@@ -31,6 +31,8 @@ async def wire_all(container: Container) -> None:
     _wire_uow(container)
     await _wire_authorization(container)
     _wire_services(container)
+    _wire_conversation(container)
+    _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
 
@@ -137,3 +139,28 @@ def _wire_services(container: Container) -> None:
         cache_ttl_seconds=settings.cache.authz_ttl_seconds,
         decision_cache=settings.authorization.decision_cache,
     )
+
+
+def _wire_conversation(container: Container) -> None:
+    from memory_service.modules.conversation.service import ConversationService
+    from memory_service.modules.working_memory.hot_thread import HotThreadCache, WorkingMemory
+
+    cache_cfg = container.settings.cache
+    hot = HotThreadCache(
+        container.cache,
+        max_messages=cache_cfg.hot_thread_max_messages,
+        ttl_seconds=cache_cfg.hot_thread_ttl_seconds,
+    )
+    container.services["hot_thread"] = hot
+    container.services["working_memory"] = WorkingMemory(
+        container.cache, ttl_seconds=cache_cfg.working_memory_ttl_seconds
+    )
+    container.services["conversation"] = ConversationService(
+        container.services["authz"], hot, archive_enabled=container.settings.archive.enabled
+    )
+
+
+def _register_jobs(container: Container) -> None:
+    from memory_service.modules.jobs.registry import register_handlers
+
+    register_handlers(container)

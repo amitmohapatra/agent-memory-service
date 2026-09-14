@@ -43,6 +43,51 @@ def _test_settings(**overrides: object) -> Settings:
     return Settings(**base)  # type: ignore[arg-type]
 
 
+DB_URL = os.environ.get(
+    "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
+)
+
+
+def pg_reachable() -> bool:
+    import psycopg
+
+    try:
+        with psycopg.connect(
+            DB_URL.replace("postgresql+psycopg://", "postgresql://"), connect_timeout=2
+        ):
+            return True
+    except Exception:
+        return False
+
+
+PG_AVAILABLE = pg_reachable()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _migrated_database() -> None:
+    """Apply Alembic + Procrastinate schemas once per session when PostgreSQL is reachable."""
+    if not PG_AVAILABLE:
+        return
+    import asyncio
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", DB_URL)
+    command.upgrade(cfg, "head")
+    from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
+
+    async def _schema() -> None:
+        q = ProcrastinateTaskQueue(DB_URL.replace("postgresql+psycopg://", "postgresql://"))
+        try:
+            await q.ensure_schema()
+        finally:
+            await q.close()
+
+    asyncio.run(_schema())
+
+
 @pytest.fixture(autouse=True)
 def _reset_settings() -> Iterator[None]:
     reset_settings_cache()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from collections.abc import AsyncIterator
 
@@ -55,7 +54,8 @@ def _redis_reachable() -> bool:
         return False
 
 
-PG_AVAILABLE = _pg_reachable()
+from tests.conftest import PG_AVAILABLE  # noqa: E402
+
 REDIS_AVAILABLE = _redis_reachable()
 
 requires_pg = pytest.mark.skipif(
@@ -64,28 +64,6 @@ requires_pg = pytest.mark.skipif(
 requires_redis = pytest.mark.skipif(
     not REDIS_AVAILABLE, reason="Redis/Dragonfly not reachable at MEMORY__CACHE__URL"
 )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _migrated_database() -> None:
-    if not PG_AVAILABLE:
-        return
-    from alembic import command
-    from alembic.config import Config
-
-    cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", DB_URL)
-    command.upgrade(cfg, "head")
-    from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
-
-    async def _schema() -> None:
-        q = ProcrastinateTaskQueue(DB_URL.replace("postgresql+psycopg://", "postgresql://"))
-        try:
-            await q.ensure_schema()
-        finally:
-            await q.close()
-
-    asyncio.run(_schema())
 
 
 def integration_settings(make_settings, **overrides):

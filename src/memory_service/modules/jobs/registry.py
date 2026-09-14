@@ -1,0 +1,67 @@
+"""Background task registration. Each module contributes handlers; the worker and the
+API process both register them so inline/test queues can execute jobs in-process."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+
+from memory_service.observability.logging import get_logger
+from memory_service.ports.tasks import Queue
+
+if TYPE_CHECKING:
+    from memory_service.application.container import Container
+
+log = get_logger(__name__)
+
+TASK_PROCESS_OBSERVATION = "memory.process_observation"
+TASK_ARCHIVE_STAGE = "archive.stage_message"
+TASK_OUTBOX_SWEEP = "system.outbox_sweep"
+TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
+
+
+def register_handlers(container: Container) -> None:
+    queue = container.tasks
+    if queue is None:
+        return
+    uow_factory = container.services["uow_factory"]
+
+    async def process_observation(payload: dict[str, Any]) -> None:
+        """M3 baseline: mark the observation processed. M7 replaces this with the memory
+        intelligence pipeline (extract -> classify -> dedup -> consolidate -> index)."""
+        pipeline = container.services.get("observation_pipeline")
+        if pipeline is not None:
+            await pipeline.run(payload)
+            return
+        async with uow_factory() as uow:
+            await uow.observations.mark_processed(
+                payload["tenant_id"], payload["observation_id"], status="RECORDED"
+            )
+            await uow.commit()
+
+    async def archive_stage(payload: dict[str, Any]) -> None:
+        """M4 replaces this with segment compaction + blob upload + verification."""
+        archiver = container.services.get("archive_service")
+        if archiver is not None:
+            await archiver.archive_thread(payload["tenant_id"], payload["thread_id"])
+
+    async def outbox_sweep(payload: dict[str, Any]) -> None:
+        relay = container.services.get("outbox_relay")
+        if relay is not None:
+            n = await relay.sweep(older_than_seconds=int(payload.get("older_than_seconds", 30)))
+            if n:
+                log.info("outbox.swept", dispatched=n)
+
+    async def idempotency_purge(payload: dict[str, Any]) -> None:
+        async with uow_factory() as uow:
+            n = await uow.idempotency.purge_expired(now=datetime.now(UTC))
+            await uow.commit()
+        if n:
+            log.info("idempotency.purged", count=n)
+
+    queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
+    queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
+    queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
+    queue.register(TASK_IDEMPOTENCY_PURGE, Queue.RECONCILE, idempotency_purge, retries=0)
+    for extra in container.services.get("extra_task_registrars", []):
+        extra(container)

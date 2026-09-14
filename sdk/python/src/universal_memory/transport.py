@@ -38,10 +38,16 @@ class Transport:
             headers[HEADER_API_KEY] = api_key
         if bearer_token:
             headers["Authorization"] = f"Bearer {bearer_token}"
-        self._client = client or httpx.AsyncClient(
-            base_url=base_url.rstrip("/"), timeout=timeout, headers=headers
-        )
-        self._owns_client = client is None
+        if client is None:
+            client = httpx.AsyncClient(
+                base_url=base_url.rstrip("/"), timeout=timeout, headers=headers
+            )
+            owns = True
+        else:
+            client.headers.update(headers)
+            owns = False
+        self._client = client
+        self._owns_client = owns
         self.max_retries = max_retries
 
     @staticmethod

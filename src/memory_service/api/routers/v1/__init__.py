@@ -6,5 +6,6 @@ from fastapi import APIRouter
 
 
 def routers() -> list[APIRouter]:
-    out: list[APIRouter] = []
-    return out
+    from memory_service.api.routers.v1 import conversation
+
+    return [conversation.router]

@@ -130,6 +130,7 @@ ignore = [
   "PLR0915",
   "PLR0911",
   "PLC0415", # local imports for optional providers
+  "PLR0917", # FastAPI route signatures are dependency lists
 ]
 
 [tool.ruff.lint.per-file-ignores]
