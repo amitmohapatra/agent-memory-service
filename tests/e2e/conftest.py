@@ -11,6 +11,12 @@ from memory_service.api.app import create_app
 from tests.conftest import PG_AVAILABLE
 
 TABLES = [
+    "context_edges",
+    "chunks",
+    "document_nodes",
+    "document_versions",
+    "file_staging",
+    "documents",
     "archive_segments",
     "job_outbox",
     "idempotency_keys",

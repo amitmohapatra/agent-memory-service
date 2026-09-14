@@ -18,6 +18,12 @@ DB_URL = os.environ.get(
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
+    "context_edges",
+    "chunks",
+    "document_nodes",
+    "document_versions",
+    "file_staging",
+    "documents",
     "archive_segments",
     "job_outbox",
     "idempotency_keys",

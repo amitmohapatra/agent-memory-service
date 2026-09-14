@@ -7,6 +7,7 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from memory_service.adapters.db.document_repository import SqlDocumentRepository
 from memory_service.adapters.db.repositories import (
     SqlAgentRunRepository,
     SqlArchiveRepository,
@@ -106,6 +107,7 @@ class SqlUnitOfWork:
         self.idempotency = SqlIdempotencyRepository(s)
         self.outbox = SqlOutboxRepository(s)
         self.archive = SqlArchiveRepository(s)
+        self.documents = SqlDocumentRepository(s)
         return self
 
     async def __aexit__(

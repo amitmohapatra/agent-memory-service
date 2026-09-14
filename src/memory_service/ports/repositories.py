@@ -13,6 +13,14 @@ from typing import Any, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.conversation import AgentRun, Message, Session, Thread, Turn
+from memory_service.domain.documents import (
+    Chunk,
+    ContextEdge,
+    Document,
+    DocumentNode,
+    DocumentVersion,
+)
+from memory_service.domain.enums import ContextGraphEdge
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.tasks import JobSpec
@@ -183,6 +191,69 @@ class ArchiveRepository(Protocol):
     ) -> list[ArchiveSegment]: ...
     async def list_for_thread(self, tenant_id: str, thread_id: str) -> list[ArchiveSegment]: ...
     async def list_verified(self, *, limit: int = 200, offset: int = 0) -> list[ArchiveSegment]: ...
+
+
+@runtime_checkable
+class DocumentRepository(Protocol):
+    async def add(
+        self, document: Document, *, visibility_keys: Sequence[str], message_id: str | None = None
+    ) -> None: ...
+    async def get(self, tenant_id: str, document_id: str) -> Document | None: ...
+    async def find_by_checksum(self, tenant_id: str, checksum: str) -> Document | None: ...
+    async def set_status(
+        self,
+        tenant_id: str,
+        document_id: str,
+        *,
+        status: str,
+        current_version_id: str | None = None,
+        error: str | None = None,
+    ) -> None: ...
+    async def stage_bytes(
+        self, tenant_id: str, document_id: str, data: bytes, *, checksum: str
+    ) -> None: ...
+    async def staged_bytes(self, tenant_id: str, document_id: str) -> bytes | None: ...
+    async def purge_staged_bytes(self, tenant_id: str, document_id: str) -> None: ...
+    async def mark_archived(
+        self, tenant_id: str, document_id: str, *, segment_id: str, archived_at: datetime
+    ) -> None: ...
+    async def list_staged_archive(
+        self, *, older_than: datetime | None = None, limit: int = 200
+    ) -> list[Document]: ...
+    async def add_version(self, version: DocumentVersion) -> None: ...
+    async def add_nodes(self, nodes: Sequence[DocumentNode]) -> None: ...
+    async def add_chunks(self, chunks: Sequence[Chunk]) -> None: ...
+    async def add_edges(self, edges: Sequence[ContextEdge]) -> None: ...
+    async def replace_version_content(self, tenant_id: str, document_id: str) -> None:
+        """Delete nodes/chunks/edges of previous versions (re-parse)."""
+        ...
+
+    async def list_nodes(
+        self, tenant_id: str, document_id: str, *, version_id: str | None = None
+    ) -> list[DocumentNode]: ...
+    async def get_nodes(self, tenant_id: str, node_ids: Sequence[str]) -> list[DocumentNode]: ...
+    async def list_chunks(
+        self, tenant_id: str, document_id: str, *, unindexed_only: bool = False, limit: int = 5000
+    ) -> list[Chunk]: ...
+    async def get_chunks(self, tenant_id: str, chunk_ids: Sequence[str]) -> list[Chunk]: ...
+    async def mark_chunks_indexed(
+        self, chunk_ids: Sequence[str], *, fingerprint: str, indexed_at: datetime
+    ) -> int: ...
+    async def edges_from(
+        self,
+        tenant_id: str,
+        source_ids: Sequence[str],
+        *,
+        kinds: Sequence[ContextGraphEdge] | None = None,
+    ) -> list[ContextEdge]: ...
+    async def edges_to(
+        self,
+        tenant_id: str,
+        target_ids: Sequence[str],
+        *,
+        kinds: Sequence[ContextGraphEdge] | None = None,
+    ) -> list[ContextEdge]: ...
+    async def visibility_keys(self, tenant_id: str, document_id: str) -> list[str]: ...
 
 
 @runtime_checkable

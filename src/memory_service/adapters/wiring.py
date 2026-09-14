@@ -34,6 +34,7 @@ async def wire_all(container: Container) -> None:
     _wire_conversation(container)
     await _wire_blob(container)
     _wire_archive(container)
+    _wire_ingestion(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -195,4 +196,31 @@ def _wire_archive(container: Container) -> None:
         container.blob,
         archive=container.settings.archive,
         blob_settings=container.settings.blob,
+    )
+
+
+def _wire_ingestion(container: Container) -> None:
+    from memory_service.adapters.parsers.builtin import BuiltinParser
+    from memory_service.modules.ingestion.service import IngestionService
+
+    cfg = container.settings.documents
+    builtin = BuiltinParser()
+    parser = builtin
+    if cfg.parser == "docling":
+        try:
+            from memory_service.adapters.parsers.docling_parser import DoclingParser
+
+            parser = DoclingParser()
+        except Exception as exc:
+            log.warning("docling.unavailable", error=str(exc))
+    container.document_parser = parser
+    container.services["ingestion"] = IngestionService(
+        container.services["uow_factory"],
+        container.services["authz"],
+        parser,
+        container.blob,
+        settings=cfg,
+        file_bucket=container.settings.blob.file_bucket,
+        tenant_shards=container.settings.archive.tenant_shards,
+        fallback_parser=builtin,
     )

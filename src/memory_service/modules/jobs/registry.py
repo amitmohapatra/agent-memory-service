@@ -47,6 +47,17 @@ def register_handlers(container: Container) -> None:
         if archiver is not None:
             await archiver.archive_thread(payload["tenant_id"], payload["thread_id"])
 
+    async def document_parse(payload: dict[str, Any]) -> None:
+        ingestion = container.services.get("ingestion")
+        if ingestion is not None:
+            await ingestion.parse_document(payload["tenant_id"], payload["document_id"])
+
+    async def document_index(payload: dict[str, Any]) -> None:
+        """M6 attaches the indexer; until then the job is a no-op that keeps the chain intact."""
+        indexer = container.services.get("indexer")
+        if indexer is not None:
+            await indexer.index_document(payload["tenant_id"], payload["document_id"])
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -79,6 +90,8 @@ def register_handlers(container: Container) -> None:
             await archiver.purge_staged_payloads()
 
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
+    queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
+    queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
     queue.register(TASK_ARCHIVE_PURGE, Queue.ARCHIVE, archive_purge, retries=0)
     every = max(1, container.settings.tasks.periodic_reconcile_seconds // 60)

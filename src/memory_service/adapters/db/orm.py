@@ -13,9 +13,11 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -366,4 +368,170 @@ class ArchiveSegmentRow(Base):
         Index("ix_archive_segments_thread", "tenant_id", "thread_id", "first_sequence"),
         Index("ix_archive_segments_status", "status", "created_at"),
         Index("uq_archive_segments_key", "bucket", "key", unique=True),
+    )
+
+
+# --------------------------------------------------------------------------
+# Documents / RAG
+# --------------------------------------------------------------------------
+
+
+class DocumentRow(Base):
+    __tablename__ = "documents"
+
+    document_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    owner_user_id: Mapped[str | None] = mapped_column(String(200))
+    thread_id: Mapped[str | None] = mapped_column(String(200))
+    message_id: Mapped[str | None] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    filename: Mapped[str] = mapped_column(Text, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(200), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    current_version_id: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="STAGED")
+    source_system: Mapped[str | None] = mapped_column(String(100))
+    source_id: Mapped[str | None] = mapped_column(String(400))
+    archive_status: Mapped[str] = mapped_column(
+        String(20), default="STAGED", server_default="STAGED"
+    )
+    archive_segment_id: Mapped[str | None] = mapped_column(String(200))
+    archived_at: Mapped[datetime | None]
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    system_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    custom_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+    deleted_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        Index("ix_documents_tenant_checksum", "tenant_id", "checksum"),
+        Index("ix_documents_tenant_thread", "tenant_id", "thread_id"),
+        Index("ix_documents_status", "status", "created_at"),
+    )
+
+
+class FileStagingRow(Base):
+    """Raw bytes staged durably until the blob archive is verified (then purged)."""
+
+    __tablename__ = "file_staging"
+
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    purged_at: Mapped[datetime | None]
+
+
+class DocumentVersionRow(Base):
+    __tablename__ = "document_versions"
+
+    document_version_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE")
+    )
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    parser: Mapped[str] = mapped_column(String(50), nullable=False)
+    parser_version: Mapped[str | None] = mapped_column(String(50))
+    page_count: Mapped[int | None] = mapped_column(Integer)
+    node_count: Mapped[int] = mapped_column(Integer, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="PARSED")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (Index("ix_document_versions_document", "document_id", "version"),)
+
+
+class DocumentNodeRow(Base):
+    __tablename__ = "document_nodes"
+
+    node_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE")
+    )
+    document_version_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    representation: Mapped[str] = mapped_column(String(30), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(String(200))
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(Text)
+    section_path: Mapped[str] = mapped_column(Text, default="")
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text, default="")
+    text_hash: Mapped[str] = mapped_column(String(64), default="")
+    token_estimate: Mapped[int] = mapped_column(Integer, default=0)
+    entities: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    system_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+
+    __table_args__ = (
+        Index("ix_document_nodes_version", "document_version_id", "depth", "ordinal"),
+        Index("ix_document_nodes_parent", "parent_id"),
+    )
+
+
+class ChunkRow(Base):
+    __tablename__ = "chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE")
+    )
+    document_version_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    contextual_text: Mapped[str] = mapped_column(Text, nullable=False)
+    page: Mapped[int | None] = mapped_column(Integer)
+    section_path: Mapped[str] = mapped_column(Text, default="")
+    token_estimate: Mapped[int] = mapped_column(Integer, default=0)
+    entities: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    indexed_at: Mapped[datetime | None]
+    index_fingerprint: Mapped[str | None] = mapped_column(String(100))
+
+    __table_args__ = (
+        Index("ix_chunks_version", "document_version_id", "node_id", "ordinal"),
+        Index("ix_chunks_tenant_document", "tenant_id", "document_id"),
+        Index("ix_chunks_text_hash", "tenant_id", "text_hash"),
+    )
+
+
+class ContextEdgeRow(Base):
+    __tablename__ = "context_edges"
+
+    edge_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.document_id", ondelete="CASCADE")
+    )
+    source_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    edge: Mapped[str] = mapped_column(String(30), nullable=False)
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    label: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("ix_context_edges_source", "source_id", "edge"),
+        Index("ix_context_edges_target", "target_id", "edge"),
+        Index("ix_context_edges_document", "document_id"),
     )

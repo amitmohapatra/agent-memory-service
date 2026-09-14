@@ -13,6 +13,7 @@ from typing import Protocol, Self, runtime_checkable
 from memory_service.ports.repositories import (
     AgentRunRepository,
     ArchiveRepository,
+    DocumentRepository,
     IdempotencyRepository,
     MessageRepository,
     ObservationRepository,
@@ -37,6 +38,7 @@ class UnitOfWork(Protocol):
     idempotency: IdempotencyRepository
     outbox: OutboxRepository
     archive: ArchiveRepository
+    documents: DocumentRepository
 
     async def __aenter__(self) -> Self: ...
 
