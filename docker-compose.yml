@@ -1,0 +1,188 @@
+name: memory-service
+
+x-common-env: &common-env
+  MEMORY__SERVICE__ENVIRONMENT: dev
+  MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
+  MEMORY__CACHE__PROVIDER: dragonfly
+  MEMORY__CACHE__URL: redis://dragonfly:6379/0
+  MEMORY__SEARCH__PROVIDER: qdrant
+  MEMORY__SEARCH__QDRANT_URL: http://qdrant:6333
+  MEMORY__AUTHORIZATION__PROVIDER: openfga
+  MEMORY__AUTHORIZATION__OPENFGA_API_URL: http://openfga:8080
+  MEMORY__BLOB__PROVIDER: filesystem
+  MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
+  MEMORY__TASKS__PROVIDER: procrastinate
+  MEMORY__MODELS__LLM__ENABLED: "false"
+  MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/embedding
+  MEMORY__MODELS__RERANKER__MODEL_PATH: /models/reranker
+  MEMORY__OBSERVABILITY__OTEL_EXPORTER: none
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: memory
+      POSTGRES_DB: memory
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    ports: ["6333:6333", "6334:6334"]
+    volumes: ["qdrant:/qdrant/storage"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dragonfly:
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
+    command: ["--maxmemory=1gb", "--proactor_threads=2"]
+    ulimits:
+      memlock: -1
+    ports: ["6379:6379"]
+    volumes: ["dragonfly:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  openfga-migrate:
+    image: openfga/openfga:v1.18.1
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://memory:memory@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      openfga-db-init:
+        condition: service_completed_successfully
+
+  openfga:
+    image: openfga/openfga:v1.18.1
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://memory:memory@postgres:5432/openfga?sslmode=disable
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_PLAYGROUND_ENABLED: "true"
+    ports: ["8081:8080", "8082:8081", "3000:3000"]
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=openfga:8081"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  openfga-db-init:
+    image: postgres:16-alpine
+    entrypoint: ["sh", "-c", "until pg_isready -h postgres -U memory; do sleep 1; done; psql -h postgres -U memory -d memory -tc \"SELECT 1 FROM pg_database WHERE datname='openfga'\" | grep -q 1 || psql -h postgres -U memory -d memory -c 'CREATE DATABASE openfga'"]
+    environment:
+      PGPASSWORD: memory
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  memory-api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    command: ["memory-api"]
+    environment:
+      <<: *common-env
+    ports: ["8080:8080"]
+    volumes:
+      - blob:/data/blob
+      - ./models:/models:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      openfga:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/health/live')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  memory-worker:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    command: ["memory-worker"]
+    environment:
+      <<: *common-env
+    volumes:
+      - blob:/data/blob
+      - ./models:/models:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------ profiles
+  seaweedfs:
+    profiles: ["object-store"]
+    image: chrislusf/seaweedfs:3
+    command: ["server", "-s3", "-dir=/data"]
+    ports: ["8333:8333", "9333:9333"]
+    volumes: ["seaweed:/data"]
+
+  neo4j:
+    profiles: ["graph-store", "graphiti"]
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/memorygraph
+      NEO4J_PLUGINS: '["apoc"]'
+    ports: ["7474:7474", "7687:7687"]
+    volumes: ["neo4j:/data"]
+
+  opa:
+    profiles: ["policy"]
+    image: openpolicyagent/opa:1
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    ports: ["8181:8181"]
+    volumes: ["./deploy/opa:/policies:ro"]
+
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes: ["./deploy/otel/collector.yaml:/etc/otel/config.yaml:ro"]
+    ports: ["4318:4318"]
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v3
+    volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  marquez:
+    profiles: ["observability"]
+    image: marquezproject/marquez:latest
+    ports: ["5000:5000", "5001:5001"]
+
+volumes:
+  pgdata:
+  qdrant:
+  dragonfly:
+  blob:
+  seaweed:
+  neo4j:

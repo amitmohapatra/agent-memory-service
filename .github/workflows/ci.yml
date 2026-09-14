@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: memory
+          POSTGRES_PASSWORD: memory
+          POSTGRES_DB: memory
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U memory" --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@localhost:5432/memory
+      MEMORY__CACHE__URL: redis://localhost:6379/0
+      MEMORY__SEARCH__QDRANT_LOCAL_PATH: ":memory:"
+      MEMORY__AUTHORIZATION__PROVIDER: memory
+      MEMORY__BLOB__PROVIDER: filesystem
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest tests/unit sdk/python/tests integrations/langgraph/tests -m "not docker and not models" -q
+      - run: uv run pytest tests/contract -q
+      - run: uv run alembic upgrade head && uv run alembic downgrade base && uv run alembic upgrade head
+      - run: uv run pytest tests/integration -m "not docker and not models" -q
+      - run: uv run pytest tests/security -q
+      - run: uv run pytest tests/e2e -m "not docker and not models" -q
+      - run: uv run pytest tests/evals -m "not models" -q
+      - name: OpenAPI schema diff
+        run: |
+          uv run python -m memory_service.tools.export_openapi /tmp/openapi.json
+          diff -q docs/openapi.json /tmp/openapi.json
+
+  nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --all-extras --dev
+      - run: make bench-retrieval bench-memory bench-embedding bench-reranker
+      - run: make load-test

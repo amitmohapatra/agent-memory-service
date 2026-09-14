@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+dist/
+build/
+.env
+.blob/
+.qdrant/
+models/
+benchmark/results/*.tmp
+.DS_Store

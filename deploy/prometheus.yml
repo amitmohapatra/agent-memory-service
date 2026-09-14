@@ -1,0 +1,6 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: memory-api
+    static_configs:
+      - targets: ["memory-api:8080"]

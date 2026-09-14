@@ -1,0 +1,206 @@
+[project]
+name = "memory-service"
+version = "0.1.0"
+description = "Enterprise Multi-Agent Memory Service: durable, scope-aware, context-preserving memory for chat, agents and RAG."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Memory Service Team" }]
+keywords = ["memory", "rag", "agents", "fastapi", "qdrant", "openfga"]
+classifiers = [
+  "Programming Language :: Python :: 3.12",
+  "Framework :: FastAPI",
+  "License :: OSI Approved :: Apache Software License",
+]
+
+# Core runtime dependencies. Everything heavy or optional lives in an extra.
+dependencies = [
+  "fastapi>=0.141,<1",
+  "pydantic>=2.13,<3",
+  "pydantic-settings>=2.15,<3",
+  "uvicorn[standard]>=0.53",
+  "sqlalchemy[asyncio]>=2.0.53,<3",
+  "psycopg[binary,pool]>=3.3,<4",
+  "alembic>=1.20,<2",
+  "procrastinate[psycopg]>=3.9,<4",
+  "qdrant-client>=1.19,<2",
+  "redis>=8.1,<9",
+  "openfga-sdk>=0.10,<1",
+  "zstandard>=0.25",
+  "orjson>=3.12",
+  "structlog>=25.2",
+  "pyyaml>=6",
+  "httpx>=0.28",
+  "python-multipart>=0.0.20",
+  "prometheus-client>=0.26",
+  "opentelemetry-api>=1.44",
+  "opentelemetry-sdk>=1.44",
+  "opentelemetry-instrumentation-fastapi>=0.65b0",
+  "opentelemetry-exporter-otlp-proto-http>=1.44",
+  "openlineage-python>=1.53",
+  "python-ulid>=3",
+  "rapidfuzz>=3",
+]
+
+[project.optional-dependencies]
+# Google Cloud production adapters
+gcp = ["google-cloud-storage>=3.14", "google-auth>=2"]
+# Document parsing + document KG extraction
+docling = ["docling>=2.127", "docling-graph>=1.9"]
+# Local CPU embedding / reranking runtimes
+models = ["sentence-transformers>=6.0", "fastembed>=0.8", "onnxruntime>=1.30", "optimum>=2.3"]
+# Memory-intelligence challengers (benchmark only; never the public contract)
+memory-providers = ["mem0ai>=2.0", "langmem>=0.0.30"]
+cognee = ["cognee>=1.5"]
+# Temporal knowledge-graph enrichment
+graphiti = ["graphiti-core>=0.30"]
+# Evaluation frameworks
+eval = ["deepeval>=4.2", "ragas>=0.4"]
+# Vectorless tree retrieval (benchmark-gated)
+pageindex = ["pageindex>=0.2"]
+# Load testing
+load = ["locust>=2.46"]
+# Everything except dev tooling
+all = [
+  "memory-service[gcp,docling,models,memory-providers,cognee,graphiti,eval,pageindex,load]",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9.1",
+  "pytest-asyncio>=1.4",
+  "pytest-cov>=6",
+  "pytest-timeout>=2.3",
+  "hypothesis>=6",
+  "testcontainers>=4.15",
+  "fakeredis>=2.38",
+  "respx>=0.22",
+  "ruff>=0.16",
+  "pyright>=1.1.414",
+  "mypy>=2.3",
+  "pre-commit>=4",
+  "openapi-spec-validator>=0.7",
+  "schemathesis>=4",
+  "universal-memory",
+  "universal-memory-langgraph",
+]
+
+[project.scripts]
+memory-api = "memory_service.__main__:run_api"
+memory-worker = "memory_service.__main__:run_worker"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/memory_service"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.workspace]
+members = ["sdk/python", "integrations/langgraph"]
+
+[tool.uv.sources]
+universal-memory = { workspace = true }
+universal-memory-langgraph = { workspace = true }
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "sdk/python/src", "integrations/langgraph/src", "tests"]
+extend-exclude = ["migrations/versions", "benchmark/results"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "B", "UP", "N", "S", "C4", "SIM", "RUF", "ASYNC", "T20", "PL", "TID",
+]
+ignore = [
+  "PLR0913", # many arguments are natural for context objects
+  "PLR2004", # magic values in tests / thresholds
+  "S101",    # assert in tests
+  "RUF012",
+  "PLR0912",
+  "PLR0915",
+  "PLR0911",
+  "PLC0415", # local imports for optional providers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PLR", "T20", "ASYNC", "E501", "RUF043"]
+"src/memory_service/domain/errors.py" = ["N818"]
+"src/memory_service/ports/blob.py" = ["N818"]
+"sdk/python/src/universal_memory/errors.py" = ["N818", "A001"]
+"src/memory_service/tools/**" = ["E501"]
+"benchmark/**" = ["T20", "S", "PLR"]
+"sdk/python/tests/**" = ["S", "PLR", "T20"]
+"integrations/langgraph/tests/**" = ["S", "PLR", "T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["memory_service", "universal_memory", "universal_memory_langgraph"]
+
+# Hexagonal boundary: the domain package may not import adapters or third-party SDKs.
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"qdrant_client".msg = "Third-party SDKs belong in memory_service.adapters, not domain/application/modules."
+"redis".msg = "Third-party SDKs belong in memory_service.adapters."
+"google.cloud".msg = "Third-party SDKs belong in memory_service.adapters."
+"mem0".msg = "Third-party SDKs belong in memory_service.adapters."
+"graphiti_core".msg = "Third-party SDKs belong in memory_service.adapters."
+"openfga_sdk".msg = "Third-party SDKs belong in memory_service.adapters."
+"procrastinate".msg = "Third-party SDKs belong in memory_service.adapters."
+"langgraph".msg = "LangGraph is never a core dependency; see integrations/langgraph."
+
+# ---------------------------------------------------------------------------
+# Pyright
+# ---------------------------------------------------------------------------
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["src", "sdk/python/src", "integrations/langgraph/src"]
+exclude = ["**/__pycache__", ".venv"]
+typeCheckingMode = "standard"
+reportMissingImports = "warning"
+reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["memory_service"]
+mypy_path = "src"
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib -p no:cacheprovider"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests", "sdk/python/tests", "integrations/langgraph/tests"]
+timeout = 120
+markers = [
+  "unit: fast tests with no external services",
+  "integration: requires PostgreSQL/Redis/Qdrant (real or embedded)",
+  "contract: OpenAPI / provider contract tests",
+  "e2e: full API flows",
+  "security: isolation and authorization gates (release blocking)",
+  "performance: latency budgets",
+  "failure: failure injection",
+  "eval: retrieval/memory evaluation gates",
+  "docker: needs a Docker daemon with registry access",
+  "models: needs local embedding/reranker model files",
+]
+filterwarnings = ["error::RuntimeWarning:memory_service"]
+
+[tool.coverage.run]
+source = ["memory_service", "universal_memory", "universal_memory_langgraph"]
+branch = true

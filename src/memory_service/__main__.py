@@ -1,0 +1,31 @@
+"""Entrypoints: ``memory-api`` and ``memory-worker``."""
+
+from __future__ import annotations
+
+import asyncio
+
+import uvicorn
+
+from memory_service.config.settings import get_settings
+
+
+def run_api() -> None:
+    settings = get_settings()
+    uvicorn.run(
+        "memory_service.api.app:create_app",
+        factory=True,
+        host=settings.service.host,
+        port=settings.service.port,
+        log_level=settings.service.log_level.lower(),
+        access_log=False,
+    )
+
+
+def run_worker() -> None:
+    from memory_service.worker import main
+
+    asyncio.run(main())
+
+
+if __name__ == "__main__":  # pragma: no cover
+    run_api()
