@@ -15,8 +15,6 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_service.domain.context import MemoryExecutionContext
-
 
 class RelationTuple(BaseModel):
     """``user`` has ``relation`` on ``object`` (e.g. user:u1 member group:legal)."""
@@ -86,9 +84,5 @@ class AuthorizationProvider(Protocol):
     ) -> None: ...
 
     async def list_objects(self, user: str, relation: str, object_type: str) -> list[str]: ...
-
-    async def authorized_scope(self, ctx: MemoryExecutionContext) -> AuthorizedScope:
-        """Resolve everything the context's principal may read. Cached by revision."""
-        ...
 
     async def ping(self) -> bool: ...

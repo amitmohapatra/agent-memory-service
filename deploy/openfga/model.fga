@@ -1,0 +1,61 @@
+model
+  schema 1.1
+
+type user
+
+type agent
+  relations
+    define operator: [user]
+
+type tenant
+  relations
+    define admin: [user]
+    define member: [user, group#member] or admin
+
+type group
+  relations
+    define tenant: [tenant]
+    define member: [user]
+
+type workspace
+  relations
+    define tenant: [tenant]
+    define admin: [user] or admin from tenant
+    define member: [user, group#member] or admin
+    define viewer: [user, group#member] or member
+
+type thread
+  relations
+    define tenant: [tenant]
+    define workspace: [workspace]
+    define owner: [user]
+    define participant: [user, agent, group#member]
+    define viewer: [user, group#member] or owner or participant or admin from workspace
+    define can_read: viewer or admin from tenant
+    define can_write: owner or participant or admin from workspace
+
+type work
+  relations
+    define tenant: [tenant]
+    define owner: [user]
+    define participant: [user, agent, group#member]
+    define can_read: owner or participant or admin from tenant
+    define can_write: owner or participant
+
+type document
+  relations
+    define tenant: [tenant]
+    define workspace: [workspace]
+    define thread: [thread]
+    define owner: [user]
+    define viewer: [user, group#member, agent]
+    define can_read: owner or viewer or can_read from thread or member from workspace or admin from tenant
+    define can_write: owner or admin from workspace
+
+type memory
+  relations
+    define tenant: [tenant]
+    define owner: [user, agent]
+    define viewer: [user, group#member, agent]
+    define can_read: owner or viewer or admin from tenant
+    define can_delete: owner or admin from tenant

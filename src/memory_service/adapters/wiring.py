@@ -29,6 +29,7 @@ async def wire_all(container: Container) -> None:
     await _wire_database(container)
     await _wire_tasks(container)
     _wire_uow(container)
+    await _wire_authorization(container)
     _wire_services(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -101,7 +102,38 @@ def _wire_uow(container: Container) -> None:
     )
 
 
+async def _wire_authorization(container: Container) -> None:
+    cfg = container.settings.authorization
+    if cfg.provider == "openfga":
+        from memory_service.adapters.authz.openfga_provider import OpenFGAAuthorizationProvider
+
+        provider = OpenFGAAuthorizationProvider(cfg)
+        container.add_dependency(
+            Dependency(name="openfga", mandatory=True, ping=provider.ping, close=provider.close)
+        )
+    else:
+        from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
+
+        provider = MemoryAuthorizationProvider(max_listed_objects=cfg.max_listed_objects)
+    container.authorization = provider
+
+
 def _wire_services(container: Container) -> None:
+    from memory_service.modules.auth.authentication import ServiceAuthenticator
+    from memory_service.modules.authz.service import AuthorizationService
     from memory_service.modules.idempotency.service import IdempotencyService
 
+    settings = container.settings
     container.services["idempotency"] = IdempotencyService(container.cache)
+    from memory_service.adapters.auth.gcp_id_token import verify_google_id_token
+
+    container.services["authenticator"] = ServiceAuthenticator(
+        settings.authentication, gcp_verifier=verify_google_id_token
+    )
+    container.services["authz"] = AuthorizationService(
+        container.authorization,
+        container.cache,
+        max_listed_objects=settings.authorization.max_listed_objects,
+        cache_ttl_seconds=settings.cache.authz_ttl_seconds,
+        decision_cache=settings.authorization.decision_cache,
+    )

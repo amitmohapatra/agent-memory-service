@@ -4,7 +4,7 @@
 |---|---|---|
 | M0 | repo, uv/venv, FastAPI + Swagger, domain contracts, ports, config, health/version, SDK skeleton | done (41 tests) |
 | M1 | PostgreSQL, Alembic, repositories, Unit of Work, Procrastinate, idempotency, OTel | done (62 tests; real PostgreSQL 16 + Procrastinate 3.9) |
-| M2 | execution context, OpenFGA, scope/visibility, tenant isolation tests | pending |
+| M2 | execution context, OpenFGA, scope/visibility, tenant isolation tests | done (105 tests total; OpenFGA contract test docker-gated) |
 | M3 | thread/session/turn/message, lineage, hot thread cache, SDK chat | pending |
 | M4 | GCS BlobStore, archive segments, compression/checksums, compaction, reconciler | pending |
 | M5 | Docling, hierarchy, Context Graph, natural chunks, contextual representations | pending |

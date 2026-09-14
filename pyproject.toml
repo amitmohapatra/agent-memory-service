@@ -41,6 +41,7 @@ dependencies = [
   "python-ulid>=3",
   "rapidfuzz>=3",
   "opentelemetry-instrumentation-sqlalchemy>=0.65b0",
+  "pyjwt[crypto]>=2.10",
 ]
 
 [project.optional-dependencies]
