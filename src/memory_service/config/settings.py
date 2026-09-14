@@ -46,12 +46,19 @@ class DatabaseSettings(BaseModel):
 
     @property
     def sync_url(self) -> str:
-        return self.url.replace("+psycopg", "").replace("postgresql+asyncpg", "postgresql")
+        """SQLAlchemy URL for sync use (Alembic). psycopg3 serves both sync and async."""
+        if "+psycopg" in self.url or "+" not in self.url.split("://", 1)[0]:
+            return (
+                self.url
+                if "+psycopg" in self.url
+                else self.url.replace("postgresql://", "postgresql+psycopg://", 1)
+            )
+        return self.url
 
     @property
     def procrastinate_dsn(self) -> str:
         """Plain libpq DSN for Procrastinate's psycopg connector."""
-        return self.sync_url.replace("postgresql://", "postgresql://", 1)
+        return self.url.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
 class CacheSettings(BaseModel):
