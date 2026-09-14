@@ -18,6 +18,7 @@ DB_URL = os.environ.get(
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
+    "archive_segments",
     "job_outbox",
     "idempotency_keys",
     "revisions",
@@ -81,10 +82,12 @@ def integration_settings(make_settings, **overrides):
 
 
 @pytest.fixture
-async def container(make_settings) -> AsyncIterator[Container]:
+async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
-    settings: Settings = integration_settings(make_settings)
+    settings: Settings = integration_settings(
+        make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")}
+    )
     c = await build_container(settings, __version__)
     async with c.database.engine.begin() as conn:
         await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))

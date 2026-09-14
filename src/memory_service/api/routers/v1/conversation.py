@@ -25,6 +25,7 @@ from memory_service.api.schemas.conversation import (
     ThreadResponse,
 )
 from memory_service.domain.conversation import Attachment, Message, Thread
+from memory_service.domain.enums import ArchiveStatus
 from memory_service.domain.errors import NotFound
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.conversation.service import ConversationService
@@ -70,6 +71,13 @@ def _message_response(m: Message) -> MessageResponse:
 
 def _service(container) -> ConversationService:  # type: ignore[no-untyped-def]
     return container.services["conversation"]
+
+
+async def _hydrate(archive, message: Message) -> Message:  # type: ignore[no-untyped-def]
+    """Fill in content that was purged from the hot store after archival."""
+    if archive is None or message.archive_status is not ArchiveStatus.PURGED:
+        return message
+    return message.model_copy(update={"content": await archive.load_message_content(message)})
 
 
 # --------------------------------------------------------------------------- threads
@@ -152,6 +160,7 @@ async def list_messages(
         bool, Query(description="Include INTERNAL agent/tool messages (lineage owners only)")
     ] = False,
 ) -> MessageListResponse:
+    archive = container.services.get("archive_service")
     async with container.services["uow_factory"]() as uow:
         messages = await _service(container).list_messages(
             uow,
@@ -161,6 +170,7 @@ async def list_messages(
             before_sequence=before_sequence,
             include_internal=include_internal,
         )
+    messages = [await _hydrate(archive, m) for m in messages]
     next_before = (
         messages[0].sequence if len(messages) == limit and messages[0].sequence > 1 else None
     )
@@ -239,7 +249,7 @@ async def get_message(
 ) -> MessageResponse:
     async with container.services["uow_factory"]() as uow:
         message = await _service(container).get_message(uow, ctx, message_id)
-    return _message_response(message)
+    return _message_response(await _hydrate(container.services.get("archive_service"), message))
 
 
 # --------------------------------------------------------------------------- jobs

@@ -118,14 +118,13 @@ class PolicySettings(BaseModel):
 
 
 class BlobSettings(BaseModel):
-    provider: Literal["gcs", "filesystem", "s3", "memory"] = "filesystem"
+    provider: Literal["gcs", "filesystem", "memory"] = "filesystem"
     chat_bucket: str = "memory-chat-archive"
     file_bucket: str = "memory-file-archive"
     benchmark_bucket: str = "memory-benchmarks"
     ingest_bucket: str = "memory-ingest-tmp"
     filesystem_root: str = "./.blob"
     gcs_project: str | None = None
-    s3_endpoint_url: str | None = None
     lifecycle_policy: Literal["autoclass", "explicit"] = "autoclass"
     explicit_lifecycle_days_nearline: int = 60
     explicit_lifecycle_days_coldline: int = 180
@@ -426,7 +425,7 @@ class Settings(BaseSettings):
             if self.authorization.provider == "memory":
                 raise ValueError("authorization.provider=memory is not allowed in prod")
             if self.blob.provider in ("memory", "filesystem"):
-                raise ValueError("blob.provider must be gcs or s3 in prod")
+                raise ValueError("blob.provider must be gcs in prod")
         if self.models.llm.enabled and self.models.llm.provider == "disabled":
             raise ValueError("llm.enabled=true requires a provider")
         return self

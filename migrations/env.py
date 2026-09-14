@@ -17,6 +17,11 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def include_object(obj, name, type_, reflected, compare_to):
+    """Ignore tables owned by other tools (Procrastinate manages its own schema)."""
+    return not (type_ == "table" and name.startswith("procrastinate_"))
+
+
 def _url() -> str:
     override = config.get_main_option("sqlalchemy.url")
     return override or get_settings().database.sync_url
@@ -29,6 +34,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -39,7 +45,12 @@ def run_migrations_online() -> None:
     section["sqlalchemy.url"] = _url()
     connectable = engine_from_config(section, prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            include_object=include_object,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

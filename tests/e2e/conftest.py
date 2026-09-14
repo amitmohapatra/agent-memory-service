@@ -11,6 +11,7 @@ from memory_service.api.app import create_app
 from tests.conftest import PG_AVAILABLE
 
 TABLES = [
+    "archive_segments",
     "job_outbox",
     "idempotency_keys",
     "revisions",
@@ -27,10 +28,13 @@ TABLES = [
 
 
 @pytest.fixture
-def app(make_settings):
+def app(make_settings, tmp_path):
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
-    settings = make_settings(tasks={"provider": "inline"})
+    settings = make_settings(
+        tasks={"provider": "inline"},
+        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
+    )
     return create_app(settings)
 
 

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memory_service.adapters.db.repositories import (
     SqlAgentRunRepository,
+    SqlArchiveRepository,
     SqlIdempotencyRepository,
     SqlMessageRepository,
     SqlObservationRepository,
@@ -104,6 +105,7 @@ class SqlUnitOfWork:
         self.revisions = SqlRevisionRepository(s)
         self.idempotency = SqlIdempotencyRepository(s)
         self.outbox = SqlOutboxRepository(s)
+        self.archive = SqlArchiveRepository(s)
         return self
 
     async def __aexit__(

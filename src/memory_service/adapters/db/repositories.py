@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import (
     AgentRunRow,
+    ArchiveSegmentRow,
     IdempotencyRow,
     MessageAttachmentRow,
     MessageRow,
@@ -36,7 +37,7 @@ from memory_service.domain.enums import ArchiveStatus, MessageKind, MessageRole,
 from memory_service.domain.ids import new_id
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
-from memory_service.ports.repositories import IdempotencyRecord, OutboxEntry
+from memory_service.ports.repositories import ArchiveSegment, IdempotencyRecord, OutboxEntry
 from memory_service.ports.tasks import JobSpec, Queue
 
 
@@ -423,7 +424,12 @@ class SqlMessageRepository:
         return _row_to_message(r) if r is not None else None
 
     async def list_staged(
-        self, *, older_than: datetime | None = None, limit: int = 1000, tenant_id: str | None = None
+        self,
+        *,
+        older_than: datetime | None = None,
+        limit: int = 1000,
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
     ) -> list[Message]:
         stmt = (
             select(MessageRow)
@@ -435,6 +441,8 @@ class SqlMessageRepository:
             stmt = stmt.where(MessageRow.created_at <= older_than)
         if tenant_id is not None:
             stmt = stmt.where(MessageRow.tenant_id == tenant_id)
+        if thread_id is not None:
+            stmt = stmt.where(MessageRow.thread_id == thread_id)
         rows = (await self.s.execute(stmt)).scalars().all()
         return [_row_to_message(r) for r in rows]
 
@@ -833,3 +841,128 @@ class SqlOutboxRepository:
             .where(OutboxRow.outbox_id == outbox_id)
             .values(attempts=OutboxRow.attempts + 1, last_error=error[:2000], dead=dead)
         )
+
+
+class SqlArchiveRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.s = session
+
+    @staticmethod
+    def _to_domain(r: ArchiveSegmentRow) -> ArchiveSegment:
+        return ArchiveSegment(
+            segment_id=r.segment_id,
+            tenant_id=r.tenant_id,
+            kind=r.kind,
+            thread_id=r.thread_id,
+            document_id=r.document_id,
+            bucket=r.bucket,
+            key=r.key,
+            generation=r.generation,
+            size_bytes=r.size_bytes,
+            raw_bytes=r.raw_bytes,
+            checksum_sha256=r.checksum_sha256,
+            message_count=r.message_count,
+            first_sequence=r.first_sequence,
+            last_sequence=r.last_sequence,
+            first_at=r.first_at,
+            last_at=r.last_at,
+            status=r.status,
+            manifest=r.manifest or {},
+            verified_at=r.verified_at,
+            last_error=r.last_error,
+        )
+
+    async def add(self, segment: ArchiveSegment) -> None:
+        self.s.add(
+            ArchiveSegmentRow(
+                segment_id=segment.segment_id,
+                tenant_id=segment.tenant_id,
+                kind=segment.kind,
+                thread_id=segment.thread_id,
+                document_id=segment.document_id,
+                bucket=segment.bucket,
+                key=segment.key,
+                generation=segment.generation,
+                size_bytes=segment.size_bytes,
+                raw_bytes=segment.raw_bytes,
+                checksum_sha256=segment.checksum_sha256,
+                message_count=segment.message_count,
+                first_sequence=segment.first_sequence,
+                last_sequence=segment.last_sequence,
+                first_at=segment.first_at,
+                last_at=segment.last_at,
+                status=segment.status,
+                manifest=segment.manifest,
+                verified_at=segment.verified_at,
+            )
+        )
+        await self.s.flush()
+
+    async def get(self, segment_id: str) -> ArchiveSegment | None:
+        r = await self.s.get(ArchiveSegmentRow, segment_id)
+        return self._to_domain(r) if r is not None else None
+
+    async def mark_verified(
+        self, segment_id: str, *, generation: str | None, verified_at: datetime
+    ) -> None:
+        await self.s.execute(
+            update(ArchiveSegmentRow)
+            .where(ArchiveSegmentRow.segment_id == segment_id)
+            .values(
+                status="VERIFIED", generation=generation, verified_at=verified_at, last_error=None
+            )
+        )
+
+    async def mark_failed(self, segment_id: str, *, error: str) -> None:
+        await self.s.execute(
+            update(ArchiveSegmentRow)
+            .where(ArchiveSegmentRow.segment_id == segment_id)
+            .values(status="FAILED", last_error=error[:2000])
+        )
+
+    async def list_by_status(
+        self, status: str, *, older_than: datetime | None = None, limit: int = 200
+    ) -> list[ArchiveSegment]:
+        stmt = (
+            select(ArchiveSegmentRow)
+            .where(ArchiveSegmentRow.status == status)
+            .order_by(ArchiveSegmentRow.created_at)
+            .limit(limit)
+        )
+        if older_than is not None:
+            stmt = stmt.where(ArchiveSegmentRow.created_at <= older_than)
+        rows = (await self.s.execute(stmt)).scalars().all()
+        return [self._to_domain(r) for r in rows]
+
+    async def list_for_thread(self, tenant_id: str, thread_id: str) -> list[ArchiveSegment]:
+        rows = (
+            (
+                await self.s.execute(
+                    select(ArchiveSegmentRow)
+                    .where(
+                        ArchiveSegmentRow.tenant_id == tenant_id,
+                        ArchiveSegmentRow.thread_id == thread_id,
+                    )
+                    .order_by(ArchiveSegmentRow.first_sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [self._to_domain(r) for r in rows]
+
+    async def list_verified(self, *, limit: int = 200, offset: int = 0) -> list[ArchiveSegment]:
+        rows = (
+            (
+                await self.s.execute(
+                    select(ArchiveSegmentRow)
+                    .where(ArchiveSegmentRow.status == "VERIFIED")
+                    .order_by(ArchiveSegmentRow.created_at)
+                    .offset(offset)
+                    .limit(limit)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [self._to_domain(r) for r in rows]

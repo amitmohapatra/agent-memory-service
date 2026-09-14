@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.conversation import AgentRun, Message, Session, Thread, Turn
 from memory_service.domain.observation import Observation
@@ -90,7 +90,12 @@ class MessageRepository(Protocol):
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None: ...
     async def list_staged(
-        self, *, older_than: datetime | None = None, limit: int = 1000, tenant_id: str | None = None
+        self,
+        *,
+        older_than: datetime | None = None,
+        limit: int = 1000,
+        tenant_id: str | None = None,
+        thread_id: str | None = None,
     ) -> list[Message]: ...
     async def mark_archived(
         self, message_ids: Sequence[str], *, segment_id: str, archived_at: datetime
@@ -138,6 +143,46 @@ class IdempotencyRepository(Protocol):
         self, tenant_id: str, key: str, *, status: int, body: dict[str, Any]
     ) -> None: ...
     async def purge_expired(self, *, now: datetime, limit: int = 5000) -> int: ...
+
+
+class ArchiveSegment(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    segment_id: str
+    tenant_id: str
+    kind: str = "chat"
+    thread_id: str | None = None
+    document_id: str | None = None
+    bucket: str
+    key: str
+    generation: str | None = None
+    size_bytes: int
+    raw_bytes: int = 0
+    checksum_sha256: str
+    message_count: int = 0
+    first_sequence: int | None = None
+    last_sequence: int | None = None
+    first_at: datetime | None = None
+    last_at: datetime | None = None
+    status: str = "UPLOADING"
+    manifest: dict[str, Any] = Field(default_factory=dict)
+    verified_at: datetime | None = None
+    last_error: str | None = None
+
+
+@runtime_checkable
+class ArchiveRepository(Protocol):
+    async def add(self, segment: ArchiveSegment) -> None: ...
+    async def get(self, segment_id: str) -> ArchiveSegment | None: ...
+    async def mark_verified(
+        self, segment_id: str, *, generation: str | None, verified_at: datetime
+    ) -> None: ...
+    async def mark_failed(self, segment_id: str, *, error: str) -> None: ...
+    async def list_by_status(
+        self, status: str, *, older_than: datetime | None = None, limit: int = 200
+    ) -> list[ArchiveSegment]: ...
+    async def list_for_thread(self, tenant_id: str, thread_id: str) -> list[ArchiveSegment]: ...
+    async def list_verified(self, *, limit: int = 200, offset: int = 0) -> list[ArchiveSegment]: ...
 
 
 @runtime_checkable

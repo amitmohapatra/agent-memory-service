@@ -30,10 +30,22 @@ class RecordingTaskQueue:
         self.payloads: dict[str, JobSpec] = {}
         self.fail_enqueue = fail_enqueue
         self._queueing_locks: set[str] = set()
+        self.periodic: dict[str, str] = {}
 
     def register(self, name: str, queue: Queue, handler: TaskHandler, *, retries: int = 5) -> None:
         self.handlers[name] = handler
         self.queues[name] = queue
+
+    def register_periodic(
+        self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
+    ) -> None:
+        self.handlers[name] = handler
+        self.queues[name] = queue
+        self.periodic[name] = cron
+
+    async def run_periodic(self, name: str) -> None:
+        """Tests/dev: run a periodic task now."""
+        await self.handlers[name]({"timestamp": 0})
 
     async def enqueue(self, spec: JobSpec, *, connection: Any | None = None) -> str:
         if self.fail_enqueue:

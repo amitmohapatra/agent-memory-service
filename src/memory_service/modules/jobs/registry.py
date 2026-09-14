@@ -18,6 +18,8 @@ TASK_PROCESS_OBSERVATION = "memory.process_observation"
 TASK_ARCHIVE_STAGE = "archive.stage_message"
 TASK_OUTBOX_SWEEP = "system.outbox_sweep"
 TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
+TASK_RECONCILE = "system.reconcile"
+TASK_ARCHIVE_PURGE = "archive.purge_payloads"
 
 
 def register_handlers(container: Container) -> None:
@@ -59,7 +61,36 @@ def register_handlers(container: Container) -> None:
         if n:
             log.info("idempotency.purged", count=n)
 
+    async def reconcile(payload: dict[str, Any]) -> None:
+        relay = container.services.get("outbox_relay")
+        if relay is not None:
+            await relay.sweep(older_than_seconds=30)
+        archiver = container.services.get("archive_service")
+        if archiver is not None:
+            report = await archiver.reconcile()
+            if any(report.values()):
+                log.info("reconcile.report", **report)
+        for extra in container.services.get("extra_reconcilers", []):
+            await extra()
+
+    async def archive_purge(payload: dict[str, Any]) -> None:
+        archiver = container.services.get("archive_service")
+        if archiver is not None:
+            await archiver.purge_staged_payloads()
+
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
+    queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
+    queue.register(TASK_ARCHIVE_PURGE, Queue.ARCHIVE, archive_purge, retries=0)
+    every = max(1, container.settings.tasks.periodic_reconcile_seconds // 60)
+    queue.register_periodic(
+        "periodic.reconcile", Queue.RECONCILE, reconcile, cron=f"*/{min(every, 59)} * * * *"
+    )
+    queue.register_periodic(
+        "periodic.archive_purge", Queue.ARCHIVE, archive_purge, cron="17 * * * *"
+    )
+    queue.register_periodic(
+        "periodic.idempotency_purge", Queue.RECONCILE, idempotency_purge, cron="43 * * * *"
+    )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
     queue.register(TASK_IDEMPOTENCY_PURGE, Queue.RECONCILE, idempotency_purge, retries=0)

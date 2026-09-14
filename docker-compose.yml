@@ -138,13 +138,6 @@ services:
         condition: service_healthy
 
   # ------------------------------------------------------------------ profiles
-  seaweedfs:
-    profiles: ["object-store"]
-    image: chrislusf/seaweedfs:3
-    command: ["server", "-s3", "-dir=/data"]
-    ports: ["8333:8333", "9333:9333"]
-    volumes: ["seaweed:/data"]
-
   neo4j:
     profiles: ["graph-store", "graphiti"]
     image: neo4j:5-community
@@ -184,5 +177,4 @@ volumes:
   qdrant:
   dragonfly:
   blob:
-  seaweed:
   neo4j:

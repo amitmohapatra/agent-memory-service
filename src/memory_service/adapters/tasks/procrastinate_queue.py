@@ -125,6 +125,23 @@ class ProcrastinateTaskQueue:
             pass_context=True,
         )(_run)
 
+    def register_periodic(
+        self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
+    ) -> None:
+        if name in self._handlers:
+            return
+        self._handlers[name] = handler
+
+        async def _run(context: procrastinate.JobContext, timestamp: int) -> Any:
+            with span("job.periodic", task=name):
+                return await handler({"timestamp": timestamp})
+
+        self.app.periodic(cron=cron)(
+            self.app.task(
+                name=name, queue=queue.value, priority=QUEUE_PRIORITY[queue], pass_context=True
+            )(_run)
+        )
+
     def registered(self) -> list[str]:
         return sorted(self._handlers)
 

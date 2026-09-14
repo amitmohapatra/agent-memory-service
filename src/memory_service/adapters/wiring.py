@@ -32,6 +32,8 @@ async def wire_all(container: Container) -> None:
     await _wire_authorization(container)
     _wire_services(container)
     _wire_conversation(container)
+    await _wire_blob(container)
+    _wire_archive(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -164,3 +166,33 @@ def _register_jobs(container: Container) -> None:
     from memory_service.modules.jobs.registry import register_handlers
 
     register_handlers(container)
+
+
+async def _wire_blob(container: Container) -> None:
+    cfg = container.settings.blob
+    if cfg.provider == "gcs":
+        from memory_service.adapters.blob.gcs import GCSBlobStore
+
+        store = GCSBlobStore(cfg)
+        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+    elif cfg.provider == "memory":
+        from memory_service.adapters.blob.memory import MemoryBlobStore
+
+        store = MemoryBlobStore()
+    else:
+        from memory_service.adapters.blob.filesystem import FilesystemBlobStore
+
+        store = FilesystemBlobStore(cfg.filesystem_root)
+        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+    container.blob = store
+
+
+def _wire_archive(container: Container) -> None:
+    from memory_service.modules.archive.service import ArchiveService
+
+    container.services["archive_service"] = ArchiveService(
+        container.services["uow_factory"],
+        container.blob,
+        archive=container.settings.archive,
+        blob_settings=container.settings.blob,
+    )

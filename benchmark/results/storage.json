@@ -1,0 +1,186 @@
+{
+  "compression": {
+    "zstd12_target1MB": {
+      "compressed_bytes": 3703608,
+      "mb_per_second": 18.7,
+      "ratio": 6.07,
+      "raw_bytes": 22487506,
+      "seconds": 1.146,
+      "segment_bytes_max": 695282,
+      "segment_bytes_median": 695001,
+      "segments": 6
+    },
+    "zstd12_target4MB": {
+      "compressed_bytes": 3719176,
+      "mb_per_second": 19.4,
+      "ratio": 6.05,
+      "raw_bytes": 22487506,
+      "seconds": 1.107,
+      "segment_bytes_max": 936772,
+      "segment_bytes_median": 927744,
+      "segments": 4
+    },
+    "zstd12_target8MB": {
+      "compressed_bytes": 3719176,
+      "mb_per_second": 19.7,
+      "ratio": 6.05,
+      "raw_bytes": 22487506,
+      "seconds": 1.089,
+      "segment_bytes_max": 936772,
+      "segment_bytes_median": 927744,
+      "segments": 4
+    },
+    "zstd3_target1MB": {
+      "compressed_bytes": 4071115,
+      "mb_per_second": 53.3,
+      "ratio": 5.52,
+      "raw_bytes": 22487506,
+      "seconds": 0.402,
+      "segment_bytes_max": 764397,
+      "segment_bytes_median": 763635,
+      "segments": 6
+    },
+    "zstd3_target4MB": {
+      "compressed_bytes": 4075293,
+      "mb_per_second": 53.7,
+      "ratio": 5.52,
+      "raw_bytes": 22487506,
+      "seconds": 0.399,
+      "segment_bytes_max": 1026466,
+      "segment_bytes_median": 1016539,
+      "segments": 4
+    },
+    "zstd3_target8MB": {
+      "compressed_bytes": 4075293,
+      "mb_per_second": 54.7,
+      "ratio": 5.52,
+      "raw_bytes": 22487506,
+      "seconds": 0.392,
+      "segment_bytes_max": 1026466,
+      "segment_bytes_median": 1016539,
+      "segments": 4
+    },
+    "zstd6_target1MB": {
+      "compressed_bytes": 4024082,
+      "mb_per_second": 39.6,
+      "ratio": 5.59,
+      "raw_bytes": 22487506,
+      "seconds": 0.542,
+      "segment_bytes_max": 755708,
+      "segment_bytes_median": 755158,
+      "segments": 6
+    },
+    "zstd6_target4MB": {
+      "compressed_bytes": 4034344,
+      "mb_per_second": 38.9,
+      "ratio": 5.57,
+      "raw_bytes": 22487506,
+      "seconds": 0.551,
+      "segment_bytes_max": 1016272,
+      "segment_bytes_median": 1006372,
+      "segments": 4
+    },
+    "zstd6_target8MB": {
+      "compressed_bytes": 4034344,
+      "mb_per_second": 38.6,
+      "ratio": 5.57,
+      "raw_bytes": 22487506,
+      "seconds": 0.556,
+      "segment_bytes_max": 1016272,
+      "segment_bytes_median": 1006372,
+      "segments": 4
+    }
+  },
+  "cost_model_usd_per_month": {
+    "1000GB_reopen10pct": {
+      "ARCHIVE": 6.2,
+      "AUTOCLASS(approx)": 15.62,
+      "COLDLINE": 6.0,
+      "NEARLINE": 11.0,
+      "STANDARD": 20.0
+    },
+    "1000GB_reopen1pct": {
+      "ARCHIVE": 1.7,
+      "AUTOCLASS(approx)": 14.54,
+      "COLDLINE": 4.2,
+      "NEARLINE": 10.1,
+      "STANDARD": 20.0
+    },
+    "1000GB_reopen50pct": {
+      "ARCHIVE": 26.2,
+      "AUTOCLASS(approx)": 20.42,
+      "COLDLINE": 14.0,
+      "NEARLINE": 15.0,
+      "STANDARD": 20.0
+    },
+    "100GB_reopen10pct": {
+      "ARCHIVE": 0.62,
+      "AUTOCLASS(approx)": 1.562,
+      "COLDLINE": 0.6,
+      "NEARLINE": 1.1,
+      "STANDARD": 2.0
+    },
+    "100GB_reopen1pct": {
+      "ARCHIVE": 0.17,
+      "AUTOCLASS(approx)": 1.454,
+      "COLDLINE": 0.42,
+      "NEARLINE": 1.01,
+      "STANDARD": 2.0
+    },
+    "100GB_reopen50pct": {
+      "ARCHIVE": 2.62,
+      "AUTOCLASS(approx)": 2.042,
+      "COLDLINE": 1.4,
+      "NEARLINE": 1.5,
+      "STANDARD": 2.0
+    }
+  },
+  "notes": [
+    "Synthetic English chat; real corpora will compress differently. Re-run on a sample of production segments.",
+    "Cost figures are a model with list-price assumptions, not measurements.",
+    "Recommendation pending real reopen rates: Autoclass unless reopen rate is known to be <1%/month, then explicit Coldline after 90d."
+  ],
+  "price_assumptions": {
+    "ARCHIVE": {
+      "min_days": 365,
+      "retrieval": 0.05,
+      "storage": 0.0012
+    },
+    "COLDLINE": {
+      "min_days": 90,
+      "retrieval": 0.02,
+      "storage": 0.004
+    },
+    "NEARLINE": {
+      "min_days": 30,
+      "retrieval": 0.01,
+      "storage": 0.01
+    },
+    "STANDARD": {
+      "min_days": 0,
+      "retrieval": 0.0,
+      "storage": 0.02
+    }
+  },
+  "provenance": {
+    "cpu_count": 2,
+    "dataset": "synthetic-chat-20k",
+    "git_commit": "25cc7883babcb3554aeb01b5329503d1ca17e71d",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "messages": 20000,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "not-installed",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-14T23:22:12.880034+00:00"
+  }
+}

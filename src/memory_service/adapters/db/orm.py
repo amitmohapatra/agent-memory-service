@@ -330,3 +330,40 @@ class OutboxRow(Base):
             postgresql_where=text("dispatched_at IS NULL AND dead = false"),
         ),
     )
+
+
+# --------------------------------------------------------------------------
+# Archive
+# --------------------------------------------------------------------------
+
+
+class ArchiveSegmentRow(Base):
+    __tablename__ = "archive_segments"
+
+    segment_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="chat")
+    thread_id: Mapped[str | None] = mapped_column(String(200))
+    document_id: Mapped[str | None] = mapped_column(String(200))
+    bucket: Mapped[str] = mapped_column(String(200), nullable=False)
+    key: Mapped[str] = mapped_column(Text, nullable=False)
+    generation: Mapped[str | None] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    raw_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    first_sequence: Mapped[int | None] = mapped_column(Integer)
+    last_sequence: Mapped[int | None] = mapped_column(Integer)
+    first_at: Mapped[datetime | None]
+    last_at: Mapped[datetime | None]
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="UPLOADING")
+    manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    verified_at: Mapped[datetime | None]
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("ix_archive_segments_thread", "tenant_id", "thread_id", "first_sequence"),
+        Index("ix_archive_segments_status", "status", "created_at"),
+        Index("uq_archive_segments_key", "bucket", "key", unique=True),
+    )
