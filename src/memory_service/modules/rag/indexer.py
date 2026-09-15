@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
@@ -47,20 +48,30 @@ class Indexer:
         self.cache = cache
         self.batch_size = batch_size
         self.embedding_cache_ttl = embedding_cache_ttl
+        # M10 (benchmark-gated): ColBERT multivectors are added to chunk records when set
+        self.late_interaction: Any = None
 
     @property
     def fingerprint(self) -> str:
-        return f"{self.embedding.fingerprint()}|{self.sparse.fingerprint()}"
+        late = f"|{self.late_interaction.fingerprint()}" if self.late_interaction else ""
+        return f"{self.embedding.fingerprint()}|{self.sparse.fingerprint()}{late}"
 
     def collection(self, base: str) -> str:
-        """Collection name bound to the embedding space."""
-        return f"{base}_{self.embedding.fingerprint()}".replace("/", "_").replace(".", "_").lower()
+        """Collection name bound to the embedding space (dense + sparse + late fingerprints)."""
+        space = self.fingerprint.replace("|", "__")
+        return f"{base}_{space}".replace("/", "_").replace(".", "_").lower()
 
     async def ensure_collections(self) -> None:
+        sparse_idf = getattr(self.sparse, "server_side_idf", True)
+        late_dim = self.late_interaction.dimension if self.late_interaction else None
         for base in (KNOWLEDGE, MEMORIES):
             await self.store.ensure_collection(
                 CollectionSpec(
-                    name=self.collection(base), dense_dim=self.embedding.dimension, sparse=True
+                    name=self.collection(base),
+                    dense_dim=self.embedding.dimension,
+                    sparse=True,
+                    sparse_idf=sparse_idf,
+                    late_interaction_dim=late_dim if base == KNOWLEDGE else None,
                 )
             )
 
@@ -157,6 +168,12 @@ class Indexer:
         texts = [summaries[i] for i in ids]
         dense = await self.embed_cached(texts, [content_hash(t) + ":sum" for t in texts])
         sparse = self.sparse.encode_documents(texts)
+        # every point in a multivector collection needs the vector (local mode requires it)
+        late = (
+            await self.late_interaction.embed_documents_multi(texts)
+            if self.late_interaction is not None
+            else None
+        )
         records = [
             SearchRecord(
                 record_id=f"sum_{nid}",
@@ -164,6 +181,7 @@ class Indexer:
                 tenant_id=tenant_id,
                 dense=dense[i],
                 sparse=sparse[i],
+                late_interaction=late[i] if late is not None else None,
                 payload={
                     "kind": "summary",
                     "visibility_keys": list(visibility_keys),
@@ -193,8 +211,13 @@ class Indexer:
         thread_id: str | None,
     ) -> int:
         texts = [c.contextual_text for c in chunks]
-        dense = await self.embed_cached(texts, [c.text_hash + ":ctx" for c in chunks])
+        dense = await self._dense_for_chunks(chunks, texts)
         sparse = self.sparse.encode_documents(texts)
+        late = (
+            await self.late_interaction.embed_documents_multi(texts)
+            if self.late_interaction is not None
+            else None
+        )
         records = [
             SearchRecord(
                 record_id=c.chunk_id,
@@ -202,6 +225,7 @@ class Indexer:
                 tenant_id=c.tenant_id,
                 dense=dense[i],
                 sparse=sparse[i],
+                late_interaction=late[i] if late is not None else None,
                 payload={
                     "kind": "chunk",
                     "visibility_keys": list(visibility_keys),
@@ -286,6 +310,22 @@ class Indexer:
             await uow.commit()
         log.info("index.memories_done", tenant_id=tenant_id, upserted=n, removed=len(gone))
         return n
+
+    async def _dense_for_chunks(
+        self, chunks: Sequence[Chunk], texts: list[str]
+    ) -> list[list[float]]:
+        """Per-chunk embeddings, or late chunking (M10) when the provider supports spans:
+        the document's chunks are embedded as one sequence and pooled per chunk span."""
+        embed_spans = getattr(self.embedding, "embed_spans", None)
+        if embed_spans is None or len(chunks) < 2:
+            return await self.embed_cached(texts, [c.text_hash + ":ctx" for c in chunks])
+        document = ""
+        spans: list[tuple[int, int]] = []
+        for c in chunks:
+            start = len(document)
+            document += c.text + "\n\n"
+            spans.append((start, start + len(c.text)))
+        return await embed_spans(document, spans, texts)
 
     async def rebuild_document(self, tenant_id: str, document_id: str) -> int:
         return await self.index_document(tenant_id, document_id, force=True)

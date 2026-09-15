@@ -5,7 +5,7 @@ PY ?= $(UV) run
 COMPOSE ?= docker compose
 
 .PHONY: help setup dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
-        performance-test failure-test eval bench-retrieval bench-memory bench-embedding bench-reranker bench-storage \
+        performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
         load-test validate openapi clean
 
 help: ## Show targets
@@ -66,6 +66,9 @@ eval: ## Deterministic retrieval/memory evaluation gates
 
 bench-retrieval: ## Retrieval benchmark
 	$(PY) python -m benchmark.retrieval
+
+bench-advanced: ## Advanced retrieval strategies vs baseline (adoption verdicts)
+	$(PY) python -m benchmark.advanced
 
 bench-memory: ## Memory intelligence benchmark
 	$(PY) python -m benchmark.memory

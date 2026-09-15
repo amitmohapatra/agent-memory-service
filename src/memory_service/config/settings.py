@@ -221,6 +221,12 @@ class LLMSettings(BaseModel):
 
 
 class ModelSettings(BaseModel):
+    """Embedding / reranker / LLM providers plus the benchmark-gated model names (M10)."""
+
+    sparse_model: str = "prithivida/Splade_PP_en_v1"
+    sparse_model_path: str | None = None
+    late_interaction_model: str = "answerdotai/answerai-colbert-small-v1"
+    late_interaction_model_path: str | None = None
     embedding: EmbeddingSettings = EmbeddingSettings()
     reranker: RerankerSettings = RerankerSettings()
     llm: LLMSettings = LLMSettings()

@@ -95,8 +95,10 @@ class RetrievalEngine:
         self.cfg = settings
         self.rerank_k = rerank_k
         self.router = router or QueryRouter()
-        # pipeline stages appended by later milestones (graph M8, expansion/verification M9, M10)
+        # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
+        # extra retrievers (M10 strategies): their hit lists are RRF-fused with the hybrid list
+        self.retrievers: dict[str, Any] = {}
         # exact lookups by id prefix (graph facts M8)
         self.exact_lookups: dict[str, Any] = {}
 
@@ -141,14 +143,27 @@ class RetrievalEngine:
                     hits = await self._hybrid(
                         routed.query, visibility, kind=kind, document_ids=document_ids
                     )
+                    retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
+                    if kind == "chunk" and self.retrievers:
+                        lists: list[Sequence[SearchHit]] = [hits]
+                        for name, extra in self.retrievers.items():
+                            extra_hits = await extra(ctx, routed, visibility, document_ids)
+                            diagnostics.setdefault("strategies", {})[name] = len(extra_hits)
+                            lists.append(extra_hits)
+                        fused = rrf_fuse(lists, k=self.cfg.rrf_k)[: self.cfg.fused_k]
+                        hits = [
+                            SearchHit(record_id=rid, score=s, retriever="fusion", payload=p)
+                            for rid, s, _, p in fused
+                        ]
+                        retrievers_of = {rid: names for rid, _, names, _ in fused}
                     for h in hits:
                         candidates.append(
                             Candidate(
                                 record_id=h.record_id,
-                                kind=kind,
+                                kind=str(h.payload.get("kind") or kind),
                                 text=str(h.payload.get("text", "")),
                                 score=h.score,
-                                retrievers=[h.retriever],
+                                retrievers=retrievers_of.get(h.record_id, [h.retriever]),
                                 payload=h.payload,
                             )
                         )

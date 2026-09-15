@@ -41,6 +41,7 @@ async def wire_all(container: Container) -> None:
     _wire_memory(container)
     _wire_graph(container)
     _wire_context_preservation(container)
+    _wire_advanced_retrieval(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -271,8 +272,28 @@ def _wire_models(container: Container) -> None:
         [*settings.provider_policy.allowed_licenses, "see model card"],
         settings.provider_policy.allow_remote_models,
     )
+    if settings.retrieval.late_chunking:
+        from memory_service.adapters.models.advanced import LateChunkingEmbedding
+
+        embedding = LateChunkingEmbedding(emb_cfg)
     container.embedding = embedding
-    container.sparse = Bm25SparseEncoder()
+    if settings.retrieval.splade or settings.retrieval.minicoil:
+        from memory_service.adapters.models.advanced import FastEmbedSparseEncoder
+
+        sparse_model = (
+            settings.models.sparse_model if settings.retrieval.splade else "Qdrant/minicoil-v1"
+        )
+        sparse_encoder = FastEmbedSparseEncoder(
+            sparse_model, model_path=settings.models.sparse_model_path
+        )
+        check_provider_policy(
+            sparse_encoder.info,
+            [*settings.provider_policy.allowed_licenses, "see model card"],
+            settings.provider_policy.allow_remote_models,
+        )
+        container.sparse = sparse_encoder
+    else:
+        container.sparse = Bm25SparseEncoder()
     rr_cfg = settings.models.reranker
     if rr_cfg.provider == "disabled":
         container.reranker = None
@@ -429,6 +450,7 @@ def _wire_graph(container: Container) -> None:
             graph,
             container.services["uow_factory"],
             max_facts=settings.context.graph_facts_max,
+            ppr=settings.retrieval.graph_ppr,
         )
 
 
@@ -447,3 +469,42 @@ def _wire_context_preservation(container: Container) -> None:
             container.services["uow_factory"], expansion, settings=settings
         )
     container.services["expansion"] = expansion
+
+
+def _wire_advanced_retrieval(container: Container) -> None:
+    """M10 benchmark-gated strategies. Every flag defaults to False; model-backed ones raise
+    DependencyUnavailable at startup when their weights are absent (no silent fallback)."""
+    from memory_service.modules.retrieval.strategies import (
+        LateInteractionRetriever,
+        PageIndexRetriever,
+        RaptorRetriever,
+    )
+
+    settings = container.settings
+    cfg = settings.retrieval
+    engine = container.services["retrieval"]
+    indexer = container.services["indexer"]
+    if cfg.pageindex:
+        engine.retrievers["pageindex"] = PageIndexRetriever(
+            container.services["uow_factory"], container.search, indexer
+        )
+    if cfg.raptor:
+        engine.retrievers["raptor"] = RaptorRetriever(container.search, indexer)
+    if cfg.colbert:
+        from memory_service.adapters.models.advanced import FastEmbedLateInteraction
+        from memory_service.config.registry import check_provider_policy
+
+        encoder = FastEmbedLateInteraction(
+            settings.models.late_interaction_model,
+            model_path=settings.models.late_interaction_model_path,
+        )
+        check_provider_policy(
+            encoder.info,
+            [*settings.provider_policy.allowed_licenses, "see model card"],
+            settings.provider_policy.allow_remote_models,
+        )
+        container.late_interaction = encoder
+        indexer.late_interaction = encoder
+        engine.retrievers["late_interaction"] = LateInteractionRetriever(
+            container.search, indexer, encoder
+        )
