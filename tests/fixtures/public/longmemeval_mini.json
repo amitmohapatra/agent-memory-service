@@ -1,0 +1,38 @@
+[
+  {
+    "question_id": "mini_001",
+    "question_type": "single-session-user",
+    "question": "Which city did I move to for my new job?",
+    "answer": "Lisbon",
+    "question_date": "2023/06/10 (Sat) 09:00",
+    "haystack_dates": ["2023/05/20 (Sat) 02:21", "2023/05/28 (Sun) 18:40"],
+    "haystack_session_ids": ["sess_a", "sess_b"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I just moved to Lisbon for my new job at a fintech startup.", "has_answer": true},
+        {"role": "assistant", "content": "Congratulations on the move to Lisbon! How is the new role going?"}
+      ],
+      [
+        {"role": "user", "content": "Can you recommend a good espresso machine under 300 euros?"},
+        {"role": "assistant", "content": "The Gaggia Classic Pro is a popular choice in that range."}
+      ]
+    ],
+    "answer_session_ids": ["sess_a"]
+  },
+  {
+    "question_id": "mini_002_abs",
+    "question_type": "single-session-user",
+    "question": "What is the name of my dog?",
+    "answer": "The user never mentioned owning a dog.",
+    "question_date": "2023/06/11 (Sun) 10:00",
+    "haystack_dates": ["2023/05/22 (Mon) 11:15"],
+    "haystack_session_ids": ["sess_c"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "My cat Milo keeps knocking plants off the windowsill."},
+        {"role": "assistant", "content": "Cats often do that for attention; try moving the plants."}
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]

@@ -224,7 +224,12 @@ async def test_bad_payloads_fail_loudly() -> None:
 
 @respx.mock
 async def test_usage_is_logged_without_prompt_text_by_default() -> None:
+    # capture_logs only sees events when structlog is on its default configuration; another
+    # test in the session may have reconfigured it, so reset first and restore afterwards.
+    import structlog
     from structlog.testing import capture_logs
+
+    structlog.reset_defaults()
 
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=_chat("SECRET-ANSWER"))

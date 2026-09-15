@@ -1,0 +1,29 @@
+[
+  {
+    "sample_id": "mini-conv-1",
+    "conversation": {
+      "speaker_a": "Caroline",
+      "speaker_b": "Melanie",
+      "session_1_date_time": "1:56 pm on 8 May, 2023",
+      "session_1": [
+        {"speaker": "Caroline", "dia_id": "D1:1", "text": "Hey Mel! I went to a pottery class yesterday and made a blue bowl."},
+        {"speaker": "Melanie", "dia_id": "D1:2", "text": "That sounds fun! I painted a sunrise last weekend.", "blip_caption": "a painting of a sunrise over hills"}
+      ],
+      "session_2_date_time": "4:10 pm on 25 May, 2023",
+      "session_2": [
+        {"speaker": "Caroline", "dia_id": "D2:1", "text": "I adopted a puppy named Biscuit on Monday."},
+        {"speaker": "Melanie", "dia_id": "D2:2", "text": "Biscuit is a great name. I am training for a 10k race in June."}
+      ]
+    },
+    "qa": [
+      {"question": "What did Caroline make in pottery class?", "answer": "A blue bowl", "evidence": ["D1:1"], "category": 4},
+      {"question": "When did Caroline go to pottery class?", "answer": "7 May 2023", "evidence": ["D1:1"], "category": 2},
+      {"question": "What hobbies do Caroline and Melanie have?", "answer": "pottery, painting", "evidence": ["D1:1", "D1:2"], "category": 1},
+      {"question": "Would Melanie likely enjoy an art museum?", "answer": "Yes, she paints; Likely yes", "evidence": ["D1:2"], "category": 3},
+      {"question": "What breed is Melanie's dog?", "evidence": ["D2:1"], "category": 5, "adversarial_answer": "a beagle"}
+    ],
+    "event_summary": {},
+    "observation": {},
+    "session_summary": {}
+  }
+]

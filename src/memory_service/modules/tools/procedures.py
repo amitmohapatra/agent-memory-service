@@ -21,8 +21,10 @@ unless every step exists in the registry and every binding resolves against a re
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from typing import Any
 
 from memory_service.domain.tools import ToolDescriptor, ToolInvocation
@@ -34,6 +36,8 @@ W_OUTCOME = 0.3
 W_RECENCY = 0.2
 FAILURE_PENALTY = 0.4
 RECENCY_HALF_LIFE_DAYS = 14.0
+# a chain is only a procedure when this fraction of the successful runs follows it end to end
+MIN_PATH_COVERAGE = 0.5
 
 
 @dataclass
@@ -216,17 +220,41 @@ def mine_procedure(pattern: str, trajectories: list[Trajectory]) -> Procedure | 
 
 
 def _best_sequence(trajectories: list[Trajectory]) -> list[str]:
-    """Highest-support path through the prefix tree of successful tool sequences. Ties break on
-    the longer sequence, then alphabetically, so the result is stable across runs."""
+    """The longest path through the prefix tree that most successful runs actually follow.
+
+    Support alone cannot be the objective: every prefix of a sequence is itself a prefix, so a
+    one-step path always has at least as much support as the chain it starts, and maximising
+    support would truncate every procedure to its first tool. A single run that retried a step
+    is enough to push a full chain below a shorter one.
+
+    So the rule is coverage first, length second: keep the prefixes that at least
+    ``MIN_PATH_COVERAGE`` of the successful runs follow (and at least two runs, so one accident
+    is never a procedure), then take the longest of those. Ties break on support and then
+    alphabetically, so the result is stable.
+    """
     counts: dict[tuple[str, ...], int] = defaultdict(int)
     for trajectory in trajectories:
-        sequence = tuple(trajectory.tool_sequence)
+        sequence = tuple(_collapse_retries(trajectory.tool_sequence))
         for length in range(1, len(sequence) + 1):
             counts[sequence[:length]] += 1
     if not counts:
         return []
-    best = max(counts.items(), key=lambda kv: (kv[1], len(kv[0]), [-ord(c) for c in kv[0][0]]))
+    required = max(2, ceil(MIN_PATH_COVERAGE * len(trajectories)))
+    qualifying = {path: n for path, n in counts.items() if n >= required}
+    if not qualifying:  # too few runs to agree on anything: fall back to the best supported
+        qualifying = {max(counts.items(), key=lambda kv: (kv[1], len(kv[0])))[0]: 0}
+    best = max(qualifying.items(), key=lambda kv: (len(kv[0]), kv[1], [-ord(c) for c in kv[0][0]]))
     return list(best[0])
+
+
+def _collapse_retries(sequence: Sequence[str]) -> list[str]:
+    """Consecutive calls to the same tool are one step of the chain: a retry is an adjustment
+    within a step, not an extra step, and counting it as one would fork the prefix tree."""
+    out: list[str] = []
+    for tool in sequence:
+        if not out or out[-1] != tool:
+            out.append(tool)
+    return out
 
 
 def _apply_edge_stats(

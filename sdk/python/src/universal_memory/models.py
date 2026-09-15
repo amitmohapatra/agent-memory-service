@@ -314,3 +314,116 @@ class GraphAnswer(BaseModel):
     entities: list[GraphEntity] = Field(default_factory=list)
     facts: list[GraphFact] = Field(default_factory=list)
     visited: int = 0
+
+
+# --------------------------------------------------------------------------- tool memory
+
+
+class ToolPolicyModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    deterministic: bool = False
+    side_effects: str = "unknown"
+    cacheable: bool = False
+    cache_ttl_seconds: int = 300
+    cache_scope: str = "run"
+    cost_hint: float | None = None
+    redact: list[str] = Field(default_factory=list)
+
+
+class Tool(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    tool_id: str
+    name: str
+    version: int = 1
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    source: str = "manual"
+    policy: ToolPolicyModel = Field(default_factory=ToolPolicyModel)
+    stats: dict[str, Any] | None = None
+
+
+class ToolCall(BaseModel):
+    """One call an agent is about to make, or has just made."""
+
+    model_config = ConfigDict(extra="allow")
+
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    task: str = ""
+    step: int | None = None
+
+
+class ToolResult(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    invocation_id: str | None = None
+    step: int = 0
+    args_hash: str = ""
+    recorded: bool = True
+    cached: bool = False
+    age_seconds: float | None = None
+    output: Any = None
+    output_summary: str | None = None
+    output_fields: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolSuggestion(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    tool: str
+    confidence: float = 0.0
+    argument_template: dict[str, Any] = Field(default_factory=dict)
+    supporting_procedures: list[str] = Field(default_factory=list)
+    supporting_invocations: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    evidence_status: str = "NONE"
+
+    def render(self) -> str:
+        args = ", ".join(f"{k}={v!r}" for k, v in self.argument_template.items())
+        line = f"{self.tool}({args})  [confidence {self.confidence:.2f}]"
+        if self.warnings:
+            line += "\n  warning: " + "; ".join(self.warnings)
+        return line
+
+
+class NextSteps(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    suggestions: list[ToolSuggestion] = Field(default_factory=list)
+    stop: bool = False
+    matched_procedure: str | None = None
+    matched_prefix_length: int = 0
+
+    def render(self) -> str:
+        if self.stop:
+            return "nothing further to call"
+        return "\n".join(s.render() for s in self.suggestions) or "no suggestion"
+
+
+class ToolPlan(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    task_pattern: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    valid: bool = False
+    reason: str | None = None
+    problems: list[str] = Field(default_factory=list)
+    support: int = 0
+    success_rate: float = 0.0
+    script: str | None = None
+    rendered: str | None = None
+    run_ids: list[str] = Field(default_factory=list)
+    invocation_ids: list[str] = Field(default_factory=list)
+
+    def render(self) -> str:
+        if self.rendered:
+            return self.rendered
+        if not self.valid:
+            return f"no validated plan ({self.reason or 'unknown'})"
+        return "\n".join(f"{i + 1}. {s.get('tool')}" for i, s in enumerate(self.steps))
+
+    def render_script(self) -> str:
+        """Starlark form for Bifrost code mode."""
+        return self.script or ""

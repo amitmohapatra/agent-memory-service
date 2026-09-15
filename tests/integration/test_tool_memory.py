@@ -174,11 +174,20 @@ async def test_cache_never_crosses_its_scope(container) -> None:
             widen_policy=True,
         )
         await service.record(
-            uow, _ctx("run_a"), tool="pricing.lookup_price", args={"sku": "A"}, output={"p": 1}, step=0
+            uow,
+            _ctx("run_a"),
+            tool="pricing.lookup_price",
+            args={"sku": "A"},
+            output={"p": 1},
+            step=0,
         )
         await uow.commit()
-        same = await service.lookup(uow, _ctx("run_a"), tool="pricing.lookup_price", args={"sku": "A"})
-        other = await service.lookup(uow, _ctx("run_b"), tool="pricing.lookup_price", args={"sku": "A"})
+        same = await service.lookup(
+            uow, _ctx("run_a"), tool="pricing.lookup_price", args={"sku": "A"}
+        )
+        other = await service.lookup(
+            uow, _ctx("run_b"), tool="pricing.lookup_price", args={"sku": "A"}
+        )
     assert same["cached"] is True
     assert other["cached"] is False
 

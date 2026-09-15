@@ -98,7 +98,21 @@ class DeclaredTool(BaseModel):
 
 
 class LookupRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "tool": "pricing.lookup_price",
+                    "args": {"sku": "SKU-22", "region": "EMEA"},
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     tool: str
@@ -118,7 +132,26 @@ class LookupResponse(BaseModel):
 
 
 class RecordRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "tool": "pricing.lookup_price",
+                    "args": {"sku": "SKU-22"},
+                    "output": {"price": 1200, "currency": "EUR"},
+                    "status": "ok",
+                    "latency_ms": 42.0,
+                    "task": "update quote Q-1183 with EMEA price for SKU-22",
+                    "step": 0,
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     tool: str
@@ -143,7 +176,24 @@ class RecordResponse(BaseModel):
 
 
 class SuggestRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "task": "update quote Q-1183 with EMEA price for SKU-22",
+                    "available_tools": [
+                        {"name": "pricing.lookup_price"},
+                        {"name": "crm.update_quote"},
+                    ],
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     task: str = Field(..., max_length=4000)
@@ -177,7 +227,31 @@ class TrajectoryStep(BaseModel):
 
 
 class NextRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "task": "update quote Q-1183 with EMEA price for SKU-22",
+                    "trajectory_so_far": [
+                        {
+                            "tool": "pricing.lookup_price",
+                            "status": "ok",
+                            "output_fields": {"quote_id": "Q-1183"},
+                        }
+                    ],
+                    "available_tools": [
+                        {"name": "pricing.lookup_price"},
+                        {"name": "crm.update_quote"},
+                    ],
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     task: str = Field(..., max_length=4000)
@@ -194,7 +268,24 @@ class NextResponse(BaseModel):
 
 
 class PlanRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "task": "update quote Q-1183 with EMEA price for SKU-22",
+                    "available_tools": [
+                        {"name": "pricing.lookup_price"},
+                        {"name": "crm.update_quote"},
+                    ],
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     task: str = Field(..., max_length=4000)
@@ -220,7 +311,21 @@ class ProceduresResponse(BaseModel):
 
 
 class OutcomeRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": {
+                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                        "agent_run_id": "run_01J8ZK",
+                    },
+                    "success": True,
+                    "note": "user accepted the quote",
+                }
+            ]
+        },
+    )
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     success: bool

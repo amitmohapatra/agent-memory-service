@@ -93,7 +93,11 @@ async def run_gate(nli: NLIProvider) -> dict[str, Any]:
         "claims": sum(len(r["expected"]) for r in rows),
         "per_verdict": per_verdict,
         "categories": categories,
-        "failures": [f"{r['id']}: expected {r['expected']}, got {r['predicted']}" for r in rows if not r["ok"]],
+        "failures": [
+            f"{r['id']}: expected {r['expected']}, got {r['predicted']}"
+            for r in rows
+            if not r["ok"]
+        ],
         "thresholds": {
             "supported_precision_min": SUPPORTED_PRECISION_MIN,
             "contradicted_recall_min": CONTRADICTED_RECALL_MIN,
@@ -159,9 +163,9 @@ async def test_grounding_gate_with_deberta() -> None:
     assert not bad, bad
     supported = report["per_verdict"]["supported"]
     contradicted = report["per_verdict"]["contradicted"]
-    assert supported["precision"] is not None and supported["precision"] >= SUPPORTED_PRECISION_MIN, (
-        report["failures"]
-    )
-    assert contradicted["recall"] is not None and contradicted["recall"] >= CONTRADICTED_RECALL_MIN, (
-        report["failures"]
-    )
+    assert (
+        supported["precision"] is not None and supported["precision"] >= SUPPORTED_PRECISION_MIN
+    ), report["failures"]
+    assert (
+        contradicted["recall"] is not None and contradicted["recall"] >= CONTRADICTED_RECALL_MIN
+    ), report["failures"]

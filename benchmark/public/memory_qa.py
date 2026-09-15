@@ -75,7 +75,7 @@ def _role(turn_role: str) -> MessageRole:
     return MessageRole.ASSISTANT if turn_role.lower() == "assistant" else MessageRole.USER
 
 
-def _content(conv: Conversation, speaker: str | None, content: str) -> str:
+def _content(speaker: str | None, content: str) -> str:
     return f"{speaker}: {content}" if speaker else content
 
 
@@ -102,7 +102,7 @@ async def _ingest_conversation(container: Any, conv: Conversation) -> dict[str, 
                     uow,
                     ctx,
                     role=role,
-                    content=_content(conv, turn.speaker, turn.content),
+                    content=_content(turn.speaker, turn.content),
                     occurred_at=session.date,
                     source_system=f"bench:{conv.conversation_id}",
                     source_message_id=f"{session.session_id}:{messages}",
@@ -139,9 +139,7 @@ async def _judge_longmemeval(
             [
                 await judge_once(
                     container.llm,
-                    anscheck_prompt(
-                        q.category, q.text, q.answer, answer, abstention=q.abstention
-                    ),
+                    anscheck_prompt(q.category, q.text, q.answer, answer, abstention=q.abstention),
                 )
                 for q, answer in items
             ]

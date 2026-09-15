@@ -14,8 +14,9 @@ immutable; ``contextvars`` propagate it within one async execution for convenien
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Self
@@ -34,9 +35,15 @@ from universal_memory.models import (
     MemoryResult,
     MessageAck,
     MessageInfo,
+    NextSteps,
     ObservationAck,
     Scope,
     ThreadInfo,
+    Tool,
+    ToolCall,
+    ToolPlan,
+    ToolResult,
+    ToolSuggestion,
 )
 from universal_memory.transport import Transport
 
@@ -107,6 +114,8 @@ class MemoryContext:
         self.chat = ChatAPI(self)
         self.files = FilesAPI(self)
         self.graph = GraphAPI(self)
+        self.tools = ToolsAPI(self)
+        self.runs = RunsAPI(self)
         self._token: Any = None
 
     # -- context manager: propagate via contextvars ---------------------
@@ -496,3 +505,214 @@ class GraphAPI:
             payload["as_of"] = as_of.isoformat()
         data = await self._ctx._request("POST", "/v1/graph/query", json=payload)
         return GraphAnswer.model_validate(data)
+
+
+class ToolsAPI:
+    """Tool memory: register what a tool is, record what happened, and ask what to call.
+
+    The service never runs a tool. ``execute`` is the convenience loop an adapter wants —
+    look in the cache, run the caller's own executor on a miss, record the outcome — so the
+    invocation records, chains and suggestions work the same whether the tool lives in the
+    agent framework or behind an MCP gateway.
+    """
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    async def register(
+        self,
+        name: str,
+        *,
+        description: str = "",
+        input_schema: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        source: str = "manual",
+        server: str | None = None,
+        policy: dict[str, Any] | None = None,
+    ) -> Tool:
+        payload: dict[str, Any] = {
+            "scope": self._ctx._scope_payload(),
+            "name": name,
+            "description": description,
+            "input_schema": input_schema,
+            "output_schema": output_schema,
+            "tags": tags or [],
+            "source": source,
+            "server": server,
+        }
+        if policy is not None:
+            payload["policy"] = policy
+        data = await self._ctx._request("POST", "/v1/tools", json=payload)
+        return Tool.model_validate(data)
+
+    async def register_many(self, descriptors: Sequence[dict[str, Any]]) -> list[Tool]:
+        return [await self.register(**d) for d in descriptors]
+
+    async def list(self, *, limit: int = 200) -> list[Tool]:
+        data = await self._ctx._request("GET", "/v1/tools", params={"limit": limit})
+        return [Tool.model_validate(t) for t in data.get("tools", [])]
+
+    async def lookup(self, tool: str, args: dict[str, Any]) -> ToolResult:
+        data = await self._ctx._request(
+            "POST",
+            "/v1/tools/lookup",
+            json={"scope": self._ctx._scope_payload(), "tool": tool, "args": args},
+        )
+        return ToolResult.model_validate(data)
+
+    async def record(
+        self,
+        tool: str,
+        args: dict[str, Any],
+        *,
+        output: Any = None,
+        output_summary: str | None = None,
+        status: str = "ok",
+        error_class: str | None = None,
+        latency_ms: float | None = None,
+        cost: float | None = None,
+        task: str = "",
+        step: int | None = None,
+        sub_calls: list[dict[str, Any]] | None = None,
+        visibility: str = "RUN",
+    ) -> ToolResult:
+        data = await self._ctx._request(
+            "POST",
+            "/v1/tools/record",
+            json={
+                "scope": self._ctx._scope_payload(),
+                "tool": tool,
+                "args": args,
+                "output": output,
+                "output_summary": output_summary,
+                "status": status,
+                "error_class": error_class,
+                "latency_ms": latency_ms,
+                "cost": cost,
+                "task": task,
+                "step": step,
+                "sub_calls": sub_calls or [],
+                "visibility": visibility,
+            },
+        )
+        return ToolResult.model_validate(data)
+
+    async def suggest(
+        self,
+        task: str,
+        *,
+        available_tools: Sequence[dict[str, Any]],
+        context: str | None = None,
+        limit: int = 5,
+    ) -> list[ToolSuggestion]:
+        data = await self._ctx._request(
+            "POST",
+            "/v1/tools/suggest",
+            json={
+                "scope": self._ctx._scope_payload(),
+                "task": task,
+                "available_tools": list(available_tools),
+                "context": context,
+                "limit": limit,
+            },
+        )
+        return [ToolSuggestion.model_validate(s) for s in data.get("suggestions", [])]
+
+    async def next(
+        self,
+        task: str,
+        *,
+        trajectory_so_far: Sequence[dict[str, Any]],
+        available_tools: Sequence[dict[str, Any]],
+        limit: int = 3,
+    ) -> NextSteps:
+        data = await self._ctx._request(
+            "POST",
+            "/v1/tools/next",
+            json={
+                "scope": self._ctx._scope_payload(),
+                "task": task,
+                "trajectory_so_far": list(trajectory_so_far),
+                "available_tools": list(available_tools),
+                "limit": limit,
+            },
+        )
+        return NextSteps.model_validate(data)
+
+    async def plan(self, task: str, *, available_tools: Sequence[dict[str, Any]]) -> ToolPlan:
+        data = await self._ctx._request(
+            "POST",
+            "/v1/tools/plan",
+            json={
+                "scope": self._ctx._scope_payload(),
+                "task": task,
+                "available_tools": list(available_tools),
+            },
+        )
+        return ToolPlan.model_validate(data)
+
+    async def procedures(self, task: str) -> list[dict[str, Any]]:
+        data = await self._ctx._request("GET", "/v1/tools/procedures", params={"task": task})
+        return list(data.get("procedures", []))
+
+    async def execute(
+        self,
+        call: ToolCall,
+        executor: Callable[[str, dict[str, Any]], Awaitable[Any]],
+        *,
+        visibility: str = "RUN",
+    ) -> ToolResult:
+        """Cache lookup, then the caller's executor, then an idempotent record.
+
+        ``executor`` is whatever actually runs the tool — a local function, a framework tool
+        node, or a POST to Bifrost's ``/v1/mcp/tool/execute``. The service stays out of it.
+        """
+        hit = await self.lookup(call.tool, call.args)
+        if hit.cached:
+            return hit
+        started = time.perf_counter()
+        status, error_class, output = "ok", None, None
+        try:
+            output = await executor(call.tool, call.args)
+        except Exception as exc:
+            status, error_class = "error", type(exc).__name__
+            await self.record(
+                call.tool,
+                call.args,
+                status=status,
+                error_class=error_class,
+                latency_ms=(time.perf_counter() - started) * 1000,
+                task=call.task,
+                step=call.step,
+                visibility=visibility,
+            )
+            raise
+        result = await self.record(
+            call.tool,
+            call.args,
+            output=output,
+            status=status,
+            latency_ms=(time.perf_counter() - started) * 1000,
+            task=call.task,
+            step=call.step,
+            visibility=visibility,
+        )
+        return result.model_copy(update={"output": output})
+
+
+class RunsAPI:
+    """Run outcomes. Only a run labelled successful validates a procedure, so this is how an
+    application tells the service that what an agent did actually worked."""
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    async def outcome(
+        self, run_id: str, *, success: bool, note: str | None = None
+    ) -> dict[str, Any]:
+        return await self._ctx._request(
+            "POST",
+            f"/v1/runs/{run_id}/outcome",
+            json={"scope": self._ctx._scope_payload(), "success": success, "note": note},
+        )

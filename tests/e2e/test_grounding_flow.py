@@ -112,7 +112,10 @@ def test_verify_over_http(client) -> None:
         "/v1/verify", headers=H, json={"scope": scope, "answer": GOOD, "bundle_id": "nope"}
     )
     assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
-    assert client.post("/v1/verify", json={"scope": scope, "answer": GOOD, "query": Q}).status_code == 401
+    assert (
+        client.post("/v1/verify", json={"scope": scope, "answer": GOOD, "query": Q}).status_code
+        == 401
+    )
 
     # another user cannot verify against this user's document: no evidence, nothing supported
     other = client.post(

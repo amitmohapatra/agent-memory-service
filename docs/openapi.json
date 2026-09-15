@@ -135,6 +135,86 @@
         "title": "Body_upload_file_v1_files_post",
         "type": "object"
       },
+      "ClaimVerdictBody": {
+        "examples": [
+          {
+            "citations": [
+              "1"
+            ],
+            "claim": "Adjusted EBITDA increased to EUR 98 million",
+            "contradicted_by": [],
+            "contradiction": 0.01,
+            "evidence_ids": [
+              "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            ],
+            "method": "nli",
+            "notes": [],
+            "support": 0.97,
+            "verdict": "supported"
+          }
+        ],
+        "properties": {
+          "citations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "contradicted_by": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Contradicted By",
+            "type": "array"
+          },
+          "contradiction": {
+            "title": "Contradiction",
+            "type": "number"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "method": {
+            "description": "citation | nli | judge",
+            "title": "Method",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "support": {
+            "title": "Support",
+            "type": "number"
+          },
+          "verdict": {
+            "description": "supported | unsupported | contradicted | borderline",
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "verdict",
+          "support",
+          "contradiction",
+          "method"
+        ],
+        "title": "ClaimVerdictBody",
+        "type": "object"
+      },
       "ContextRequest": {
         "additionalProperties": false,
         "examples": [
@@ -149,6 +229,22 @@
           }
         ],
         "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "maxLength": 40000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When given, the grounding cascade verifies this answer against the bundle and the report is attached as evidence.grounding",
+            "examples": [
+              null
+            ],
+            "title": "Answer"
+          },
           "document_ids": {
             "anyOf": [
               {
@@ -214,6 +310,7 @@
         "examples": [
           {
             "built_at": "2026-09-14T10:00:00Z",
+            "bundle_id": "6f1c\u2026",
             "cache_hit": false,
             "conversation": {
               "message_ids": [
@@ -226,11 +323,13 @@
             "diagnostics": {},
             "evidence": {
               "escalations": [],
+              "llm_tokens": 0,
               "missing_groups": [],
               "notes": [],
               "required_groups": [],
               "satisfied_groups": [],
-              "status": "COMPLETE"
+              "status": "COMPLETE",
+              "unused": []
             },
             "graph_facts": [],
             "knowledge": [],
@@ -245,6 +344,11 @@
           }
         ],
         "properties": {
+          "bundle_id": {
+            "default": "",
+            "title": "Bundle Id",
+            "type": "string"
+          },
           "cache_hit": {
             "title": "Cache Hit",
             "type": "boolean"
@@ -519,6 +623,72 @@
           }
         },
         "title": "CreateThreadRequest",
+        "type": "object"
+      },
+      "DeclaredTool": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server"
+          },
+          "source": {
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DeclaredTool",
         "type": "object"
       },
       "DependencyStatus": {
@@ -1207,6 +1377,136 @@
         "title": "LiveResponse",
         "type": "object"
       },
+      "LookupRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "args": {
+              "region": "EMEA",
+              "sku": "SKU-22"
+            },
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "tool": "pricing.lookup_price"
+          }
+        ],
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "LookupRequest",
+        "type": "object"
+      },
+      "LookupResponse": {
+        "properties": {
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "cache_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Scope"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "invocation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invocation Id"
+          },
+          "output_blob_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Blob Ref"
+          },
+          "output_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Digest"
+          },
+          "output_fields": {
+            "additionalProperties": true,
+            "title": "Output Fields",
+            "type": "object"
+          },
+          "output_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Summary"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "cached"
+        ],
+        "title": "LookupResponse",
+        "type": "object"
+      },
       "MemoryListResponse": {
         "properties": {
           "memories": {
@@ -1444,6 +1744,9 @@
           "SUMMARY",
           "DERIVED",
           "POLICY",
+          "OBSERVATION",
+          "BELIEF",
+          "ENTITY_SUMMARY",
           "CUSTOM"
         ],
         "title": "MemoryType",
@@ -1682,6 +1985,108 @@
         "title": "MessageRole",
         "type": "string"
       },
+      "NextRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "available_tools": [
+              {
+                "name": "pricing.lookup_price"
+              },
+              {
+                "name": "crm.update_quote"
+              }
+            ],
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "task": "update quote Q-1183 with EMEA price for SKU-22",
+            "trajectory_so_far": [
+              {
+                "output_fields": {
+                  "quote_id": "Q-1183"
+                },
+                "status": "ok",
+                "tool": "pricing.lookup_price"
+              }
+            ]
+          }
+        ],
+        "properties": {
+          "available_tools": {
+            "items": {
+              "$ref": "#/components/schemas/DeclaredTool"
+            },
+            "title": "Available Tools",
+            "type": "array"
+          },
+          "limit": {
+            "default": 3,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "task": {
+            "maxLength": 4000,
+            "title": "Task",
+            "type": "string"
+          },
+          "trajectory_so_far": {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryStep"
+            },
+            "title": "Trajectory So Far",
+            "type": "array"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "NextRequest",
+        "type": "object"
+      },
+      "NextResponse": {
+        "properties": {
+          "matched_prefix_length": {
+            "default": 0,
+            "title": "Matched Prefix Length",
+            "type": "integer"
+          },
+          "matched_procedure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Procedure"
+          },
+          "stop": {
+            "title": "Stop",
+            "type": "boolean"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions",
+          "stop"
+        ],
+        "title": "NextResponse",
+        "type": "object"
+      },
       "ObservationAckResponse": {
         "properties": {
           "job_ids": {
@@ -1808,6 +2213,269 @@
           "content"
         ],
         "title": "ObservationRequest",
+        "type": "object"
+      },
+      "OutcomeRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "note": "user accepted the quote",
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "success": true
+          }
+        ],
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "OutcomeRequest",
+        "type": "object"
+      },
+      "OutcomeResponse": {
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "run_id",
+          "success",
+          "source"
+        ],
+        "title": "OutcomeResponse",
+        "type": "object"
+      },
+      "PlanRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "available_tools": [
+              {
+                "name": "pricing.lookup_price"
+              },
+              {
+                "name": "crm.update_quote"
+              }
+            ],
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "task": "update quote Q-1183 with EMEA price for SKU-22"
+          }
+        ],
+        "properties": {
+          "available_tools": {
+            "items": {
+              "$ref": "#/components/schemas/DeclaredTool"
+            },
+            "title": "Available Tools",
+            "type": "array"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "task": {
+            "maxLength": 4000,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "PlanRequest",
+        "type": "object"
+      },
+      "PlanResponse": {
+        "properties": {
+          "invocation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Invocation Ids",
+            "type": "array"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "rendered": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rendered"
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Ids",
+            "type": "array"
+          },
+          "script": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Script"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "success_rate": {
+            "default": 0.0,
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "support": {
+            "default": 0,
+            "title": "Support",
+            "type": "integer"
+          },
+          "task_pattern": {
+            "title": "Task Pattern",
+            "type": "string"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_pattern",
+          "valid"
+        ],
+        "title": "PlanResponse",
+        "type": "object"
+      },
+      "PolicyBody": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_scope": {
+            "default": "run",
+            "title": "Cache Scope",
+            "type": "string"
+          },
+          "cache_ttl_seconds": {
+            "default": 300,
+            "maximum": 86400.0,
+            "minimum": 0.0,
+            "title": "Cache Ttl Seconds",
+            "type": "integer"
+          },
+          "cacheable": {
+            "default": false,
+            "title": "Cacheable",
+            "type": "boolean"
+          },
+          "cost_hint": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Hint"
+          },
+          "deterministic": {
+            "default": false,
+            "title": "Deterministic",
+            "type": "boolean"
+          },
+          "redact": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redact",
+            "type": "array"
+          },
+          "side_effects": {
+            "default": "unknown",
+            "title": "Side Effects",
+            "type": "string"
+          }
+        },
+        "title": "PolicyBody",
+        "type": "object"
+      },
+      "ProceduresResponse": {
+        "properties": {
+          "procedures": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Procedures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "procedures"
+        ],
+        "title": "ProceduresResponse",
         "type": "object"
       },
       "ProcessingHintsIn": {
@@ -2186,6 +2854,272 @@
         "title": "RecallResponse",
         "type": "object"
       },
+      "RecordRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "args": {
+              "sku": "SKU-22"
+            },
+            "latency_ms": 42.0,
+            "output": {
+              "currency": "EUR",
+              "price": 1200
+            },
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "status": "ok",
+            "step": 0,
+            "task": "update quote Q-1183 with EMEA price for SKU-22",
+            "tool": "pricing.lookup_price"
+          }
+        ],
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "error_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Class"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "output_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Summary"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "sub_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Sub Calls",
+            "type": "array"
+          },
+          "task": {
+            "default": "",
+            "title": "Task",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "RUN",
+            "description": "RUN | AGENT_GROUP | USER | THREAD | ...",
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "RecordRequest",
+        "type": "object"
+      },
+      "RecordResponse": {
+        "properties": {
+          "args_hash": {
+            "title": "Args Hash",
+            "type": "string"
+          },
+          "invocation_id": {
+            "title": "Invocation Id",
+            "type": "string"
+          },
+          "recorded": {
+            "description": "False when an identical call was already recorded.",
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "step": {
+            "title": "Step",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "invocation_id",
+          "step",
+          "args_hash",
+          "recorded"
+        ],
+        "title": "RecordResponse",
+        "type": "object"
+      },
+      "RegisterToolRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "description": "Current list price for a SKU in a region",
+            "input_schema": {
+              "properties": {
+                "region": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "name": "pricing.lookup_price",
+            "policy": {
+              "cache_scope": "thread",
+              "cache_ttl_seconds": 900,
+              "cacheable": true,
+              "deterministic": true,
+              "side_effects": "read"
+            },
+            "source": "mcp",
+            "tags": [
+              "pricing"
+            ]
+          }
+        ],
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Schema"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PolicyBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Widening a policy requires tenant admin; otherwise the stored policy wins."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server"
+          },
+          "source": {
+            "default": "manual",
+            "title": "Source",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RegisterToolRequest",
+        "type": "object"
+      },
       "ScopeBody": {
         "additionalProperties": false,
         "description": "Lineage part of the scope, sent in request bodies by the SDK.\n\nSecurity fields (tenant/workspace/user/groups) travel in trusted headers. When they are\nalso present in the body they must match the headers exactly.",
@@ -2387,6 +3321,131 @@
         "title": "ScopeBody",
         "type": "object"
       },
+      "SuggestRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "available_tools": [
+              {
+                "name": "pricing.lookup_price"
+              },
+              {
+                "name": "crm.update_quote"
+              }
+            ],
+            "scope": {
+              "agent_run_id": "run_01J8ZK",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "task": "update quote Q-1183 with EMEA price for SKU-22"
+          }
+        ],
+        "properties": {
+          "available_tools": {
+            "items": {
+              "$ref": "#/components/schemas/DeclaredTool"
+            },
+            "title": "Available Tools",
+            "type": "array"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "task": {
+            "maxLength": 4000,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "SuggestRequest",
+        "type": "object"
+      },
+      "SuggestResponse": {
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions"
+        ],
+        "title": "SuggestResponse",
+        "type": "object"
+      },
+      "SuggestionOut": {
+        "properties": {
+          "argument_template": {
+            "additionalProperties": true,
+            "title": "Argument Template",
+            "type": "object"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "evidence_status": {
+            "title": "Evidence Status",
+            "type": "string"
+          },
+          "supporting_invocations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Invocations",
+            "type": "array"
+          },
+          "supporting_procedures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Procedures",
+            "type": "array"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tool",
+          "confidence",
+          "evidence_status"
+        ],
+        "title": "SuggestionOut",
+        "type": "object"
+      },
       "ThreadResponse": {
         "examples": [
           {
@@ -2471,6 +3530,456 @@
           "updated_at"
         ],
         "title": "ThreadResponse",
+        "type": "object"
+      },
+      "ToolListResponse": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolOut"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "ToolListResponse",
+        "type": "object"
+      },
+      "ToolOut": {
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy": {
+            "additionalProperties": true,
+            "title": "Policy",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "stats": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stats"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tool_id",
+          "name",
+          "version",
+          "source",
+          "policy"
+        ],
+        "title": "ToolOut",
+        "type": "object"
+      },
+      "TrajectoryStep": {
+        "additionalProperties": false,
+        "properties": {
+          "args_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Args Hash"
+          },
+          "output_fields": {
+            "additionalProperties": true,
+            "title": "Output Fields",
+            "type": "object"
+          },
+          "output_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Summary"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "TrajectoryStep",
+        "type": "object"
+      },
+      "VerifyItem": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+            "item_id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+            "kind": "chunk",
+            "text": "Adjusted EBITDA increased to EUR 98 million (FY25: EUR 90 million)."
+          }
+        ],
+        "properties": {
+          "citation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            ],
+            "title": "Citation"
+          },
+          "item_id": {
+            "examples": [
+              "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            ],
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "chunk",
+            "examples": [
+              "chunk"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "examples": [
+              "Adjusted EBITDA increased to EUR 98 million (FY25: EUR 90 million)."
+            ],
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "text"
+        ],
+        "title": "VerifyItem",
+        "type": "object"
+      },
+      "VerifyRequest": {
+        "additionalProperties": false,
+        "description": "Exactly one evidence source: ``bundle_id`` (a bundle from /v1/context, while cached),\n``items`` (evidence the caller holds; ``unused`` may accompany it) or ``query``\n(retrieval is re-run under the caller's scope).",
+        "examples": [
+          {
+            "answer": "Adjusted EBITDA increased to EUR 98 million [1]. Revenue fell to EUR 400 million because of lower volumes.",
+            "items": [
+              {
+                "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "item_id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "kind": "chunk",
+                "text": "Adjusted EBITDA increased to EUR 98 million (FY25: EUR 90 million)."
+              }
+            ],
+            "scope": {
+              "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            }
+          }
+        ],
+        "properties": {
+          "answer": {
+            "examples": [
+              "Adjusted EBITDA increased to EUR 98 million [1]. Revenue fell to EUR 400 million because of lower volumes."
+            ],
+            "maxLength": 40000,
+            "minLength": 1,
+            "title": "Answer",
+            "type": "string"
+          },
+          "bundle_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              null
+            ],
+            "title": "Bundle Id"
+          },
+          "document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              null
+            ],
+            "title": "Document Ids"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/VerifyItem"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              [
+                {
+                  "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                  "item_id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                  "kind": "chunk",
+                  "text": "Adjusted EBITDA increased to EUR 98 million (FY25: EUR 90 million)."
+                }
+              ]
+            ],
+            "title": "Items"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              null
+            ],
+            "title": "Query"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody",
+            "examples": [
+              {
+                "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+              }
+            ]
+          },
+          "unused": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/VerifyItem"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "retrieved-but-unused evidence scanned for contradictions",
+            "examples": [
+              null
+            ],
+            "title": "Unused"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "VerifyRequest",
+        "type": "object"
+      },
+      "VerifyResponse": {
+        "description": "GroundingReport: one verdict per claim and the per-claim hallucination rate.",
+        "examples": [
+          {
+            "borderline": 0,
+            "claims": [
+              {
+                "citations": [
+                  "1"
+                ],
+                "claim": "Adjusted EBITDA increased to EUR 98 million",
+                "contradicted_by": [],
+                "contradiction": 0.01,
+                "evidence_ids": [
+                  "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+                ],
+                "method": "nli",
+                "notes": [],
+                "support": 0.97,
+                "verdict": "supported"
+              },
+              {
+                "citations": [],
+                "claim": "Revenue fell to EUR 400 million because of lower volumes",
+                "contradicted_by": [],
+                "contradiction": 0.03,
+                "evidence_ids": [
+                  "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+                ],
+                "method": "nli",
+                "notes": [],
+                "support": 0.08,
+                "verdict": "unsupported"
+              }
+            ],
+            "contradicted": 0,
+            "evidence_count": 1,
+            "judge_consulted": 0,
+            "llm_tokens": 0,
+            "nli_provider": "nli-deberta-v3-base-mnli-fever-anli",
+            "notes": [],
+            "per_claim_hallucination_rate": 0.5,
+            "representative": true,
+            "source": "items",
+            "supported": 1,
+            "unsupported": 1,
+            "unused_count": 0
+          }
+        ],
+        "properties": {
+          "borderline": {
+            "title": "Borderline",
+            "type": "integer"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimVerdictBody"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "contradicted": {
+            "title": "Contradicted",
+            "type": "integer"
+          },
+          "evidence_count": {
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "judge_consulted": {
+            "title": "Judge Consulted",
+            "type": "integer"
+          },
+          "llm_tokens": {
+            "title": "Llm Tokens",
+            "type": "integer"
+          },
+          "nli_provider": {
+            "title": "Nli Provider",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "per_claim_hallucination_rate": {
+            "title": "Per Claim Hallucination Rate",
+            "type": "number"
+          },
+          "representative": {
+            "title": "Representative",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "bundle | items | query",
+            "title": "Source",
+            "type": "string"
+          },
+          "supported": {
+            "title": "Supported",
+            "type": "integer"
+          },
+          "unsupported": {
+            "title": "Unsupported",
+            "type": "integer"
+          },
+          "unused_count": {
+            "title": "Unused Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "claims",
+          "supported",
+          "unsupported",
+          "contradicted",
+          "borderline",
+          "per_claim_hallucination_rate",
+          "nli_provider",
+          "representative",
+          "judge_consulted",
+          "llm_tokens",
+          "evidence_count",
+          "unused_count"
+        ],
+        "title": "VerifyResponse",
         "type": "object"
       },
       "VersionResponse": {
@@ -5201,6 +6710,160 @@
         ]
       }
     },
+    "/v1/runs/{run_id}/outcome": {
+      "post": {
+        "operationId": "set_run_outcome_v1_runs__run_id__outcome_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Label an agent run successful or not (only successful runs validate a procedure)",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
     "/v1/threads": {
       "post": {
         "operationId": "create_thread_v1_threads_post",
@@ -6189,6 +7852,1310 @@
         "summary": "List messages (newest page last; page backwards with before_sequence)",
         "tags": [
           "messages"
+        ]
+      }
+    },
+    "/v1/tools": {
+      "get": {
+        "operationId": "list_tools_v1_tools_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List the tenant's tools with their outcome statistics",
+        "tags": [
+          "tools"
+        ]
+      },
+      "post": {
+        "operationId": "register_tool_v1_tools_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterToolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Register or update a tool descriptor (policy widening requires tenant admin)",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/lookup": {
+      "post": {
+        "operationId": "lookup_tool_v1_tools_lookup_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LookupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Serve a still-valid identical result for a deterministic, cacheable tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/next": {
+      "post": {
+        "operationId": "next_tool_v1_tools_next_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Rank the next steps given the trajectory so far, with arguments already bound",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/plan": {
+      "post": {
+        "operationId": "plan_tools_v1_tools_plan_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "The best-known validated chain for a task, as an ordered plan with bindings",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/procedures": {
+      "get": {
+        "operationId": "list_procedures_v1_tools_procedures_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProceduresResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Procedures mined for a task pattern",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/record": {
+      "post": {
+        "operationId": "record_tool_v1_tools_record_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Record one tool call (idempotent on run + step + tool + arguments)",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/suggest": {
+      "post": {
+        "operationId": "suggest_tools_v1_tools_suggest_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Rank the declared tools for a task from previous runs",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/verify": {
+      "post": {
+        "operationId": "verify_v1_verify_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Verify an answer claim by claim against evidence",
+        "tags": [
+          "retrieval"
         ]
       }
     },
