@@ -87,16 +87,17 @@ class TestCandidates:
     def test_embedding_matrix(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv("MEMORY_MODELS_DIR", str(tmp_path))
         full = embedding.candidates(threads=3)
-        assert len(full) == 6
+        # derived from the catalogue, so adding a candidate model does not break the test
+        assert len(full) == len(embedding.MODELS) * len(embedding.BACKENDS)
         assert {c.provider for c in full.values()} == set(embedding.BACKENDS)
-        assert {c.dimension for c in full.values()} == {768, 384}
+        assert {c.dimension for c in full.values()} == {d for _, d in embedding.MODELS.values()}
         assert all(c.threads == 3 for c in full.values())
         large = full["granite-embedding-english-r2/onnx"]
         assert large.model == "ibm-granite/granite-embedding-english-r2"
         assert large.model_path == str(tmp_path / "granite-embedding-english-r2")
 
         quick = embedding.candidates(quick=True)
-        assert len(quick) == 2
+        assert len(quick) == len(embedding.MODELS)
         assert {c.provider for c in quick.values()} == {"sentence_transformers"}
 
         stand_in = embedding.candidates(stand_in=True)

@@ -48,8 +48,11 @@ from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 from memory_service.ports.search import SearchFilter
 
 MODELS: dict[str, tuple[str, int]] = {
-    "granite-embedding-english-r2": ("ibm-granite/granite-embedding-english-r2", 768),
+    "bge-small-en-v1.5": ("BAAI/bge-small-en-v1.5", 384),
+    "bge-base-en-v1.5": ("BAAI/bge-base-en-v1.5", 768),
     "granite-embedding-small-english-r2": ("ibm-granite/granite-embedding-small-english-r2", 384),
+    "granite-embedding-english-r2": ("ibm-granite/granite-embedding-english-r2", 768),
+    "qwen3-embedding-0.6b": ("Qwen/Qwen3-Embedding-0.6B", 1024),
 }
 BACKENDS = ("sentence_transformers", "onnx", "openvino")
 QUICK_BACKENDS = ("sentence_transformers",)

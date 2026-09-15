@@ -77,9 +77,15 @@ Requires Docker and Python 3.12.
 ```bash
 git clone <repo> memory-service && cd memory-service
 make setup          # uv venv + dependencies
+make models         # download the model weights into ./models (~1 GB, git-ignored)
 make dev-up         # PostgreSQL, Qdrant, Dragonfly, OpenFGA, api, worker
 make migrate
 ```
+
+**`make models` is not optional for `make dev-up`.** The service reads its weights from local
+directories and never downloads at run time, so a missing model is a startup error rather than
+a silent fall back to something weaker. (The test suite and `examples/run_server.sh` do have a
+deterministic stand-in, which is why they run without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
 `/health/ready`. The dev API key is `dev-key`.
@@ -88,9 +94,65 @@ The API is on **http://localhost:8080** — interactive docs at `/docs`, health 
 pip install -e sdk/python        # the universal-memory SDK
 ```
 
-Local model weights (embeddings, reranker) go in `models/` and are read from there; without
-them the service still runs, using a deterministic stand-in that is fine for development but
-**not** representative of retrieval quality. See [Status](#status-read-this-before-you-trust-a-number).
+### What actually runs
+
+`make models` fetches three defaults into `models/`, each in a directory named after the model
+so the configuration and the weights cannot drift apart:
+
+| Role | Default | Size | Why |
+|---|---|---|---|
+| Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | 26x cheaper than the next option and the only one close to a CPU budget |
+| Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
+
+`make models-all` additionally fetches the benchmark challengers (BGE small/base/M3, Granite
+R2 base, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
+to re-run `make bench-embedding` / `make bench-reranker`.
+
+**These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
+candidate through the real pipeline and the golden set; the numbers below are from
+`benchmark/results/embedding.json` (p95 over 18 golden queries, 4-core container):
+
+| Candidate | dim | Recall@20 | EGR | query p95 | index |
+|---|---|---|---|---|---|
+| `granite-embedding-small-english-r2` | 384 | 1.00 | 1.00 | **204 ms** | 59 s |
+| `bge-small-en-v1.5` | 384 | 1.00 | 1.00 | 289 ms | **21 s** |
+| `bge-base-en-v1.5` | 768 | 1.00 | 1.00 | 353 ms | 33 s |
+| `granite-embedding-english-r2` | 768 | 1.00 | 1.00 | 2,020 ms | 369 s |
+| `Qwen/Qwen3-Embedding-0.6B` | 1024 | 1.00 | 1.00 | 3,545 ms | 673 s |
+
+Rerankers, scoring 20 candidates: `ms-marco-MiniLM-L6-v2` 1,399 ms ·
+`granite-embedding-reranker-english-r2` 11,978 ms · `BAAI/bge-reranker-v2-m3` 35,794 ms.
+
+Three things that table is actually telling you:
+
+- **Every candidate scores a perfect 1.00.** That is not evidence they are equally good — it
+  means the golden set (18 questions over 2 documents) is too easy to separate them. Quality
+  here is *undiscriminated*, not *equal*, and the set needs harder questions before it can
+  rank encoders.
+- **Bigger is not better under a latency budget.** Qwen3-Embedding and `bge-reranker-v2-m3`
+  are strong models that buy no measurable recall here and cost 17x and 26x their smaller
+  siblings. They are configuration-selectable for GPU deployments, not defaults.
+- **The 300 ms recall budget does not survive real models on this hardware.** End-to-end
+  recall p95 was 3.5-4.1 s for *every* candidate. Those budgets were set against the
+  deterministic stand-in and need re-justifying against a deployed instance — see
+  [Status](#status-read-this-before-you-trust-a-number).
+
+Swap any of them with configuration; nothing in the code names a model:
+
+```bash
+MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/bge-small-en-v1.5
+MEMORY__MODELS__EMBEDDING__DIMENSION=384
+```
+
+Changing the embedding changes the vector space, so **re-index after a swap**
+(`make reindex`); the dimension and the model fingerprint are part of the collection name, so
+old and new vectors can never silently mix.
+
+**Where the stand-in applies.** The test suite and `examples/run_server.sh` fall back to a
+deterministic hash embedding when `models/` is absent, so they exercise the plumbing without a
+download. `run_server.sh` prints which mode it is in, and any benchmark produced that way is
+labelled `representative: false`. Never read a retrieval number that carries that flag.
 
 ---
 

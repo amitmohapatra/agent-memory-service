@@ -4,7 +4,7 @@ UV ?= uv
 PY ?= $(UV) run
 COMPOSE ?= docker compose
 
-.PHONY: help setup dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
+.PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
         load-test gates gates-network validate openapi reindex examples clean
 
@@ -25,6 +25,12 @@ dev-up: ## Start dev stack (postgres, qdrant, dragonfly, openfga, api, worker)
 
 dev-down: ## Stop dev stack
 	$(COMPOSE) down -v
+
+models: ## Download the default model weights into ./models (git-ignored)
+	$(PY) python -m memory_service.tools.download_models
+
+models-all: ## Download the defaults plus every benchmark challenger
+	$(PY) python -m memory_service.tools.download_models --all
 
 migrate: ## Apply database migrations
 	$(PY) alembic upgrade head

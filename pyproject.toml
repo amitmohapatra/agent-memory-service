@@ -50,7 +50,7 @@ gcp = ["google-cloud-storage>=3.14", "google-auth>=2"]
 # Document parsing + document KG extraction
 docling = ["docling>=2.127", "docling-graph>=1.9"]
 # Local CPU embedding / reranking runtimes
-models = ["sentence-transformers>=6.0", "torch>=2.4", "fastembed>=0.8", "onnxruntime>=1.30", "optimum>=2.3"]
+models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "fastembed>=0.8", "onnxruntime>=1.30", "optimum>=2.3"]
 # Memory-intelligence challengers (benchmark only; never the public contract)
 memory-providers = ["mem0ai>=2.0", "langmem>=0.0.30"]
 cognee = ["cognee>=1.5"]

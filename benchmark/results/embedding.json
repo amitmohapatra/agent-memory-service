@@ -1,0 +1,274 @@
+{
+  "candidates": {
+    "bge-base-en-v1.5/sentence_transformers": {
+      "backend": "sentence_transformers",
+      "dimension": 768,
+      "embed_ms": {
+        "batch_mean": 16789.86,
+        "batch_p95": 18490.36,
+        "batch_size": 32,
+        "batches": 2,
+        "queries": 18,
+        "query_mean": 243.23,
+        "query_p95": 352.99
+      },
+      "fingerprint": "st-bge-base-en-v1.5-torch-d768",
+      "index_seconds": 32.87,
+      "indexed_points": 36,
+      "load_seconds": 0.7,
+      "model": "BAAI/bge-base-en-v1.5",
+      "model_path": "/models/bge-base-en-v1.5",
+      "quality": {
+        "critical_evidence_group_recall": 1.0,
+        "critical_questions": 17,
+        "critical_recall_at_k": 1.0,
+        "evidence_group_recall": 1.0,
+        "k": 20,
+        "questions": 18,
+        "recall_at_k": 1.0,
+        "routing_accuracy": 1.0
+      },
+      "quality_per_ms": 0.0028,
+      "recall_p95_ms": 2884.53,
+      "representative": true,
+      "threads": 4
+    },
+    "bge-small-en-v1.5/sentence_transformers": {
+      "backend": "sentence_transformers",
+      "dimension": 384,
+      "embed_ms": {
+        "batch_mean": 5891.51,
+        "batch_p95": 7274.8,
+        "batch_size": 32,
+        "batches": 2,
+        "queries": 18,
+        "query_mean": 131.73,
+        "query_p95": 288.5
+      },
+      "fingerprint": "st-bge-small-en-v1.5-torch-d384",
+      "index_seconds": 21.01,
+      "indexed_points": 36,
+      "load_seconds": 17.4,
+      "model": "BAAI/bge-small-en-v1.5",
+      "model_path": "/models/bge-small-en-v1.5",
+      "quality": {
+        "critical_evidence_group_recall": 1.0,
+        "critical_questions": 17,
+        "critical_recall_at_k": 1.0,
+        "evidence_group_recall": 1.0,
+        "k": 20,
+        "questions": 18,
+        "recall_at_k": 1.0,
+        "routing_accuracy": 1.0
+      },
+      "quality_per_ms": 0.0035,
+      "recall_p95_ms": 4128.05,
+      "representative": true,
+      "threads": 4
+    },
+    "granite-embedding-english-r2/sentence_transformers": {
+      "backend": "sentence_transformers",
+      "dimension": 768,
+      "embed_ms": {
+        "batch_mean": 126495.95,
+        "batch_p95": 149171.89,
+        "batch_size": 32,
+        "batches": 2,
+        "queries": 18,
+        "query_mean": 815.05,
+        "query_p95": 2019.91
+      },
+      "fingerprint": "st-granite-embedding-english-r2-torch-d768",
+      "index_seconds": 369.45,
+      "indexed_points": 36,
+      "load_seconds": 1.39,
+      "model": "ibm-granite/granite-embedding-english-r2",
+      "model_path": "/models/granite-embedding-english-r2",
+      "quality": {
+        "critical_evidence_group_recall": 1.0,
+        "critical_questions": 17,
+        "critical_recall_at_k": 1.0,
+        "evidence_group_recall": 1.0,
+        "k": 20,
+        "questions": 18,
+        "recall_at_k": 1.0,
+        "routing_accuracy": 1.0
+      },
+      "quality_per_ms": 0.0005,
+      "recall_p95_ms": 8021.72,
+      "representative": true,
+      "threads": 4
+    },
+    "granite-embedding-small-english-r2/sentence_transformers": {
+      "backend": "sentence_transformers",
+      "dimension": 384,
+      "embed_ms": {
+        "batch_mean": 44839.01,
+        "batch_p95": 45297.4,
+        "batch_size": 32,
+        "batches": 2,
+        "queries": 18,
+        "query_mean": 178.45,
+        "query_p95": 203.69
+      },
+      "fingerprint": "st-granite-embedding-small-english-r2-torch-d384",
+      "index_seconds": 58.79,
+      "indexed_points": 36,
+      "load_seconds": 1.04,
+      "model": "ibm-granite/granite-embedding-small-english-r2",
+      "model_path": "/models/granite-embedding-small-english-r2",
+      "quality": {
+        "critical_evidence_group_recall": 1.0,
+        "critical_questions": 17,
+        "critical_recall_at_k": 1.0,
+        "evidence_group_recall": 1.0,
+        "k": 20,
+        "questions": 18,
+        "recall_at_k": 1.0,
+        "routing_accuracy": 1.0
+      },
+      "quality_per_ms": 0.0049,
+      "recall_p95_ms": 3496.75,
+      "representative": true,
+      "threads": 4
+    },
+    "qwen3-embedding-0.6b/sentence_transformers": {
+      "backend": "sentence_transformers",
+      "dimension": 1024,
+      "embed_ms": {
+        "batch_mean": 535689.28,
+        "batch_p95": 611205.32,
+        "batch_size": 32,
+        "batches": 2,
+        "queries": 18,
+        "query_mean": 2222.54,
+        "query_p95": 3545.49
+      },
+      "fingerprint": "st-qwen3-embedding-0.6b-torch-d1024",
+      "index_seconds": 673.08,
+      "indexed_points": 36,
+      "load_seconds": 6.06,
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "model_path": "/models/qwen3-embedding-0.6b",
+      "quality": {
+        "critical_evidence_group_recall": 1.0,
+        "critical_questions": 17,
+        "critical_recall_at_k": 1.0,
+        "evidence_group_recall": 1.0,
+        "k": 20,
+        "questions": 18,
+        "recall_at_k": 1.0,
+        "routing_accuracy": 1.0
+      },
+      "quality_per_ms": 0.0003,
+      "recall_p95_ms": 5447.42,
+      "representative": true,
+      "threads": 4
+    }
+  },
+  "corpus": {
+    "copies": 1,
+    "documents": 2
+  },
+  "mode": {
+    "quick": true,
+    "stand_in": false
+  },
+  "note": "Per-candidate numbers come from a container built with that embedding setting on the golden corpus; latencies are CPU wall-clock (batch of 32 documents, single query). representative=false means the hash stand-in ran instead of Granite.",
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "b546c6c5bcc4bd97292f439546436660297a76de",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "prithivida/Splade_PP_en_v1",
+        "revision": "762be6a7206e2f299182705972a65e5c46e62be2"
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-15T13:29:38.325266+00:00"
+  },
+  "providers": {
+    "representative": true,
+    "reranker": "sentence_transformers",
+    "search": "qdrant"
+  },
+  "verdict": {
+    "best": {
+      "critical_evidence_group_recall": 1.0,
+      "critical_recall_at_k": 1.0
+    },
+    "default": "granite-embedding-small-english-r2/sentence_transformers",
+    "eligible": [
+      "granite-embedding-small-english-r2/sentence_transformers",
+      "bge-small-en-v1.5/sentence_transformers",
+      "bge-base-en-v1.5/sentence_transformers",
+      "granite-embedding-english-r2/sentence_transformers",
+      "qwen3-embedding-0.6b/sentence_transformers"
+    ],
+    "reason": "lowest cost among candidates matching the best critical recall / EGR"
+  }
+}
