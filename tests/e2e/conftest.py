@@ -11,6 +11,8 @@ from memory_service.api.app import create_app
 from tests.conftest import PG_AVAILABLE
 
 TABLES = [
+    "graph_relations",
+    "graph_entities",
     "memories",
     "context_edges",
     "chunks",

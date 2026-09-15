@@ -615,3 +615,72 @@ class MemoryRow(Base):
             postgresql_where=text("expires_at IS NOT NULL AND deleted_at IS NULL"),
         ),
     )
+
+
+# --------------------------------------------------------------------------
+# Knowledge graph (M8): entities and temporal relations, rebuildable from memories/chunks
+# --------------------------------------------------------------------------
+
+
+class GraphEntityRow(Base):
+    __tablename__ = "graph_entities"
+
+    entity_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False, default="")
+    canonical_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False, default="THING")
+    aliases: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    mention_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "scope_key", "canonical_name", name="uq_graph_entity"),
+        Index("ix_graph_entities_tenant_name", "tenant_id", "canonical_name"),
+        Index("ix_graph_entities_keys", "visibility_keys", postgresql_using="gin"),
+    )
+
+
+class GraphRelationRow(Base):
+    __tablename__ = "graph_relations"
+
+    relation_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False, default="")
+    subject_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    predicate: Mapped[str] = mapped_column(String(120), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    valid_from: Mapped[datetime | None]
+    valid_to: Mapped[datetime | None]
+    observed_at: Mapped[datetime] = mapped_column(server_default=_now())
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="CURRENT", server_default="CURRENT"
+    )
+    superseded_by: Mapped[str | None] = mapped_column(String(200))
+    confidence: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    memory_id: Mapped[str | None] = mapped_column(String(200))
+    document_id: Mapped[str | None] = mapped_column(String(200))
+    fact_text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    attributes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        Index("ix_graph_relations_subject", "tenant_id", "subject_id", "status"),
+        Index("ix_graph_relations_object", "tenant_id", "object_id", "status"),
+        Index("ix_graph_relations_slot", "tenant_id", "subject_id", "predicate", "status"),
+        Index("ix_graph_relations_memory", "tenant_id", "memory_id"),
+        Index("ix_graph_relations_document", "tenant_id", "document_id"),
+        Index("ix_graph_relations_keys", "visibility_keys", postgresql_using="gin"),
+    )

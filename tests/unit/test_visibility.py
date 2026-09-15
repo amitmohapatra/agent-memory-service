@@ -27,7 +27,7 @@ def test_visibility_keys_by_visibility() -> None:
         "acme", Visibility.WORKSPACE, owner_principal="user:u1", scope=scope
     ) == ["ws:acme/ws1"]
     assert visibility_keys("acme", Visibility.TENANT, owner_principal="user:u1") == ["tenant:acme"]
-    assert visibility_keys("acme", Visibility.GLOBAL, owner_principal="user:u1") == ["global"]
+    assert visibility_keys("acme", Visibility.GLOBAL, owner_principal="user:u1") == ["global:acme"]
     assert visibility_keys(
         "acme", Visibility.GROUP, owner_principal="user:u1", group_id="legal"
     ) == ["group:acme/legal"]
@@ -54,7 +54,7 @@ def test_specification_from_scope_and_filter() -> None:
     assert not spec.allows("acme", ["thread:acme/thr2"])
     assert not spec.allows("acme", ["user:acme/u2"])
     assert not spec.allows("acme", ["principal:acme/agent:a1"])
-    assert not spec.allows("globex", ["global"])  # tenant mismatch beats everything
+    assert not spec.allows("globex", ["global:globex"])  # tenant mismatch beats everything
     assert not spec.allows("globex", ["tenant:globex"])
     flt = spec.search_filter(collection="memories")
     assert flt.tenant_id == "acme" and flt.must == {"collection": "memories"}

@@ -19,7 +19,7 @@ and the exact "retrieve globally then filter in memory" anti-pattern the spec fo
    real OpenFGA server.
 3. **Visibility keys.** At write time each memory/chunk/message gets `visibility_keys`
    derived from its visibility + anchors (`user:acme/u1`, `thread:acme/thr1`,
-   `principal:acme/agent:research`, `tenant:acme`, `global`, ...). At read time the
+   `principal:acme/agent:research`, `tenant:acme`, `global:acme`, ...). At read time the
    principal's `AuthorizedScope` (OpenFGA `list_objects`, bounded, cached by revision) is
    turned into the set of audience keys it may read. The store-side filter is
    `tenant_id == T AND visibility_keys ∩ allowed ≠ ∅` — one `must_any` clause in Qdrant and

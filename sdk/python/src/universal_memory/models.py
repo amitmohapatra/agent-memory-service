@@ -170,3 +170,40 @@ class MessageInfo(BaseModel):
     sequence: int
     content: str
     occurred_at: datetime | None = None
+
+
+class GraphEntity(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    entity_id: str
+    name: str
+    canonical_name: str
+    entity_type: str = "THING"
+    mention_count: int = 1
+
+
+class GraphFact(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    relation_id: str
+    subject: str
+    predicate: str
+    object: str
+    fact_text: str = ""
+    status: str = "CURRENT"
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    observed_at: datetime | None = None
+    confidence: float = 0.5
+    memory_id: str | None = None
+    document_id: str | None = None
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+
+class GraphAnswer(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    matched: list[GraphEntity] = Field(default_factory=list)
+    entities: list[GraphEntity] = Field(default_factory=list)
+    facts: list[GraphFact] = Field(default_factory=list)
+    visited: int = 0

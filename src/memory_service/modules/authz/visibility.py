@@ -84,7 +84,7 @@ def visibility_keys(
         case Visibility.TENANT:
             return [f"tenant:{t}"]
         case Visibility.GLOBAL:
-            return ["global"]
+            return [f"global:{t}"]  # never crosses a tenant: tenant is always authoritative
     raise ValueError(f"unknown visibility {visibility}")  # pragma: no cover
 
 
@@ -100,7 +100,7 @@ class VisibilitySpecification(BaseModel):
     @classmethod
     def from_scope(cls, scope: AuthorizedScope) -> VisibilitySpecification:
         t = scope.tenant_id
-        keys: set[str] = {"global", f"tenant:{t}", f"principal:{t}/{scope.principal}"}
+        keys: set[str] = {f"global:{t}", f"tenant:{t}", f"principal:{t}/{scope.principal}"}
         if scope.user_id:
             keys.add(f"user:{t}/{scope.user_id}")
             # an agent acting for a user also sees that user's private memories? No:

@@ -23,7 +23,7 @@ from memory_service.domain.context_bundle import (
     EvidenceReport,
 )
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import EvidenceStatus, MessageKind, Representation
+from memory_service.domain.enums import EvidenceStatus, MessageKind
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
 from memory_service.domain.revisions import RevisionKind
@@ -42,13 +42,20 @@ log = get_logger(__name__)
 
 def candidate_to_item(c: Candidate) -> ContextItem:
     p = c.payload
-    citation = f"chunk_id:{c.record_id}" if c.kind == "chunk" else f"memory_id:{c.record_id}"
+    citation = {
+        "chunk": f"chunk_id:{c.record_id}",
+        "memory": f"memory_id:{c.record_id}",
+        "fact": f"relation_id:{c.record_id}",
+        "summary": f"summary_id:{c.record_id}",
+    }.get(c.kind, f"{c.kind}:{c.record_id}")
     evidence = [
         EvidenceRef(
-            source_type="document_chunk" if c.kind == "chunk" else "memory",
+            source_type={"chunk": "document_chunk", "memory": "memory", "fact": "graph_fact"}.get(
+                c.kind, c.kind
+            ),
             source_id=c.record_id,
             document_id=p.get("document_id"),
-            chunk_id=c.record_id if c.kind == "chunk" else None,
+            chunk_id=c.record_id if c.kind == "chunk" else p.get("chunk_id"),
             node_id=p.get("node_id"),
             page=p.get("page"),
             observed_at=datetime.now(UTC),
@@ -56,9 +63,7 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     ]
     return ContextItem(
         item_id=c.record_id,
-        representation=c.representation
-        if c.expansion_edge is None
-        else Representation(p.get("representation", "CHUNK")),
+        representation=c.representation,
         text=c.text,
         score=c.rerank_score if c.rerank_score is not None else c.score,
         retrievers=c.retrievers,

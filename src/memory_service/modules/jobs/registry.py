@@ -59,11 +59,17 @@ def register_handlers(container: Container) -> None:
         indexer = container.services.get("indexer")
         if indexer is not None:
             await indexer.index_document(payload["tenant_id"], payload["document_id"])
+        graph = container.services.get("graph")
+        if graph is not None:
+            await graph.enrich_document(payload["tenant_id"], payload["document_id"])
 
     async def memory_index(payload: dict[str, Any]) -> None:
         indexer = container.services.get("indexer")
         if indexer is not None:
             await indexer.index_memories(payload["tenant_id"], list(payload["memory_ids"]))
+        graph = container.services.get("graph")
+        if graph is not None:
+            await graph.enrich_memories(payload["tenant_id"], list(payload["memory_ids"]))
 
     async def memory_expire(payload: dict[str, Any]) -> None:
         """Mark SHORT_TERM memories past their TTL as EXPIRED and drop them from the index."""

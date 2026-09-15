@@ -39,6 +39,7 @@ async def wire_all(container: Container) -> None:
     _wire_models(container)
     _wire_retrieval(container)
     _wire_memory(container)
+    _wire_graph(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -368,3 +369,63 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
     )
     container.services["memory"] = MemoryService(container.services["authz"])
+
+
+def _wire_graph(container: Container) -> None:
+    """Knowledge graph: store (postgres | memory), enrichment provider, service, retrieval stage."""
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.modules.graph.native import NativeGraphEnrichment
+    from memory_service.modules.graph.retrieval import GraphStage
+    from memory_service.modules.graph.service import GraphService
+
+    settings = container.settings
+    if settings.graph.store == "postgres":
+        from memory_service.adapters.graph.postgres_store import PostgresGraphStore
+
+        container.graph_store = PostgresGraphStore(container.database.engine)
+    else:
+        from memory_service.adapters.graph.memory_store import MemoryGraphStore
+
+        container.graph_store = MemoryGraphStore()
+    cfg = settings.graph_enrichment
+    if cfg.provider == "disabled":
+        container.graph_enrichment = None
+        return
+    if cfg.provider == "native":
+        provider = NativeGraphEnrichment()
+    elif cfg.provider == "graphiti":
+        from memory_service.adapters.graph.graphiti_provider import GraphitiEnrichment
+
+        provider = GraphitiEnrichment(settings)
+    elif cfg.provider == "docling_graph":
+        from memory_service.adapters.graph.docling_graph_provider import DoclingGraphEnrichment
+
+        provider = DoclingGraphEnrichment(settings)
+    else:  # cognee: graph comes from the cognee memory provider; native structure here
+        provider = NativeGraphEnrichment()
+    check_provider_policy(
+        provider.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    if provider.info.requires_llm and not settings.models.llm.enabled:
+        raise NotImplementedError(
+            f"graph enrichment provider {cfg.provider!r} requires an LLM; "
+            "set MEMORY__MODELS__LLM__ENABLED=true"
+        )
+    container.graph_enrichment = provider
+    graph = GraphService(
+        container.services["uow_factory"],
+        container.graph_store,
+        provider,
+        container.services["authz"],
+        settings=settings.graph,
+    )
+    container.services["graph"] = graph
+    if settings.retrieval.graph:
+        engine = container.services["retrieval"]
+        engine.post_stages["graph"] = GraphStage(
+            graph,
+            container.services["uow_factory"],
+            max_facts=settings.context.graph_facts_max,
+        )

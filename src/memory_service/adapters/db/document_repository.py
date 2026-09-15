@@ -255,6 +255,23 @@ class SqlDocumentRepository:
         )
         await self.s.flush()
 
+    async def get_version(self, tenant_id: str, document_version_id: str) -> DocumentVersion | None:
+        r = await self.s.get(DocumentVersionRow, document_version_id)
+        if r is None or r.tenant_id != tenant_id:
+            return None
+        return DocumentVersion(
+            document_version_id=r.document_version_id,
+            document_id=r.document_id,
+            tenant_id=r.tenant_id,
+            version=r.version,
+            parser=r.parser,
+            parser_version=r.parser_version,
+            page_count=r.page_count,
+            node_count=r.node_count,
+            chunk_count=r.chunk_count,
+            status=r.status,
+        )
+
     async def add_nodes(self, nodes: Sequence[DocumentNode]) -> None:
         self.s.add_all(
             [

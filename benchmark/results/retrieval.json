@@ -6,22 +6,22 @@
   },
   "corpus": {
     "documents": 50,
-    "index_seconds": 4.05,
+    "index_seconds": 15.72,
     "indexed_points": 548
   },
   "latency_ms": {
-    "context_cached_p50": 2.3,
-    "context_cached_p95": 2.58,
-    "context_cold_p50": 37.04,
-    "context_cold_p95": 38.01,
-    "mean_recall": 33.44,
-    "recall_p50": 33.17,
-    "recall_p95": 35.51,
+    "context_cached_p50": 2.47,
+    "context_cached_p95": 2.97,
+    "context_cold_p50": 40.55,
+    "context_cold_p95": 88.88,
+    "mean_recall": 48.81,
+    "recall_p50": 34.14,
+    "recall_p95": 84.35,
     "samples": 30
   },
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "f689bfb2b3c80a25c3b1143dea5c0c71af7566c0",
+    "git_commit": "dd4badc91de66f286d4ebf3e4b88a94e707f08a7",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -36,7 +36,7 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T00:00:10.819820+00:00"
+    "timestamp": "2026-09-15T00:55:56.848777+00:00"
   },
   "providers": {
     "embedding": "hash-v1-d64",

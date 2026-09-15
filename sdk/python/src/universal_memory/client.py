@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any, Self
 
 import httpx
@@ -23,6 +24,7 @@ from universal_memory.models import (
     ContextBundle,
     ContextItem,
     FileHandle,
+    GraphAnswer,
     JobHandle,
     MemoryResult,
     MessageAck,
@@ -95,6 +97,7 @@ class MemoryContext:
         self.scope = scope
         self.chat = ChatAPI(self)
         self.files = FilesAPI(self)
+        self.graph = GraphAPI(self)
         self._token: Any = None
 
     # -- context manager: propagate via contextvars ---------------------
@@ -325,3 +328,30 @@ def _default_key(prefix: str, scope: Scope, *parts: str) -> str:
         h.update(p.encode("utf-8"))
         h.update(b"\x1f")
     return f"{prefix}-{h.hexdigest()}"
+
+
+class GraphAPI:
+    """Knowledge-graph queries: resolve entities in a question (or given names) and traverse
+    a bounded, visibility-filtered neighbourhood; ``as_of`` gives the temporal view."""
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    async def query(
+        self,
+        query: str | None = None,
+        *,
+        entities: list[str] | None = None,
+        hops: int = 1,
+        as_of: datetime | None = None,
+    ) -> GraphAnswer:
+        payload: dict[str, Any] = {
+            "scope": self._ctx._scope_payload(),
+            "query": query,
+            "entities": entities or [],
+            "hops": hops,
+        }
+        if as_of is not None:
+            payload["as_of"] = as_of.isoformat()
+        data = await self._ctx._request("POST", "/v1/graph/query", json=payload)
+        return GraphAnswer.model_validate(data)

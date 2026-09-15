@@ -46,7 +46,7 @@ class RecallRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=100, examples=[20])
     kinds: list[str] = Field(
         default_factory=lambda: ["chunk", "memory"],
-        description="chunk | memory",
+        description="chunk | memory | fact (graph facts are included only when requested)",
         examples=[["chunk", "memory"]],
     )
     document_ids: list[str] | None = Field(
@@ -190,9 +190,14 @@ async def recall(
     ctx = build_context(request, container, body.scope)
     engine = container.services["retrieval"]
     result = await engine.retrieve(
-        ctx, body.query, limit=body.limit, kinds=tuple(body.kinds), document_ids=body.document_ids
+        ctx,
+        body.query,
+        limit=body.limit,
+        kinds=tuple(k for k in body.kinds if k in ("chunk", "memory")),
+        document_ids=body.document_ids,
     )
-    items = [candidate_to_item(c) for c in result.candidates]
+    wanted = set(body.kinds)
+    items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
     return RecallResponse(
         query=body.query,
         query_type=result.routed.query_type.value,

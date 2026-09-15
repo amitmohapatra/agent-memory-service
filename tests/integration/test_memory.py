@@ -140,7 +140,7 @@ async def test_decisions_are_thread_scoped_and_shared_in_thread(container, uow_f
     # thread participant b can recall it; a stranger outside the thread cannot
     engine = container.services["retrieval"]
     got = await engine.retrieve(b, "why did we decide on PostgreSQL?", kinds=("memory",))
-    assert [c.record_id for c in got.candidates] == [decision.memory_id]
+    assert [c.record_id for c in got.candidates if c.kind == "memory"] == [decision.memory_id]
     stranger = U2.model_copy(update={"user_id": "u3"})
     assert (
         await engine.retrieve(stranger, "why did we decide on PostgreSQL?", kinds=("memory",))

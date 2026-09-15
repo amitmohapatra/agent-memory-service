@@ -101,6 +101,11 @@ extracts, classifies and consolidates memories asynchronously (native rules by d
 LLM). `GET /v1/memories`, `GET/DELETE /v1/memories/{id}` read and forget them. In the SDK:
 `await ctx.observe(text)`, `await ctx.remember(text, memory_type=...)`, `await ctx.forget(id)`.
 
+Graph: `POST /v1/graph/query` resolves entities from a question (or explicit names) and
+returns a bounded, visibility-filtered neighbourhood of temporal facts with evidence;
+`as_of` gives the historical view. Multi-hop and entity questions use the same traversal
+inside `/v1/recall` and `/v1/context` to pull in the evidence chunks the facts point at.
+
 Without local model weights the service runs with a deterministic hash embedding and a
 lexical reranker (`MEMORY__MODELS__EMBEDDING__PROVIDER=hash`) — fine for plumbing tests,
 not representative of retrieval quality (every benchmark file records which was used).

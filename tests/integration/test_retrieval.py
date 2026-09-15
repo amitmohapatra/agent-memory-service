@@ -190,8 +190,10 @@ async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) ->
     res = await engine.retrieve(OWNER, "why did Adjusted EBITDA increase despite lower revenue?")
     assert res.routed.query_type is QueryType.DOCUMENT_MULTI_HOP
     assert res.diagnostics["reranked"] is True and res.diagnostics["fused_candidates"] >= 5
-    assert len(res.candidates) <= container.settings.retrieval.final_k
-    assert all(c.rerank_score is not None for c in res.candidates[: engine.rerank_k])
+    evidence = [c for c in res.candidates if c.kind in ("chunk", "memory")]
+    assert len(evidence) <= container.settings.retrieval.final_k
+    reranked = [c for c in res.candidates if c.kind == "chunk" and c.expansion_edge is None]
+    assert all(c.rerank_score is not None for c in reranked[: engine.rerank_k])
     assert res.candidates[0].record_id == target.chunk_id
     # limit is honoured; document_ids restricts; kinds=memory returns nothing yet (M7)
     assert len((await engine.retrieve(OWNER, "revenue", limit=2)).candidates) == 2

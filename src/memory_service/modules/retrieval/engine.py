@@ -42,7 +42,12 @@ class Candidate:
 
     @property
     def representation(self) -> Representation:
-        return Representation.CHUNK if self.kind == "chunk" else Representation.MEMORY
+        return {
+            "chunk": Representation.CHUNK,
+            "memory": Representation.MEMORY,
+            "fact": Representation.RELATION,
+            "summary": Representation.SUMMARY,
+        }.get(self.kind, Representation.CHUNK)
 
 
 @dataclass
@@ -157,6 +162,8 @@ class RetrievalEngine:
             for name, stage in self.post_stages.items():
                 candidates = await stage(ctx, routed, candidates, visibility, diagnostics)
                 diagnostics.setdefault("stages", []).append(name)
+            if self.post_stages:
+                candidates = _cap_evidence(candidates, limit)
         return RetrievalResult(
             routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
         )
@@ -273,6 +280,20 @@ class RetrievalEngine:
             c.rerank_score = r.score
             reranked.append(c)
         return (reranked + tail)[:limit]
+
+
+def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
+    """Keep at most ``limit`` evidence items (chunks/memories) after post-stages; facts and
+    summaries ride along uncounted because they are routed into their own bundle buckets."""
+    out: list[Candidate] = []
+    evidence = 0
+    for c in candidates:
+        if c.kind in ("chunk", "memory"):
+            if evidence >= limit:
+                continue
+            evidence += 1
+        out.append(c)
+    return out
 
 
 def _dedup(candidates: list[Candidate]) -> list[Candidate]:

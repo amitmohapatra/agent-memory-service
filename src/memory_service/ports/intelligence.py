@@ -110,7 +110,9 @@ class Entity(BaseModel):
     entity_type: str = "THING"
     aliases: list[str] = Field(default_factory=list)
     scope_key: str = ""
+    visibility_keys: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
+    mention_count: int = 1
     revision: int = 1
 
 
@@ -125,13 +127,17 @@ class Relation(BaseModel):
     predicate: str
     object_id: str
     scope_key: str = ""
+    visibility_keys: list[str] = Field(default_factory=list)
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime
     status: str = "CURRENT"
+    superseded_by: str | None = None
     confidence: float = 0.5
     evidence: list[EvidenceRef] = Field(..., min_length=1)
     memory_id: str | None = None
+    document_id: str | None = None
+    fact_text: str = Field(default="", description="human-readable statement of the fact")
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -167,6 +173,12 @@ class GraphStore(Protocol):
         ...
 
     async def supersede(self, relation_id: str, *, by: str, at: datetime) -> None: ...
+
+    async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
+        """Retire every CURRENT relation derived from a memory that is no longer current."""
+        ...
+
+    async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...
 
     async def ping(self) -> bool: ...
 

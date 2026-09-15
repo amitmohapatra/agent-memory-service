@@ -664,6 +664,39 @@
         "title": "DocumentResponse",
         "type": "object"
       },
+      "EntityOut": {
+        "properties": {
+          "canonical_name": {
+            "title": "Canonical Name",
+            "type": "string"
+          },
+          "entity_id": {
+            "title": "Entity Id",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "mention_count": {
+            "title": "Mention Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity_id",
+          "name",
+          "canonical_name",
+          "entity_type",
+          "mention_count"
+        ],
+        "title": "EntityOut",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -803,6 +836,109 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "FactOut": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "fact_text": {
+            "title": "Fact Text",
+            "type": "string"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "object": {
+            "title": "Object",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "predicate": {
+            "title": "Predicate",
+            "type": "string"
+          },
+          "relation_id": {
+            "title": "Relation Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "relation_id",
+          "subject",
+          "predicate",
+          "object",
+          "fact_text",
+          "status",
+          "observed_at",
+          "confidence"
+        ],
+        "title": "FactOut",
+        "type": "object"
+      },
       "FileAckResponse": {
         "description": "Durable acknowledgement: bytes and the parse job are committed; parsing is asynchronous.",
         "examples": [
@@ -866,6 +1002,116 @@
           "size_bytes"
         ],
         "title": "FileAckResponse",
+        "type": "object"
+      },
+      "GraphQueryRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "hops": 2,
+            "query": "Why did Adjusted EBITDA increase despite lower revenue?",
+            "scope": {
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            }
+          }
+        ],
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "temporal view: facts valid at this instant",
+            "title": "As Of"
+          },
+          "entities": {
+            "description": "explicit entity names",
+            "items": {
+              "type": "string"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "hops": {
+            "default": 1,
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Hops",
+            "type": "integer"
+          },
+          "max_visited": {
+            "anyOf": [
+              {
+                "maximum": 2000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Visited"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "free text; entities are resolved from it",
+            "title": "Query"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          }
+        },
+        "title": "GraphQueryRequest",
+        "type": "object"
+      },
+      "GraphQueryResponse": {
+        "properties": {
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/EntityOut"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FactOut"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "matched": {
+            "items": {
+              "$ref": "#/components/schemas/EntityOut"
+            },
+            "title": "Matched",
+            "type": "array"
+          },
+          "visited": {
+            "title": "Visited",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "matched",
+          "entities",
+          "facts",
+          "visited"
+        ],
+        "title": "GraphQueryResponse",
         "type": "object"
       },
       "JobResponse": {
@@ -1807,7 +2053,7 @@
             "title": "Document Ids"
           },
           "kinds": {
-            "description": "chunk | memory",
+            "description": "chunk | memory | fact (graph facts are included only when requested)",
             "examples": [
               [
                 "chunk",
@@ -2861,6 +3107,151 @@
         "summary": "Ingest a file into RAG memory (multipart)",
         "tags": [
           "files"
+        ]
+      }
+    },
+    "/v1/graph/query": {
+      "post": {
+        "operationId": "graph_query_v1_graph_query_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphQueryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Resolve entities and traverse the knowledge graph (bounded, visibility-filtered)",
+        "tags": [
+          "graph"
         ]
       }
     },
