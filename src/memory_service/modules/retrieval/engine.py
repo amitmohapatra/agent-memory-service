@@ -101,6 +101,7 @@ class RetrievalEngine:
         self.retrievers: dict[str, Any] = {}
         # exact lookups by id prefix (graph facts M8)
         self.exact_lookups: dict[str, Any] = {}
+        self._ensured: set[str] = set()
 
     async def retrieve(
         self,
@@ -125,6 +126,11 @@ class RetrievalEngine:
             if visibility is None:
                 async with self.uow_factory() as uow:
                     visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
+            if self.indexer.fingerprint not in self._ensured:
+                # a fresh deployment answers "nothing yet" before anything was indexed,
+                # instead of failing on a missing collection
+                await self.indexer.ensure_collections()
+                self._ensured.add(self.indexer.fingerprint)
             candidates: list[Candidate] = []
             # 1. exact identifiers (O(1)/O(log n) lookups, no ranking)
             if routed.identifiers and self.cfg.exact:

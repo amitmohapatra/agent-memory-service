@@ -110,6 +110,11 @@ agents stay side by side as `contradicts` (flagged in the evidence report) inste
 silently overriding the other. Agent messages are internal and never reach the user's
 visible history or memories (ADR 0013).
 
+LangGraph: `integrations/langgraph` (`universal-memory-langgraph`) wraps graph nodes —
+`memory.wrap(node, recall=..., observe=...)` — mapping `thread_id` and the checkpoint
+namespace to the memory context (subgraphs become agent runs), fetching a bundle before
+the node and recording messages/observations after it with retry-safe idempotency keys.
+
 Graph: `POST /v1/graph/query` resolves entities from a question (or explicit names) and
 returns a bounded, visibility-filtered neighbourhood of temporal facts with evidence;
 `as_of` gives the historical view. Multi-hop and entity questions use the same traversal

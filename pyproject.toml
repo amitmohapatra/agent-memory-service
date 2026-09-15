@@ -146,7 +146,8 @@ ignore = [
 "migrations/**" = ["TID251", "E501"]
 "benchmark/**" = ["T20", "S", "PLR", "TID251", "E501", "SIM905", "RUF100"]
 "sdk/python/tests/**" = ["S", "PLR", "T20"]
-"integrations/langgraph/tests/**" = ["S", "PLR", "T20"]
+"integrations/langgraph/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
+"integrations/langgraph/src/**" = ["TID251"]  # the one place LangGraph may be imported
 
 [tool.ruff.lint.isort]
 known-first-party = ["memory_service", "universal_memory", "universal_memory_langgraph"]
