@@ -13,6 +13,7 @@ def routers() -> list[APIRouter]:
         grounding,
         memory,
         retrieval,
+        tools,
     )
 
     return [
@@ -22,4 +23,5 @@ def routers() -> list[APIRouter]:
         grounding.router,
         memory.router,
         graph.router,
+        tools.router,
     ]

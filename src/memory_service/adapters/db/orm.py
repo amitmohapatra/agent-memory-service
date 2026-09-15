@@ -720,3 +720,91 @@ class GraphEntityAliasRow(Base):
         Index("ix_graph_entity_aliases_alias", "tenant_id", "alias"),
         Index("ix_graph_entity_aliases_entity", "tenant_id", "entity_id"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Tool memory (TOOL_MEMORY.md §30.0-§30.1)
+# ---------------------------------------------------------------------------
+
+
+class ToolRow(Base):
+    __tablename__ = "tools"
+
+    tool_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    input_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    tags: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    source: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    server: Mapped[str | None] = mapped_column(String(200))
+    policy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", "schema_hash", name="uq_tools_tenant_name_schema"),
+        Index("ix_tools_tenant_name", "tenant_id", "name"),
+    )
+
+
+class ToolInvocationRow(Base):
+    __tablename__ = "tool_invocations"
+
+    invocation_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    run_id: Mapped[str | None] = mapped_column(String(200))
+    thread_id: Mapped[str | None] = mapped_column(String(200))
+    turn_id: Mapped[str | None] = mapped_column(String(200))
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    user_id: Mapped[str | None] = mapped_column(String(200))
+    agent_id: Mapped[str | None] = mapped_column(String(200))
+    principal_id: Mapped[str | None] = mapped_column(String(300))
+    step: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    args_redacted: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    args_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    output_summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    output_digest: Mapped[str | None] = mapped_column(String(64))
+    output_blob_ref: Mapped[str | None] = mapped_column(String(600))
+    output_fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), default="ok", server_default="ok")
+    error_class: Mapped[str | None] = mapped_column(String(200))
+    latency_ms: Mapped[float | None] = mapped_column(Float)
+    cost: Mapped[float | None] = mapped_column(Float)
+    task: Mapped[str] = mapped_column(Text, default="", server_default="")
+    task_pattern: Mapped[str | None] = mapped_column(Text)
+    sub_calls: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    occurred_at: Mapped[datetime] = mapped_column(server_default=_now())
+    indexed_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "idempotency_key", name="uq_tool_invocations_idempotent"),
+        Index("ix_tool_invocations_run", "tenant_id", "run_id", "step"),
+        Index("ix_tool_invocations_tool", "tenant_id", "tool_id", "occurred_at"),
+        Index("ix_tool_invocations_pattern", "tenant_id", "task_pattern"),
+        Index("ix_tool_invocations_unindexed", "tenant_id", "indexed_at"),
+    )
+
+
+class RunOutcomeRow(Base):
+    __tablename__ = "run_outcomes"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(20), default="explicit", server_default="explicit")
+    recorded_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (Index("ix_run_outcomes_tenant_success", "tenant_id", "success"),)

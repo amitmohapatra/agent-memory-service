@@ -22,6 +22,7 @@ from memory_service.adapters.db.repositories import (
     SqlThreadRepository,
     SqlTurnRepository,
 )
+from memory_service.adapters.db.tool_repository import SqlToolRepository
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -111,6 +112,7 @@ class SqlUnitOfWork:
         self.archive = SqlArchiveRepository(s)
         self.documents = SqlDocumentRepository(s)
         self.memories = SqlMemoryRepository(s)
+        self.tools = SqlToolRepository(s)
         return self
 
     async def __aexit__(

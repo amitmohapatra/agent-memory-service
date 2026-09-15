@@ -41,6 +41,7 @@ async def wire_all(container: Container) -> None:
     _wire_nli(container)
     _wire_retrieval(container)
     _wire_memory(container)
+    _wire_tools(container)
     _wire_graph(container)
     _wire_context_preservation(container)
     _wire_advanced_retrieval(container)
@@ -457,6 +458,22 @@ def _wire_memory(container: Container) -> None:
 
     container.services["reflection"] = ReflectionService(
         container.services["uow_factory"], assist=container.services["llm_assist"]
+    )
+
+
+def _wire_tools(container: Container) -> None:
+    """Tool memory: registry, invocation records, output cache, chains and procedures."""
+    from memory_service.modules.tools.cache import ToolOutputCache
+    from memory_service.modules.tools.service import ToolMemoryService
+
+    settings = container.settings
+    container.services["tool_memory"] = ToolMemoryService(
+        container.services["uow_factory"],
+        container.services["authz"],
+        cache=ToolOutputCache(container.cache),
+        blob=container.blob,
+        blob_bucket=settings.blob.file_bucket,
+        indexer=container.services.get("indexer"),
     )
 
 

@@ -1,0 +1,511 @@
+"""Public /v1/tools routes: the tool registry, invocation records, the output cache and the
+advice an agent asks for mid-task (TOOL_MEMORY.md §30.0, §30.2, §30.4, §30.6).
+
+The service never executes a tool. ``record`` is what an adapter calls after it ran one,
+``lookup`` is what it calls before, and ``suggest`` / ``next`` / ``plan`` answer from what
+previous runs did. Every reply names only tools the caller declared as available and is
+built from records the caller's visibility keys cover.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Request
+from pydantic import BaseModel, ConfigDict, Field
+
+from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
+from memory_service.api.errors import error_responses
+from memory_service.domain.enums import Visibility
+from memory_service.domain.tools import ToolDescriptor, ToolPolicy
+
+router = APIRouter()
+_ERRORS = error_responses(401, 403, 422, 503)
+
+_TOOL_EXAMPLE: dict[str, Any] = {
+    "name": "pricing.lookup_price",
+    "description": "Current list price for a SKU in a region",
+    "input_schema": {
+        "type": "object",
+        "properties": {"sku": {"type": "string"}, "region": {"type": "string"}},
+    },
+    "tags": ["pricing"],
+    "source": "mcp",
+    "policy": {
+        "deterministic": True,
+        "cacheable": True,
+        "cache_ttl_seconds": 900,
+        "cache_scope": "thread",
+        "side_effects": "read",
+    },
+}
+
+
+class PolicyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deterministic: bool = False
+    side_effects: str = "unknown"
+    cacheable: bool = False
+    cache_ttl_seconds: int = Field(default=300, ge=0, le=86400)
+    cache_scope: str = "run"
+    cost_hint: float | None = Field(default=None, ge=0.0)
+    redact: list[str] = Field(default_factory=list)
+
+
+class RegisterToolRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_TOOL_EXAMPLE]})
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = ""
+    input_schema: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
+    source: str = "manual"
+    server: str | None = None
+    policy: PolicyBody | None = Field(
+        default=None,
+        description="Widening a policy requires tenant admin; otherwise the stored policy wins.",
+    )
+
+
+class ToolOut(BaseModel):
+    tool_id: str
+    name: str
+    version: int
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    source: str
+    policy: dict[str, Any]
+    stats: dict[str, Any] | None = None
+
+
+class ToolListResponse(BaseModel):
+    tools: list[ToolOut]
+
+
+class DeclaredTool(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    name: str
+    description: str = ""
+    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
+    output_schema: dict[str, Any] | None = None
+    tags: list[str] = Field(default_factory=list)
+    source: str = "manual"
+    server: str | None = None
+
+
+class LookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
+class LookupResponse(BaseModel):
+    cached: bool
+    reason: str | None = None
+    age_seconds: float | None = None
+    output_summary: str | None = None
+    output_digest: str | None = None
+    output_blob_ref: str | None = None
+    output_fields: dict[str, Any] = Field(default_factory=dict)
+    invocation_id: str | None = None
+    cache_scope: str | None = None
+
+
+class RecordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    tool: str
+    args: dict[str, Any] = Field(default_factory=dict)
+    output: Any = None
+    output_summary: str | None = None
+    status: str = "ok"
+    error_class: str | None = None
+    latency_ms: float | None = Field(default=None, ge=0.0)
+    cost: float | None = Field(default=None, ge=0.0)
+    task: str = ""
+    step: int | None = Field(default=None, ge=0)
+    sub_calls: list[dict[str, Any]] = Field(default_factory=list)
+    visibility: str = Field(default="RUN", description="RUN | AGENT_GROUP | USER | THREAD | ...")
+
+
+class RecordResponse(BaseModel):
+    invocation_id: str
+    step: int
+    args_hash: str
+    recorded: bool = Field(description="False when an identical call was already recorded.")
+
+
+class SuggestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    task: str = Field(..., max_length=4000)
+    available_tools: list[DeclaredTool] = Field(default_factory=list)
+    context: str | None = None
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class SuggestionOut(BaseModel):
+    tool: str
+    confidence: float
+    argument_template: dict[str, Any] = Field(default_factory=dict)
+    supporting_procedures: list[str] = Field(default_factory=list)
+    supporting_invocations: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    evidence_status: str
+
+
+class SuggestResponse(BaseModel):
+    suggestions: list[SuggestionOut]
+
+
+class TrajectoryStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    args_hash: str | None = None
+    status: str = "ok"
+    output_summary: str | None = None
+    output_fields: dict[str, Any] = Field(default_factory=dict)
+
+
+class NextRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    task: str = Field(..., max_length=4000)
+    trajectory_so_far: list[TrajectoryStep] = Field(default_factory=list)
+    available_tools: list[DeclaredTool] = Field(default_factory=list)
+    limit: int = Field(default=3, ge=1, le=10)
+
+
+class NextResponse(BaseModel):
+    suggestions: list[SuggestionOut]
+    stop: bool
+    matched_procedure: str | None = None
+    matched_prefix_length: int = 0
+
+
+class PlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    task: str = Field(..., max_length=4000)
+    available_tools: list[DeclaredTool] = Field(default_factory=list)
+
+
+class PlanResponse(BaseModel):
+    task_pattern: str
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    valid: bool
+    reason: str | None = None
+    problems: list[str] = Field(default_factory=list)
+    support: int = 0
+    success_rate: float = 0.0
+    script: str | None = None
+    rendered: str | None = None
+    run_ids: list[str] = Field(default_factory=list)
+    invocation_ids: list[str] = Field(default_factory=list)
+
+
+class ProceduresResponse(BaseModel):
+    procedures: list[dict[str, Any]]
+
+
+class OutcomeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    success: bool
+    note: str | None = None
+
+
+class OutcomeResponse(BaseModel):
+    run_id: str
+    success: bool
+    source: str
+
+
+def _declared(items: list[DeclaredTool]) -> list[dict[str, Any]]:
+    return [i.model_dump(by_alias=True, exclude_none=False) for i in items]
+
+
+async def _scope_keys(container: Any, ctx: Any) -> list[str]:
+    visibility = await container.services["authz"].visibility(ctx)
+    return list(visibility.keys)
+
+
+@router.post(
+    "/tools",
+    response_model=ToolOut,
+    tags=["tools"],
+    summary="Register or update a tool descriptor (policy widening requires tenant admin)",
+    responses=_ERRORS,
+)
+async def register_tool(
+    request: Request, body: RegisterToolRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> ToolOut:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    descriptor = ToolDescriptor(
+        tenant_id=ctx.tenant_id,
+        workspace_id=ctx.workspace_id,
+        name=body.name,
+        description=body.description,
+        input_schema=body.input_schema,
+        output_schema=body.output_schema,
+        tags=body.tags,
+        source=body.source,  # type: ignore[arg-type]
+        server=body.server,
+        policy=ToolPolicy(**body.policy.model_dump()) if body.policy else ToolPolicy(),
+    )
+    async with container.services["uow_factory"]() as uow:
+        stored = await service.register(uow, ctx, descriptor)
+        await uow.commit()
+    return ToolOut(
+        tool_id=stored.tool_id,
+        name=stored.name,
+        version=stored.version,
+        description=stored.description,
+        tags=list(stored.tags),
+        source=stored.source,
+        policy=stored.policy.model_dump(),
+    )
+
+
+@router.get(
+    "/tools",
+    response_model=ToolListResponse,
+    tags=["tools"],
+    summary="List the tenant's tools with their outcome statistics",
+    responses=_ERRORS,
+)
+async def list_tools(
+    request: Request, container: ContainerDep, _: ServicePrincipalDep, limit: int = 200
+) -> ToolListResponse:
+    ctx = build_context(request, container, ScopeBody())
+    async with container.services["uow_factory"]() as uow:
+        tools = await uow.tools.list_tools(ctx.tenant_id, limit=limit)
+        stats = {s.tool_name: s for s in await uow.tools.stats(ctx.tenant_id)}
+    out = []
+    for tool in tools:
+        stat = stats.get(tool.name)
+        out.append(
+            ToolOut(
+                tool_id=tool.tool_id,
+                name=tool.name,
+                version=tool.version,
+                description=tool.description,
+                tags=list(tool.tags),
+                source=tool.source,
+                policy=tool.policy.model_dump(),
+                stats=(
+                    {
+                        "invocations": stat.invocations,
+                        "successes": stat.successes,
+                        "failures": stat.failures,
+                        "success_rate": round(stat.success_rate, 4),
+                        "median_latency_ms": stat.median_latency_ms,
+                        "total_cost": stat.total_cost,
+                        "last_used_at": stat.last_used_at,
+                    }
+                    if stat
+                    else None
+                ),
+            )
+        )
+    return ToolListResponse(tools=out)
+
+
+@router.post(
+    "/tools/lookup",
+    response_model=LookupResponse,
+    tags=["tools"],
+    summary="Serve a still-valid identical result for a deterministic, cacheable tool",
+    responses=_ERRORS,
+)
+async def lookup_tool(
+    request: Request, body: LookupRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> LookupResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    async with container.services["uow_factory"]() as uow:
+        result = await service.lookup(uow, ctx, tool=body.tool, args=body.args)
+    return LookupResponse(**result)
+
+
+@router.post(
+    "/tools/record",
+    response_model=RecordResponse,
+    status_code=202,
+    tags=["tools"],
+    summary="Record one tool call (idempotent on run + step + tool + arguments)",
+    responses=_ERRORS,
+)
+async def record_tool(
+    request: Request, body: RecordRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> RecordResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    async with container.services["uow_factory"]() as uow:
+        before = (
+            await uow.tools.invocations_for_run(ctx.tenant_id, ctx.agent_run_id)
+            if ctx.agent_run_id
+            else []
+        )
+        invocation = await service.record(
+            uow,
+            ctx,
+            tool=body.tool,
+            args=body.args,
+            output=body.output,
+            output_summary=body.output_summary,
+            status=body.status,
+            error_class=body.error_class,
+            latency_ms=body.latency_ms,
+            cost=body.cost,
+            task=body.task,
+            step=body.step,
+            sub_calls=body.sub_calls,
+            visibility=Visibility(body.visibility),
+        )
+        await uow.commit()
+    known = {i.invocation_id for i in before}
+    return RecordResponse(
+        invocation_id=invocation.invocation_id,
+        step=invocation.step,
+        args_hash=invocation.args_hash,
+        recorded=invocation.invocation_id not in known,
+    )
+
+
+@router.post(
+    "/tools/suggest",
+    response_model=SuggestResponse,
+    tags=["tools"],
+    summary="Rank the declared tools for a task from previous runs",
+    responses=_ERRORS,
+)
+async def suggest_tools(
+    request: Request, body: SuggestRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> SuggestResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    keys = await _scope_keys(container, ctx)
+    async with container.services["uow_factory"]() as uow:
+        suggestions = await service.suggest(
+            uow,
+            ctx,
+            task=body.task,
+            available_tools=_declared(body.available_tools),
+            scope_keys=keys,
+            limit=body.limit,
+        )
+        await uow.commit()
+    return SuggestResponse(suggestions=[SuggestionOut(**s.to_payload()) for s in suggestions])
+
+
+@router.post(
+    "/tools/next",
+    response_model=NextResponse,
+    tags=["tools"],
+    summary="Rank the next steps given the trajectory so far, with arguments already bound",
+    responses=_ERRORS,
+)
+async def next_tool(
+    request: Request, body: NextRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> NextResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    keys = await _scope_keys(container, ctx)
+    async with container.services["uow_factory"]() as uow:
+        result = await service.next_step(
+            uow,
+            ctx,
+            task=body.task,
+            trajectory_so_far=[s.model_dump() for s in body.trajectory_so_far],
+            available_tools=_declared(body.available_tools),
+            scope_keys=keys,
+            limit=body.limit,
+        )
+        await uow.commit()
+    return NextResponse(
+        suggestions=[SuggestionOut(**s.to_payload()) for s in result.suggestions],
+        stop=result.stop,
+        matched_procedure=result.matched_procedure,
+        matched_prefix_length=result.matched_prefix_length,
+    )
+
+
+@router.post(
+    "/tools/plan",
+    response_model=PlanResponse,
+    tags=["tools"],
+    summary="The best-known validated chain for a task, as an ordered plan with bindings",
+    responses=_ERRORS,
+)
+async def plan_tools(
+    request: Request, body: PlanRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> PlanResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    keys = await _scope_keys(container, ctx)
+    async with container.services["uow_factory"]() as uow:
+        payload = await service.plan(
+            uow,
+            ctx,
+            task=body.task,
+            available_tools=_declared(body.available_tools),
+            scope_keys=keys,
+        )
+        await uow.commit()
+    return PlanResponse(**{k: v for k, v in payload.items() if k in PlanResponse.model_fields})
+
+
+@router.get(
+    "/tools/procedures",
+    response_model=ProceduresResponse,
+    tags=["tools"],
+    summary="Procedures mined for a task pattern",
+    responses=_ERRORS,
+)
+async def list_procedures(
+    request: Request, container: ContainerDep, _: ServicePrincipalDep, task: str = ""
+) -> ProceduresResponse:
+    ctx = build_context(request, container, ScopeBody())
+    service = container.services["tool_memory"]
+    keys = await _scope_keys(container, ctx)
+    async with container.services["uow_factory"]() as uow:
+        procedures = await service.procedures(uow, ctx, task=task, scope_keys=keys)
+    return ProceduresResponse(procedures=[p.to_payload() for p in procedures])
+
+
+@router.post(
+    "/runs/{run_id}/outcome",
+    response_model=OutcomeResponse,
+    tags=["tools"],
+    summary="Label an agent run successful or not (only successful runs validate a procedure)",
+    responses=_ERRORS,
+)
+async def set_run_outcome(
+    run_id: str,
+    request: Request,
+    body: OutcomeRequest,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+) -> OutcomeResponse:
+    ctx = build_context(request, container, body.scope)
+    service = container.services["tool_memory"]
+    async with container.services["uow_factory"]() as uow:
+        outcome = await service.set_outcome(
+            uow, ctx, run_id=run_id, success=body.success, note=body.note
+        )
+        await uow.commit()
+    return OutcomeResponse(run_id=outcome.run_id, success=outcome.success, source=outcome.source)
