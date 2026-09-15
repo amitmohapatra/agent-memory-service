@@ -22,6 +22,7 @@ TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
 TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
+TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
 
 
@@ -87,6 +88,17 @@ def register_handlers(container: Container) -> None:
         if expired:
             log.info("memory.expired", count=len(expired))
 
+    async def memory_forget(payload: dict[str, Any]) -> None:
+        """Archive idle, low-value memories and evict working memory by the same score.
+
+        ``sweep`` enqueues its own re-index jobs inside the transaction that archives the rows
+        and evicts working memory itself, so there is nothing to do here but run it. Canonical
+        rows are never deleted; ``ForgettingService.restore`` brings an archived memory back.
+        """
+        forgetting = container.services.get("forgetting")
+        if forgetting is not None:
+            await forgetting.sweep()
+
     async def memory_reflect(payload: dict[str, Any]) -> None:
         """Derive insights over each principal's recent memories (LLM use ``reflection``)."""
         reflection = container.services.get("reflection")
@@ -132,6 +144,7 @@ def register_handlers(container: Container) -> None:
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
     queue.register(TASK_MEMORY_EXPIRE, Queue.RECONCILE, memory_expire, retries=0)
+    queue.register(TASK_MEMORY_FORGET, Queue.RECONCILE, memory_forget, retries=0)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
     queue.register(TASK_ARCHIVE_PURGE, Queue.ARCHIVE, archive_purge, retries=0)
     every = max(1, container.settings.tasks.periodic_reconcile_seconds // 60)
@@ -146,6 +159,9 @@ def register_handlers(container: Container) -> None:
     )
     queue.register_periodic(
         "periodic.memory_expire", Queue.RECONCILE, memory_expire, cron="29 * * * *"
+    )
+    queue.register_periodic(
+        "periodic.memory_forget", Queue.RECONCILE, memory_forget, cron="11 4 * * *"
     )
     if container.settings.models.llm.wants("reflection"):
         queue.register(TASK_MEMORY_REFLECT, Queue.RECONCILE, memory_reflect, retries=0)

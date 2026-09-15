@@ -1,5 +1,12 @@
 # Target stack and required changes — best-in-class open source (September 2026)
 
+> **Status: design document, partly implemented.** This was written before the work as the
+> input to the real-component validation run. The Bifrost LLM path (and its `uses` flags),
+> the validation harness and tool memory are built; the reranker upgrade, GLiNER2 extraction
+> tier, multi-layer graph, public benchmarks and the keep/cut decisions are not yet done.
+> Where this disagrees with the code, the code is right. See
+> [FINAL_REPORT.md](FINAL_REPORT.md) for what has actually been measured.
+
 Goal: a memory service that is best in class on every axis that matters — complex relations and
 a temporal knowledge graph, short- and long-term memory, retrieval/RAG, grounding, evaluation,
 latency and scale — built only from open-source components, with every model swappable later

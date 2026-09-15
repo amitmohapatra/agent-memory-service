@@ -96,6 +96,46 @@ def _strip_citations(sentence: str) -> tuple[str, list[str]]:
     return " ".join(text.split()).strip(" ,;"), cites
 
 
+# ``kind`` is a Representation value for packed evidence (CHUNK, TABLE, RELATION, SUMMARY...)
+# and a record kind for unused evidence. Higher is a better thing to cite.
+_SOURCE_RANK = {
+    "CHUNK": 3,
+    "TABLE": 3,
+    "PARAGRAPH": 3,
+    "SECTION": 3,
+    "SUBSECTION": 3,
+    "CODE_BLOCK": 3,
+    "chunk": 3,
+    "SUMMARY": 2,
+    "summary": 2,
+    "ENTITY": 1,
+    "RELATION": 1,
+    "memory": 1,
+}
+
+
+def _source_rank(evidence: Evidence) -> int:
+    """A verifiable passage beats a derived fact: a chunk carries a document, page and offsets
+    the reader can check, while a graph relation distilled from that chunk carries none."""
+    return _SOURCE_RANK.get(evidence.kind, 0)
+
+
+_DOT_SENTINEL = "\x00dot\x00"
+
+
+def _protect_citations(answer: str) -> str:
+    """Hide full stops inside citation markers from the sentence splitter."""
+
+    def hide(match: re.Match[str]) -> str:
+        return match.group(0).replace(".", _DOT_SENTINEL)
+
+    return _SOURCE_CITE.sub(hide, _BRACKET_CITE.sub(hide, answer))
+
+
+def _restore_citations(text: str) -> str:
+    return text.replace(_DOT_SENTINEL, ".")
+
+
 def _assertive(text: str) -> bool:
     if not text or text.endswith("?"):
         return False
@@ -116,13 +156,19 @@ def _clauses(sentence: str) -> list[str]:
 
 def decompose(answer: str, *, max_claims: int = 40) -> list[Claim]:
     """Deterministic sentence/clause split; questions, short hedges and discourse-only
-    fragments are dropped; citation markers are lifted off the claim text."""
+    fragments are dropped; citation markers are lifted off the claim text.
+
+    Citations are lifted *before* the sentence split, because a citation can contain a full
+    stop ("(source: annual report p. 11)") that would otherwise split the sentence through the
+    middle of the marker — leaving its words in the claim, where they count as uncovered
+    content and push a well-supported claim down into the borderline band.
+    """
     out: list[Claim] = []
-    for raw in _SENTENCE_SPLIT.split(answer):
+    for raw in _SENTENCE_SPLIT.split(_protect_citations(answer)):
         sentence = _LIST_MARKER.sub("", raw.strip())
         if not sentence:
             continue
-        text, cites = _strip_citations(sentence)
+        text, cites = _strip_citations(_restore_citations(sentence))
         for raw_clause in _clauses(text):
             clause = raw_clause.rstrip(".!").strip()
             if _assertive(clause):
@@ -250,6 +296,7 @@ class GroundingCascade:
                     notes=[f"citation [{cite}] does not resolve to any evidence item"],
                 )
             notes.append(f"citation ({cite}) is not an evidence id; treated as uncited")
+        cited = bool(premises)
         if premises:
             mismatched = [e.item_id for e in premises if coverage(claim.text, e.text) == 0.0]
             if mismatched:
@@ -271,8 +318,17 @@ class GroundingCascade:
                 notes=[*notes, "no evidence shares a content term with the claim"],
             )
         scores = await self.nli.entail([e.text for e in premises], claim.text)
-        best_e = max(range(len(scores)), key=lambda i: (scores[i].entailment, -i))
-        best_c = max(range(len(scores)), key=lambda i: (scores[i].contradiction, -i))
+        # On equal support, cite the primary source. A graph fact derived from a chunk renders
+        # as the same sentence and ties with it, but only the chunk carries a document, page and
+        # offsets the reader can check, so it is the more useful citation.
+        best_e = max(
+            range(len(scores)),
+            key=lambda i: (scores[i].entailment, _source_rank(premises[i]), -i),
+        )
+        best_c = max(
+            range(len(scores)),
+            key=lambda i: (scores[i].contradiction, _source_rank(premises[i]), -i),
+        )
         support = scores[best_e].entailment
         contradiction = scores[best_c].contradiction
         threshold = self.cfg.supported_threshold
@@ -286,6 +342,15 @@ class GroundingCascade:
         if not supported and _contradicts(scores[best_c], threshold) and support <= high:
             verdict = "contradicted"
             ids = [premises[best_c].item_id]
+        elif cited:
+            # The claim named its source, so the question is only "does that item say this?" —
+            # answerable from the premise itself. A middling score means the citation does not
+            # carry the claim, which is a failed citation rather than something to hedge on or
+            # spend a judge call arguing about.
+            verdict = "supported" if supported else "unsupported"
+            method = "citation"
+            if not supported:
+                notes.append("cited evidence does not support the claim")
         elif low <= support <= high:
             verdict = "borderline"
             decision = await self._judge(claim.text, premises)

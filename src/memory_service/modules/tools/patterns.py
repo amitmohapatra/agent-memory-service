@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
+from memory_service.modules.ingestion.context_graph import extract_entities
 
 MAX_PATTERN_CHARS = 300
 
@@ -49,10 +49,6 @@ def task_pattern(task: str, *, max_chars: int = MAX_PATTERN_CHARS) -> str:
     text = _NUMBER.sub("{num}", text)
     text = _WS.sub(" ", text).strip().casefold()
     return text[:max_chars]
-
-
-def pattern_key(pattern: str) -> str:
-    return canonical_entity(pattern)
 
 
 def similarity(left: str, right: str) -> float:

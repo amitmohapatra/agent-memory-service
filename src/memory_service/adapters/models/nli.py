@@ -11,7 +11,13 @@ from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.grounding.lexical import conflicts, content_tokens, coverage
 from memory_service.ports.models import NLIScore, ProviderInfo
 
-_RELATED = 0.3
+# How much of a claim a premise must cover before a number or negation clash between them is
+# read as a contradiction rather than a coincidence. Two sentences sharing only "EUR" and
+# "million" will always disagree on some number; calling that a refutation makes a mis-cited
+# claim look like a factual error. Measured over tests/eval/golden/grounding_claims.json: on the
+# deciding premise, genuine contradictions score >= 0.60 coverage while coincidental clashes
+# never exceed 0.40, so the bar sits in the empty band between them.
+_RELATED = 0.5
 _MAX_SCORE = 0.95
 
 

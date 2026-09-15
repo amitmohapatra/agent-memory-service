@@ -106,8 +106,3 @@ def layer_order(query: str) -> tuple[GraphLayer, ...]:
     ):
         return ("temporal", "entity", "causal", "structural")
     return ("entity", "causal", "temporal", "structural")
-
-
-def layer_weights(query: str) -> dict[str, float]:
-    order = layer_order(query)
-    return {layer: 1.0 - 0.2 * i for i, layer in enumerate(order)}

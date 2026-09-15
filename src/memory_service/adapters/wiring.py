@@ -454,8 +454,15 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
     )
     container.services["memory"] = MemoryService(container.services["authz"])
+    from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.reflection import ReflectionService
 
+    container.services["forgetting"] = ForgettingService(
+        container.services["uow_factory"],
+        settings=cfg,
+        cache=container.cache,
+        working_ttl_seconds=settings.cache.working_memory_ttl_seconds,
+    )
     container.services["reflection"] = ReflectionService(
         container.services["uow_factory"], assist=container.services["llm_assist"]
     )

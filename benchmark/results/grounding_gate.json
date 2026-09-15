@@ -2,7 +2,7 @@
   "cases": 40,
   "categories": {
     "citation": {
-      "correct": 5,
+      "correct": 6,
       "total": 6
     },
     "negation": {
@@ -42,7 +42,6 @@
   "failures": [
     "paraphrase-01: expected ['supported'], got ['borderline']",
     "paraphrase-02: expected ['supported'], got ['borderline']",
-    "citation-03: expected ['unsupported'], got ['contradicted']",
     "unrelated-03: expected ['unsupported'], got ['borderline']"
   ],
   "gate": "grounding",
@@ -59,8 +58,8 @@
     },
     "contradicted": {
       "fn": 0,
-      "fp": 1,
-      "precision": 0.9412,
+      "fp": 0,
+      "precision": 1.0,
       "recall": 1.0,
       "tp": 16
     },
@@ -72,16 +71,16 @@
       "tp": 16
     },
     "unsupported": {
-      "fn": 2,
+      "fn": 1,
       "fp": 0,
       "precision": 1.0,
-      "recall": 0.75,
-      "tp": 6
+      "recall": 0.875,
+      "tp": 7
     }
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "7fb402790a169ac0007ff5ee88edc4eaa7ce13ab",
+    "git_commit": "fa88b3144123e281f6458da2689c9941b8de1f11",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -153,7 +152,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-15T11:06:08.324375+00:00"
+    "timestamp": "2026-09-15T11:59:09.317178+00:00"
   },
   "representative": false,
   "rows": [
@@ -360,7 +359,7 @@
       ],
       "id": "citation-01",
       "methods": [
-        "nli"
+        "citation"
       ],
       "ok": true,
       "predicted": [
@@ -374,7 +373,7 @@
       ],
       "id": "citation-02",
       "methods": [
-        "nli"
+        "citation"
       ],
       "ok": true,
       "predicted": [
@@ -388,11 +387,11 @@
       ],
       "id": "citation-03",
       "methods": [
-        "nli"
+        "citation"
       ],
-      "ok": false,
+      "ok": true,
       "predicted": [
-        "contradicted"
+        "unsupported"
       ]
     },
     {

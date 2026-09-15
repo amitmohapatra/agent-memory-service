@@ -1,5 +1,11 @@
 # Final report — Enterprise Multi-Agent Memory Service (M0–M13)
 
+> **Status: the gate account as of milestone M13.** Work has continued since (tool memory,
+> the Bifrost LLM path, the validation harness); those gates are recorded in
+> `benchmark/results/` and in [adr/0017](adr/0017-real-component-validation.md). The verdict
+> below still holds: retrieval-quality and latency numbers are **not** representative until
+> the gates are re-run with real model weights and real servers.
+
 Date: 2026-09-15 · Commit: see `benchmark/results/*.json` → `provenance.git_commit`
 
 ## Verdict, in one paragraph

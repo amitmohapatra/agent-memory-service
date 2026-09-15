@@ -199,7 +199,8 @@ async def test_borderline_band_uses_the_judge_and_falls_back_to_borderline() -> 
         report = await cascade(assist=gw.assist(uses=["grounding_judge"])).verify(claim, [E1])
         assert gw.route.call_count == 1
         prompt = gw.prompts()[0]["messages"][1]["content"]
-    assert prompt.startswith(f"Claim: {claim}") and "[1] Adjusted EBITDA" in prompt
+    # decomposition strips terminal punctuation: a claim is a proposition, not a sentence
+    assert prompt.startswith(f"Claim: {claim.rstrip('.')}") and "[1] Adjusted EBITDA" in prompt
     c = report.claims[0]
     assert c.verdict == "supported" and c.method == "judge" and "judge:" in c.notes[-1]
     assert 0.3 <= c.support <= 0.7

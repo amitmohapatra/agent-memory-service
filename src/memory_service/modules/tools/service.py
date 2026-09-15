@@ -30,7 +30,6 @@ from memory_service.domain.tools import (
     ToolDescriptor,
     ToolInvocation,
     ToolPolicy,
-    stable_hash,
 )
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.tools.cache import CachedOutput, ToolOutputCache, args_hash_for
@@ -604,7 +603,3 @@ def _render(value: Any) -> str:
         return json.dumps(value, default=str, sort_keys=True)[:20000]
     except (TypeError, ValueError):
         return str(value)[:20000]
-
-
-def descriptor_fingerprint(descriptor: ToolDescriptor) -> str:
-    return stable_hash({"name": descriptor.name, "schema": descriptor.input_schema})
