@@ -26,6 +26,25 @@ BANNED_IN_CORE = {
 }
 CORE_PACKAGES = ("domain", "application", "modules", "ports", "api")
 
+# LLM provider SDKs are banned in *every* package, adapters included: the only LLM path is the
+# Bifrost gateway adapter speaking plain HTTP (adapters/models/llm.py).
+LLM_SDKS = {
+    "openai",
+    "anthropic",
+    "google.generativeai",
+    "google.genai",
+    "vertexai",
+    "litellm",
+    "langchain_openai",
+    "langchain_anthropic",
+    "langchain_google_genai",
+    "mistralai",
+    "cohere",
+    "ollama",
+    "groq",
+    "together",
+}
+
 
 def _imports(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -46,6 +65,35 @@ def test_core_packages_do_not_import_provider_sdks() -> None:
             if bad:
                 offenders.append(f"{path.relative_to(SRC)}: {sorted(bad)}")
     assert not offenders, "provider SDKs leaked into core:\n" + "\n".join(offenders)
+
+
+def _dotted_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+    return names
+
+
+def test_no_llm_provider_sdk_anywhere_under_src() -> None:
+    root = SRC.parent
+    offenders: list[str] = []
+    for path in root.rglob("*.py"):
+        for name in _dotted_imports(path):
+            if name in LLM_SDKS or any(name.startswith(f"{sdk}.") for sdk in LLM_SDKS):
+                offenders.append(f"{path.relative_to(root)}: {name}")
+    assert not offenders, "LLM SDK imported outside Bifrost:\n" + "\n".join(offenders)
+
+
+def test_llm_settings_only_allow_bifrost() -> None:
+    from typing import get_args
+
+    from memory_service.config.settings import LLMSettings
+
+    assert set(get_args(LLMSettings.model_fields["provider"].annotation)) == {"disabled", "bifrost"}
 
 
 def test_domain_does_not_import_application_adapters_or_frameworks() -> None:

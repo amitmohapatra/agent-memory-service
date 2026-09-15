@@ -96,10 +96,22 @@ class QueryRouter:
             qt = QueryType.DOCUMENT_LOCAL
         else:
             qt = QueryType.GENERAL_SEMANTIC
+        return self.routed(q, qt, identifiers=ids, signals=signals, has_thread=has_thread)
+
+    def routed(
+        self,
+        query: str,
+        qt: QueryType,
+        *,
+        identifiers: list[str],
+        signals: dict[str, bool],
+        has_thread: bool = True,
+    ) -> RoutedQuery:
+        """The RoutedQuery for an already decided type (rules, or a model when they could not)."""
         return RoutedQuery(
-            query=q,
+            query=query,
             query_type=qt,
-            identifiers=ids,
+            identifiers=identifiers,
             signals=signals,
             needs_conversation=has_thread
             and qt

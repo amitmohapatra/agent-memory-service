@@ -1,0 +1,61 @@
+{
+  "budgets_ms": {
+    "chat_accept_p95": 100
+  },
+  "llm_enabled": false,
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T06:37:17.211748+00:00"
+  },
+  "provider": "native",
+  "quality": {
+    "langmem": {
+      "skipped": "models.llm.enabled=false (provider requires an LLM)"
+    },
+    "mem0": {
+      "skipped": "models.llm.enabled=false (provider requires an LLM)"
+    },
+    "native": {
+      "dedup_recall": 1.0,
+      "distinct_pairs": 15,
+      "failures": [],
+      "false_merge_rate": 0.0,
+      "false_merges": 0,
+      "merge_pairs": 18,
+      "missed_merges": 0,
+      "pairs": 35
+    }
+  },
+  "throughput": {
+    "accept_p50_ms": 7.22,
+    "accept_p95_ms": 9.51,
+    "decisions": {
+      "CREATE": 66,
+      "REINFORCE": 59,
+      "SUPERSEDE": 21
+    },
+    "memories_current": 66,
+    "memories_rows": 87,
+    "observations": 200,
+    "observations_per_second": 26.2,
+    "process_mean_ms": 14.51,
+    "process_p50_ms": 16.49,
+    "process_p95_ms": 20.13,
+    "wall_seconds": 7.63
+  }
+}

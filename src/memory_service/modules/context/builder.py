@@ -22,16 +22,28 @@ from memory_service.domain.context_bundle import (
     ContextItem,
     ConversationWindow,
     EvidenceReport,
+    UnusedEvidence,
 )
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import EvidenceStatus, MessageKind
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.context.summaries import (
+    SOURCE_CHARS,
+    SUMMARY_SCHEMA,
+    accept_abstractive,
+)
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.retrieval.engine import Candidate, RetrievalEngine, RetrievalResult
+from memory_service.modules.retrieval.engine import (
+    UNUSED_MAX,
+    Candidate,
+    RetrievalEngine,
+    RetrievalResult,
+)
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -39,6 +51,13 @@ from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
+
+_ROLLING_SYSTEM = (
+    "You summarise the earlier part of a conversation that no longer fits the context "
+    "window. Write at most {max_chars} characters capturing what the user asked for, the "
+    "facts and decisions stated, and anything still open. Use only the conversation; no "
+    'preamble. Return JSON only: {{"summary": "..."}}.'
+)
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -110,6 +129,7 @@ class ContextBuilder:
         retrieval: RetrievalSettings,
         cache_ttl_seconds: int = 300,
         working: EphemeralMemory | None = None,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.engine = engine
@@ -119,13 +139,19 @@ class ContextBuilder:
         self.cfg = settings
         self.retrieval_cfg = retrieval
         self.cache_ttl = cache_ttl_seconds
+        self.assist = assist or LLMAssist.disabled()
 
     def _config_fingerprint(self) -> str:
-        return stable_key(
+        parts = [
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
-        )
+        ]
+        # bundles built with model assistance must not be served to a deployment without it
+        llm_uses = [u for u in ("summaries", "query_expansion") if self.assist.wants(u)]
+        if llm_uses:
+            parts.append("llm:" + ",".join(llm_uses))
+        return stable_key(*parts)
 
     async def _revision_fingerprint(self, ctx: MemoryExecutionContext) -> str:
         async with self.uow_factory() as uow:
@@ -151,7 +177,7 @@ class ContextBuilder:
             stage_seconds.labels("context.build").time(),
         ):
             revision_fp = await self._revision_fingerprint(ctx)
-            cache_key = "ctx:" + stable_key(
+            bundle_id = stable_key(
                 ctx.tenant_id,
                 ctx.scope_fingerprint(),
                 revision_fp,
@@ -160,6 +186,7 @@ class ContextBuilder:
                 str(budget),
                 ",".join(document_ids or []),
             )
+            cache_key = self._cache_key(ctx.tenant_id, bundle_id)
             if self.cache is not None:
                 try:
                     raw = await self.cache.get(cache_key)
@@ -168,6 +195,7 @@ class ContextBuilder:
                 if raw is not None:
                     bundle = ContextBundle.model_validate_json(raw)
                     return bundle.model_copy(update={"cache_hit": True})
+            tokens_before = self.assist.tokens_used()
             result = await self.engine.retrieve(ctx, query, document_ids=document_ids)
             window = await self._conversation_window(ctx, result)
             if self.working is not None and result.routed.needs_memories:
@@ -184,6 +212,13 @@ class ContextBuilder:
                         ),
                     )
             bundle = self._assemble(query, result, window, budget, revision_fp)
+            spent = self.assist.tokens_used() - tokens_before
+            bundle = bundle.model_copy(
+                update={
+                    "bundle_id": bundle_id,
+                    "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
+                }
+            )
             if self.cache is not None:
                 with contextlib.suppress(CacheUnavailable):
                     await self.cache.set(
@@ -191,6 +226,20 @@ class ContextBuilder:
                     )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         return bundle
+
+    async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:
+        """A bundle built earlier under the caller's tenant, while it is still cached."""
+        if self.cache is None or not bundle_id:
+            return None
+        try:
+            raw = await self.cache.get(self._cache_key(ctx.tenant_id, bundle_id))
+        except CacheUnavailable:
+            return None
+        return ContextBundle.model_validate_json(raw) if raw is not None else None
+
+    @staticmethod
+    def _cache_key(tenant_id: str, bundle_id: str) -> str:
+        return f"ctx:{tenant_id}:{bundle_id}"
 
     async def _conversation_window(
         self, ctx: MemoryExecutionContext, result: RetrievalResult
@@ -207,7 +256,10 @@ class ContextBuilder:
         window = render_window(ctx.thread_id, messages, self.cfg.conversation_token_budget)
         older = [m for m in messages if m.message_id not in set(window.message_ids)]
         if older:
-            window = window.model_copy(update={"summary": rolling_summary(older)})
+            summary = rolling_summary(older)
+            if self.assist.wants("summaries"):
+                summary = await abstractive_rolling_summary(self.assist, older, summary)
+            window = window.model_copy(update={"summary": summary})
         return window
 
     def _assemble(
@@ -365,10 +417,22 @@ class ContextBuilder:
                 )
         if not (knowledge or memories or graph_facts or summaries):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
+        # what the retriever found but this bundle does not carry (ranked out, over budget):
+        # the grounding cascade checks answers against it for contradictions
+        unused = [
+            UnusedEvidence(item_id=c.record_id, kind=c.kind, text=c.text)
+            for c, _ in items
+            if c.record_id not in included_ids and c.kind in ("chunk", "memory", "summary")
+        ]
+        unused.extend(
+            UnusedEvidence(item_id=str(u["record_id"]), kind=str(u["kind"]), text=str(u["text"]))
+            for u in result.diagnostics.get("unused") or []
+        )
+        report = report.model_copy(update={"unused": unused[:UNUSED_MAX]})
         diagnostics = {
             k: v
             for k, v in result.diagnostics.items()
-            if k not in ("evidence", "evidence_targets", "evidence_seed_groups")
+            if k not in ("evidence", "evidence_targets", "evidence_seed_groups", "unused")
         }
         return ContextBundle(
             query=query,
@@ -408,6 +472,33 @@ def rolling_summary(messages: Sequence[Message], *, max_chars: int = 600) -> str
         parts.append(line)
         used += len(line) + 1
     return "\n".join(parts)
+
+
+async def abstractive_rolling_summary(
+    assist: LLMAssist,
+    messages: Sequence[Message],
+    extractive: str,
+    *,
+    max_chars: int = 600,
+) -> str:
+    """Model-written digest of the turns that fell out of the window, given the deterministic
+    digest and the (bounded, most recent) source turns; the deterministic digest otherwise."""
+    if not assist.wants("summaries"):
+        return extractive
+    lines = [
+        f"{m.role.value.lower()}: {' '.join(m.content.split())}"
+        for m in messages
+        if m.kind is MessageKind.VISIBLE and m.content.strip()
+    ]
+    source = "\n".join(lines)[-SOURCE_CHARS:]
+    result = await assist.structured(
+        "summaries",
+        system=_ROLLING_SYSTEM.format(max_chars=max_chars),
+        user=f"Deterministic digest:\n{extractive}\n\nEarlier conversation:\n{source}",
+        schema=SUMMARY_SCHEMA,
+        max_tokens=max(128, max_chars // 2),
+    )
+    return accept_abstractive(result, max_chars=max_chars) or extractive
 
 
 def render_window(

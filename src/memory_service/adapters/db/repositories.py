@@ -125,6 +125,17 @@ class SqlThreadRepository:
         rows = (await self.s.execute(stmt)).scalars().all()
         return [_row_to_thread(r) for r in rows]
 
+    async def list_active(self, *, since: datetime, limit: int = 500) -> list[Thread]:
+        rows = (
+            await self.s.execute(
+                select(ThreadRow)
+                .where(ThreadRow.updated_at >= since, ThreadRow.deleted_at.is_(None))
+                .order_by(ThreadRow.updated_at.desc())
+                .limit(limit)
+            )
+        ).scalars()
+        return [_row_to_thread(r) for r in rows.all()]
+
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool:
         result = await self.s.execute(
             update(ThreadRow)

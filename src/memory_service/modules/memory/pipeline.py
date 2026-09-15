@@ -9,22 +9,25 @@ job is retried from the durable observation either way).
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from memory_service.config.settings import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
+    AdmissionVerdict,
     DedupDecision,
     Lifetime,
     MemoryType,
+    ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
 )
-from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
+from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.visibility import visibility_keys
+from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.observability.logging import get_logger
@@ -38,10 +41,14 @@ from memory_service.ports.intelligence import (
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
+if TYPE_CHECKING:
+    from memory_service.modules.memory.landing import LandingReflection
+
 log = get_logger(__name__)
 
 TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
+TASK_MEMORY_OBSERVE = "memory.observe"
 
 SHORT_TERM_TTL = timedelta(days=7)
 
@@ -180,11 +187,17 @@ class ObservationPipeline:
         *,
         settings: MemoryIntelligenceSettings,
         working: EphemeralMemory | None = None,
+        gate: AdmissionGate | None = None,
+        landing: LandingReflection | None = None,
+        observe_threads: bool = True,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
         self.cfg = settings
         self.working = working
+        self.gate = gate
+        self.landing = landing
+        self.observe_threads = observe_threads
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -210,8 +223,14 @@ class ObservationPipeline:
                 for c in await self.provider.extract(observation, ctx)
             ]
             outcomes: list[ConsolidationOutcome] = []
+            hinted = (
+                observation.hints.memory_type is not None
+                or observation.hints.importance is not None
+            )
             async with self.uow_factory() as uow:
-                affected = await self._apply_all(uow, ctx, candidates, outcomes)
+                affected = await self._apply_all(uow, ctx, candidates, outcomes, hinted=hinted)
+                if self.observe_threads and observation.kind is ObservationKind.MESSAGE:
+                    await self._maybe_observe(uow, ctx)
                 if affected:
                     await uow.enqueue(
                         JobSpec(
@@ -255,12 +274,46 @@ class ObservationPipeline:
             update["importance"] = h.importance
         return c.model_copy(update=update) if update else c
 
+    async def _maybe_observe(self, uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
+        """Ask the observer to compress turns that fell out of the hot window, once per batch
+        of new messages (the observer itself is idempotent over already covered turns)."""
+        if not ctx.thread_id:
+            return
+        latest = await uow.messages.list_thread(ctx.tenant_id, ctx.thread_id, limit=1)
+        if not latest:
+            return
+        older = latest[-1].sequence - self.cfg.observer_hot_window_messages
+        if older < self.cfg.observer_batch_messages:
+            return
+        await uow.enqueue(
+            JobSpec(
+                task_name=TASK_MEMORY_OBSERVE,
+                queue=Queue.RECONCILE,
+                payload={"tenant_id": ctx.tenant_id, "thread_id": ctx.thread_id},
+                idempotency_key=(
+                    f"memobs:{ctx.thread_id}:{older // self.cfg.observer_batch_messages}"
+                ),
+                tenant_id=ctx.tenant_id,
+            )
+        )
+
+    async def _deferred_before(self, ctx: MemoryExecutionContext, cand: MemoryCandidate) -> bool:
+        if self.working is None:
+            return False
+        key = normalized_hash(cand.content)
+        return any(
+            normalized_hash(str(d.get("content", ""))) == key and d.get("deferred")
+            for d in await self.working.recall(ctx)
+        )
+
     async def _apply_all(
         self,
         uow: UnitOfWork,
         ctx: MemoryExecutionContext,
         candidates: list[MemoryCandidate],
         outcomes: list[ConsolidationOutcome],
+        *,
+        hinted: bool = False,
     ) -> set[str]:
         affected: set[str] = set()
         now = datetime.now(UTC)
@@ -283,9 +336,53 @@ class ObservationPipeline:
                 limit=self.cfg.dedup_candidate_k,
             )
             outcome = await self.provider.consolidate(cand, existing, ctx)
+            admission: AdmissionDecision | None = None
+            if self.gate is not None:
+                admission = self.gate.evaluate(cand, outcome, hinted=hinted, now=now)
+                if admission.verdict is AdmissionVerdict.DEFER and await self._deferred_before(
+                    ctx, cand
+                ):
+                    admission = admission.model_copy(
+                        update={
+                            "verdict": AdmissionVerdict.ADMIT,
+                            "reasons": [*admission.reasons, "corroborated: repeated while deferred"],
+                        }
+                    )
+                if admission.verdict is not AdmissionVerdict.ADMIT:
+                    if admission.verdict is AdmissionVerdict.DEFER and self.working is not None:
+                        await self.working.remember(ctx, cand, deferred=True)
+                    outcomes.append(
+                        ConsolidationOutcome(
+                            decision=DedupDecision.IGNORE,
+                            candidate=cand,
+                            reason=f"{admission.verdict.value.lower()}: "
+                            + "; ".join(admission.reasons),
+                        )
+                    )
+                    continue
             outcomes.append(outcome)
-            affected |= await self._apply(uow, ctx, outcome, existing, now=now)
+            before = {m.memory_id for m in existing}
+            ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
+            affected |= ids
+            if self.landing is not None:
+                for created in sorted(ids - before):
+                    landed = await uow.memories.get(ctx.tenant_id, created)
+                    if landed is not None:
+                        affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
         return affected
+
+    @staticmethod
+    def _new_memory(
+        cand: MemoryCandidate,
+        ctx: MemoryExecutionContext,
+        *,
+        now: datetime,
+        admission: AdmissionDecision | None,
+    ) -> CanonicalMemory:
+        memory = build_memory(cand, ctx, now=now)
+        if admission is not None:
+            memory.system_metadata["admission"] = admission.model_dump(mode="json")
+        return memory
 
     async def _apply(
         self,
@@ -295,12 +392,13 @@ class ObservationPipeline:
         existing: list[CanonicalMemory],
         *,
         now: datetime,
+        admission: AdmissionDecision | None = None,
     ) -> set[str]:
         cand = outcome.candidate
         target = next((m for m in existing if m.memory_id == outcome.target_memory_id), None)
         match outcome.decision:
             case DedupDecision.CREATE:
-                memory = build_memory(cand, ctx, now=now)
+                memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 await uow.memories.add(
                     memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
                 )
@@ -332,7 +430,7 @@ class ObservationPipeline:
                 await uow.memories.update(target)
                 return {target.memory_id}
             case DedupDecision.SUPERSEDE | DedupDecision.UPDATE if target is not None:
-                memory = build_memory(cand, ctx, now=now)
+                memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 # the correction holds from now (unless the candidate is explicitly dated),
                 # so a temporal view before it returns the old value, not both
                 memory.temporal = memory.temporal.model_copy(
@@ -356,7 +454,7 @@ class ObservationPipeline:
                 await uow.memories.update(target)
                 return {memory.memory_id, target.memory_id}
             case DedupDecision.CONTRADICT if target is not None:
-                memory = build_memory(cand, ctx, now=now)
+                memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 memory.temporal = memory.temporal.model_copy(
                     update={"contradicts": [target.memory_id]}
                 )

@@ -11,12 +11,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, ContextEdge, DocumentNode, DocumentVersion
 from memory_service.domain.enums import DedupDecision, Lifetime, MemoryType, Visibility
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.graph import GraphLayer, layer_for
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.ports.models import ProviderInfo
@@ -114,10 +115,20 @@ class Entity(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
     mention_count: int = 1
     revision: int = 1
+    summary: str = Field(
+        default="",
+        description="maintained one-paragraph summary of the entity's current facts",
+    )
 
 
 class Relation(BaseModel):
-    """A temporal fact: subject -predicate-> object, valid over [valid_from, valid_to)."""
+    """A bitemporal fact: subject -predicate-> object, true over [valid_from, valid_to)
+    (valid time) and known from ``observed_at`` until ``invalidated_at`` (knowledge time).
+
+    A relation is never deleted: a replaced or withdrawn fact keeps its row, gets a status
+    (SUPERSEDED when it stopped being true, INVALIDATED when it was never right) and an
+    ``invalidated_by`` edge that names the winning fact and the reason.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -126,11 +137,17 @@ class Relation(BaseModel):
     subject_id: str
     predicate: str
     object_id: str
+    layer: GraphLayer = Field(
+        default="entity", description="entity | temporal | causal | structural (from predicate)"
+    )
     scope_key: str = ""
     visibility_keys: list[str] = Field(default_factory=list)
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime
+    invalidated_at: datetime | None = Field(
+        default=None, description="knowledge time at which the fact stopped being asserted"
+    )
     status: str = "CURRENT"
     superseded_by: str | None = None
     confidence: float = 0.5
@@ -139,6 +156,27 @@ class Relation(BaseModel):
     document_id: str | None = None
     fact_text: str = Field(default="", description="human-readable statement of the fact")
     attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _layer_from_predicate(cls, data: Any) -> Any:
+        if isinstance(data, dict) and not data.get("layer"):
+            data = {**data, "layer": layer_for(str(data.get("predicate", "")))}
+        return data
+
+
+class EntityAlias(BaseModel):
+    """Tenant-wide alias row: ``alias`` (canonical form) names ``entity_id`` with a
+    confidence and the source that established it (canonical, lexicon, rule:acronym,
+    rule:plural, rule:punctuation, embedding, llm)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tenant_id: str
+    alias: str
+    entity_id: str
+    confidence: float = Field(default=1.0, ge=0, le=1)
+    source: str = "canonical"
 
 
 class GraphNeighborhood(BaseModel):
@@ -159,6 +197,12 @@ class GraphStore(Protocol):
         self, tenant_id: str, names: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]: ...
 
+    async def list_entities(
+        self, tenant_id: str, *, scope_keys: Sequence[str], limit: int = 200
+    ) -> list[Entity]:
+        """Bounded listing of visible entities, most mentioned first."""
+        ...
+
     async def neighborhood(
         self,
         tenant_id: str,
@@ -168,8 +212,15 @@ class GraphStore(Protocol):
         hops: int = 1,
         max_visited: int = 200,
         as_of: datetime | None = None,
+        valid_at: datetime | None = None,
+        layers: Sequence[GraphLayer] | None = None,
     ) -> GraphNeighborhood:
-        """Bounded traversal: O(V+E) over at most ``max_visited`` nodes."""
+        """Bounded traversal: O(V+E) over at most ``max_visited`` nodes.
+
+        ``as_of`` selects facts *true* at that instant (valid time); ``valid_at`` selects
+        facts *asserted* by then and not yet invalidated (knowledge time); ``layers``
+        restricts the walk to those layers.
+        """
         ...
 
     async def supersede(self, relation_id: str, *, by: str, at: datetime) -> None: ...
@@ -178,17 +229,78 @@ class GraphStore(Protocol):
         """Retire every CURRENT relation derived from a memory that is no longer current."""
         ...
 
+    async def invalidate(
+        self,
+        relation_id: str,
+        *,
+        reason: str,
+        at: datetime,
+        by: str | None = None,
+        status: str = "INVALIDATED",
+        attributes: dict[str, Any] | None = None,
+    ) -> Relation | None:
+        """Close a relation without deleting it and record why: the row keeps its history,
+        gets ``status`` and ``invalidated_at``, and — when ``by`` names the winning fact —
+        an ``invalidated_by`` edge (relation -> relation) carries ``reason``, the winner,
+        the loser and ``attributes`` (which fact won and why). Returns the edge."""
+        ...
+
+    async def invalidate_for_document(
+        self,
+        tenant_id: str,
+        document_id: str,
+        *,
+        keep: Sequence[str],
+        at: datetime,
+        reason: str,
+    ) -> int:
+        """Invalidate the document's CURRENT relations that a re-extraction no longer
+        produced (``keep`` = the ids it did produce); the replacement for a hard delete."""
+        ...
+
+    async def invalidations(self, tenant_id: str, relation_ids: Sequence[str]) -> list[Relation]:
+        """The ``invalidated_by`` edges leaving the given relations."""
+        ...
+
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...
 
     async def relations_for_document(
-        self, tenant_id: str, document_id: str, *, scope_keys: Sequence[str]
+        self,
+        tenant_id: str,
+        document_id: str,
+        *,
+        scope_keys: Sequence[str],
+        include_invalidated: bool = False,
     ) -> list[Relation]:
         """Every visible relation extracted from a document (audits, evals, exports)."""
+        ...
+
+    async def relations_touching(
+        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int = 2000
+    ) -> list[Relation]:
+        """CURRENT relations with either end in ``entity_ids`` regardless of audience
+        (service-internal: summary maintenance applies its own audience rule)."""
         ...
 
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]: ...
+
+    async def entities_by_id(self, tenant_id: str, entity_ids: Sequence[str]) -> list[Entity]:
+        """Entities by id without audience filtering (service-internal maintenance)."""
+        ...
+
+    async def list_tenant_entities(
+        self, tenant_id: str, *, entity_types: Sequence[str] = (), limit: int = 300
+    ) -> list[Entity]:
+        """Tenant-wide candidates for cross-document resolution, most mentioned first."""
+        ...
+
+    async def set_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None: ...
+
+    async def upsert_aliases(self, aliases: Sequence[EntityAlias]) -> None: ...
+
+    async def find_aliases(self, tenant_id: str, aliases: Sequence[str]) -> list[EntityAlias]: ...
 
     async def ping(self) -> bool: ...
 

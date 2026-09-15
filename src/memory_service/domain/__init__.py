@@ -12,6 +12,7 @@ from memory_service.domain.context_bundle import (
     ContextItem,
     ConversationWindow,
     EvidenceReport,
+    UnusedEvidence,
 )
 from memory_service.domain.conversation import (
     AgentRun,
@@ -47,6 +48,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.evidence import EvidenceGroup, EvidenceRef
+from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
 from memory_service.domain.memory import CanonicalMemory, MemoryResult, Scope, TemporalState
 from memory_service.domain.observation import Observation, ProcessingHints
 
@@ -56,6 +58,8 @@ __all__ = [
     "Attachment",
     "CanonicalMemory",
     "Chunk",
+    "ClaimReport",
+    "ClaimVerdict",
     "ContextBundle",
     "ContextEdge",
     "ContextGraphEdge",
@@ -70,6 +74,7 @@ __all__ = [
     "EvidenceRef",
     "EvidenceReport",
     "EvidenceStatus",
+    "GroundingReport",
     "JobStatus",
     "Lifetime",
     "MemoryExecutionContext",
@@ -90,5 +95,6 @@ __all__ = [
     "TemporalStatus",
     "Thread",
     "Turn",
+    "UnusedEvidence",
     "Visibility",
 ]

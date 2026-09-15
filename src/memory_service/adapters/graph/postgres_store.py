@@ -224,6 +224,25 @@ class PostgresGraphStore:
             ).all()
         return [_entity(r) for r in rows]
 
+    async def list_entities(
+        self, tenant_id: str, *, scope_keys: Sequence[str], limit: int = 200
+    ) -> list[Entity]:
+        if not scope_keys or limit <= 0:
+            return []
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphEntityRow)
+                    .where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
+                    )
+                    .order_by(GraphEntityRow.mention_count.desc(), GraphEntityRow.canonical_name)
+                    .limit(limit)
+                )
+            ).all()
+        return [_entity(r) for r in rows]
+
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]:

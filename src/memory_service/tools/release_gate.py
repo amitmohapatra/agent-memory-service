@@ -13,6 +13,12 @@ results summary, then fails when any hard gate is violated:
     failure-recovery suite            passes
 
 Gates are never downgraded to make a build pass. Missing evidence == failed gate.
+
+The in-process producers are mandatory evidence. Their network-hop counterparts
+(``durability_network.json`` / ``performance_network.json`` from ``benchmark.deployed``,
+measured over TCP against a deployed API with real workers) are held to the same
+thresholds whenever they are present; when they are missing the PASS carries the caveat
+that latency and durability were measured in-process only.
 """
 
 from __future__ import annotations
@@ -34,9 +40,21 @@ def _load(name: str) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _latency_caveat(perf: dict[str, Any]) -> str | None:
+    providers = perf.get("providers") or {}
+    if providers.get("representative", False):
+        return None
+    shown = {k: v for k, v in providers.items() if k != "representative"}
+    return (
+        f"latency measured over {perf.get('transport', 'unknown transport')} with "
+        f"providers={shown}: NOT representative of a deployed instance"
+    )
+
+
 def representativeness(results: dict[str, dict[str, Any] | None]) -> list[str]:
     """Caveats that do not fail the gate but must be stated with any PASS: evidence
-    produced with stand-in providers bounds the service logic, not a deployment."""
+    produced with stand-in providers bounds the service logic, not a deployment, and
+    evidence produced in-process only says nothing about the network hop or real workers."""
     notes: list[str] = []
     retrieval = results.get("retrieval_gate")
     if retrieval is not None and not retrieval.get("representative", False):
@@ -45,13 +63,33 @@ def representativeness(results: dict[str, dict[str, Any] | None]) -> list[str]:
             f"reranker={retrieval.get('reranker')}: NOT representative of production models"
         )
     perf = results.get("performance")
-    if perf is not None and not (perf.get("providers") or {}).get("representative", False):
+    if perf is not None and (note := _latency_caveat(perf)):
+        notes.append(note)
+    perf_network = results.get("performance_network")
+    if perf_network is None:
         notes.append(
-            f"latency measured over {perf.get('transport', 'unknown transport')} with "
-            f"providers={ {k: v for k, v in (perf.get('providers') or {}).items() if k != 'representative'} }: "
-            "NOT representative of a deployed instance"
+            "latency measured in-process only (performance_network.json missing): "
+            "no evidence over the network against a deployed instance"
+        )
+    elif note := _latency_caveat(perf_network):
+        notes.append(note)
+    if results.get("durability_network") is None:
+        notes.append(
+            "acknowledged-data-loss chaos measured in-process only (durability_network.json "
+            "missing): no evidence with real worker crashes against a deployed instance"
         )
     return notes
+
+
+def _check_budgets(perf: dict[str, Any], budgets: dict[str, float], label: str) -> list[str]:
+    failures: list[str] = []
+    for key, budget in budgets.items():
+        observed = perf.get(key)
+        if observed is None:
+            failures.append(f"{key}{label} not measured")
+        elif observed > budget:
+            failures.append(f"{key}{label} = {observed} > budget {budget}")
+    return failures
 
 
 def evaluate(settings: Settings | None = None) -> tuple[bool, list[str]]:
@@ -70,6 +108,15 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
         failures.append(
             f"acknowledged data loss = {durability.get('acknowledged_data_loss')} (must be 0)"
         )
+    durability_network = _load("durability_network.json")
+    if durability_network is not None:
+        loss = durability_network.get("acknowledged_data_loss", 1)
+        if loss != 0:
+            failures.append(f"acknowledged data loss over the network = {loss} (must be 0)")
+        if (durability_network.get("recovery") or {}).get("timed_out", False):
+            failures.append(
+                "network chaos run: recovery timed out (acknowledgements still pending)"
+            )
 
     security = _load("security.json")
     if security is None:
@@ -119,23 +166,21 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
         if kg.get("query_hit_rate", 0.0) < 1.0:
             failures.append(f"KG query hit rate = {kg.get('query_hit_rate')} (must be 1.00)")
 
+    budgets = {
+        "chat_accept_p95_ms": settings.budgets.chat_accept_p95_ms,
+        "cached_context_p95_ms": settings.budgets.cached_context_p95_ms,
+        "recall_p95_ms": settings.budgets.recall_p95_ms,
+        "context_bundle_p95_ms": settings.budgets.context_bundle_p95_ms,
+        "file_accept_p95_ms": settings.budgets.file_accept_p95_ms,
+    }
     perf = _load("performance.json")
     if perf is None:
         failures.append("performance.json missing (p95 gate has no evidence)")
     else:
-        budgets = {
-            "chat_accept_p95_ms": settings.budgets.chat_accept_p95_ms,
-            "cached_context_p95_ms": settings.budgets.cached_context_p95_ms,
-            "recall_p95_ms": settings.budgets.recall_p95_ms,
-            "context_bundle_p95_ms": settings.budgets.context_bundle_p95_ms,
-            "file_accept_p95_ms": settings.budgets.file_accept_p95_ms,
-        }
-        for key, budget in budgets.items():
-            observed = perf.get(key)
-            if observed is None:
-                failures.append(f"{key} not measured")
-            elif observed > budget:
-                failures.append(f"{key} = {observed} > budget {budget}")
+        failures += _check_budgets(perf, budgets, "")
+    perf_network = _load("performance_network.json")
+    if perf_network is not None:
+        failures += _check_budgets(perf_network, budgets, " (network)")
 
     recovery = _load("failure_injection.json")
     if recovery is None:
@@ -153,7 +198,14 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
     elif tests.get("total", 0) == 0:
         failures.append("tests.json records no tests")
 
-    notes = representativeness({"retrieval_gate": retrieval, "performance": perf})
+    notes = representativeness(
+        {
+            "retrieval_gate": retrieval,
+            "performance": perf,
+            "performance_network": perf_network,
+            "durability_network": durability_network,
+        }
+    )
     return (not failures, failures, notes)
 
 

@@ -31,12 +31,14 @@ async def wire_all(container: Container) -> None:
     _wire_uow(container)
     await _wire_authorization(container)
     _wire_services(container)
+    _wire_llm(container)
     _wire_conversation(container)
     await _wire_blob(container)
     _wire_archive(container)
     _wire_ingestion(container)
     await _wire_search(container)
     _wire_models(container)
+    _wire_nli(container)
     _wire_retrieval(container)
     _wire_memory(container)
     _wire_graph(container)
@@ -230,6 +232,7 @@ def _wire_ingestion(container: Container) -> None:
         file_bucket=container.settings.blob.file_bucket,
         tenant_shards=container.settings.archive.tenant_shards,
         fallback_parser=builtin,
+        assist=container.services["llm_assist"],
     )
 
 
@@ -303,6 +306,60 @@ def _wire_models(container: Container) -> None:
         container.reranker = CrossEncoderReranker(rr_cfg)
 
 
+def _wire_llm(container: Container) -> None:
+    """The generative model is optional and reachable only through the Bifrost gateway."""
+    from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.modules.llm.assist import LLMAssist
+
+    settings = container.settings
+    cfg = settings.models.llm
+    if not cfg.enabled:
+        container.llm = DisabledLLM()
+        container.services["llm_assist"] = LLMAssist.disabled()
+        return
+    llm = BifrostLLM(cfg, log_source_text=settings.service.log_source_text)
+    check_provider_policy(
+        llm.info, [*settings.provider_policy.allowed_licenses, "see model card"], allow_remote=True
+    )
+    container.llm = llm
+    container.services["llm_assist"] = LLMAssist(llm, cfg)
+    container.add_dependency(
+        Dependency(name="llm", mandatory=False, ping=llm.ping, close=llm.close)
+    )
+
+
+def _wire_nli(container: Container) -> None:
+    """Claim-support classifier + grounding cascade. Like the parser, the model tier degrades
+    to the deterministic stand-in with a warning when its weights cannot be loaded; reports
+    then say ``representative: false``."""
+    from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.domain.errors import DependencyUnavailable
+    from memory_service.modules.grounding.cascade import GroundingCascade
+
+    settings = container.settings
+    cfg = settings.models.nli
+    if cfg.provider == "disabled":
+        container.nli = None
+        return
+    nli: LexicalNLI | TransformersNLI = LexicalNLI()
+    if cfg.provider == "transformers":
+        try:
+            nli = TransformersNLI(cfg)
+        except DependencyUnavailable as exc:
+            log.warning("nli.unavailable", error=exc.message, fallback="lexical")
+    check_provider_policy(
+        nli.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    container.nli = nli
+    container.services["grounding"] = GroundingCascade(
+        nli, settings=cfg, assist=container.services["llm_assist"]
+    )
+
+
 def _wire_retrieval(container: Container) -> None:
     from memory_service.modules.context.builder import ContextBuilder
     from memory_service.modules.memory.ephemeral import EphemeralMemory
@@ -318,6 +375,7 @@ def _wire_retrieval(container: Container) -> None:
         container.cache,
         batch_size=settings.models.embedding.batch_size,
         embedding_cache_ttl=settings.cache.embedding_ttl_seconds,
+        assist=container.services["llm_assist"],
     )
     container.services["indexer"] = indexer
     engine = RetrievalEngine(
@@ -328,6 +386,7 @@ def _wire_retrieval(container: Container) -> None:
         container.reranker,
         settings=settings.retrieval,
         rerank_k=settings.models.reranker.candidate_k,
+        assist=container.services["llm_assist"],
     )
     container.services["retrieval"] = engine
     working = EphemeralMemory(
@@ -343,6 +402,7 @@ def _wire_retrieval(container: Container) -> None:
         retrieval=settings.retrieval,
         cache_ttl_seconds=settings.cache.context_bundle_ttl_seconds,
         working=working,
+        assist=container.services["llm_assist"],
     )
 
 
@@ -358,7 +418,9 @@ def _wire_memory(container: Container) -> None:
     cfg = settings.memory_intelligence
     provider: MemoryIntelligenceProvider
     if cfg.provider == "native":
-        provider = NativeMemoryIntelligence(cfg, container.embedding)
+        provider = NativeMemoryIntelligence(
+            cfg, container.embedding, assist=container.services["llm_assist"]
+        )
     elif cfg.provider == "mem0":
         from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence
 
@@ -391,6 +453,11 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
     )
     container.services["memory"] = MemoryService(container.services["authz"])
+    from memory_service.modules.memory.reflection import ReflectionService
+
+    container.services["reflection"] = ReflectionService(
+        container.services["uow_factory"], assist=container.services["llm_assist"]
+    )
 
 
 def _wire_graph(container: Container) -> None:
@@ -413,8 +480,9 @@ def _wire_graph(container: Container) -> None:
     if cfg.provider == "disabled":
         container.graph_enrichment = None
         return
+    assist = container.services["llm_assist"]
     if cfg.provider == "native":
-        provider = NativeGraphEnrichment()
+        provider = NativeGraphEnrichment(assist=assist)
     elif cfg.provider == "graphiti":
         from memory_service.adapters.graph.graphiti_provider import GraphitiEnrichment
 
@@ -424,7 +492,7 @@ def _wire_graph(container: Container) -> None:
 
         provider = DoclingGraphEnrichment(settings)
     else:  # cognee: graph comes from the cognee memory provider; native structure here
-        provider = NativeGraphEnrichment()
+        provider = NativeGraphEnrichment(assist=assist)
     check_provider_policy(
         provider.info,
         [*settings.provider_policy.allowed_licenses, "see model card"],
@@ -442,6 +510,7 @@ def _wire_graph(container: Container) -> None:
         provider,
         container.services["authz"],
         settings=settings.graph,
+        assist=assist,
     )
     container.services["graph"] = graph
     if settings.retrieval.graph:

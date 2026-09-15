@@ -1,0 +1,62 @@
+{
+  "cross_tenant_unauthorized": 0,
+  "cross_tenant_unauthorized_evidence": {
+    "missing": [],
+    "tests": {
+      "test_cross_tenant_seed_is_inert": "passed",
+      "test_every_reader_gets_only_authorized_records": "passed",
+      "test_exhaustive_cross_tenant_never_leaks": "passed",
+      "test_scope_resolution_is_tenant_bound": "passed",
+      "test_traversal_returns_only_authorized_relations": "passed"
+    }
+  },
+  "cross_user_unauthorized": 0,
+  "cross_user_unauthorized_evidence": {
+    "missing": [],
+    "tests": {
+      "test_empty_visibility_returns_nothing": "passed",
+      "test_every_reader_gets_only_authorized_records": "passed",
+      "test_isolation_holds_per_retriever_and_with_document_filter": "passed",
+      "test_visibility_matches_independent_oracle": "passed"
+    }
+  },
+  "private_agent_leakage": 0,
+  "private_agent_leakage_evidence": {
+    "missing": [],
+    "tests": {
+      "test_agent_inherits_user_access_but_not_user_private_memories": "passed",
+      "test_every_reader_gets_only_authorized_records": "passed",
+      "test_private_agent_memory_invisible_to_everyone_else": "passed"
+    }
+  },
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T06:51:25.768145+00:00"
+  },
+  "pytest_exit_status": 0,
+  "tests": {
+    "deselected": 0,
+    "errors": 0,
+    "failed": 0,
+    "passed": 10,
+    "skipped": 0,
+    "total": 10,
+    "xfailed": 0,
+    "xpassed": 0
+  }
+}

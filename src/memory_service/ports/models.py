@@ -1,4 +1,4 @@
-"""Model provider ports: embeddings, reranking, sparse encoding, generative LLM.
+"""Model provider ports: embeddings, reranking, sparse encoding, NLI, generative LLM.
 
 All providers carry a :class:`ProviderInfo` (name, version, license, origin, locality,
 data residency) so the provider policy can allow/deny them by configuration.
@@ -78,6 +78,30 @@ class Reranker(Protocol):
     def fingerprint(self) -> str: ...
 
 
+class NLIScore(BaseModel):
+    """Probabilities that a premise entails / is neutral to / contradicts a hypothesis."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entailment: float = Field(..., ge=0.0, le=1.0)
+    neutral: float = Field(..., ge=0.0, le=1.0)
+    contradiction: float = Field(..., ge=0.0, le=1.0)
+
+
+@runtime_checkable
+class NLIProvider(Protocol):
+    """Natural-language-inference classifier used by the grounding cascade. One hypothesis
+    (a claim) is scored against each premise (an evidence item); the list is index-aligned
+    with ``premises``. ``representative`` is False for deterministic stand-ins."""
+
+    info: ProviderInfo
+    representative: bool
+
+    async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]: ...
+
+    def fingerprint(self) -> str: ...
+
+
 class LLMMessage(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -96,13 +120,20 @@ class LLMCompletion(BaseModel):
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    """Optional generative model. ``DisabledLLM`` raises ``ProviderNotConfigured``."""
+    """Optional generative model behind the Bifrost gateway. ``DisabledLLM`` raises
+    ``ProviderNotConfigured``. ``use`` names the configured ``LLMSettings.uses`` entry making
+    the call (metrics/tracing label and fast-vs-strong model selection)."""
 
     info: ProviderInfo
     enabled: bool
 
     async def complete(
-        self, messages: Sequence[LLMMessage], *, max_tokens: int = 512, temperature: float = 0.0
+        self,
+        messages: Sequence[LLMMessage],
+        *,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+        use: str = "generic",
     ) -> LLMCompletion: ...
 
     async def structured(
@@ -111,4 +142,5 @@ class LLMProvider(Protocol):
         *,
         schema: dict[str, Any],
         max_tokens: int = 1024,
+        use: str = "generic",
     ) -> dict[str, Any]: ...

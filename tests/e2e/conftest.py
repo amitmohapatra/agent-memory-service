@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from memory_service.api.app import create_app
 from tests.conftest import PG_AVAILABLE
+from tests.support_real import reset_real_backends
 
 TABLES = [
     "graph_relations",
@@ -58,6 +59,7 @@ def client(app) -> Iterator[TestClient]:
                 await conn.execute(
                     text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE")
                 )
+            await reset_real_backends(container)
 
         c.portal.call(_truncate) if hasattr(c, "portal") else asyncio.run(_truncate())
         yield c

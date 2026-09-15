@@ -42,6 +42,9 @@ class MemoryType(StrEnum):
     SUMMARY = "SUMMARY"
     DERIVED = "DERIVED"
     POLICY = "POLICY"
+    OBSERVATION = "OBSERVATION"  # dated, thread-scoped notes compressed from older turns
+    BELIEF = "BELIEF"  # derived generalisation with support and a revision chain
+    ENTITY_SUMMARY = "ENTITY_SUMMARY"  # one maintained summary per entity (subject)
     CUSTOM = "CUSTOM"
 
 
@@ -102,6 +105,15 @@ class TemporalStatus(StrEnum):
     EXPIRED = "EXPIRED"
     CONTRADICTED = "CONTRADICTED"
     RETRACTED = "RETRACTED"
+    ARCHIVED = "ARCHIVED"  # forgotten by policy: kept, restorable, out of retrieval
+
+
+class AdmissionVerdict(StrEnum):
+    """What the admission gate decided for a memory candidate."""
+
+    ADMIT = "ADMIT"
+    REJECT = "REJECT"
+    DEFER = "DEFER"  # parked in working memory until corroborated
 
 
 class MessageRole(StrEnum):

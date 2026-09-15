@@ -22,6 +22,7 @@ and worker processes sharing PostgreSQL.
                                                             adapters
                        PostgreSQL · Qdrant · Dragonfly · OpenFGA · Procrastinate · GCS/filesystem ·
                        Docling · sentence-transformers/fastembed · Mem0/Cognee/LangMem · Graphiti · OPA
+                       Bifrost (the only LLM path: one HTTP adapter, no provider SDK anywhere)
 ```
 
 Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
@@ -84,6 +85,25 @@ Chunks are indexed with deterministic context (document, section path, page, ent
 prepended — Contextual Retrieval — while the original text is kept separately for display.
 The Document Context Graph (PARENT/NEXT/PREVIOUS/ON_PAGE/IN_TABLE/FOOTNOTE/CROSS_REFERENCE/
 MENTIONS/DEFINED_BY) is built without an LLM and is distinct from the semantic Knowledge Graph.
+
+## Generative model access
+
+The service never talks to an LLM provider. `LLMSettings.provider` is `disabled` or
+`bifrost`; `adapters/models/llm.py` speaks the OpenAI-compatible HTTP API of a
+[Bifrost](https://github.com/maximhq/bifrost) gateway that runs outside the service and
+holds the provider keys. The service holds only a Bifrost *virtual key*
+(`secrets.env` / `MEMORY__MODELS__LLM__API_KEY`). Calls are bounded (timeout, bounded
+retries, circuit breaker), traced (`llm.chat` spans with model/tokens/latency), metered
+(`memory_llm_*`) and logged without prompt text unless `service.log_source_text=true`.
+Provider SDK imports are banned under `src/` by Ruff and `tests/unit/test_architecture.py`.
+
+Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMAssist` is
+the single entry point modules use: a use is consulted only when its flag is in
+`models.llm.uses` (ambiguous_extraction, ambiguous_worthiness, relation_extraction,
+entity_resolution, conflict_adjudication, summaries, reflection, query_expansion,
+chunk_context) and any failure returns `None`, so the module continues with its native
+result. Third-party providers that need an LLM (Mem0, LangMem, Graphiti, Cognee) are
+pointed at the same gateway through their OpenAI-compatible base-URL settings.
 
 ## Caching
 

@@ -8,6 +8,7 @@ new ids are inserts. The manager is injectable for tests; the real one needs an 
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Any, Protocol
 
@@ -51,8 +52,12 @@ class LangMemIntelligence:
             llm = self.settings.models.llm
             if not llm.enabled or not llm.model:
                 raise DependencyUnavailable("langmem requires models.llm.enabled=true and a model")
+            # LangMem builds a LangChain OpenAI chat model from the model string; the
+            # OpenAI-compatible endpoint it talks to is the Bifrost gateway, never a provider.
+            os.environ["OPENAI_BASE_URL"] = llm.base_url
+            os.environ["OPENAI_API_KEY"] = llm.api_key.get_secret_value() if llm.api_key else "-"
             self._manager = create_memory_manager(
-                llm.model, enable_inserts=True, enable_updates=True
+                f"openai:{llm.model}", enable_inserts=True, enable_updates=True
             )  # type: ignore[assignment]
         return self._manager  # type: ignore[return-value]
 

@@ -26,7 +26,9 @@ class EphemeralMemory:
         anchor = ctx.agent_run_id or ctx.thread_id
         return f"wm:{ctx.tenant_id}:{anchor}" if anchor else None
 
-    async def remember(self, ctx: MemoryExecutionContext, candidate: MemoryCandidate) -> None:
+    async def remember(
+        self, ctx: MemoryExecutionContext, candidate: MemoryCandidate, *, deferred: bool = False
+    ) -> None:
         key = self.key(ctx)
         if self.cache is None or key is None:
             return
@@ -35,6 +37,8 @@ class EphemeralMemory:
                 "content": candidate.content,
                 "memory_type": candidate.memory_type.value,
                 "principal": ctx.principal_id,
+                "importance": candidate.importance,
+                "deferred": deferred,
                 "at": datetime.now(UTC).isoformat(),
             }
         ).encode()

@@ -1,0 +1,233 @@
+{
+  "name": "public_pdfs_critical",
+  "description": "Critical evidence-preservation questions over four real-world public-domain PDFs parsed by Docling (CDC MMWR two-column article with tables and footnotes; Federal Reserve Financial Stability Report with a footnoted table and figures; NIST SP 800-63-3 with a table of contents, an errata table and a normative/informative table; Federal Reserve Beige Book two-column prose). Pages are 1-based within the trimmed fixture. A group is satisfied by any retrieved chunk matching one of its alternatives (document + page + substring).",
+  "documents": {
+    "cdc": "cdc_mmwr_7301.pdf",
+    "fsr": "fed_fsr_2024_04.pdf",
+    "nist": "nist_sp800_63_3.pdf",
+    "beige": "fed_beige_book_2024_01.pdf"
+  },
+  "questions": [
+    {
+      "id": "cdc_volume_and_cost",
+      "query": "How many topical antifungal prescriptions were filled by Medicare Part D beneficiaries in 2021 and what did they cost in total?",
+      "critical": true,
+      "required_groups": {
+        "volume": [
+          {"document": "cdc", "page": 1, "contains": "6.5 million"},
+          {"document": "cdc", "page": 3, "contains": "6.5 million"},
+          {"document": "cdc", "page": 5, "contains": "6.5 million"}
+        ],
+        "cost": [
+          {"document": "cdc", "page": 1, "contains": "$231 million"},
+          {"document": "cdc", "page": 3, "contains": "$231 million"},
+          {"document": "cdc", "page": 5, "contains": "$231 million"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_table_highest_avg_cost",
+      "query": "Which drug had the highest average cost per topical antifungal prescription?",
+      "critical": true,
+      "required_groups": {
+        "efinaconazole_row": [
+          {"document": "cdc", "page": 3, "contains": "1,035.38"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_table_region_rate",
+      "query": "What was the topical antifungal prescription rate per 1,000 beneficiaries in the Northeast?",
+      "critical": true,
+      "required_groups": {
+        "northeast": [
+          {"document": "cdc", "page": 3, "contains": "188.0"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_top_prescribers",
+      "query": "How many prescribers were in the top 10% of topical antifungal prescribers and what share of prescriptions did they write?",
+      "critical": true,
+      "required_groups": {
+        "count": [
+          {"document": "cdc", "page": 3, "contains": "13,106"},
+          {"document": "cdc", "page": 4, "contains": "13,106"}
+        ],
+        "share": [
+          {"document": "cdc", "page": 1, "contains": "44.2%"},
+          {"document": "cdc", "page": 3, "contains": "44.2%"},
+          {"document": "cdc", "page": 4, "contains": "44.2"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_primary_care_share",
+      "query": "What percentage of topical antifungal prescriptions were written by primary care physicians?",
+      "critical": true,
+      "required_groups": {
+        "share": [
+          {"document": "cdc", "page": 1, "contains": "40.0%"},
+          {"document": "cdc", "page": 3, "contains": "40.0%"},
+          {"document": "cdc", "page": 4, "contains": "40.0"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_footnote_drug_list",
+      "query": "Which drugs were included in the topical antifungal analysis?",
+      "critical": true,
+      "required_groups": {
+        "footnote": [
+          {"document": "cdc", "page": 2, "contains": "butoconazole"}
+        ]
+      }
+    },
+    {
+      "id": "cdc_schedule_deletions",
+      "query": "Which vaccines were deleted from the 2024 child and adolescent immunization schedule?",
+      "critical": true,
+      "required_groups": {
+        "deleted": [
+          {"document": "cdc", "page": 7, "contains": "were deleted from all sections"},
+          {"document": "cdc", "page": 7, "contains": "no longer distributed"}
+        ]
+      }
+    },
+    {
+      "id": "fsr_table_equities",
+      "query": "What is the outstanding size of the equities market in the Financial Stability Report?",
+      "critical": true,
+      "required_groups": {
+        "equities_row": [
+          {"document": "fsr", "page": 6, "contains": "57,175"}
+        ]
+      }
+    },
+    {
+      "id": "fsr_table_cre",
+      "query": "How much commercial real estate was outstanding and how did it grow from 2022:Q4 to 2023:Q4?",
+      "critical": true,
+      "required_groups": {
+        "cre_row": [
+          {"document": "fsr", "page": 6, "contains": "22,518"}
+        ]
+      }
+    },
+    {
+      "id": "fsr_survey_top_risk",
+      "query": "Which risk was most frequently cited in the survey of salient risks to financial stability?",
+      "critical": true,
+      "required_groups": {
+        "top_risk": [
+          {"document": "fsr", "page": 3, "contains": "nearly three-fourths of survey participants"}
+        ]
+      }
+    },
+    {
+      "id": "fsr_btfp_end",
+      "query": "When did the Bank Term Funding Program stop extending new loans?",
+      "critical": true,
+      "required_groups": {
+        "date": [
+          {"document": "fsr", "page": 3, "contains": "March 11, 2024"}
+        ]
+      }
+    },
+    {
+      "id": "fsr_overview_leverage",
+      "query": "What happened to hedge fund leverage according to the Financial Stability Report overview?",
+      "critical": false,
+      "required_groups": {
+        "leverage": [
+          {"document": "fsr", "page": 2, "contains": "hedge fund leverage grew to historic highs"},
+          {"document": "fsr", "page": 1, "contains": "largest hedge funds"}
+        ]
+      }
+    },
+    {
+      "id": "nist_normative_sections",
+      "query": "Which sections of SP 800-63-3 are normative?",
+      "critical": true,
+      "required_groups": {
+        "table_2_1": [
+          {"document": "nist", "page": 7, "contains": "Normative"}
+        ]
+      }
+    },
+    {
+      "id": "nist_assurance_components",
+      "query": "What do IAL, AAL and FAL refer to?",
+      "critical": true,
+      "required_groups": {
+        "definitions": [
+          {"document": "nist", "page": 6, "contains": "identity proofing process"}
+        ]
+      }
+    },
+    {
+      "id": "nist_exclusions",
+      "query": "Which transactions are not covered by the NIST digital identity guidance?",
+      "critical": true,
+      "required_groups": {
+        "national_security": [
+          {"document": "nist", "page": 7, "contains": "national security"}
+        ]
+      }
+    },
+    {
+      "id": "nist_errata_2020",
+      "query": "What did the 2020-03-02 errata change in SP 800-63-3?",
+      "critical": true,
+      "required_groups": {
+        "errata_row": [
+          {"document": "nist", "page": 3, "contains": "Clarified flowcharts"},
+          {"document": "nist", "page": 3, "contains": "FAL3 definition"}
+        ]
+      }
+    },
+    {
+      "id": "nist_federation_volume",
+      "query": "Which SP 800-63 volume addresses federation and assertions, and is the federation considerations section normative?",
+      "critical": true,
+      "required_groups": {
+        "volume": [
+          {"document": "nist", "page": 6, "contains": "SP 800-63C Federation and Assertions"}
+        ],
+        "table": [
+          {"document": "nist", "page": 7, "contains": "Federation Considerations"}
+        ]
+      }
+    },
+    {
+      "id": "beige_wage_growth",
+      "query": "Which Federal Reserve Districts characterized wage growth as moderate?",
+      "critical": true,
+      "required_groups": {
+        "wages": [
+          {"document": "beige", "page": 1, "contains": "wage growth was characterized as moderate"}
+        ]
+      }
+    },
+    {
+      "id": "beige_kansas_city",
+      "query": "What did the Kansas City District report about economic activity?",
+      "critical": true,
+      "required_groups": {
+        "kansas_city": [
+          {"document": "beige", "page": 4, "contains": "Tenth District declined moderately"}
+        ]
+      }
+    },
+    {
+      "id": "beige_collection_date",
+      "query": "When was the information in the Beige Book collected?",
+      "critical": true,
+      "required_groups": {
+        "note": [
+          {"document": "beige", "page": 1, "contains": "January 8, 2024"}
+        ]
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.domain.enums import (
+    AdmissionVerdict,
     Lifetime,
     MemoryType,
     Representation,
@@ -89,6 +90,26 @@ class TemporalState(BaseModel):
         return not (self.valid_to and when >= self.valid_to)
 
 
+class AdmissionDecision(BaseModel):
+    """Why a candidate was (or was not) admitted as a memory. Stored with the memory."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    verdict: AdmissionVerdict
+    worthiness: float = Field(ge=0.0, le=1.0, description="type prior blended with confidence")
+    novelty: float = Field(ge=0.0, le=1.0, description="from the consolidation decision")
+    confidence: float = Field(ge=0.0, le=1.0)
+    expected_utility: float = Field(ge=0.0, le=1.0, description="lifetime x importance x recency")
+    score: float = Field(ge=0.0, le=1.0)
+    reasons: list[str] = Field(default_factory=list)
+    decided_at: datetime
+
+
+DERIVED_MEMORY_TYPES: frozenset[MemoryType] = frozenset(
+    {MemoryType.OBSERVATION, MemoryType.BELIEF, MemoryType.ENTITY_SUMMARY}
+)
+
+
 class CanonicalMemory(BaseModel):
     """A durable unit of intelligence derived from raw evidence. Never replaces the evidence."""
 
@@ -118,6 +139,8 @@ class CanonicalMemory(BaseModel):
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     reinforcement_count: int = Field(default=1, ge=1)
+    access_count: int = Field(default=0, ge=0, description="recall hits; drives forgetting")
+    last_accessed_at: datetime | None = None
 
     system_metadata: dict[str, Any] = Field(default_factory=dict)
     custom_metadata: dict[str, Any] = Field(default_factory=dict)

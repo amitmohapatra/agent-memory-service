@@ -6,21 +6,51 @@ Rules:
 * an oversized table is split by rows, repeating the header row in every part;
 * an oversized code block is split on blank-line boundaries;
 * every chunk's ``contextual_text`` prepends deterministic context (document title, section
-  path, page, entities) so BM25 and dense embeddings see where the text sits.
+  path, page, entities) so BM25 and dense embeddings see where the text sits;
+* when the ``chunk_context`` LLM use is enabled, a bounded subset of chunks (parts of a split
+  node, tables) additionally gets a model-written situating sentence after that header.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import Representation
 from memory_service.domain.ids import content_hash
 from memory_service.modules.ingestion.context_graph import extract_entities
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
+from memory_service.modules.llm.assist import LLMAssist
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"(])")
+
+_CONTEXT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "contexts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"index": {"type": "integer"}, "context": {"type": "string"}},
+                "required": ["index", "context"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["contexts"],
+    "additionalProperties": False,
+}
+_CONTEXT_SYSTEM = (
+    "You write a short situating context for passages of a document so search can find "
+    "them. For every chunk given, write 1-2 sentences (at most 60 words) saying what the "
+    "passage is about and how it fits its section: the subject, what its figures or table "
+    "rows refer to, and any name or term the passage relies on but does not repeat. Use only "
+    "the text provided. Return JSON only: "
+    '{"contexts": [{"index": <chunk index>, "context": "..."}]}.'
+)
+_CONTEXT_MAX_CHARS = 400
 
 
 def contextual_header(
@@ -197,3 +227,87 @@ def chunk_nodes(
         else:
             merged.append(c)
     return merged
+
+
+def _window(node_text: str, chunk_text: str, chars: int) -> str:
+    half = chars // 2
+    pos = node_text.find(chunk_text[:120])
+    if pos < 0:
+        return node_text[:chars]
+    before = node_text[max(0, pos - half) : pos]
+    after = node_text[pos + len(chunk_text) : pos + len(chunk_text) + half]
+    return f"{before}[…the chunk…]{after}".strip()
+
+
+def situated_candidates(
+    chunks: Sequence[Chunk], nodes: Sequence[DocumentNode], *, max_chunks: int
+) -> list[int]:
+    """Indexes of the chunks whose deterministic header lost context: parts of a node that
+    was split (first), then tables; bounded to ``max_chunks``."""
+    by_node = {n.node_id: n for n in nodes}
+    parts_per_node: dict[str, int] = {}
+    for c in chunks:
+        parts_per_node[c.node_id] = parts_per_node.get(c.node_id, 0) + 1
+    split = [i for i, c in enumerate(chunks) if parts_per_node[c.node_id] > 1]
+    tables = [
+        i
+        for i, c in enumerate(chunks)
+        if parts_per_node[c.node_id] == 1
+        and c.node_id in by_node
+        and by_node[c.node_id].representation is Representation.TABLE
+    ]
+    return [*split, *tables][:max_chunks]
+
+
+async def situate_chunks(
+    assist: LLMAssist,
+    chunks: Sequence[Chunk],
+    nodes: Sequence[DocumentNode],
+    *,
+    document_title: str,
+    max_chunks: int = 48,
+    batch_size: int = 8,
+    window_chars: int = 1500,
+) -> list[Chunk]:
+    """Prepend a model-written situating context (after the deterministic header) to a bounded
+    subset of chunks. ``text`` never changes; any model failure leaves the chunk as it is."""
+    out = list(chunks)
+    if not assist.wants("chunk_context"):
+        return out
+    by_node = {n.node_id: n for n in nodes}
+    wanted = situated_candidates(chunks, nodes, max_chunks=max_chunks)
+    for start in range(0, len(wanted), batch_size):
+        batch = wanted[start : start + batch_size]
+        sections = [f"Document: {document_title}"]
+        for slot, i in enumerate(batch):
+            c = chunks[i]
+            node = by_node.get(c.node_id)
+            surrounding = _window(node.text, c.text, window_chars) if node else ""
+            sections.append(
+                f"### Chunk {slot}\nSection: {c.section_path or document_title}\n"
+                f"Surrounding text: {surrounding}\nChunk text: {c.text[:800]}"
+            )
+        result = await assist.structured(
+            "chunk_context",
+            system=_CONTEXT_SYSTEM,
+            user="\n\n".join(sections),
+            schema=_CONTEXT_SCHEMA,
+            max_tokens=1024,
+        )
+        if result is None:
+            continue
+        for item in result.get("contexts", []):
+            slot = item.get("index")
+            context = " ".join(str(item.get("context", "")).split())[:_CONTEXT_MAX_CHARS]
+            if not isinstance(slot, int) or not 0 <= slot < len(batch) or not context:
+                continue
+            c = chunks[batch[slot]]
+            head = (
+                c.contextual_text[: len(c.contextual_text) - len(c.text)]
+                if c.contextual_text.endswith(c.text)
+                else ""
+            )
+            out[batch[slot]] = c.model_copy(
+                update={"contextual_text": f"{head}Context: {context}\n\n{c.text}"}
+            )
+    return out

@@ -14,7 +14,8 @@ from typing import Any
 
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
-from memory_service.modules.context.summaries import build_summaries
+from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -40,6 +41,7 @@ class Indexer:
         *,
         batch_size: int = 32,
         embedding_cache_ttl: int = 7 * 24 * 3600,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.store = store
@@ -48,6 +50,7 @@ class Indexer:
         self.cache = cache
         self.batch_size = batch_size
         self.embedding_cache_ttl = embedding_cache_ttl
+        self.assist = assist or LLMAssist.disabled()
         # M10 (benchmark-gated): ColBERT multivectors are added to chunk records when set
         self.late_interaction: Any = None
 
@@ -128,6 +131,10 @@ class Indexer:
             # hierarchical summaries (M9): one per section/subsection/document, indexed as
             # kind="summary" records so GLOBAL_SUMMARY questions can find them
             summaries = build_summaries(nodes, all_chunks, title=document.title)
+            if self.assist.wants("summaries"):
+                summaries = await abstractive_summaries(
+                    self.assist, nodes, all_chunks, summaries, title=document.title
+                )
             await self._index_summaries(
                 summaries,
                 nodes=nodes,

@@ -1,0 +1,320 @@
+{
+  "gate": "retrieval",
+  "golden_set": "acme_fy26_critical",
+  "embedding": "hash-v1-d64",
+  "sparse": "bm25-v1-k1.2-b0.75",
+  "reranker": "lexical-v1",
+  "representative": false,
+  "note": "hash embedding is a deterministic stand-in; quality numbers are not representative",
+  "k": 20,
+  "questions": 18,
+  "critical_questions": 17,
+  "critical_recall_at_k": 1.0,
+  "critical_evidence_group_recall": 1.0,
+  "recall_at_k": 1.0,
+  "evidence_group_recall": 1.0,
+  "routing_accuracy": 1.0,
+  "per_question": [
+    {
+      "id": "ebitda_multi_hop",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "ebitda_result": 1,
+        "restructuring_savings": 8,
+        "litigation_footnote": 2,
+        "definition": 4
+      },
+      "query_type": {
+        "expected": "DOCUMENT_MULTI_HOP",
+        "observed": "DOCUMENT_MULTI_HOP"
+      }
+    },
+    {
+      "id": "revenue_decline_driver",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "revenue_text": 1
+      },
+      "query_type": {
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
+      }
+    },
+    {
+      "id": "revenue_table",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "table": 1
+      },
+      "query_type": {
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
+      }
+    },
+    {
+      "id": "restructuring_details",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "section8": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "footnote_effect",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "footnote": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "definition_lookup",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "definition": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "ebitda_reconciliation_table",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "table2": 2
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "distractor_margin",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "margin_result": 1,
+        "integration": 6,
+        "warranty_footnote": 3
+      },
+      "query_type": {
+        "expected": "DOCUMENT_MULTI_HOP",
+        "observed": "DOCUMENT_MULTI_HOP"
+      }
+    },
+    {
+      "id": "distractor_acquisition",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "section9": 2
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "depreciation_policy",
+      "critical": false,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "note12": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "segments_table",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "table": 1
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "sensors_segment",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "sensors": 2
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "arr_alias",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "definition": 1,
+        "value": 10
+      },
+      "query_type": {
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
+      }
+    },
+    {
+      "id": "approval",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "board": 1
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "synergies",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "section9": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "margin_exclusions",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "definition": 1,
+        "integration": 7,
+        "warranty": 3
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "apac_operator",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "overview": 1
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "cross_document",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "acme_revenue": 1,
+        "globex_revenue": 4
+      },
+      "query_type": {
+        "expected": "DOCUMENT_MULTI_HOP",
+        "observed": "DOCUMENT_MULTI_HOP"
+      }
+    }
+  ],
+  "critical_evidence_complete_rate": 1.0,
+  "evidence_status": {
+    "ebitda_multi_hop": "COMPLETE",
+    "revenue_decline_driver": "COMPLETE",
+    "revenue_table": "COMPLETE",
+    "restructuring_details": "COMPLETE",
+    "footnote_effect": "COMPLETE",
+    "definition_lookup": "COMPLETE",
+    "ebitda_reconciliation_table": "COMPLETE",
+    "distractor_margin": "COMPLETE",
+    "distractor_acquisition": "COMPLETE",
+    "depreciation_policy": "COMPLETE",
+    "segments_table": "COMPLETE",
+    "sensors_segment": "COMPLETE",
+    "arr_alias": "COMPLETE",
+    "approval": "COMPLETE",
+    "synergies": "COMPLETE",
+    "margin_exclusions": "COMPLETE",
+    "apac_operator": "COMPLETE",
+    "cross_document": "COMPLETE"
+  },
+  "provenance": {
+    "timestamp": "2026-09-15T06:48:30.386940+00:00",
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0"
+    }
+  }
+}

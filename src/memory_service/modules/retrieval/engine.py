@@ -17,6 +17,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
@@ -27,6 +28,39 @@ from memory_service.ports.search import SearchHit, SearchStore
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
+
+_QUERY_TYPES = {t.value: t for t in QueryType}
+_EXPANSION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "query_type": {"type": "string", "enum": list(_QUERY_TYPES)},
+        "terms": {"type": "array", "items": {"type": "string"}},
+        "identifiers": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["query_type", "terms", "identifiers"],
+    "additionalProperties": False,
+}
+_EXPANSION_SYSTEM = (
+    "You classify a search query against a memory and document store and propose search "
+    "terms. Query types: EXACT_IDENTIFIER (lookup of an explicit id), CONVERSATION_HISTORY "
+    "(what was said earlier in this chat), USER_MEMORY (the user's own preferences or facts), "
+    "DECISION (why something was decided), DOCUMENT_LOCAL (a specific place in a document), "
+    "DOCUMENT_MULTI_HOP (needs several passages combined), ENTITY_RELATION (who or what "
+    "relates to whom), TEMPORAL (time-bound or how something changed), GLOBAL_SUMMARY "
+    "(overview of a whole document), GENERAL_SEMANTIC (anything else). Return JSON only: "
+    '{"query_type": ..., "terms": up to 6 short synonyms or closely related terms not already '
+    'in the query, "identifiers": explicit ids mentioned in the query (usually empty)}.'
+)
+_MAX_TERMS = 6
+_MAX_IDENTIFIERS = 4
+UNUSED_MAX = 8
+
+
+@dataclass
+class QueryExpansion:
+    query_type: QueryType | None
+    terms: list[str]
+    identifiers: list[str]
 
 
 @dataclass
@@ -87,6 +121,7 @@ class RetrievalEngine:
         settings: RetrievalSettings,
         rerank_k: int = 20,
         router: QueryRouter | None = None,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
@@ -96,6 +131,7 @@ class RetrievalEngine:
         self.cfg = settings
         self.rerank_k = rerank_k
         self.router = router or QueryRouter()
+        self.assist = assist or LLMAssist.disabled()
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
         # extra retrievers (M10 strategies): their hit lists are RRF-fused with the hybrid list
@@ -115,11 +151,30 @@ class RetrievalEngine:
         visibility: VisibilitySpecification | None = None,
     ) -> RetrievalResult:
         limit = limit or self.cfg.final_k
-        routed = self.router.route(query, has_thread=ctx.thread_id is not None)
-        diagnostics: dict[str, Any] = {
-            "query_type": routed.query_type.value,
-            "signals": routed.signals,
-        }
+        has_thread = ctx.thread_id is not None
+        routed = self.router.route(query, has_thread=has_thread)
+        search_text = routed.query
+        diagnostics: dict[str, Any] = {}
+        if (
+            self.assist.wants("query_expansion")
+            and routed.query_type is QueryType.GENERAL_SEMANTIC
+            and not any(routed.signals.values())
+        ):
+            expansion = await self._expand_query(routed.query)
+            if expansion is not None:
+                if expansion.query_type is not None:
+                    routed = self.router.routed(
+                        routed.query,
+                        expansion.query_type,
+                        identifiers=[*routed.identifiers, *expansion.identifiers],
+                        signals=routed.signals,
+                        has_thread=has_thread,
+                    )
+                if expansion.terms:
+                    search_text = f"{routed.query} {' '.join(expansion.terms)}"
+                diagnostics["query_expansion"] = expansion.terms
+        diagnostics["query_type"] = routed.query_type.value
+        diagnostics["signals"] = routed.signals
         with (
             span("retrieval", tenant_id=ctx.tenant_id, query_type=routed.query_type.value),
             stage_seconds.labels("retrieval").time(),
@@ -149,7 +204,7 @@ class RetrievalEngine:
                     if kind == "memory" and not routed.needs_memories:
                         continue
                     hits = await self._hybrid(
-                        routed.query, visibility, kind=kind, document_ids=document_ids
+                        search_text, visibility, kind=kind, document_ids=document_ids
                     )
                     retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
                     if kind == "chunk" and self.retrievers:
@@ -189,11 +244,19 @@ class RetrievalEngine:
             if before != len(candidates):
                 diagnostics["duplicates_collapsed"] = before - len(candidates)
             # 4. bounded CPU rerank
+            pool = candidates
             if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
                 candidates = await self._rerank(routed.query, candidates, limit=limit)
                 diagnostics["reranked"] = True
             else:
                 candidates = candidates[:limit]
+            kept = {c.record_id for c in candidates}
+            unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
+            if unused:
+                # retrieved but ranked out: the grounding cascade scans these for contradictions
+                diagnostics["unused"] = [
+                    {"record_id": c.record_id, "kind": c.kind, "text": c.text} for c in unused
+                ]
             # 5. strategy hooks (graph M8, expansion/verification M9)
             for name, stage in self.post_stages.items():
                 candidates = await stage(ctx, routed, candidates, visibility, diagnostics)
@@ -203,6 +266,34 @@ class RetrievalEngine:
         return RetrievalResult(
             routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
         )
+
+    async def _expand_query(self, query: str) -> QueryExpansion | None:
+        """Model-assisted routing + lexical expansion when no rule fired. The original query
+        is kept for reranking and verification; the terms only widen the hybrid search."""
+        out = await self.assist.structured(
+            "query_expansion",
+            system=_EXPANSION_SYSTEM,
+            user=f"Query: {query[:500]}",
+            schema=_EXPANSION_SCHEMA,
+            max_tokens=200,
+        )
+        if out is None:
+            return None
+        lowered = query.lower()
+        terms: list[str] = []
+        for raw in out.get("terms", []):
+            term = " ".join(str(raw).split())[:48]
+            if term and term.lower() not in lowered and term.lower() not in map(str.lower, terms):
+                terms.append(term)
+        identifiers = [i for i in (str(x).strip()[:64] for x in out.get("identifiers", [])) if i][
+            :_MAX_IDENTIFIERS
+        ]
+        qt = _QUERY_TYPES.get(str(out.get("query_type")))
+        if qt is QueryType.EXACT_IDENTIFIER and not identifiers:
+            qt = None
+        if qt is QueryType.GENERAL_SEMANTIC:
+            qt = None
+        return QueryExpansion(query_type=qt, terms=terms[:_MAX_TERMS], identifiers=identifiers)
 
     async def _exact(
         self,

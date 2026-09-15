@@ -143,6 +143,54 @@ class ConversationWindow(BaseModel):
     summary: str | None = None
 
 
+class ClaimVerdict(BaseModel):
+    """One claim of an answer and what the grounding cascade decided about it."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    claim: str
+    verdict: Literal["supported", "unsupported", "contradicted", "borderline"]
+    support: float = 0.0
+    contradiction: float = 0.0
+    evidence_ids: list[str] = Field(default_factory=list)
+    contradicted_by: list[str] = Field(default_factory=list)
+    citations: list[str] = Field(default_factory=list)
+    method: str = "nli"
+    notes: list[str] = Field(default_factory=list)
+
+
+class GroundingReport(BaseModel):
+    """Per-claim verdicts and the per-claim hallucination rate of a verified answer."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    claims: list[ClaimVerdict] = Field(default_factory=list)
+    supported: int = 0
+    unsupported: int = 0
+    contradicted: int = 0
+    borderline: int = 0
+    per_claim_hallucination_rate: float = 0.0
+    nli_provider: str = ""
+    representative: bool = False
+    judge_consulted: int = 0
+    llm_tokens: int = 0
+    evidence_count: int = 0
+    unused_count: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+    @property
+    def grounded(self) -> bool:
+        return self.per_claim_hallucination_rate == 0.0
+
+
+class UnusedEvidence(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    item_id: str
+    kind: str = "chunk"
+    text: str
+
+
 class EvidenceReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -152,6 +200,9 @@ class EvidenceReport(BaseModel):
     missing_groups: list[str] = Field(default_factory=list)
     escalations: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    unused: list[UnusedEvidence] = Field(default_factory=list)
+    grounding: GroundingReport | None = None
+    llm_tokens: int = 0
 
 
 class ContextBundle(BaseModel):
@@ -161,6 +212,7 @@ class ContextBundle(BaseModel):
 
     query: str
     query_type: str
+    bundle_id: str = ""
     conversation: ConversationWindow
     memories: list[ContextItem] = Field(default_factory=list)
     knowledge: list[ContextItem] = Field(default_factory=list)
@@ -175,6 +227,19 @@ class ContextBundle(BaseModel):
     @property
     def insufficient(self) -> bool:
         return self.evidence.status == "INSUFFICIENT"
+
+    @property
+    def grounding(self) -> GroundingReport | None:
+        return self.evidence.grounding
+
+    def evidence_items(self) -> list[dict[str, Any]]:
+        """The packed evidence as ``/v1/verify`` items, in citation order (``[1]`` is the
+        first memory, then facts, summaries, knowledge)."""
+        return [
+            {"item_id": i.item_id, "text": i.text, "kind": i.representation, "citation": i.citation}
+            for group in (self.memories, self.graph_facts, self.summaries, self.knowledge)
+            for i in group
+        ]
 
 
 class ThreadInfo(BaseModel):

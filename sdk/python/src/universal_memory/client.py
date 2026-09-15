@@ -29,6 +29,7 @@ from universal_memory.models import (
     DocumentInfo,
     FileHandle,
     GraphAnswer,
+    GroundingReport,
     JobHandle,
     MemoryResult,
     MessageAck,
@@ -203,6 +204,36 @@ class MemoryContext:
         payload = {"query": query, "scope": self._scope_payload(), "limit": limit, **options}
         data = await self._request("POST", "/v1/recall", json=payload)
         return [ContextItem.model_validate(m) for m in data.get("results", [])]
+
+    async def verify(
+        self,
+        answer: str,
+        *,
+        bundle: ContextBundle | None = None,
+        query: str | None = None,
+        items: Sequence[ContextItem | dict[str, Any]] | None = None,
+        unused: Sequence[dict[str, Any]] | None = None,
+        document_ids: Sequence[str] | None = None,
+    ) -> GroundingReport:
+        """Verify ``answer`` claim by claim (citation validation, NLI, judge for borderline
+        claims, contradiction scan) against a ``bundle`` from :meth:`context`, explicit
+        evidence ``items`` or a fresh retrieval for ``query`` under this scope."""
+        payload: dict[str, Any] = {"answer": answer, "scope": self._scope_payload()}
+        if bundle is not None:
+            payload["items"] = bundle.evidence_items()
+            payload["unused"] = [u.model_dump(mode="json") for u in bundle.evidence.unused]
+        elif items is not None:
+            payload["items"] = [_verify_item(i) for i in items]
+            if unused:
+                payload["unused"] = [dict(u) for u in unused]
+        elif query is not None:
+            payload["query"] = query
+            if document_ids:
+                payload["document_ids"] = list(document_ids)
+        else:
+            raise ValueError("verify() needs a bundle, items or a query")
+        data = await self._request("POST", "/v1/verify", json=payload)
+        return GroundingReport.model_validate(data)
 
     async def get_memory(self, memory_id: str) -> MemoryResult:
         data = await self._request("GET", f"/v1/memories/{memory_id}")
@@ -411,6 +442,17 @@ def _coerce_file(file: Any, filename: str | None, media_type: str | None) -> tup
         path.read_bytes(),
         media_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream",
     )
+
+
+def _verify_item(item: ContextItem | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(item, ContextItem):
+        return {
+            "item_id": item.item_id,
+            "text": item.text,
+            "kind": item.representation,
+            "citation": item.citation,
+        }
+    return {k: v for k, v in dict(item).items() if k in ("item_id", "text", "kind", "citation")}
 
 
 def _default_key(prefix: str, scope: Scope, *parts: str) -> str:

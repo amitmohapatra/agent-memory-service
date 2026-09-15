@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import random
 import time
 from pathlib import Path
@@ -31,23 +30,24 @@ import httpx
 from sqlalchemy import text
 
 from benchmark.common import provenance, write_result
-from benchmark.retrieval import FIXTURES, TABLES, _settings
+from benchmark.harness import (
+    FACTS,
+    FIXTURE_REPORT,
+    H,
+    count_duplicate_memories,
+    drive_stream,
+    new_scope,
+    verify_documents,
+    verify_messages,
+)
+from benchmark.retrieval import TABLES, _settings
 from memory_service.__about__ import __version__
 from memory_service.api.app import create_app
 from memory_service.application.container import build_container
 from memory_service.domain.enums import JobStatus
-from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 
-H = {"X-API-Key": "bench", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
-FACTS = [
-    "My timezone is Europe/Berlin.",
-    "I prefer concise answers.",
-    "We decided to use PostgreSQL as the canonical store.",
-    "Revenue was EUR 412 million in FY26.",
-    "My favourite editor is neovim.",
-    "I work at ACME Corp.",
-]
+__all__ = ["FACTS", "Chaos", "H", "main", "run"]
 
 
 class Chaos:
@@ -123,15 +123,6 @@ class Chaos:
         return {"outbox_swept": swept, "jobs_retried": retried}
 
 
-async def _post(client: httpx.AsyncClient, path: str, **kw: Any) -> httpx.Response:
-    for attempt in range(3):
-        try:
-            return await client.post(path, headers=H, **kw)
-        except httpx.TransportError:
-            await asyncio.sleep(0.05 * (attempt + 1))
-    return await client.post(path, headers=H, **kw)
-
-
 async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
     settings = _settings()
@@ -143,11 +134,6 @@ async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, A
     register_handlers(container)
     chaos = Chaos(container)
     app = create_app(settings, container=container)
-    acked_messages: dict[str, dict[str, Any]] = {}
-    acked_observations: dict[str, dict[str, Any]] = {}
-    acked_uploads: dict[str, dict[str, Any]] = {}
-    refused = {"messages": 0, "observations": 0, "files": 0}
-    errors: list[str] = []
     t0 = time.perf_counter()
     try:
         async with container.database.engine.begin() as conn:
@@ -158,98 +144,37 @@ async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, A
                 transport=httpx.ASGITransport(app=app), base_url="http://bench", timeout=30
             ) as client,
         ):
-            scopes = [
-                {
-                    "thread_id": new_id("thread"),
-                    "session_id": new_id("session"),
-                    "turn_id": new_id("turn"),
-                }
-                for _ in range(threads)
-            ]
-            fixture = (FIXTURES / "acme_fy26_annual_report.md").read_bytes()
-            total = threads * messages
+            scopes = [new_scope() for _ in range(threads)]
             schedule = {  # fault windows as fractions of the message stream
                 "cache": (0.15, 0.35),
                 "queue": (0.30, 0.45),
                 "workers": (0.40, 0.70),
                 "blob": (0.55, 0.85),
             }
-            sem = asyncio.Semaphore(16)
-            sent = 0
-            lock = asyncio.Lock()
 
-            async def step() -> None:
-                nonlocal sent
-                async with lock:
-                    sent += 1
-                    frac = sent / total
-                    for fault, (start, end) in schedule.items():
-                        on = start <= frac < end
-                        current = {
-                            "cache": not container.cache.available,
-                            "queue": container.tasks.fail_enqueue,
-                            "workers": chaos.crash_all_first_attempts,
-                            "blob": not container.blob.available,
-                        }[fault]
-                        if on != current:
-                            getattr(chaos, fault)(on)
+            async def step(sent: int, total: int) -> None:
+                frac = sent / total
+                for fault, (start, end) in schedule.items():
+                    on = start <= frac < end
+                    current = {
+                        "cache": not container.cache.available,
+                        "queue": container.tasks.fail_enqueue,
+                        "workers": chaos.crash_all_first_attempts,
+                        "blob": not container.blob.available,
+                    }[fault]
+                    if on != current:
+                        getattr(chaos, fault)(on)
 
-            async def chat(scope: dict[str, str], i: int) -> None:
-                async with sem:
-                    await step()
-                    content = f"{rng.choice(FACTS)} (turn {i} of {scope['thread_id'][-6:]})"
-                    r = await _post(
-                        client,
-                        "/v1/messages",
-                        json={"scope": scope, "role": "USER", "content": content},
-                    )
-                    if r.status_code == 202:
-                        body = r.json()
-                        acked_messages[body["message_id"]] = {
-                            "thread_id": scope["thread_id"],
-                            "content": content,
-                            "job_ids": body.get("job_ids", []),
-                        }
-                    elif r.status_code in (503, 429):
-                        refused["messages"] += 1
-                    else:
-                        errors.append(f"messages {r.status_code}: {r.text[:200]}")
-                    if i % 3 == 0:
-                        r = await _post(
-                            client,
-                            "/v1/observations",
-                            json={"scope": scope, "kind": "EVENT", "content": rng.choice(FACTS)},
-                        )
-                        if r.status_code == 202:
-                            acked_observations[r.json()["observation_id"]] = {
-                                "thread_id": scope["thread_id"]
-                            }
-                        elif r.status_code in (503, 429):
-                            refused["observations"] += 1
-                        else:
-                            errors.append(f"observations {r.status_code}: {r.text[:200]}")
-
-            async def upload(n: int) -> None:
-                async with sem:
-                    scope = scopes[n % len(scopes)]
-                    salt = f"\n\n<!-- durability copy {n} -->\n".encode()
-                    r = await _post(
-                        client,
-                        "/v1/files",
-                        files={"file": (f"report_{n}.md", fixture + salt, "text/markdown")},
-                        data={"scope": json.dumps(scope), "title": f"report {n}"},
-                    )
-                    if r.status_code == 202:
-                        acked_uploads[r.json()["document_id"]] = {"n": n}
-                    elif r.status_code in (503, 429):
-                        refused["files"] += 1
-                    else:
-                        errors.append(f"files {r.status_code}: {r.text[:200]}")
-
-            tasks = [chat(s, i) for s in scopes for i in range(messages)]
-            tasks += [upload(n) for n in range(files)]
-            rng.shuffle(tasks)
-            await asyncio.gather(*tasks)
+            acked = await drive_stream(
+                client,
+                H,
+                scopes,
+                messages=messages,
+                files=files,
+                fixture=FIXTURE_REPORT.read_bytes(),
+                rng=rng,
+                on_step=step,
+            )
             drive_seconds = round(time.perf_counter() - t0, 2)
             recovery = await chaos.recover()
             # archive everything and purge staged payloads: content must remain readable
@@ -259,63 +184,26 @@ async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, A
                 archived += len(await archive.archive_thread("acme", scope["thread_id"]))
             report = await archive.reconcile()
             # ---- verification ----------------------------------------------------
-            lost: list[str] = []
-            for scope in scopes:
-                r = await client.get(
-                    f"/v1/threads/{scope['thread_id']}/messages",
-                    headers=H,
-                    params={"limit": 500},
-                )
-                got = {m["message_id"]: m for m in r.json().get("messages", [])}
-                for mid, info in acked_messages.items():
-                    if info["thread_id"] != scope["thread_id"]:
-                        continue
-                    m = got.get(mid)
-                    if m is None:
-                        lost.append(f"message {mid} missing from listing ({r.status_code})")
-                    elif m["content"] != info["content"]:
-                        lost.append(f"message {mid} content mismatch: {m['content'][:40]!r}")
+            lost = await verify_messages(client, H, scopes, acked.messages)
             uow_factory = container.services["uow_factory"]
             async with uow_factory() as uow:
-                for oid in acked_observations:
+                for oid in acked.observations:
                     obs = await uow.observations.get("acme", oid)
                     if obs is None:
                         lost.append(f"observation {oid}")
                     elif obs.processed_at is None:
                         lost.append(f"observation {oid} never processed")
-            for doc_id in acked_uploads:
-                r = await client.get(f"/v1/documents/{doc_id}", headers=H)
-                if r.status_code != 200:
-                    lost.append(f"document {doc_id}: {r.status_code}")
-                    continue
-                doc = r.json()
-                if doc["status"] not in ("READY",) or doc["archive_status"] != "ARCHIVED":
-                    lost.append(f"document {doc_id}: {doc['status']}/{doc['archive_status']}")
-            # duplicate side effects: one memory per distinct fact per thread at most
-            duplicates = 0
-            async with uow_factory() as uow:
-                for scope in scopes:
-                    r = await client.get(
-                        "/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}
-                    )
-                    seen: dict[tuple[str, str], int] = {}
-                    for m in r.json().get("memories", []):
-                        key = (m.get("predicate") or "", m.get("object") or "")
-                        seen[key] = seen.get(key, 0) + 1
-                    duplicates += sum(v - 1 for v in seen.values() if v > 1)
+            lost += await verify_documents(client, H, acked.uploads)
+            duplicates = await count_duplicate_memories(client, H, scopes)
             pending = [
                 j
                 for j, info in container.tasks.jobs.items()
                 if info.status is not JobStatus.SUCCEEDED
             ]
             return {
-                "acknowledged": {
-                    "messages": len(acked_messages),
-                    "observations": len(acked_observations),
-                    "files": len(acked_uploads),
-                },
-                "refused_during_outage": refused,
-                "unexpected_errors": errors[:20],
+                "acknowledged": acked.counts(),
+                "refused_during_outage": acked.refused,
+                "unexpected_errors": acked.errors[:20],
                 "faults": chaos.events,
                 "worker_crashes_injected": chaos.crashed,
                 "recovery": recovery,
