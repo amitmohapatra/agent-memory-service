@@ -18,11 +18,14 @@ from sqlalchemy import Text, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
+from memory_service.adapters.db.orm import GraphEntityAliasRow, GraphEntityRow, GraphRelationRow
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
+from memory_service.domain.ids import stable_key
+from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.intelligence import Entity, GraphNeighborhood, Relation
+from memory_service.ports.intelligence import Entity, EntityAlias, GraphNeighborhood, Relation
 
 
 def _keys_clause(column: Any, keys: Sequence[str]) -> Any:
@@ -43,6 +46,7 @@ def _entity(r: GraphEntityRow) -> Entity:
         evidence=[EvidenceRef.model_validate(e) for e in (r.evidence or [])],
         mention_count=r.mention_count,
         revision=r.revision,
+        summary=r.summary or "",
     )
 
 
@@ -53,11 +57,13 @@ def _relation(r: GraphRelationRow) -> Relation:
         subject_id=r.subject_id,
         predicate=r.predicate,
         object_id=r.object_id,
+        layer=r.layer,  # type: ignore[arg-type]
         scope_key=r.scope_key,
         visibility_keys=list(r.visibility_keys or []),
         valid_from=r.valid_from,
         valid_to=r.valid_to,
         observed_at=r.observed_at,
+        invalidated_at=r.invalidated_at,
         status=r.status,
         superseded_by=r.superseded_by,
         confidence=r.confidence,
@@ -71,6 +77,41 @@ def _relation(r: GraphRelationRow) -> Relation:
 
 def _ev(evidence: Sequence[EvidenceRef]) -> list[dict[str, Any]]:
     return [json.loads(e.model_dump_json(exclude_none=True)) for e in evidence]
+
+
+def _alias(r: GraphEntityAliasRow) -> EntityAlias:
+    return EntityAlias(
+        tenant_id=r.tenant_id,
+        alias=r.alias,
+        entity_id=r.entity_id,
+        confidence=r.confidence,
+        source=r.source,
+    )
+
+
+def _time_conditions(as_of: datetime | None, valid_at: datetime | None) -> list[Any]:
+    """See :func:`memory_service.modules.graph.invalidation.passes_time`."""
+    if as_of is None and valid_at is None:
+        return [GraphRelationRow.status == "CURRENT"]
+    conds: list[Any] = []
+    if as_of is not None:
+        # valid-time semantics: an undated fact is taken to have held before it was learned
+        # (a job, a preference), so ``as_of`` inside a superseded interval returns the old
+        # value, not the current one; a fact that was never right is never returned
+        conds.append(
+            or_(GraphRelationRow.valid_from.is_(None), GraphRelationRow.valid_from <= as_of)
+        )
+        conds.append(or_(GraphRelationRow.valid_to.is_(None), GraphRelationRow.valid_to > as_of))
+        conds.append(GraphRelationRow.status.not_in(["RETRACTED", "INVALIDATED"]))
+    if valid_at is not None:
+        conds.append(GraphRelationRow.observed_at <= valid_at)
+        conds.append(
+            or_(
+                GraphRelationRow.invalidated_at.is_(None),
+                GraphRelationRow.invalidated_at > valid_at,
+            )
+        )
+    return conds
 
 
 class PostgresGraphStore:
@@ -138,10 +179,12 @@ class PostgresGraphStore:
                     subject_id=r.subject_id,
                     predicate=r.predicate,
                     object_id=r.object_id,
+                    layer=r.layer,
                     visibility_keys=list(r.visibility_keys),
                     valid_from=r.valid_from,
                     valid_to=r.valid_to,
                     observed_at=r.observed_at,
+                    invalidated_at=r.invalidated_at,
                     status=r.status,
                     superseded_by=r.superseded_by,
                     confidence=r.confidence,
@@ -158,7 +201,9 @@ class PostgresGraphStore:
                             GraphRelationRow.confidence, stmt.excluded.confidence
                         ),
                         "status": stmt.excluded.status,
+                        "layer": stmt.excluded.layer,
                         "valid_to": stmt.excluded.valid_to,
+                        "invalidated_at": stmt.excluded.invalidated_at,
                         "superseded_by": stmt.excluded.superseded_by,
                         "visibility_keys": stmt.excluded.visibility_keys,
                         "fact_text": stmt.excluded.fact_text,
@@ -172,7 +217,13 @@ class PostgresGraphStore:
             await s.execute(
                 update(GraphRelationRow)
                 .where(GraphRelationRow.relation_id == relation_id)
-                .values(status="SUPERSEDED", superseded_by=by, valid_to=at, updated_at=at)
+                .values(
+                    status="SUPERSEDED",
+                    superseded_by=by,
+                    valid_to=at,
+                    invalidated_at=at,
+                    updated_at=at,
+                )
             )
 
     async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
@@ -184,10 +235,90 @@ class PostgresGraphStore:
                     GraphRelationRow.memory_id == memory_id,
                     GraphRelationRow.status == "CURRENT",
                 )
-                .values(status="SUPERSEDED", valid_to=at, updated_at=at)
+                .values(status="SUPERSEDED", valid_to=at, invalidated_at=at, updated_at=at)
                 .returning(GraphRelationRow.relation_id)
             )
             return len(res.scalars().all())
+
+    async def invalidate(
+        self,
+        relation_id: str,
+        *,
+        reason: str,
+        at: datetime,
+        by: str | None = None,
+        status: str = "INVALIDATED",
+        attributes: dict[str, Any] | None = None,
+    ) -> Relation | None:
+        async with self.session() as s, s.begin():
+            row = await s.get(GraphRelationRow, relation_id)
+            if row is None:
+                return None
+            row.status = status
+            row.invalidated_at = row.invalidated_at or at
+            row.attributes = {
+                **dict(row.attributes or {}),
+                "invalidation": {"reason": reason, "at": at.isoformat(), "by": by},
+            }
+            if status == "SUPERSEDED":
+                row.valid_to = row.valid_to or at
+                row.superseded_by = by or row.superseded_by
+            row.updated_at = at
+            winner = await s.get(GraphRelationRow, by) if by else None
+            if winner is None:
+                return None
+            edge = invalidation_edge(
+                _relation(row), _relation(winner), reason=reason, at=at, attributes=attributes
+            )
+        await self.upsert_relations([edge])
+        return edge
+
+    async def invalidate_for_document(
+        self,
+        tenant_id: str,
+        document_id: str,
+        *,
+        keep: Sequence[str],
+        at: datetime,
+        reason: str,
+    ) -> int:
+        async with self.session() as s, s.begin():
+            conds = [
+                GraphRelationRow.tenant_id == tenant_id,
+                GraphRelationRow.document_id == document_id,
+                GraphRelationRow.status == "CURRENT",
+            ]
+            if keep:
+                conds.append(GraphRelationRow.relation_id.not_in(list(keep)))
+            res = await s.execute(
+                update(GraphRelationRow)
+                .where(*conds)
+                .values(
+                    status="INVALIDATED",
+                    invalidated_at=at,
+                    updated_at=at,
+                    attributes=GraphRelationRow.attributes.op("||")(
+                        {"invalidation": {"reason": reason, "at": at.isoformat(), "by": None}}
+                    ),
+                )
+                .returning(GraphRelationRow.relation_id)
+            )
+            return len(res.scalars().all())
+
+    async def invalidations(self, tenant_id: str, relation_ids: Sequence[str]) -> list[Relation]:
+        if not relation_ids:
+            return []
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphRelationRow).where(
+                        GraphRelationRow.tenant_id == tenant_id,
+                        GraphRelationRow.predicate == INVALIDATED_BY,
+                        GraphRelationRow.subject_id.in_(list(relation_ids)),
+                    )
+                )
+            ).all()
+        return [_relation(r) for r in rows]
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         async with self.session() as s, s.begin():
@@ -243,6 +374,25 @@ class PostgresGraphStore:
             ).all()
         return [_entity(r) for r in rows]
 
+    async def list_tenant_entities(
+        self, tenant_id: str, *, entity_types: Sequence[str] = (), limit: int = 300
+    ) -> list[Entity]:
+        if limit <= 0:
+            return []
+        conds = [GraphEntityRow.tenant_id == tenant_id]
+        if entity_types:
+            conds.append(GraphEntityRow.entity_type.in_(list(entity_types)))
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphEntityRow)
+                    .where(*conds)
+                    .order_by(GraphEntityRow.mention_count.desc(), GraphEntityRow.canonical_name)
+                    .limit(limit)
+                )
+            ).all()
+        return [_entity(r) for r in rows]
+
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]:
@@ -260,6 +410,70 @@ class PostgresGraphStore:
             ).all()
         return [_entity(r) for r in rows]
 
+    async def entities_by_id(self, tenant_id: str, entity_ids: Sequence[str]) -> list[Entity]:
+        if not entity_ids:
+            return []
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphEntityRow).where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        GraphEntityRow.entity_id.in_(list(entity_ids)),
+                    )
+                )
+            ).all()
+        return [_entity(r) for r in rows]
+
+    async def set_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None:
+        if not summaries:
+            return
+        async with self.session() as s, s.begin():
+            for eid, summary in summaries.items():
+                await s.execute(
+                    update(GraphEntityRow)
+                    .where(GraphEntityRow.tenant_id == tenant_id, GraphEntityRow.entity_id == eid)
+                    .values(summary=summary, updated_at=func.now())
+                )
+
+    async def upsert_aliases(self, aliases: Sequence[EntityAlias]) -> None:
+        if not aliases:
+            return
+        async with self.session() as s, s.begin():
+            for a in aliases:
+                stmt = insert(GraphEntityAliasRow).values(
+                    alias_id="als_" + stable_key(a.tenant_id, a.alias, a.entity_id),
+                    tenant_id=a.tenant_id,
+                    alias=a.alias[:300],
+                    entity_id=a.entity_id,
+                    confidence=a.confidence,
+                    source=a.source,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    constraint="uq_graph_entity_alias",
+                    set_={
+                        "confidence": func.greatest(
+                            GraphEntityAliasRow.confidence, stmt.excluded.confidence
+                        ),
+                        "updated_at": func.now(),
+                    },
+                )
+                await s.execute(stmt)
+
+    async def find_aliases(self, tenant_id: str, aliases: Sequence[str]) -> list[EntityAlias]:
+        wanted = [a for a in aliases if a]
+        if not wanted:
+            return []
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphEntityAliasRow).where(
+                        GraphEntityAliasRow.tenant_id == tenant_id,
+                        GraphEntityAliasRow.alias.in_(wanted),
+                    )
+                )
+            ).all()
+        return [_alias(r) for r in rows]
+
     async def neighborhood(
         self,
         tenant_id: str,
@@ -269,6 +483,8 @@ class PostgresGraphStore:
         hops: int = 1,
         max_visited: int = 200,
         as_of: datetime | None = None,
+        valid_at: datetime | None = None,
+        layers: Sequence[GraphLayer] | None = None,
     ) -> GraphNeighborhood:
         if not entity_ids or not scope_keys:
             return GraphNeighborhood(entities=[], relations=[], visited=0)
@@ -287,26 +503,10 @@ class PostgresGraphStore:
                             GraphRelationRow.object_id.in_(frontier),
                         ),
                         _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+                        *_time_conditions(as_of, valid_at),
                     ]
-                    if as_of is None:
-                        conds.append(GraphRelationRow.status == "CURRENT")
-                    else:
-                        # valid-time semantics: an undated fact is taken to have held
-                        # before it was learned (a job, a preference), so ``as_of`` inside
-                        # a superseded interval returns the old value, not the current one
-                        conds.append(
-                            or_(
-                                GraphRelationRow.valid_from.is_(None),
-                                GraphRelationRow.valid_from <= as_of,
-                            )
-                        )
-                        conds.append(
-                            or_(
-                                GraphRelationRow.valid_to.is_(None),
-                                GraphRelationRow.valid_to > as_of,
-                            )
-                        )
-                        conds.append(GraphRelationRow.status != "RETRACTED")
+                    if layers:
+                        conds.append(GraphRelationRow.layer.in_(list(layers)))
                     rows = (
                         await s.scalars(
                             select(GraphRelationRow)
@@ -339,18 +539,46 @@ class PostgresGraphStore:
         )
 
     async def relations_for_document(
-        self, tenant_id: str, document_id: str, *, scope_keys: Sequence[str]
+        self,
+        tenant_id: str,
+        document_id: str,
+        *,
+        scope_keys: Sequence[str],
+        include_invalidated: bool = False,
     ) -> list[Relation]:
         if not scope_keys:
             return []
+        conds = [
+            GraphRelationRow.tenant_id == tenant_id,
+            GraphRelationRow.document_id == document_id,
+            _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+        ]
+        if not include_invalidated:
+            conds.append(GraphRelationRow.status != "INVALIDATED")
+        async with self.session() as s:
+            rows = (await s.scalars(select(GraphRelationRow).where(*conds))).all()
+        return [_relation(r) for r in rows]
+
+    async def relations_touching(
+        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int = 2000
+    ) -> list[Relation]:
+        if not entity_ids or limit <= 0:
+            return []
+        ids = list(entity_ids)
         async with self.session() as s:
             rows = (
                 await s.scalars(
-                    select(GraphRelationRow).where(
+                    select(GraphRelationRow)
+                    .where(
                         GraphRelationRow.tenant_id == tenant_id,
-                        GraphRelationRow.document_id == document_id,
-                        _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+                        GraphRelationRow.status == "CURRENT",
+                        or_(
+                            GraphRelationRow.subject_id.in_(ids),
+                            GraphRelationRow.object_id.in_(ids),
+                        ),
                     )
+                    .order_by(GraphRelationRow.confidence.desc(), GraphRelationRow.relation_id)
+                    .limit(limit)
                 )
             ).all()
         return [_relation(r) for r in rows]
@@ -377,7 +605,10 @@ class PostgresGraphStore:
             r = await s.scalar(
                 select(func.count())
                 .select_from(GraphRelationRow)
-                .where(GraphRelationRow.tenant_id == tenant_id)
+                .where(
+                    GraphRelationRow.tenant_id == tenant_id,
+                    GraphRelationRow.predicate != INVALIDATED_BY,
+                )
             )
         return int(e or 0), int(r or 0)
 

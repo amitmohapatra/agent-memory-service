@@ -141,7 +141,9 @@ class AdmissionGate:
             reasons.append(f"score {score:.2f} below admission band")
         elif score < self.cfg.admission_score_min:
             verdict = AdmissionVerdict.DEFER
-            reasons.append(f"score {score:.2f} < {self.cfg.admission_score_min}: needs corroboration")
+            reasons.append(
+                f"score {score:.2f} < {self.cfg.admission_score_min}: needs corroboration"
+            )
         else:
             reasons.append(f"score {score:.2f} >= {self.cfg.admission_score_min}")
         return AdmissionDecision(

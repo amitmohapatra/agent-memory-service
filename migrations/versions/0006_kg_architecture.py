@@ -2,7 +2,7 @@
 the tenant-wide alias table
 
 Revision ID: 0006_kg_arch
-Revises: 0005
+Revises: 0006
 Create Date: 2026-09-15 12:00:00.000000+00:00
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '0006_kg_arch'
-down_revision = '0005'
+down_revision = '0006'
 branch_labels = None
 depends_on = None
 
