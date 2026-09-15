@@ -147,6 +147,7 @@ ignore = [
 "tests/**/conftest.py" = ["TID251"]
 "migrations/**" = ["TID251", "E501"]
 "benchmark/**" = ["T20", "S", "PLR", "TID251", "E501", "SIM905", "RUF100"]
+"examples/**" = ["T20", "S", "PLR", "TID251", "E501", "RUF100", "ASYNC"]
 "sdk/python/tests/**" = ["S", "PLR", "T20"]
 "integrations/langgraph/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
 "integrations/langgraph/src/**" = ["TID251"]  # the one place LangGraph may be imported

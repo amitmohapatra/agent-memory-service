@@ -15,6 +15,7 @@ from universal_memory.errors import (
 from universal_memory.models import (
     ContextBundle,
     ContextItem,
+    DocumentInfo,
     EvidenceRef,
     FileHandle,
     GraphAnswer,
@@ -39,6 +40,7 @@ __all__ = [
     "ContextBundle",
     "ContextItem",
     "DependencyUnavailableError",
+    "DocumentInfo",
     "EvidenceRef",
     "FileHandle",
     "FilesAPI",

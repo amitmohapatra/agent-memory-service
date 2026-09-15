@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Sequence
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Self
@@ -25,6 +26,7 @@ from universal_memory.errors import InsufficientEvidence
 from universal_memory.models import (
     ContextBundle,
     ContextItem,
+    DocumentInfo,
     FileHandle,
     GraphAnswer,
     JobHandle,
@@ -72,7 +74,11 @@ class MemoryClient:
         return MemoryContext(self, Scope(**scope))
 
     async def health(self) -> dict[str, Any]:
+        """Readiness (dependencies pinged); ``alive()`` is the cheap liveness probe."""
         return await self._transport.request("GET", "/health/ready")
+
+    async def alive(self) -> dict[str, Any]:
+        return await self._transport.request("GET", "/health/live")
 
     async def version(self) -> dict[str, Any]:
         return await self._transport.request("GET", "/version")
@@ -202,6 +208,21 @@ class MemoryContext:
         data = await self._request("GET", f"/v1/memories/{memory_id}")
         return MemoryResult.model_validate(data)
 
+    async def memories(
+        self,
+        *,
+        memory_types: Sequence[str] | None = None,
+        include_superseded: bool = False,
+        limit: int = 100,
+    ) -> list[MemoryResult]:
+        """Current memories anchored to this context's scopes (user, thread, agent run,
+        work, workspace) — the inventory view; ``recall`` is the ranked, query-driven view."""
+        params: dict[str, Any] = {"limit": limit, "include_superseded": include_superseded}
+        if memory_types:
+            params["memory_type"] = list(memory_types)
+        data = await self._request("GET", "/v1/memories", params=params)
+        return [MemoryResult.model_validate(m) for m in data.get("memories", [])]
+
     async def forget(self, memory_id: str) -> None:
         await self._request(
             "DELETE", f"/v1/memories/{memory_id}", idempotency_key=f"del-{memory_id}"
@@ -273,6 +294,27 @@ class ChatAPI:
         data = await self._ctx._request("GET", f"/v1/threads/{self._ctx.scope.thread_id}")
         return ThreadInfo.model_validate(data)
 
+    async def create(self, *, title: str | None = None, **metadata: Any) -> ThreadInfo:
+        """Create the context's thread explicitly (idempotent: an existing thread is
+        returned). Messages create threads on demand, so this is for titles/metadata."""
+        payload: dict[str, Any] = {"scope": self._ctx._scope_payload(), "custom_metadata": metadata}
+        if self._ctx.scope.thread_id:
+            payload["thread_id"] = self._ctx.scope.thread_id
+        if title is not None:
+            payload["title"] = title
+        data = await self._ctx._request("POST", "/v1/threads", json=payload)
+        return ThreadInfo.model_validate(data)
+
+    async def message(self, message_id: str) -> MessageInfo:
+        data = await self._ctx._request("GET", f"/v1/messages/{message_id}")
+        return MessageInfo.model_validate(data)
+
+    async def delete_thread(self, thread_id: str | None = None) -> None:
+        """Soft-delete a thread (owner or tenant admin): messages stop being listed and
+        retrieved; archived segments are kept for the retention period."""
+        tid = thread_id or self._ctx.scope.thread_id
+        await self._ctx._request("DELETE", f"/v1/threads/{tid}", idempotency_key=f"delthr-{tid}")
+
     async def _message(
         self,
         role: str,
@@ -305,19 +347,53 @@ class FilesAPI:
         message_id: str | None = None,
         filename: str | None = None,
         media_type: str | None = None,
+        title: str | None = None,
+        visibility: str | None = None,
         idempotency_key: str | None = None,
+        **metadata: Any,
     ) -> FileHandle:
-        """``file`` may be bytes, a path, or a (filename, bytes, media_type) tuple."""
+        """``file`` may be bytes, a path, or a (filename, bytes, media_type) tuple.
+        ``visibility`` widens who may retrieve the document (default: the thread, else the
+        user); ``metadata`` is stored as custom metadata."""
+        import json
+
         name, data, mtype = _coerce_file(file, filename, media_type)
         digest = hashlib.sha256(data).hexdigest()
-        key = idempotency_key or f"file-{self._ctx.scope.tenant_id}-{digest}"
+        fields = f"{message_id or ''}|{title or ''}|{visibility or ''}|{sorted(metadata.items())}"
+        form_digest = hashlib.blake2b(fields.encode(), digest_size=6).hexdigest()
+        key = idempotency_key or f"file-{self._ctx.scope.tenant_id}-{digest}-{form_digest}"
         form = {"scope": self._ctx.scope.model_dump_json(exclude_none=True)}
         if message_id:
             form["message_id"] = message_id
+        if title:
+            form["title"] = title
+        if visibility:
+            form["visibility"] = visibility
+        if metadata:
+            form["custom_metadata"] = json.dumps(metadata)
         result = await self._ctx._request(
             "POST", "/v1/files", files={"file": (name, data, mtype)}, data=form, idempotency_key=key
         )
         return FileHandle.model_validate(result)
+
+    async def document(self, document_id: str) -> DocumentInfo:
+        data = await self._ctx._request("GET", f"/v1/documents/{document_id}")
+        return DocumentInfo.model_validate(data)
+
+    async def wait_ready(
+        self, document_id: str, *, max_wait: float = 60.0, interval: float = 0.5
+    ) -> DocumentInfo:
+        """Poll until the document is parsed and indexed (READY) or FAILED, or ``max_wait``
+        seconds have passed (the last observed status is returned either way)."""
+        import asyncio
+        import time
+
+        deadline = time.monotonic() + max_wait
+        while True:
+            doc = await self.document(document_id)
+            if doc.status in ("READY", "FAILED") or time.monotonic() >= deadline:
+                return doc
+            await asyncio.sleep(interval)
 
 
 def _coerce_file(file: Any, filename: str | None, media_type: str | None) -> tuple[str, bytes, str]:

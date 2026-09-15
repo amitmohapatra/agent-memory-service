@@ -29,7 +29,40 @@ from memory_service.ports.intelligence import Entity, Relation
 from memory_service.ports.uow import UnitOfWorkFactory
 
 _MULTI_HOP_TYPES = {QueryType.DOCUMENT_MULTI_HOP, QueryType.ENTITY_RELATION}
-_STRUCTURAL = {"mentioned_in", "co_occurs_with"}
+_STRUCTURAL = {"mentioned_in", "co_occurs_with", "discusses", "refers_to", "segment_of"}
+# query words that name a relation: "exclude" -> excludes, "drove" -> driven_by, "pay" -> ...
+_PREDICATE_CUES: dict[str, tuple[str, ...]] = {
+    "excludes": ("exclude", "excludes", "excluded", "excluding", "exclusion", "exclusions"),
+    "driven_by": ("drove", "driver", "drivers", "driven", "why", "because", "reason", "cause"),
+    "has_value": ("how much", "value", "amount", "revenue", "total", "figure", "number", "was"),
+    "would_have_value": ("would", "if", "had"),
+    "consideration": ("pay", "paid", "price", "cost", "consideration", "for"),
+    "approved_by": ("approved", "approve", "who"),
+    "acquired": ("acquired", "acquisition", "bought", "buy"),
+    "operates_in": ("where", "operate", "operates", "region", "country", "countries"),
+    "provides": ("provide", "provides", "product", "products", "offer", "offers", "sell"),
+    "closed_on": ("when", "close", "closed", "date"),
+    "reduced": ("reduce", "reduced", "cut", "headcount"),
+    "defined_in": ("mean", "means", "definition", "define", "defined"),
+}
+
+
+def _predicate_boost(predicate: str, query: str) -> int:
+    q = query.lower()
+    return 1 if any(cue in q for cue in _PREDICATE_CUES.get(predicate, ())) else 0
+
+
+def _distinct(relations: list[Relation]) -> list[Relation]:
+    """Copies of the same document yield the same fact with different ids: keep one."""
+    seen: set[tuple[str, str, str, str]] = set()
+    out: list[Relation] = []
+    for r in relations:
+        key = (r.subject_id, r.predicate, r.object_id, str(r.attributes.get("period") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
 
 
 def fact_candidate(r: Relation, names: dict[str, str]) -> Candidate:
@@ -57,6 +90,7 @@ def fact_candidate(r: Relation, names: dict[str, str]) -> Candidate:
             "node_id": ev.node_id if ev else None,
             "page": ev.page if ev else r.attributes.get("page"),
             "representation": "RELATION",
+            "attributes": {k: v for k, v in r.attributes.items() if k != "page"},
         },
     )
 
@@ -113,25 +147,31 @@ class GraphStage:
             seeds = {e.entity_id for e in answer.matched}
             if self.ppr:
                 scores = personalized_pagerank(answer.relations, seeds)
-                ranked = sorted(
-                    answer.relations,
-                    key=lambda r: (
-                        -(scores.get(r.subject_id, 0.0) + scores.get(r.object_id, 0.0))
-                        * r.confidence,
-                        r.relation_id,
-                    ),
+                ranked = _distinct(
+                    sorted(
+                        answer.relations,
+                        key=lambda r: (
+                            -(scores.get(r.subject_id, 0.0) + scores.get(r.object_id, 0.0))
+                            * r.confidence,
+                            r.relation_id,
+                        ),
+                    )
                 )
                 diagnostics["graph"]["ppr"] = True
             else:
-                # typed facts (from memories) first, then structural facts touching a seed
-                ranked = sorted(
-                    answer.relations,
-                    key=lambda r: (
-                        r.predicate in _STRUCTURAL,
-                        not (r.subject_id in seeds or r.object_id in seeds),
-                        -r.confidence,
-                        r.relation_id,
-                    ),
+                # facts the question names first (predicate cues), then typed facts touching
+                # a seed, structural facts last; one fact per distinct triple
+                ranked = _distinct(
+                    sorted(
+                        answer.relations,
+                        key=lambda r: (
+                            r.predicate in _STRUCTURAL,
+                            -_predicate_boost(r.predicate, routed.query),
+                            not (r.subject_id in seeds or r.object_id in seeds),
+                            -r.confidence,
+                            r.relation_id,
+                        ),
+                    )
                 )
             existing_ids = {c.record_id for c in candidates}
             facts = [fact_candidate(r, names) for r in ranked[: self.max_facts]]

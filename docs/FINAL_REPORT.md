@@ -34,17 +34,41 @@ a PostgreSQL knowledge graph, multi-agent visibility semantics, a Python SDK
 |---|---|---|---|
 | Acknowledged data loss | 0 | **0** over 200 messages, 59 observations, 6 uploads acknowledged during cache/blob/queue outages and 285 injected worker crashes; 0 duplicate memories after recovery | `durability.json` |
 | Unauthorized retrieval | 0 cross-tenant, cross-user, private-agent | **0 / 0 / 0** (property-based oracle, exhaustive tenant matrix, retrieval- and graph-level reader matrices incl. run lineage; 10 suites) | `security.json` |
-| Critical Recall@20 | 1.00 | **1.00** (9 critical questions, golden set `acme_fy26_critical`) | `retrieval_gate.json` |
+| Critical Recall@20 | 1.00 | **1.00** (17 critical questions incl. tables, aliases, exclusions, cross-document; also 1.00 on the 25-copy crowded corpus in `retrieval.json`) | `retrieval_gate.json` |
 | Critical Evidence-Group Recall | 1.00 | **1.00**; evidence-complete rate 1.00 | `retrieval_gate.json` |
 | False-merge rate | ≤ 0.01 | **0.00** on 35 labelled pairs; dedup recall 1.00 | `memory_gate.json` |
 | p95 latency | chat 100 / cached ctx 75 / recall 300 / bundle 400 / file 200 ms | **32.7 / 6.2 / 71.3 / 78.3 / 25.3 ms** (in-process, 50-document corpus) | `performance.json` |
 | Failure recovery | all scenarios pass | **worker_kill, cache_flush, blob_outage, search_rebuild, authz_denial: pass** | `failure_injection.json` |
-| All tests pass | 0 failed, 0 errors | **274 passed, 0 failed, 0 errors** (unit, contract, integration, security, e2e, eval, failure, SDK, LangGraph) | `tests.json` |
+| Knowledge graph | fact recall 1.00, false facts 0, noise 0, golden questions answered | **1.00 / 0 / 0 / 8 of 8** over 49 golden facts (ACME + GLOBEX): typed entities with aliases, values with period/currency/change, table cells, drivers, exclusions, approvals, acquisitions, counterfactuals kept apart | `kg_gate.json` |
+| All tests pass | 0 failed, 0 errors | **281 passed, 0 failed, 0 errors** (unit, contract, integration, security, e2e, eval, failure, SDK, LangGraph) | `tests.json` |
 
 Advanced retrieval strategies (`advanced_retrieval.json`): PageIndex, RAPTOR-style summary
 fusion and graph personalised PageRank are *adoptable* (no critical gate below baseline,
 within the latency budget); SPLADE, miniCOIL, ColBERT and late chunking are *skipped* —
 their adapters refuse to run without local weights rather than degrade silently.
+
+## Verified end to end over HTTP (`examples/`)
+
+`examples/run_server.sh` starts a real server (PostgreSQL, Redis, inline jobs);
+`examples/sdk_tour.py` runs 14 checks covering every SDK method and every API route
+(threads, messages, history, files, documents, jobs, recall, context with evidence gating,
+observe/remember/list/get/forget, consolidation with temporal history, agent-run lineage
+and sharing, graph queries with aliases and `as_of`), and `examples/langgraph_crew/app.py`
+runs a three-level LangGraph crew through the adapter. Both pass: 14/14 and all checks.
+The tour found and fixed four defects on the way: hints did not override the classifier's
+lifetime (EPHEMERAL persisted), `forget` was not idempotent, document results crowded
+memories out before reranking, and a superseding memory had no `valid_from` (a temporal
+view returned both values).
+
+## Ingestion and knowledge-graph accuracy
+
+`tests/integration/test_ingestion_fidelity.py` proves that every source line and table
+row lands in exactly one chunk with the right page, tables stay whole and section paths
+follow the heading hierarchy. The document knowledge graph was rebuilt (ADR 0016): the
+previous version only knew that terms were *mentioned*; it now extracts typed entities
+(ORG, PERSON/ROLE, LOCATION, METRIC, SEGMENT, EVENT, MONEY/PERCENT/DATE) with resolved
+aliases and factual relations with attributes and page evidence. The KG gate holds it to
+fact recall 1.00 with zero false facts and zero noise entities on the fixtures.
 
 ## What the chaos run found (and fixed)
 

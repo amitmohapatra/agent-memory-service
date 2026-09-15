@@ -200,8 +200,13 @@ class ObservationPipeline:
             span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
             stage_seconds.labels("memory.process").time(),
         ):
+            # hints are applied before classification (so the provider sees the intended
+            # type) and again after it (explicit lifetime/visibility/importance always win)
             candidates = [
-                await self.provider.classify(self._apply_hints(c, observation), ctx)
+                self._apply_hints(
+                    await self.provider.classify(self._apply_hints(c, observation), ctx),
+                    observation,
+                )
                 for c in await self.provider.extract(observation, ctx)
             ]
             outcomes: list[ConsolidationOutcome] = []
@@ -328,8 +333,13 @@ class ObservationPipeline:
                 return {target.memory_id}
             case DedupDecision.SUPERSEDE | DedupDecision.UPDATE if target is not None:
                 memory = build_memory(cand, ctx, now=now)
+                # the correction holds from now (unless the candidate is explicitly dated),
+                # so a temporal view before it returns the old value, not both
                 memory.temporal = memory.temporal.model_copy(
-                    update={"supersedes": target.memory_id}
+                    update={
+                        "supersedes": target.memory_id,
+                        "valid_from": memory.temporal.valid_from or now,
+                    }
                 )
                 memory.reinforcement_count = 1
                 await uow.memories.add(

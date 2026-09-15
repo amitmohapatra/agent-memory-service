@@ -34,6 +34,11 @@ class ContextItem(BaseModel):
     expanded_from: str | None = Field(default=None, description="item_id this was expanded from")
     expansion_edge: str | None = Field(default=None, description="PARENT | NEXT | DEFINED_BY | ...")
     token_estimate: int = 0
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="structured extras: predicate/subject/object for facts and memories, "
+        "fact attributes (period, currency, amount...), contradicts/contributors",
+    )
 
 
 class ConversationWindow(BaseModel):

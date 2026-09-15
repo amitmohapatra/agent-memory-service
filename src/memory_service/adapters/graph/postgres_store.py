@@ -272,6 +272,9 @@ class PostgresGraphStore:
                     if as_of is None:
                         conds.append(GraphRelationRow.status == "CURRENT")
                     else:
+                        # valid-time semantics: an undated fact is taken to have held
+                        # before it was learned (a job, a preference), so ``as_of`` inside
+                        # a superseded interval returns the old value, not the current one
                         conds.append(
                             or_(
                                 GraphRelationRow.valid_from.is_(None),

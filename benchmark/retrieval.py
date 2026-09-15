@@ -147,10 +147,10 @@ async def run(copies: int, queries: int) -> dict:
             )
         quality = summarize(results, k=k)
         quality["note"] = (
-            "salted copies are exact duplicates of the golden documents: with many copies the "
-            "top-k fills with clones of the best chunk and secondary evidence groups fall out "
-            "(near-duplicate crowding). Informational; the release gate is tests/eval on the "
-            "un-duplicated corpus. Diversity-aware ranking is an M10 candidate."
+            "salted copies are exact duplicates of the golden documents (near-duplicate "
+            "crowding): identical chunks collapse on text_hash and graph facts are "
+            "de-duplicated per triple, so secondary evidence groups survive. Informational; "
+            "the release gate is tests/eval on the un-duplicated corpus."
         )
 
         # --- latency ------------------------------------------------------------------------

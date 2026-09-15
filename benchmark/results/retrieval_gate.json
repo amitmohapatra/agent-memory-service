@@ -170,8 +170,8 @@
         "table": 1
       },
       "query_type": {
-        "expected": "TEMPORAL",
-        "observed": "TEMPORAL"
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
       }
     },
     {
@@ -243,8 +243,8 @@
         "warranty": 3
       },
       "query_type": {
-        "expected": "GENERAL_SEMANTIC",
-        "observed": "GENERAL_SEMANTIC"
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
       }
     },
     {
@@ -299,8 +299,8 @@
     "cross_document": "COMPLETE"
   },
   "provenance": {
-    "timestamp": "2026-09-15T06:06:50.700201+00:00",
-    "git_commit": "f02cbeab7057dc4bb3afb4e3deb175c95eabc0cd",
+    "timestamp": "2026-09-15T06:48:30.386940+00:00",
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
     "python": "3.12.3",
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "machine": "x86_64",

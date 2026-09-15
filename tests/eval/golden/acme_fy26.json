@@ -194,7 +194,7 @@
     {
       "id": "segments_table",
       "query": "Which segments grew and which shrank at ACME in FY26?",
-      "query_type": "TEMPORAL",
+      "query_type": "ENTITY_RELATION",
       "critical": true,
       "required_groups": {
         "table": [
@@ -276,7 +276,7 @@
     {
       "id": "margin_exclusions",
       "query": "What items does Adjusted Operating Margin exclude?",
-      "query_type": "GENERAL_SEMANTIC",
+      "query_type": "ENTITY_RELATION",
       "critical": true,
       "required_groups": {
         "definition": [

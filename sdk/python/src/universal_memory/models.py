@@ -54,14 +54,18 @@ class ObservationAck(BaseModel):
 
 
 class FileHandle(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     document_id: str
     filename: str
     checksum: str
     size_bytes: int
-    job_id: str | None = None
+    job_ids: list[str] = Field(default_factory=list)
     deduplicated: bool = False
+
+    @property
+    def job_id(self) -> str | None:
+        return self.job_ids[0] if self.job_ids else None
 
 
 class JobHandle(BaseModel):
@@ -93,6 +97,15 @@ class MemoryResult(BaseModel):
     memory_type: str
     lifetime: str
     visibility: str
+    scope_level: str | None = None
+    subject: str | None = None
+    predicate: str | None = None
+    object: str | None = None
+    temporal_status: str = "CURRENT"
+    supersedes: str | None = None
+    superseded_by: str | None = None
+    importance: float | None = None
+    category: str | None = None
     score: float | None = None
     confidence: float | None = None
     owner_principal: str | None = None
@@ -114,6 +127,11 @@ class ContextItem(BaseModel):
     page: int | None = None
     section_path: str | None = None
     evidence: list[EvidenceRef] = Field(default_factory=list)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def predicate(self) -> str | None:
+        return self.attributes.get("predicate")
 
 
 class ConversationWindow(BaseModel):
@@ -168,6 +186,21 @@ class ThreadInfo(BaseModel):
     created_at: datetime | None = None
 
 
+class DocumentInfo(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    document_id: str
+    title: str
+    filename: str
+    media_type: str
+    size_bytes: int
+    checksum: str
+    status: str
+    archive_status: str
+    current_version_id: str | None = None
+    thread_id: str | None = None
+
+
 class MessageInfo(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -187,6 +220,7 @@ class GraphEntity(BaseModel):
     canonical_name: str
     entity_type: str = "THING"
     mention_count: int = 1
+    aliases: list[str] = Field(default_factory=list)
 
 
 class GraphFact(BaseModel):
@@ -204,6 +238,7 @@ class GraphFact(BaseModel):
     confidence: float = 0.5
     memory_id: str | None = None
     document_id: str | None = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 

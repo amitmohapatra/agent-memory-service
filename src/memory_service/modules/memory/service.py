@@ -193,9 +193,12 @@ class MemoryService:
 
     async def forget(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, memory_id: str
-    ) -> CanonicalMemory:
+    ) -> CanonicalMemory | None:
         """Soft-delete. Allowed for the owner principal, the user an agent acts for, or a
-        tenant admin; the search index entry is removed by the index job."""
+        tenant admin; the search index entry is removed by the index job. Idempotent: a
+        memory that is already forgotten returns None instead of NotFound."""
+        if await uow.memories.is_forgotten(ctx.tenant_id, memory_id):
+            return None
         memory = await self.get_memory(uow, ctx, memory_id)
         owner_ok = memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}")
         if not owner_ok and not await self.authz.is_tenant_admin(ctx):

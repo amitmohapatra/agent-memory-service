@@ -16,3 +16,11 @@
 | M11 | multi-agent semantics | done (Visibility.RUN lineage — hand-off context flows down one hop, never up or sideways; explicit sharing by hint; cross-agent corroboration counted via contributors; cross-principal conflicts kept as CONTRADICT with evidence notes; agent self-facts never become USER memories; isolation gates 0 leaks incl. run dimension; ADR 0013) |
 | M12 | LangGraph adapter | done (`LangGraphMemory.wrap`: context from thread + checkpoint namespace, subgraphs = agent runs with stable task-derived run ids, bundle before / messages + observations after nodes, deterministic idempotency keys across checkpoint retries, evidence gating, writes never silent; real-graph tests; ADR 0014) |
 | M13 | full eval / load / chaos / hardening / final report | done (gate producers: durability chaos run, security/failure-injection reducers, performance p95, tests.json plugin; failure suite with a real SIGKILLed worker, cache/blob/index/authz faults; reindex tool; per-tenant rate limit; two durability bugs fixed with regression tests; `make gates` + `make validate` -> RELEASE GATE: PASS with representativeness caveats; ADR 0015; docs/FINAL_REPORT.md) |
+
+## Post-M13 verification pass (2026-09-15)
+
+- Ingestion fidelity test (every line in exactly one chunk with the right page).
+- Document knowledge graph rebuilt: typed entities, aliases, factual relations with attributes; KG gate (49 golden facts, 0 false, 0 noise, 8/8 questions) added to the release gate. ADR 0016.
+- Retrieval golden set extended to 18 questions; R@20 = EGR = 1.00 on the gate corpus and on the 25-copy crowded corpus (graph facts de-duplicated per triple, relation-shaped questions routed to the graph, memories interleaved with document results).
+- SDK completed (`memories()`, `chat.create/message/delete_thread`, `files.document/wait_ready`, `alive()`, `files.add(title=, visibility=)`, fact `attributes`, entity `aliases`); route-coverage test.
+- `examples/`: live-server SDK tour (14/14) and LangGraph crew, both run over HTTP; four defects found by the tour fixed (hint precedence, idempotent forget, memory crowding, `valid_from` on supersede).

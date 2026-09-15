@@ -282,6 +282,10 @@ class SqlMemoryRepository:
         await self.s.flush()
         return True
 
+    async def is_forgotten(self, tenant_id: str, memory_id: str) -> bool:
+        r = await self.s.get(MemoryRow, memory_id)
+        return r is not None and r.tenant_id == tenant_id and r.deleted_at is not None
+
     async def list_unindexed(self, tenant_id: str, *, limit: int = 500) -> list[CanonicalMemory]:
         rows = (
             await self.s.scalars(

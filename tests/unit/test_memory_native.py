@@ -151,6 +151,13 @@ async def test_extraction_kinds_and_temporal(native) -> None:
     assert event[0].memory_type is MemoryType.EPISODIC
     multi = await _extract(native, "My name is Amit and my timezone is CET. I prefer tea.")
     assert [c.predicate for c in multi] == ["name", "timezone", "prefers"]
+    proc = await _extract(
+        native, "To deploy the API, run make release and then check the dashboard."
+    )
+    assert proc[0].memory_type is MemoryType.PROCEDURAL and proc[0].lifetime is Lifetime.LONG_TERM
+    assert proc[0].subject.startswith("workspace:") and proc[0].category == "procedure"
+    runbook = await _extract(native, "The runbook for outages is to page the on-call lead first.")
+    assert runbook[0].memory_type is MemoryType.PROCEDURAL
 
 
 async def test_classification_defaults_and_hints(native) -> None:

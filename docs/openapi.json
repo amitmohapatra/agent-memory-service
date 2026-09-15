@@ -666,6 +666,13 @@
       },
       "EntityOut": {
         "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
           "canonical_name": {
             "title": "Canonical Name",
             "type": "string"
@@ -838,6 +845,12 @@
       },
       "FactOut": {
         "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "Structured fact data: period, currency, amount, change, table, page ...",
+            "title": "Attributes",
+            "type": "object"
+          },
           "confidence": {
             "title": "Confidence",
             "type": "number"

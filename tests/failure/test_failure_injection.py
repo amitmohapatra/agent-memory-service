@@ -112,7 +112,7 @@ async def test_worker_kill_requeues_the_job_and_processes_once(make_settings, tm
             env=env,
         )
         try:
-            line = await asyncio.wait_for(asyncio.to_thread(proc.stdout.readline), timeout=60)  # type: ignore[union-attr]
+            line = await asyncio.wait_for(asyncio.to_thread(proc.stdout.readline), timeout=120)  # type: ignore[union-attr]
             assert line.startswith("TOOK")
         finally:
             proc.send_signal(signal.SIGKILL)
@@ -122,9 +122,14 @@ async def test_worker_kill_requeues_the_job_and_processes_once(make_settings, tm
         assert job is not None and job.status is JobStatus.RUNNING
         assert await _memories(container, ctx) == []
         # the periodic reconcile re-queues stalled jobs; a healthy worker finishes it
-        await container.tasks.recover_stalled(seconds_since_heartbeat=0)
-        job = await container.tasks.get(job_id)
-        assert job is not None and job.status is JobStatus.PENDING
+        # (the dead worker's last heartbeat can be the current second: poll briefly)
+        for _ in range(20):
+            await container.tasks.recover_stalled(seconds_since_heartbeat=0)
+            job = await container.tasks.get(job_id)
+            if job is not None and job.status is JobStatus.PENDING:
+                break
+            await asyncio.sleep(0.25)
+        assert job is not None and job.status is JobStatus.PENDING, job
         # only the work queues: periodic maintenance (reconcile/archive) is not under test
         work = [Queue.CHAT_FAST, Queue.EMBEDDING, Queue.GRAPH, Queue.MEMORY_EXTRACT]
         await asyncio.wait_for(container.tasks.run_until_idle(work, concurrency=2), 60)

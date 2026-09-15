@@ -105,12 +105,20 @@ async def test_bundle_report_reflects_budget(container, uow_factory) -> None:
     assert {k.page for k in full.knowledge} >= {1, 11, 14, 20}
     assert full.summaries and "## Summaries" in full.render()
     assert all(s.expansion_edge == "PARENT" for s in full.summaries)
-    # a budget that only fits the first chunk drops companions -> INCOMPLETE, never a lie
-    small = await builder.build(U1, Q, token_budget=260)
-    assert small.token_estimate <= 260
+    # a seed travels with its companions: a tight budget still yields a COMPLETE bundle
+    # (seed + definition + footnote + cross-reference packed together) ...
+    tight = await builder.build(U1, Q, token_budget=260)
+    assert tight.token_estimate <= 260 and tight.evidence.status is EvidenceStatus.COMPLETE
+    assert {k.page for k in tight.knowledge} >= {1, 11, 14, 20}
+    # ... and a budget that cannot hold the unit leaves the seed out and says so:
+    # INCOMPLETE with the missing groups, never a seed without its companions
+    small = await builder.build(U1, Q, token_budget=90)
+    assert small.token_estimate <= 90
     assert small.evidence.status is EvidenceStatus.INCOMPLETE
     assert "token budget" in " ".join(small.evidence.notes)
     assert small.evidence.missing_groups
+    seed_pages = {11}
+    assert not ({k.page for k in small.knowledge} & seed_pages) or small.evidence.missing_groups
 
 
 async def test_global_summary_and_conversation_rolling_summary(container, uow_factory) -> None:

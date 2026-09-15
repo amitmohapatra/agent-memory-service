@@ -6,7 +6,7 @@ COMPOSE ?= docker compose
 
 .PHONY: help setup dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
-        load-test gates validate openapi reindex clean
+        load-test gates validate openapi reindex examples clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -96,6 +96,10 @@ gates: ## Produce every release-gate artifact under benchmark/results/
 	$(PY) python -m benchmark.performance
 	$(PY) python -m benchmark.retrieval
 	$(PY) python -m benchmark.memory
+
+examples: ## Run the SDK tour and the LangGraph crew against a running server (./examples/run_server.sh)
+	$(PY) python examples/sdk_tour.py
+	$(PY) python examples/langgraph_crew/app.py
 
 reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebuild)
 	$(PY) python -m memory_service.tools.reindex

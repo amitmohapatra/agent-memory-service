@@ -1,13 +1,13 @@
 {
   "budget_recall_p95_ms": 300,
   "corpus": {
-    "copies": 3,
-    "documents": 6
+    "copies": 5,
+    "documents": 10
   },
   "note": "Quality numbers come from the deterministic hash embedding unless providers.representative is true; verdicts are relative to the baseline run in the same environment. Model-backed strategies are skipped without local weights.",
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "fbed60acedb97d681978a383641a6d0a54520529",
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -22,16 +22,16 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T01:26:50.825115+00:00"
+    "timestamp": "2026-09-15T06:37:54.920790+00:00"
   },
   "strategies": {
     "baseline": {
       "flags": {},
-      "index_seconds": 2.04,
+      "index_seconds": 4.23,
       "latency_ms": {
-        "recall_p50": 25.27,
-        "recall_p95": 56.28,
-        "samples": 15
+        "recall_p50": 59.78,
+        "recall_p95": 94.62,
+        "samples": 20
       },
       "providers": {
         "embedding": "hash-v1-d64",
@@ -42,11 +42,11 @@
       "quality": {
         "critical_evidence_complete_rate": 1.0,
         "critical_evidence_group_recall": 1.0,
-        "critical_questions": 9,
+        "critical_questions": 17,
         "critical_recall_at_k": 1.0,
         "evidence_group_recall": 1.0,
         "k": 20,
-        "questions": 10,
+        "questions": 18,
         "recall_at_k": 1.0,
         "routing_accuracy": 1.0
       },
@@ -60,11 +60,11 @@
       "flags": {
         "graph_ppr": true
       },
-      "index_seconds": 1.88,
+      "index_seconds": 4.22,
       "latency_ms": {
-        "recall_p50": 26.47,
-        "recall_p95": 58.55,
-        "samples": 15
+        "recall_p50": 50.17,
+        "recall_p95": 87.72,
+        "samples": 20
       },
       "providers": {
         "embedding": "hash-v1-d64",
@@ -75,11 +75,11 @@
       "quality": {
         "critical_evidence_complete_rate": 1.0,
         "critical_evidence_group_recall": 1.0,
-        "critical_questions": 9,
+        "critical_questions": 17,
         "critical_recall_at_k": 1.0,
         "evidence_group_recall": 1.0,
         "k": 20,
-        "questions": 10,
+        "questions": 18,
         "recall_at_k": 1.0,
         "routing_accuracy": 1.0
       },
@@ -101,11 +101,11 @@
       "flags": {
         "pageindex": true
       },
-      "index_seconds": 1.91,
+      "index_seconds": 4.08,
       "latency_ms": {
-        "recall_p50": 49.57,
-        "recall_p95": 72.78,
-        "samples": 15
+        "recall_p50": 80.55,
+        "recall_p95": 111.84,
+        "samples": 20
       },
       "providers": {
         "embedding": "hash-v1-d64",
@@ -116,11 +116,11 @@
       "quality": {
         "critical_evidence_complete_rate": 1.0,
         "critical_evidence_group_recall": 1.0,
-        "critical_questions": 9,
+        "critical_questions": 17,
         "critical_recall_at_k": 1.0,
         "evidence_group_recall": 1.0,
         "k": 20,
-        "questions": 10,
+        "questions": 18,
         "recall_at_k": 1.0,
         "routing_accuracy": 1.0
       },
@@ -131,11 +131,11 @@
         "pageindex": true,
         "raptor": true
       },
-      "index_seconds": 1.95,
+      "index_seconds": 3.94,
       "latency_ms": {
-        "recall_p50": 49.61,
-        "recall_p95": 82.39,
-        "samples": 15
+        "recall_p50": 80.83,
+        "recall_p95": 111.78,
+        "samples": 20
       },
       "providers": {
         "embedding": "hash-v1-d64",
@@ -146,11 +146,11 @@
       "quality": {
         "critical_evidence_complete_rate": 1.0,
         "critical_evidence_group_recall": 1.0,
-        "critical_questions": 9,
+        "critical_questions": 17,
         "critical_recall_at_k": 1.0,
         "evidence_group_recall": 1.0,
         "k": 20,
-        "questions": 10,
+        "questions": 18,
         "recall_at_k": 1.0,
         "routing_accuracy": 1.0
       },
@@ -160,11 +160,11 @@
       "flags": {
         "raptor": true
       },
-      "index_seconds": 1.86,
+      "index_seconds": 3.95,
       "latency_ms": {
-        "recall_p50": 29.4,
-        "recall_p95": 59.66,
-        "samples": 15
+        "recall_p50": 62.03,
+        "recall_p95": 88.31,
+        "samples": 20
       },
       "providers": {
         "embedding": "hash-v1-d64",
@@ -175,11 +175,11 @@
       "quality": {
         "critical_evidence_complete_rate": 1.0,
         "critical_evidence_group_recall": 1.0,
-        "critical_questions": 9,
+        "critical_questions": 17,
         "critical_recall_at_k": 1.0,
         "evidence_group_recall": 1.0,
         "k": 20,
-        "questions": 10,
+        "questions": 18,
         "recall_at_k": 1.0,
         "routing_accuracy": 1.0
       },

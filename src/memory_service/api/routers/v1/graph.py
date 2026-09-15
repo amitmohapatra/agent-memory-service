@@ -42,6 +42,7 @@ class EntityOut(BaseModel):
     canonical_name: str
     entity_type: str
     mention_count: int
+    aliases: list[str] = Field(default_factory=list)
 
 
 class FactOut(BaseModel):
@@ -57,6 +58,10 @@ class FactOut(BaseModel):
     confidence: float
     memory_id: str | None = None
     document_id: str | None = None
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured fact data: period, currency, amount, change, table, page ...",
+    )
     evidence: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -96,6 +101,7 @@ async def graph_query(
             canonical_name=e.canonical_name,
             entity_type=e.entity_type,
             mention_count=e.mention_count,
+            aliases=list(e.aliases),
         )
 
     return GraphQueryResponse(
@@ -115,6 +121,7 @@ async def graph_query(
                 confidence=r.confidence,
                 memory_id=r.memory_id,
                 document_id=r.document_id,
+                attributes=dict(r.attributes),
                 evidence=[e.model_dump(mode="json", exclude_none=True) for e in r.evidence[:3]],
             )
             for r in answer.relations

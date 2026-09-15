@@ -16,3 +16,4 @@ build/
 benchmark/results/*.tmp
 .DS_Store
 .bench_blob/
+dump.rdb

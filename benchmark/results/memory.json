@@ -5,7 +5,7 @@
   "llm_enabled": false,
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -20,7 +20,7 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T02:44:43.407331+00:00"
+    "timestamp": "2026-09-15T06:37:17.211748+00:00"
   },
   "provider": "native",
   "quality": {
@@ -42,8 +42,8 @@
     }
   },
   "throughput": {
-    "accept_p50_ms": 7.57,
-    "accept_p95_ms": 9.2,
+    "accept_p50_ms": 7.22,
+    "accept_p95_ms": 9.51,
     "decisions": {
       "CREATE": 66,
       "REINFORCE": 59,
@@ -52,10 +52,10 @@
     "memories_current": 66,
     "memories_rows": 87,
     "observations": 200,
-    "observations_per_second": 25.0,
-    "process_mean_ms": 14.73,
-    "process_p50_ms": 16.94,
-    "process_p95_ms": 20.61,
-    "wall_seconds": 8.01
+    "observations_per_second": 26.2,
+    "process_mean_ms": 14.51,
+    "process_p50_ms": 16.49,
+    "process_p95_ms": 20.13,
+    "wall_seconds": 7.63
   }
 }

@@ -36,7 +36,10 @@ _MULTI_HOP = re.compile(
     re.IGNORECASE,
 )
 _ENTITY = re.compile(
-    r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of)\b",
+    r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"
+    # relation cues the knowledge graph answers directly (typed facts + their evidence)
+    r"(?:does|do|did|is|are|was|were) .{2,60}? (?:exclude|excludes|include|includes|operate in|provide|provides|serve|serves|acquire|acquired|approve|approved)|"
+    r"(?:what|which) (?:items|costs|charges|segments|regions|products|companies)|how much did .{2,40}? pay|segments? of|excluded from|approved by|acquired by|driven by)\b",
     re.IGNORECASE,
 )
 _DOC_LOCAL = re.compile(

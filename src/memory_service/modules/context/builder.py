@@ -76,6 +76,25 @@ def candidate_to_item(c: Candidate) -> ContextItem:
         expanded_from=c.expanded_from,
         expansion_edge=c.expansion_edge,
         token_estimate=estimate_tokens(c.text),
+        attributes={
+            k: v
+            for k, v in p.items()
+            if k
+            in (
+                "predicate",
+                "subject",
+                "object",
+                "attributes",
+                "contradicts",
+                "contributors",
+                "memory_type",
+                "visibility",
+                "owner_principal",
+                "confidence",
+                "status",
+            )
+            and v not in (None, [], {})
+        },
     )
 
 
@@ -204,8 +223,68 @@ class ContextBuilder:
         knowledge: list[ContextItem] = []
         graph_facts: list[ContextItem] = []
         summaries: list[ContextItem] = []
-        for c in result.candidates:
-            item = candidate_to_item(c)
+        # a seed chunk travels with the companions its required evidence groups point at
+        # (definition, footnote, cross-reference): either the whole unit fits the budget or
+        # the seed is left out, so the bundle never carries a claim without its companion
+        targets = result.diagnostics.get("evidence_targets") or {}
+        seed_groups = result.diagnostics.get("evidence_seed_groups") or {}
+        included_ids: set[str] = set()
+        skipped_seeds: list[str] = []
+        top_seed_skipped: list[str] = []  # groups of the best-ranked seed, if it was left out
+        seen_seed = False
+        items = [(c, candidate_to_item(c)) for c in result.candidates]
+        by_node: dict[str, list[tuple[Any, ContextItem]]] = {}
+        for c, item in items:
+            node = c.payload.get("node_id")
+            if node and c.kind in ("chunk", "summary"):
+                by_node.setdefault(str(node), []).append((c, item))
+
+        def companions_for(node: str) -> list[tuple[Any, ContextItem]]:
+            out: list[tuple[Any, ContextItem]] = []
+            for group in seed_groups.get(node, []):
+                accepted = set(targets.get(group, []))
+                if any(
+                    str(cc.payload.get("node_id")) in accepted
+                    for cc, _ in items
+                    if cc.record_id in included_ids
+                ):
+                    continue  # already satisfied by something in the bundle
+                for target in targets.get(group, []):
+                    found = [
+                        (cc, it)
+                        for cc, it in by_node.get(target, [])
+                        if cc.record_id not in included_ids
+                    ]
+                    if found:
+                        out.append(found[0])
+                        break
+            return out
+
+        for c, item in items:
+            if c.record_id in included_ids:
+                continue
+            if c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:
+                node = str(c.payload.get("node_id") or "")
+                unit = [(c, item)] + (companions_for(node) if node in seed_groups else [])
+                cost = sum(it.token_estimate for _, it in unit)
+                if cost > remaining:
+                    if len(unit) > 1:
+                        skipped_seeds.append(c.record_id)
+                        if not seen_seed:
+                            top_seed_skipped.extend(seed_groups.get(node, []))
+                    seen_seed = seen_seed or node in seed_groups
+                    continue
+                seen_seed = seen_seed or node in seed_groups
+                for cc, it in unit:
+                    if cc.record_id in included_ids:
+                        continue
+                    if cc.kind == "summary":
+                        summaries.append(it)
+                    else:
+                        knowledge.append(it)
+                    included_ids.add(cc.record_id)
+                remaining -= cost
+                continue
             if item.token_estimate > remaining:
                 continue
             if c.kind == "memory" and len(memories) < self.cfg.memories_max:
@@ -214,10 +293,9 @@ class ContextBuilder:
                 graph_facts.append(item)
             elif c.kind == "summary" and len(summaries) < self.cfg.summaries_max:
                 summaries.append(item)
-            elif c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:
-                knowledge.append(item)
             else:
                 continue
+            included_ids.add(c.record_id)
             remaining -= item.token_estimate
         evidence = result.diagnostics.get("evidence")
         report = (
@@ -235,8 +313,44 @@ class ContextBuilder:
             ev.node_id for item in (*knowledge, *summaries) for ev in item.evidence if ev.node_id
         }
         if report.required_groups and report.status is not EvidenceStatus.INSUFFICIENT:
-            targets = dict(zip(report.required_groups, _group_targets(result), strict=False))
-            dropped = [g for g, ids in targets.items() if ids and not (set(ids) & included_nodes)]
+            # groups required only by seeds that were left out (with their companions) no
+            # longer apply to what is in the bundle
+            seeds_in = {
+                str(c.payload.get("node_id"))
+                for c in result.candidates
+                if c.record_id in included_ids and c.kind == "chunk"
+            }
+            applicable = {
+                g for node, names in seed_groups.items() if node in seeds_in for g in names
+            } or set(report.required_groups)
+            report = report.model_copy(
+                update={
+                    "required_groups": [g for g in report.required_groups if g in applicable],
+                    "satisfied_groups": [g for g in report.satisfied_groups if g in applicable],
+                    "missing_groups": [g for g in report.missing_groups if g in applicable],
+                    "notes": [
+                        *report.notes,
+                        *(
+                            [
+                                f"{len(skipped_seeds)} lower-ranked passage(s) left out: their "
+                                "companion evidence did not fit the token budget"
+                            ]
+                            if skipped_seeds
+                            else []
+                        ),
+                    ],
+                }
+            )
+            targets_by_group = dict(
+                zip(
+                    report.required_groups,
+                    [list(targets.get(g, [])) for g in report.required_groups],
+                    strict=False,
+                )
+            )
+            dropped = [
+                g for g, ids in targets_by_group.items() if ids and not (set(ids) & included_nodes)
+            ]
             if dropped:
                 missing = sorted(set(report.missing_groups) | set(dropped))
                 report = report.model_copy(
@@ -252,7 +366,9 @@ class ContextBuilder:
         if not (knowledge or memories or graph_facts or summaries):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         diagnostics = {
-            k: v for k, v in result.diagnostics.items() if k not in ("evidence", "evidence_targets")
+            k: v
+            for k, v in result.diagnostics.items()
+            if k not in ("evidence", "evidence_targets", "evidence_seed_groups")
         }
         return ContextBundle(
             query=query,

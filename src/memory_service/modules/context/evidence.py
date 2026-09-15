@@ -84,6 +84,7 @@ class VerificationStage:
         self.expansion = expansion
         self.cfg = settings
         self.seeds = seeds
+        self._last_seed_groups: dict[str, list[str]] = {}
 
     async def required_groups(
         self, ctx: MemoryExecutionContext, seeds: Sequence[Candidate]
@@ -99,6 +100,13 @@ class VerificationStage:
             )
             targets = edges_to_groups(edges)
             groups: dict[str, set[str]] = {name: {t} for name, t in targets.items()}
+            # which seed node needs which group (the bundle packs a seed with its companions)
+            seed_groups: dict[str, list[str]] = {}
+            for e in edges:
+                name = f"{e.edge.value.lower()}:{e.label or e.target_id}"
+                if name in groups:
+                    seed_groups.setdefault(e.source_id, []).append(name)
+            self._last_seed_groups = seed_groups
             frontier = sorted(set(targets.values()))
             for _ in range(3):  # section > subsection > paragraph
                 if not frontier:
@@ -158,6 +166,9 @@ class VerificationStage:
             groups = await self.required_groups(ctx, seeds)
             report["required_groups"] = sorted(groups)
             diagnostics["evidence_targets"] = {name: sorted(ids) for name, ids in groups.items()}
+            diagnostics["evidence_seed_groups"] = {
+                node: sorted(set(names)) for node, names in self._last_seed_groups.items()
+            }
             done = self.satisfied(groups, candidates)
             rounds = 0
             while len(done) < len(groups) and rounds < self.cfg.escalation_max_rounds:

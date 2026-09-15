@@ -190,10 +190,18 @@ def extract_definitions(text: str) -> list[str]:
     out = []
     for t in terms:
         c = canonical_entity(t)
-        if c not in seen:
-            seen.add(c)
-            out.append(t)
+        if c in seen or _NOT_A_TERM.fullmatch(c):
+            continue
+        seen.add(c)
+        out.append(t)
     return out
+
+
+_NOT_A_TERM = re.compile(
+    r"(?:fy\s?\d{2,4}|q[1-4](?:\s?\d{2,4})?|h[12]\s?\d{2,4}|(?:19|20)\d{2}|"
+    r"(?:eur|usd|gbp|chf|jpy|inr|cad|aud)\s*(?:m|mn|bn|k|million|billion|thousand)?|"
+    r"table|figure|note|section)"
+)
 
 
 # --------------------------------------------------------------------------- references

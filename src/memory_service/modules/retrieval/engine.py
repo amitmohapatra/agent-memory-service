@@ -7,6 +7,7 @@ engine never sees another principal's data, so there is nothing to "filter in me
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -141,6 +142,7 @@ class RetrievalEngine:
                 wanted = list(kinds)
                 if routed.needs_summaries and "summary" not in wanted:
                     wanted.append("summary")
+                per_kind: list[list[Candidate]] = []
                 for kind in wanted:
                     if kind == "chunk" and not routed.needs_knowledge:
                         continue
@@ -162,8 +164,8 @@ class RetrievalEngine:
                             for rid, s, _, p in fused
                         ]
                         retrievers_of = {rid: names for rid, _, names, _ in fused}
-                    for h in hits:
-                        candidates.append(
+                    per_kind.append(
+                        [
                             Candidate(
                                 record_id=h.record_id,
                                 kind=str(h.payload.get("kind") or kind),
@@ -172,7 +174,13 @@ class RetrievalEngine:
                                 retrievers=retrievers_of.get(h.record_id, [h.retriever]),
                                 payload=h.payload,
                             )
-                        )
+                            for h in hits
+                        ]
+                    )
+                # interleave the per-kind lists by rank so a long document result list can
+                # never crowd out the memories (or summaries) before the reranker sees them
+                for group in itertools.zip_longest(*per_kind):
+                    candidates.extend(c for c in group if c is not None)
                 diagnostics["fused_candidates"] = len(candidates)
             # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate texts
             #    (copies of the same document) so they cannot crowd out other evidence

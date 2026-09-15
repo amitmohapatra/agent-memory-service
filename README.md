@@ -121,14 +121,22 @@ LangGraph: `integrations/langgraph` (`universal-memory-langgraph`) wraps graph n
 namespace to the memory context (subgraphs become agent runs), fetching a bundle before
 the node and recording messages/observations after it with retry-safe idempotency keys.
 
-Graph: `POST /v1/graph/query` resolves entities from a question (or explicit names) and
-returns a bounded, visibility-filtered neighbourhood of temporal facts with evidence;
-`as_of` gives the historical view. Multi-hop and entity questions use the same traversal
+Graph: `POST /v1/graph/query` resolves entities from a question (or explicit names, or
+aliases such as `ARR`) and returns a bounded, visibility-filtered neighbourhood of typed,
+temporal facts with attributes (period, currency, amount, change ...) and page evidence;
+`as_of` gives the historical view. Documents are mined without an LLM into metric values,
+table cells, drivers, exclusions, approvals, acquisitions and counterfactuals (ADR 0016). Multi-hop and entity questions use the same traversal
 inside `/v1/recall` and `/v1/context` to pull in the evidence chunks the facts point at.
 
 Without local model weights the service runs with a deterministic hash embedding and a
 lexical reranker (`MEMORY__MODELS__EMBEDDING__PROVIDER=hash`) — fine for plumbing tests,
 not representative of retrieval quality (every benchmark file records which was used).
+
+## Examples
+
+`examples/` runs against a live server: `run_server.sh`, `sdk_tour.py` (every SDK method
+and API route as a checklist) and `langgraph_crew/` (a nested LangGraph crew using the
+adapter). See [examples/README.md](examples/README.md).
 
 ## Repository layout
 
