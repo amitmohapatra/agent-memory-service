@@ -208,6 +208,26 @@ class ProcrastinateTaskQueue:
             fetch_job_polling_interval=2.0,
         )
 
+    async def recover_stalled(self, *, seconds_since_heartbeat: float = 30) -> int:
+        """Re-queue jobs left in ``doing`` by a worker that died (kill -9, OOM, node loss).
+
+        Procrastinate workers heartbeat; a job whose worker stopped heartbeating is stalled.
+        The handler's idempotency (observation ``processed_at``, outbox keys, index upserts)
+        makes the replay safe. Returns the number of jobs re-queued. Called from the
+        periodic reconcile with ``tasks.stalled_after_seconds`` (never below a heartbeat
+        interval there, or a live worker would prune itself)."""
+        await self.open()
+        manager = self.app.job_manager
+        await manager.prune_stalled_workers(seconds_since_heartbeat=seconds_since_heartbeat)
+        stalled = list(
+            await manager.get_stalled_jobs(seconds_since_heartbeat=seconds_since_heartbeat)
+        )
+        for job in stalled:
+            await manager.retry_job(job)
+        if stalled:
+            log.warning("jobs.stalled_recovered", count=len(stalled))
+        return len(stalled)
+
     async def run_until_idle(
         self, queues: list[Queue] | None = None, *, concurrency: int = 4
     ) -> None:

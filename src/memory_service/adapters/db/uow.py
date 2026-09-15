@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Self
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memory_service.adapters.db.document_repository import SqlDocumentRepository
@@ -130,6 +131,13 @@ class SqlUnitOfWork:
     def session(self) -> AsyncSession:
         assert self._session is not None, "UnitOfWork used outside 'async with'"
         return self._session
+
+    async def serialize(self, *keys: str) -> None:
+        assert self._session is not None
+        for key in keys:  # pg_advisory_xact_lock: released with the transaction
+            await self._session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key}
+            )
 
     async def enqueue(self, spec: JobSpec) -> int | None:
         outbox_id = await self.outbox.add(spec)

@@ -34,6 +34,13 @@ class ServiceSettings(BaseModel):
     api_version: str = "v1"
     request_timeout_seconds: float = 30.0
     max_body_bytes: int = 25 * 1024 * 1024
+    rate_limit_per_minute: int = Field(
+        default=1200,
+        description="Requests per tenant per minute (0 disables); counted in the cache",
+    )
+    rate_limit_burst: int = Field(
+        default=200, description="Extra requests tolerated above the rate"
+    )
 
 
 class DatabaseSettings(BaseModel):
@@ -81,6 +88,10 @@ class TaskSettings(BaseModel):
     default_retries: int = 5
     job_timeout_seconds: int = 600
     periodic_reconcile_seconds: int = 300
+    stalled_after_seconds: float = Field(
+        default=120,
+        description="A job whose worker stopped heartbeating for this long is re-queued",
+    )
 
 
 class AuthenticationSettings(BaseModel):

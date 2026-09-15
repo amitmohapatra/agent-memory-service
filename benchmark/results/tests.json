@@ -1,0 +1,44 @@
+{
+  "args": [
+    "tests",
+    "sdk/python/tests",
+    "integrations/langgraph/tests",
+    "-m",
+    "not docker and not models",
+    "-q",
+    "-p",
+    "benchmark.pytest_results",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "deselected": 4,
+  "duration_seconds": 104.9,
+  "errors": 0,
+  "exit_status": 0,
+  "failed": 0,
+  "failed_tests": [],
+  "passed": 274,
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T02:49:26.037280+00:00"
+  },
+  "skipped": 0,
+  "total": 274,
+  "xfailed": 0,
+  "xpassed": 0
+}

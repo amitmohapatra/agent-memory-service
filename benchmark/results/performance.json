@@ -1,0 +1,101 @@
+{
+  "budgets_ms": {
+    "cached_context_p95_ms": 75,
+    "chat_accept_p95_ms": 100,
+    "context_bundle_p95_ms": 400,
+    "file_accept_p95_ms": 200,
+    "recall_p95_ms": 300
+  },
+  "cached_context_p95_ms": 6.21,
+  "chat_accept_p95_ms": 32.71,
+  "context_bundle_p95_ms": 78.33,
+  "corpus": {
+    "copies": 5,
+    "documents": 10,
+    "index_seconds": 3.32
+  },
+  "detail": {
+    "cached": {
+      "max": 9.75,
+      "p50": 5.03,
+      "p95": 6.21,
+      "p99": 8.16,
+      "samples": 60,
+      "status_codes": {
+        "200": 60
+      }
+    },
+    "chat": {
+      "max": 145.3,
+      "p50": 23.36,
+      "p95": 32.71,
+      "p99": 36.88,
+      "samples": 60,
+      "status_codes": {
+        "202": 60
+      }
+    },
+    "context": {
+      "max": 183.0,
+      "p50": 38.27,
+      "p95": 78.33,
+      "p99": 84.76,
+      "samples": 60,
+      "status_codes": {
+        "200": 60
+      }
+    },
+    "file": {
+      "max": 28.64,
+      "p50": 22.11,
+      "p95": 25.34,
+      "p99": 28.09,
+      "samples": 60,
+      "status_codes": {
+        "202": 60
+      }
+    },
+    "recall": {
+      "max": 156.67,
+      "p50": 32.41,
+      "p95": 71.29,
+      "p99": 81.81,
+      "samples": 60,
+      "status_codes": {
+        "200": 60
+      }
+    }
+  },
+  "file_accept_p95_ms": 25.34,
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T02:44:09.641547+00:00"
+  },
+  "providers": {
+    "blob": "memory",
+    "cache": "memory",
+    "embedding": "hash-v1-d64",
+    "representative": false,
+    "reranker": "LexicalReranker",
+    "search": "memory",
+    "tasks": "memory"
+  },
+  "recall_p95_ms": 71.29,
+  "transport": "in-process ASGI (no network hop)",
+  "within_budget": true
+}

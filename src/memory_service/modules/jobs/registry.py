@@ -109,6 +109,9 @@ def register_handlers(container: Container) -> None:
             report = await archiver.reconcile()
             if any(report.values()):
                 log.info("reconcile.report", **report)
+        recover = getattr(container.tasks, "recover_stalled", None)
+        if recover is not None:  # jobs orphaned by a worker that died mid-run
+            await recover(seconds_since_heartbeat=container.settings.tasks.stalled_after_seconds)
         for extra in container.services.get("extra_reconcilers", []):
             await extra()
 

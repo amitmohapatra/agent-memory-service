@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 
 from memory_service.adapters.authz.model import MODEL, TypeDef
+from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.authorization import AccessCheck, RelationTuple
 from memory_service.ports.models import ProviderInfo
 
@@ -32,6 +33,11 @@ class MemoryAuthorizationProvider:
         self._objects_by_type: dict[str, set[str]] = defaultdict(set)
         self.max_listed_objects = max_listed_objects
         self.check_calls = 0
+        self.available = True  # flip to False to simulate an authorization outage
+
+    def _guard(self) -> None:
+        if not self.available:
+            raise DependencyUnavailable("simulated authorization outage")
 
     # -- tuple management -----------------------------------------------------
     async def write(
@@ -62,10 +68,12 @@ class MemoryAuthorizationProvider:
 
     # -- check ----------------------------------------------------------------
     async def check(self, check: AccessCheck) -> bool:
+        self._guard()
         self.check_calls += 1
         return self._check(check.user, check.relation, check.object, frozenset())
 
     async def batch_check(self, checks: Sequence[AccessCheck]) -> list[bool]:
+        self._guard()
         return [await self.check(c) for c in checks]
 
     def _check(
@@ -103,6 +111,7 @@ class MemoryAuthorizationProvider:
         return False
 
     async def list_objects(self, user: str, relation: str, object_type: str) -> list[str]:
+        self._guard()
         out = [
             obj
             for obj in sorted(self._objects_by_type.get(object_type, ()))

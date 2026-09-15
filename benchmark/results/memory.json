@@ -5,7 +5,7 @@
   "llm_enabled": false,
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "95f58cca8dfab0b017d9399fbdc4750a48d67dd4",
+    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -20,7 +20,7 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T00:31:07.875169+00:00"
+    "timestamp": "2026-09-15T02:44:43.407331+00:00"
   },
   "provider": "native",
   "quality": {
@@ -42,20 +42,20 @@
     }
   },
   "throughput": {
-    "accept_p50_ms": 7.94,
-    "accept_p95_ms": 10.27,
+    "accept_p50_ms": 7.57,
+    "accept_p95_ms": 9.2,
     "decisions": {
-      "CREATE": 57,
-      "REINFORCE": 33,
-      "SUPERSEDE": 19
+      "CREATE": 66,
+      "REINFORCE": 59,
+      "SUPERSEDE": 21
     },
-    "memories_current": 57,
-    "memories_rows": 76,
-    "observations": 150,
-    "observations_per_second": 34.0,
-    "process_mean_ms": 14.87,
-    "process_p50_ms": 17.33,
-    "process_p95_ms": 21.48,
-    "wall_seconds": 4.41
+    "memories_current": 66,
+    "memories_rows": 87,
+    "observations": 200,
+    "observations_per_second": 25.0,
+    "process_mean_ms": 14.73,
+    "process_p50_ms": 16.94,
+    "process_p95_ms": 20.61,
+    "wall_seconds": 8.01
   }
 }

@@ -6,7 +6,7 @@ COMPOSE ?= docker compose
 
 .PHONY: help setup dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
-        load-test validate openapi clean
+        load-test gates validate openapi reindex clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -55,11 +55,8 @@ e2e: ## End-to-end API flows
 security-test: ## Isolation / authorization gates (release blocking)
 	$(PY) pytest tests/security -q
 
-performance-test: ## Latency budgets
-	$(PY) pytest tests/performance -q
-
-failure-test: ## Failure injection
-	$(PY) pytest tests/failure -q 2>/dev/null || $(PY) pytest tests/integration -m failure -q
+performance-test: ## Latency budgets (writes benchmark/results/performance.json)
+	$(PY) python -m benchmark.performance
 
 eval: ## Deterministic retrieval/memory evaluation gates
 	$(PY) pytest tests/eval -m "not models" -q
@@ -88,15 +85,25 @@ load-test: ## Locust load test (headless)
 openapi: ## Export OpenAPI schema
 	$(PY) python -m memory_service.tools.export_openapi docs/openapi.json
 
-validate: ## Full release smoke gate
+failure-test: ## Failure-injection scenarios (worker kill, cache flush, blob outage, index rebuild, authz outage)
+	$(PY) pytest tests/failure -m failure -q
+
+gates: ## Produce every release-gate artifact under benchmark/results/
+	$(PY) pytest tests sdk/python/tests integrations/langgraph/tests -m "not docker and not models" -q -p benchmark.pytest_results
+	$(PY) python -m benchmark.security
+	$(PY) python -m benchmark.failure_injection
+	$(PY) python -m benchmark.durability
+	$(PY) python -m benchmark.performance
+	$(PY) python -m benchmark.retrieval
+	$(PY) python -m benchmark.memory
+
+reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebuild)
+	$(PY) python -m memory_service.tools.reindex
+
+validate: ## Full release gate: lint, types, every suite, gate artifacts, then the gate evaluator
 	$(MAKE) lint
 	$(MAKE) typecheck
-	$(MAKE) unit
-	$(MAKE) contract-test
-	$(MAKE) integration
-	$(MAKE) security-test
-	$(MAKE) e2e
-	$(MAKE) eval
+	$(MAKE) gates
 	$(PY) python -m memory_service.tools.release_gate
 
 clean:

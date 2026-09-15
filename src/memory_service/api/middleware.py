@@ -91,3 +91,74 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         response.headers[HEADER_TRACE_ID] = trace_id
         response.headers[HEADER_CORRELATION_ID] = correlation_id
         return response
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-tenant (and per-API-key) request budget: a fixed one-minute window counted in
+    the shared cache, so every instance of the service enforces the same budget. Health,
+    readiness and metrics are exempt. A cache outage fails *open* for this middleware —
+    losing the cache must degrade rate limiting, never availability — and is logged once
+    per window. The limit is a hardening measure against runaway clients, not a security
+    boundary (authorization is)."""
+
+    def __init__(self, app, *, per_minute: int, burst: int) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(app)
+        self.per_minute = per_minute
+        self.burst = burst
+        self._warned_window = -1
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if self.per_minute <= 0 or request.url.path in (
+            "/health/live",
+            "/health/ready",
+            "/metrics",
+        ):
+            return await call_next(request)
+        cache = getattr(getattr(request.app.state, "container", None), "cache", None)
+        if cache is None:
+            return await call_next(request)
+        tenant = request.headers.get("x-memory-tenant") or "-"
+        api_key = request.headers.get("x-api-key") or request.headers.get("authorization") or "-"
+        window = int(time.time() // 60)
+        key = f"ratelimit:{tenant}:{hash_key(api_key)}:{window}"
+        try:
+            count = await cache.incr(key)
+            if count == 1:
+                await cache.set(key, b"1", ttl_seconds=120)
+        except Exception as exc:
+            if self._warned_window != window:
+                self._warned_window = window
+                log.warning("ratelimit.cache_unavailable", error=str(exc))
+            return await call_next(request)
+        limit = self.per_minute + self.burst
+        if count > limit:
+            retry_after = 60 - int(time.time() % 60)
+            return JSONResponse(
+                status_code=429,
+                headers={
+                    "Retry-After": str(retry_after),
+                    "X-RateLimit-Limit": str(self.per_minute),
+                    "X-RateLimit-Remaining": "0",
+                },
+                content={
+                    "error": {
+                        "code": "RATE_LIMIT",
+                        "message": "Too many requests for this tenant; retry after the window",
+                        "retryable": True,
+                        "trace_id": getattr(request.state, "trace_id", ""),
+                        "details": {"limit_per_minute": self.per_minute, "window_seconds": 60},
+                    }
+                },
+            )
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(self.per_minute)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, limit - count))
+        return response
+
+
+def hash_key(value: str) -> str:
+    import hashlib
+
+    return hashlib.blake2b(value.encode(), digest_size=8).hexdigest()

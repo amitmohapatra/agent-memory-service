@@ -78,13 +78,19 @@ into that directory, or point `MEMORY__MODELS__*__MODEL_PATH` elsewhere.
 ```
 make setup | dev-up | dev-down | migrate
 make lint | format | typecheck
-make unit | integration | contract-test | e2e | security-test | performance-test
-make eval | bench-retrieval | bench-memory | bench-embedding | bench-reranker | bench-storage | load-test
-make validate            # full release smoke gate
+make unit | integration | contract-test | e2e | security-test | failure-test | performance-test
+make eval | bench-retrieval | bench-advanced | bench-memory | bench-embedding | bench-reranker | bench-storage | load-test
+make gates               # every release-gate artifact under benchmark/results/
+make validate            # lint + types + gates + memory_service.tools.release_gate
+make reindex             # rebuild the search index from PostgreSQL
 ```
 
-`make validate` runs every suite and then `memory_service.tools.release_gate`, which fails the
-build if any hard gate lacks evidence or is violated.
+`make validate` produces the gate evidence (durability chaos run, security and
+failure-injection reducers, p95 latency, retrieval/memory eval gates, test outcomes) and
+then runs `memory_service.tools.release_gate`, which fails the build if any hard gate lacks
+evidence or is violated and flags evidence produced with stand-in providers as not
+representative. The current state of every gate is summarised in
+[docs/FINAL_REPORT.md](docs/FINAL_REPORT.md).
 
 ## API
 
@@ -130,5 +136,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md). Decisions are recorded in `docs/adr/`.
 
 ## Status
 
-Milestones M0–M13 are implemented sequentially with hard quality gates; see
-`docs/MILESTONES.md` for what is complete and what each gate measured.
+All milestones M0–M13 are implemented; see `docs/MILESTONES.md` for what each delivered
+and `docs/FINAL_REPORT.md` for the gate evidence. The release gate passes in the build
+environment **with caveats**: retrieval quality and latency were measured with the hash
+embedding, local Qdrant and no network hop, which bound the service logic but are not a
+production measurement. The service is not declared production-ready until the same gates
+pass with representative models and infrastructure (`make gates` with weights in `models/`
+and the compose stack).

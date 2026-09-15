@@ -329,6 +329,14 @@ class QdrantSearchStore:
         )
         return int(res.count)
 
+    async def drop_collection(self, collection: str) -> bool:
+        name = self._name(collection)
+        self._known.discard(name)
+        if not await self._client.collection_exists(name):
+            return False
+        await self._client.delete_collection(name)
+        return True
+
     async def ping(self) -> bool:
         try:
             await self._client.get_collections()

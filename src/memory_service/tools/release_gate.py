@@ -33,7 +33,32 @@ def _load(name: str) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def representativeness(results: dict[str, dict[str, Any] | None]) -> list[str]:
+    """Caveats that do not fail the gate but must be stated with any PASS: evidence
+    produced with stand-in providers bounds the service logic, not a deployment."""
+    notes: list[str] = []
+    retrieval = results.get("retrieval_gate")
+    if retrieval is not None and not retrieval.get("representative", False):
+        notes.append(
+            f"retrieval quality measured with embedding={retrieval.get('embedding')} "
+            f"reranker={retrieval.get('reranker')}: NOT representative of production models"
+        )
+    perf = results.get("performance")
+    if perf is not None and not (perf.get("providers") or {}).get("representative", False):
+        notes.append(
+            f"latency measured over {perf.get('transport', 'unknown transport')} with "
+            f"providers={ {k: v for k, v in (perf.get('providers') or {}).items() if k != 'representative'} }: "
+            "NOT representative of a deployed instance"
+        )
+    return notes
+
+
 def evaluate(settings: Settings | None = None) -> tuple[bool, list[str]]:
+    ok, failures, _ = evaluate_with_notes(settings)
+    return ok, failures
+
+
+def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[str], list[str]]:
     settings = settings or Settings()
     failures: list[str] = []
 
@@ -110,19 +135,29 @@ def evaluate(settings: Settings | None = None) -> tuple[bool, list[str]]:
         failures.append("tests.json missing (all-tests-pass gate has no evidence)")
     elif tests.get("failed", 1) != 0 or tests.get("errors", 1) != 0:
         failures.append(f"tests failed={tests.get('failed')} errors={tests.get('errors')}")
+    elif tests.get("total", 0) == 0:
+        failures.append("tests.json records no tests")
 
-    return (not failures, failures)
+    notes = representativeness({"retrieval_gate": retrieval, "performance": perf})
+    return (not failures, failures, notes)
 
 
 def main() -> int:
-    ok, failures = evaluate()
+    ok, failures, notes = evaluate_with_notes()
     if ok:
         sys.stdout.write("RELEASE GATE: PASS\n")
-        return 0
-    sys.stdout.write("RELEASE GATE: FAIL\n")
-    for f in failures:
-        sys.stdout.write(f"  - {f}\n")
-    return 1
+    else:
+        sys.stdout.write("RELEASE GATE: FAIL\n")
+        for f in failures:
+            sys.stdout.write(f"  - {f}\n")
+    for n in notes:
+        sys.stdout.write(f"  ! {n}\n")
+    if ok and notes:
+        sys.stdout.write(
+            "  Gates pass for the service logic in this environment; production readiness "
+            "additionally requires the same gates with representative providers.\n"
+        )
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":  # pragma: no cover

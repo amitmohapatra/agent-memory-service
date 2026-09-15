@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from memory_service.__about__ import __version__
 from memory_service.api.errors import install_error_handlers
-from memory_service.api.middleware import CorrelationMiddleware
+from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddleware
 from memory_service.api.openapi import custom_openapi
 from memory_service.api.routers import ops
 from memory_service.application.container import Container, build_container
@@ -45,6 +45,12 @@ def create_app(settings: Settings | None = None, *, container: Container | None 
         openapi_url="/openapi.json",
     )
     app.state.settings = settings
+    # outermost first: correlation ids wrap everything, the rate limit sits inside them
+    app.add_middleware(
+        RateLimitMiddleware,
+        per_minute=settings.service.rate_limit_per_minute,
+        burst=settings.service.rate_limit_burst,
+    )
     app.add_middleware(CorrelationMiddleware, max_body_bytes=settings.service.max_body_bytes)
     install_error_handlers(app)
     app.include_router(ops.router)

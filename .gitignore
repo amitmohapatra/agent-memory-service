@@ -15,3 +15,4 @@ build/
 /models/
 benchmark/results/*.tmp
 .DS_Store
+.bench_blob/

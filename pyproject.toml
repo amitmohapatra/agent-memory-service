@@ -134,7 +134,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S", "PLR", "T20", "ASYNC", "E501", "RUF043"]
+"tests/**" = ["S", "PLR", "T20", "ASYNC", "E501", "RUF043", "N806", "RUF100"]
 "src/memory_service/domain/errors.py" = ["N818"]
 "src/memory_service/ports/blob.py" = ["N818"]
 "src/memory_service/adapters/blob/filesystem.py" = ["N818"]

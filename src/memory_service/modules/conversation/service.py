@@ -53,6 +53,7 @@ class MessageAck:
 class AppendResult:
     ack: MessageAck
     message: Message | None
+    revision: int = 0  # thread revision after this append (validates the hot cache)
 
 
 class ConversationService:
@@ -160,6 +161,9 @@ class ConversationService:
             span("conversation.append", tenant_id=ctx.tenant_id),
             stage_seconds.labels("conversation.append").time(),
         ):
+            # concurrent first messages of a new thread (and its session/turn) must not
+            # race on creation: serialize writers per thread for this transaction
+            await uow.serialize(f"thread:{ctx.tenant_id}/{ctx.thread_id}")
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
             if thread is None:
                 await self.create_thread(uow, ctx, thread_id=ctx.thread_id)
@@ -270,7 +274,7 @@ class ConversationService:
                 if outbox_id is not None:
                     job_ids.append(f"obx_{outbox_id}")
 
-            await uow.threads.touch(ctx.tenant_id, ctx.thread_id)
+            revision = await uow.threads.touch(ctx.tenant_id, ctx.thread_id)
             await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, ctx.thread_id)
             ack = MessageAck(
                 message.message_id,
@@ -281,12 +285,12 @@ class ConversationService:
                 job_ids=job_ids,
                 observation_id=observation.observation_id,
             )
-            return AppendResult(ack, message)
+            return AppendResult(ack, message, revision)
 
     async def after_commit(self, result: AppendResult) -> None:
         """Post-commit side effects that must never affect the acknowledgement."""
         if result.message is not None:
-            await self.hot.append(result.message)
+            await self.hot.append(result.message, revision=result.revision)
 
     async def list_messages(
         self,
@@ -302,8 +306,13 @@ class ConversationService:
         if thread is None:
             raise NotFound("Thread not found")
         await self.authz.require(ctx, "can_read", "thread", thread_id)
-        if not include_internal and before_sequence is None:
-            cached = await self.hot.recent(ctx.tenant_id, thread_id, limit=limit)
+        newest = not include_internal and before_sequence is None
+        if newest:
+            # the cache answers only when it is provably current for this thread revision
+            # (appends during a cache outage advance the revision without reaching the cache)
+            cached = await self.hot.recent(
+                ctx.tenant_id, thread_id, limit=limit, revision=thread.revision
+            )
             if cached is not None:
                 return cached
         messages = await uow.messages.list_thread(
@@ -313,6 +322,8 @@ class ConversationService:
             before_sequence=before_sequence,
             include_internal=include_internal,
         )
+        if newest:
+            await self.hot.refill(ctx.tenant_id, thread_id, messages, revision=thread.revision)
         return messages
 
     async def get_message(

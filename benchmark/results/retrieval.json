@@ -6,22 +6,22 @@
   },
   "corpus": {
     "documents": 50,
-    "index_seconds": 16.29,
+    "index_seconds": 15.42,
     "indexed_points": 948
   },
   "latency_ms": {
-    "context_cached_p50": 2.55,
-    "context_cached_p95": 3.26,
-    "context_cold_p50": 68.79,
-    "context_cold_p95": 121.97,
-    "mean_recall": 79.46,
-    "recall_p50": 65.02,
-    "recall_p95": 112.19,
+    "context_cached_p50": 2.47,
+    "context_cached_p95": 2.68,
+    "context_cold_p50": 65.07,
+    "context_cold_p95": 116.13,
+    "mean_recall": 81.83,
+    "recall_p50": 60.04,
+    "recall_p95": 141.58,
     "samples": 30
   },
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "23b856cd23de1561c467cf329cbe27e50e439f5a",
+    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -36,7 +36,7 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T01:19:29.418908+00:00"
+    "timestamp": "2026-09-15T02:44:33.130365+00:00"
   },
   "providers": {
     "embedding": "hash-v1-d64",
@@ -60,7 +60,7 @@
           "definition": 3,
           "ebitda_result": 1,
           "litigation_footnote": 2,
-          "restructuring_savings": 17
+          "restructuring_savings": 6
         },
         "id": "ebitda_multi_hop",
         "missing": [],

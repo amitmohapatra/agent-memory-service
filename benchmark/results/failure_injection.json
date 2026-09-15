@@ -1,0 +1,53 @@
+{
+  "authz_denial": "pass",
+  "authz_denial_detail": {
+    "test_authz_denial_fails_closed": "passed"
+  },
+  "blob_outage": "pass",
+  "blob_outage_detail": {
+    "test_blob_outage_keeps_acknowledged_messages_and_recovers": "passed"
+  },
+  "cache_flush": "pass",
+  "cache_flush_detail": {
+    "test_cache_flush_mid_flow_changes_nothing": "passed",
+    "test_cache_flush_over_the_api_never_hides_acknowledged_messages": "passed"
+  },
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T02:43:10.068429+00:00"
+  },
+  "pytest_exit_status": 0,
+  "search_rebuild": "pass",
+  "search_rebuild_detail": {
+    "test_search_rebuild_from_postgres_restores_identical_hits": "passed"
+  },
+  "tests": {
+    "deselected": 0,
+    "errors": 0,
+    "failed": 0,
+    "passed": 6,
+    "skipped": 0,
+    "total": 6,
+    "xfailed": 0,
+    "xpassed": 0
+  },
+  "worker_kill": "pass",
+  "worker_kill_detail": {
+    "test_worker_kill_requeues_the_job_and_processes_once": "passed"
+  }
+}
