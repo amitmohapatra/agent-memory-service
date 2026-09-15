@@ -63,8 +63,32 @@ async def test_document_graph_and_multi_hop_stage(container, uow_factory) -> Non
     assert {"defined_in", "mentioned_in", "co_occurs_with"} <= preds
     defined = next(r for r in answer.relations if r.predicate == "defined_in")
     assert defined.evidence[0].page == 1 and defined.document_id == doc_id
-    pages = {r.evidence[0].page for r in answer.relations if r.predicate == "mentioned_in"}
-    assert {1, 11, 14} <= pages
+    mentioned = next(r for r in answer.relations if r.predicate == "mentioned_in")
+    assert {1, 11, 14, 20} <= set(mentioned.attributes["pages"])
+    assert {r.evidence[0].page for r in answer.relations} >= {1, 11, 14, 20}
+    # factual layer: values with period + currency, the FY25 comparative, exclusions, the
+    # counterfactual kept apart, and aliases ("FY26 Adjusted EBITDA" resolved to the metric)
+    by_pred: dict[str, list] = {}
+    for r in answer.relations:
+        by_pred.setdefault(r.predicate, []).append(r)
+    ents = {e.entity_id: e for e in answer.entities}
+    values = {(ents[r.object_id].name, r.attributes.get("period")) for r in by_pred["has_value"]}
+    assert {("EUR 98 million", "FY26"), ("EUR 81 million", "FY25")} <= values
+    excluded = {ents[r.object_id].canonical_name for r in by_pred["excludes"]}
+    assert {
+        "restructuring charges",
+        "litigation settlement",
+        "share-based compensation",
+    } <= excluded
+    counter = by_pred["would_have_value"][0]
+    assert ents[counter.object_id].name == "EUR 91 million" and counter.attributes["hypothetical"]
+    assert answer.matched[0].entity_type == "METRIC"
+    assert [
+        e.canonical_name for e in (await graph.query(U1, entities=["ARR"], hops=1)).matched
+    ] == ["recurring revenue"]
+    assert [
+        e.canonical_name for e in (await graph.query(U1, entities=["ACME"], hops=1)).matched
+    ] == ["acme corporation"]
     # two hops reach entities that never share a chunk with the seed
     two = await graph.query(U1, entities=["Adjusted EBITDA"], hops=2)
     assert two.visited > answer.visited and len(two.relations) > len(answer.relations)

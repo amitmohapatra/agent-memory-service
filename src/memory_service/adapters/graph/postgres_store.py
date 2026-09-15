@@ -207,12 +207,17 @@ class PostgresGraphStore:
     ) -> list[Entity]:
         if not names or not scope_keys:
             return []
+        wanted = [n for n in names if n]
         async with self.session() as s:
             rows = (
                 await s.scalars(
                     select(GraphEntityRow).where(
                         GraphEntityRow.tenant_id == tenant_id,
-                        GraphEntityRow.canonical_name.in_(list(names)),
+                        or_(
+                            GraphEntityRow.canonical_name.in_(wanted),
+                            # aliases hold canonical (lower-cased) forms: "arr", "acme"
+                            GraphEntityRow.aliases.op("?|")(array(wanted, type_=Text)),
+                        ),
                         _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
                     )
                 )
@@ -310,6 +315,23 @@ class PostgresGraphStore:
         return GraphNeighborhood(
             entities=[_entity(e) for e in ents], relations=rels, visited=len(visited)
         )
+
+    async def relations_for_document(
+        self, tenant_id: str, document_id: str, *, scope_keys: Sequence[str]
+    ) -> list[Relation]:
+        if not scope_keys:
+            return []
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphRelationRow).where(
+                        GraphRelationRow.tenant_id == tenant_id,
+                        GraphRelationRow.document_id == document_id,
+                        _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+                    )
+                )
+            ).all()
+        return [_relation(r) for r in rows]
 
     async def relations_for_memory(self, tenant_id: str, memory_id: str) -> list[Relation]:
         async with self.session() as s:

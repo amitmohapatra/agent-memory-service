@@ -190,6 +190,154 @@
           }
         ]
       }
+    },
+    {
+      "id": "segments_table",
+      "query": "Which segments grew and which shrank at ACME in FY26?",
+      "query_type": "TEMPORAL",
+      "critical": true,
+      "required_groups": {
+        "table": [
+          {
+            "document": "acme",
+            "page": 7,
+            "contains": "| Subscriptions | 276 | 301 |"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sensors_segment",
+      "query": "How did the Sensors segment perform for GLOBEX?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "sensors": [
+          {
+            "document": "globex",
+            "page": 6,
+            "contains": "| Sensors | 402 | 471 |"
+          }
+        ]
+      }
+    },
+    {
+      "id": "arr_alias",
+      "query": "What is ARR and how much was it in FY26?",
+      "query_type": "TEMPORAL",
+      "critical": true,
+      "required_groups": {
+        "definition": [
+          {
+            "document": "acme",
+            "page": 1,
+            "contains": "Recurring Revenue** (\"ARR\")"
+          }
+        ],
+        "value": [
+          {
+            "document": "acme",
+            "page": 7,
+            "contains": "Recurring Revenue grew 9%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "approval",
+      "query": "Who approved the restructuring programme and when?",
+      "query_type": "ENTITY_RELATION",
+      "critical": true,
+      "required_groups": {
+        "board": [
+          {
+            "document": "acme",
+            "page": 1,
+            "contains": "The Board approved a restructuring programme"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synergies",
+      "query": "What are the expected synergies from the Initech deal?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "section9": [
+          {
+            "document": "globex",
+            "page": 13,
+            "contains": "Expected synergies"
+          }
+        ]
+      }
+    },
+    {
+      "id": "margin_exclusions",
+      "query": "What items does Adjusted Operating Margin exclude?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "definition": [
+          {
+            "document": "globex",
+            "page": 1,
+            "contains": "Adjusted Operating Margin** means"
+          }
+        ],
+        "integration": [
+          {
+            "document": "globex",
+            "page": 13,
+            "contains": "excluded from Adjusted Operating Margin"
+          }
+        ],
+        "warranty": [
+          {
+            "document": "globex",
+            "page": 18,
+            "contains": "warranty provision"
+          }
+        ]
+      }
+    },
+    {
+      "id": "apac_operator",
+      "query": "Which company operates in Asia-Pacific?",
+      "query_type": "ENTITY_RELATION",
+      "critical": true,
+      "required_groups": {
+        "overview": [
+          {
+            "document": "globex",
+            "page": 1,
+            "contains": "Asia-Pacific"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cross_document",
+      "query": "Compare ACME and GLOBEX total revenue in FY26",
+      "query_type": "DOCUMENT_MULTI_HOP",
+      "critical": true,
+      "required_groups": {
+        "acme_revenue": [
+          {
+            "document": "acme",
+            "page": 7,
+            "contains": "EUR 412 million"
+          }
+        ],
+        "globex_revenue": [
+          {
+            "document": "globex",
+            "page": 6,
+            "contains": "USD 655 million"
+          }
+        ]
+      }
     }
   ]
 }

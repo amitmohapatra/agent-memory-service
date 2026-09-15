@@ -7,8 +7,8 @@
   "representative": false,
   "note": "hash embedding is a deterministic stand-in; quality numbers are not representative",
   "k": 20,
-  "questions": 10,
-  "critical_questions": 9,
+  "questions": 18,
+  "critical_questions": 17,
   "critical_recall_at_k": 1.0,
   "critical_evidence_group_recall": 1.0,
   "recall_at_k": 1.0,
@@ -159,6 +159,122 @@
         "expected": "GENERAL_SEMANTIC",
         "observed": "GENERAL_SEMANTIC"
       }
+    },
+    {
+      "id": "segments_table",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "table": 1
+      },
+      "query_type": {
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
+      }
+    },
+    {
+      "id": "sensors_segment",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "sensors": 2
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "arr_alias",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "definition": 1,
+        "value": 10
+      },
+      "query_type": {
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
+      }
+    },
+    {
+      "id": "approval",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "board": 1
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "synergies",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "section9": 1
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "margin_exclusions",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "definition": 1,
+        "integration": 7,
+        "warranty": 3
+      },
+      "query_type": {
+        "expected": "GENERAL_SEMANTIC",
+        "observed": "GENERAL_SEMANTIC"
+      }
+    },
+    {
+      "id": "apac_operator",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "overview": 1
+      },
+      "query_type": {
+        "expected": "ENTITY_RELATION",
+        "observed": "ENTITY_RELATION"
+      }
+    },
+    {
+      "id": "cross_document",
+      "critical": true,
+      "recall": 1.0,
+      "complete": true,
+      "missing": [],
+      "first_rank": {
+        "acme_revenue": 1,
+        "globex_revenue": 4
+      },
+      "query_type": {
+        "expected": "DOCUMENT_MULTI_HOP",
+        "observed": "DOCUMENT_MULTI_HOP"
+      }
     }
   ],
   "critical_evidence_complete_rate": 1.0,
@@ -172,11 +288,19 @@
     "ebitda_reconciliation_table": "COMPLETE",
     "distractor_margin": "COMPLETE",
     "distractor_acquisition": "COMPLETE",
-    "depreciation_policy": "COMPLETE"
+    "depreciation_policy": "COMPLETE",
+    "segments_table": "COMPLETE",
+    "sensors_segment": "COMPLETE",
+    "arr_alias": "COMPLETE",
+    "approval": "COMPLETE",
+    "synergies": "COMPLETE",
+    "margin_exclusions": "COMPLETE",
+    "apac_operator": "COMPLETE",
+    "cross_document": "COMPLETE"
   },
   "provenance": {
-    "timestamp": "2026-09-15T02:48:02.122155+00:00",
-    "git_commit": "1a73addd76f1088869d3a674e77fd057e5a8acb9",
+    "timestamp": "2026-09-15T06:06:50.700201+00:00",
+    "git_commit": "f02cbeab7057dc4bb3afb4e3deb175c95eabc0cd",
     "python": "3.12.3",
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "machine": "x86_64",

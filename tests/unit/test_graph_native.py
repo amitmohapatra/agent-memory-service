@@ -132,9 +132,29 @@ async def test_document_enrichment_definitions_mentions_cooccurrence() -> None:
         "restructuring programme",
     }
     assert co.evidence[0].chunk_id == chunks[0].chunk_id and co.evidence[0].page == 11
-    mentioned = [r for r in relations if r.predicate == "mentioned_in"]
-    assert {r.evidence[0].page for r in mentioned} == {11, 14}
+    mentioned = {names_by_id[r.subject_id]: r for r in relations if r.predicate == "mentioned_in"}
+    assert mentioned["adjusted ebitda"].attributes["pages"] == [11]
+    assert mentioned["restructuring programme"].attributes["pages"] == [11, 14]
     assert all(r.visibility_keys == ["thread:acme/thr_1"] for r in relations)
+    # the factual layer: typed metric values with period/currency, and causes
+    values = {
+        (names_by_id[r.subject_id], names_by_id[r.object_id]): r
+        for r in relations
+        if r.predicate == "has_value"
+    }
+    ebitda = values[("adjusted ebitda", "eur 98 million")]
+    assert ebitda.attributes["currency"] == "EUR" and ebitda.attributes["amount"] == 98_000_000
+    assert ebitda.attributes["period"] == "FY26" and ebitda.evidence[0].page == 11
+    assert names["eur 98 million"].entity_type == "MONEY"
+    assert ("annualised savings", "eur 19 million") in values
+    driven = next(r for r in relations if r.predicate == "driven_by")
+    assert names_by_id[driven.subject_id] == "adjusted ebitda"
+    assert names_by_id[driven.object_id] == "restructuring programme"
+    reduced = next(r for r in relations if r.predicate == "reduced")
+    assert names_by_id[reduced.subject_id] == "restructuring programme"
+    assert names_by_id[reduced.object_id] == "headcount" and reduced.attributes["by"] == "12%"
+    assert names["restructuring programme"].entity_type == "EVENT"
+    assert names["adjusted ebitda"].entity_type == "METRIC"
 
 
 async def test_memory_store_traversal_bounds_visibility_and_time() -> None:

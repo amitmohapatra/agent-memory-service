@@ -7,6 +7,7 @@ results summary, then fails when any hard gate is violated:
     unauthorized retrieval            = 0
     critical Recall@K                 = 1.00
     critical Evidence-Group Recall    = 1.00
+    KG fact recall / false facts      = 1.00 / 0   (golden facts over the fixtures)
     false-merge rate                 <= configured threshold
     p95 latency                      <= configured budget
     failure-recovery suite            passes
@@ -103,6 +104,20 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
         failures.append(
             f"false merge rate {memory.get('false_merge_rate')} > {settings.memory_intelligence.false_merge_rate_max}"
         )
+
+    kg = _load("kg_gate.json")
+    if kg is None:
+        failures.append("kg_gate.json missing (knowledge-graph gate has no evidence)")
+    else:
+        if kg.get("fact_recall", 0.0) < 1.0:
+            failures.append(f"KG fact recall = {kg.get('fact_recall')} (must be 1.00)")
+        if kg.get("false_facts", 1) != 0 or kg.get("noise_entities", 1) != 0:
+            failures.append(
+                f"KG false facts = {kg.get('false_facts')}, noise entities = "
+                f"{kg.get('noise_entities')} (must be 0)"
+            )
+        if kg.get("query_hit_rate", 0.0) < 1.0:
+            failures.append(f"KG query hit rate = {kg.get('query_hit_rate')} (must be 1.00)")
 
     perf = _load("performance.json")
     if perf is None:

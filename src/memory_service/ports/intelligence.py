@@ -180,6 +180,16 @@ class GraphStore(Protocol):
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...
 
+    async def relations_for_document(
+        self, tenant_id: str, document_id: str, *, scope_keys: Sequence[str]
+    ) -> list[Relation]:
+        """Every visible relation extracted from a document (audits, evals, exports)."""
+        ...
+
+    async def get_entities(
+        self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
+    ) -> list[Entity]: ...
+
     async def ping(self) -> bool: ...
 
 

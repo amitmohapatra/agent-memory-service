@@ -1,0 +1,631 @@
+{
+  "name": "kg_facts_fy26",
+  "description": "Knowledge-graph golden set over the ACME and GLOBEX FY26 fixtures: the typed entities, aliases and factual relations an analyst would expect, plus names that must NOT become entities (noise). Objects are canonical names or value displays; attributes are subsets that must match.",
+  "documents": {
+    "acme": "acme_fy26_annual_report.md",
+    "globex": "globex_fy26_annual_report.md"
+  },
+  "entities": {
+    "acme": {
+      "acme corporation": {
+        "type": "ORG",
+        "aliases": [
+          "acme"
+        ]
+      },
+      "the board": {
+        "type": "ORG"
+      },
+      "adjusted ebitda": {
+        "type": "METRIC"
+      },
+      "recurring revenue": {
+        "type": "METRIC",
+        "aliases": [
+          "arr"
+        ]
+      },
+      "revenue": {
+        "type": "METRIC",
+        "aliases": [
+          "total revenue"
+        ]
+      },
+      "restructuring programme": {
+        "type": "EVENT"
+      },
+      "restructuring charges": {
+        "type": "METRIC"
+      },
+      "annualised savings": {
+        "type": "METRIC"
+      },
+      "litigation settlement": {
+        "type": "METRIC"
+      },
+      "legacy services": {
+        "type": "SEGMENT"
+      },
+      "subscriptions": {
+        "type": "SEGMENT"
+      },
+      "europe": {
+        "type": "LOCATION"
+      },
+      "north america": {
+        "type": "LOCATION"
+      },
+      "headcount": {
+        "type": "METRIC"
+      },
+      "eur 412 million": {
+        "type": "MONEY"
+      }
+    },
+    "globex": {
+      "globex industries": {
+        "type": "ORG",
+        "aliases": [
+          "globex"
+        ]
+      },
+      "initech": {
+        "type": "ORG"
+      },
+      "acquisition of initech": {
+        "type": "EVENT"
+      },
+      "adjusted operating margin": {
+        "type": "METRIC"
+      },
+      "bookings": {
+        "type": "METRIC"
+      },
+      "revenue": {
+        "type": "METRIC",
+        "aliases": [
+          "total revenue"
+        ]
+      },
+      "sensors": {
+        "type": "SEGMENT"
+      },
+      "services": {
+        "type": "SEGMENT"
+      },
+      "asia-pacific": {
+        "type": "LOCATION"
+      },
+      "integration costs": {
+        "type": "METRIC"
+      },
+      "warranty provision": {
+        "type": "METRIC"
+      },
+      "expected synergies": {
+        "type": "METRIC"
+      },
+      "definitions": {
+        "type": "SECTION"
+      }
+    }
+  },
+  "noise": {
+    "acme": [
+      "eur m",
+      "segment",
+      "operating",
+      "depreciation",
+      "annualised",
+      "fy25",
+      "europe and north america",
+      "fy26 adjusted ebitda",
+      "the board approved",
+      "table 1",
+      "item"
+    ],
+    "globex": [
+      "usd m",
+      "segment",
+      "operating",
+      "item",
+      "fy26 adjusted operating margin",
+      "the board approved"
+    ]
+  },
+  "facts": {
+    "acme": [
+      {
+        "id": "revenue_fy26",
+        "subject": "revenue",
+        "predicate": "has_value",
+        "object": "eur 412 million",
+        "attributes": {
+          "period": "FY26",
+          "currency": "EUR",
+          "amount": 412000000.0,
+          "change": "-4%"
+        },
+        "page": 7
+      },
+      {
+        "id": "revenue_fy25_table",
+        "subject": "revenue",
+        "predicate": "has_value",
+        "object": "eur 429 million",
+        "attributes": {
+          "period": "FY25",
+          "table": "Table 1: Revenue by segment"
+        }
+      },
+      {
+        "id": "revenue_driver",
+        "subject": "revenue",
+        "predicate": "driven_by",
+        "object": "legacy services",
+        "attributes": {
+          "direction": "down"
+        },
+        "page": 7
+      },
+      {
+        "id": "arr_fy26",
+        "subject": "recurring revenue",
+        "predicate": "has_value",
+        "object": "eur 301 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "+9%"
+        }
+      },
+      {
+        "id": "subscriptions_fy26",
+        "subject": "subscriptions",
+        "predicate": "has_value",
+        "object": "eur 301 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "+9%",
+          "metric": "Revenue"
+        }
+      },
+      {
+        "id": "legacy_fy26",
+        "subject": "legacy services",
+        "predicate": "has_value",
+        "object": "eur 111 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "-27%"
+        }
+      },
+      {
+        "id": "legacy_segment",
+        "subject": "legacy services",
+        "predicate": "segment_of",
+        "object": "revenue"
+      },
+      {
+        "id": "ebitda_fy26",
+        "subject": "adjusted ebitda",
+        "predicate": "has_value",
+        "object": "eur 98 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "+21%",
+          "previous_value": "EUR 81 million",
+          "direction": "up"
+        },
+        "page": 11
+      },
+      {
+        "id": "ebitda_fy25",
+        "subject": "adjusted ebitda",
+        "predicate": "has_value",
+        "object": "eur 81 million",
+        "attributes": {
+          "period": "FY25"
+        }
+      },
+      {
+        "id": "ebitda_driver",
+        "subject": "adjusted ebitda",
+        "predicate": "driven_by",
+        "object": "restructuring savings",
+        "attributes": {
+          "direction": "up"
+        },
+        "page": 11
+      },
+      {
+        "id": "ebitda_excludes_restructuring",
+        "subject": "adjusted ebitda",
+        "predicate": "excludes",
+        "object": "restructuring charges"
+      },
+      {
+        "id": "ebitda_excludes_sbc",
+        "subject": "adjusted ebitda",
+        "predicate": "excludes",
+        "object": "share-based compensation"
+      },
+      {
+        "id": "ebitda_excludes_litigation",
+        "subject": "adjusted ebitda",
+        "predicate": "excludes",
+        "object": "litigation settlement",
+        "attributes": {
+          "value": "EUR 7 million"
+        },
+        "page": 20
+      },
+      {
+        "id": "ebitda_counterfactual",
+        "subject": "adjusted ebitda",
+        "predicate": "would_have_value",
+        "object": "eur 91 million",
+        "attributes": {
+          "hypothetical": true
+        },
+        "page": 20
+      },
+      {
+        "id": "no_false_ebitda_91",
+        "forbidden": true,
+        "subject": "adjusted ebitda",
+        "predicate": "has_value",
+        "object": "eur 91 million"
+      },
+      {
+        "id": "no_false_ebitda_7",
+        "forbidden": true,
+        "subject": "adjusted ebitda",
+        "predicate": "has_value",
+        "object": "eur 7 million"
+      },
+      {
+        "id": "restructuring_charges_fy26",
+        "subject": "restructuring charges",
+        "predicate": "has_value",
+        "object": "eur 26 million",
+        "attributes": {
+          "period": "FY26"
+        },
+        "page": 14
+      },
+      {
+        "id": "savings_estimate",
+        "subject": "annualised savings",
+        "predicate": "has_value",
+        "object": "eur 19 million",
+        "attributes": {
+          "estimate": true
+        }
+      },
+      {
+        "id": "headcount_cut",
+        "subject": "restructuring programme",
+        "predicate": "reduced",
+        "object": "headcount",
+        "attributes": {
+          "by": "12%"
+        },
+        "page": 14
+      },
+      {
+        "id": "data_centres",
+        "subject": "restructuring programme",
+        "predicate": "consolidated",
+        "object": "data centres",
+        "attributes": {
+          "count": 3
+        }
+      },
+      {
+        "id": "approved",
+        "subject": "restructuring programme",
+        "predicate": "approved_by",
+        "object": "the board",
+        "attributes": {
+          "period": "Q2"
+        },
+        "page": 1
+      },
+      {
+        "id": "provides",
+        "subject": "acme corporation",
+        "predicate": "provides",
+        "object": "workflow software"
+      },
+      {
+        "id": "serves",
+        "subject": "acme corporation",
+        "predicate": "serves",
+        "object": "mid-market manufacturers"
+      },
+      {
+        "id": "operates_eu",
+        "subject": "acme corporation",
+        "predicate": "operates_in",
+        "object": "europe"
+      },
+      {
+        "id": "operates_na",
+        "subject": "acme corporation",
+        "predicate": "operates_in",
+        "object": "north america"
+      },
+      {
+        "id": "xref",
+        "subject": "business overview",
+        "predicate": "refers_to",
+        "object": "restructuring programme",
+        "attributes": {
+          "reference": "Section 8"
+        }
+      },
+      {
+        "id": "definition",
+        "subject": "adjusted ebitda",
+        "predicate": "defined_in",
+        "object": "doc",
+        "page": 1
+      },
+      {
+        "id": "table2_fy26",
+        "subject": "adjusted ebitda",
+        "predicate": "has_value",
+        "object": "98",
+        "attributes": {
+          "period": "FY26",
+          "table": "Table 2: Adjusted EBITDA reconciliation"
+        }
+      }
+    ],
+    "globex": [
+      {
+        "id": "revenue_fy26",
+        "subject": "revenue",
+        "predicate": "has_value",
+        "object": "usd 655 million",
+        "attributes": {
+          "period": "FY26",
+          "currency": "USD",
+          "change": "+11%"
+        },
+        "page": 6
+      },
+      {
+        "id": "revenue_driver_sensors",
+        "subject": "revenue",
+        "predicate": "driven_by",
+        "object": "sensors",
+        "attributes": {
+          "direction": "up"
+        }
+      },
+      {
+        "id": "revenue_driver_initech",
+        "subject": "revenue",
+        "predicate": "driven_by",
+        "object": "initech"
+      },
+      {
+        "id": "bookings",
+        "subject": "bookings",
+        "predicate": "has_value",
+        "object": "usd 720 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "+14%"
+        }
+      },
+      {
+        "id": "margin_fy26",
+        "subject": "adjusted operating margin",
+        "predicate": "has_value",
+        "object": "14.2%",
+        "attributes": {
+          "period": "FY26",
+          "previous_value": "16.8%",
+          "direction": "down"
+        },
+        "page": 9
+      },
+      {
+        "id": "margin_fy25",
+        "subject": "adjusted operating margin",
+        "predicate": "has_value",
+        "object": "16.8%",
+        "attributes": {
+          "period": "FY25"
+        }
+      },
+      {
+        "id": "margin_driver_integration",
+        "subject": "adjusted operating margin",
+        "predicate": "driven_by",
+        "object": "integration costs",
+        "attributes": {
+          "direction": "down"
+        }
+      },
+      {
+        "id": "margin_driver_prices",
+        "subject": "adjusted operating margin",
+        "predicate": "driven_by",
+        "object": "input prices"
+      },
+      {
+        "id": "margin_excludes_impairment",
+        "subject": "adjusted operating margin",
+        "predicate": "excludes",
+        "object": "impairment charges"
+      },
+      {
+        "id": "margin_excludes_integration",
+        "subject": "adjusted operating margin",
+        "predicate": "excludes",
+        "object": "integration costs",
+        "attributes": {
+          "value": "USD 12 million"
+        }
+      },
+      {
+        "id": "margin_excludes_warranty",
+        "subject": "adjusted operating margin",
+        "predicate": "excludes",
+        "object": "warranty provision",
+        "attributes": {
+          "value": "USD 9 million"
+        },
+        "page": 18
+      },
+      {
+        "id": "margin_counterfactual",
+        "subject": "adjusted operating margin",
+        "predicate": "would_have_value",
+        "object": "12.8%",
+        "attributes": {
+          "hypothetical": true
+        }
+      },
+      {
+        "id": "no_false_margin_128",
+        "forbidden": true,
+        "subject": "adjusted operating margin",
+        "predicate": "has_value",
+        "object": "12.8%"
+      },
+      {
+        "id": "acquired",
+        "subject": "globex industries",
+        "predicate": "acquired",
+        "object": "initech"
+      },
+      {
+        "id": "no_board_acquired",
+        "forbidden": true,
+        "subject": "the board",
+        "predicate": "acquired",
+        "object": "initech"
+      },
+      {
+        "id": "acq_approved",
+        "subject": "acquisition of initech",
+        "predicate": "approved_by",
+        "object": "the board",
+        "attributes": {
+          "period": "Q3"
+        }
+      },
+      {
+        "id": "acq_closed",
+        "subject": "acquisition of initech",
+        "predicate": "closed_on",
+        "object": "1 october"
+      },
+      {
+        "id": "acq_consideration",
+        "subject": "acquisition of initech",
+        "predicate": "consideration",
+        "object": "usd 210 million",
+        "attributes": {
+          "amount": 210000000.0
+        },
+        "page": 13
+      },
+      {
+        "id": "synergies",
+        "subject": "expected synergies",
+        "predicate": "has_value",
+        "object": "usd 25 million",
+        "attributes": {
+          "period": "FY28+",
+          "per": "year",
+          "estimate": true
+        }
+      },
+      {
+        "id": "sensors_fy26",
+        "subject": "sensors",
+        "predicate": "has_value",
+        "object": "usd 471 million",
+        "attributes": {
+          "period": "FY26",
+          "change": "+17%",
+          "metric": "Revenue"
+        }
+      },
+      {
+        "id": "sensors_segment",
+        "subject": "sensors",
+        "predicate": "segment_of",
+        "object": "revenue"
+      },
+      {
+        "id": "provides",
+        "subject": "globex industries",
+        "predicate": "provides",
+        "object": "industrial sensors"
+      },
+      {
+        "id": "serves",
+        "subject": "globex industries",
+        "predicate": "serves",
+        "object": "utilities"
+      },
+      {
+        "id": "operates",
+        "subject": "globex industries",
+        "predicate": "operates_in",
+        "object": "asia-pacific"
+      },
+      {
+        "id": "acq_involves",
+        "subject": "acquisition of initech",
+        "predicate": "involves",
+        "object": "initech"
+      }
+    ]
+  },
+  "queries": {
+    "acme": [
+      {
+        "question": "What was ACME's total revenue in FY26?",
+        "expect_fact": "revenue_fy26"
+      },
+      {
+        "question": "What does ARR stand for and how much was it?",
+        "expect_fact": "arr_fy26"
+      },
+      {
+        "question": "Why did Adjusted EBITDA increase?",
+        "expect_fact": "ebitda_driver"
+      },
+      {
+        "question": "What does Adjusted EBITDA exclude?",
+        "expect_fact": "ebitda_excludes_litigation"
+      },
+      {
+        "question": "Who approved the restructuring programme?",
+        "expect_fact": "approved"
+      }
+    ],
+    "globex": [
+      {
+        "question": "How much did GLOBEX pay for Initech?",
+        "expect_fact": "acq_consideration",
+        "hops": 2
+      },
+      {
+        "question": "What drove the decline in Adjusted Operating Margin?",
+        "expect_fact": "margin_driver_integration"
+      },
+      {
+        "question": "Where does GLOBEX operate?",
+        "expect_fact": "operates"
+      }
+    ]
+  }
+}

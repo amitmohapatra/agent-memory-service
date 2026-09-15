@@ -28,6 +28,12 @@ GOOD = {
         "reranker": "lexical-v1",
     },
     "memory_gate.json": {"false_merge_rate": 0.0},
+    "kg_gate.json": {
+        "fact_recall": 1.0,
+        "false_facts": 0,
+        "noise_entities": 0,
+        "query_hit_rate": 1.0,
+    },
     "performance.json": {
         "chat_accept_p95_ms": 30,
         "cached_context_p95_ms": 5,
@@ -73,6 +79,9 @@ def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
         ("retrieval_gate.json", {"k": 10}, "critical Recall@20"),
         ("retrieval_gate.json", {"critical_evidence_group_recall": 0.5}, "Evidence-Group"),
         ("memory_gate.json", {"false_merge_rate": 0.02}, "false merge rate"),
+        ("kg_gate.json", {"fact_recall": 0.9}, "KG fact recall"),
+        ("kg_gate.json", {"false_facts": 1}, "KG false facts"),
+        ("kg_gate.json", {"query_hit_rate": 0.5}, "KG query hit rate"),
         ("performance.json", {"recall_p95_ms": 301}, "recall_p95_ms = 301"),
         ("performance.json", {"file_accept_p95_ms": None}, "file_accept_p95_ms not measured"),
         ("failure_injection.json", {"worker_kill": "fail"}, "worker_kill = fail"),

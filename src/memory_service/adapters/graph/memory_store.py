@@ -59,7 +59,7 @@ class MemoryGraphStore:
             e
             for e in self.entities.values()
             if e.tenant_id == tenant_id
-            and e.canonical_name in wanted
+            and (e.canonical_name in wanted or wanted.intersection(e.aliases))
             and self._visible(e.visibility_keys, scope_keys)
         ]
 
@@ -141,6 +141,17 @@ class MemoryGraphStore:
         for rid in gone:
             del self.relations[rid]
         return len(gone)
+
+    async def relations_for_document(
+        self, tenant_id: str, document_id: str, *, scope_keys: Sequence[str]
+    ) -> list[Relation]:
+        return [
+            r
+            for r in self.relations.values()
+            if r.tenant_id == tenant_id
+            and r.document_id == document_id
+            and self._visible(r.visibility_keys, scope_keys)
+        ]
 
     async def relations_for_memory(self, tenant_id: str, memory_id: str) -> list[Relation]:
         return [
