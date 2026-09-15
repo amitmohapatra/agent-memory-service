@@ -30,6 +30,12 @@ COPY migrations ./migrations
 COPY alembic.ini ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra gcp --extra models --extra docling
+# COPY preserves the builder's permissions: a source tree checked out with a restrictive
+# umask (0700 directories) produces an image whose own package is unreadable to the
+# unprivileged runtime user, and the container exits with ModuleNotFoundError. The image
+# must not depend on how the build host happened to be set up. Only the copied sources need
+# this — the virtualenv is created inside the image with normal permissions.
+RUN chmod -R a+rX /app/src /app/sdk /app/integrations /app/migrations /app/alembic.ini
 ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8080
 USER nobody
