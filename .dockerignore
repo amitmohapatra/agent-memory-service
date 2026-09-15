@@ -1,0 +1,48 @@
+# The build context is copied to the daemon and then into the image; anything here that is
+# not needed to build is both slower and, for the virtualenvs, hundreds of megabytes of
+# someone else's platform baked into the image.
+
+# Virtualenvs — including the ones inside the standalone integrations, which are not part of
+# the uv workspace and were adding ~560 MB to every image.
+.venv/
+**/.venv/
+**/node_modules/
+
+# Secrets and keys must never enter an image layer.
+.env
+.env.*
+!.env.example
+*.pem
+*_rsa
+*_ed25519
+deploy_key*
+.deploy_key
+
+# Model weights are mounted at run time (./models -> /models), never copied in.
+models/
+
+# Version control, caches and local state
+.git/
+.github/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.deepeval/
+.coverage
+htmlcov/
+*.log
+
+# Local data and scratch
+.blob/
+.bench_blob/
+benchmark/
+Claude outputs/
+*.bundle
+
+# Documentation and development-only material
+docs/
+examples/
+VALIDATION_PROMPT*.md

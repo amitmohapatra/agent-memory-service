@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 #
 # Targets:
-#   runtime     (default) production image: core + gcp + models + docling extras, no dev tools
+#   runtime     (default) production image: core + the extras named by the EXTRAS build arg
 #   validation  runtime + dev tooling + every extra; the repository is bind-mounted at /app so
 #               the release gates run against the working tree with real weights and services
 FROM python:3.12-slim AS base
@@ -18,18 +18,28 @@ COPY integrations/langgraph/pyproject.toml integrations/langgraph/README.md inte
 COPY integrations/crewai/pyproject.toml integrations/crewai/README.md integrations/crewai/
 COPY integrations/mcp/pyproject.toml integrations/mcp/README.md integrations/mcp/
 
+# Which optional extras go into the image. The default is what a deployment needs to run
+# with real embedding/rerank/NLI models. `docling` (rich document parsing) is opt-in: it
+# brings opencv, rapidocr, pandas and litellm — roughly 300 MB — and the service falls back
+# to its builtin parser without it.
+#
+#   docker compose build --build-arg EXTRAS="gcp models docling"
+ARG EXTRAS="gcp models"
+
 FROM base AS runtime-deps
+ARG EXTRAS
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-workspace --extra gcp --extra models --extra docling
+    uv sync --frozen --no-dev --no-install-workspace $(for e in $EXTRAS; do echo --extra $e; done)
 
 FROM runtime-deps AS runtime
+ARG EXTRAS
 COPY src ./src
 COPY sdk ./sdk
 COPY integrations ./integrations
 COPY migrations ./migrations
 COPY alembic.ini ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --extra gcp --extra models --extra docling
+    uv sync --frozen --no-dev $(for e in $EXTRAS; do echo --extra $e; done)
 # COPY preserves the builder's permissions: a source tree checked out with a restrictive
 # umask (0700 directories) produces an image whose own package is unreadable to the
 # unprivileged runtime user, and the container exits with ModuleNotFoundError. The image
