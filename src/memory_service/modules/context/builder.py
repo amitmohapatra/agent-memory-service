@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -184,7 +185,11 @@ class ContextBuilder:
             messages = await self.conversation.list_messages(
                 uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
             )
-        return render_window(ctx.thread_id, messages, self.cfg.conversation_token_budget)
+        window = render_window(ctx.thread_id, messages, self.cfg.conversation_token_budget)
+        older = [m for m in messages if m.message_id not in set(window.message_ids)]
+        if older:
+            window = window.model_copy(update={"summary": rolling_summary(older)})
+        return window
 
     def _assemble(
         self,
@@ -224,7 +229,31 @@ class ContextBuilder:
                 else EvidenceStatus.INSUFFICIENT
             )
         )
-        diagnostics = {k: v for k, v in result.diagnostics.items() if k != "evidence"}
+        # the report must describe what is IN the bundle: companions that were retrieved but
+        # dropped by the token budget count as missing
+        included_nodes = {
+            ev.node_id for item in (*knowledge, *summaries) for ev in item.evidence if ev.node_id
+        }
+        if report.required_groups and report.status is not EvidenceStatus.INSUFFICIENT:
+            targets = dict(zip(report.required_groups, _group_targets(result), strict=False))
+            dropped = [g for g, ids in targets.items() if ids and not (set(ids) & included_nodes)]
+            if dropped:
+                missing = sorted(set(report.missing_groups) | set(dropped))
+                report = report.model_copy(
+                    update={
+                        "status": EvidenceStatus.INCOMPLETE,
+                        "missing_groups": missing,
+                        "satisfied_groups": [
+                            g for g in report.satisfied_groups if g not in missing
+                        ],
+                        "notes": [*report.notes, "companion evidence exceeded the token budget"],
+                    }
+                )
+        if not (knowledge or memories or graph_facts or summaries):
+            report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
+        diagnostics = {
+            k: v for k, v in result.diagnostics.items() if k not in ("evidence", "evidence_targets")
+        }
         return ContextBundle(
             query=query,
             query_type=result.routed.query_type,
@@ -239,6 +268,30 @@ class ContextBuilder:
             revision_fingerprint=revision_fp,
             diagnostics=diagnostics,
         )
+
+
+def _group_targets(result: RetrievalResult) -> list[list[str]]:
+    """Acceptable node ids per required group, in ``required_groups`` order."""
+    targets = result.diagnostics.get("evidence_targets") or {}
+    groups = (result.diagnostics.get("evidence") or {}).get("required_groups", [])
+    return [list(targets.get(g, [])) for g in groups]
+
+
+def rolling_summary(messages: Sequence[Message], *, max_chars: int = 600) -> str:
+    """Deterministic digest of turns that fell out of the window: role + first sentence."""
+    parts: list[str] = []
+    used = 0
+    for m in messages:
+        if m.kind is not MessageKind.VISIBLE or not m.content.strip():
+            continue
+        first = re.split(r"(?<=[.!?])\s+", m.content.strip(), maxsplit=1)[0][:160]
+        line = f"{m.role.value.lower()}: {first}"
+        if used + len(line) > max_chars:
+            parts.append("…")
+            break
+        parts.append(line)
+        used += len(line) + 1
+    return "\n".join(parts)
 
 
 def render_window(

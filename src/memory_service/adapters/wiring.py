@@ -40,6 +40,7 @@ async def wire_all(container: Container) -> None:
     _wire_retrieval(container)
     _wire_memory(container)
     _wire_graph(container)
+    _wire_context_preservation(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -429,3 +430,20 @@ def _wire_graph(container: Container) -> None:
             container.services["uow_factory"],
             max_facts=settings.context.graph_facts_max,
         )
+
+
+def _wire_context_preservation(container: Container) -> None:
+    """M9: expansion over the Document Context Graph, then evidence-group verification."""
+    from memory_service.modules.context.evidence import VerificationStage
+    from memory_service.modules.context.expansion import ExpansionStage
+
+    settings = container.settings.retrieval
+    engine = container.services["retrieval"]
+    expansion = ExpansionStage(container.services["uow_factory"], settings=settings)
+    if settings.parent_expansion or settings.neighbor_expansion or settings.definition_expansion:
+        engine.post_stages["expansion"] = expansion
+    if settings.evidence_verification:
+        engine.post_stages["verify"] = VerificationStage(
+            container.services["uow_factory"], expansion, settings=settings
+        )
+    container.services["expansion"] = expansion

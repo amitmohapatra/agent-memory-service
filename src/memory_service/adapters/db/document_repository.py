@@ -405,6 +405,50 @@ class SqlDocumentRepository:
         )
         return [_chunk(r) for r in rows]
 
+    async def chunks_for_nodes(self, tenant_id: str, node_ids: Sequence[str]) -> list[Chunk]:
+        if not node_ids:
+            return []
+        rows = (
+            await self.s.execute(
+                select(ChunkRow)
+                .where(ChunkRow.tenant_id == tenant_id, ChunkRow.node_id.in_(list(node_ids)))
+                .order_by(ChunkRow.node_id, ChunkRow.ordinal)
+            )
+        ).scalars()
+        return [_chunk(r) for r in rows]
+
+    async def set_node_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None:
+        if not summaries:
+            return
+        rows = (
+            await self.s.execute(
+                select(DocumentNodeRow).where(
+                    DocumentNodeRow.tenant_id == tenant_id,
+                    DocumentNodeRow.node_id.in_(list(summaries)),
+                )
+            )
+        ).scalars()
+        for r in rows:
+            r.system_metadata = {**(r.system_metadata or {}), "summary": summaries[r.node_id]}
+        await self.s.flush()
+
+    async def node_summaries(self, tenant_id: str, node_ids: Sequence[str]) -> dict[str, str]:
+        if not node_ids:
+            return {}
+        rows = (
+            await self.s.execute(
+                select(DocumentNodeRow).where(
+                    DocumentNodeRow.tenant_id == tenant_id,
+                    DocumentNodeRow.node_id.in_(list(node_ids)),
+                )
+            )
+        ).scalars()
+        return {
+            r.node_id: str((r.system_metadata or {}).get("summary"))
+            for r in rows
+            if (r.system_metadata or {}).get("summary")
+        }
+
     async def mark_chunks_indexed(
         self, chunk_ids: Sequence[str], *, fingerprint: str, indexed_at: datetime
     ) -> int:

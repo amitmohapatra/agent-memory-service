@@ -20,6 +20,7 @@ from typing import Any, Self
 
 import httpx
 
+from universal_memory.errors import InsufficientEvidence
 from universal_memory.models import (
     ContextBundle,
     ContextItem,
@@ -126,13 +127,29 @@ class MemoryContext:
 
     # -- 90% path -------------------------------------------------------
     async def context(
-        self, query: str, *, token_budget: int | None = None, **options: Any
+        self,
+        query: str,
+        *,
+        token_budget: int | None = None,
+        require_evidence: bool = False,
+        **options: Any,
     ) -> ContextBundle:
+        """Bounded, ranked context for this turn. With ``require_evidence=True`` an
+        ``INSUFFICIENT`` evidence report raises :class:`InsufficientEvidence` instead of
+        returning a bundle the caller might answer from anyway."""
         payload: dict[str, Any] = {"query": query, "scope": self._scope_payload(), **options}
         if token_budget is not None:
             payload["token_budget"] = token_budget
         data = await self._request("POST", "/v1/context", json=payload)
-        return ContextBundle.model_validate(data)
+        bundle = ContextBundle.model_validate(data)
+        if require_evidence and bundle.evidence.status == "INSUFFICIENT":
+            raise InsufficientEvidence(
+                "no sufficient evidence was retrieved for this query",
+                code="INSUFFICIENT_EVIDENCE",
+                status=200,
+                details={"notes": list(getattr(bundle.evidence, "notes", []) or [])},
+            )
+        return bundle
 
     async def observe(
         self,

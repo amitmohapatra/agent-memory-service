@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from memory_service.domain.enums import QueryType
 
 _ID = re.compile(
-    r"\b(?:thr|ses|trn|msg|doc|chk|mem|obs|run|job|nod)_[0-9A-Za-z]{10,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[A-Z]{2,6}-\d{2,7}\b"
+    r"\b(?:thr|ses|trn|msg|doc|chk|mem|obs|run|job|nod|sum_nod|rel|ent)_[0-9A-Za-z]{10,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[A-Z]{2,6}-\d{2,7}\b"
 )
 _CONVERSATION = re.compile(
     r"\b(what did (?:i|you|we) (?:say|ask|mention)|earlier (?:in this|you)|previous(?:ly)? (?:said|message)|as (?:i|you) (?:said|mentioned)|in this (?:chat|conversation|thread)|scroll back|remind me what)\b",

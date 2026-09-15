@@ -58,8 +58,10 @@ async def test_critical_recall_and_evidence_group_gates(container, uow_factory) 
     engine = container.services["retrieval"]
     k = container.settings.evaluation.critical_recall_k
     results = []
+    evidence_status: dict[str, str] = {}
     for q in golden.questions:
         res = await engine.retrieve(CTX, q.query, limit=k)
+        evidence_status[q.id] = str((res.diagnostics.get("evidence") or {}).get("status"))
         retrieved = [
             RetrievedChunk(
                 document_alias=aliases.get(str(c.payload.get("document_id"))),
@@ -73,6 +75,10 @@ async def test_critical_recall_and_evidence_group_gates(container, uow_factory) 
             evaluate_question(q, retrieved, k=k, observed_type=res.routed.query_type.value)
         )
     summary = summarize(results, k=k)
+    critical_ids = [q.id for q in golden.questions if q.critical]
+    complete = sum(1 for i in critical_ids if evidence_status[i] == "COMPLETE")
+    summary["critical_evidence_complete_rate"] = round(complete / len(critical_ids), 4)
+    summary["evidence_status"] = evidence_status
     indexer = container.services["indexer"]
     report = {
         "gate": "retrieval",
@@ -98,6 +104,8 @@ async def test_critical_recall_and_evidence_group_gates(container, uow_factory) 
     assert summary["critical_recall_at_k"] == 1.0
     assert summary["critical_evidence_group_recall"] == 1.0
     assert summary["k"] == k
+    # M9: every critical question ends with a COMPLETE evidence report (no abstention, no gaps)
+    assert summary["critical_evidence_complete_rate"] == 1.0, evidence_status
     assert summary["routing_accuracy"] == 1.0, [
         p["query_type"]
         for p in summary["per_question"]

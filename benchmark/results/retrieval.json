@@ -6,22 +6,22 @@
   },
   "corpus": {
     "documents": 50,
-    "index_seconds": 15.72,
-    "indexed_points": 548
+    "index_seconds": 16.29,
+    "indexed_points": 948
   },
   "latency_ms": {
-    "context_cached_p50": 2.47,
-    "context_cached_p95": 2.97,
-    "context_cold_p50": 40.55,
-    "context_cold_p95": 88.88,
-    "mean_recall": 48.81,
-    "recall_p50": 34.14,
-    "recall_p95": 84.35,
+    "context_cached_p50": 2.55,
+    "context_cached_p95": 3.26,
+    "context_cold_p50": 68.79,
+    "context_cold_p95": 121.97,
+    "mean_recall": 79.46,
+    "recall_p50": 65.02,
+    "recall_p95": 112.19,
     "samples": 30
   },
   "provenance": {
     "cpu_count": 2,
-    "git_commit": "dd4badc91de66f286d4ebf3e4b88a94e707f08a7",
+    "git_commit": "23b856cd23de1561c467cf329cbe27e50e439f5a",
     "machine": "x86_64",
     "memory_gb": 7.8,
     "packages": {
@@ -36,7 +36,7 @@
     },
     "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
     "python": "3.12.3",
-    "timestamp": "2026-09-15T00:55:56.848777+00:00"
+    "timestamp": "2026-09-15T01:19:29.418908+00:00"
   },
   "providers": {
     "embedding": "hash-v1-d64",
@@ -46,33 +46,29 @@
     "sparse": "bm25-v1-k1.2-b0.75"
   },
   "quality": {
-    "critical_evidence_group_recall": 0.7778,
+    "critical_evidence_group_recall": 1.0,
     "critical_questions": 9,
-    "critical_recall_at_k": 0.8426,
-    "evidence_group_recall": 0.8,
+    "critical_recall_at_k": 1.0,
+    "evidence_group_recall": 1.0,
     "k": 20,
     "note": "salted copies are exact duplicates of the golden documents: with many copies the top-k fills with clones of the best chunk and secondary evidence groups fall out (near-duplicate crowding). Informational; the release gate is tests/eval on the un-duplicated corpus. Diversity-aware ranking is an M10 candidate.",
     "per_question": [
       {
-        "complete": false,
+        "complete": true,
         "critical": true,
         "first_rank": {
-          "definition": null,
+          "definition": 3,
           "ebitda_result": 1,
-          "litigation_footnote": null,
-          "restructuring_savings": null
+          "litigation_footnote": 2,
+          "restructuring_savings": 17
         },
         "id": "ebitda_multi_hop",
-        "missing": [
-          "restructuring_savings",
-          "litigation_footnote",
-          "definition"
-        ],
+        "missing": [],
         "query_type": {
           "expected": "DOCUMENT_MULTI_HOP",
           "observed": "DOCUMENT_MULTI_HOP"
         },
-        "recall": 0.25
+        "recall": 1.0
       },
       {
         "complete": true,
@@ -92,7 +88,7 @@
         "complete": true,
         "critical": true,
         "first_rank": {
-          "table": 1
+          "table": 2
         },
         "id": "revenue_table",
         "missing": [],
@@ -148,7 +144,7 @@
         "complete": true,
         "critical": true,
         "first_rank": {
-          "table2": 1
+          "table2": 2
         },
         "id": "ebitda_reconciliation_table",
         "missing": [],
@@ -159,23 +155,20 @@
         "recall": 1.0
       },
       {
-        "complete": false,
+        "complete": true,
         "critical": true,
         "first_rank": {
-          "integration": null,
+          "integration": 15,
           "margin_result": 1,
-          "warranty_footnote": null
+          "warranty_footnote": 10
         },
         "id": "distractor_margin",
-        "missing": [
-          "integration",
-          "warranty_footnote"
-        ],
+        "missing": [],
         "query_type": {
           "expected": "DOCUMENT_MULTI_HOP",
           "observed": "DOCUMENT_MULTI_HOP"
         },
-        "recall": 0.3333
+        "recall": 1.0
       },
       {
         "complete": true,
@@ -207,7 +200,7 @@
       }
     ],
     "questions": 10,
-    "recall_at_k": 0.8583,
+    "recall_at_k": 1.0,
     "routing_accuracy": 1.0
   }
 }

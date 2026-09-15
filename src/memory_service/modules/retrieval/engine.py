@@ -130,7 +130,10 @@ class RetrievalEngine:
                 diagnostics["exact_hits"] = len(candidates)
             # 2. hybrid lexical + dense with native RRF inside the store
             if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
-                for kind in kinds:
+                wanted = list(kinds)
+                if routed.needs_summaries and "summary" not in wanted:
+                    wanted.append("summary")
+                for kind in wanted:
                     if kind == "chunk" and not routed.needs_knowledge:
                         continue
                     if kind == "memory" and not routed.needs_memories:
@@ -150,8 +153,12 @@ class RetrievalEngine:
                             )
                         )
                 diagnostics["fused_candidates"] = len(candidates)
-            # 3. prune to fused_k, keeping exact hits first
+            # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate texts
+            #    (copies of the same document) so they cannot crowd out other evidence
+            before = len(candidates)
             candidates = _dedup(candidates)[: max(self.cfg.fused_k, limit)]
+            if before != len(candidates):
+                diagnostics["duplicates_collapsed"] = before - len(candidates)
             # 4. bounded CPU rerank
             if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
                 candidates = await self._rerank(routed.query, candidates, limit=limit)
@@ -197,6 +204,29 @@ class RetrievalEngine:
                                 },
                             )
                         )
+        summary_nodes = [i[4:] for i in identifiers if i.startswith("sum_")]
+        if summary_nodes:
+            async with self.uow_factory() as uow:
+                summaries = await uow.documents.node_summaries(ctx.tenant_id, summary_nodes)
+                nodes = await uow.documents.get_nodes(ctx.tenant_id, list(summaries))
+                for n in nodes:
+                    keys = await uow.documents.visibility_keys(ctx.tenant_id, n.document_id)
+                    if visibility.allows(n.tenant_id, keys):
+                        out.append(
+                            Candidate(
+                                record_id=f"sum_{n.node_id}",
+                                kind="summary",
+                                text=summaries[n.node_id],
+                                score=1.0,
+                                retrievers=["exact"],
+                                payload={
+                                    "document_id": n.document_id,
+                                    "node_id": n.node_id,
+                                    "page": n.page_start,
+                                    "section_path": n.section_path,
+                                },
+                            )
+                        )
         memory_ids = [i for i in identifiers if i.startswith("mem_")]
         if memory_ids:
             async with self.uow_factory() as uow:
@@ -234,7 +264,7 @@ class RetrievalEngine:
         kind: str,
         document_ids: Sequence[str] | None,
     ) -> list[SearchHit]:
-        collection = self.indexer.collection(KNOWLEDGE if kind == "chunk" else MEMORIES)
+        collection = self.indexer.collection(MEMORIES if kind == "memory" else KNOWLEDGE)
         flt = visibility.search_filter(kind=kind)
         if kind == "memory":
             flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
@@ -283,12 +313,13 @@ class RetrievalEngine:
 
 
 def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
-    """Keep at most ``limit`` evidence items (chunks/memories) after post-stages; facts and
-    summaries ride along uncounted because they are routed into their own bundle buckets."""
+    """Keep at most ``limit`` *ranked* evidence items (chunks/memories) after post-stages.
+    Expansions, escalated companions, facts and summaries ride along uncounted: they are
+    bounded by their own budgets and exist precisely to complete the ranked evidence."""
     out: list[Candidate] = []
     evidence = 0
     for c in candidates:
-        if c.kind in ("chunk", "memory"):
+        if c.kind in ("chunk", "memory") and c.expansion_edge is None:
             if evidence >= limit:
                 continue
             evidence += 1
@@ -297,12 +328,23 @@ def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
 
 
 def _dedup(candidates: list[Candidate]) -> list[Candidate]:
+    """Merge repeated record ids and collapse identical texts (same ``text_hash``, e.g. the
+    same document uploaded twice) onto the first occurrence, remembering the twins."""
     seen: dict[str, Candidate] = {}
+    by_hash: dict[str, Candidate] = {}
     for c in candidates:
         if c.record_id in seen:
             existing = seen[c.record_id]
             existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
             existing.score = max(existing.score, c.score)
-        else:
-            seen[c.record_id] = c
+            continue
+        h = c.payload.get("text_hash") if c.kind == "chunk" else None
+        if h:
+            twin = by_hash.get(h)
+            if twin is not None:
+                twin.payload.setdefault("duplicates", []).append(c.record_id)
+                twin.score = max(twin.score, c.score)
+                continue
+            by_hash[h] = c
+        seen[c.record_id] = c
     return list(seen.values())

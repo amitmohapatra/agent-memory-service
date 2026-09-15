@@ -106,6 +106,9 @@ class RecallResponse(BaseModel):
     query_type: str
     results: list[RecallItem]
     diagnostics: dict[str, Any] = Field(default_factory=dict)
+    evidence: dict[str, Any] | None = Field(
+        default=None, description="EvidenceReport: COMPLETE | INCOMPLETE | INSUFFICIENT"
+    )
 
 
 class ContextRequest(BaseModel):
@@ -205,7 +208,10 @@ async def recall(
             RecallItem(**{**i.model_dump(mode="json"), "representation": i.representation.value})
             for i in items
         ],
-        diagnostics={k: v for k, v in result.diagnostics.items() if k != "evidence"},
+        diagnostics={
+            k: v for k, v in result.diagnostics.items() if k not in ("evidence", "evidence_targets")
+        },
+        evidence=result.diagnostics.get("evidence"),
     )
 
 

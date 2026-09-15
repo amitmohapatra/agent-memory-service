@@ -93,7 +93,7 @@ class SentenceTransformersEmbedding:
 
             torch.set_num_threads(settings.threads)
         self.settings = settings
-        self.dimension = int(self._model.get_sentence_embedding_dimension() or settings.dimension)
+        self.dimension = int(self._model.get_embedding_dimension() or settings.dimension)
         self.max_tokens = int(
             getattr(self._model, "max_seq_length", settings.max_tokens) or settings.max_tokens
         )

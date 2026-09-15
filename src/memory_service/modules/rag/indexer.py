@@ -11,7 +11,9 @@ import contextlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from memory_service.domain.documents import Chunk
+from memory_service.domain.documents import Chunk, Document, DocumentNode
+from memory_service.domain.ids import content_hash
+from memory_service.modules.context.summaries import build_summaries
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -96,6 +98,10 @@ class Indexer:
             )
             document = await uow.documents.get(tenant_id, document_id)
             keys = await uow.documents.visibility_keys(tenant_id, document_id)
+            all_chunks = (
+                chunks if force else await uow.documents.list_chunks(tenant_id, document_id)
+            )
+            nodes = await uow.documents.list_nodes(tenant_id, document_id)
         if not chunks or document is None:
             return 0
         with (
@@ -108,15 +114,75 @@ class Indexer:
                 document_title=document.title,
                 thread_id=document.thread_id,
             )
+            # hierarchical summaries (M9): one per section/subsection/document, indexed as
+            # kind="summary" records so GLOBAL_SUMMARY questions can find them
+            summaries = build_summaries(nodes, all_chunks, title=document.title)
+            await self._index_summaries(
+                summaries,
+                nodes=nodes,
+                tenant_id=tenant_id,
+                document=document,
+                visibility_keys=keys,
+            )
             async with self.uow_factory() as uow:
+                await uow.documents.set_node_summaries(tenant_id, summaries)
                 await uow.documents.mark_chunks_indexed(
                     [c.chunk_id for c in chunks],
                     fingerprint=self.fingerprint,
                     indexed_at=datetime.now(UTC),
                 )
                 await uow.commit()
-        log.info("index.document_done", tenant_id=tenant_id, document_id=document_id, chunks=n)
+        log.info(
+            "index.document_done",
+            tenant_id=tenant_id,
+            document_id=document_id,
+            chunks=n,
+            summaries=len(summaries),
+        )
         return n
+
+    async def _index_summaries(
+        self,
+        summaries: dict[str, str],
+        *,
+        nodes: Sequence[DocumentNode],
+        tenant_id: str,
+        document: Document,
+        visibility_keys: Sequence[str],
+    ) -> None:
+        if not summaries:
+            return
+        by_id = {n.node_id: n for n in nodes}
+        ids = list(summaries)
+        texts = [summaries[i] for i in ids]
+        dense = await self.embed_cached(texts, [content_hash(t) + ":sum" for t in texts])
+        sparse = self.sparse.encode_documents(texts)
+        records = [
+            SearchRecord(
+                record_id=f"sum_{nid}",
+                collection=self.collection(KNOWLEDGE),
+                tenant_id=tenant_id,
+                dense=dense[i],
+                sparse=sparse[i],
+                payload={
+                    "kind": "summary",
+                    "visibility_keys": list(visibility_keys),
+                    "document_id": document.document_id,
+                    "document_title": document.title,
+                    "node_id": nid,
+                    "thread_id": document.thread_id,
+                    "page": by_id[nid].page_start if nid in by_id else None,
+                    "section_path": by_id[nid].section_path if nid in by_id else "",
+                    "representation": by_id[nid].representation.value
+                    if nid in by_id
+                    else "SUMMARY",
+                    "text": texts[i][:2000],
+                    "text_hash": content_hash(texts[i]),
+                },
+            )
+            for i, nid in enumerate(ids)
+        ]
+        await self.store.upsert(records)
 
     async def _index_chunks(
         self,
@@ -147,6 +213,7 @@ class Indexer:
                     "page": c.page,
                     "section_path": c.section_path,
                     "text": c.text[:2000],
+                    "text_hash": c.text_hash,
                     "entities": c.entities[:12],
                     "token_estimate": c.token_estimate,
                 },

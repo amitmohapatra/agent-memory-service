@@ -65,9 +65,13 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
         pending = await uow.documents.list_chunks("acme", doc_id, unindexed_only=True)
     assert chunks and not pending, "every chunk is marked indexed after the job"
     assert all(c.index_fingerprint == indexer.fingerprint for c in chunks)
-    assert await store.count(collection, SearchFilter(tenant_id="acme")) == len(chunks)
-    # dense, sparse and hybrid all find the EBITDA chunk with a tenant-only filter
-    flt = SearchFilter(tenant_id="acme")
+    flt = SearchFilter(tenant_id="acme", must={"kind": "chunk"})
+    assert await store.count(collection, flt) == len(chunks)
+    # summaries (M9) live in the same collection under kind="summary"
+    assert (
+        await store.count(collection, SearchFilter(tenant_id="acme", must={"kind": "summary"})) > 0
+    )
+    # dense, sparse and hybrid all find the EBITDA chunk with a tenant + kind filter
     q = "Adjusted EBITDA increased despite lower revenue"
     dense = await store.search_dense(
         collection, await indexer.embedding.embed_query(q), flt, limit=5
@@ -94,7 +98,7 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
     assert await store.count(collection, flt) == len(chunks)
     # delete removes only that document's points
     await indexer.delete_document("acme", doc_id)
-    assert await store.count(collection, flt) == 0
+    assert await store.count(collection, SearchFilter(tenant_id="acme")) == 0
 
 
 async def test_store_side_visibility_filtering(container, uow_factory) -> None:
@@ -196,7 +200,9 @@ async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) ->
     assert all(c.rerank_score is not None for c in reranked[: engine.rerank_k])
     assert res.candidates[0].record_id == target.chunk_id
     # limit is honoured; document_ids restricts; kinds=memory returns nothing yet (M7)
-    assert len((await engine.retrieve(OWNER, "revenue", limit=2)).candidates) == 2
+    two = await engine.retrieve(OWNER, "revenue", limit=2)
+    ranked_two = [c for c in two.candidates if c.kind == "chunk" and c.expansion_edge is None]
+    assert len(ranked_two) == 2  # expansions/companions ride along uncounted
     assert (await engine.retrieve(OWNER, "revenue", document_ids=["doc_nope"])).candidates == []
     assert (await engine.retrieve(OWNER, "revenue", kinds=("memory",))).candidates == []
 

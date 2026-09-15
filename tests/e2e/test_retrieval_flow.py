@@ -77,6 +77,21 @@ def test_recall_and_context_over_http(client) -> None:
     assert "here is the FY26 report" in bundle["conversation"]["rendered"]
     assert bundle["knowledge"][0]["item_id"] == top["item_id"]
     assert bundle["evidence"]["status"] == "COMPLETE"
+    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= set(
+        bundle["evidence"]["required_groups"]
+    )
+    assert bundle["summaries"] and "## Summaries" in bundle["rendered"]
+    assert bundle["conversation"]["summary"] is None  # everything fits the window
+    # recall exposes the same report; an unrelated question is INSUFFICIENT
+    r = client.post("/v1/recall", headers=H, json={"scope": scope, "query": Q})
+    assert r.json()["evidence"]["status"] == "COMPLETE"
+    r = client.post(
+        "/v1/context",
+        headers=H,
+        json={"scope": scope, "query": "Who won the 1998 football championship?"},
+    )
+    assert r.json()["evidence"]["status"] == "INSUFFICIENT"
+    assert "## Evidence status\nINSUFFICIENT" in r.json()["rendered"]
     assert (
         "## Recent conversation" in bundle["rendered"]
         and "increased to EUR 98" in bundle["rendered"]
@@ -119,6 +134,14 @@ async def test_sdk_context_and_recall(app, client) -> None:
     assert bundle.knowledge[0].document_id == doc_id and bundle.knowledge[0].page == 11
     assert bundle.evidence.status == "COMPLETE" and bundle.token_estimate <= 4000
     assert "increased to EUR 98" in bundle.rendered
+    assert bundle.evidence.required_groups and not bundle.evidence.missing_groups
+    from universal_memory import InsufficientEvidence
+
+    with pytest.raises(InsufficientEvidence) as exc:
+        await ctx.context("Who won the 1998 football championship?", require_evidence=True)
+    assert exc.value.code == "INSUFFICIENT_EVIDENCE"
+    lenient = await ctx.context("Who won the 1998 football championship?")
+    assert lenient.evidence.status == "INSUFFICIENT"
     items = await ctx.recall("restructuring programme headcount", limit=3)
     assert 0 < len(items) <= 3 and items[0].citation.startswith("chunk_id:")
     assert any("headcount" in i.text for i in items)

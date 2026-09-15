@@ -2120,6 +2120,19 @@
             "title": "Diagnostics",
             "type": "object"
           },
+          "evidence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "EvidenceReport: COMPLETE | INCOMPLETE | INSUFFICIENT",
+            "title": "Evidence"
+          },
           "query": {
             "title": "Query",
             "type": "string"

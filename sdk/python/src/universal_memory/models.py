@@ -125,8 +125,11 @@ class EvidenceReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     status: Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
+    required_groups: list[str] = Field(default_factory=list)
+    satisfied_groups: list[str] = Field(default_factory=list)
     missing_groups: list[str] = Field(default_factory=list)
     escalations: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 class ContextBundle(BaseModel):
