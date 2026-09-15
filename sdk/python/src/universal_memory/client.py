@@ -399,7 +399,13 @@ class FilesAPI:
 
         name, data, mtype = _coerce_file(file, filename, media_type)
         digest = hashlib.sha256(data).hexdigest()
-        fields = f"{message_id or ''}|{title or ''}|{visibility or ''}|{sorted(metadata.items())}"
+        # The filename and media type are part of the request the service compares against a
+        # replayed key, so they belong in the key: identical bytes uploaded under a different
+        # name are a different document, not a replay of the same one.
+        fields = (
+            f"{name}|{mtype}|{message_id or ''}|{title or ''}|{visibility or ''}"
+            f"|{sorted(metadata.items())}"
+        )
         form_digest = hashlib.blake2b(fields.encode(), digest_size=6).hexdigest()
         key = idempotency_key or f"file-{self._ctx.scope.tenant_id}-{digest}-{form_digest}"
         form = {"scope": self._ctx.scope.model_dump_json(exclude_none=True)}

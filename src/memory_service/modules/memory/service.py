@@ -8,12 +8,13 @@ from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
-from memory_service.domain.errors import NotFound, ScopeDenied
+from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.ports.tasks import JobSpec, Queue
@@ -24,6 +25,38 @@ from memory_service.ports.uow import UnitOfWork
 class ObservationAck:
     observation_id: str
     job_ids: list[str] = field(default_factory=list)
+
+
+def _validate_visibility(ctx: MemoryExecutionContext, hints: ProcessingHints | None) -> None:
+    """Reject a requested visibility this context cannot satisfy, at submission time.
+
+    Audience keys are built from the context's anchors, so a visibility whose anchor is
+    missing (AGENT_GROUP without an agent group, WORKSPACE without a workspace...) cannot be
+    expressed. Without this check the observation is acknowledged with a 202 and the failure
+    surfaces only when ``memory.process_observation`` runs — by which time the caller is long
+    gone and no memory was ever created. Validating here turns silent data loss into a 422
+    that names the missing anchor.
+    """
+    requested = getattr(hints, "visibility", None) if hints is not None else None
+    if requested is None:
+        return
+    try:
+        visibility_keys(
+            ctx.tenant_id,
+            requested,
+            owner_principal=ctx.principal_id,
+            workspace_id=ctx.workspace_id,
+            user_id=ctx.user_id,
+            group_id=ctx.group_ids[0] if ctx.group_ids else None,
+            thread_id=ctx.thread_id,
+            work_id=ctx.work_id,
+            agent_group_id=ctx.agent_group_id,
+            agent_run_id=ctx.agent_run_id,
+        )
+    except ValueError as exc:
+        raise ValidationFailed(
+            str(exc), details={"visibility": str(requested)}
+        ) from exc
 
 
 class MemoryService:
@@ -44,6 +77,7 @@ class MemoryService:
         source_id: str | None = None,
         tool_run_id: str | None = None,
     ) -> ObservationAck:
+        _validate_visibility(ctx, hints)
         observation = Observation(
             tenant_id=ctx.tenant_id,
             kind=kind,
