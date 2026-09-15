@@ -20,7 +20,7 @@ from memory_service.domain.documents import (
     DocumentNode,
     DocumentVersion,
 )
-from memory_service.domain.enums import ContextGraphEdge
+from memory_service.domain.enums import ContextGraphEdge, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
@@ -60,6 +60,10 @@ class ThreadRepository(Protocol):
         self, tenant_id: str, user_id: str, *, limit: int = 50, before: datetime | None = None
     ) -> list[Thread]: ...
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool: ...
+
+    async def list_active(self, *, since: datetime, limit: int = 500) -> list[Thread]:
+        """Threads updated at or after ``since`` across tenants (periodic observer sweep)."""
+        ...
 
 
 @runtime_checkable
@@ -333,4 +337,39 @@ class MemoryRepository(Protocol):
     ) -> None: ...
     async def expire_due(self, *, now: datetime, limit: int = 500) -> list[tuple[str, str]]:
         """Mark memories past ``expires_at`` EXPIRED; returns (tenant_id, memory_id) pairs."""
+        ...
+
+    async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
+        """CURRENT memories created at or after ``since``, newest first, across tenants
+        (periodic jobs discover the scopes with fresh activity)."""
+        ...
+
+    async def related(
+        self,
+        tenant_id: str,
+        *,
+        scope_key: str,
+        subject: str,
+        exclude: Sequence[str] = (),
+        limit: int = 8,
+    ) -> list[CanonicalMemory]:
+        """CURRENT memories about ``subject`` in one scope, newest first (landing reflection,
+        beliefs and entity summaries); bounded by ``limit``."""
+        ...
+
+    async def bump_access(self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime) -> int:
+        """Record recall hits: ``access_count + 1`` and ``last_accessed_at``; no revision bump,
+        no re-index."""
+        ...
+
+    async def list_idle(
+        self, *, idle_before: datetime, limit: int = 500, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        """CURRENT memories neither updated nor accessed since ``idle_before`` (forgetting)."""
+        ...
+
+    async def set_status(
+        self, tenant_id: str, memory_id: str, status: TemporalStatus, *, now: datetime
+    ) -> bool:
+        """Change the temporal status (archive / restore) and mark the row for re-indexing."""
         ...

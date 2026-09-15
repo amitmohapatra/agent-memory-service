@@ -1,0 +1,117 @@
+{
+  "acknowledged": {
+    "files": 6,
+    "messages": 200,
+    "observations": 52
+  },
+  "acknowledged_data_loss": 0,
+  "archive": {
+    "failed_requeued": 0,
+    "requeued_threads": 0,
+    "segments": 0,
+    "uploading_repaired": 0,
+    "verify_mismatch": 0
+  },
+  "drive_seconds": 5.92,
+  "duplicate_memories": 0,
+  "faults": [
+    {
+      "fault": "cache_outage",
+      "on": true,
+      "t": 1789455089.744
+    },
+    {
+      "fault": "queue_outage",
+      "on": true,
+      "t": 1789455090.598
+    },
+    {
+      "fault": "cache_outage",
+      "on": false,
+      "t": 1789455090.811
+    },
+    {
+      "fault": "worker_crashes",
+      "on": true,
+      "t": 1789455091.042
+    },
+    {
+      "fault": "queue_outage",
+      "on": false,
+      "t": 1789455091.356
+    },
+    {
+      "fault": "blob_outage",
+      "on": true,
+      "t": 1789455092.033
+    },
+    {
+      "fault": "worker_crashes",
+      "on": false,
+      "t": 1789455092.827
+    },
+    {
+      "fault": "blob_outage",
+      "on": false,
+      "t": 1789455093.544
+    },
+    {
+      "fault": "cache_outage",
+      "on": false,
+      "t": 1789455094.549
+    },
+    {
+      "fault": "blob_outage",
+      "on": false,
+      "t": 1789455094.549
+    },
+    {
+      "fault": "queue_outage",
+      "on": false,
+      "t": 1789455094.549
+    },
+    {
+      "fault": "worker_crashes",
+      "on": true,
+      "t": 1789455094.722
+    },
+    {
+      "fault": "worker_crashes",
+      "on": false,
+      "t": 1789455094.724
+    }
+  ],
+  "jobs_not_succeeded_after_recovery": 0,
+  "lost": [],
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T06:51:48.524784+00:00"
+  },
+  "recovery": {
+    "jobs_retried": 278,
+    "outbox_swept": 192
+  },
+  "refused_during_outage": {
+    "files": 0,
+    "messages": 0,
+    "observations": 0
+  },
+  "total_seconds": 19.88,
+  "unexpected_errors": [],
+  "worker_crashes_injected": 278
+}

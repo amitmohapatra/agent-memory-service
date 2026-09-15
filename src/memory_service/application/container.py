@@ -47,6 +47,7 @@ class Container:
     embedding: Any = None
     sparse: Any = None
     reranker: Any = None
+    nli: Any = None
     llm: Any = None
     memory_intelligence: Any = None
     graph_store: Any = None

@@ -30,7 +30,8 @@ from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
-from memory_service.modules.ingestion.chunking import chunk_nodes
+from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import archive_bytes_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -69,6 +70,7 @@ class IngestionService:
         file_bucket: str,
         tenant_shards: int = 64,
         fallback_parser: DocumentParser | None = None,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
@@ -78,6 +80,7 @@ class IngestionService:
         self.cfg = settings
         self.file_bucket = file_bucket
         self.shards = tenant_shards
+        self.assist = assist or LLMAssist.disabled()
 
     # -- accept -----------------------------------------------------------------
     async def accept_file(
@@ -290,6 +293,10 @@ class IngestionService:
                 keep_code_intact=self.cfg.keep_code_intact,
                 contextual=self.cfg.contextual_chunks,
             )
+            if self.assist.wants("chunk_context"):
+                chunks = await situate_chunks(
+                    self.assist, chunks, parsed.nodes, document_title=parsed.title
+                )
             version = parsed.version.model_copy(
                 update={
                     "node_count": len(parsed.nodes),

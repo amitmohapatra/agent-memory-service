@@ -17,3 +17,9 @@ benchmark/results/*.tmp
 .DS_Store
 .bench_blob/
 dump.rdb
+secrets.env
+vendor/
+.bifrost/
+.deploy_key
+deploy_key.pub
+*.bundle

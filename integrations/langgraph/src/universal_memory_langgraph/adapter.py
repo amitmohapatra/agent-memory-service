@@ -27,17 +27,17 @@ the SDK is async.
 
 from __future__ import annotations
 
-import hashlib
 import inspect
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from universal_memory import MemoryClient, MemoryContext
-from universal_memory.models import ContextBundle, ObservationAck
+from universal_memory.integrations.core import MemoryHooks, as_observations, idempotency_key
+from universal_memory.models import ContextBundle, GroundingReport, ObservationAck
 from universal_memory_langgraph.lineage import Lineage, lineage_from_config, scope_fields
-from universal_memory_langgraph.messages import MessageView, new_messages, trailing_human
+from universal_memory_langgraph.messages import new_messages, trailing_human
 
 log = logging.getLogger("universal_memory.langgraph")
 
@@ -54,6 +54,15 @@ class NodeResult:
     bundle: ContextBundle | None
     observations: tuple[ObservationAck, ...]
     recorded_messages: int
+    grounding: GroundingReport | None = None
+    max_hallucination_rate: float = 0.0
+
+    @property
+    def evidence_complete(self) -> bool | None:
+        """Whether the node's answer passed the grounding gate (``None``: not verified)."""
+        if self.grounding is None:
+            return None
+        return self.grounding.per_claim_hallucination_rate <= self.max_hallucination_rate
 
 
 class LangGraphMemory:
@@ -71,15 +80,24 @@ class LangGraphMemory:
         token_budget: int | None = None,
         strict: bool = True,
         record_messages: bool = True,
+        max_hallucination_rate: float = 0.0,
     ) -> None:
         self.client = client
-        self.defaults: dict[str, Any] = {
-            "tenant_id": tenant_id,
-            "user_id": user_id,
-            "workspace_id": workspace_id,
-            "group_ids": list(group_ids or []),
-            "agent_group_id": agent_group_id,
-        }
+        self.max_hallucination_rate = max_hallucination_rate
+        self.hooks = MemoryHooks(
+            client,
+            namespace="lg",
+            defaults={
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "workspace_id": workspace_id,
+                "group_ids": list(group_ids or []),
+                "agent_group_id": agent_group_id,
+            },
+            token_budget=token_budget,
+            strict=strict,
+        )
+        self.defaults = self.hooks.defaults
         self.thread_prefix = thread_prefix
         self.inject = inject
         self.token_budget = token_budget
@@ -126,6 +144,8 @@ class LangGraphMemory:
         observe_hints: Mapping[str, Any] | None = None,
         agent: str | None = None,
         require_evidence: bool = False,
+        verify_answer: bool = False,
+        max_hallucination_rate: float | None = None,
         token_budget: int | None = None,
         record_messages: bool | None = None,
     ) -> Callable[[Any, Any], Awaitable[Any]]:
@@ -136,11 +156,19 @@ class LangGraphMemory:
         (a dict may carry ``content``, ``kind``, ``hints``, ``metadata``).
         ``agent``: run this node as an agent (RUN-scoped working memory, run id = the
         LangGraph task id, parent = the enclosing subgraph run).
+        ``verify_answer``: run the grounding cascade on the node's assistant message(s)
+        against the recalled bundle before they are recorded; the report lands in
+        ``state[inject]["grounding"]`` and an answer whose per-claim hallucination rate
+        exceeds ``max_hallucination_rate`` (default 0.0) is recorded with
+        ``evidence_complete=False`` instead of as verified.
         """
         node_name = name or getattr(node, "__name__", "node")
         accepts = _accepted_kwargs(node)
         record = self.record_messages if record_messages is None else record_messages
         budget = self.token_budget if token_budget is None else token_budget
+        max_rate = (
+            self.max_hallucination_rate if max_hallucination_rate is None else max_hallucination_rate
+        )
 
         async def wrapped(state: Any, config=None) -> Any:
             config = config or _running_config()
@@ -150,18 +178,38 @@ class LangGraphMemory:
                 recorded = 0
                 if record:  # the user's turn arrives as graph input, not as a node result
                     recorded += await self._record_input(ctx, lineage, state)
-                bundle = await self._recall(ctx, state, recall, budget, require_evidence)
+                query = _query(state, recall)
+                bundle = await self._recall(ctx, query, budget, require_evidence)
                 inbound = _inject(state, self.inject, bundle) if recall is not None else state
                 kwargs = _kwargs_for(accepts, config)
                 result = node(inbound, **kwargs)
                 if inspect.isawaitable(result):
                     result = await result
-                if record:
-                    recorded += await self._record(ctx, lineage, node_name, state, result)
-                acks = await self._observe(
-                    ctx, lineage, node_name, state, result, observe, observe_kind, observe_hints
+                new = new_messages(state, result)
+                grounding = None
+                if verify_answer:
+                    grounding = await self._verify(ctx, new, bundle, query)
+                    if grounding is not None:
+                        result = _inject(
+                            result, self.inject, {"bundle": bundle, "grounding": grounding}
+                        )
+                written = await self.hooks.after_run(
+                    ctx,
+                    key_parts=_key_parts(lineage, node_name),
+                    messages=[
+                        m.as_message(**_message_meta(m, grounding, max_rate))
+                        for m in (new if record else [])
+                    ],
+                    observations=self._observations(state, result, observe),
+                    default_kind=observe_kind,
+                    hints=observe_hints,
+                    langgraph_node=node_name,
+                    langgraph_path=lineage.path,
                 )
-            self.last = NodeResult(node_name, ctx, bundle, tuple(acks), recorded)
+                recorded += written.recorded_messages
+            self.last = NodeResult(
+                node_name, ctx, bundle, written.observations, recorded, grounding, max_rate
+            )
             return result
 
         wrapped.__name__ = node_name
@@ -181,37 +229,38 @@ class LangGraphMemory:
     async def _recall(
         self,
         ctx: MemoryContext,
-        state: Any,
-        recall: Query | None,
+        query: str | None,
         budget: int | None,
         require_evidence: bool,
     ) -> ContextBundle | None:
-        if recall is None:
+        if query is None:
             return None
-        query = _pick(state, recall) if isinstance(recall, str) else recall(state)
-        if not query:
+        return await self.hooks.before_run(
+            ctx, query, require_evidence=require_evidence, token_budget=budget
+        )
+
+    async def _verify(
+        self,
+        ctx: MemoryContext,
+        messages: Sequence[Any],
+        bundle: ContextBundle | None,
+        query: str | None,
+    ) -> GroundingReport | None:
+        """The grounding cascade over the node's assistant message(s): against the recalled
+        bundle when there is one, else against a fresh retrieval for the recall query (or
+        the answer itself). Failures propagate like reads unless ``strict=False``."""
+        answer = "\n".join(m.content for m in messages if m.type == "ai").strip()
+        if not answer:
             return None
         try:
-            return await ctx.context(
-                str(query), token_budget=budget, require_evidence=require_evidence
-            )
+            if bundle is not None:
+                return await ctx.verify(answer, bundle=bundle)
+            return await ctx.verify(answer, query=str(query or answer))
         except Exception:
-            if self.strict or require_evidence:
+            if self.strict:
                 raise
-            log.exception("memory recall failed; continuing without context")
+            log.exception("answer verification failed; recording without a grounding report")
             return None
-
-    async def _record(
-        self, ctx: MemoryContext, lineage: Lineage, node: str, state: Any, result: Any
-    ) -> int:
-        if not ctx.scope.thread_id:
-            return 0
-        count = 0
-        for m in new_messages(state, result):
-            key = self._key("msg", lineage, node, m.type, m.id or m.content)
-            await self._send_message(ctx, m, key)
-            count += 1
-        return count
 
     async def _record_input(self, ctx: MemoryContext, lineage: Lineage, state: Any) -> int:
         """Record the pending human turn (the trailing human messages of the state). The key
@@ -221,63 +270,49 @@ class LangGraphMemory:
         pending = trailing_human(state)
         for m in pending:
             key = self._key("in", Lineage(lineage.thread_id), "", m.id or m.content)
-            await self._send_message(ctx, m, key)
+            meta = {"langgraph_message_id": m.id} if m.id else {}
+            await self.hooks.record_message(ctx, m.as_message(**meta), key)
         return len(pending)
 
-    async def _send_message(self, ctx: MemoryContext, m: MessageView, key: str) -> None:
-        meta: dict[str, Any] = {"langgraph_message_id": m.id} if m.id else {}
-        if m.type == "human":
-            await ctx.chat.user(m.content, attachments=None, idempotency_key=key, **meta)
-        elif m.type == "ai":
-            await ctx.chat.assistant(m.content, idempotency_key=key, **meta)
-        else:  # tool / system / function -> internal, never in the visible history
-            role = "TOOL" if m.type == "tool" else "SYSTEM" if m.type == "system" else "AGENT"
-            await ctx.chat.internal(m.content, role=role, idempotency_key=key, **meta)
-
-    async def _observe(
-        self,
-        ctx: MemoryContext,
-        lineage: Lineage,
-        node: str,
-        state: Any,
-        result: Any,
-        observe: Observer | None,
-        kind: str | None,
-        hints: Mapping[str, Any] | None,
-    ) -> list[ObservationAck]:
+    @staticmethod
+    def _observations(state: Any, result: Any, observe: Observer | None) -> list[Any]:
         if observe is None:
             return []
         raw = _pick(result, observe) if isinstance(observe, str) else observe(state, result)
-        default_kind = kind or ("AGENT_RESULT" if ctx.scope.agent_id else "EVENT")
-        acks: list[ObservationAck] = []
-        for item in _as_observations(raw):
-            content = str(item.get("content") or "").strip()
-            if not content:
-                continue
-            k = str(item.get("kind") or default_kind)
-            key = self._key("obs", lineage, node, k, content)
-            acks.append(
-                await ctx.observe(
-                    content,
-                    kind=k,
-                    idempotency_key=key,
-                    hints={**(hints or {}), **(item.get("hints") or {})},
-                    langgraph_node=node,
-                    langgraph_path=lineage.path,
-                    **(item.get("metadata") or {}),
-                )
-            )
-        return acks
+        return list(as_observations(raw))
 
     @staticmethod
     def _key(prefix: str, lineage: Lineage, node: str, *parts: str) -> str:
         """Stable across checkpoint retries: the task id in the namespace is derived from
         (checkpoint, step, node), so the same superstep replays to the same key."""
-        h = hashlib.blake2b(digest_size=16)
-        for p in (lineage.thread_id or "", lineage.path, node, str(lineage.step or ""), *parts):
-            h.update(p.encode())
-            h.update(b"\x00")
-        return f"lg-{prefix}-{h.hexdigest()}"
+        return idempotency_key("lg", prefix, *_key_parts(lineage, node), *parts)
+
+
+def _key_parts(lineage: Lineage, node: str) -> tuple[str, str, str, str]:
+    return (lineage.thread_id or "", lineage.path, node, str(lineage.step or ""))
+
+
+def _query(state: Any, recall: Query | None) -> str | None:
+    if recall is None:
+        return None
+    query = _pick(state, recall) if isinstance(recall, str) else recall(state)
+    return str(query) if query else None
+
+
+def _message_meta(
+    message: Any, grounding: GroundingReport | None, max_rate: float
+) -> dict[str, Any]:
+    meta: dict[str, Any] = {"langgraph_message_id": message.id} if message.id else {}
+    if grounding is not None and message.type == "ai":
+        meta["grounding"] = {
+            "evidence_complete": grounding.per_claim_hallucination_rate <= max_rate,
+            "hallucination_rate": grounding.per_claim_hallucination_rate,
+            "claims": len(grounding.claims),
+            "contradicted": grounding.contradicted,
+            "unsupported": grounding.unsupported,
+            "representative": grounding.representative,
+        }
+    return meta
 
 
 # -- helpers --------------------------------------------------------------------
@@ -338,18 +373,3 @@ def _inject(state: Any, key: str, bundle: ContextBundle | None) -> Any:
         if copy is not None:
             return copy(update={key: bundle})
     return state
-
-
-def _as_observations(raw: Any) -> list[dict[str, Any]]:
-    if raw is None:
-        return []
-    if isinstance(raw, str):
-        return [{"content": raw}]
-    if isinstance(raw, Mapping):
-        return [dict(raw)]
-    if isinstance(raw, list | tuple):
-        out: list[dict[str, Any]] = []
-        for item in raw:
-            out.extend(_as_observations(item))
-        return out
-    return [{"content": str(raw)}]

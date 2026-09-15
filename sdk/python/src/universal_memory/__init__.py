@@ -13,6 +13,7 @@ from universal_memory.errors import (
     ValidationError,
 )
 from universal_memory.models import (
+    ClaimVerdict,
     ContextBundle,
     ContextItem,
     DocumentInfo,
@@ -21,6 +22,7 @@ from universal_memory.models import (
     GraphAnswer,
     GraphEntity,
     GraphFact,
+    GroundingReport,
     JobHandle,
     MemoryResult,
     MessageAck,
@@ -36,6 +38,7 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "ChatAPI",
+    "ClaimVerdict",
     "ConflictError",
     "ContextBundle",
     "ContextItem",
@@ -47,6 +50,7 @@ __all__ = [
     "GraphAnswer",
     "GraphEntity",
     "GraphFact",
+    "GroundingReport",
     "InsufficientEvidence",
     "JobHandle",
     "MemoryClient",

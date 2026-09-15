@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import itertools
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,8 +26,9 @@ from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import CanonicalMemory
-from memory_service.modules.graph.document_facts import DocumentIE, Fact, LexEntity
+from memory_service.modules.graph.document_facts import DocumentIE, Fact, LexEntity, sentences
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.ports.intelligence import Entity, Relation
 from memory_service.ports.models import ProviderInfo
 
@@ -37,6 +39,113 @@ table figure section page note appendix chapter total item revenue change fy25 f
 eur usd million billion
 """
 _GENERIC = frozenset(_GENERIC_WORDS.split())
+
+LLM_RELATION_MAX_CONFIDENCE = 0.8
+LLM_MAX_RELATIONS_PER_MEMORY = 8
+LLM_MAX_PAIRS_PER_DOCUMENT = 12
+_LLM_MAX_TEXT = 1200
+_LLM_MAX_SENTENCE = 300
+_STRUCTURAL_PREDICATES = frozenset(
+    {"mentions", "mentioned_in", "co_occurs_with", "discusses", "defined_in"}
+)
+_PREDICATE_RE = re.compile(r"[a-z][a-z0-9_]{1,39}")
+_RELATIONS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "relations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "subject": {"type": "string"},
+                    "predicate": {"type": "string"},
+                    "object": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["subject", "predicate", "object", "confidence"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["relations"],
+    "additionalProperties": False,
+}
+_MEMORY_RELATIONS_SYSTEM = (
+    "You extract relations for a knowledge graph. Given a text and the entities already "
+    "found in it, return the typed relations the text states explicitly between two of those "
+    "entities. Use entity names exactly as listed; never introduce other entities. Predicates "
+    "are short lowercase snake_case verb phrases (works_at, leads, reports_to, located_in, "
+    "part_of, uses). Return an empty list when the text states no relation."
+)
+_DOCUMENT_RELATIONS_SYSTEM = (
+    "You extract relations for a knowledge graph. For each numbered pair of entities and the "
+    "sentence(s) where they appear together, return a typed relation only when a sentence "
+    "states one explicitly between the two entities of that pair (either direction). Use entity "
+    "names exactly as listed; never introduce other entities. Predicates are short lowercase "
+    "snake_case verb phrases (acquired, part_of, led_by, headquartered_in, measures, "
+    "reduced). Return nothing for a pair that merely co-occurs."
+)
+
+
+def llm_predicate(raw: object) -> str | None:
+    """Model predicate normalised like native ones (``works at`` -> ``works_at``); ``None``
+    when it is empty, malformed or one of the structural predicates the native layer owns."""
+    pred = re.sub(r"[^a-z0-9]+", "_", str(raw).strip().casefold()).strip("_")
+    if not _PREDICATE_RE.fullmatch(pred) or pred in _STRUCTURAL_PREDICATES:
+        return None
+    return pred
+
+
+def llm_confidence(raw: object) -> float:
+    value = float(raw) if isinstance(raw, int | float) else 0.5
+    return min(LLM_RELATION_MAX_CONFIDENCE, max(0.1, value))
+
+
+def accept_relations[E](
+    out: dict[str, Any] | None,
+    resolve: Callable[[str], E | None],
+    *,
+    allowed_pairs: set[frozenset[str]] | None = None,
+    key: Callable[[E], str],
+    max_relations: int,
+) -> list[tuple[E, str, E, float]]:
+    """Keep only model relations whose ends resolve to entities the native code already
+    found (never invent entities), with a well-formed predicate and capped confidence."""
+    accepted: list[tuple[E, str, E, float]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in (out or {}).get("relations", []):
+        if not isinstance(item, dict) or len(accepted) >= max_relations:
+            continue
+        subject = resolve(str(item.get("subject", "")))
+        obj = resolve(str(item.get("object", "")))
+        pred = llm_predicate(item.get("predicate", ""))
+        if subject is None or obj is None or pred is None or key(subject) == key(obj):
+            continue
+        if allowed_pairs is not None and frozenset((key(subject), key(obj))) not in allowed_pairs:
+            continue
+        sig = (key(subject), pred, key(obj))
+        if sig in seen:
+            continue
+        seen.add(sig)
+        accepted.append((subject, pred, obj, llm_confidence(item.get("confidence"))))
+    return accepted
+
+
+@dataclass
+class _PairContext:
+    first: LexEntity
+    second: LexEntity
+    chunk: Chunk
+    count: int = 0
+    sentences: list[str] = field(default_factory=list)
+
+
+def _has_form(low: str, lex: LexEntity) -> bool:
+    return any(
+        re.search(r"(?<![a-z0-9\-])" + re.escape(f) + r"(?:s|es)?(?![a-z0-9\-])", low)
+        for f in lex.all_forms()
+        if len(f) >= 2
+    )
 
 
 def entity_id_for(tenant_id: str, scope_key: str, canonical: str) -> str:
@@ -112,6 +221,9 @@ class NativeGraphEnrichment:
     info = ProviderInfo(
         name="native-graph", license="Apache-2.0", origin="memory-service", locality="local"
     )
+
+    def __init__(self, *, assist: LLMAssist | None = None) -> None:
+        self.assist = assist or LLMAssist.disabled()
 
     # -- memories ---------------------------------------------------------------------
     async def enrich_memory(
@@ -194,7 +306,67 @@ class NativeGraphEnrichment:
                     attributes={"memory_type": memory.memory_type.value},
                 )
             )
+        if (
+            len(entities) >= 2
+            and all(r.predicate == "mentions" for r in relations)
+            and self.assist.wants("relation_extraction")
+        ):
+            known = {r.relation_id for r in relations}
+            for r in await self._memory_relations(memory, list(entities.values()), keys):
+                if r.relation_id not in known:
+                    known.add(r.relation_id)
+                    relations.append(r)
         return list(entities.values()), relations
+
+    async def _memory_relations(
+        self, memory: CanonicalMemory, entities: Sequence[Entity], keys: Sequence[str]
+    ) -> list[Relation]:
+        by_form: dict[str, Entity] = {}
+        for e in entities:
+            for form in (
+                e.canonical_name,
+                canonical_entity(e.name),
+                *map(canonical_entity, e.aliases),
+            ):
+                by_form.setdefault(form, e)
+        out = await self.assist.structured(
+            "relation_extraction",
+            system=_MEMORY_RELATIONS_SYSTEM,
+            user=f"Text: {memory.content[:_LLM_MAX_TEXT]}\n"
+            f"Entities: {'; '.join(e.name for e in entities)}",
+            schema=_RELATIONS_SCHEMA,
+            max_tokens=400,
+        )
+        accepted = accept_relations(
+            out,
+            lambda name: by_form.get(canonical_entity(name)),
+            key=lambda e: e.entity_id,
+            max_relations=LLM_MAX_RELATIONS_PER_MEMORY,
+        )
+        status = "CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED"
+        return [
+            Relation(
+                relation_id=relation_id_for(
+                    memory.tenant_id, subject.entity_id, pred, obj.entity_id, memory.memory_id
+                ),
+                tenant_id=memory.tenant_id,
+                subject_id=subject.entity_id,
+                predicate=pred,
+                object_id=obj.entity_id,
+                scope_key=memory.scope.key(),
+                visibility_keys=list(keys),
+                valid_from=memory.temporal.valid_from,
+                valid_to=memory.temporal.valid_to,
+                observed_at=memory.temporal.observed_at,
+                status=status,
+                confidence=min(confidence, memory.confidence),
+                evidence=list(memory.evidence),
+                memory_id=memory.memory_id,
+                fact_text=memory.content,
+                attributes={"memory_type": memory.memory_type.value, "extraction": "llm"},
+            )
+            for subject, pred, obj, confidence in accepted
+        ]
 
     # -- documents --------------------------------------------------------------------
     async def enrich_document(
@@ -381,6 +553,8 @@ class NativeGraphEnrichment:
                     "page": pages[0] if pages else None,
                 },
             )
+        llm_pairs: dict[tuple[str, str], _PairContext] = {}
+        llm_on = self.assist.wants("relation_extraction")
         for c in chunks:
             names = [
                 ie.forms.get(m.entity.canonical) or m.entity
@@ -415,6 +589,7 @@ class NativeGraphEnrichment:
                         confidence=0.6,
                         attributes={"page": c.page},
                     )
+            chunk_sentences = sentences(c.text) if llm_on else []
             for a, b in list(itertools.combinations(named[:6], 2))[:8]:
                 first, second = sorted((a, b), key=lambda x: x.canonical)
                 rel(
@@ -427,7 +602,69 @@ class NativeGraphEnrichment:
                     confidence=0.4,
                     attributes={"page": c.page},
                 )
+                if llm_on:
+                    pc = llm_pairs.setdefault(
+                        (first.canonical, second.canonical), _PairContext(first, second, c)
+                    )
+                    pc.count += 1
+                    if len(pc.sentences) < 2:
+                        for s in chunk_sentences:
+                            low = s.lower()
+                            if _has_form(low, first) and _has_form(low, second):
+                                if not pc.sentences:
+                                    pc.chunk = c
+                                pc.sentences.append(s[:_LLM_MAX_SENTENCE])
+                                if len(pc.sentences) >= 2:
+                                    break
+        if llm_pairs:
+            for first, pred, second, confidence, pc in await self._document_relations(
+                ie, llm_pairs
+            ):
+                text = f"{first.name} {pred.replace('_', ' ')} {second.name}"
+                if pc.sentences:
+                    text += f" — {pc.sentences[0][:240]}"
+                rel(
+                    ent(first),
+                    pred,
+                    ent(second),
+                    "llm:" + pc.chunk.chunk_id,
+                    [chunk_ref(pc.chunk)],
+                    text=text,
+                    confidence=confidence,
+                    attributes={"page": pc.chunk.page, "extraction": "llm"},
+                )
         return list(entities.values()), list(relations.values())
+
+    async def _document_relations(
+        self, ie: DocumentIE, pairs: dict[tuple[str, str], _PairContext]
+    ) -> list[tuple[LexEntity, str, LexEntity, float, _PairContext]]:
+        top = sorted(
+            pairs.values(), key=lambda p: (-p.count, p.first.canonical, p.second.canonical)
+        )
+        top = top[:LLM_MAX_PAIRS_PER_DOCUMENT]
+        lines = []
+        for i, pc in enumerate(top, start=1):
+            context = " ".join(pc.sentences) or pc.chunk.text.strip().replace("\n", " ")[:200]
+            lines.append(f"{i}. {pc.first.name} | {pc.second.name}\n   context: {context}")
+        out = await self.assist.structured(
+            "relation_extraction",
+            system=_DOCUMENT_RELATIONS_SYSTEM,
+            user="Pairs:\n" + "\n".join(lines),
+            schema=_RELATIONS_SCHEMA,
+            max_tokens=600,
+        )
+        by_pair = {frozenset((pc.first.canonical, pc.second.canonical)): pc for pc in top}
+        accepted = accept_relations(
+            out,
+            lambda name: ie.forms.get(canonical_entity(name)),
+            allowed_pairs=set(by_pair),
+            key=lambda lex: lex.canonical,
+            max_relations=LLM_MAX_PAIRS_PER_DOCUMENT,
+        )
+        return [
+            (subject, pred, obj, confidence, by_pair[frozenset((subject.canonical, obj.canonical))])
+            for subject, pred, obj, confidence in accepted
+        ]
 
 
 VALUE_TYPES = frozenset({"MONEY", "PERCENT", "COUNT", "DATE", "NUMBER", "PERIOD"})

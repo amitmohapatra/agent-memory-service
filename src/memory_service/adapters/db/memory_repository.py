@@ -64,6 +64,8 @@ def _to_domain(r: MemoryRow) -> CanonicalMemory:
         confidence=r.confidence,
         importance=r.importance,
         reinforcement_count=r.reinforcement_count,
+        access_count=r.access_count or 0,
+        last_accessed_at=r.last_accessed_at,
         system_metadata={
             **(r.system_metadata or {}),
             "provider": r.provider,
@@ -127,6 +129,8 @@ class SqlMemoryRepository:
                 confidence=memory.confidence,
                 importance=memory.importance,
                 reinforcement_count=memory.reinforcement_count,
+                access_count=memory.access_count,
+                last_accessed_at=memory.last_accessed_at,
                 provider=provider,
                 system_metadata=sm,
                 custom_metadata=memory.custom_metadata,
@@ -188,6 +192,9 @@ class SqlMemoryRepository:
         r.confidence = memory.confidence
         r.importance = memory.importance
         r.reinforcement_count = memory.reinforcement_count
+        r.access_count = max(r.access_count or 0, memory.access_count)
+        if memory.last_accessed_at is not None:
+            r.last_accessed_at = memory.last_accessed_at
         r.lifetime = memory.lifetime.value
         r.memory_type = memory.memory_type.value
         r.visibility = memory.visibility.value
@@ -333,3 +340,85 @@ class SqlMemoryRepository:
             out.append((r.tenant_id, r.memory_id))
         await self.s.flush()
         return out
+
+    async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(
+                    MemoryRow.created_at >= since,
+                    MemoryRow.deleted_at.is_(None),
+                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                )
+                .order_by(MemoryRow.created_at.desc())
+                .limit(limit)
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
+    async def related(
+        self,
+        tenant_id: str,
+        *,
+        scope_key: str,
+        subject: str,
+        exclude: Sequence[str] = (),
+        limit: int = 8,
+    ) -> list[CanonicalMemory]:
+        stmt = select(MemoryRow).where(
+            MemoryRow.tenant_id == tenant_id,
+            MemoryRow.scope_key == scope_key,
+            MemoryRow.subject == subject,
+            MemoryRow.deleted_at.is_(None),
+            MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+        )
+        if exclude:
+            stmt = stmt.where(MemoryRow.memory_id.not_in(list(exclude)))
+        rows = (await self.s.scalars(stmt.order_by(MemoryRow.updated_at.desc()).limit(limit))).all()
+        return [_to_domain(r) for r in rows]
+
+    async def bump_access(self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime) -> int:
+        if not memory_ids:
+            return 0
+        result = await self.s.execute(
+            update(MemoryRow)
+            .where(
+                MemoryRow.tenant_id == tenant_id,
+                MemoryRow.memory_id.in_(list(memory_ids)),
+                MemoryRow.deleted_at.is_(None),
+            )
+            .values(access_count=MemoryRow.access_count + 1, last_accessed_at=at)
+        )
+        return int(result.rowcount or 0)
+
+    async def list_idle(
+        self, *, idle_before: datetime, limit: int = 500, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        conds = [
+            MemoryRow.deleted_at.is_(None),
+            MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+            MemoryRow.updated_at < idle_before,
+            or_(MemoryRow.last_accessed_at.is_(None), MemoryRow.last_accessed_at < idle_before),
+        ]
+        if tenant_id is not None:
+            conds.append(MemoryRow.tenant_id == tenant_id)
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow).where(*conds).order_by(MemoryRow.updated_at).limit(limit)
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
+    async def set_status(
+        self, tenant_id: str, memory_id: str, status: TemporalStatus, *, now: datetime
+    ) -> bool:
+        r = await self.s.get(MemoryRow, memory_id)
+        if r is None or r.tenant_id != tenant_id or r.deleted_at is not None:
+            return False
+        if r.temporal_status == status.value:
+            return True
+        r.temporal_status = status.value
+        r.updated_at = now
+        r.indexed_at = None
+        await self.s.flush()
+        return True

@@ -79,7 +79,7 @@ class MemoryUser(HttpUser):
         )
 
     @task(3)
-    def context(self) -> None:
+    def context_bundle(self) -> None:
         self.client.post(
             "/v1/context",
             headers=self.headers,

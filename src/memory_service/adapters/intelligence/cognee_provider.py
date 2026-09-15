@@ -9,6 +9,7 @@ as candidates. It requires an LLM and Cognee's own databases; it is wired only w
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -38,6 +39,27 @@ class CogneeMemoryIntelligence:
 
     def _cognee(self) -> Any:
         if self._client is None:
+            llm = self.settings.models.llm
+            if not llm.enabled or not llm.model:
+                raise DependencyUnavailable("cognee requires models.llm.enabled=true and a model")
+            # Cognee reads its LLM/embedding endpoints from the environment (OpenAI-compatible);
+            # both point at the Bifrost gateway. Must be set before the package is imported.
+            api_key = llm.api_key.get_secret_value() if llm.api_key else "-"
+            os.environ.update(
+                {
+                    "LLM_PROVIDER": "openai",
+                    "LLM_MODEL": llm.model,
+                    "LLM_ENDPOINT": llm.base_url,
+                    "LLM_API_KEY": api_key,
+                    "EMBEDDING_PROVIDER": "openai",
+                    "EMBEDDING_MODEL": self.settings.graph_enrichment.graphiti_embedding_model,
+                    "EMBEDDING_ENDPOINT": llm.base_url,
+                    "EMBEDDING_API_KEY": api_key,
+                    "EMBEDDING_DIMENSIONS": str(
+                        self.settings.graph_enrichment.graphiti_embedding_dim
+                    ),
+                }
+            )
             try:
                 import cognee
             except ImportError as exc:

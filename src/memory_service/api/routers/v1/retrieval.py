@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
+from memory_service.modules.grounding.cascade import attach
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -123,6 +125,13 @@ class ContextRequest(BaseModel):
     )
     token_budget: int | None = Field(default=None, ge=200, le=200_000, examples=[6000])
     document_ids: list[str] | None = Field(default=None, examples=[None])
+    answer: str | None = Field(
+        default=None,
+        max_length=40_000,
+        description="When given, the grounding cascade verifies this answer against the "
+        "bundle and the report is attached as evidence.grounding",
+        examples=[None],
+    )
 
 
 class ContextResponse(BaseModel):
@@ -153,7 +162,11 @@ class ContextResponse(BaseModel):
                         "missing_groups": [],
                         "escalations": [],
                         "notes": [],
+                        "unused": [],
+                        "grounding": None,
+                        "llm_tokens": 0,
                     },
+                    "bundle_id": "6f1c…",
                     "token_budget": 6000,
                     "token_estimate": 1840,
                     "cache_hit": False,
@@ -168,6 +181,7 @@ class ContextResponse(BaseModel):
 
     query: str
     query_type: str
+    bundle_id: str = ""
     conversation: dict[str, Any]
     memories: list[dict[str, Any]]
     knowledge: list[dict[str, Any]]
@@ -230,4 +244,9 @@ async def context(
     bundle = await builder.build(
         ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
     )
+    if body.answer:
+        cascade = container.services.get("grounding")
+        if cascade is None:
+            raise ProviderNotConfigured("models.nli.provider=disabled")
+        bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
     return ContextResponse.model_validate(bundle_to_api(bundle))

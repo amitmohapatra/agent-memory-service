@@ -1,0 +1,193 @@
+{
+  "acknowledged": {
+    "files": 1,
+    "messages": 12,
+    "observations": 4
+  },
+  "acknowledged_data_loss": 0,
+  "archive": {
+    "documents_pending": 0,
+    "messages_unarchived": 0
+  },
+  "drive_seconds": 8.57,
+  "duplicate_memories": 3,
+  "faults": [
+    {
+      "fault": "worker_kill",
+      "jobs_in_flight": 5,
+      "pid": 44269,
+      "restarted_pid": 44375,
+      "signal": "SIGKILL",
+      "t": 1789465361.51,
+      "worker": "worker-0"
+    }
+  ],
+  "jobs_not_succeeded_after_recovery": 0,
+  "lost": [],
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "465375f2c484482aae72af3d41edecf17a8a5984",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": null,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "prithivida/Splade_PP_en_v1",
+        "revision": "762be6a7206e2f299182705972a65e5c46e62be2"
+      }
+    },
+    "packages": {
+      "docling": "not-installed",
+      "fastapi": "0.141.1",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "not-installed",
+      "sqlalchemy": "2.0.53",
+      "torch": "not-installed",
+      "transformers": "not-installed",
+      "zstandard": "0.25.0"
+    },
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "python": "3.12.14",
+    "timestamp": "2026-09-15T09:44:09.962388+00:00"
+  },
+  "recovery": {
+    "final_state": {
+      "documents_pending": 0,
+      "jobs_doing": 0,
+      "jobs_failed": 0,
+      "jobs_open": 0,
+      "jobs_scheduled": 0,
+      "messages_unarchived": 0,
+      "observations_unprocessed": 0
+    },
+    "jobs": {
+      "doing": 0,
+      "failed": 0,
+      "max_attempts": 2,
+      "runnable": 0,
+      "scheduled": 0,
+      "succeeded": 74
+    },
+    "jobs_retried": 3,
+    "queue_idle_with_pending": false,
+    "reached_after_seconds": {
+      "documents_pending": 87.17,
+      "jobs_open": 87.17,
+      "messages_unarchived": 57.53,
+      "observations_unprocessed": 87.17
+    },
+    "seconds": 87.18,
+    "timed_out": false
+  },
+  "recovery_seconds": 87.18,
+  "refused_during_outage": {
+    "files": 0,
+    "messages": 0,
+    "observations": 0
+  },
+  "server": {
+    "api_started_by_tool": true,
+    "base_url": "http://127.0.0.1:60196",
+    "environment": "dev",
+    "logs": "/private/tmp/claude-501/-Users-ricky-usage-data-agent-memory-service/2938c508-8659-4ba8-8a9e-bf49206b385f/scratchpad/deployed_logs2",
+    "readiness": {
+      "dependencies": {
+        "blob": {
+          "error": null,
+          "mandatory": true,
+          "ok": true
+        },
+        "cache": {
+          "error": null,
+          "mandatory": false,
+          "ok": true
+        },
+        "openfga": {
+          "error": null,
+          "mandatory": true,
+          "ok": true
+        },
+        "postgres": {
+          "error": null,
+          "mandatory": true,
+          "ok": true
+        },
+        "qdrant": {
+          "error": null,
+          "mandatory": true,
+          "ok": true
+        },
+        "task_queue": {
+          "error": null,
+          "mandatory": true,
+          "ok": true
+        }
+      },
+      "status": "ready"
+    },
+    "service": "memory-service",
+    "version": "0.1.0"
+  },
+  "state_reset": {},
+  "total_seconds": 97.01,
+  "transport": "tcp",
+  "unexpected_errors": [],
+  "worker_crashes_injected": 1,
+  "worker_kills_injected": 1,
+  "workers": {
+    "alive_at_end": 2,
+    "cmd": "memory-worker",
+    "count": 2,
+    "unexpected_exits": []
+  }
+}

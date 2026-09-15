@@ -432,22 +432,79 @@
     }
   ],
   "provenance": {
-    "timestamp": "2026-09-15T06:48:28.486272+00:00",
-    "git_commit": "6293184743fc2164c7420ae6e9902687f9e0a409",
-    "python": "3.12.3",
-    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "timestamp": "2026-09-15T09:48:21.510553+00:00",
+    "git_commit": "465375f2c484482aae72af3d41edecf17a8a5984",
+    "python": "3.12.14",
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "machine": "x86_64",
-    "cpu_count": 2,
-    "memory_gb": 7.8,
+    "cpu_count": 4,
+    "memory_gb": null,
     "packages": {
       "fastapi": "0.141.1",
       "sqlalchemy": "2.0.53",
       "qdrant-client": "1.19.0",
       "procrastinate": "3.9.0",
       "zstandard": "0.25.0",
-      "sentence-transformers": "6.0.1",
-      "fastembed": "0.8.0",
-      "onnxruntime": "1.30.0"
+      "sentence-transformers": "not-installed",
+      "torch": "not-installed",
+      "transformers": "not-installed",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "docling": "not-installed"
+    },
+    "models": {
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "prithivida/Splade_PP_en_v1",
+        "revision": "762be6a7206e2f299182705972a65e5c46e62be2"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
     }
   }
 }

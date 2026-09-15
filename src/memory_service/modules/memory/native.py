@@ -1,11 +1,15 @@
 """Native memory intelligence: deterministic extraction, classification and consolidation.
 
-No LLM is involved. Rules are conservative on purpose: when the service is not sure a
-sentence is memory-worthy it stores nothing (the raw message is still in the thread and the
-archive), and when it is not sure two memories are the same it keeps both. The release gate
-for this module is the *false-merge rate*, so every merge/supersede decision needs positive
-evidence (identical normalized text, identical subject+predicate, or an explicit replacement
-signal), and disagreeing numbers or negation always block a merge.
+The rules are complete on their own and conservative on purpose: when the service is not
+sure a sentence is memory-worthy it stores nothing (the raw message is still in the thread
+and the archive), and when it is not sure two memories are the same it keeps both. The
+release gate for this module is the *false-merge rate*, so every merge/supersede decision
+needs positive evidence (identical normalized text, identical subject+predicate, or an
+explicit replacement signal), and disagreeing numbers or negation always block a merge.
+
+An optional ``LLMAssist`` refines only the ambiguous decisions (low-confidence extractions,
+sentences no rule matched, the grey band of consolidation) and every consultation falls back
+to the native result; with assist disabled the module behaves exactly as without it.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate
 from memory_service.ports.models import EmbeddingProvider, ProviderInfo
 
@@ -237,6 +242,77 @@ _IMPORTANCE_BY_TYPE = {
 }
 
 
+# --------------------------------------------------------------------------- llm assist
+
+_AMBIGUOUS_CONFIDENCE = 0.7
+_ASSIST_MAX_SENTENCES = 8  # model consultations per observation and use
+_ASSIST_MAX_CHARS = 2000
+_ASSIST_MIN_SIMILARITY = 0.5
+_MEMORY_TYPES = [t.value for t in MemoryType if t is not MemoryType.CUSTOM]
+
+_EXTRACTION_SYSTEM = (
+    "You refine a tentative memory extracted from one sentence by rules. Keep the meaning, "
+    "write the content as one compact factual statement, and pick the memory_type: USER "
+    "(stable attribute of the user), PREFERENCE (how the user wants things), SEMANTIC (a fact "
+    "or decision), PROCEDURAL (how to do something), EPISODIC (something that happened), TASK "
+    "(something to do). subject/predicate/object describe the fact as a triple when it has "
+    "one. Never invent details that are not in the sentence."
+)
+_EXTRACTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["memory_type", "content"],
+    "properties": {
+        "memory_type": {"type": "string", "enum": _MEMORY_TYPES},
+        "content": {"type": "string"},
+        "subject": {"type": "string"},
+        "predicate": {"type": "string"},
+        "object": {"type": "string"},
+    },
+}
+_WORTHINESS_SYSTEM = (
+    "Decide whether one sentence from a conversation is worth remembering as a durable memory "
+    "about the user, the agent or their work: a stable attribute, a preference, a decision, "
+    "a fact about their project, how something is done, or a notable event. Small talk, "
+    "questions, transient chatter and generic statements are not worthy. When worthy, give "
+    "the memory_type (USER, PREFERENCE, SEMANTIC, PROCEDURAL, EPISODIC or TASK) and the "
+    "content as one compact statement in the third person that keeps every detail."
+)
+_WORTHINESS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["worthy"],
+    "properties": {
+        "worthy": {"type": "boolean"},
+        "memory_type": {"type": "string", "enum": _MEMORY_TYPES},
+        "content": {"type": "string"},
+    },
+}
+_ADJUDICATION_SYSTEM = (
+    "Compare a NEW memory with an EXISTING one and answer with a verdict: 'same' when both "
+    "state the same fact (paraphrase, no new information); 'update' when the new one gives a "
+    "newer value for the same thing and should replace the existing one; 'contradict' when "
+    "they disagree about the same thing and neither clearly replaces the other; 'different' "
+    "when they are about different things. When unsure answer 'different'."
+)
+_ADJUDICATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["verdict"],
+    "properties": {
+        "verdict": {"type": "string", "enum": ["same", "update", "contradict", "different"]}
+    },
+}
+
+
+def _bounded(value: object, limit: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = re.sub(r"\s+", " ", value).strip()
+    return text[:limit] if text else None
+
+
+def _memory_type(value: object) -> MemoryType | None:
+    return MemoryType(value) if isinstance(value, str) and value in _MEMORY_TYPES else None
+
+
 _OBJECT_TAIL = re.compile(
     r"\s*\b(?:since|as of|from|starting|effective|until|through|till|from now on)\b.*$",
     re.IGNORECASE,
@@ -297,10 +373,15 @@ class NativeMemoryIntelligence:
     )
 
     def __init__(
-        self, settings: MemoryIntelligenceSettings, embedding: EmbeddingProvider | None = None
+        self,
+        settings: MemoryIntelligenceSettings,
+        embedding: EmbeddingProvider | None = None,
+        *,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
+        self.assist = assist or LLMAssist.disabled()
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
@@ -364,9 +445,21 @@ class NativeMemoryIntelligence:
             ]
         out: list[MemoryCandidate] = []
         seen: set[str] = set()
+        refine_left = worth_left = _ASSIST_MAX_SENTENCES
         for sentence in split_sentences(text):
             for clause in split_clauses(sentence):
                 cand = self._from_sentence(clause, ctx, evidence, kind=kind)
+                if cand is None:
+                    if worth_left > 0 and self._worth_asking(clause):
+                        worth_left -= 1
+                        cand = await self._assist_worthiness(clause, ctx, evidence)
+                elif (
+                    cand.confidence <= _AMBIGUOUS_CONFIDENCE
+                    and refine_left > 0
+                    and self.assist.wants("ambiguous_extraction")
+                ):
+                    refine_left -= 1
+                    cand = await self._assist_extraction(clause, cand, ctx)
                 if cand is None:
                     continue
                 key = normalized_hash(cand.content)
@@ -375,6 +468,85 @@ class NativeMemoryIntelligence:
                 seen.add(key)
                 out.append(cand)
         return out
+
+    def _worth_asking(self, s: str) -> bool:
+        return (
+            self.assist.wants("ambiguous_worthiness")
+            and not _QUESTION.search(s)
+            and not _CHITCHAT.match(s)
+        )
+
+    async def _assist_extraction(
+        self, s: str, cand: MemoryCandidate, ctx: MemoryExecutionContext
+    ) -> MemoryCandidate:
+        """Let the model refine a weak rule match; the native candidate stays unless the
+        answer validates. Evidence and temporal fields are never taken from the model."""
+        out = await self.assist.structured(
+            "ambiguous_extraction",
+            system=_EXTRACTION_SYSTEM,
+            user=(
+                f"Sentence: {s[:_ASSIST_MAX_CHARS]}\n"
+                f"Speaker: {ctx.principal_id}\n"
+                f"Rule guess: memory_type={cand.memory_type.value} subject={cand.subject or '-'} "
+                f"predicate={cand.predicate or '-'} object={cand.object or '-'}"
+            ),
+            schema=_EXTRACTION_SCHEMA,
+            max_tokens=300,
+        )
+        if out is None:
+            return cand
+        mt = _memory_type(out.get("memory_type"))
+        content = _bounded(out.get("content"), 2000)
+        if mt is None or content is None:
+            return cand
+        update: dict[str, Any] = {"content": content, "memory_type": mt}
+        if mt is not cand.memory_type:
+            update["lifetime"] = _LIFETIME_BY_TYPE.get(mt, cand.lifetime)
+            update["importance"] = _IMPORTANCE_BY_TYPE.get(mt, cand.importance)
+            update["category"] = mt.value.lower()
+        if subject := _bounded(out.get("subject"), 300):
+            update["subject"] = subject.lower()
+        if predicate := _bounded(out.get("predicate"), 100):
+            update["predicate"] = predicate.lower().replace(" ", "_")
+        if obj := _bounded(out.get("object"), 300):
+            update["object"] = _clean_object(obj)
+        return cand.model_copy(update=update)
+
+    async def _assist_worthiness(
+        self, s: str, ctx: MemoryExecutionContext, evidence: list[EvidenceRef]
+    ) -> MemoryCandidate | None:
+        """No rule matched: the fast model may still find a durable memory in the sentence.
+        Anything short of a validated 'worthy' answer keeps the native verdict (drop)."""
+        out = await self.assist.structured(
+            "ambiguous_worthiness",
+            system=_WORTHINESS_SYSTEM,
+            user=f"Sentence: {s[:_ASSIST_MAX_CHARS]}\nSpeaker: {ctx.principal_id}",
+            schema=_WORTHINESS_SCHEMA,
+            max_tokens=200,
+        )
+        if out is None or out.get("worthy") is not True:
+            return None
+        mt = _memory_type(out.get("memory_type"))
+        content = _bounded(out.get("content"), 1000)
+        if mt is None or content is None:
+            return None
+        vf_m, vt_m = _VALID_FROM.search(s), _VALID_TO.search(s)
+        user = _user_subject(ctx)
+        return MemoryCandidate(
+            content=content,
+            memory_type=mt,
+            lifetime=_LIFETIME_BY_TYPE.get(mt, Lifetime.LONG_TERM),
+            subject=user
+            if mt in (MemoryType.USER, MemoryType.PREFERENCE) or not ctx.thread_id
+            else f"thread:{ctx.thread_id}",
+            evidence=evidence,
+            importance=_IMPORTANCE_BY_TYPE.get(mt, 0.5),
+            confidence=0.6,
+            category="assisted",
+            negates_prior=bool(_REPLACEMENT.search(s)),
+            valid_from=parse_date(vf_m.group(1)) if vf_m else None,
+            valid_to=parse_date(vt_m.group(1)) if vt_m else None,
+        )
 
     def _decision(
         self,
@@ -670,6 +842,7 @@ class NativeMemoryIntelligence:
         c_neg = has_negation(candidate.content)
         c_obj = _clean_object(candidate.object or "")
         best: ConsolidationOutcome | None = None
+        grey: tuple[CanonicalMemory, float] | None = None
         dense: list[float] | None = None
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
@@ -708,13 +881,25 @@ class NativeMemoryIntelligence:
                     if _other_principals_shared(mem, ctx) and not candidate.negates_prior:
                         # another agent's finding in a shared scope is not silently replaced:
                         # both stay, linked as contradicting, for a human or a later signal
-                        return ConsolidationOutcome(
+                        native = ConsolidationOutcome(
                             decision=DedupDecision.CONTRADICT,
                             candidate=candidate,
                             target_memory_id=mem.memory_id,
                             score=0.9,
                             reason=f"conflicting value for {candidate.predicate} from "
                             f"{ctx.principal_id} vs {mem.owner_principal}",
+                        )
+                        return await self._adjudicate(
+                            candidate,
+                            mem,
+                            ctx,
+                            native=native,
+                            same=native.model_copy(
+                                update={
+                                    "decision": DedupDecision.REINFORCE,
+                                    "reason": f"equivalent value for {candidate.predicate}",
+                                }
+                            ),
                         )
                     # a newer value for a single-valued slot replaces the older one
                     return ConsolidationOutcome(
@@ -754,6 +939,14 @@ class NativeMemoryIntelligence:
                 if best is None or outcome.score > best.score:
                     best = outcome
                 continue
+            if (
+                sim >= _ASSIST_MIN_SIMILARITY
+                and (grey is None or sim > grey[1])
+                and self.assist.wants("conflict_adjudication")
+                and numbers(mem.content) == c_numbers
+                and has_negation(mem.content) == c_neg
+            ):
+                grey = (mem, sim)
             # 3. dense similarity (only with a real embedding provider; the hash stand-in is
             #    excluded because it would merge unrelated sentences sharing a few tokens)
             if (
@@ -777,9 +970,73 @@ class NativeMemoryIntelligence:
                     )
                     if best is None or outcome.score > best.score:
                         best = outcome
-        return best or ConsolidationOutcome(
+        create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
+        if best is None and grey is not None:
+            # similar wording but below the merge threshold: the native answer is "keep both";
+            # the model may recognise a paraphrase, an update or a contradiction
+            mem, sim = grey
+            same = ConsolidationOutcome(
+                decision=DedupDecision.MERGE
+                if c_tokens - tokens(mem.content)
+                else DedupDecision.REINFORCE,
+                candidate=candidate,
+                target_memory_id=mem.memory_id,
+                score=sim,
+                reason=f"lexical similarity {sim:.2f}",
+            )
+            return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
+        return best or create
+
+    async def _adjudicate(
+        self,
+        candidate: MemoryCandidate,
+        mem: CanonicalMemory,
+        ctx: MemoryExecutionContext,
+        *,
+        native: ConsolidationOutcome,
+        same: ConsolidationOutcome,
+    ) -> ConsolidationOutcome:
+        """Ask the model to settle a candidate against one existing memory. The hard blocks
+        (differing numbers or negation) are checked first and are never overridden; any
+        failure or a 'different' verdict keeps the native outcome."""
+        if not self.assist.wants("conflict_adjudication"):
+            return native
+        if numbers(mem.content) != numbers(candidate.content) or has_negation(
+            mem.content
+        ) != has_negation(candidate.content):
+            return native
+        observed = candidate.evidence[0].observed_at if candidate.evidence else datetime.now(UTC)
+        out = await self.assist.structured(
+            "conflict_adjudication",
+            system=_ADJUDICATION_SYSTEM,
+            user=(
+                f"NEW (by {ctx.principal_id}, observed {observed.isoformat()}):\n"
+                f"{candidate.content[:_ASSIST_MAX_CHARS]}\n"
+                f"triple: {candidate.subject or '-'} / {candidate.predicate or '-'} / "
+                f"{candidate.object or '-'}\n\n"
+                f"EXISTING (by {mem.owner_principal}, observed "
+                f"{mem.temporal.observed_at.isoformat()}):\n{mem.content[:_ASSIST_MAX_CHARS]}\n"
+                f"triple: {mem.subject or '-'} / {mem.predicate or '-'} / {mem.object or '-'}"
+            ),
+            schema=_ADJUDICATION_SCHEMA,
+            max_tokens=50,
+        )
+        verdict = out.get("verdict") if out else None
+        if verdict == "same":
+            return same.model_copy(update={"reason": f"model: same ({same.reason})"})
+        if verdict in ("update", "contradict"):
+            return ConsolidationOutcome(
+                decision=DedupDecision.SUPERSEDE
+                if verdict == "update"
+                else DedupDecision.CONTRADICT,
+                candidate=candidate,
+                target_memory_id=mem.memory_id,
+                score=0.85,
+                reason=f"model: {verdict} ({native.reason})",
+            )
+        return native
 
     async def search_features(self, query: str, ctx: MemoryExecutionContext) -> dict[str, Any]:
         return {}

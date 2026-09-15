@@ -208,27 +208,81 @@ class RerankerSettings(BaseModel):
     batch_size: int = 16
 
 
+class NLISettings(BaseModel):
+    """Claim-support classifier for the grounding cascade. ``transformers`` runs the DeBERTa
+    NLI cross-encoder on CPU; ``lexical`` is a deterministic stand-in (never representative)."""
+
+    provider: Literal["transformers", "lexical", "disabled"] = "transformers"
+    model: str = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
+    model_path: str | None = Field(default=None, description="local directory with model files")
+    batch_size: int = 16
+    max_length: int = 512
+    supported_threshold: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="entailment (or contradiction) score to decide"
+    )
+    borderline_band: tuple[float, float] = Field(
+        default=(0.3, 0.7), description="entailment band in which the LLM judge is consulted"
+    )
+    premises_per_claim: int = Field(
+        default=5, ge=1, description="evidence items scored per claim (best lexical overlap)"
+    )
+    max_claims: int = Field(default=40, ge=1)
+
+
+LLMUse = Literal[
+    "ambiguous_extraction",
+    "ambiguous_worthiness",
+    "relation_extraction",
+    "entity_resolution",
+    "conflict_adjudication",
+    "summaries",
+    "reflection",
+    "query_expansion",
+    "chunk_context",
+    "grounding_judge",
+    "observation_refinement",
+]
+
+
 class LLMSettings(BaseModel):
+    """Generative model access. The only provider is the Bifrost gateway (OpenAI-compatible);
+    provider keys live in Bifrost, the service holds a Bifrost *virtual key*."""
+
     enabled: bool = False
-    provider: Literal["disabled", "local", "vertex", "openai", "custom"] = "disabled"
-    model: str | None = None
-    base_url: str | None = None
-    api_key: SecretStr | None = None
+    provider: Literal["disabled", "bifrost"] = "disabled"
+    base_url: str = Field(
+        default="http://localhost:8090/v1", description="Bifrost OpenAI-compatible endpoint"
+    )
+    api_key: SecretStr | None = Field(
+        default=None,
+        description="Bifrost virtual key (MEMORY__MODELS__LLM__API_KEY or secrets.env)",
+    )
+    model: str | None = Field(
+        default="anthropic/claude-sonnet-5",
+        description="strong model (Bifrost provider/model name) for complex uses",
+    )
+    fast_model: str | None = Field(
+        default="anthropic/claude-haiku-4-5-20251001",
+        description="cheap model for fast_uses (classification-sized calls)",
+    )
+    fast_uses: list[LLMUse] = Field(
+        default_factory=lambda: ["ambiguous_worthiness", "query_expansion", "chunk_context"]
+    )
     max_tokens: int = 1024
     timeout_seconds: float = 30.0
-    uses: list[
-        Literal[
-            "ambiguous_extraction",
-            "ambiguous_worthiness",
-            "relation_extraction",
-            "entity_resolution",
-            "conflict_adjudication",
-            "summaries",
-            "reflection",
-            "query_expansion",
-            "chunk_context",
-        ]
-    ] = Field(default_factory=list)
+    max_retries: int = Field(default=2, description="retries on 429/5xx/timeouts, bounded")
+    retry_backoff_seconds: float = 0.5
+    circuit_failure_threshold: int = Field(
+        default=5, description="consecutive failures that open the circuit"
+    )
+    circuit_open_seconds: float = 30.0
+    uses: list[LLMUse] = Field(
+        default_factory=list,
+        description="which deterministic paths may consult the model; each falls back natively",
+    )
+
+    def wants(self, use: LLMUse) -> bool:
+        return self.enabled and use in self.uses
 
 
 class ModelSettings(BaseModel):
@@ -240,6 +294,7 @@ class ModelSettings(BaseModel):
     late_interaction_model_path: str | None = None
     embedding: EmbeddingSettings = EmbeddingSettings()
     reranker: RerankerSettings = RerankerSettings()
+    nli: NLISettings = NLISettings()
     llm: LLMSettings = LLMSettings()
 
 
@@ -250,6 +305,26 @@ class MemoryIntelligenceSettings(BaseModel):
     dedup_dense_threshold: float = 0.90
     dedup_candidate_k: int = 20
     false_merge_rate_max: float = Field(default=0.01, description="release gate threshold")
+    # admission gate (worthiness x novelty x confidence x expected utility -> admit/defer/reject)
+    admission_worthiness_min: float = Field(default=0.35, ge=0.0, le=1.0)
+    admission_confidence_min: float = Field(default=0.3, ge=0.0, le=1.0)
+    admission_score_min: float = Field(default=0.4, ge=0.0, le=1.0)
+    admission_defer_band: float = Field(
+        default=0.08, ge=0.0, le=1.0, description="score band below the minimum that defers"
+    )
+    # observational memory per thread
+    observer_hot_window_messages: int = Field(default=20, ge=1)
+    observer_batch_messages: int = Field(default=10, ge=1)
+    observer_max_notes: int = Field(default=12, ge=1)
+    # landing reflection and derived memories
+    landing_reflection_k: int = Field(default=8, ge=0, le=8)
+    belief_min_support: int = Field(default=2, ge=2)
+    entity_summary_min_facts: int = Field(default=2, ge=1)
+    # forgetting: importance x recency x access decay
+    forgetting_half_life_days: float = Field(default=30.0, gt=0.0)
+    forgetting_archive_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+    forgetting_min_idle_days: float = Field(default=30.0, ge=0.0)
+    forgetting_batch: int = Field(default=500, ge=1)
 
 
 class GraphEnrichmentSettings(BaseModel):
@@ -257,6 +332,11 @@ class GraphEnrichmentSettings(BaseModel):
     graphiti_neo4j_url: str | None = None
     graphiti_neo4j_user: str | None = None
     graphiti_neo4j_password: SecretStr | None = None
+    graphiti_embedding_model: str = Field(
+        default="openai/text-embedding-3-small",
+        description="embedding model Graphiti requests through the Bifrost gateway",
+    )
+    graphiti_embedding_dim: int = 1536
 
 
 class DocumentSettings(BaseModel):
@@ -388,7 +468,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="MEMORY__",
         env_nested_delimiter="__",
-        env_file=".env",
+        env_file=(".env", "secrets.env"),  # secrets.env is git-ignored; later files win
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -444,7 +524,9 @@ class Settings(BaseSettings):
             if self.blob.provider in ("memory", "filesystem"):
                 raise ValueError("blob.provider must be gcs in prod")
         if self.models.llm.enabled and self.models.llm.provider == "disabled":
-            raise ValueError("llm.enabled=true requires a provider")
+            raise ValueError("llm.enabled=true requires models.llm.provider=bifrost")
+        if self.models.llm.enabled and not self.models.llm.model:
+            raise ValueError("llm.enabled=true requires models.llm.model")
         return self
 
     def redacted(self) -> dict[str, Any]:

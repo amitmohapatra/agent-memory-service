@@ -32,6 +32,7 @@ def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_yaml_file_source(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)  # a developer's .env must not leak into the test
     cfg = tmp_path / "memory.yaml"
     cfg.write_text("search:\n  provider: memory\nmodels:\n  llm:\n    enabled: false\n")
     monkeypatch.setenv("MEMORY_CONFIG_FILE", str(cfg))
@@ -60,8 +61,10 @@ def test_prod_guards_reject_dev_only_providers() -> None:
 
 
 def test_llm_enabled_requires_provider() -> None:
-    with pytest.raises(ValueError, match="requires a provider"):
+    with pytest.raises(ValueError, match="provider=bifrost"):
         Settings(models={"llm": {"enabled": True, "provider": "disabled"}})
+    with pytest.raises(ValueError, match="models.llm.model"):
+        Settings(models={"llm": {"enabled": True, "provider": "bifrost", "model": None}})
 
 
 def test_redacted_hides_secrets() -> None:

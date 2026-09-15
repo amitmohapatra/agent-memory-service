@@ -20,12 +20,35 @@ R. Do not proceed if a release gate fails.
 - Python 3.12+, `uv`, `src` layout, Ruff (format + lint), Pyright (standard).
 - Typed Pydantic models at every public/application boundary; `dict[str, Any]` only for
   custom metadata.
-- Provider SDKs only inside `src/memory_service/adapters/`.
+- Provider SDKs only inside `src/memory_service/adapters/`. LLM provider SDKs (`openai`,
+  `anthropic`, `litellm`, …) are banned everywhere: the only generative path is the Bifrost
+  gateway adapter (`adapters/models/llm.py`), enforced by Ruff `banned-api` and
+  `tests/unit/test_architecture.py`.
 - Tests are marked: `unit`, `integration`, `contract`, `e2e`, `security`, `performance`,
-  `failure`, `eval`; plus `docker` (needs a Docker daemon with registry access) and `models`
-  (needs local model files). CI runs everything that is not `docker`/`models`; nightly runs
-  the rest.
-- Commit messages: `M<n>: <what>`.
+  `failure`, `eval`; plus `docker` (needs a Docker daemon with registry access), `models`
+  (needs local model files / Docling) and `bifrost` (needs a running gateway). CI runs
+  everything that is not `docker`/`models`/`bifrost`; the release gates run the rest.
+- Test settings are hermetic by default (hash embedding, lexical reranker, in-process
+  Qdrant/cache/authorization, builtin parser). `MEMORY_TEST_PROVIDERS=env` makes every
+  fixture take the *models / search / cache / authorization / documents / retrieval*
+  sections from the environment instead, so the same suites run against real weights and
+  servers; the fixtures then reset the Qdrant collections and the cache between tests.
+- Commit messages: `M<n>: <what>`; no tool or AI attribution trailers.
+
+## Real-component validation
+
+Everything that needs model weights or Docling runs in the `memory-validate` compose
+service (a Linux image with every extra; the repository is bind-mounted at `/app`, weights
+at `/models`):
+
+```bash
+docker compose --profile validation up -d memory-validate
+docker compose exec memory-validate uv sync --frozen --all-extras --dev   # workspace members
+docker compose exec -e MEMORY_TEST_PROVIDERS=env memory-validate make validate
+```
+
+Secrets never enter the repository: the Bifrost virtual key lives in the git-ignored
+`secrets.env` (or `MEMORY__MODELS__LLM__API_KEY`); provider keys live only in Bifrost.
 
 ## Pre-commit
 

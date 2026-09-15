@@ -15,6 +15,7 @@ x-common-env: &common-env
   MEMORY__MODELS__LLM__ENABLED: "false"
   MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/embedding
   MEMORY__MODELS__RERANKER__MODEL_PATH: /models/reranker
+  MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
   MEMORY__OBSERVABILITY__OTEL_EXPORTER: none
 
 services:
@@ -97,6 +98,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile
+      target: runtime
     command: ["memory-api"]
     environment:
       <<: *common-env
@@ -123,6 +125,7 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile
+      target: runtime
     command: ["memory-worker"]
     environment:
       <<: *common-env
@@ -138,6 +141,44 @@ services:
         condition: service_healthy
 
   # ------------------------------------------------------------------ profiles
+  # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`
+  # run on the working tree against the real services above with the weights in ./models.
+  #   docker compose --profile validation up -d memory-validate
+  #   docker compose exec memory-validate make validate
+  memory-validate:
+    profiles: ["validation"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: validation
+    working_dir: /app
+    environment:
+      <<: *common-env
+      MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
+      MEMORY__SERVICE__LOG_LEVEL: WARNING
+      MEMORY_MODELS_DIR: /models
+      MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
+      MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
+      MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
+      MEMORY__MODELS__SPARSE_MODEL_PATH: /models/Splade_PP_en_v1
+      MEMORY__MODELS__LATE_INTERACTION_MODEL_PATH: /models/answerai-colbert-small-v1
+      MEMORY__BLOB__FILESYSTEM_ROOT: /app/.blob
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+    volumes:
+      - .:/app
+      - ./models:/models
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      openfga:
+        condition: service_started
+
   neo4j:
     profiles: ["graph-store", "graphiti"]
     image: neo4j:5-community

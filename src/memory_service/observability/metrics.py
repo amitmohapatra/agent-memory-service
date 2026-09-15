@@ -68,6 +68,37 @@ memory_decisions_total = Counter(
     ["decision"],
     registry=REGISTRY,
 )
+llm_requests_total = Counter(
+    "memory_llm_requests_total",
+    "LLM gateway calls by use and outcome (ok, http_<status>, exhausted, circuit_open, ...)",
+    ["use", "outcome"],
+    registry=REGISTRY,
+)
+llm_seconds = Histogram(
+    "memory_llm_seconds",
+    "LLM gateway call latency by use",
+    ["use"],
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 30.0),
+    registry=REGISTRY,
+)
+llm_assist_total = Counter(
+    "memory_llm_assist_total",
+    "Module-level LLM assistance by use and outcome (used|fallback)",
+    ["use", "outcome"],
+    registry=REGISTRY,
+)
+llm_tokens_total = Counter(
+    "memory_llm_tokens_total",
+    "LLM tokens by use and direction (input|output)",
+    ["use", "direction"],
+    registry=REGISTRY,
+)
+grounding_claims_total = Counter(
+    "memory_grounding_claims_total",
+    "Grounding cascade claim verdicts (supported|unsupported|contradicted|borderline)",
+    ["verdict"],
+    registry=REGISTRY,
+)
 
 
 def render_metrics() -> tuple[bytes, str]:

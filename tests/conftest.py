@@ -25,6 +25,7 @@ def _test_settings(**overrides: object) -> Settings:
         "models": {
             "embedding": {"provider": "hash", "dimension": 64},
             "reranker": {"provider": "lexical"},
+            "nli": {"provider": "lexical"},
             "llm": {"enabled": False},
         },
         "documents": {"parser": "builtin"},
@@ -40,7 +41,25 @@ def _test_settings(**overrides: object) -> Settings:
             base[key] = {**base[key], **value}  # type: ignore[dict-item]
         else:
             base[key] = value
+    if os.environ.get("MEMORY_TEST_PROVIDERS") == "env":
+        # Real-component runs: the environment's providers (weights, Qdrant server, cache,
+        # OpenFGA, parser, LLM gateway) replace the hermetic stand-ins for these sections
+        # only; tasks/blob stay test-local so drain() and tmp_path semantics hold.
+        env_only = Settings().model_dump(exclude_unset=True)
+        for section in ("models", "search", "cache", "authorization", "documents", "retrieval"):
+            if isinstance(env_only.get(section), dict):
+                base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
     return Settings(**base)  # type: ignore[arg-type]
+
+
+def _deep_merge(base: dict, extra: dict) -> dict:
+    out = dict(base)
+    for key, value in extra.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
 
 
 DB_URL = os.environ.get(

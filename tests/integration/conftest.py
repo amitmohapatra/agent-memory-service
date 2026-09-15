@@ -65,6 +65,7 @@ def _redis_reachable() -> bool:
 
 
 from tests.conftest import PG_AVAILABLE  # noqa: E402
+from tests.support_real import reset_real_backends  # noqa: E402
 
 REDIS_AVAILABLE = _redis_reachable()
 
@@ -103,6 +104,7 @@ async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
         await conn.execute(
             text("TRUNCATE procrastinate_jobs, procrastinate_events RESTART IDENTITY CASCADE")
         )
+    await reset_real_backends(c)
     try:
         yield c
     finally:

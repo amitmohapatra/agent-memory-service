@@ -48,6 +48,27 @@ GOOD = {
     ),
     "tests.json": {"failed": 0, "errors": 0, "total": 260},
 }
+NETWORK = {
+    "durability_network.json": {
+        "transport": "tcp",
+        "acknowledged_data_loss": 0,
+        "worker_kills_injected": 3,
+        "recovery": {"timed_out": False},
+    },
+    "performance_network.json": {
+        "chat_accept_p95_ms": 40,
+        "cached_context_p95_ms": 8,
+        "recall_p95_ms": 90,
+        "context_bundle_p95_ms": 120,
+        "file_accept_p95_ms": 35,
+        "transport": "tcp",
+        "providers": {
+            "embedding": "sentence_transformers:granite",
+            "search": "qdrant",
+            "representative": True,
+        },
+    },
+}
 
 
 @pytest.fixture
@@ -58,10 +79,67 @@ def results(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
+def _write(results: Path, name: str, payload: dict) -> None:
+    (results / name).write_text(json.dumps(payload))
+
+
 def test_pass_with_caveats(results: Path) -> None:
     ok, failures, notes = release_gate.evaluate_with_notes()
     assert ok and failures == []
+    assert len(notes) == 4
+    assert sum("NOT representative" in n for n in notes) == 2
+    assert any("latency measured in-process only" in n for n in notes)
+    assert any("chaos measured in-process only" in n for n in notes)
+
+
+def test_network_artifacts_replace_the_in_process_only_caveats(results: Path) -> None:
+    for name, payload in NETWORK.items():
+        _write(results, name, payload)
+    ok, failures, notes = release_gate.evaluate_with_notes()
+    assert ok and failures == []
+    assert not any("in-process only" in n for n in notes)
     assert len(notes) == 2 and all("NOT representative" in n for n in notes)
+
+
+def test_network_artifacts_with_stand_in_providers_keep_the_provider_caveat(results: Path) -> None:
+    for name, payload in NETWORK.items():
+        _write(results, name, payload)
+    perf = {
+        **NETWORK["performance_network.json"],
+        "providers": {"embedding": "hash:hash", "representative": False},
+    }
+    _write(results, "performance_network.json", perf)
+    ok, _, notes = release_gate.evaluate_with_notes()
+    assert ok
+    assert sum("latency measured over tcp" in n and "NOT representative" in n for n in notes) == 1
+    assert not any("in-process only" in n for n in notes)
+
+
+@pytest.mark.parametrize(
+    ("name", "patch", "needle"),
+    [
+        (
+            "durability_network.json",
+            {"acknowledged_data_loss": 2},
+            "data loss over the network = 2",
+        ),
+        ("durability_network.json", {"recovery": {"timed_out": True}}, "recovery timed out"),
+        ("performance_network.json", {"recall_p95_ms": 301}, "recall_p95_ms (network) = 301"),
+        (
+            "performance_network.json",
+            {"chat_accept_p95_ms": None},
+            "chat_accept_p95_ms (network) not measured",
+        ),
+    ],
+)
+def test_network_gates_use_the_same_thresholds(
+    results: Path, name: str, patch: dict, needle: str
+) -> None:
+    for artifact, payload in NETWORK.items():
+        _write(results, artifact, payload)
+    _write(results, name, {**NETWORK[name], **patch})
+    ok, failures, _ = release_gate.evaluate_with_notes()
+    assert not ok and any(needle in f for f in failures), failures
 
 
 def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
@@ -104,5 +182,7 @@ def test_representative_evidence_has_no_caveat(results: Path) -> None:
         else:
             data["providers"]["representative"] = True
         (results / name).write_text(json.dumps(data))
+    for name, payload in NETWORK.items():
+        _write(results, name, payload)
     ok, _, notes = release_gate.evaluate_with_notes()
     assert ok and notes == []

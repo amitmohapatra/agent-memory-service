@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.grounding import GroundingReport
 
 
 class ContextItem(BaseModel):
@@ -51,6 +52,17 @@ class ConversationWindow(BaseModel):
     summary: str | None = Field(default=None, description="rolling summary of older messages")
 
 
+class UnusedEvidence(BaseModel):
+    """Retrieved but not packed (reranked out or over budget): the grounding cascade scans
+    these for contradictions with the answer."""
+
+    model_config = ConfigDict(frozen=True)
+
+    item_id: str
+    kind: str
+    text: str
+
+
 class EvidenceReport(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -60,6 +72,13 @@ class EvidenceReport(BaseModel):
     missing_groups: list[str] = Field(default_factory=list)
     escalations: list[str] = Field(default_factory=list, description="strategies attempted")
     notes: list[str] = Field(default_factory=list)
+    unused: list[UnusedEvidence] = Field(
+        default_factory=list, description="retrieved-but-unused evidence (bounded)"
+    )
+    grounding: GroundingReport | None = Field(
+        default=None, description="per-claim verdicts when an answer was verified"
+    )
+    llm_tokens: int = Field(default=0, description="LLM tokens spent building this report")
 
 
 class ContextBundle(BaseModel):
@@ -69,6 +88,9 @@ class ContextBundle(BaseModel):
 
     query: str
     query_type: QueryType
+    bundle_id: str = Field(
+        default="", description="tenant-bound handle for /v1/verify while the bundle is cached"
+    )
     conversation: ConversationWindow
     memories: list[ContextItem] = Field(default_factory=list)
     knowledge: list[ContextItem] = Field(default_factory=list)

@@ -1,0 +1,47 @@
+[project]
+name = "universal-memory-adk"
+version = "0.1.0"
+description = "Google ADK integration for the universal-memory SDK: a BaseMemoryService and memory tools. Never a core Memory Service dependency."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "universal-memory",
+  "google-adk>=2.9",
+  "pydantic>=2.13,<3",
+]
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1.4", "pytest-timeout>=2.3", "pyright>=1.1.414", "ruff>=0.16"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/universal_memory_adk"]
+
+# Not a workspace member: google-adk pins opentelemetry-api/sdk below the Memory Service's
+# floor, so this package has its own lock and virtualenv (`uv sync --project integrations/adk`)
+# and its tests run against a live server (MEMORY_URL).
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+universal-memory = { path = "../../sdk/python", editable = true }
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib -p no:cacheprovider"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["../.."]
+timeout = 120
+
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["src"]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"

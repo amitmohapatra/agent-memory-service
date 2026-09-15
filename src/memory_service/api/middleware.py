@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from memory_service.domain.ids import is_valid_id, new_id
+from memory_service.modules.llm.cost import start_llm_accounting
 from memory_service.observability.logging import bind_log_context, clear_log_context, get_logger
 from memory_service.observability.metrics import http_request_seconds, http_requests_total
 from memory_service.observability.tracing import current_trace_id
@@ -18,6 +19,7 @@ HEADER_REQUEST_ID = "X-Request-ID"
 HEADER_TRACE_ID = "X-Trace-ID"
 HEADER_CORRELATION_ID = "X-Correlation-ID"
 HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
+HEADER_LLM_TOKENS = "X-Memory-LLM-Tokens"
 
 log = get_logger("memory_service.http")
 
@@ -66,6 +68,7 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
 
         clear_log_context()
         bind_log_context(request_id=request_id, trace_id=trace_id, correlation_id=correlation_id)
+        llm_tokens = start_llm_accounting()
         started = time.perf_counter()
         route = "unmatched"
         status = 500
@@ -90,6 +93,8 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
         response.headers[HEADER_REQUEST_ID] = request_id
         response.headers[HEADER_TRACE_ID] = trace_id
         response.headers[HEADER_CORRELATION_ID] = correlation_id
+        if llm_tokens.total:
+            response.headers[HEADER_LLM_TOKENS] = str(llm_tokens.total)
         return response
 
 

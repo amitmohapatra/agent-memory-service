@@ -582,6 +582,8 @@ class MemoryRow(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
     importance: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
     reinforcement_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    access_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_accessed_at: Mapped[datetime | None]
     provider: Mapped[str] = mapped_column(String(40), default="native", server_default="native")
     system_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
@@ -614,6 +616,12 @@ class MemoryRow(Base):
             "expires_at",
             postgresql_where=text("expires_at IS NOT NULL AND deleted_at IS NULL"),
         ),
+        Index(
+            "ix_memories_forgetting",
+            "tenant_id",
+            "updated_at",
+            postgresql_where=text("temporal_status = 'CURRENT' AND deleted_at IS NULL"),
+        ),
     )
 
 
@@ -638,6 +646,7 @@ class GraphEntityRow(Base):
     evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
     mention_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    summary: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
 
@@ -657,12 +666,16 @@ class GraphRelationRow(Base):
     subject_id: Mapped[str] = mapped_column(String(200), nullable=False)
     predicate: Mapped[str] = mapped_column(String(120), nullable=False)
     object_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    layer: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="entity", server_default="entity"
+    )
     visibility_keys: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )
     valid_from: Mapped[datetime | None]
     valid_to: Mapped[datetime | None]
     observed_at: Mapped[datetime] = mapped_column(server_default=_now())
+    invalidated_at: Mapped[datetime | None]
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="CURRENT", server_default="CURRENT"
     )
@@ -683,4 +696,27 @@ class GraphRelationRow(Base):
         Index("ix_graph_relations_memory", "tenant_id", "memory_id"),
         Index("ix_graph_relations_document", "tenant_id", "document_id"),
         Index("ix_graph_relations_keys", "visibility_keys", postgresql_using="gin"),
+        Index("ix_graph_relations_layer", "tenant_id", "layer", "status"),
+    )
+
+
+class GraphEntityAliasRow(Base):
+    """Tenant-wide alias table for cross-document entity resolution (no audience: an alias
+    only names an entity id; the entity itself stays audience-filtered)."""
+
+    __tablename__ = "graph_entity_aliases"
+
+    alias_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    alias: Mapped[str] = mapped_column(String(300), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
+    source: Mapped[str] = mapped_column(String(40), default="canonical", server_default="canonical")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "alias", "entity_id", name="uq_graph_entity_alias"),
+        Index("ix_graph_entity_aliases_alias", "tenant_id", "alias"),
+        Index("ix_graph_entity_aliases_entity", "tenant_id", "entity_id"),
     )

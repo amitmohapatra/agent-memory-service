@@ -13,6 +13,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from universal_memory.integrations.core import Message, message_text, normalize_role
+
 _ROLE_TO_TYPE = {
     "user": "human",
     "human": "human",
@@ -30,19 +32,9 @@ class MessageView:
     content: str
     id: str | None = None
 
-
-def _text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list | tuple):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, Mapping) and block.get("type", "text") == "text":
-                parts.append(str(block.get("text") or ""))
-        return "\n".join(p for p in parts if p)
-    return "" if content is None else str(content)
+    def as_message(self, **metadata: Any) -> Message:
+        """The framework-neutral message (LangChain types -> roles)."""
+        return Message(normalize_role(self.type) or "agent", self.content, self.id, metadata)
 
 
 def as_view(message: Any) -> MessageView | None:
@@ -51,15 +43,19 @@ def as_view(message: Any) -> MessageView | None:
     if isinstance(message, tuple) and len(message) == 2:
         role, content = message
         t = _ROLE_TO_TYPE.get(str(role).lower())
-        return MessageView(t, _text(content)) if t else None
+        return MessageView(t, message_text(content)) if t else None
     if isinstance(message, Mapping):
         role = message.get("role") or message.get("type")
         t = _ROLE_TO_TYPE.get(str(role).lower()) if role else None
-        return MessageView(t, _text(message.get("content")), message.get("id")) if t else None
+        if t is None:
+            return None
+        return MessageView(t, message_text(message.get("content")), message.get("id"))
     t = _ROLE_TO_TYPE.get(str(getattr(message, "type", "")).lower())
     if t is None:
         return None
-    return MessageView(t, _text(getattr(message, "content", "")), getattr(message, "id", None))
+    return MessageView(
+        t, message_text(getattr(message, "content", "")), getattr(message, "id", None)
+    )
 
 
 def new_messages(state: Any, result: Any) -> list[MessageView]:

@@ -47,16 +47,43 @@ class GraphitiEnrichment:
                 raise DependencyUnavailable(
                     "graphiti requires graph_enrichment.graphiti_neo4j_* settings"
                 )
+            llm = self.settings.models.llm
+            if not llm.enabled or not llm.model:
+                raise DependencyUnavailable("graphiti requires models.llm.enabled=true and a model")
             try:
                 from graphiti_core import Graphiti
+                from graphiti_core.cross_encoder.openai_reranker_client import (
+                    OpenAIRerankerClient,
+                )
+                from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+                from graphiti_core.llm_client.config import LLMConfig
+                from graphiti_core.llm_client.openai_client import OpenAIClient
             except ImportError as exc:
                 raise DependencyUnavailable(
                     "graphiti-core is required (install [graphiti])"
                 ) from exc
+            # Graphiti's own OpenAI-compatible clients, all pointed at the Bifrost gateway
+            api_key = llm.api_key.get_secret_value() if llm.api_key else "-"
+            llm_config = LLMConfig(
+                api_key=api_key,
+                model=llm.model,
+                small_model=llm.fast_model or llm.model,
+                base_url=llm.base_url,
+            )
             self._client = Graphiti(
                 cfg.graphiti_neo4j_url,
                 cfg.graphiti_neo4j_user,
                 cfg.graphiti_neo4j_password.get_secret_value(),
+                llm_client=OpenAIClient(config=llm_config),
+                embedder=OpenAIEmbedder(
+                    config=OpenAIEmbedderConfig(
+                        api_key=api_key,
+                        base_url=llm.base_url,
+                        embedding_model=cfg.graphiti_embedding_model,
+                        embedding_dim=cfg.graphiti_embedding_dim,
+                    )
+                ),
+                cross_encoder=OpenAIRerankerClient(config=llm_config),
             )
             await self._client.build_indices_and_constraints()
         return self._client

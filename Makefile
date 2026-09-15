@@ -6,7 +6,7 @@ COMPOSE ?= docker compose
 
 .PHONY: help setup dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
-        load-test gates validate openapi reindex examples clean
+        load-test gates gates-network validate openapi reindex examples clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -79,8 +79,15 @@ bench-reranker: ## Reranker benchmark
 bench-storage: ## Archive segment / storage benchmark
 	$(PY) python -m benchmark.storage
 
-load-test: ## Locust load test (headless)
-	$(PY) locust -f benchmark/load/locustfile.py --headless -u 20 -r 5 -t 60s --host http://localhost:8080
+BASE_URL ?= http://localhost:8080
+API_KEY ?= dev-key
+
+load-test: ## Locust load test (headless) -> benchmark/results/load_test.json (BASE_URL, API_KEY)
+	$(PY) python -m benchmark.load.run --base-url $(BASE_URL) --api-key $(API_KEY) -u 20 -r 5 -t 60s
+
+gates-network: ## Network-hop gates against a deployed api + real workers (BASE_URL, API_KEY): durability_network, performance_network, load_test
+	$(PY) python -m benchmark.deployed --base-url $(BASE_URL) --api-key $(API_KEY)
+	$(PY) python -m benchmark.load.run --base-url $(BASE_URL) --api-key $(API_KEY) -u 20 -r 5 -t 60s
 
 openapi: ## Export OpenAPI schema
 	$(PY) python -m memory_service.tools.export_openapi docs/openapi.json

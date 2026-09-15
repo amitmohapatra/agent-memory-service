@@ -15,8 +15,9 @@ from memory_service.domain.memory import Scope
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.graph.native import NativeGraphEnrichment
+from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichment
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.native import _STOP as _STOP_WORDS
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -33,6 +34,33 @@ give list describe compare because despite
 """
 _QUESTION_WORDS = frozenset(_QUESTION_TEXT.split())
 _IGNORE = _STOP_WORDS | _QUESTION_WORDS
+LLM_MAX_CANDIDATES = 200
+LLM_MAX_QUERY_NAMES = 12
+_RESOLUTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "matches": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "query_name": {"type": "string"},
+                    "entity_name": {"type": "string"},
+                },
+                "required": ["query_name", "entity_name"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["matches"],
+    "additionalProperties": False,
+}
+_RESOLUTION_SYSTEM = (
+    "You resolve names in a question to entities of a knowledge graph. For each query name "
+    "that clearly refers to one of the candidate entities (a synonym, abbreviation, spelling "
+    "or wording variant), return the candidate name exactly as listed. Skip query names that "
+    "refer to nothing in the list; never invent entities."
+)
 
 
 @dataclass
@@ -66,12 +94,14 @@ class GraphService:
         authz: AuthorizationService,
         *,
         settings: GraphSettings,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.store = store
         self.provider = provider or NativeGraphEnrichment()
         self.authz = authz
         self.cfg = settings
+        self.assist = assist or LLMAssist.disabled()
 
     # -- enrichment (called from index jobs) ------------------------------------------
     async def enrich_memories(self, tenant_id: str, memory_ids: Sequence[str]) -> int:
@@ -158,9 +188,65 @@ class GraphService:
         self, ctx: MemoryExecutionContext, names: Sequence[str], visibility: VisibilitySpecification
     ) -> list[Entity]:
         canon = [canonical_entity(n) for n in names if n.strip()]
-        return await self.store.find_entities(
-            ctx.tenant_id, canon, scope_keys=sorted(visibility.keys)
+        scope_keys = sorted(visibility.keys)
+        found = await self.store.find_entities(ctx.tenant_id, canon, scope_keys=scope_keys)
+        if not canon or not self.assist.wants("entity_resolution"):
+            return found
+        known = {e.canonical_name for e in found} | {
+            canonical_entity(a) for e in found for a in e.aliases
+        }
+        unmatched = [
+            n for n in dict.fromkeys(canon) if not any(k and f" {k} " in f" {n} " for k in known)
+        ][:LLM_MAX_QUERY_NAMES]
+        if not unmatched:
+            return found
+        seen = {e.entity_id for e in found}
+        extra = await self._resolve_with_model(ctx.tenant_id, unmatched, scope_keys)
+        return found + [e for e in extra if e.entity_id not in seen]
+
+    async def _resolve_with_model(
+        self, tenant_id: str, names: Sequence[str], scope_keys: Sequence[str]
+    ) -> list[Entity]:
+        candidates = [
+            e
+            for e in await self.store.list_entities(
+                tenant_id, scope_keys=scope_keys, limit=LLM_MAX_CANDIDATES
+            )
+            if e.entity_type not in VALUE_TYPES
+        ]
+        if not candidates:
+            return []
+        by_form: dict[str, Entity] = {}
+        for e in candidates:
+            for form in (
+                e.canonical_name,
+                canonical_entity(e.name),
+                *map(canonical_entity, e.aliases),
+            ):
+                if form:
+                    by_form.setdefault(form, e)
+        lines = []
+        for e in candidates:
+            aka = [a for a in e.aliases if canonical_entity(a) != canonical_entity(e.name)][:3]
+            lines.append(f"- {e.name[:80]}" + (f" (aka {', '.join(aka)})" if aka else ""))
+        out = await self.assist.structured(
+            "entity_resolution",
+            system=_RESOLUTION_SYSTEM,
+            user=f"Query names: {'; '.join(names)}\nCandidates:\n" + "\n".join(lines),
+            schema=_RESOLUTION_SCHEMA,
+            max_tokens=400,
         )
+        asked = set(names)
+        accepted: dict[str, None] = {}
+        for m in (out or {}).get("matches", []):
+            if not isinstance(m, dict):
+                continue
+            e = by_form.get(canonical_entity(str(m.get("entity_name", ""))))
+            if e is not None and canonical_entity(str(m.get("query_name", ""))) in asked:
+                accepted[e.canonical_name] = None
+        if not accepted:
+            return []
+        return await self.store.find_entities(tenant_id, list(accepted), scope_keys=scope_keys)
 
     async def query(
         self,

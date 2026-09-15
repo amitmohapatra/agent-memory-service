@@ -22,6 +22,7 @@ TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
 TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
+TASK_MEMORY_REFLECT = "memory.reflect"
 
 
 def register_handlers(container: Container) -> None:
@@ -86,6 +87,12 @@ def register_handlers(container: Container) -> None:
         if expired:
             log.info("memory.expired", count=len(expired))
 
+    async def memory_reflect(payload: dict[str, Any]) -> None:
+        """Derive insights over each principal's recent memories (LLM use ``reflection``)."""
+        reflection = container.services.get("reflection")
+        if reflection is not None:
+            await reflection.reflect_all()
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -140,6 +147,11 @@ def register_handlers(container: Container) -> None:
     queue.register_periodic(
         "periodic.memory_expire", Queue.RECONCILE, memory_expire, cron="29 * * * *"
     )
+    if container.settings.models.llm.wants("reflection"):
+        queue.register(TASK_MEMORY_REFLECT, Queue.RECONCILE, memory_reflect, retries=0)
+        queue.register_periodic(
+            "periodic.memory_reflect", Queue.RECONCILE, memory_reflect, cron="53 */6 * * *"
+        )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
     queue.register(TASK_IDEMPOTENCY_PURGE, Queue.RECONCILE, idempotency_purge, retries=0)

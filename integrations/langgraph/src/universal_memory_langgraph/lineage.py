@@ -8,7 +8,7 @@ ids are derived deterministically from the checkpoint, the step and the node, so
 are stable across retries of the same superstep — which makes them the right agent run
 ids and the right idempotency material.
 
-Mapping rules:
+Mapping rules (the generic part lives in :mod:`universal_memory.integrations.core`):
 
 - ``thread_id`` -> ``Scope.thread_id`` (optionally prefixed, ids must match the service's
   ``ID_PATTERN``: letters, digits, ``._:-``).
@@ -27,35 +27,14 @@ Mapping rules:
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-_SAFE = re.compile(r"[^A-Za-z0-9._:\-]")
-_SCOPE_FIELDS = (
-    "tenant_id",
-    "workspace_id",
-    "user_id",
-    "group_ids",
-    "thread_id",
-    "session_id",
-    "turn_id",
-    "work_id",
-    "task_id",
-    "agent_id",
-    "agent_group_id",
-    "agent_run_id",
-    "parent_agent_run_id",
-    "trace_id",
-    "correlation_id",
-)
+from universal_memory.integrations.core import AgentRun, safe_id
+from universal_memory.integrations.core import scope_fields as _core_scope_fields
 
-
-def safe_id(value: str, *, max_len: int = 200) -> str:
-    """Coerce an arbitrary LangGraph id into the service's id alphabet."""
-    cleaned = _SAFE.sub("-", str(value)).strip("-.")[:max_len]
-    return cleaned or "x"
+__all__ = ["Lineage", "Segment", "lineage_from_config", "safe_id", "scope_fields"]
 
 
 @dataclass(frozen=True)
@@ -127,30 +106,19 @@ def scope_fields(
     ``memory`` dict overrides them; the checkpoint namespace supplies the agent lineage;
     ``agent`` turns the executing node itself into an agent run.
     """
-    out: dict[str, Any] = {k: v for k, v in defaults.items() if k in _SCOPE_FIELDS}
-    out.update({k: v for k, v in lineage.overrides.items() if k in _SCOPE_FIELDS})
-    if lineage.thread_id and not out.get("thread_id"):
-        out["thread_id"] = safe_id(f"{thread_prefix}{lineage.thread_id}")
-    thread = out.get("thread_id")
-    if thread and not out.get("session_id"):
-        # one session per LangGraph thread unless the app supplies its own
-        out["session_id"] = safe_id(f"{thread}-session")
-    if thread and not out.get("turn_id"):
-        # a turn = one human input: its message id when the messages convention is used,
-        # otherwise the superstep (apps with their own turn ids pass configurable.memory)
-        out["turn_id"] = safe_id(
-            f"turn-{turn_hint}" if turn_hint else f"{thread}-step{lineage.step or 0}"
-        )
-    runs = list(lineage.subgraphs)
+    runs = [AgentRun(s.node, s.task_id) for s in lineage.subgraphs]
     if agent and lineage.task is not None:
-        runs.append(Segment(node=agent, task_id=lineage.task.task_id))
+        runs.append(AgentRun(agent, lineage.task.task_id))
     elif agent:
-        runs.append(Segment(node=agent, task_id=lineage.run_id or "run"))
-    if runs and not lineage.overrides.get("agent_run_id"):
-        last = runs[-1]
-        out["agent_id"] = lineage.overrides.get("agent_id") or safe_id(last.node)
-        out["agent_run_id"] = safe_id(f"lg-{last.task_id}")
-        out["parent_agent_run_id"] = safe_id(f"lg-{runs[-2].task_id}") if len(runs) > 1 else None
-    if lineage.run_id and not out.get("correlation_id"):
-        out["correlation_id"] = safe_id(lineage.run_id)
-    return {k: v for k, v in out.items() if v is not None}
+        runs.append(AgentRun(agent, lineage.run_id or "run"))
+    return _core_scope_fields(
+        defaults=defaults,
+        overrides=lineage.overrides,
+        thread_id=lineage.thread_id,
+        thread_prefix=thread_prefix,
+        turn_hint=turn_hint,
+        step=lineage.step,
+        runs=runs,
+        run_prefix="lg-",
+        correlation_id=lineage.run_id,
+    )

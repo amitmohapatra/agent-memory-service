@@ -1,0 +1,28 @@
+[project]
+name = "universal-memory-mcp"
+version = "0.1.0"
+description = "MCP server over the universal-memory SDK: memory tools for any MCP client. Never a core Memory Service dependency."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "universal-memory",
+  "mcp>=1.23",
+  "pydantic>=2.13,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9", "pytest-asyncio>=1.4"]
+
+[project.scripts]
+universal-memory-mcp = "universal_memory_mcp.server:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/universal_memory_mcp"]
+
+[tool.uv.sources]
+universal-memory = { workspace = true }
