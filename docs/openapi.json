@@ -135,6 +135,200 @@
         "title": "Body_upload_file_v1_files_post",
         "type": "object"
       },
+      "ContextRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "query": "Why did Adjusted EBITDA increase despite lower revenue?",
+            "scope": {
+              "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            },
+            "token_budget": 6000
+          }
+        ],
+        "properties": {
+          "document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              null
+            ],
+            "title": "Document Ids"
+          },
+          "query": {
+            "examples": [
+              "Why did Adjusted EBITDA increase despite lower revenue?"
+            ],
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody",
+            "examples": [
+              {
+                "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+              }
+            ]
+          },
+          "token_budget": {
+            "anyOf": [
+              {
+                "maximum": 200000.0,
+                "minimum": 200.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "examples": [
+              6000
+            ],
+            "title": "Token Budget"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "ContextRequest",
+        "type": "object"
+      },
+      "ContextResponse": {
+        "additionalProperties": true,
+        "description": "ContextBundle: bounded, ranked, provenance-carrying context. ``rendered`` is prompt-ready.",
+        "examples": [
+          {
+            "built_at": "2026-09-14T10:00:00Z",
+            "cache_hit": false,
+            "conversation": {
+              "message_ids": [
+                "msg_1"
+              ],
+              "rendered": "USER: \u2026",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "token_estimate": 120
+            },
+            "diagnostics": {},
+            "evidence": {
+              "escalations": [],
+              "missing_groups": [],
+              "notes": [],
+              "required_groups": [],
+              "satisfied_groups": [],
+              "status": "COMPLETE"
+            },
+            "graph_facts": [],
+            "knowledge": [],
+            "memories": [],
+            "query": "Why did Adjusted EBITDA increase?",
+            "query_type": "DOCUMENT_MULTI_HOP",
+            "rendered": "## Recent conversation\nUSER: \u2026",
+            "revision_fingerprint": "\u2026",
+            "summaries": [],
+            "token_budget": 6000,
+            "token_estimate": 1840
+          }
+        ],
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "conversation": {
+            "additionalProperties": true,
+            "title": "Conversation",
+            "type": "object"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "graph_facts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Graph Facts",
+            "type": "array"
+          },
+          "knowledge": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Knowledge",
+            "type": "array"
+          },
+          "memories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "query_type": {
+            "title": "Query Type",
+            "type": "string"
+          },
+          "rendered": {
+            "title": "Rendered",
+            "type": "string"
+          },
+          "summaries": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Summaries",
+            "type": "array"
+          },
+          "token_budget": {
+            "title": "Token Budget",
+            "type": "integer"
+          },
+          "token_estimate": {
+            "title": "Token Estimate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "query_type",
+          "conversation",
+          "memories",
+          "knowledge",
+          "graph_facts",
+          "summaries",
+          "evidence",
+          "token_budget",
+          "token_estimate",
+          "cache_hit",
+          "rendered"
+        ],
+        "title": "ContextResponse",
+        "type": "object"
+      },
       "CreateMessageRequest": {
         "additionalProperties": false,
         "examples": [
@@ -1135,6 +1329,250 @@
         "title": "ReadyResponse",
         "type": "object"
       },
+      "RecallItem": {
+        "examples": [
+          {
+            "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+            "document_id": "doc_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+            "evidence": [],
+            "item_id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+            "page": 11,
+            "representation": "CHUNK",
+            "retrievers": [
+              "fusion"
+            ],
+            "score": 0.83,
+            "section_path": "ACME FY26 Annual Report > 3. Financial Results",
+            "text": "Adjusted EBITDA increased to EUR 98 million\u2026"
+          }
+        ],
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "expanded_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expanded From"
+          },
+          "expansion_edge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expansion Edge"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "representation": {
+            "title": "Representation",
+            "type": "string"
+          },
+          "retrievers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Retrievers",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "section_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Path"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "representation",
+          "text",
+          "score",
+          "retrievers",
+          "citation"
+        ],
+        "title": "RecallItem",
+        "type": "object"
+      },
+      "RecallRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "limit": 20,
+            "query": "Why did Adjusted EBITDA increase despite lower revenue?",
+            "scope": {
+              "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+              "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            }
+          }
+        ],
+        "properties": {
+          "document_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Restrict knowledge retrieval to these documents",
+            "examples": [
+              null
+            ],
+            "title": "Document Ids"
+          },
+          "kinds": {
+            "description": "chunk | memory",
+            "examples": [
+              [
+                "chunk",
+                "memory"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "limit": {
+            "default": 20,
+            "examples": [
+              20
+            ],
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "examples": [
+              "Why did Adjusted EBITDA increase despite lower revenue?"
+            ],
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody",
+            "examples": [
+              {
+                "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+                "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+              }
+            ]
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "RecallRequest",
+        "type": "object"
+      },
+      "RecallResponse": {
+        "examples": [
+          {
+            "diagnostics": {
+              "fused_candidates": 12,
+              "reranked": true
+            },
+            "query": "Why did Adjusted EBITDA increase?",
+            "query_type": "DOCUMENT_MULTI_HOP",
+            "results": []
+          }
+        ],
+        "properties": {
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "query_type": {
+            "title": "Query Type",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/RecallItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "query_type",
+          "results"
+        ],
+        "title": "RecallResponse",
+        "type": "object"
+      },
       "ScopeBody": {
         "additionalProperties": false,
         "description": "Lineage part of the scope, sent in request bodies by the SDK.\n\nSecurity fields (tenant/workspace/user/groups) travel in trusted headers. When they are\nalso present in the body they must match the headers exactly.",
@@ -1588,6 +2026,151 @@
         "summary": "Prometheus metrics",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/v1/context": {
+      "post": {
+        "operationId": "context_v1_context_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Build a ContextBundle for the current turn",
+        "tags": [
+          "retrieval"
         ]
       }
     },
@@ -2427,6 +3010,151 @@
         "summary": "Get a message",
         "tags": [
           "messages"
+        ]
+      }
+    },
+    "/v1/recall": {
+      "post": {
+        "operationId": "recall_v1_recall_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecallResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Scope-filtered ranked recall",
+        "tags": [
+          "retrieval"
         ]
       }
     },

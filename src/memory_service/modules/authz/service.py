@@ -202,8 +202,13 @@ class AuthorizationService:
         groups: Sequence[str] = (),
         workspaces: Sequence[str] = (),
         admin: bool = False,
+        revisions: RevisionRepository | None = None,
     ) -> None:
-        """Bootstrap helper used by imports/admin: tenant membership, groups and workspaces."""
+        """Bootstrap helper used by imports/admin: tenant membership, groups and workspaces.
+
+        Pass ``revisions`` (inside the caller's unit of work) so the user's cached
+        AuthorizedScope is invalidated immediately instead of after the cache TTL.
+        """
         tuples = [
             RelationTuple(
                 user=f"user:{user_id}",
@@ -228,6 +233,8 @@ class AuthorizationService:
                 )
             )
         await self.provider.write(tuples)
+        if revisions is not None:
+            await revisions.bump(tenant_id, RevisionKind.USER, user_id)
 
     def describe(self) -> str:
         return json.dumps(

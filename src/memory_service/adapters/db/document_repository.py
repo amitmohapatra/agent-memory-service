@@ -93,6 +93,8 @@ def _chunk(r: ChunkRow) -> Chunk:
         section_path=r.section_path,
         token_estimate=r.token_estimate,
         entities=list(r.entities or []),
+        indexed_at=r.indexed_at,
+        index_fingerprint=r.index_fingerprint,
     )
 
 

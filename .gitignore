@@ -12,6 +12,6 @@ build/
 .env
 .blob/
 .qdrant/
-models/
+/models/
 benchmark/results/*.tmp
 .DS_Store

@@ -35,6 +35,9 @@ async def wire_all(container: Container) -> None:
     await _wire_blob(container)
     _wire_archive(container)
     _wire_ingestion(container)
+    await _wire_search(container)
+    _wire_models(container)
+    _wire_retrieval(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -223,4 +226,91 @@ def _wire_ingestion(container: Container) -> None:
         file_bucket=container.settings.blob.file_bucket,
         tenant_shards=container.settings.archive.tenant_shards,
         fallback_parser=builtin,
+    )
+
+
+async def _wire_search(container: Container) -> None:
+    from memory_service.adapters.search.qdrant_store import QdrantSearchStore
+
+    cfg = container.settings.search
+    if cfg.provider == "memory":
+        cfg = cfg.model_copy(update={"qdrant_local_path": ":memory:"})
+    store = QdrantSearchStore(cfg)
+    container.search = store
+    if cfg.qdrant_local_path is None:
+        container.add_dependency(
+            Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
+        )
+
+
+def _wire_models(container: Container) -> None:
+    from memory_service.adapters.models.embeddings import (
+        FastEmbedEmbedding,
+        HashEmbedding,
+        SentenceTransformersEmbedding,
+    )
+    from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
+    from memory_service.adapters.models.sparse import Bm25SparseEncoder
+    from memory_service.config.registry import check_provider_policy
+
+    settings = container.settings
+    emb_cfg = settings.models.embedding
+    if emb_cfg.provider == "hash":
+        embedding = HashEmbedding(emb_cfg.dimension)
+    elif emb_cfg.provider == "fastembed":
+        embedding = FastEmbedEmbedding(emb_cfg)
+    elif emb_cfg.provider in ("sentence_transformers", "onnx", "openvino"):
+        embedding = SentenceTransformersEmbedding(emb_cfg)
+    else:
+        raise NotImplementedError(f"embedding provider {emb_cfg.provider} not implemented yet")
+    check_provider_policy(
+        embedding.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    container.embedding = embedding
+    container.sparse = Bm25SparseEncoder()
+    rr_cfg = settings.models.reranker
+    if rr_cfg.provider == "disabled":
+        container.reranker = None
+    elif rr_cfg.provider == "lexical":
+        container.reranker = LexicalReranker()
+    else:
+        container.reranker = CrossEncoderReranker(rr_cfg)
+
+
+def _wire_retrieval(container: Container) -> None:
+    from memory_service.modules.context.builder import ContextBuilder
+    from memory_service.modules.rag.indexer import Indexer
+    from memory_service.modules.retrieval.engine import RetrievalEngine
+
+    settings = container.settings
+    indexer = Indexer(
+        container.services["uow_factory"],
+        container.search,
+        container.embedding,
+        container.sparse,
+        container.cache,
+        batch_size=settings.models.embedding.batch_size,
+        embedding_cache_ttl=settings.cache.embedding_ttl_seconds,
+    )
+    container.services["indexer"] = indexer
+    engine = RetrievalEngine(
+        container.services["uow_factory"],
+        container.services["authz"],
+        container.search,
+        indexer,
+        container.reranker,
+        settings=settings.retrieval,
+        rerank_k=settings.models.reranker.candidate_k,
+    )
+    container.services["retrieval"] = engine
+    container.services["context_builder"] = ContextBuilder(
+        container.services["uow_factory"],
+        engine,
+        container.services["conversation"],
+        container.cache,
+        settings=settings.context,
+        retrieval=settings.retrieval,
+        cache_ttl_seconds=settings.cache.context_bundle_ttl_seconds,
     )

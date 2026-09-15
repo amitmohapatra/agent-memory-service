@@ -100,6 +100,10 @@ class Chunk(BaseModel):
     section_path: str = ""
     token_estimate: int = 0
     entities: list[str] = Field(default_factory=list)
+    indexed_at: datetime | None = None
+    index_fingerprint: str | None = Field(
+        default=None, description="embedding|sparse fingerprint the chunk was last indexed with"
+    )
 
 
 class ContextEdge(BaseModel):

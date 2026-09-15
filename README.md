@@ -92,6 +92,14 @@ Swagger UI at `/docs`, ReDoc at `/redoc`, schema at `/openapi.json`, health at
 `/health/live` and `/health/ready`, metrics at `/metrics`, build info at `/version`.
 Public routes live under `/v1` (see `docs/openapi.json`).
 
+Retrieval: `POST /v1/recall` returns scope-filtered ranked evidence (chunks and memories,
+each with a citation and `EvidenceRef`s); `POST /v1/context` returns a bounded, ranked
+`ContextBundle` with a prompt-ready `rendered` field. Both take the same `scope` body as the
+conversation routes. In the SDK: `await ctx.recall(query)` and `await ctx.context(query)`.
+Without local model weights the service runs with a deterministic hash embedding and a
+lexical reranker (`MEMORY__MODELS__EMBEDDING__PROVIDER=hash`) — fine for plumbing tests,
+not representative of retrieval quality (every benchmark file records which was used).
+
 ## Repository layout
 
 See [ARCHITECTURE.md](ARCHITECTURE.md). Decisions are recorded in `docs/adr/`.

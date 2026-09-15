@@ -62,7 +62,7 @@ failure-test: ## Failure injection
 	$(PY) pytest tests/failure -q 2>/dev/null || $(PY) pytest tests/integration -m failure -q
 
 eval: ## Deterministic retrieval/memory evaluation gates
-	$(PY) pytest tests/evals -m "not models" -q
+	$(PY) pytest tests/eval -m "not models" -q
 
 bench-retrieval: ## Retrieval benchmark
 	$(PY) python -m benchmark.retrieval

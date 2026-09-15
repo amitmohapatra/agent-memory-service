@@ -21,6 +21,7 @@ import httpx
 
 from universal_memory.models import (
     ContextBundle,
+    ContextItem,
     FileHandle,
     JobHandle,
     MemoryResult,
@@ -165,10 +166,11 @@ class MemoryContext:
             hints["visibility"] = visibility
         return await self.observe(content, kind="EVENT", hints=hints, **metadata)
 
-    async def recall(self, query: str, *, limit: int = 20, **options: Any) -> list[MemoryResult]:
+    async def recall(self, query: str, *, limit: int = 20, **options: Any) -> list[ContextItem]:
+        """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly."""
         payload = {"query": query, "scope": self._scope_payload(), "limit": limit, **options}
         data = await self._request("POST", "/v1/recall", json=payload)
-        return [MemoryResult.model_validate(m) for m in data.get("results", [])]
+        return [ContextItem.model_validate(m) for m in data.get("results", [])]
 
     async def get_memory(self, memory_id: str) -> MemoryResult:
         data = await self._request("GET", f"/v1/memories/{memory_id}")

@@ -1,0 +1,195 @@
+{
+  "name": "acme_fy26_critical",
+  "description": "Critical evidence-preservation questions over the ACME FY26 fixture with the GLOBEX FY26 report indexed as a same-scope distractor. Every question lists the evidence groups a correct answer must be grounded in; a group is satisfied by any retrieved chunk that matches one of its alternatives (document + page + substring).",
+  "documents": {
+    "acme": "acme_fy26_annual_report.md",
+    "globex": "globex_fy26_annual_report.md"
+  },
+  "questions": [
+    {
+      "id": "ebitda_multi_hop",
+      "query": "Why did Adjusted EBITDA increase despite lower revenue?",
+      "query_type": "DOCUMENT_MULTI_HOP",
+      "critical": true,
+      "required_groups": {
+        "ebitda_result": [
+          {
+            "document": "acme",
+            "page": 11,
+            "contains": "increased to EUR 98"
+          }
+        ],
+        "restructuring_savings": [
+          {
+            "document": "acme",
+            "page": 14,
+            "contains": "Annualised savings"
+          }
+        ],
+        "litigation_footnote": [
+          {
+            "document": "acme",
+            "page": 20,
+            "contains": "litigation settlement"
+          }
+        ],
+        "definition": [
+          {
+            "document": "acme",
+            "page": 1,
+            "contains": "Adjusted EBITDA** means"
+          }
+        ]
+      }
+    },
+    {
+      "id": "revenue_decline_driver",
+      "query": "What drove the decrease in ACME total revenue in FY26?",
+      "query_type": "TEMPORAL",
+      "critical": true,
+      "required_groups": {
+        "revenue_text": [
+          {
+            "document": "acme",
+            "page": 7,
+            "contains": "wind-down of the Legacy Services"
+          }
+        ]
+      }
+    },
+    {
+      "id": "revenue_table",
+      "query": "Legacy Services revenue FY25 vs FY26",
+      "query_type": "TEMPORAL",
+      "critical": true,
+      "required_groups": {
+        "table": [
+          {
+            "document": "acme",
+            "page": 7,
+            "contains": "| Legacy Services | 153 | 111 |"
+          }
+        ]
+      }
+    },
+    {
+      "id": "restructuring_details",
+      "query": "How much were the restructuring charges and what savings are expected?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "section8": [
+          {
+            "document": "acme",
+            "page": 14,
+            "contains": "EUR 26 million"
+          }
+        ]
+      }
+    },
+    {
+      "id": "footnote_effect",
+      "query": "What would Adjusted EBITDA have been if the litigation settlement were included?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "footnote": [
+          {
+            "document": "acme",
+            "page": 20,
+            "contains": "EUR 91 million"
+          }
+        ]
+      }
+    },
+    {
+      "id": "definition_lookup",
+      "query": "What does Adjusted EBITDA mean in the ACME report?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "definition": [
+          {
+            "document": "acme",
+            "page": 1,
+            "contains": "non-GAAP measure"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ebitda_reconciliation_table",
+      "query": "Adjusted EBITDA reconciliation table depreciation and restructuring charges",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "table2": [
+          {
+            "document": "acme",
+            "page": 11,
+            "contains": "| Restructuring charges | 6 | 26 |"
+          }
+        ]
+      }
+    },
+    {
+      "id": "distractor_margin",
+      "query": "Why did GLOBEX Adjusted Operating Margin decline despite higher revenue?",
+      "query_type": "DOCUMENT_MULTI_HOP",
+      "critical": true,
+      "required_groups": {
+        "margin_result": [
+          {
+            "document": "globex",
+            "page": 9,
+            "contains": "declined to 14.2%"
+          }
+        ],
+        "integration": [
+          {
+            "document": "globex",
+            "page": 13,
+            "contains": "Integration costs"
+          }
+        ],
+        "warranty_footnote": [
+          {
+            "document": "globex",
+            "page": 18,
+            "contains": "warranty provision"
+          }
+        ]
+      }
+    },
+    {
+      "id": "distractor_acquisition",
+      "query": "When did the Initech acquisition close and for how much?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": true,
+      "required_groups": {
+        "section9": [
+          {
+            "document": "globex",
+            "page": 13,
+            "contains": "closed on 1 October"
+          }
+        ]
+      }
+    },
+    {
+      "id": "depreciation_policy",
+      "query": "Which note describes the change in depreciation policy for data centre assets?",
+      "query_type": "GENERAL_SEMANTIC",
+      "critical": false,
+      "required_groups": {
+        "note12": [
+          {
+            "document": "acme",
+            "page": 20,
+            "contains": "depreciation policy"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -53,12 +53,15 @@ class SearchFilter(BaseModel):
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
 
 
+Retriever = Literal["dense", "sparse", "bm25", "late_interaction", "exact", "fusion"]
+
+
 class SearchHit(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     record_id: str
     score: float
-    retriever: Literal["dense", "sparse", "bm25", "late_interaction", "exact", "fusion"]
+    retriever: Retriever
     payload: dict[str, Any] = Field(default_factory=dict)
 
 

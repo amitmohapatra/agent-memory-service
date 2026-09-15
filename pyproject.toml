@@ -138,6 +138,7 @@ ignore = [
 "src/memory_service/domain/errors.py" = ["N818"]
 "src/memory_service/ports/blob.py" = ["N818"]
 "src/memory_service/adapters/blob/filesystem.py" = ["N818"]
+"src/memory_service/modules/retrieval/router.py" = ["E501"]
 "sdk/python/src/universal_memory/errors.py" = ["N818", "A001"]
 "src/memory_service/tools/**" = ["E501"]
 "src/memory_service/adapters/**" = ["TID251"]
@@ -193,6 +194,7 @@ addopts = "--import-mode=importlib -p no:cacheprovider"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 testpaths = ["tests", "sdk/python/tests", "integrations/langgraph/tests"]
+pythonpath = ["."]
 timeout = 120
 markers = [
   "unit: fast tests with no external services",

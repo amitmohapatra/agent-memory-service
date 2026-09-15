@@ -1,0 +1,213 @@
+{
+  "budgets_ms": {
+    "cached_context_p95": 75,
+    "context_bundle_p95": 400,
+    "recall_p95": 300
+  },
+  "corpus": {
+    "documents": 50,
+    "index_seconds": 4.05,
+    "indexed_points": 548
+  },
+  "latency_ms": {
+    "context_cached_p50": 2.3,
+    "context_cached_p95": 2.58,
+    "context_cold_p50": 37.04,
+    "context_cold_p95": 38.01,
+    "mean_recall": 33.44,
+    "recall_p50": 33.17,
+    "recall_p95": 35.51,
+    "samples": 30
+  },
+  "provenance": {
+    "cpu_count": 2,
+    "git_commit": "f689bfb2b3c80a25c3b1143dea5c0c71af7566c0",
+    "machine": "x86_64",
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-09-15T00:00:10.819820+00:00"
+  },
+  "providers": {
+    "embedding": "hash-v1-d64",
+    "representative": false,
+    "reranker": "lexical-v1",
+    "search": "QdrantSearchStore",
+    "sparse": "bm25-v1-k1.2-b0.75"
+  },
+  "quality": {
+    "critical_evidence_group_recall": 0.7778,
+    "critical_questions": 9,
+    "critical_recall_at_k": 0.8426,
+    "evidence_group_recall": 0.8,
+    "k": 20,
+    "note": "salted copies are exact duplicates of the golden documents: with many copies the top-k fills with clones of the best chunk and secondary evidence groups fall out (near-duplicate crowding). Informational; the release gate is tests/eval on the un-duplicated corpus. Diversity-aware ranking is an M10 candidate.",
+    "per_question": [
+      {
+        "complete": false,
+        "critical": true,
+        "first_rank": {
+          "definition": null,
+          "ebitda_result": 1,
+          "litigation_footnote": null,
+          "restructuring_savings": null
+        },
+        "id": "ebitda_multi_hop",
+        "missing": [
+          "restructuring_savings",
+          "litigation_footnote",
+          "definition"
+        ],
+        "query_type": {
+          "expected": "DOCUMENT_MULTI_HOP",
+          "observed": "DOCUMENT_MULTI_HOP"
+        },
+        "recall": 0.25
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "revenue_text": 1
+        },
+        "id": "revenue_decline_driver",
+        "missing": [],
+        "query_type": {
+          "expected": "TEMPORAL",
+          "observed": "TEMPORAL"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "table": 1
+        },
+        "id": "revenue_table",
+        "missing": [],
+        "query_type": {
+          "expected": "TEMPORAL",
+          "observed": "TEMPORAL"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "section8": 1
+        },
+        "id": "restructuring_details",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "footnote": 1
+        },
+        "id": "footnote_effect",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "definition": 1
+        },
+        "id": "definition_lookup",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "table2": 1
+        },
+        "id": "ebitda_reconciliation_table",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": false,
+        "critical": true,
+        "first_rank": {
+          "integration": null,
+          "margin_result": 1,
+          "warranty_footnote": null
+        },
+        "id": "distractor_margin",
+        "missing": [
+          "integration",
+          "warranty_footnote"
+        ],
+        "query_type": {
+          "expected": "DOCUMENT_MULTI_HOP",
+          "observed": "DOCUMENT_MULTI_HOP"
+        },
+        "recall": 0.3333
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "section9": 1
+        },
+        "id": "distractor_acquisition",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": false,
+        "first_rank": {
+          "note12": 1
+        },
+        "id": "depreciation_policy",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      }
+    ],
+    "questions": 10,
+    "recall_at_k": 0.8583,
+    "routing_accuracy": 1.0
+  }
+}
