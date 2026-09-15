@@ -153,7 +153,9 @@ def extract_notes(
     for m in messages:
         if m.kind is not MessageKind.VISIBLE or not m.content.strip():
             continue
-        speaker = ctx if m.role is MessageRole.USER else ctx.model_copy(update={"agent_id": "assistant"})
+        speaker = (
+            ctx if m.role is MessageRole.USER else ctx.model_copy(update={"agent_id": "assistant"})
+        )
         evidence = [
             EvidenceRef(
                 source_type="message",
@@ -247,7 +249,9 @@ class ThreadObserver:
                 return []
             cutoff = latest[-1].sequence - self.cfg.observer_hot_window_messages + 1
             existing = await self.observations(uow, thread)
-            covered = max((int(m.system_metadata.get("sequence_to", 0)) for m in existing), default=0)
+            covered = max(
+                (int(m.system_metadata.get("sequence_to", 0)) for m in existing), default=0
+            )
             pending = cutoff - 1 - covered
             if pending < (1 if force else self.cfg.observer_batch_messages):
                 return []
@@ -356,7 +360,9 @@ class ThreadObserver:
         )[-_MAX_SOURCE_CHARS:]
         out = await self.assist.structured(
             "observation_refinement",
-            system=_REFINE_SYSTEM.format(n=self.cfg.observer_max_notes, kinds=", ".join(NOTE_KINDS)),
+            system=_REFINE_SYSTEM.format(
+                n=self.cfg.observer_max_notes, kinds=", ".join(NOTE_KINDS)
+            ),
             user="Deterministic notes:\n"
             + "\n".join(f"- {n['kind']}: {n['text']}" for n in notes)
             + f"\n\nSource turns:\n{source}",
@@ -463,8 +469,8 @@ class ObservationReflector:
                 occurred_at=_parse_at(note.get("at")) or obs.temporal.observed_at,
             )
             provider = self.pipeline.provider
-            for cand in await provider.extract(observation, ctx):
-                cand = await provider.classify(cand, ctx)
+            for extracted in await provider.extract(observation, ctx):
+                cand = await provider.classify(extracted, ctx)
                 out.append(
                     cand.model_copy(
                         update={

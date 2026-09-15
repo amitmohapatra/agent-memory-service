@@ -345,7 +345,10 @@ class ObservationPipeline:
                     admission = admission.model_copy(
                         update={
                             "verdict": AdmissionVerdict.ADMIT,
-                            "reasons": [*admission.reasons, "corroborated: repeated while deferred"],
+                            "reasons": [
+                                *admission.reasons,
+                                "corroborated: repeated while deferred",
+                            ],
                         }
                     )
                 if admission.verdict is not AdmissionVerdict.ADMIT:

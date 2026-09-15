@@ -22,6 +22,7 @@ from memory_service.ports.repositories import (
     RevisionRepository,
     SessionRepository,
     ThreadRepository,
+    ToolRepository,
     TurnRepository,
 )
 from memory_service.ports.tasks import JobSpec
@@ -41,6 +42,7 @@ class UnitOfWork(Protocol):
     archive: ArchiveRepository
     documents: DocumentRepository
     memories: MemoryRepository
+    tools: ToolRepository
 
     async def __aenter__(self) -> Self: ...
 

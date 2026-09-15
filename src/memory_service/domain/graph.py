@@ -23,24 +23,63 @@ LAYERS: tuple[GraphLayer, ...] = get_args(GraphLayer)
 INVALIDATED_BY = "invalidated_by"
 
 _CAUSAL = frozenset(
-    """
-    driven_by caused_by causes leads_to results_in due_to reflects offset_by impacted_by
-    attributable_to supported_by helped_by hurt_by enables contributed_to triggered_by
-    depends_on because_of
-    """.split()
+    [
+        "driven_by",
+        "caused_by",
+        "causes",
+        "leads_to",
+        "results_in",
+        "due_to",
+        "reflects",
+        "offset_by",
+        "impacted_by",
+        "attributable_to",
+        "supported_by",
+        "helped_by",
+        "hurt_by",
+        "enables",
+        "contributed_to",
+        "triggered_by",
+        "depends_on",
+        "because_of",
+    ]
 )
 _TEMPORAL = frozenset(
-    """
-    valid_from valid_to as_of supersedes superseded_by invalidated_by closed_on founded_in
-    adopted_in occurred_on announced_on effective_from started_on ended_on dated
-    scheduled_for expires_on preceded_by followed_by
-    """.split()
+    [
+        "valid_from",
+        "valid_to",
+        "as_of",
+        "supersedes",
+        "superseded_by",
+        "invalidated_by",
+        "closed_on",
+        "founded_in",
+        "adopted_in",
+        "occurred_on",
+        "announced_on",
+        "effective_from",
+        "started_on",
+        "ended_on",
+        "dated",
+        "scheduled_for",
+        "expires_on",
+        "preceded_by",
+        "followed_by",
+    ]
 )
 _STRUCTURAL = frozenset(
-    """
-    mentions mentioned_in co_occurs_with discusses defined_in refers_to appears_in cites
-    contained_in links
-    """.split()
+    [
+        "mentions",
+        "mentioned_in",
+        "co_occurs_with",
+        "discusses",
+        "defined_in",
+        "refers_to",
+        "appears_in",
+        "cites",
+        "contained_in",
+        "links",
+    ]
 )
 
 
@@ -67,8 +106,3 @@ def layer_order(query: str) -> tuple[GraphLayer, ...]:
     ):
         return ("temporal", "entity", "causal", "structural")
     return ("entity", "causal", "temporal", "structural")
-
-
-def layer_weights(query: str) -> dict[str, float]:
-    order = layer_order(query)
-    return {layer: 1.0 - 0.2 * i for i, layer in enumerate(order)}

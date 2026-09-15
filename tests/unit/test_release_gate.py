@@ -46,6 +46,14 @@ GOOD = {
     "failure_injection.json": dict.fromkeys(
         ("worker_kill", "cache_flush", "blob_outage", "search_rebuild", "authz_denial"), "pass"
     ),
+    "tool_gate.json": {
+        "suggestion_hit_rate": 1.0,
+        "next_step_hit_rate": 1.0,
+        "plan_validity": 1.0,
+        "cache_violations": 0,
+        "isolation_violations": 0,
+        "undeclared_tool_suggestions": 0,
+    },
     "tests.json": {"failed": 0, "errors": 0, "total": 260},
 }
 NETWORK = {
@@ -160,6 +168,11 @@ def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
         ("kg_gate.json", {"fact_recall": 0.9}, "KG fact recall"),
         ("kg_gate.json", {"false_facts": 1}, "KG false facts"),
         ("kg_gate.json", {"query_hit_rate": 0.5}, "KG query hit rate"),
+        ("tool_gate.json", {"suggestion_hit_rate": 0.5}, "tool suggestion_hit_rate"),
+        ("tool_gate.json", {"next_step_hit_rate": 0.1}, "tool next_step_hit_rate"),
+        ("tool_gate.json", {"plan_validity": 0.9}, "tool plan_validity"),
+        ("tool_gate.json", {"cache_violations": 1}, "tool cache_violations"),
+        ("tool_gate.json", {"isolation_violations": 2}, "tool isolation_violations"),
         ("performance.json", {"recall_p95_ms": 301}, "recall_p95_ms = 301"),
         ("performance.json", {"file_accept_p95_ms": None}, "file_accept_p95_ms not measured"),
         ("failure_injection.json", {"worker_kill": "fail"}, "worker_kill = fail"),

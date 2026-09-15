@@ -27,9 +27,15 @@ from universal_memory.models import (
     MemoryResult,
     MessageAck,
     MessageInfo,
+    NextSteps,
     ObservationAck,
     Scope,
     ThreadInfo,
+    Tool,
+    ToolCall,
+    ToolPlan,
+    ToolResult,
+    ToolSuggestion,
 )
 
 __version__ = "0.1.0"
@@ -59,11 +65,17 @@ __all__ = [
     "MemoryResult",
     "MessageAck",
     "MessageInfo",
+    "NextSteps",
     "NotFoundError",
     "ObservationAck",
     "RateLimitedError",
     "Scope",
     "ThreadInfo",
+    "Tool",
+    "ToolCall",
+    "ToolPlan",
+    "ToolResult",
+    "ToolSuggestion",
     "ValidationError",
     "current_context",
 ]

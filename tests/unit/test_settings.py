@@ -32,15 +32,17 @@ def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_yaml_file_source(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)  # a developer's .env must not leak into the test
+    # _env_file=None isolates the test from a developer's .env, which legitimately outranks
+    # the YAML source and would otherwise decide the assertions below.
     cfg = tmp_path / "memory.yaml"
     cfg.write_text("search:\n  provider: memory\nmodels:\n  llm:\n    enabled: false\n")
     monkeypatch.setenv("MEMORY_CONFIG_FILE", str(cfg))
-    s = Settings()
+    monkeypatch.delenv("MEMORY__SEARCH__PROVIDER", raising=False)
+    s = Settings(_env_file=None)
     assert s.search.provider == "memory"
     # env still wins over yaml
     monkeypatch.setenv("MEMORY__SEARCH__PROVIDER", "qdrant")
-    assert Settings().search.provider == "qdrant"
+    assert Settings(_env_file=None).search.provider == "qdrant"
 
 
 def test_prod_guards_reject_dev_only_providers() -> None:

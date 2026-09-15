@@ -69,6 +69,7 @@ bench-advanced: ## Advanced retrieval strategies vs baseline (adoption verdicts)
 
 bench-memory: ## Memory intelligence benchmark
 	$(PY) python -m benchmark.memory
+	$(PY) pytest tests/eval/test_tool_gate.py -q
 
 bench-embedding: ## Embedding runtime benchmark
 	$(PY) python -m benchmark.embedding

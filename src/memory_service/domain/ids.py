@@ -25,6 +25,8 @@ PREFIXES: Final[dict[str, str]] = {
     "agent_run": "run",
     "observation": "obs",
     "memory": "mem",
+    "tool": "tol",
+    "tool_invocation": "tiv",
     "evidence": "evd",
     "document": "doc",
     "document_version": "dcv",

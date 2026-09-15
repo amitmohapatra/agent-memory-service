@@ -117,7 +117,9 @@ def read_beir_dir(path: Path, *, split: str = "test") -> BeirDataset:
             if len(parts) < 3 or (i == 0 and parts[0] in ("query-id", "query_id")):
                 continue
             qrels.setdefault(parts[0], {})[parts[1]] = int(float(parts[2]))
-    return BeirDataset(name=path.name, corpus=corpus, queries=queries, qrels=qrels, source=str(path))
+    return BeirDataset(
+        name=path.name, corpus=corpus, queries=queries, qrels=qrels, source=str(path)
+    )
 
 
 def _download_beir(name: str, target: Path) -> None:
@@ -206,7 +208,11 @@ class MemoryDataset:
         return [(c, q) for c in self.conversations for q in c.questions]
 
     def limited(
-        self, *, max_conversations: int | None = None, max_questions: int | None = None, seed: int = 7
+        self,
+        *,
+        max_conversations: int | None = None,
+        max_questions: int | None = None,
+        seed: int = 7,
     ) -> MemoryDataset:
         convs = list(self.conversations)
         if max_conversations is not None:

@@ -12,6 +12,9 @@ from tests.conftest import PG_AVAILABLE
 from tests.support_real import reset_real_backends
 
 TABLES = [
+    "tool_invocations",
+    "run_outcomes",
+    "tools",
     "graph_relations",
     "graph_entities",
     "memories",

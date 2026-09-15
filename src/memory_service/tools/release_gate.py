@@ -190,6 +190,23 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
             if recovery.get(key) != "pass":
                 failures.append(f"failure injection {key} = {recovery.get(key)} (must be pass)")
 
+    tool_gate = _load("tool_gate.json")
+    if tool_gate is None:
+        failures.append("tool_gate.json missing (tool-memory gate has no evidence)")
+    else:
+        thresholds = tool_gate.get("thresholds") or {}
+        for key, floor in (
+            ("suggestion_hit_rate", thresholds.get("suggestion_hit_rate", 0.95)),
+            ("next_step_hit_rate", thresholds.get("next_step_hit_rate", 0.90)),
+            ("plan_validity", thresholds.get("plan_validity", 1.0)),
+        ):
+            observed = tool_gate.get(key)
+            if observed is None or observed < floor:
+                failures.append(f"tool {key} = {observed} (must be >= {floor})")
+        for key in ("cache_violations", "isolation_violations", "undeclared_tool_suggestions"):
+            if tool_gate.get(key, 1) != 0:
+                failures.append(f"tool {key} = {tool_gate.get(key)} (must be 0)")
+
     tests = _load("tests.json")
     if tests is None:
         failures.append("tests.json missing (all-tests-pass gate has no evidence)")

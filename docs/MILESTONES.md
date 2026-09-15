@@ -1,5 +1,10 @@
 # Milestones
 
+> **Status: historical build log.** This records what each milestone delivered, in order,
+> and is useful for understanding how the service came to be shaped this way. It is not a
+> description of the current API — for that, see the [README](../README.md) — and the test
+> counts are those at the time each milestone closed.
+
 | Milestone | Scope | Status |
 |---|---|---|
 | M0 | repo, uv/venv, FastAPI + Swagger, domain contracts, ports, config, health/version, SDK skeleton | done (41 tests) |

@@ -87,9 +87,7 @@ def adjudicate(a: Relation, b: Relation) -> tuple[Relation, Relation, str, str]:
     (a less reliable claim rejected against an established fact)."""
     if abs(a.confidence - b.confidence) > 1e-9:
         winner, loser = (a, b) if a.confidence > b.confidence else (b, a)
-        why = (
-            f"higher confidence ({winner.confidence:.2f} vs {loser.confidence:.2f})"
-        )
+        why = f"higher confidence ({winner.confidence:.2f} vs {loser.confidence:.2f})"
     else:
         winner, loser = (a, b) if a.observed_at >= b.observed_at else (b, a)
         why = "more recently observed at equal confidence"

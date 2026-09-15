@@ -90,9 +90,21 @@ def coverage(hypothesis: str, premise: str) -> float:
 
 
 def number_conflict(hypothesis: str, premise: str) -> bool:
-    """Both sides carry numbers and none of the hypothesis' numbers appears in the premise."""
+    """Both sides carry numbers and the hypothesis states one the premise does not.
+
+    Two failure modes have to be told apart. Requiring *no* overlap misses the commonest
+    fabrication — quoting one real figure and altering another ("increased to EUR 150 million
+    from EUR 81 million" where the premise says 98 and 81): the shared 81 makes the claim look
+    anchored while the load-bearing number is invented. But treating any unmatched number as a
+    clash would flag a premise that is simply shorter ("Adjusted EBITDA increased to EUR 98
+    million" against a claim that also mentions the 81 it rose from), which omits rather than
+    disagrees.
+
+    So a conflict needs *divergence*: each side carries a number the other does not. Omission
+    alone is not disagreement.
+    """
     h, p = numbers(hypothesis), numbers(premise)
-    return bool(h) and bool(p) and not (h & p)
+    return bool(h - p) and bool(p - h)
 
 
 def polarity_conflict(hypothesis: str, premise: str) -> bool:

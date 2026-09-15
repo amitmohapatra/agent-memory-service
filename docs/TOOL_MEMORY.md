@@ -1,5 +1,13 @@
 # Tool memory — remembering tool calls, outcomes and procedures (change 30)
 
+> **Status: the service is built; the framework adapters are not.** Sections 30.0-30.4,
+> 30.6, 30.7 and 30.9 are implemented and covered by a hard gate — the registry, invocation
+> records, the replay cache, chain mining, procedures, `/v1/tools`, the SDK and
+> `benchmark/results/tool_gate.json`. Sections 30.5 and 30.8 (the LangGraph tool wrapper,
+> ADK callbacks, the CrewAI wrapper, MCP verbs and the Bifrost agent-mode plugin) are not
+> built yet. See [adr/0018-tool-memory.md](adr/0018-tool-memory.md) for what was decided and
+> the README for how to use what exists.
+
 Companion to `TARGET_STACK.md` and `INTEGRATIONS_PLAN.md`.
 
 ## What the service does today

@@ -24,6 +24,12 @@ from memory_service.domain.enums import ContextGraphEdge, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.tools import (
+    RunOutcome,
+    ToolDescriptor,
+    ToolInvocation,
+    ToolOutcomeStats,
+)
 from memory_service.ports.tasks import JobSpec
 
 
@@ -373,3 +379,62 @@ class MemoryRepository(Protocol):
     ) -> bool:
         """Change the temporal status (archive / restore) and mark the row for re-indexing."""
         ...
+
+
+@runtime_checkable
+class ToolRepository(Protocol):
+    """Tool descriptors, invocation records and run outcomes (TOOL_MEMORY.md §30.0-§30.1).
+
+    Registration is an idempotent upsert on (tenant, name, schema_hash); ``widen_policy`` is
+    the admin-scope flag, so a per-call declaration can never make a tool cacheable. Recording
+    is idempotent on (run, step, tool, args_hash). Reads take ``scope_keys`` and filter
+    store-side, exactly like memories.
+    """
+
+    async def register(
+        self, descriptor: ToolDescriptor, *, widen_policy: bool
+    ) -> ToolDescriptor: ...
+
+    async def by_name(
+        self, tenant_id: str, name: str, *, schema_hash: str | None = None
+    ) -> ToolDescriptor | None: ...
+
+    async def get(self, tenant_id: str, tool_id: str) -> ToolDescriptor | None: ...
+
+    async def list_tools(self, tenant_id: str, *, limit: int = 500) -> list[ToolDescriptor]: ...
+
+    async def stats(
+        self, tenant_id: str, *, names: Sequence[str] | None = None
+    ) -> list[ToolOutcomeStats]: ...
+
+    async def record(self, invocation: ToolInvocation) -> ToolInvocation:
+        """Insert once; a retry of the same key returns the stored row unchanged."""
+        ...
+
+    async def invocations_for_run(
+        self, tenant_id: str, run_id: str, *, scope_keys: Sequence[str] | None = None
+    ) -> list[ToolInvocation]: ...
+
+    async def recent(
+        self,
+        tenant_id: str,
+        *,
+        task_pattern: str | None = None,
+        tool_name: str | None = None,
+        scope_keys: Sequence[str] | None = None,
+        limit: int = 200,
+    ) -> list[ToolInvocation]: ...
+
+    async def successful_runs(
+        self, tenant_id: str, *, task_pattern: str, limit: int = 100
+    ) -> list[str]: ...
+
+    async def mark_indexed(self, tenant_id: str, invocation_ids: Sequence[str]) -> None: ...
+
+    async def unindexed(
+        self, tenant_id: str | None = None, *, limit: int = 200
+    ) -> list[ToolInvocation]: ...
+
+    async def set_outcome(self, outcome: RunOutcome) -> None: ...
+
+    async def outcome(self, tenant_id: str, run_id: str) -> RunOutcome | None: ...

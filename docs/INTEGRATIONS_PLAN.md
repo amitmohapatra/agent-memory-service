@@ -1,5 +1,10 @@
 # Framework integrations — LangGraph, Google ADK, CrewAI, MCP
 
+> **Status: LangGraph is built and tested. Google ADK, CrewAI, the MCP server and the
+> conformance suite are specified here but not finished** — the ADK and CrewAI packages are
+> scaffolds and the MCP server is partial. Use the LangGraph adapter, or the
+> framework-neutral SDK, which works anywhere.
+
 Companion to `TARGET_STACK.md` (changes 26–29). The Python SDK (`universal-memory`) is
 framework-agnostic; each framework gets a thin adapter that maps its own session/agent model
 onto the service's tenant / workspace / user / agent-group / agent-run / thread scopes. No

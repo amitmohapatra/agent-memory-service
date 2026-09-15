@@ -60,7 +60,9 @@ _MAX_VALUES = 12
 
 
 def narrowest_visibility(sources: Sequence[CanonicalMemory]) -> Visibility:
-    return min((m.visibility for m in sources), key=lambda v: _NARROWNESS[v], default=Visibility.PRIVATE)
+    return min(
+        (m.visibility for m in sources), key=lambda v: _NARROWNESS[v], default=Visibility.PRIVATE
+    )
 
 
 def _value_of(m: CanonicalMemory) -> str:
@@ -188,7 +190,9 @@ class BeliefService:
         if confidence is None:
             n = len(sources)
             confidence = min(0.95, 0.4 + 0.1 * n) * fmean(m.confidence for m in sources)
-        existing = await self.current(uow, ctx.tenant_id, scope=scope, subject=subject, predicate=predicate)
+        existing = await self.current(
+            uow, ctx.tenant_id, scope=scope, subject=subject, predicate=predicate
+        )
         if existing is not None and existing.normalized_hash == normalized_hash(content):
             return existing, False
         chain = (

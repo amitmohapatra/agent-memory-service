@@ -1,0 +1,1800 @@
+{
+  "name": "tool_trajectories",
+  "description": "Replayed agent runs for the tool gate: six task patterns, six runs each, with an injected failure and its correction in two patterns, plus two runs by a different agent whose calls are never shared (isolation).",
+  "held_out": [
+    "run_quote_update_5",
+    "run_invoice_issue_5",
+    "run_support_escalation_5",
+    "run_inventory_restock_5",
+    "run_expense_approval_5",
+    "run_contract_renewal_5"
+  ],
+  "runs": [
+    {
+      "run_id": "run_quote_update_0",
+      "pattern": "quote_update",
+      "task": "update quote Q-1001 with APAC price for SKU-1",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1001",
+            "region": "REGION-1001"
+          },
+          "output": {
+            "price": 1007,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1001"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1001",
+            "amount": 1007
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1001"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1001",
+            "recipient": "RECIPIENT-1001"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1001"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_quote_update_1",
+      "pattern": "quote_update",
+      "task": "update quote Q-1002 with AMER price for SKU-2",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1002",
+            "region": "REGION-1002"
+          },
+          "output": {
+            "price": 1014,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1002"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1002",
+            "amount": 1014
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1002"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1002",
+            "recipient": "RECIPIENT-1002"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1002"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_quote_update_2",
+      "pattern": "quote_update",
+      "task": "update quote Q-1003 with EMEA price for SKU-3",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1003",
+            "region": "REGION-1003"
+          },
+          "output": {
+            "price": 1021,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1003"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1003",
+            "amount": 1021
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1003"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1003",
+            "recipient": "RECIPIENT-1003"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1003"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_quote_update_3",
+      "pattern": "quote_update",
+      "task": "update quote Q-1004 with APAC price for SKU-4",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1004",
+            "region": "REGION-1004"
+          },
+          "output": {
+            "price": 1028,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1004"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1004",
+            "amount": 1028
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1004"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1004",
+            "recipient": "RECIPIENT-1004"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1004"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_quote_update_4",
+      "pattern": "quote_update",
+      "task": "update quote Q-1005 with AMER price for SKU-5",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1005",
+            "region": "REGION-1005"
+          },
+          "output": {
+            "price": 1035,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1005"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1005",
+            "amount": 1035
+          },
+          "status": "error",
+          "error_class": "ValidationError",
+          "latency_ms": 120.0
+        },
+        {
+          "step": 2,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1005",
+            "amount": 1035
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1005"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        },
+        {
+          "step": 3,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1005",
+            "recipient": "RECIPIENT-1005"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1005"
+          },
+          "status": "ok",
+          "latency_ms": 100.0,
+          "cost": 0.004
+        }
+      ]
+    },
+    {
+      "run_id": "run_quote_update_5",
+      "pattern": "quote_update",
+      "task": "update quote Q-1006 with EMEA price for SKU-6",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "pricing.lookup_price",
+          "args": {
+            "sku": "SKU-1006",
+            "region": "REGION-1006"
+          },
+          "output": {
+            "price": 1042,
+            "currency": "EUR",
+            "quote_id": "QUOTE-ID-1006"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.update_quote",
+          "args": {
+            "quote_id": "QUOTE-ID-1006",
+            "amount": 1042
+          },
+          "output": {
+            "ok": true,
+            "quote_version": "QUOTE-VERSION-1006"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "notify.send_email",
+          "args": {
+            "quote_id": "QUOTE-ID-1006",
+            "recipient": "RECIPIENT-1006"
+          },
+          "output": {
+            "message_id": "MESSAGE-ID-1006"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_0",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-7 in APAC",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1007"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1007",
+            "total": 1049,
+            "order_id": "ORDER-ID-1007"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1007",
+            "total": 1049
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1007",
+            "due_date": "DUE-DATE-1007"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_1",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-8 in AMER",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1008"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1008",
+            "total": 1056,
+            "order_id": "ORDER-ID-1008"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1008",
+            "total": 1056
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1008",
+            "due_date": "DUE-DATE-1008"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_2",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-9 in EMEA",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1009"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1009",
+            "total": 1063,
+            "order_id": "ORDER-ID-1009"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1009",
+            "total": 1063
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1009",
+            "due_date": "DUE-DATE-1009"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_3",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-10 in APAC",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1010"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1010",
+            "total": 1070,
+            "order_id": "ORDER-ID-1010"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1010",
+            "total": 1070
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1010",
+            "due_date": "DUE-DATE-1010"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_4",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-11 in AMER",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1011"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1011",
+            "total": 1077,
+            "order_id": "ORDER-ID-1011"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1011",
+            "total": 1077
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1011",
+            "due_date": "DUE-DATE-1011"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_invoice_issue_5",
+      "pattern": "invoice_issue",
+      "task": "issue invoice for order ORD-12 in EMEA",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "orders.get_order",
+          "args": {
+            "order_id": "ORDER-ID-1012"
+          },
+          "output": {
+            "customer_id": "CUSTOMER-ID-1012",
+            "total": 1084,
+            "order_id": "ORDER-ID-1012"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "billing.create_invoice",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1012",
+            "total": 1084
+          },
+          "output": {
+            "invoice_id": "INVOICE-ID-1012",
+            "due_date": "DUE-DATE-1012"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_0",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-13 for customer CUST-13",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1013"
+          },
+          "output": {
+            "severity": "high",
+            "customer_id": "CUSTOMER-ID-1013",
+            "ticket_id": "TICKET-ID-1013"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1013"
+          },
+          "output": {
+            "tier": "silver",
+            "owner": "OWNER-1013"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1013",
+            "tier": "silver"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1013"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_1",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-14 for customer CUST-14",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1014"
+          },
+          "output": {
+            "severity": "low",
+            "customer_id": "CUSTOMER-ID-1014",
+            "ticket_id": "TICKET-ID-1014"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1014"
+          },
+          "output": {
+            "tier": "platinum",
+            "owner": "OWNER-1014"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1014",
+            "tier": "platinum"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1014"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_2",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-15 for customer CUST-15",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1015"
+          },
+          "output": {
+            "severity": "high",
+            "customer_id": "CUSTOMER-ID-1015",
+            "ticket_id": "TICKET-ID-1015"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1015"
+          },
+          "output": {
+            "tier": "gold",
+            "owner": "OWNER-1015"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1015",
+            "tier": "gold"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1015"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_3",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-16 for customer CUST-16",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1016"
+          },
+          "output": {
+            "severity": "low",
+            "customer_id": "CUSTOMER-ID-1016",
+            "ticket_id": "TICKET-ID-1016"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1016"
+          },
+          "output": {
+            "tier": "silver",
+            "owner": "OWNER-1016"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1016",
+            "tier": "silver"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1016"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_4",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-17 for customer CUST-17",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1017"
+          },
+          "output": {
+            "severity": "high",
+            "customer_id": "CUSTOMER-ID-1017",
+            "ticket_id": "TICKET-ID-1017"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1017"
+          },
+          "output": {
+            "tier": "platinum",
+            "owner": "OWNER-1017"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1017",
+            "tier": "platinum"
+          },
+          "status": "error",
+          "error_class": "ValidationError",
+          "latency_ms": 120.0
+        },
+        {
+          "step": 3,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1017",
+            "tier": "platinum"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1017"
+          },
+          "status": "ok",
+          "latency_ms": 100.0,
+          "cost": 0.004
+        }
+      ]
+    },
+    {
+      "run_id": "run_support_escalation_5",
+      "pattern": "support_escalation",
+      "task": "escalate ticket TK-18 for customer CUST-18",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "support.get_ticket",
+          "args": {
+            "ticket_id": "TICKET-ID-1018"
+          },
+          "output": {
+            "severity": "low",
+            "customer_id": "CUSTOMER-ID-1018",
+            "ticket_id": "TICKET-ID-1018"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "crm.lookup_customer",
+          "args": {
+            "customer_id": "CUSTOMER-ID-1018"
+          },
+          "output": {
+            "tier": "gold",
+            "owner": "OWNER-1018"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "support.escalate",
+          "args": {
+            "ticket_id": "TICKET-ID-1018",
+            "tier": "gold"
+          },
+          "output": {
+            "escalation_id": "ESCALATION-ID-1018"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_0",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-3 for sku SKU-19",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1019",
+            "warehouse": "WAREHOUSE-1019"
+          },
+          "output": {
+            "on_hand": 1133,
+            "reorder_point": 1133,
+            "sku": "SKU-1019"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1019",
+            "quantity": 1133
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1019"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_1",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-0 for sku SKU-20",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1020",
+            "warehouse": "WAREHOUSE-1020"
+          },
+          "output": {
+            "on_hand": 1140,
+            "reorder_point": 1140,
+            "sku": "SKU-1020"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1020",
+            "quantity": 1140
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1020"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_2",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-1 for sku SKU-21",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1021",
+            "warehouse": "WAREHOUSE-1021"
+          },
+          "output": {
+            "on_hand": 1147,
+            "reorder_point": 1147,
+            "sku": "SKU-1021"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1021",
+            "quantity": 1147
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1021"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_3",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-2 for sku SKU-22",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1022",
+            "warehouse": "WAREHOUSE-1022"
+          },
+          "output": {
+            "on_hand": 1154,
+            "reorder_point": 1154,
+            "sku": "SKU-1022"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1022",
+            "quantity": 1154
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1022"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_4",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-3 for sku SKU-23",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1023",
+            "warehouse": "WAREHOUSE-1023"
+          },
+          "output": {
+            "on_hand": 1161,
+            "reorder_point": 1161,
+            "sku": "SKU-1023"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1023",
+            "quantity": 1161
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1023"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_inventory_restock_5",
+      "pattern": "inventory_restock",
+      "task": "restock warehouse WH-0 for sku SKU-24",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "inventory.check_stock",
+          "args": {
+            "sku": "SKU-1024",
+            "warehouse": "WAREHOUSE-1024"
+          },
+          "output": {
+            "on_hand": 1168,
+            "reorder_point": 1168,
+            "sku": "SKU-1024"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "procurement.create_po",
+          "args": {
+            "sku": "SKU-1024",
+            "quantity": 1168
+          },
+          "output": {
+            "po_number": "PO-NUMBER-1024"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_0",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-25 for employee EMP-25",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1025"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1025",
+            "cost_center": "COST-CENTER-1025"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1025"
+          },
+          "output": {
+            "amount": 1175,
+            "report_id": "REPORT-ID-1025"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1025",
+            "manager_id": "MANAGER-ID-1025"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1025"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_1",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-26 for employee EMP-26",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1026"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1026",
+            "cost_center": "COST-CENTER-1026"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1026"
+          },
+          "output": {
+            "amount": 1182,
+            "report_id": "REPORT-ID-1026"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1026",
+            "manager_id": "MANAGER-ID-1026"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1026"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_2",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-27 for employee EMP-27",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1027"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1027",
+            "cost_center": "COST-CENTER-1027"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1027"
+          },
+          "output": {
+            "amount": 1189,
+            "report_id": "REPORT-ID-1027"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1027",
+            "manager_id": "MANAGER-ID-1027"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1027"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_3",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-28 for employee EMP-28",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1028"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1028",
+            "cost_center": "COST-CENTER-1028"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1028"
+          },
+          "output": {
+            "amount": 1196,
+            "report_id": "REPORT-ID-1028"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1028",
+            "manager_id": "MANAGER-ID-1028"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1028"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_4",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-29 for employee EMP-29",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1029"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1029",
+            "cost_center": "COST-CENTER-1029"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1029"
+          },
+          "output": {
+            "amount": 1203,
+            "report_id": "REPORT-ID-1029"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1029",
+            "manager_id": "MANAGER-ID-1029"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1029"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_expense_approval_5",
+      "pattern": "expense_approval",
+      "task": "approve expense report REP-30 for employee EMP-30",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "hr.get_employee",
+          "args": {
+            "employee_id": "EMPLOYEE-ID-1030"
+          },
+          "output": {
+            "manager_id": "MANAGER-ID-1030",
+            "cost_center": "COST-CENTER-1030"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "finance.get_report",
+          "args": {
+            "report_id": "REPORT-ID-1030"
+          },
+          "output": {
+            "amount": 1210,
+            "report_id": "REPORT-ID-1030"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "finance.approve",
+          "args": {
+            "report_id": "REPORT-ID-1030",
+            "manager_id": "MANAGER-ID-1030"
+          },
+          "output": {
+            "approval_id": "APPROVAL-ID-1030"
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_0",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-31 for account ACC-31",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1031"
+          },
+          "output": {
+            "end_date": "END-DATE-1031",
+            "value": 1217,
+            "contract_id": "CONTRACT-ID-1031"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1031",
+            "value": 1217
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1031"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1031",
+            "draft_id": "DRAFT-ID-1031"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_1",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-32 for account ACC-32",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1032"
+          },
+          "output": {
+            "end_date": "END-DATE-1032",
+            "value": 1224,
+            "contract_id": "CONTRACT-ID-1032"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1032",
+            "value": 1224
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1032"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1032",
+            "draft_id": "DRAFT-ID-1032"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_2",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-33 for account ACC-33",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1033"
+          },
+          "output": {
+            "end_date": "END-DATE-1033",
+            "value": 1231,
+            "contract_id": "CONTRACT-ID-1033"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1033",
+            "value": 1231
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1033"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1033",
+            "draft_id": "DRAFT-ID-1033"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_3",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-34 for account ACC-34",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1034"
+          },
+          "output": {
+            "end_date": "END-DATE-1034",
+            "value": 1238,
+            "contract_id": "CONTRACT-ID-1034"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1034",
+            "value": 1238
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1034"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1034",
+            "draft_id": "DRAFT-ID-1034"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_4",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-35 for account ACC-35",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1035"
+          },
+          "output": {
+            "end_date": "END-DATE-1035",
+            "value": 1245,
+            "contract_id": "CONTRACT-ID-1035"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1035",
+            "value": 1245
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1035"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1035",
+            "draft_id": "DRAFT-ID-1035"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_contract_renewal_5",
+      "pattern": "contract_renewal",
+      "task": "renew contract CTR-36 for account ACC-36",
+      "agent_id": "ops-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "crm.get_contract",
+          "args": {
+            "contract_id": "CONTRACT-ID-1036"
+          },
+          "output": {
+            "end_date": "END-DATE-1036",
+            "value": 1252,
+            "contract_id": "CONTRACT-ID-1036"
+          },
+          "status": "ok",
+          "latency_ms": 40.0,
+          "cost": 0.001
+        },
+        {
+          "step": 1,
+          "tool": "legal.draft_renewal",
+          "args": {
+            "contract_id": "CONTRACT-ID-1036",
+            "value": 1252
+          },
+          "output": {
+            "draft_id": "DRAFT-ID-1036"
+          },
+          "status": "ok",
+          "latency_ms": 60.0,
+          "cost": 0.002
+        },
+        {
+          "step": 2,
+          "tool": "crm.attach_document",
+          "args": {
+            "contract_id": "CONTRACT-ID-1036",
+            "draft_id": "DRAFT-ID-1036"
+          },
+          "output": {
+            "ok": true
+          },
+          "status": "ok",
+          "latency_ms": 80.0,
+          "cost": 0.003
+        }
+      ]
+    },
+    {
+      "run_id": "run_other_agent_0",
+      "pattern": "quote_update",
+      "task": "update quote Q-9990 with EMEA price for SKU-990",
+      "agent_id": "rival-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "secret.internal_lookup",
+          "args": {
+            "sku": "CONFIDENTIAL-0"
+          },
+          "output": {
+            "price": 1
+          },
+          "status": "ok",
+          "latency_ms": 10.0
+        }
+      ]
+    },
+    {
+      "run_id": "run_other_agent_1",
+      "pattern": "quote_update",
+      "task": "update quote Q-9991 with EMEA price for SKU-991",
+      "agent_id": "rival-agent",
+      "success": true,
+      "invocations": [
+        {
+          "step": 0,
+          "tool": "secret.internal_lookup",
+          "args": {
+            "sku": "CONFIDENTIAL-1"
+          },
+          "output": {
+            "price": 1
+          },
+          "status": "ok",
+          "latency_ms": 10.0
+        }
+      ]
+    }
+  ]
+}

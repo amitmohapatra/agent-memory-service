@@ -1,0 +1,738 @@
+{
+  "cases": 40,
+  "categories": {
+    "citation": {
+      "correct": 6,
+      "total": 6
+    },
+    "negation": {
+      "correct": 4,
+      "total": 4
+    },
+    "number": {
+      "correct": 6,
+      "total": 6
+    },
+    "paraphrase": {
+      "correct": 4,
+      "total": 6
+    },
+    "polarity": {
+      "correct": 3,
+      "total": 3
+    },
+    "structure": {
+      "correct": 2,
+      "total": 2
+    },
+    "unrelated": {
+      "correct": 2,
+      "total": 3
+    },
+    "unused": {
+      "correct": 2,
+      "total": 2
+    },
+    "verbatim": {
+      "correct": 8,
+      "total": 8
+    }
+  },
+  "claims": 42,
+  "failures": [
+    "paraphrase-01: expected ['supported'], got ['borderline']",
+    "paraphrase-02: expected ['supported'], got ['borderline']",
+    "unrelated-03: expected ['unsupported'], got ['borderline']"
+  ],
+  "gate": "grounding",
+  "golden_set": "grounding_claims_v1",
+  "nli_provider": "lexical-nli-v1",
+  "note": "lexical NLI is a deterministic stand-in; only the deterministic categories are asserted and the quality numbers are not representative",
+  "per_verdict": {
+    "borderline": {
+      "fn": 0,
+      "fp": 3,
+      "precision": 0.0,
+      "recall": null,
+      "tp": 0
+    },
+    "contradicted": {
+      "fn": 0,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "tp": 16
+    },
+    "supported": {
+      "fn": 2,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.8889,
+      "tp": 16
+    },
+    "unsupported": {
+      "fn": 1,
+      "fp": 0,
+      "precision": 1.0,
+      "recall": 0.875,
+      "tp": 7
+    }
+  },
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "fa88b3144123e281f6458da2689c9941b8de1f11",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": null,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "prithivida/Splade_PP_en_v1",
+        "revision": "762be6a7206e2f299182705972a65e5c46e62be2"
+      }
+    },
+    "packages": {
+      "docling": "not-installed",
+      "fastapi": "0.141.1",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "not-installed",
+      "sqlalchemy": "2.0.53",
+      "torch": "not-installed",
+      "transformers": "not-installed",
+      "zstandard": "0.25.0"
+    },
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "python": "3.12.14",
+    "timestamp": "2026-09-15T11:59:09.317178+00:00"
+  },
+  "representative": false,
+  "rows": [
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-04",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-05",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-06",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-07",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "verbatim",
+      "expected": [
+        "supported"
+      ],
+      "id": "verbatim-08",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": false,
+      "predicted": [
+        "borderline"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": false,
+      "predicted": [
+        "borderline"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-04",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-05",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "paraphrase",
+      "expected": [
+        "supported"
+      ],
+      "id": "paraphrase-06",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "supported"
+      ],
+      "id": "citation-01",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "supported"
+      ],
+      "id": "citation-02",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "citation-03",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "citation-04",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "citation-05",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "citation",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "citation-06",
+      "methods": [
+        "citation"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-04",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-05",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "number",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "number-06",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "negation",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "negation-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "negation",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "negation-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "negation",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "negation-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "negation",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "negation-04",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "polarity",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "polarity-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "polarity",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "polarity-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "polarity",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "polarity-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "unrelated",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "unrelated-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "unrelated",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "unrelated-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "unsupported"
+      ]
+    },
+    {
+      "category": "unrelated",
+      "expected": [
+        "unsupported"
+      ],
+      "id": "unrelated-03",
+      "methods": [
+        "nli"
+      ],
+      "ok": false,
+      "predicted": [
+        "borderline"
+      ]
+    },
+    {
+      "category": "unused",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "unused-01",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "unused",
+      "expected": [
+        "contradicted"
+      ],
+      "id": "unused-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "contradicted"
+      ]
+    },
+    {
+      "category": "structure",
+      "expected": [
+        "supported",
+        "contradicted",
+        "unsupported"
+      ],
+      "id": "structure-01",
+      "methods": [
+        "nli",
+        "nli",
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported",
+        "contradicted",
+        "unsupported"
+      ]
+    },
+    {
+      "category": "structure",
+      "expected": [
+        "supported"
+      ],
+      "id": "structure-02",
+      "methods": [
+        "nli"
+      ],
+      "ok": true,
+      "predicted": [
+        "supported"
+      ]
+    }
+  ],
+  "thresholds": {
+    "contradicted_recall_min": 0.9,
+    "deterministic_categories": [
+      "citation",
+      "number",
+      "negation",
+      "verbatim",
+      "unused",
+      "structure"
+    ],
+    "supported_precision_min": 0.9
+  }
+}
