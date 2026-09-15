@@ -101,37 +101,42 @@ so the configuration and the weights cannot drift apart:
 
 | Role | Default | Size | Why |
 |---|---|---|---|
-| Embedding | `BAAI/bge-small-en-v1.5` (384-dim) | 137 MB | fastest of the candidates measured on CPU, at the smallest useful dimension |
-| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | the only reranker measured inside a CPU latency budget |
+| Embedding | `BAAI/bge-small-en-v1.5` (384-dim) | 137 MB | ties on quality with every candidate; fastest to index. See the note below — the benchmark's own pick is `granite-embedding-small-english-r2` on p95 |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | 26x cheaper than the next option and the only one close to a CPU budget |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
 `make models-all` additionally fetches the benchmark challengers (Granite R2 small and base,
 BGE base/M3, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
 to re-run `make bench-embedding` / `make bench-reranker`.
 
-**These defaults were chosen by measurement, on CPU, and the losers are instructive.** Per
-query, embedding one question and reranking 20 candidates, measured in the validation
-container on a 4-core machine:
+**These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
+candidate through the real pipeline and the golden set; the numbers below are from
+`benchmark/results/embedding.json` (p95 over 18 golden queries, 4-core container):
 
-| Candidate | Cost | Verdict |
-|---|---|---|
-| `bge-small-en-v1.5` (384-dim) | 117 ms/query | **default** — fastest, and 2x quicker than Granite-small at the same dimension |
-| `granite-embedding-small-english-r2` | 241 ms/query | close second, English-only |
-| `bge-base-en-v1.5` (768-dim) | 267 ms/query | 2x the cost for a larger vector |
-| `Qwen/Qwen3-Embedding-0.6B` | **2,003 ms/query** | GPU only — 6.7x the entire recall budget for one step |
-| `ms-marco-MiniLM-L6-v2` | 1,399 ms / 20 candidates | **default** reranker |
-| `granite-embedding-reranker-english-r2` | 11,978 ms / 20 | too slow on CPU |
-| `BAAI/bge-reranker-v2-m3` | **35,794 ms / 20** | GPU only, 119x the recall budget |
+| Candidate | dim | Recall@20 | EGR | query p95 | index |
+|---|---|---|---|---|---|
+| `granite-embedding-small-english-r2` | 384 | 1.00 | 1.00 | **204 ms** | 59 s |
+| `bge-small-en-v1.5` | 384 | 1.00 | 1.00 | 289 ms | **21 s** |
+| `bge-base-en-v1.5` | 768 | 1.00 | 1.00 | 353 ms | 33 s |
+| `granite-embedding-english-r2` | 768 | 1.00 | 1.00 | 2,020 ms | 369 s |
+| `Qwen/Qwen3-Embedding-0.6B` | 1024 | 1.00 | 1.00 | 3,545 ms | 673 s |
 
-A larger model is not automatically better here: the whole recall p95 budget is 300 ms, so a
-0.6B embedding or a 568M cross-encoder is not a quality upgrade on CPU, it is an outage. If
-you deploy on GPUs, `bge-reranker-v2-m3` is the quality option and the configuration above is
-how to select it.
+Rerankers, scoring 20 candidates: `ms-marco-MiniLM-L6-v2` 1,399 ms ·
+`granite-embedding-reranker-english-r2` 11,978 ms · `BAAI/bge-reranker-v2-m3` 35,794 ms.
 
-Note the honest consequence: with a *real* cross-encoder the 300 ms recall budget is not met
-on this hardware even by the fastest candidate. Those budgets were set against the lexical
-stand-in and need re-justifying against a deployed instance — see
-[Status](#status-read-this-before-you-trust-a-number).
+Three things that table is actually telling you:
+
+- **Every candidate scores a perfect 1.00.** That is not evidence they are equally good — it
+  means the golden set (18 questions over 2 documents) is too easy to separate them. Quality
+  here is *undiscriminated*, not *equal*, and the set needs harder questions before it can
+  rank encoders.
+- **Bigger is not better under a latency budget.** Qwen3-Embedding and `bge-reranker-v2-m3`
+  are strong models that buy no measurable recall here and cost 17x and 26x their smaller
+  siblings. They are configuration-selectable for GPU deployments, not defaults.
+- **The 300 ms recall budget does not survive real models on this hardware.** End-to-end
+  recall p95 was 3.5-4.1 s for *every* candidate. Those budgets were set against the
+  deterministic stand-in and need re-justifying against a deployed instance — see
+  [Status](#status-read-this-before-you-trust-a-number).
 
 Swap any of them with configuration; nothing in the code names a model:
 
