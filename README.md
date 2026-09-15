@@ -77,9 +77,15 @@ Requires Docker and Python 3.12.
 ```bash
 git clone <repo> memory-service && cd memory-service
 make setup          # uv venv + dependencies
+make models         # download the model weights into ./models (~1 GB, git-ignored)
 make dev-up         # PostgreSQL, Qdrant, Dragonfly, OpenFGA, api, worker
 make migrate
 ```
+
+**`make models` is not optional for `make dev-up`.** The service reads its weights from local
+directories and never downloads at run time, so a missing model is a startup error rather than
+a silent fall back to something weaker. (The test suite and `examples/run_server.sh` do have a
+deterministic stand-in, which is why they run without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
 `/health/ready`. The dev API key is `dev-key`.
@@ -88,9 +94,60 @@ The API is on **http://localhost:8080** — interactive docs at `/docs`, health 
 pip install -e sdk/python        # the universal-memory SDK
 ```
 
-Local model weights (embeddings, reranker) go in `models/` and are read from there; without
-them the service still runs, using a deterministic stand-in that is fine for development but
-**not** representative of retrieval quality. See [Status](#status-read-this-before-you-trust-a-number).
+### What actually runs
+
+`make models` fetches three defaults into `models/`, each in a directory named after the model
+so the configuration and the weights cannot drift apart:
+
+| Role | Default | Size | Why |
+|---|---|---|---|
+| Embedding | `BAAI/bge-small-en-v1.5` (384-dim) | 137 MB | fastest of the candidates measured on CPU, at the smallest useful dimension |
+| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | the only reranker measured inside a CPU latency budget |
+| Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
+
+`make models-all` additionally fetches the benchmark challengers (Granite R2 small and base,
+BGE base/M3, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
+to re-run `make bench-embedding` / `make bench-reranker`.
+
+**These defaults were chosen by measurement, on CPU, and the losers are instructive.** Per
+query, embedding one question and reranking 20 candidates, measured in the validation
+container on a 4-core machine:
+
+| Candidate | Cost | Verdict |
+|---|---|---|
+| `bge-small-en-v1.5` (384-dim) | 117 ms/query | **default** — fastest, and 2x quicker than Granite-small at the same dimension |
+| `granite-embedding-small-english-r2` | 241 ms/query | close second, English-only |
+| `bge-base-en-v1.5` (768-dim) | 267 ms/query | 2x the cost for a larger vector |
+| `Qwen/Qwen3-Embedding-0.6B` | **2,003 ms/query** | GPU only — 6.7x the entire recall budget for one step |
+| `ms-marco-MiniLM-L6-v2` | 1,399 ms / 20 candidates | **default** reranker |
+| `granite-embedding-reranker-english-r2` | 11,978 ms / 20 | too slow on CPU |
+| `BAAI/bge-reranker-v2-m3` | **35,794 ms / 20** | GPU only, 119x the recall budget |
+
+A larger model is not automatically better here: the whole recall p95 budget is 300 ms, so a
+0.6B embedding or a 568M cross-encoder is not a quality upgrade on CPU, it is an outage. If
+you deploy on GPUs, `bge-reranker-v2-m3` is the quality option and the configuration above is
+how to select it.
+
+Note the honest consequence: with a *real* cross-encoder the 300 ms recall budget is not met
+on this hardware even by the fastest candidate. Those budgets were set against the lexical
+stand-in and need re-justifying against a deployed instance — see
+[Status](#status-read-this-before-you-trust-a-number).
+
+Swap any of them with configuration; nothing in the code names a model:
+
+```bash
+MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r2
+MEMORY__MODELS__EMBEDDING__DIMENSION=384
+```
+
+Changing the embedding changes the vector space, so **re-index after a swap**
+(`make reindex`); the dimension and the model fingerprint are part of the collection name, so
+old and new vectors can never silently mix.
+
+**Where the stand-in applies.** The test suite and `examples/run_server.sh` fall back to a
+deterministic hash embedding when `models/` is absent, so they exercise the plumbing without a
+download. `run_server.sh` prints which mode it is in, and any benchmark produced that way is
+labelled `representative: false`. Never read a retrieval number that carries that flag.
 
 ---
 

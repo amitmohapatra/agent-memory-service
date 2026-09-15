@@ -13,8 +13,11 @@ x-common-env: &common-env
   MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
   MEMORY__TASKS__PROVIDER: procrastinate
   MEMORY__MODELS__LLM__ENABLED: "false"
-  MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/embedding
-  MEMORY__MODELS__RERANKER__MODEL_PATH: /models/reranker
+  MEMORY__MODELS__EMBEDDING__MODEL: BAAI/bge-small-en-v1.5
+  MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/bge-small-en-v1.5
+  MEMORY__MODELS__EMBEDDING__DIMENSION: "384"
+  MEMORY__MODELS__RERANKER__MODEL: cross-encoder/ms-marco-MiniLM-L6-v2
+  MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
   MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
   MEMORY__OBSERVABILITY__OTEL_EXPORTER: none
 
@@ -157,7 +160,7 @@ services:
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
       MEMORY__SERVICE__LOG_LEVEL: WARNING
       MEMORY_MODELS_DIR: /models
-      MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
+      MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/bge-small-en-v1.5
       MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
       MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
       MEMORY__MODELS__SPARSE_MODEL_PATH: /models/Splade_PP_en_v1
