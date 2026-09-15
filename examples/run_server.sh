@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 MODELS_DIR="${MEMORY_MODELS_DIR:-./models}"
-EMBEDDING_DIR="$MODELS_DIR/bge-small-en-v1.5"
+EMBEDDING_DIR="$MODELS_DIR/granite-embedding-small-english-r2"
 RERANKER_DIR="$MODELS_DIR/ms-marco-MiniLM-L6-v2"
 if [[ -d "$EMBEDDING_DIR" && -d "$RERANKER_DIR" ]]; then
   echo "models: real weights from $MODELS_DIR (embedding + reranker)"

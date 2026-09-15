@@ -188,7 +188,7 @@ class EmbeddingSettings(BaseModel):
         "hash",
         "disabled",
     ] = "sentence_transformers"
-    model: str = "BAAI/bge-small-en-v1.5"
+    model: str = "ibm-granite/granite-embedding-small-english-r2"
     model_path: str | None = Field(default=None, description="local directory with model files")
     dimension: int = 384
     batch_size: int = 32

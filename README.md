@@ -101,12 +101,12 @@ so the configuration and the weights cannot drift apart:
 
 | Role | Default | Size | Why |
 |---|---|---|---|
-| Embedding | `BAAI/bge-small-en-v1.5` (384-dim) | 137 MB | ties on quality with every candidate; fastest to index. See the note below — the benchmark's own pick is `granite-embedding-small-english-r2` on p95 |
+| Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | 26x cheaper than the next option and the only one close to a CPU budget |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
-`make models-all` additionally fetches the benchmark challengers (Granite R2 small and base,
-BGE base/M3, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
+`make models-all` additionally fetches the benchmark challengers (BGE small/base/M3, Granite
+R2 base, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
 to re-run `make bench-embedding` / `make bench-reranker`.
 
 **These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
@@ -141,7 +141,7 @@ Three things that table is actually telling you:
 Swap any of them with configuration; nothing in the code names a model:
 
 ```bash
-MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r2
+MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/bge-small-en-v1.5
 MEMORY__MODELS__EMBEDDING__DIMENSION=384
 ```
 

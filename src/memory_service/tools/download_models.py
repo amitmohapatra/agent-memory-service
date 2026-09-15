@@ -42,10 +42,10 @@ class Model:
 MODELS: tuple[Model, ...] = (
     # ---- defaults: what a normal deployment runs -------------------------------------
     Model(
-        "bge-small-en-v1.5",
-        "BAAI/bge-small-en-v1.5",
+        "granite-embedding-small-english-r2",
+        "ibm-granite/granite-embedding-small-english-r2",
         "embedding",
-        "default dense encoder, 384-dim: fastest of the candidates measured on CPU",
+        "default dense encoder, 384-dim: lowest query p95 of the candidates benchmarked",
         default=True,
     ),
     Model(
@@ -64,10 +64,10 @@ MODELS: tuple[Model, ...] = (
     ),
     # ---- challengers: only needed to re-run the benchmarks ---------------------------
     Model(
-        "granite-embedding-small-english-r2",
-        "ibm-granite/granite-embedding-small-english-r2",
+        "bge-small-en-v1.5",
+        "BAAI/bge-small-en-v1.5",
         "embedding",
-        "English-only, 384-dim, the low-latency tier",
+        "384-dim, indexes ~3x faster but a higher query p95",
     ),
     Model(
         "granite-embedding-english-r2",
