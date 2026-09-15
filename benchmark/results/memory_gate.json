@@ -1,0 +1,453 @@
+{
+  "gate": "memory",
+  "provider": "native",
+  "golden_set": "memory_consolidation_pairs",
+  "threshold": 0.01,
+  "pairs": 35,
+  "distinct_pairs": 15,
+  "false_merges": 0,
+  "false_merge_rate": 0.0,
+  "merge_pairs": 18,
+  "missed_merges": 0,
+  "dedup_recall": 1.0,
+  "failures": [],
+  "per_pair": [
+    {
+      "id": "same_exact",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "same_whitespace",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "same_slot_same_value",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "tz_change",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "tz_change_signal",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "role_change",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "employer_change",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "favourite_change",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "pref_replacement",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "pref_distinct_topic",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "pref_distinct_food",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "pref_negation",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "numbers_differ",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "numbers_differ_year",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "same_fact_repeated",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "decision_distinct",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "decision_reversal",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "decision_same",
+      "expected": "reinforce_or_distinct",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "task_distinct",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "task_same",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "event_distinct_day",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "event_same",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "procedure_distinct",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "name_vs_timezone",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "lives_change",
+      "expected": "supersede_or_distinct",
+      "decisions": [],
+      "extracted": [
+        1,
+        0
+      ],
+      "ok": true
+    },
+    {
+      "id": "lives_same",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "manager_change",
+      "expected": "supersede",
+      "decisions": [
+        "SUPERSEDE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "email_same",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "email_distinct_person",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "negation_only",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "similar_but_different_object",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "instruction_same",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "instruction_distinct",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "avoid_vs_prefer",
+      "expected": "distinct",
+      "decisions": [
+        "CREATE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    },
+    {
+      "id": "role_same_wording",
+      "expected": "reinforce",
+      "decisions": [
+        "REINFORCE"
+      ],
+      "extracted": [
+        1,
+        1
+      ],
+      "ok": true
+    }
+  ],
+  "provenance": {
+    "timestamp": "2026-09-15T00:32:36.630034+00:00",
+    "git_commit": "95f58cca8dfab0b017d9399fbdc4750a48d67dd4",
+    "python": "3.12.3",
+    "platform": "Linux-6.18.44-fc-v33-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 2,
+    "memory_gb": 7.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0"
+    }
+  }
+}

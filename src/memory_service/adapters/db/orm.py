@@ -535,3 +535,83 @@ class ContextEdgeRow(Base):
         Index("ix_context_edges_target", "target_id", "edge"),
         Index("ix_context_edges_document", "document_id"),
     )
+
+
+# --------------------------------------------------------------------------
+# Memory intelligence (M7): canonical memories derived from observations
+# --------------------------------------------------------------------------
+
+
+class MemoryRow(Base):
+    __tablename__ = "memories"
+
+    memory_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    user_id: Mapped[str | None] = mapped_column(String(200))
+    group_id: Mapped[str | None] = mapped_column(String(200))
+    thread_id: Mapped[str | None] = mapped_column(String(200))
+    work_id: Mapped[str | None] = mapped_column(String(200))
+    agent_id: Mapped[str | None] = mapped_column(String(200))
+    agent_group_id: Mapped[str | None] = mapped_column(String(200))
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False)
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    owner_principal: Mapped[str] = mapped_column(String(300), nullable=False)
+    lifetime: Mapped[str] = mapped_column(String(20), nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    custom_type: Mapped[str | None] = mapped_column(String(100))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    subject: Mapped[str | None] = mapped_column(String(300))
+    predicate: Mapped[str | None] = mapped_column(String(200))
+    object: Mapped[str | None] = mapped_column(Text)
+    temporal_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="CURRENT", server_default="CURRENT"
+    )
+    valid_from: Mapped[datetime | None]
+    valid_to: Mapped[datetime | None]
+    observed_at: Mapped[datetime] = mapped_column(server_default=_now())
+    superseded_by: Mapped[str | None] = mapped_column(String(200))
+    supersedes: Mapped[str | None] = mapped_column(String(200))
+    contradicts: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    confidence: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
+    importance: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
+    reinforcement_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    provider: Mapped[str] = mapped_column(String(40), default="native", server_default="native")
+    system_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    custom_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    expires_at: Mapped[datetime | None]
+    indexed_at: Mapped[datetime | None]
+    index_fingerprint: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    deleted_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        Index("ix_memories_tenant_hash", "tenant_id", "normalized_hash"),
+        Index("ix_memories_tenant_scope", "tenant_id", "scope_key", "temporal_status"),
+        Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
+        Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
+        Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
+        Index(
+            "ix_memories_unindexed",
+            "tenant_id",
+            "created_at",
+            postgresql_where=text("indexed_at IS NULL AND deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_memories_expiring",
+            "expires_at",
+            postgresql_where=text("expires_at IS NOT NULL AND deleted_at IS NULL"),
+        ),
+    )

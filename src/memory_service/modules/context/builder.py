@@ -29,6 +29,7 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
+from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.retrieval.engine import Candidate, RetrievalEngine, RetrievalResult
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
@@ -83,11 +84,13 @@ class ContextBuilder:
         settings: ContextSettings,
         retrieval: RetrievalSettings,
         cache_ttl_seconds: int = 300,
+        working: EphemeralMemory | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.engine = engine
         self.conversation = conversation
         self.cache = cache
+        self.working = working
         self.cfg = settings
         self.retrieval_cfg = retrieval
         self.cache_ttl = cache_ttl_seconds
@@ -142,6 +145,19 @@ class ContextBuilder:
                     return bundle.model_copy(update={"cache_hit": True})
             result = await self.engine.retrieve(ctx, query, document_ids=document_ids)
             window = await self._conversation_window(ctx, result)
+            if self.working is not None and result.routed.needs_memories:
+                for i, item in enumerate(await self.working.recall(ctx)):
+                    result.candidates.insert(
+                        i,
+                        Candidate(
+                            record_id=f"wm_{i}",
+                            kind="memory",
+                            text=str(item.get("content", "")),
+                            score=1.0,
+                            retrievers=["working"],
+                            payload={"memory_type": item.get("memory_type", "WORKING")},
+                        ),
+                    )
             bundle = self._assemble(query, result, window, budget, revision_fp)
             if self.cache is not None:
                 with contextlib.suppress(CacheUnavailable):

@@ -96,6 +96,11 @@ Retrieval: `POST /v1/recall` returns scope-filtered ranked evidence (chunks and 
 each with a citation and `EvidenceRef`s); `POST /v1/context` returns a bounded, ranked
 `ContextBundle` with a prompt-ready `rendered` field. Both take the same `scope` body as the
 conversation routes. In the SDK: `await ctx.recall(query)` and `await ctx.context(query)`.
+Memory: `POST /v1/observations` records "this happened or was learned"; the service
+extracts, classifies and consolidates memories asynchronously (native rules by default, no
+LLM). `GET /v1/memories`, `GET/DELETE /v1/memories/{id}` read and forget them. In the SDK:
+`await ctx.observe(text)`, `await ctx.remember(text, memory_type=...)`, `await ctx.forget(id)`.
+
 Without local model weights the service runs with a deterministic hash embedding and a
 lexical reranker (`MEMORY__MODELS__EMBEDDING__PROVIDER=hash`) — fine for plumbing tests,
 not representative of retrieval quality (every benchmark file records which was used).

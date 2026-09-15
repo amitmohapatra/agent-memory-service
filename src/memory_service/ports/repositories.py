@@ -21,6 +21,7 @@ from memory_service.domain.documents import (
     DocumentVersion,
 )
 from memory_service.domain.enums import ContextGraphEdge
+from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.tasks import JobSpec
@@ -267,3 +268,52 @@ class OutboxRepository(Protocol):
     ) -> list[OutboxEntry]: ...
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...
     async def mark_failed(self, outbox_id: int, *, error: str, dead: bool) -> None: ...
+
+
+@runtime_checkable
+class MemoryRepository(Protocol):
+    """Canonical memories (M7). Rows are never physically deleted by application code:
+    ``forget`` soft-deletes and later purge is an operator task."""
+
+    async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None: ...
+    async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
+    async def get_many(
+        self, tenant_id: str, memory_ids: Sequence[str]
+    ) -> list[CanonicalMemory]: ...
+    async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]: ...
+    async def update(self, memory: CanonicalMemory) -> None:
+        """Persist content/temporal/evidence/counter changes; bumps ``revision``."""
+        ...
+
+    async def candidates(
+        self,
+        tenant_id: str,
+        *,
+        scope_key: str,
+        normalized_hash: str | None = None,
+        subject: str | None = None,
+        limit: int = 20,
+    ) -> list[CanonicalMemory]:
+        """Existing CURRENT memories that could be duplicates of a new candidate: same scope
+        and (same hash OR same subject OR most recent)."""
+        ...
+
+    async def list_scope(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        memory_types: Sequence[str] | None = None,
+        current_only: bool = True,
+        limit: int = 200,
+    ) -> list[CanonicalMemory]: ...
+    async def forget(self, tenant_id: str, memory_id: str) -> bool: ...
+    async def list_unindexed(
+        self, tenant_id: str, *, limit: int = 500
+    ) -> list[CanonicalMemory]: ...
+    async def mark_indexed(
+        self, memory_ids: Sequence[str], *, fingerprint: str, indexed_at: datetime
+    ) -> None: ...
+    async def expire_due(self, *, now: datetime, limit: int = 500) -> list[tuple[str, str]]:
+        """Mark memories past ``expires_at`` EXPIRED; returns (tenant_id, memory_id) pairs."""
+        ...

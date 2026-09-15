@@ -106,6 +106,16 @@ class AuthorizationService:
             results = await self.provider.batch_check(checks)
         return any(results)
 
+    async def is_tenant_admin(self, ctx: MemoryExecutionContext) -> bool:
+        subjects = [ctx.principal_id]
+        if ctx.is_agent and ctx.user_id:
+            subjects.append(f"user:{ctx.user_id}")
+        checks = [
+            AccessCheck(user=s, relation="admin", object=f"tenant:{ctx.tenant_id}")
+            for s in subjects
+        ]
+        return any(await self.provider.batch_check(checks))
+
     async def require(
         self, ctx: MemoryExecutionContext, relation: str, obj_type: str, ident: str
     ) -> None:

@@ -156,6 +156,70 @@ class Indexer:
         await self.store.upsert(records)
         return len(records)
 
+    async def index_memories(self, tenant_id: str, memory_ids: Sequence[str]) -> int:
+        """Upsert CURRENT memories into the memories collection; remove every other state
+        (superseded, expired, retracted, forgotten) so only live intelligence is searchable.
+        Superseded memories stay in PostgreSQL for temporal/audit queries."""
+        await self.ensure_collections()
+        async with self.uow_factory() as uow:
+            memories = await uow.memories.get_many(tenant_id, memory_ids)
+        found = {m.memory_id for m in memories}
+        live = [m for m in memories if m.temporal.status.value == "CURRENT"]
+        gone = [m.memory_id for m in memories if m.temporal.status.value != "CURRENT"] + [
+            i for i in memory_ids if i not in found
+        ]
+        collection = self.collection(MEMORIES)
+        if gone:
+            await self.store.delete(collection, gone)
+        n = 0
+        if live:
+            with (
+                span("index.memories", tenant_id=tenant_id),
+                stage_seconds.labels("index.memories").time(),
+            ):
+                texts = [f"{m.memory_type.value.lower()}: {m.content}" for m in live]
+                dense = await self.embed_cached(texts, [m.normalized_hash + ":mem" for m in live])
+                sparse = self.sparse.encode_documents(texts)
+                records = [
+                    SearchRecord(
+                        record_id=m.memory_id,
+                        collection=collection,
+                        tenant_id=m.tenant_id,
+                        dense=dense[i],
+                        sparse=sparse[i],
+                        payload={
+                            "kind": "memory",
+                            "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
+                            "memory_type": m.memory_type.value,
+                            "lifetime": m.lifetime.value,
+                            "temporal_status": m.temporal.status.value,
+                            "current": True,
+                            "subject": m.subject,
+                            "predicate": m.predicate,
+                            "object": (m.object or "")[:300],
+                            "owner_principal": m.owner_principal,
+                            "importance": m.importance,
+                            "confidence": m.confidence,
+                            "observed_at": m.temporal.observed_at.isoformat(),
+                            "thread_id": m.scope.thread_id,
+                            "text": m.content[:2000],
+                            "representation": "MEMORY",
+                        },
+                    )
+                    for i, m in enumerate(live)
+                ]
+                await self.store.upsert(records)
+                n = len(records)
+        async with self.uow_factory() as uow:
+            await uow.memories.mark_indexed(
+                [m.memory_id for m in memories],
+                fingerprint=self.fingerprint,
+                indexed_at=datetime.now(UTC),
+            )
+            await uow.commit()
+        log.info("index.memories_done", tenant_id=tenant_id, upserted=n, removed=len(gone))
+        return n
+
     async def rebuild_document(self, tenant_id: str, document_id: str) -> int:
         return await self.index_document(tenant_id, document_id, force=True)
 

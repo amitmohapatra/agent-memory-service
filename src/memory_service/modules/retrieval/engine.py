@@ -92,7 +92,7 @@ class RetrievalEngine:
         self.router = router or QueryRouter()
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9, M10)
         self.post_stages: dict[str, Any] = {}
-        # exact lookups by id prefix (memories M7)
+        # exact lookups by id prefix (graph facts M8)
         self.exact_lookups: dict[str, Any] = {}
 
     async def retrieve(
@@ -190,6 +190,29 @@ class RetrievalEngine:
                                 },
                             )
                         )
+        memory_ids = [i for i in identifiers if i.startswith("mem_")]
+        if memory_ids:
+            async with self.uow_factory() as uow:
+                for m in await uow.memories.get_many(ctx.tenant_id, memory_ids):
+                    keys = m.system_metadata.get("visibility_keys", [])
+                    if visibility.allows(m.tenant_id, keys):
+                        out.append(
+                            Candidate(
+                                record_id=m.memory_id,
+                                kind="memory",
+                                text=m.content,
+                                score=1.0,
+                                retrievers=["exact"],
+                                payload={
+                                    "memory_type": m.memory_type.value,
+                                    "temporal_status": m.temporal.status.value,
+                                    "subject": m.subject,
+                                    "predicate": m.predicate,
+                                    "object": m.object,
+                                    "observed_at": m.temporal.observed_at.isoformat(),
+                                },
+                            )
+                        )
         for prefix, lookup in self.exact_lookups.items():
             matching = [i for i in identifiers if i.startswith(prefix)]
             if matching:
@@ -206,6 +229,8 @@ class RetrievalEngine:
     ) -> list[SearchHit]:
         collection = self.indexer.collection(KNOWLEDGE if kind == "chunk" else MEMORIES)
         flt = visibility.search_filter(kind=kind)
+        if kind == "memory":
+            flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
         if document_ids:
             flt = flt.model_copy(
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}

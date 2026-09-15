@@ -15,6 +15,7 @@ from memory_service.ports.repositories import (
     ArchiveRepository,
     DocumentRepository,
     IdempotencyRepository,
+    MemoryRepository,
     MessageRepository,
     ObservationRepository,
     OutboxRepository,
@@ -39,6 +40,7 @@ class UnitOfWork(Protocol):
     outbox: OutboxRepository
     archive: ArchiveRepository
     documents: DocumentRepository
+    memories: MemoryRepository
 
     async def __aenter__(self) -> Self: ...
 

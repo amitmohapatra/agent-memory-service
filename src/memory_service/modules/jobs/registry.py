@@ -20,6 +20,8 @@ TASK_OUTBOX_SWEEP = "system.outbox_sweep"
 TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
 TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
+TASK_MEMORY_INDEX = "memory.index"
+TASK_MEMORY_EXPIRE = "memory.expire"
 
 
 def register_handlers(container: Container) -> None:
@@ -58,6 +60,26 @@ def register_handlers(container: Container) -> None:
         if indexer is not None:
             await indexer.index_document(payload["tenant_id"], payload["document_id"])
 
+    async def memory_index(payload: dict[str, Any]) -> None:
+        indexer = container.services.get("indexer")
+        if indexer is not None:
+            await indexer.index_memories(payload["tenant_id"], list(payload["memory_ids"]))
+
+    async def memory_expire(payload: dict[str, Any]) -> None:
+        """Mark SHORT_TERM memories past their TTL as EXPIRED and drop them from the index."""
+        async with uow_factory() as uow:
+            expired = await uow.memories.expire_due(now=datetime.now(UTC))
+            await uow.commit()
+        indexer = container.services.get("indexer")
+        by_tenant: dict[str, list[str]] = {}
+        for tenant_id, memory_id in expired:
+            by_tenant.setdefault(tenant_id, []).append(memory_id)
+        for tenant_id, ids in by_tenant.items():
+            if indexer is not None:
+                await indexer.index_memories(tenant_id, ids)
+        if expired:
+            log.info("memory.expired", count=len(expired))
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -92,6 +114,8 @@ def register_handlers(container: Container) -> None:
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
+    queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
+    queue.register(TASK_MEMORY_EXPIRE, Queue.RECONCILE, memory_expire, retries=0)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
     queue.register(TASK_ARCHIVE_PURGE, Queue.ARCHIVE, archive_purge, retries=0)
     every = max(1, container.settings.tasks.periodic_reconcile_seconds // 60)
@@ -103,6 +127,9 @@ def register_handlers(container: Container) -> None:
     )
     queue.register_periodic(
         "periodic.idempotency_purge", Queue.RECONCILE, idempotency_purge, cron="43 * * * *"
+    )
+    queue.register_periodic(
+        "periodic.memory_expire", Queue.RECONCILE, memory_expire, cron="29 * * * *"
     )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)

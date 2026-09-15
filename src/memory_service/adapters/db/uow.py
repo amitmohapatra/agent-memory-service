@@ -8,6 +8,7 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memory_service.adapters.db.document_repository import SqlDocumentRepository
+from memory_service.adapters.db.memory_repository import SqlMemoryRepository
 from memory_service.adapters.db.repositories import (
     SqlAgentRunRepository,
     SqlArchiveRepository,
@@ -108,6 +109,7 @@ class SqlUnitOfWork:
         self.outbox = SqlOutboxRepository(s)
         self.archive = SqlArchiveRepository(s)
         self.documents = SqlDocumentRepository(s)
+        self.memories = SqlMemoryRepository(s)
         return self
 
     async def __aexit__(

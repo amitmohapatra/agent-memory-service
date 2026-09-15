@@ -45,6 +45,16 @@ class MemoryCandidate(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
     provider: str = "native"
+    negates_prior: bool = Field(
+        default=False,
+        description="the statement explicitly replaces an earlier one (no longer / now / instead)",
+    )
+    category: str | None = Field(
+        default=None, description="finer label than memory_type, e.g. decision, attribute"
+    )
+    provider_ref: str | None = Field(
+        default=None, description="the external provider's own id for this memory, if any"
+    )
 
 
 class ConsolidationOutcome(BaseModel):

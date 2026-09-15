@@ -9,7 +9,7 @@
 | M4 | GCS BlobStore, archive segments, compression/checksums, compaction, reconciler | done (filesystem+memory+GCS adapters; failure-injection tests; bench-storage) |
 | M5 | Docling, hierarchy, Context Graph, natural chunks, contextual representations | done (147 tests; Docling DOCX verified offline, PDF needs HF models) |
 | M6 | Qdrant, BM25, dense, RRF, reranker, ContextBuilder, benchmark | done (180 tests; critical Recall@20 = 1.00 and EGR = 1.00 on the golden set with hash embeddings — non-representative until real weights are benchmarked; retrieval isolation gate = 0 leaks) |
-| M7 | native memory intelligence, dedup/consolidation/temporal, Mem0/Cognee/LangMem adapters | pending |
+| M7 | native memory intelligence, dedup/consolidation/temporal, Mem0/Cognee/LangMem adapters | done (memories table, native extract/classify/consolidate, ObservationPipeline, memory index + exact lookup, /v1/observations /v1/memories, SDK observe/remember/get/forget, Mem0/LangMem/Cognee adapters; false-merge rate 0.00 on 35 labelled pairs) |
 | M8 | GraphStore, native enrichment, Docling Graph, Graphiti, temporal facts, multi-hop | pending |
 | M9 | expansion, hierarchical summaries, evidence-group verification, multi-hop suite | pending |
 | M10 | advanced retrieval benchmarks (gated) | pending |

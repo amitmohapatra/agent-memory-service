@@ -38,6 +38,7 @@ async def wire_all(container: Container) -> None:
     await _wire_search(container)
     _wire_models(container)
     _wire_retrieval(container)
+    _wire_memory(container)
     _register_jobs(container)
     log.info("wiring.done", dependencies=sorted(container.dependencies))
 
@@ -281,6 +282,7 @@ def _wire_models(container: Container) -> None:
 
 def _wire_retrieval(container: Container) -> None:
     from memory_service.modules.context.builder import ContextBuilder
+    from memory_service.modules.memory.ephemeral import EphemeralMemory
     from memory_service.modules.rag.indexer import Indexer
     from memory_service.modules.retrieval.engine import RetrievalEngine
 
@@ -305,6 +307,10 @@ def _wire_retrieval(container: Container) -> None:
         rerank_k=settings.models.reranker.candidate_k,
     )
     container.services["retrieval"] = engine
+    working = EphemeralMemory(
+        container.cache, ttl_seconds=settings.cache.working_memory_ttl_seconds
+    )
+    container.services["ephemeral_memory"] = working
     container.services["context_builder"] = ContextBuilder(
         container.services["uow_factory"],
         engine,
@@ -313,4 +319,52 @@ def _wire_retrieval(container: Container) -> None:
         settings=settings.context,
         retrieval=settings.retrieval,
         cache_ttl_seconds=settings.cache.context_bundle_ttl_seconds,
+        working=working,
     )
+
+
+def _wire_memory(container: Container) -> None:
+    """Memory intelligence: provider (native by default) + observation pipeline + service."""
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.modules.memory.native import NativeMemoryIntelligence
+    from memory_service.modules.memory.pipeline import ObservationPipeline
+    from memory_service.modules.memory.service import MemoryService
+    from memory_service.ports.intelligence import MemoryIntelligenceProvider
+
+    settings = container.settings
+    cfg = settings.memory_intelligence
+    provider: MemoryIntelligenceProvider
+    if cfg.provider == "native":
+        provider = NativeMemoryIntelligence(cfg, container.embedding)
+    elif cfg.provider == "mem0":
+        from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence
+
+        provider = Mem0MemoryIntelligence(settings)
+    elif cfg.provider == "langmem":
+        from memory_service.adapters.intelligence.langmem_provider import LangMemIntelligence
+
+        provider = LangMemIntelligence(settings)
+    elif cfg.provider == "cognee":
+        from memory_service.adapters.intelligence.cognee_provider import CogneeMemoryIntelligence
+
+        provider = CogneeMemoryIntelligence(settings)
+    else:  # pragma: no cover - settings Literal guards this
+        raise NotImplementedError(cfg.provider)
+    check_provider_policy(
+        provider.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    if provider.info.requires_llm and not settings.models.llm.enabled:
+        raise NotImplementedError(
+            f"memory intelligence provider {cfg.provider!r} requires an LLM; "
+            "set MEMORY__MODELS__LLM__ENABLED=true and configure the model"
+        )
+    container.services["memory_provider"] = provider
+    container.services["observation_pipeline"] = ObservationPipeline(
+        container.services["uow_factory"],
+        provider,
+        settings=cfg,
+        working=container.services.get("ephemeral_memory"),
+    )
+    container.services["memory"] = MemoryService(container.services["authz"])

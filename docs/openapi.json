@@ -948,6 +948,203 @@
         "title": "LiveResponse",
         "type": "object"
       },
+      "MemoryListResponse": {
+        "properties": {
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryResponse"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "MemoryListResponse",
+        "type": "object"
+      },
+      "MemoryResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "importance": {
+            "title": "Importance",
+            "type": "number"
+          },
+          "lifetime": {
+            "title": "Lifetime",
+            "type": "string"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "memory_type": {
+            "title": "Memory Type",
+            "type": "string"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "owner_principal": {
+            "title": "Owner Principal",
+            "type": "string"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicate"
+          },
+          "reinforcement_count": {
+            "title": "Reinforcement Count",
+            "type": "integer"
+          },
+          "scope_level": {
+            "title": "Scope Level",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "supersedes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes"
+          },
+          "temporal_status": {
+            "title": "Temporal Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "visibility": {
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content",
+          "memory_type",
+          "lifetime",
+          "visibility",
+          "scope_level",
+          "owner_principal",
+          "temporal_status",
+          "observed_at",
+          "confidence",
+          "importance",
+          "reinforcement_count",
+          "evidence",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MemoryResponse",
+        "type": "object"
+      },
       "MemoryType": {
         "description": "What kind of intelligence a memory carries. Custom plugin types use ``CUSTOM``.",
         "enum": [
@@ -1209,6 +1406,134 @@
         ],
         "title": "MessageRole",
         "type": "string"
+      },
+      "ObservationAckResponse": {
+        "properties": {
+          "job_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Ids",
+            "type": "array"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id"
+        ],
+        "title": "ObservationAckResponse",
+        "type": "object"
+      },
+      "ObservationKind": {
+        "description": "What an application is telling the Memory Service happened.",
+        "enum": [
+          "MESSAGE",
+          "FILE",
+          "AGENT_RESULT",
+          "TOOL_RESULT",
+          "DECISION",
+          "FEEDBACK",
+          "EVENT",
+          "IMPORT"
+        ],
+        "title": "ObservationKind",
+        "type": "string"
+      },
+      "ObservationRequest": {
+        "additionalProperties": false,
+        "description": "'This happened or was learned.' The service decides what (if anything) to remember.",
+        "examples": [
+          {
+            "content": "My timezone is Europe/Berlin and I prefer concise answers.",
+            "hints": {},
+            "kind": "EVENT",
+            "scope": {
+              "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
+            }
+          }
+        ],
+        "properties": {
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "custom_metadata": {
+            "additionalProperties": true,
+            "title": "Custom Metadata",
+            "type": "object"
+          },
+          "hints": {
+            "$ref": "#/components/schemas/ProcessingHintsIn"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ObservationKind",
+            "default": "EVENT",
+            "examples": [
+              "EVENT"
+            ]
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 400,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_system": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source System"
+          },
+          "tool_run_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Run Id"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ObservationRequest",
+        "type": "object"
       },
       "ProcessingHintsIn": {
         "additionalProperties": false,
@@ -2694,6 +3019,565 @@
         ]
       }
     },
+    "/v1/memories": {
+      "get": {
+        "description": "Security fields come from trusted headers; lineage anchors (thread, work, agent) are\nquery parameters so a caller can list the memories of a specific thread or agent.",
+        "operationId": "list_memories_v1_memories_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "memory_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Memory Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_superseded",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Superseded",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List current memories anchored to the caller's scopes",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
+    "/v1/memories/{memory_id}": {
+      "delete": {
+        "operationId": "forget_memory_v1_memories__memory_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Forget a memory (soft delete + index removal)",
+        "tags": [
+          "memory"
+        ]
+      },
+      "get": {
+        "operationId": "get_memory_v1_memories__memory_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Get a memory (with evidence and temporal state)",
+        "tags": [
+          "memory"
+        ]
+      }
+    },
     "/v1/messages": {
       "post": {
         "description": "Persists the message, its observation and the processing jobs in one transaction and returns 202 only after COMMIT. Retries with the same Idempotency-Key (or the same lineage + content when the header is absent) return the original acknowledgement.",
@@ -3010,6 +3894,170 @@
         "summary": "Get a message",
         "tags": [
           "messages"
+        ]
+      }
+    },
+    "/v1/observations": {
+      "post": {
+        "operationId": "submit_observation_v1_observations_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationAckResponse"
+                }
+              }
+            },
+            "description": "Durably acknowledged"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Submit an observation (durably acknowledged, processed asynchronously)",
+        "tags": [
+          "memory"
         ]
       }
     },

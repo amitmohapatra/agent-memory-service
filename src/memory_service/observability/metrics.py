@@ -62,6 +62,12 @@ dependency_up = Gauge(
 evidence_status_total = Counter(
     "memory_evidence_status_total", "Evidence verification outcomes", ["status"], registry=REGISTRY
 )
+memory_decisions_total = Counter(
+    "memory_decisions_total",
+    "Consolidation decisions by outcome",
+    ["decision"],
+    registry=REGISTRY,
+)
 
 
 def render_metrics() -> tuple[bytes, str]:
