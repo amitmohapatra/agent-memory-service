@@ -52,6 +52,8 @@ def _oracle(reader: dict, obj: dict) -> bool:
         return obj["work"] in reader["works"]
     if v == "AGENT_GROUP":
         return obj["agent_group"] in reader["agent_groups"]
+    if v == "RUN":  # the writing run, its direct children, and the writer itself
+        return obj["run"] in reader["runs"] or reader["principal"] == obj["owner"]
     raise AssertionError(v)
 
 
@@ -66,6 +68,7 @@ reader_st = st.fixed_dictionaries(
         "workspaces": st.lists(st.sampled_from(["ws1", "ws2"]), max_size=2),
         "works": st.lists(st.sampled_from(["w1"]), max_size=1),
         "agent_groups": st.lists(st.sampled_from(["crew"]), max_size=1),
+        "runs": st.lists(st.sampled_from(["run1", "run2"]), max_size=2),
     }
 )
 object_st = st.fixed_dictionaries(
@@ -79,6 +82,7 @@ object_st = st.fixed_dictionaries(
         "workspace": st.sampled_from(["ws1", "ws2"]),
         "work": st.sampled_from(["w1", "w2"]),
         "agent_group": st.sampled_from(["crew", "other"]),
+        "run": st.sampled_from(["run1", "run2", "run3"]),
     }
 )
 
@@ -94,6 +98,7 @@ def _spec(reader: dict) -> VisibilitySpecification:
         thread_ids=reader["threads"],
         work_ids=reader["works"],
         agent_group_ids=reader["agent_groups"],
+        run_ids=reader.get("runs", []),
     )
     reader["principal"] = principal
     return VisibilitySpecification.from_scope(scope)
@@ -110,6 +115,7 @@ def _keys(obj: dict) -> list[str]:
         workspace_id=obj["workspace"],
         work_id=obj["work"],
         agent_group_id=obj["agent_group"],
+        agent_run_id=obj.get("run", "run0"),
     )
 
 

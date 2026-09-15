@@ -26,6 +26,7 @@ def test_bind_builds_scope_and_child_contexts(client: MemoryClient) -> None:
     assert child.scope.parent_agent_run_id is None
     grandchild = child.agent("writer")
     assert grandchild.scope.parent_agent_run_id == "run_1"
+    assert grandchild.scope.agent_run_id and grandchild.scope.agent_run_id != "run_1"
 
 
 async def test_context_manager_propagates_via_contextvars(client: MemoryClient) -> None:

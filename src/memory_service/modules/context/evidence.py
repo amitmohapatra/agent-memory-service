@@ -55,6 +55,20 @@ def overlaps(query: str, candidates: Sequence[Candidate]) -> bool:
     return False
 
 
+def _conflicting_memories(candidates: Sequence[Candidate]) -> list[tuple[str, str]]:
+    """Pairs of retrieved memories that are linked as contradicting (multi-agent conflicts
+    the consolidator refused to resolve silently)."""
+    ids = {c.record_id for c in candidates if c.kind == "memory"}
+    out: list[tuple[str, str]] = []
+    for c in candidates:
+        if c.kind != "memory":
+            continue
+        for other in c.payload.get("contradicts", []) or []:
+            if other in ids and (other, c.record_id) not in out:
+                out.append((c.record_id, other))
+    return out
+
+
 class VerificationStage:
     name = "verify"
 
@@ -162,6 +176,12 @@ class VerificationStage:
                 done = self.satisfied(groups, candidates)
             report["satisfied_groups"] = sorted(done)
             report["missing_groups"] = sorted(set(groups) - done)
+            conflicts = _conflicting_memories(candidates)
+            if conflicts:
+                report["notes"].append(
+                    "conflicting memories from different principals: "
+                    + "; ".join(f"{a} vs {b}" for a, b in conflicts)
+                )
             if report["missing_groups"]:
                 report["status"] = EvidenceStatus.INCOMPLETE.value
                 report["notes"].append("required companion evidence could not be retrieved")

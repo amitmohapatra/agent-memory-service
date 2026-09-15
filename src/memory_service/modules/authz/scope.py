@@ -76,6 +76,7 @@ class ScopeResolver:
             work_ids=own(works),
             document_ids=own(documents),
             agent_ids=agents,
+            run_ids=[r for r in (ctx.agent_run_id, ctx.parent_agent_run_id) if r],
             agent_group_ids=[ctx.agent_group_id] if ctx.agent_group_id else [],
             user_id=ctx.user_id,
             truncated=truncated,

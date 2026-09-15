@@ -14,6 +14,7 @@ immutable; ``contextvars`` propagate it within one async execution for convenien
 from __future__ import annotations
 
 import hashlib
+import uuid
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Self
@@ -118,9 +119,14 @@ class MemoryContext:
     def agent(
         self, agent_id: str, *, agent_run_id: str | None = None, agent_group_id: str | None = None
     ) -> MemoryContext:
+        """Context for an agent run acting for this user. Each call is a new run: the agent's
+        working notes (``Visibility.RUN``) are readable by this run, the runs it derives
+        with ``.agent(...)`` (hand-off context flows down) and the same agent later — never
+        by the user, sibling runs, or other agents. Share explicitly with ``memory_type=
+        "SHARED"`` / ``visibility="AGENT_GROUP"``."""
         return self.derive(
             agent_id=agent_id,
-            agent_run_id=agent_run_id,
+            agent_run_id=agent_run_id or f"run_{uuid.uuid4().hex}",
             agent_group_id=agent_group_id or self.scope.agent_group_id,
             parent_agent_run_id=self.scope.agent_run_id,
         )

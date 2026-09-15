@@ -65,6 +65,20 @@ class Transport:
             h[HEADER_CORRELATION] = scope.correlation_id
         return h
 
+    @staticmethod
+    def scope_params(scope: Scope) -> dict[str, str]:
+        """Lineage for body-less (GET/DELETE) routes; security fields stay in headers."""
+        fields = (
+            "thread_id",
+            "work_id",
+            "task_id",
+            "agent_id",
+            "agent_group_id",
+            "agent_run_id",
+            "parent_agent_run_id",
+        )
+        return {f: v for f in fields if (v := getattr(scope, f, None))}
+
     async def request(
         self,
         method: str,
@@ -80,6 +94,8 @@ class Transport:
         headers: dict[str, str] = {}
         if scope is not None:
             headers.update(self.scope_headers(scope))
+            if json is None and method.upper() in ("GET", "DELETE"):
+                params = {**self.scope_params(scope), **(params or {})}
         if idempotency_key:
             headers[HEADER_IDEMPOTENCY] = idempotency_key
         attempt = 0

@@ -143,3 +143,40 @@ async def test_sdk_remember_recall_forget(app, client) -> None:
     bundle = await ctx.context("how should I phrase the answer?")
     assert any("British English" in m.text for m in bundle.memories)
     await memory.aclose()
+
+
+async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
+    memory = sdk_client(app)
+    user = memory.bind(tenant_id="acme", user_id="u1", agent_group_id="crew", **_scope())
+    await user.chat.user("Please prepare the FY26 brief.")
+    planner = user.agent("planner")
+    writer = planner.agent("writer")  # child run: reads the planner's hand-off context
+    await planner.observe("Plan: split the brief into revenue and cost.", kind="AGENT_RESULT")
+    q = "plan for the brief sections"
+    assert any("Plan:" in i.text for i in await writer.recall(q, kinds=["memory"]))
+    assert not any("Plan:" in i.text for i in await user.recall(q, kinds=["memory"]))
+    assert not any(
+        "Plan:" in i.text for i in await user.agent("intern").recall(q, kinds=["memory"])
+    )
+    # explicit sharing with the agent group; a second agent corroborates
+    fact = "Revenue was EUR 412 million in FY26."
+    await planner.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
+    await writer.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
+    auditor = user.agent("auditor")
+    items = await auditor.recall("FY26 revenue", kinds=["memory"])
+    hit = next(i for i in items if "412" in i.text)
+    got = await auditor.get_memory(hit.item_id)
+    assert got.visibility == "AGENT_GROUP" and got.reinforcement_count == 2
+    assert got.owner_principal == "agent:planner" and got.contributors == ["agent:writer"]
+    # a conflicting single-valued fact from another agent is kept, linked, never overwritten
+    await planner.remember("My manager is Dana.", memory_type="SHARED", visibility="AGENT_GROUP")
+    await auditor.remember("My manager is Lee.", memory_type="SHARED", visibility="AGENT_GROUP")
+    managers = [
+        i
+        for i in await writer.recall("who is my manager?", kinds=["memory"])
+        if "manager" in i.text
+    ]
+    assert len(managers) == 2
+    linked = [await writer.get_memory(i.item_id) for i in managers]
+    assert any(m.contradicts for m in linked)
+    await memory.aclose()

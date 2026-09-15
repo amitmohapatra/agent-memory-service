@@ -80,6 +80,12 @@ class MemoryResponse(BaseModel):
     confidence: float
     importance: float
     reinforcement_count: int
+    contributors: list[str] = Field(
+        default_factory=list, description="Other principals that corroborated this memory"
+    )
+    contradicts: list[str] = Field(
+        default_factory=list, description="CURRENT memories this one conflicts with"
+    )
     evidence: list[dict[str, Any]]
     category: str | None = None
     created_at: datetime
@@ -111,6 +117,8 @@ def memory_to_api(m: CanonicalMemory) -> dict[str, Any]:
         "confidence": m.confidence,
         "importance": m.importance,
         "reinforcement_count": m.reinforcement_count,
+        "contributors": list(m.system_metadata.get("contributors") or []),
+        "contradicts": list(m.temporal.contradicts),
         "evidence": [e.model_dump(mode="json", exclude_none=True) for e in m.evidence],
         "category": m.system_metadata.get("category"),
         "created_at": m.created_at,

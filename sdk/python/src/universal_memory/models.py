@@ -95,6 +95,10 @@ class MemoryResult(BaseModel):
     visibility: str
     score: float | None = None
     confidence: float | None = None
+    owner_principal: str | None = None
+    reinforcement_count: int = 1
+    contributors: list[str] = Field(default_factory=list)
+    contradicts: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 

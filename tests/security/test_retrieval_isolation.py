@@ -40,16 +40,18 @@ OBJECTS: list[dict[str, Any]] = [
         "workspace": ws,
         "work": "w1",
         "agent_group": ag,
+        "run": run,
     }
-    for tenant, vis, owner, user, group, thread, ws, ag in itertools.product(
+    for tenant, vis, owner, user, group, thread, ws, ag, run in itertools.product(
         TENANTS,
         Visibility,
         ["user:u1", "agent:research"],
         ["u1", "u2"],
-        ["legal", "finance"],
+        ["legal"],
         ["thr1", "thr2"],
         ["ws1", "ws2"],
         ["crew", "other"],
+        ["run1", "run9"],
     )
 ]
 
@@ -64,15 +66,19 @@ READERS: list[dict[str, Any]] = [
         "workspaces": workspaces,
         "works": ["w1"],
         "agent_groups": agent_groups,
+        "runs": runs,
     }
-    for tenant, user, is_agent, groups, threads, workspaces, agent_groups in itertools.product(
-        TENANTS,
-        ["u1", "u2"],
-        [False, True],
-        [[], ["legal"]],
-        [[], ["thr1"]],
-        [[], ["ws1"], ["ws1", "ws2"]],
-        [[], ["crew"]],
+    for tenant, user, is_agent, groups, threads, workspaces, agent_groups, runs in (
+        itertools.product(
+            TENANTS,
+            ["u1", "u2"],
+            [False, True],
+            [[], ["legal"]],
+            [[], ["thr1"]],
+            [[], ["ws1"], ["ws1", "ws2"]],
+            [[], ["crew"]],
+            [[], ["run1"]],
+        )
     )
 ]
 

@@ -171,7 +171,8 @@ async def test_agent_private_memories_stay_private(container, uow_factory) -> No
         kind=ObservationKind.AGENT_RESULT,
     )
     mine = await _memories(uow_factory, agent, container)
-    assert len(mine) == 1 and mine[0].visibility is Visibility.PRIVATE
+    # working notes of a run stay with that run (RUN: the run, its children, the writer)
+    assert len(mine) == 1 and mine[0].visibility is Visibility.RUN
     assert mine[0].memory_type is MemoryType.AGENT and mine[0].lifetime is Lifetime.SHORT_TERM
     assert mine[0].system_metadata["expires_at"] is not None
     engine = container.services["retrieval"]

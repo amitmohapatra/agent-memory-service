@@ -187,6 +187,8 @@ class MemoryExecutionContext(BaseModel):
             ",".join(self.group_ids),
             self.agent_id or "",
             self.agent_group_id or "",
+            self.agent_run_id or "",
+            self.parent_agent_run_id or "",
         )
 
     def log_fields(self) -> dict[str, str]:

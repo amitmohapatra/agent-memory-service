@@ -128,10 +128,33 @@ def build_context(
 
 
 async def get_header_context(
-    request: Request, container: ContainerDep, _: ServicePrincipalDep
+    request: Request,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+    thread_id: str | None = None,
+    work_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    agent_group_id: str | None = None,
+    agent_run_id: str | None = None,
+    parent_agent_run_id: str | None = None,
 ) -> MemoryExecutionContext:
-    """Context for GET/DELETE routes (no body): trusted headers only."""
-    return build_context(request, container, None)
+    """Context for GET/DELETE routes (no body): security fields from trusted headers, the
+    lineage (thread, work, agent run, agent group) from optional query parameters so an
+    agent reads and forgets with the same identity it wrote with."""
+    return build_context(
+        request,
+        container,
+        ScopeBody(
+            thread_id=thread_id,
+            work_id=work_id,
+            task_id=task_id,
+            agent_id=agent_id,
+            agent_group_id=agent_group_id,
+            agent_run_id=agent_run_id,
+            parent_agent_run_id=parent_agent_run_id,
+        ),
+    )
 
 
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]

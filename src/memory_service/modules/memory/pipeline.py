@@ -122,9 +122,12 @@ def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) 
         thread_id=ctx.thread_id,
         work_id=ctx.work_id,
         agent_group_id=ctx.agent_group_id,
+        agent_run_id=ctx.agent_run_id,
     )
     owner = f"principal:{ctx.tenant_id}/{ctx.principal_id}"
-    return keys if owner in keys or visibility is Visibility.PRIVATE else [*keys, owner]
+    if owner in keys or visibility is Visibility.PRIVATE:
+        return keys
+    return [*keys, owner]
 
 
 def build_memory(
@@ -235,6 +238,10 @@ class ObservationPipeline:
         update: dict[str, Any] = {}
         if h.memory_type:
             update["memory_type"] = h.memory_type
+        elif o.agent_id and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
+            # "my timezone is UTC" said by an agent is about the agent: it becomes the agent's
+            # working memory, never a USER memory of the human it acts for (no chat pollution)
+            update["memory_type"] = MemoryType.AGENT
         if h.lifetime:
             update["lifetime"] = h.lifetime
         if h.visibility:
@@ -295,7 +302,17 @@ class ObservationPipeline:
                 return {memory.memory_id}
             case DedupDecision.REINFORCE | DedupDecision.MERGE if target is not None:
                 target.reinforcement_count += 1
-                target.confidence = min(1.0, target.confidence + 0.05)
+                contributors = list(target.system_metadata.get("contributors", []))
+                if (
+                    ctx.principal_id not in contributors
+                    and ctx.principal_id != target.owner_principal
+                ):
+                    # independent corroboration by another principal is worth more than a repeat
+                    contributors.append(ctx.principal_id)
+                    target.system_metadata["contributors"] = contributors
+                    target.confidence = min(1.0, target.confidence + 0.15)
+                else:
+                    target.confidence = min(1.0, target.confidence + 0.05)
                 target.importance = max(target.importance, cand.importance)
                 for ev in cand.evidence:
                     if ev not in target.evidence:

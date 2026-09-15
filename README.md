@@ -101,6 +101,15 @@ extracts, classifies and consolidates memories asynchronously (native rules by d
 LLM). `GET /v1/memories`, `GET/DELETE /v1/memories/{id}` read and forget them. In the SDK:
 `await ctx.observe(text)`, `await ctx.remember(text, memory_type=...)`, `await ctx.forget(id)`.
 
+Agents: `ctx.agent("planner")` derives a run context (fresh run id, parent recorded). An
+agent's working memory is `RUN`-visible: the run, the runs it delegates to, and the same
+agent later can read it; the user, sibling runs and other agents cannot. Share on purpose
+with `remember(text, memory_type="SHARED", visibility="AGENT_GROUP")`; the same finding from
+two agents is one memory with `contributors`, and conflicting single-valued facts from two
+agents stay side by side as `contradicts` (flagged in the evidence report) instead of one
+silently overriding the other. Agent messages are internal and never reach the user's
+visible history or memories (ADR 0013).
+
 Graph: `POST /v1/graph/query` resolves entities from a question (or explicit names) and
 returns a bounded, visibility-filtered neighbourhood of temporal facts with evidence;
 `as_of` gives the historical view. Multi-hop and entity questions use the same traversal

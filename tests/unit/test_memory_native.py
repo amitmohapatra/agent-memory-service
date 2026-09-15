@@ -132,7 +132,7 @@ async def test_extraction_skips_noise_and_questions(native) -> None:
 async def test_extraction_kinds_and_temporal(native) -> None:
     tool = await _extract(native, "{'rows': 3}", kind=ObservationKind.TOOL_RESULT, ctx=AGENT)
     assert tool[0].memory_type is MemoryType.TOOL and tool[0].lifetime is Lifetime.SHORT_TERM
-    assert tool[0].visibility is Visibility.PRIVATE
+    assert tool[0].visibility is Visibility.RUN  # AGENT carries a run id
     agent = await _extract(
         native, "Draft plan: split by region.", kind=ObservationKind.AGENT_RESULT, ctx=AGENT
     )

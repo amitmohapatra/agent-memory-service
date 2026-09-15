@@ -31,6 +31,7 @@ OBJECTS = [
         "workspace": ws,
         "work": "w1",
         "agent_group": "crew",
+        "run": "run1",
     }
     for tenant, vis, owner, user, ws in itertools.product(
         TENANTS, Visibility, ["user:u1", "agent:research"], ["u1", "u2"], ["ws1", "ws2"]
@@ -117,6 +118,7 @@ async def test_cross_tenant_seed_is_inert(store) -> None:
         "workspaces": ["ws1", "ws2"],
         "works": ["w1"],
         "agent_groups": ["crew"],
+        "runs": [],
     }
     spec = spec_for(reader)
     # seeding with the OTHER tenant's hub id under acme's keys yields nothing

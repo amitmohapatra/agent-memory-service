@@ -277,6 +277,14 @@ def _evidence(observation: Observation) -> list[EvidenceRef]:
     ]
 
 
+_SHARED_LEVELS = frozenset({"AGENT_GROUP", "THREAD", "WORK", "WORKSPACE", "TENANT", "GROUP"})
+
+
+def _other_principals_shared(mem: CanonicalMemory, ctx: MemoryExecutionContext) -> bool:
+    """True when ``mem`` was written by a different principal into a shared scope."""
+    return mem.owner_principal != ctx.principal_id and mem.scope.level.value in _SHARED_LEVELS
+
+
 def _user_subject(ctx: MemoryExecutionContext) -> str:
     return f"user:{ctx.user_id}" if ctx.user_id else ctx.principal_id
 
@@ -610,7 +618,8 @@ class NativeMemoryIntelligence:
         if mt in (MemoryType.USER, MemoryType.PREFERENCE):
             visibility = Visibility.USER if ctx.user_id else Visibility.PRIVATE
         elif mt in (MemoryType.AGENT, MemoryType.TOOL, MemoryType.WORKING):
-            visibility = Visibility.PRIVATE
+            # hand-off context flows down the run tree (child runs read it); nothing else does
+            visibility = Visibility.RUN if ctx.agent_run_id else Visibility.PRIVATE
         elif mt is MemoryType.SHARED:
             visibility = (
                 Visibility.AGENT_GROUP
@@ -662,7 +671,10 @@ class NativeMemoryIntelligence:
         c_obj = _clean_object(candidate.object or "")
         best: ConsolidationOutcome | None = None
         dense: list[float] | None = None
-        for mem in existing:
+        # a principal's own memories are matched first: "actually, X is now Y" corrects the
+        # writer's own earlier finding before it is compared with anyone else's
+        ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
+        for mem in ordered:
             if mem.temporal.status.value != "CURRENT" or mem.deleted_at is not None:
                 continue
             # 1. identical normalized content -> reinforce
@@ -693,6 +705,17 @@ class NativeMemoryIntelligence:
                 pred = candidate.predicate or ""
                 single = pred in _SINGLE_VALUED or pred.startswith("favourite_")
                 if m_obj and c_obj and m_obj != c_obj and single:
+                    if _other_principals_shared(mem, ctx) and not candidate.negates_prior:
+                        # another agent's finding in a shared scope is not silently replaced:
+                        # both stay, linked as contradicting, for a human or a later signal
+                        return ConsolidationOutcome(
+                            decision=DedupDecision.CONTRADICT,
+                            candidate=candidate,
+                            target_memory_id=mem.memory_id,
+                            score=0.9,
+                            reason=f"conflicting value for {candidate.predicate} from "
+                            f"{ctx.principal_id} vs {mem.owner_principal}",
+                        )
                     # a newer value for a single-valued slot replaces the older one
                     return ConsolidationOutcome(
                         decision=DedupDecision.SUPERSEDE,

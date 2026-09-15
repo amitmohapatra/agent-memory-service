@@ -52,6 +52,7 @@ class Visibility(StrEnum):
     USER = "USER"  # the owning user across threads
     GROUP = "GROUP"  # a user group
     AGENT_GROUP = "AGENT_GROUP"  # a group of cooperating agents
+    RUN = "RUN"  # this agent run and the runs it spawns (hand-off context flows down)
     THREAD = "THREAD"  # everyone participating in the thread
     WORK = "WORK"  # everyone participating in a unit of work
     WORKSPACE = "WORKSPACE"

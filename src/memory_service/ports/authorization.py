@@ -51,6 +51,9 @@ class AuthorizedScope(BaseModel):
     work_ids: list[str] = Field(default_factory=list)
     document_ids: list[str] = Field(default_factory=list)
     agent_ids: list[str] = Field(default_factory=list)
+    run_ids: list[str] = Field(
+        default_factory=list, description="this agent run and its parent (lineage, one level up)"
+    )
     agent_group_ids: list[str] = Field(default_factory=list)
     user_id: str | None = None
     truncated: bool = False

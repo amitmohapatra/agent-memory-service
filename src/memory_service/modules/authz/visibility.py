@@ -44,6 +44,7 @@ def visibility_keys(
     thread_id: str | None = None,
     work_id: str | None = None,
     agent_group_id: str | None = None,
+    agent_run_id: str | None = None,
 ) -> list[str]:
     """Audience keys an object is readable by, given its visibility and anchors."""
     if scope is not None:
@@ -69,6 +70,11 @@ def visibility_keys(
             if not agent_group_id:
                 raise ValueError("AGENT_GROUP visibility requires agent_group_id")
             return [f"agroup:{t}/{agent_group_id}"]
+        case Visibility.RUN:
+            if not agent_run_id:
+                raise ValueError("RUN visibility requires agent_run_id")
+            # the writing run itself + the principal; child runs carry the parent's run key
+            return [f"run:{t}/{agent_run_id}", f"principal:{t}/{owner_principal}"]
         case Visibility.THREAD:
             if not thread_id:
                 raise ValueError("THREAD visibility requires thread_id")
@@ -110,6 +116,7 @@ class VisibilitySpecification(BaseModel):
         keys.update(f"thread:{t}/{th}" for th in scope.thread_ids)
         keys.update(f"work:{t}/{w}" for w in scope.work_ids)
         keys.update(f"agroup:{t}/{ag}" for ag in scope.agent_group_ids)
+        keys.update(f"run:{t}/{r}" for r in scope.run_ids)
         return cls(tenant_id=t, keys=frozenset(keys), truncated=scope.truncated)
 
     def allows(self, object_tenant_id: str, object_keys: Iterable[str]) -> bool:

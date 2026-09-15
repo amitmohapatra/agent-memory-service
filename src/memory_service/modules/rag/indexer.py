@@ -289,6 +289,8 @@ class Indexer:
                             "predicate": m.predicate,
                             "object": (m.object or "")[:300],
                             "owner_principal": m.owner_principal,
+                            "contributors": list(m.system_metadata.get("contributors", [])),
+                            "contradicts": list(m.temporal.contradicts),
                             "importance": m.importance,
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
