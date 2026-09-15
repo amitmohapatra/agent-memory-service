@@ -61,8 +61,8 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
     spawns, and nobody else. This is the claim the section is built on."""
     memory = sdk_client(app)
     ctx = _bind(memory)
-    researcher = ctx.agent("researcher")
-    writer = ctx.agent("writer")
+    researcher = ctx.agent("researcher", agent_group_id="analysis-crew")
+    writer = ctx.agent("writer", agent_group_id="analysis-crew")
     await researcher.remember(NOTE, visibility="RUN")
     child = researcher.agent("fact-checker")
 
@@ -74,11 +74,15 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
     assert not await sees(writer), "a sibling agent must not see RUN-scoped notes"
     assert not await sees(ctx), "the user must not see agent notes"
 
-    await researcher.remember(
-        "FY26 revenue is EUR 412m, confirmed in two sources",
-        memory_type="SHARED",
-        visibility="AGENT_GROUP",
-    )
+    shared = "FY26 revenue is EUR 412m, confirmed in two sources"
+    await researcher.remember(shared, memory_type="SHARED", visibility="AGENT_GROUP")
+
+    # sharing is only meaningful if the crew can actually read it: the sibling that saw
+    # nothing of the RUN note must see this one
+    async def sees_shared(scope) -> bool:
+        return any(shared in (i.text or "") for i in await scope.recall(shared, kinds=["memory"]))
+
+    assert await sees_shared(writer), "an AGENT_GROUP memory must reach the crew"
 
 
 async def test_readme_tool_memory_walkthrough(app, client) -> None:

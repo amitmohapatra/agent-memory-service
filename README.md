@@ -262,11 +262,16 @@ sub-agent should flow *down* but not *sideways*; a shared finding should be shar
 ### Each agent run gets its own memory scope
 
 ```python
-researcher = ctx.agent("researcher")        # a new run, isolated by default
-writer     = ctx.agent("writer")            # a sibling run — cannot see the researcher's notes
+researcher = ctx.agent("researcher", agent_group_id="analysis-crew")   # a new run, isolated
+writer     = ctx.agent("writer", agent_group_id="analysis-crew")       # a sibling run
 
 await researcher.remember("Source A contradicts source B", visibility="RUN")
 ```
+
+The `agent_group_id` names the crew these runs belong to. It costs nothing while the notes
+stay `RUN`-scoped, and it is what makes the explicit sharing below possible: an
+`AGENT_GROUP` memory needs a group to be shared *with*, and the service rejects the write
+if the run does not belong to one.
 
 `visibility="RUN"` (the default for agent notes) means: this run, and any run it spawns.
 Not the user, not sibling agents, not the next run of the same agent.
@@ -282,7 +287,7 @@ child = researcher.agent("fact-checker")     # spawned by the researcher
 ### Sharing is explicit
 
 ```python
-await researcher.remember(
+await researcher.remember(                 # the run must belong to an agent group
     "FY26 revenue is EUR 412m, confirmed in two sources",
     memory_type="SHARED",
     visibility="AGENT_GROUP",     # now the whole crew can use it
