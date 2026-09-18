@@ -9,18 +9,22 @@ import pytest
 from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
 from memory_service.domain.enums import JobStatus
 from memory_service.ports.tasks import JobSpec, Queue
-from tests.integration.conftest import DB_URL, requires_pg
+from tests.integration.conftest import requires_pg
 
 pytestmark = [pytest.mark.integration, requires_pg]
 
 
 @pytest.fixture
-async def queue():
-    q = ProcrastinateTaskQueue(
-        DB_URL.replace("postgresql+psycopg://", "postgresql://"),
-        default_retries=2,
-        job_timeout_seconds=5,
-    )
+async def queue(queue_database: str):
+    # The queueing lock dedups against jobs that are still pending, and these tests use fixed
+    # lock keys — so a job left behind by an earlier run would make the *first* enqueue of the
+    # next one look like a duplicate. The database is this suite's own; start it empty.
+    import psycopg
+
+    with psycopg.connect(queue_database, autocommit=True) as conn:
+        conn.execute("TRUNCATE procrastinate_jobs, procrastinate_events RESTART IDENTITY CASCADE")
+
+    q = ProcrastinateTaskQueue(queue_database, default_retries=2, job_timeout_seconds=5)
     await q.open()
     try:
         yield q

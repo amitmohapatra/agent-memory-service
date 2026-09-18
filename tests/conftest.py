@@ -81,6 +81,85 @@ def pg_reachable() -> bool:
 
 PG_AVAILABLE = pg_reachable()
 
+#: Queue tests get a database of their own.
+#:
+#: Procrastinate jobs are claimed by whichever worker polls first, so a queue test sharing
+#: the application database with a running ``docker compose`` stack has its jobs stolen by
+#: the dev worker — which does not know ``test.echo`` and fails it instantly. The tests then
+#: pass only while the stack is *down*, which is the wrong way round. A separate database
+#: no worker is pointed at makes them independent of what happens to be running.
+QUEUE_DB_NAME = os.environ.get("MEMORY_TEST_QUEUE_DB", "memory_queue_tests")
+QUEUE_DB_URL = DB_URL.rsplit("/", 1)[0] + "/" + QUEUE_DB_NAME
+
+
+#: The same reasoning applies to the one test that kills a worker mid-job: it needs the
+#: application tables *and* an uncontested queue, so it gets a full database of its own.
+APP_DB_NAME = os.environ.get("MEMORY_TEST_APP_DB", "memory_failure_tests")
+APP_DB_URL = DB_URL.rsplit("/", 1)[0] + "/" + APP_DB_NAME
+
+
+def _create_database(name: str) -> None:
+    import psycopg
+
+    admin = DB_URL.replace("postgresql+psycopg://", "postgresql://")
+    with psycopg.connect(admin, autocommit=True) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
+        ).fetchone()
+        if not exists:
+            conn.execute(f'CREATE DATABASE "{name}"')
+
+
+@pytest.fixture(scope="session")
+def isolated_app_database() -> str:
+    """A fully migrated application database no other process is polling."""
+    if not PG_AVAILABLE:
+        pytest.skip("PostgreSQL is not reachable")
+    import asyncio
+
+    from alembic import command
+    from alembic.config import Config
+
+    from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
+
+    _create_database(APP_DB_NAME)
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", APP_DB_URL)
+    command.upgrade(cfg, "head")
+
+    async def _schema() -> None:
+        q = ProcrastinateTaskQueue(APP_DB_URL.replace("postgresql+psycopg://", "postgresql://"))
+        try:
+            await q.ensure_schema()
+        finally:
+            await q.close()
+
+    asyncio.run(_schema())
+    return APP_DB_URL
+
+
+@pytest.fixture(scope="session")
+def queue_database() -> str:
+    """A Procrastinate schema in a database of this suite's own. Returns its DSN."""
+    if not PG_AVAILABLE:
+        pytest.skip("PostgreSQL is not reachable")
+    import asyncio
+
+    from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
+
+    _create_database(QUEUE_DB_NAME)
+    dsn = QUEUE_DB_URL.replace("postgresql+psycopg://", "postgresql://")
+
+    async def _schema() -> None:
+        q = ProcrastinateTaskQueue(dsn)
+        try:
+            await q.ensure_schema()
+        finally:
+            await q.close()
+
+    asyncio.run(_schema())
+    return dsn
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _migrated_database() -> None:

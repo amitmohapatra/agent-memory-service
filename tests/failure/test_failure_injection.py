@@ -72,10 +72,15 @@ async def _memories(container, ctx):
 # -- worker_kill ------------------------------------------------------------------
 
 
-async def test_worker_kill_requeues_the_job_and_processes_once(make_settings, tmp_path) -> None:
+async def test_worker_kill_requeues_the_job_and_processes_once(
+    make_settings, tmp_path, isolated_app_database
+) -> None:
+    # Its own database: a Procrastinate job goes to whichever worker polls first, so on the
+    # shared one a running ``docker compose`` worker claims the job before this test's does.
     settings = integration_settings(
         make_settings,
         tasks={"provider": "procrastinate"},
+        database={"url": isolated_app_database},
         blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     )
     container = await build_container(settings, __version__)
@@ -105,7 +110,7 @@ async def test_worker_kill_requeues_the_job_and_processes_once(make_settings, tm
             [
                 sys.executable,
                 str(Path(__file__).with_name("_slow_worker.py")),
-                DB_URL.replace("postgresql+psycopg://", "postgresql://"),
+                isolated_app_database.replace("postgresql+psycopg://", "postgresql://"),
             ],
             stdout=subprocess.PIPE,
             text=True,
