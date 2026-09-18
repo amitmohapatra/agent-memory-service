@@ -334,11 +334,11 @@ independently record the same fact, its confidence rises and the contributors ar
 
 ## Tool memory
 
-Agents forget which tool worked, call the same expensive endpoint twice in one run, and
-rediscover the same failure every time. Tool memory fixes that.
+Agents rediscover the same chain of calls every run, and the same failure every time. Tool
+memory records what happened and mines the chains that worked.
 
-**The service never executes your tools.** It records what happened, caches what is safe to
-cache, learns the chains that worked, and advises.
+**The service never executes your tools.** It records what your agent did, and learns from
+runs you label successful.
 
 ### Record what your agent did
 
@@ -354,69 +354,34 @@ await ctx.tools.record(
 
 Recording is idempotent on (run, step, tool, arguments), so retries never double-count.
 
-### Ask what to call
+`task` is the important argument, and it is the **question**, not an identifier. The service
+normalises it into a typed-placeholder pattern — `"update quote {entity} with {entity} price
+for {entity}"` — so two phrasings of the same request mine the same trajectory. Pass an
+opaque id and nothing will ever match.
 
-```python
-tools = [{"name": "pricing.lookup_price"}, {"name": "crm.update_quote"}]
-
-for s in await ctx.tools.suggest("update quote Q-9 with APAC price for SKU-3",
-                                 available_tools=tools):
-    print(s.render())
-# pricing.lookup_price(sku='SKU-3', region='APAC')  [confidence 0.94]
-```
-
-Only tools you declare in `available_tools` are ever suggested — nothing is invented.
-
-### Ask what comes next, mid-task
-
-```python
-nxt = await ctx.tools.next(
-    task,
-    trajectory_so_far=[{"tool": "pricing.lookup_price", "status": "ok",
-                        "output_fields": {"quote_id": "Q-9", "price": 1200}}],
-    available_tools=tools,
-)
-nxt.suggestions[0].tool                          # 'crm.update_quote'
-nxt.suggestions[0].argument_template["quote_id"] # 'Q-9'  ← bound from the previous output
-nxt.stop                                         # True when the chain is finished
-```
-
-The service learned that `quote_id` flows from the first tool's output into the second tool's
-arguments, by observing it happen — not by being told.
-
-### Get the whole plan up front
+### Read back what worked
 
 ```python
 plan = await ctx.tools.plan(task, available_tools=tools)
-print(plan.render())        # the ordered chain with bindings and known failure modes
-plan.render_script()        # Starlark, for Bifrost code mode
+# plan.steps      the tool sequence, in order
+# plan.support    how many successful runs back it
+# plan.success_rate
 ```
 
-### Don't call the same thing twice
+Each step carries an argument template whose bindings point at earlier steps' outputs, the
+preconditions those bindings imply, and the failure modes observed after that step. A plan is
+`valid` only if every tool exists and every binding resolves against a real run — nothing is
+invented.
 
-```python
-hit = await ctx.tools.lookup("pricing.lookup_price", {"sku": "SKU-22"})
-if hit.cached:
-    print(hit.output_fields, f"({hit.age_seconds:.0f}s old)")
-```
+### What this deliberately does not do
 
-A cached result is served **only** for a tool registered as deterministic, cacheable and
-free of write side effects — and only inside the scope it was cached for. Everything else is
-a miss by design, because replaying a call that writes would hide it. Defaults are
-conservative: an unregistered tool is never cached. Widen it deliberately:
+There is no `suggest`, no `next`, no tool registry and no output cache. Modern models plan
+tool use better than a support count can, every agent framework already owns a tool
+catalogue, and caching tool output replays stale results — `stock_level(SKU-1)` returning
+yesterday's number is the exact failure the rest of this service exists to prevent. What the
+model *cannot* know is what worked here before, which is the one thing this keeps.
 
-```python
-await ctx.tools.register(
-    "pricing.lookup_price",
-    policy={"deterministic": True, "cacheable": True,
-            "cache_ttl_seconds": 900, "cache_scope": "thread",
-            "side_effects": "read", "redact": ["auth.token"]},
-)
-```
-
-`redact` paths never reach storage.
-
-### The whole loop in one call
+### The loop in one call
 
 ```python
 result = await ctx.tools.execute(
@@ -425,8 +390,8 @@ result = await ctx.tools.execute(
 )
 ```
 
-Cache lookup → your executor on a miss → idempotent record. Failures are recorded with their
-error class, so the next run gets the correction.
+Your executor, then an idempotent record. Failures are recorded with their error class, so
+the next run gets the correction.
 
 ### Tell it whether the run worked
 

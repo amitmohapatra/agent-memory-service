@@ -525,48 +525,6 @@ class ToolsAPI:
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
 
-    async def register(
-        self,
-        name: str,
-        *,
-        description: str = "",
-        input_schema: dict[str, Any] | None = None,
-        output_schema: dict[str, Any] | None = None,
-        tags: list[str] | None = None,
-        source: str = "manual",
-        server: str | None = None,
-        policy: dict[str, Any] | None = None,
-    ) -> Tool:
-        payload: dict[str, Any] = {
-            "scope": self._ctx._scope_payload(),
-            "name": name,
-            "description": description,
-            "input_schema": input_schema,
-            "output_schema": output_schema,
-            "tags": tags or [],
-            "source": source,
-            "server": server,
-        }
-        if policy is not None:
-            payload["policy"] = policy
-        data = await self._ctx._request("POST", "/v1/tools", json=payload)
-        return Tool.model_validate(data)
-
-    async def register_many(self, descriptors: Sequence[dict[str, Any]]) -> list[Tool]:
-        return [await self.register(**d) for d in descriptors]
-
-    async def list(self, *, limit: int = 200) -> list[Tool]:
-        data = await self._ctx._request("GET", "/v1/tools", params={"limit": limit})
-        return [Tool.model_validate(t) for t in data.get("tools", [])]
-
-    async def lookup(self, tool: str, args: dict[str, Any]) -> ToolResult:
-        data = await self._ctx._request(
-            "POST",
-            "/v1/tools/lookup",
-            json={"scope": self._ctx._scope_payload(), "tool": tool, "args": args},
-        )
-        return ToolResult.model_validate(data)
-
     async def record(
         self,
         tool: str,
@@ -604,48 +562,6 @@ class ToolsAPI:
         )
         return ToolResult.model_validate(data)
 
-    async def suggest(
-        self,
-        task: str,
-        *,
-        available_tools: Sequence[dict[str, Any]],
-        context: str | None = None,
-        limit: int = 5,
-    ) -> list[ToolSuggestion]:
-        data = await self._ctx._request(
-            "POST",
-            "/v1/tools/suggest",
-            json={
-                "scope": self._ctx._scope_payload(),
-                "task": task,
-                "available_tools": list(available_tools),
-                "context": context,
-                "limit": limit,
-            },
-        )
-        return [ToolSuggestion.model_validate(s) for s in data.get("suggestions", [])]
-
-    async def next(
-        self,
-        task: str,
-        *,
-        trajectory_so_far: Sequence[dict[str, Any]],
-        available_tools: Sequence[dict[str, Any]],
-        limit: int = 3,
-    ) -> NextSteps:
-        data = await self._ctx._request(
-            "POST",
-            "/v1/tools/next",
-            json={
-                "scope": self._ctx._scope_payload(),
-                "task": task,
-                "trajectory_so_far": list(trajectory_so_far),
-                "available_tools": list(available_tools),
-                "limit": limit,
-            },
-        )
-        return NextSteps.model_validate(data)
-
     async def plan(self, task: str, *, available_tools: Sequence[dict[str, Any]]) -> ToolPlan:
         data = await self._ctx._request(
             "POST",
@@ -669,14 +585,17 @@ class ToolsAPI:
         *,
         visibility: str = "RUN",
     ) -> ToolResult:
-        """Cache lookup, then the caller's executor, then an idempotent record.
+        """Run the caller's executor, then record the invocation idempotently.
 
         ``executor`` is whatever actually runs the tool — a local function, a framework tool
         node, or a POST to Bifrost's ``/v1/mcp/tool/execute``. The service stays out of it.
+
+        There is deliberately no output cache in front of this. Replaying a previous result
+        for identical arguments is the staleness bug in another costume: ``stock_level(SKU-1)``
+        returning yesterday's 95 units is exactly the failure the rest of this system is built
+        to avoid. A tool that is genuinely deterministic should be cached by its own caller,
+        which is the only place that knows.
         """
-        hit = await self.lookup(call.tool, call.args)
-        if hit.cached:
-            return hit
         started = time.perf_counter()
         status, error_class, output = "ok", None, None
         try:

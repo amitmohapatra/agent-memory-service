@@ -86,23 +86,13 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
 
 
 async def test_readme_tool_memory_walkthrough(app, client) -> None:
-    """README: Tool memory — register a policy, record runs, then suggest / next / plan /
-    lookup / execute behave as documented."""
+    """README: Tool memory — record what ran, label the run, and the service mines the
+    procedure. Three endpoints, because the advice endpoints it used to have (register,
+    lookup, suggest, next) were removed: the model plans better than a support count, every
+    framework already owns a tool catalogue, and an output cache replays stale results."""
     memory = sdk_client(app)
     ctx = _bind(memory)
     agent = ctx.agent("ops", agent_run_id="run_readme_1")
-
-    await agent.tools.register(
-        "pricing.lookup_price",
-        policy={
-            "deterministic": True,
-            "cacheable": True,
-            "cache_ttl_seconds": 900,
-            "cache_scope": "thread",
-            "side_effects": "read",
-            "redact": ["auth.token"],
-        },
-    )
 
     for i in range(3):
         run = ctx.agent("ops", agent_run_id=f"run_readme_{i}")
@@ -121,32 +111,17 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             task=TASK,
             step=1,
         )
+        # only a run labelled successful validates a procedure
         await run.runs.outcome(f"run_readme_{i}", success=True)
-
-    suggestions = await agent.tools.suggest(TASK, available_tools=TOOLS)
-    assert suggestions and suggestions[0].tool == "pricing.lookup_price"
-    assert suggestions[0].render()
-
-    nxt = await agent.tools.next(
-        TASK,
-        trajectory_so_far=[
-            {
-                "tool": "pricing.lookup_price",
-                "status": "ok",
-                "output_fields": {"quote_id": "Q-9", "price": 1200},
-            }
-        ],
-        available_tools=TOOLS,
-    )
-    assert nxt.suggestions[0].tool == "crm.update_quote"
-    # the README's headline claim: the argument is bound from the previous step's output
-    assert nxt.suggestions[0].argument_template["quote_id"] == "Q-9"
 
     plan = await agent.tools.plan(TASK, available_tools=TOOLS)
     assert plan.valid and plan.render() and plan.render_script()
-
-    hit = await agent.tools.lookup("pricing.lookup_price", {"sku": "SKU-0", "region": "EMEA"})
-    assert hit.cached and hit.age_seconds is not None
+    steps = [s["tool"] for s in plan.steps]
+    assert steps == ["pricing.lookup_price", "crm.update_quote"], steps
+    assert plan.support == 3 and plan.success_rate == 1.0
+    # the headline claim: an argument is bound from an earlier step's output
+    binding = next(b for b in plan.steps[1]["bindings"] if b["argument"] == "quote_id")
+    assert binding["source_step"] == 0 and binding["source_field"]
 
     ran: list[str] = []
 
@@ -158,4 +133,3 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
         ToolCall(tool="crm.update_quote", args={"quote_id": "Q-X"}, task=TASK), runner
     )
     assert ran == ["crm.update_quote"] and result.recorded
-    assert {t.name for t in await agent.tools.list()} >= {"pricing.lookup_price"}

@@ -110,89 +110,13 @@ async def test_recording_is_idempotent_across_retries(container) -> None:
     assert len(rows) == 1
 
 
-async def test_cache_serves_only_replayable_tools(container) -> None:
-    service = container.services["tool_memory"]
-    ctx = _ctx("run_cache")
-    async with container.services["uow_factory"]() as uow:
-        await service.register(
-            uow,
-            ctx,
-            ToolDescriptor(
-                tenant_id="acme",
-                name="pricing.lookup_price",
-                policy=ToolPolicy(
-                    deterministic=True, cacheable=True, side_effects="read", cache_scope="run"
-                ),
-            ),
-            widen_policy=True,
-        )
-        await service.register(
-            uow,
-            ctx,
-            ToolDescriptor(
-                tenant_id="acme",
-                name="crm.update_quote",
-                policy=ToolPolicy(deterministic=False, cacheable=False, side_effects="write"),
-            ),
-            widen_policy=True,
-        )
-        await service.record(
-            uow,
-            ctx,
-            tool="pricing.lookup_price",
-            args={"sku": "A"},
-            output={"price": 1200},
-            step=0,
-        )
-        await service.record(
-            uow, ctx, tool="crm.update_quote", args={"quote_id": "Q-1"}, output={"ok": True}, step=1
-        )
-        await uow.commit()
-        hit = await service.lookup(uow, ctx, tool="pricing.lookup_price", args={"sku": "A"})
-        miss_args = await service.lookup(uow, ctx, tool="pricing.lookup_price", args={"sku": "B"})
-        refused = await service.lookup(uow, ctx, tool="crm.update_quote", args={"quote_id": "Q-1"})
-    assert hit["cached"] is True and hit["age_seconds"] >= 0
-    assert hit["output_fields"]["price"] == 1200
-    assert miss_args["cached"] is False
-    assert refused["cached"] is False and "policy forbids replay" in refused["reason"]
+async def test_a_procedure_is_mined_from_successful_runs(container) -> None:
+    """Three successful runs of one task pattern produce a validated chain.
 
-
-async def test_cache_never_crosses_its_scope(container) -> None:
-    """A run-scoped entry written in one run is not visible in another."""
-    service = container.services["tool_memory"]
-    async with container.services["uow_factory"]() as uow:
-        await service.register(
-            uow,
-            _ctx(),
-            ToolDescriptor(
-                tenant_id="acme",
-                name="pricing.lookup_price",
-                policy=ToolPolicy(
-                    deterministic=True, cacheable=True, side_effects="read", cache_scope="run"
-                ),
-            ),
-            widen_policy=True,
-        )
-        await service.record(
-            uow,
-            _ctx("run_a"),
-            tool="pricing.lookup_price",
-            args={"sku": "A"},
-            output={"p": 1},
-            step=0,
-        )
-        await uow.commit()
-        same = await service.lookup(
-            uow, _ctx("run_a"), tool="pricing.lookup_price", args={"sku": "A"}
-        )
-        other = await service.lookup(
-            uow, _ctx("run_b"), tool="pricing.lookup_price", args={"sku": "A"}
-        )
-    assert same["cached"] is True
-    assert other["cached"] is False
-
-
-async def test_procedure_plan_and_next_are_learned_from_successful_runs(container) -> None:
+    The advice endpoints that used to read this — suggest and next — are gone: modern models
+    plan tool use better than a support count can. What the model cannot know is what worked
+    here before, and that is what the procedure carries.
+    """
     service = container.services["tool_memory"]
     ctx = _ctx()
     keys = list((await container.services["authz"].visibility(ctx)).keys)
@@ -202,9 +126,6 @@ async def test_procedure_plan_and_next_are_learned_from_successful_runs(containe
     async with container.services["uow_factory"]() as uow:
         procedures = await service.procedures(uow, ctx, task=TASK, scope_keys=keys)
         plan = await service.plan(uow, ctx, task=TASK, available_tools=DECLARED, scope_keys=keys)
-        suggestions = await service.suggest(
-            uow, ctx, task=TASK, available_tools=DECLARED, scope_keys=keys
-        )
         await uow.commit()
 
     assert procedures, "three successful runs of one pattern must yield a procedure"
@@ -216,57 +137,17 @@ async def test_procedure_plan_and_next_are_learned_from_successful_runs(containe
     assert any(b.argument == "quote_id" and b.source_step == 0 for b in bound), second.bindings
     assert plan["valid"] is True and len(plan["steps"]) == 2
     assert "pricing" in plan["script"]
-    assert suggestions[0].tool == "pricing.lookup_price"
-
-    # next: having called the first tool, the second is proposed with its argument already bound
-    async with container.services["uow_factory"]() as uow:
-        nxt = await service.next_step(
-            uow,
-            ctx,
-            task=TASK,
-            trajectory_so_far=[
-                {
-                    "tool": "pricing.lookup_price",
-                    "status": "ok",
-                    "output_fields": {"quote_id": "Q-9", "price": 99},
-                }
-            ],
-            available_tools=DECLARED,
-            scope_keys=keys,
-        )
-        await uow.commit()
-    assert [s.tool for s in nxt.suggestions] == ["crm.update_quote"]
-    assert nxt.suggestions[0].argument_template.get("quote_id") == "Q-9"
-
-    # and after the whole chain there is nothing left to call
-    async with container.services["uow_factory"]() as uow:
-        done = await service.next_step(
-            uow,
-            ctx,
-            task=TASK,
-            trajectory_so_far=[
-                {"tool": "pricing.lookup_price", "status": "ok", "output_fields": {}},
-                {"tool": "crm.update_quote", "status": "ok", "output_fields": {}},
-            ],
-            available_tools=DECLARED,
-            scope_keys=keys,
-        )
-        await uow.commit()
-    assert done.stop is True and not done.suggestions
+    assert plan["support"] == 3 and plan["success_rate"] == 1.0
 
 
-async def test_suggestions_never_name_an_undeclared_tool(container) -> None:
+async def test_a_plan_never_names_a_tool_the_caller_cannot_call(container) -> None:
     service = container.services["tool_memory"]
     ctx = _ctx()
     keys = list((await container.services["authz"].visibility(ctx)).keys)
     await _run_once(container, service, run="run_x", task=TASK, quote="Q-1", sku="S-1")
     async with container.services["uow_factory"]() as uow:
-        suggestions = await service.suggest(
-            uow, ctx, task=TASK, available_tools=[PRICING], scope_keys=keys
-        )
         plan = await service.plan(uow, ctx, task=TASK, available_tools=[PRICING], scope_keys=keys)
         await uow.commit()
-    assert {s.tool for s in suggestions} == {"pricing.lookup_price"}
     assert plan["valid"] is False and "did not declare" in plan["reason"]
 
 

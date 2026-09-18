@@ -10,6 +10,30 @@
 
 Companion to `TARGET_STACK.md` and `INTEGRATIONS_PLAN.md`.
 
+
+> **Status note (September 2026).** The surface described below was reduced to what is
+> actually used. `POST /v1/tools` (registry), `/v1/tools/lookup` (output cache),
+> `/v1/tools/suggest` and `/v1/tools/next` were removed, along with their SDK methods.
+>
+> Why: the harness — the only client — called `record` and nothing else, and the five other
+> endpoints' sole consumers were this document and the test that checked this document still
+> compiled. Beyond being unused, each was answering a question that has moved. Modern models
+> plan tool use better than a support count can; every agent framework already owns a tool
+> catalogue, so a second one only drifts; and an output cache replays stale results —
+> `stock_level(SKU-1)` returning yesterday's number is precisely the failure the rest of this
+> service exists to prevent.
+>
+> What remains is the part the model genuinely cannot know: **what worked here before.**
+> `POST /v1/tools/record` writes an invocation, `POST /v1/runs/{id}/outcome` labels the run,
+> and `POST /v1/tools/plan` returns the mined procedure with its support count, success rate,
+> argument bindings and observed failure modes. Sections 30.0, 30.2, 30.4 and 30.6 below
+> describe the removed endpoints and are kept as design history, not as current API.
+>
+> The published evidence for this reduction is in the research summarised at the end of
+> §30.9: under a matched token budget, injecting mined sequences as prompt guidance loses to
+> giving the model the same tokens as extra reasoning, and retrieval precision over a growing
+> procedure library collapses from 29.6% to 3.3% between 5 and 100 entries.
+
 ## What the service does today
 
 Nothing tool-specific. An agent can already `observe()` a sentence about a tool outcome with a
