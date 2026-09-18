@@ -49,12 +49,10 @@ async def test_lexical_nli_contract() -> None:
 @pytest.mark.models
 async def test_deberta_real_weights_contract() -> None:
     """Runs only when the DeBERTa weights are present (MEMORY_MODELS_DIR)."""
-    root = os.environ.get("MEMORY_MODELS_DIR")
-    if not root:
-        pytest.skip("MEMORY_MODELS_DIR not set")
-    path = Path(root) / "deberta-v3-base-mnli-fever-anli"
-    if not path.exists():
-        pytest.skip(f"{path} not present")
+    from tests.support_models import requires_torch, requires_weights
+
+    requires_torch()
+    path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
     from memory_service.adapters.models.nli import TransformersNLI
 
     nli = TransformersNLI(NLISettings(model_path=str(path), batch_size=2))

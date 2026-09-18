@@ -144,12 +144,10 @@ async def test_grounding_gate_with_lexical_stand_in() -> None:
 
 @pytest.mark.models
 async def test_grounding_gate_with_deberta() -> None:
-    root = os.environ.get("MEMORY_MODELS_DIR")
-    if not root:
-        pytest.skip("MEMORY_MODELS_DIR not set")
-    path = Path(root) / "deberta-v3-base-mnli-fever-anli"
-    if not path.exists():
-        pytest.skip(f"{path} not present")
+    from tests.support_models import requires_torch, requires_weights
+
+    requires_torch()
+    path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
     from memory_service.adapters.models.nli import TransformersNLI
 
     report = await run_gate(TransformersNLI(NLISettings(model_path=str(path))))

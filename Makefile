@@ -58,6 +58,19 @@ contract-test: ## OpenAPI + provider contract tests
 e2e: ## End-to-end API flows
 	$(PY) pytest tests/e2e -m "not docker and not models" -q
 
+model-test: ## Local-model contract tests against real weights, inside the runtime image
+	@# torch and onnxruntime publish no macOS x86_64 wheels, so on an Intel Mac the [models]
+	@# extra cannot be installed at all and these tests can only run in the Linux image —
+	@# which already carries the runtime. ./models is mounted read-only.
+	docker run --rm --user root \
+	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
+	  -e MEMORY_MODELS_DIR=/models -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  --entrypoint sh memory-service-memory-api -c '\
+	    uv pip install -q pytest pytest-asyncio anyio && cd /app && \
+	    /opt/venv/bin/python -m pytest $(MODEL_TESTS) -q -p no:randomly -p no:cacheprovider'
+
+MODEL_TESTS ?= tests/contract/test_advanced_adapters.py tests/contract/test_nli_adapter.py tests/contract/test_model_adapters.py
+
 security-test: ## Isolation / authorization gates (release blocking)
 	$(PY) pytest tests/security -q
 

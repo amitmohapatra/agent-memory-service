@@ -11,10 +11,10 @@ import pytest
 
 from memory_service.config.settings import EmbeddingSettings
 from memory_service.domain.errors import DependencyUnavailable
+from tests.support_models import MODELS_DIR as MODELS
+from tests.support_models import requires_sentence_transformers, requires_weights
 
 pytestmark = pytest.mark.contract
-
-MODELS = Path(os.environ["MEMORY_MODELS_DIR"]) if os.environ.get("MEMORY_MODELS_DIR") else None
 
 
 def test_missing_sparse_and_late_models_fail_loudly(tmp_path: Path) -> None:
@@ -53,8 +53,7 @@ async def test_wiring_refuses_model_backed_flags_without_weights(make_settings) 
 
 @pytest.mark.models
 async def test_splade_and_colbert_with_local_weights() -> None:
-    if MODELS is None:
-        pytest.skip("MEMORY_MODELS_DIR not set")
+    requires_weights("Splade_PP_en_v1", "answerai-colbert-small-v1")
     from memory_service.adapters.models.advanced import (
         FastEmbedLateInteraction,
         FastEmbedSparseEncoder,
@@ -79,8 +78,8 @@ async def test_splade_and_colbert_with_local_weights() -> None:
 
 @pytest.mark.models
 async def test_late_chunking_with_local_weights() -> None:
-    if MODELS is None or not (MODELS / "granite-embedding-small-english-r2").exists():
-        pytest.skip("granite weights not present")
+    requires_weights("granite-embedding-small-english-r2")
+    requires_sentence_transformers()
     from memory_service.adapters.models.advanced import LateChunkingEmbedding
 
     emb = LateChunkingEmbedding(

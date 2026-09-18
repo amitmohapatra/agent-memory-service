@@ -21,9 +21,11 @@ from memory_service.domain.errors import DependencyUnavailable
 
 pytestmark = pytest.mark.contract
 
-st = pytest.importorskip("sentence_transformers")
-st_models = pytest.importorskip("sentence_transformers.models")
-transformers = pytest.importorskip("transformers")
+from tests.support_models import NO_RUNTIME  # noqa: E402
+
+st = pytest.importorskip("sentence_transformers", reason=NO_RUNTIME)
+st_models = pytest.importorskip("sentence_transformers.models", reason=NO_RUNTIME)
+transformers = pytest.importorskip("transformers", reason=NO_RUNTIME)
 
 _WORDS = """
 adjusted ebitda increased to eur million despite lower revenue restructuring savings
@@ -177,7 +179,7 @@ async def test_granite_real_weights_contract() -> None:
     """Runs only when real weights are present (MEMORY_MODELS_DIR)."""
     root = os.environ.get("MEMORY_MODELS_DIR")
     if not root:
-        pytest.skip("MEMORY_MODELS_DIR not set")
+        pytest.skip("MEMORY_MODELS_DIR not set — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)")
     path = Path(root) / "granite-embedding-small-english-r2"
     if not path.exists():
         pytest.skip(f"{path} not present")
