@@ -45,6 +45,11 @@ class Transport:
             owns = True
         else:
             client.headers.update(headers)
+            # An injected client is the caller's to own, but a caller who forgot the base URL
+            # gets "Request URL is missing an 'http://' or 'https://' protocol" from deep
+            # inside httpx. Fill it in; an explicit one is left alone.
+            if not str(client.base_url):
+                client.base_url = base_url.rstrip("/")
             owns = False
         self._client = client
         self._owns_client = owns
