@@ -72,20 +72,32 @@ And four guarantees the service is built around:
 
 ## Install and run
 
-Requires Docker and Python 3.12.
+Requires Docker. (Python 3.12 only if you want to work on the service itself.)
 
 ```bash
 git clone <repo> memory-service && cd memory-service
-make setup          # uv venv + dependencies
-make models         # download the model weights into ./models (~1 GB, git-ignored)
-make dev-up         # PostgreSQL, Qdrant, Dragonfly, OpenFGA, api, worker
-make migrate
+docker compose up -d
 ```
 
-**`make models` is not optional for `make dev-up`.** The service reads its weights from local
-directories and never downloads at run time, so a missing model is a startup error rather than
-a silent fall back to something weaker. (The test suite and `examples/run_server.sh` do have a
-deterministic stand-in, which is why they run without weights — see below.)
+That is the whole thing. Bringing the stack up downloads the model weights into `./models`
+(~1 GB, once, git-ignored) and applies both database schemas before the API and the worker
+start, so a fresh clone reaches a working service with no further steps. Allow a few minutes
+the first time — most of it is the download and the image build. Afterwards the weights are
+recognised as present and skipped.
+
+To work on the service rather than just run it:
+
+```bash
+make setup          # uv venv + dependencies
+make models         # the same weights, without Docker
+make dev-up         # the same stack
+make migrate        # the same schemas
+```
+
+The service reads its weights from local directories and never downloads at run time, so a
+missing model is a startup error rather than a silent fall back to something weaker. (The test
+suite and `examples/run_server.sh` do have a deterministic stand-in, which is why they run
+without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
 `/health/ready`. The dev API key is `dev-key`.

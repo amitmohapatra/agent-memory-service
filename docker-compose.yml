@@ -109,8 +109,16 @@ services:
       dockerfile: deploy/Dockerfile
       target: runtime
     # ~1 GB the first time; afterwards each model is recognised as present and skipped.
-    entrypoint: ["python", "-m", "memory_service.tools.download_models", "--dir", "/models"]
-    user: root                      # ./models belongs to the host user, not to `nobody`
+    # Runs as root because ./models belongs to the host user, not to `nobody` — then hands
+    # the files back to whoever owns the directory, so a Linux checkout is not left full of
+    # root-owned weights the user cannot delete.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        python -m memory_service.tools.download_models --dir /models &&
+        chown -R "$$(stat -c '%u:%g' /models)" /models
+    user: root
     restart: "no"
     volumes:
       - ./models:/models
