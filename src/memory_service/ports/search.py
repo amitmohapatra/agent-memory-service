@@ -86,6 +86,11 @@ class SearchStore(Protocol):
 
     async def delete_by_filter(self, collection: str, flt: SearchFilter) -> int: ...
 
+    async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
+        """Every record id matching ``flt``. Used to find index entries whose source row is
+        gone, which is the only way to notice a superseded generation of a document."""
+        ...
+
     async def search_dense(
         self, collection: str, vector: Sequence[float], flt: SearchFilter, *, limit: int
     ) -> list[SearchHit]: ...

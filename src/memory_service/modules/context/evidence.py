@@ -85,6 +85,9 @@ class VerificationStage:
         self.cfg = settings
         self.seeds = seeds
         self._last_seed_groups: dict[str, list[str]] = {}
+        #: node ids of the seeds the last call derived requirements from; empty means the
+        #: seeds had nothing to derive from, which is not the same as "nothing required"
+        self._last_seed_nodes: list[str] = []
 
     async def required_groups(
         self, ctx: MemoryExecutionContext, seeds: Sequence[Candidate]
@@ -92,6 +95,7 @@ class VerificationStage:
         """Group name -> node ids that satisfy it (the target and its descendants, so a
         'see Section 8' reference is satisfied by any paragraph of Section 8)."""
         node_ids = [str(c.payload["node_id"]) for c in seeds if c.payload.get("node_id")]
+        self._last_seed_nodes = list(node_ids)
         if not node_ids:
             return {}
         async with self.uow_factory() as uow:
@@ -165,6 +169,21 @@ class VerificationStage:
             ]
             groups = await self.required_groups(ctx, seeds)
             report["required_groups"] = sorted(groups)
+            # COMPLETE has two very different meanings, and they were indistinguishable: the
+            # companions were checked and found, or nothing was ever checked. Measured live,
+            # the second was reported as the first for every memory-only turn and for every
+            # bundle whose seeds were orphaned index entries. Say which happened.
+            if not groups:
+                report["notes"].append(
+                    "no companion evidence was required"
+                    if seeds
+                    else "no document seeds to derive requirements from"
+                )
+            if seeds and not self._last_seed_nodes:
+                report["notes"].append(
+                    "seed chunks carry no context-graph node, so requirements could not be "
+                    "derived from them"
+                )
             diagnostics["evidence_targets"] = {name: sorted(ids) for name, ids in groups.items()}
             diagnostics["evidence_seed_groups"] = {
                 node: sorted(set(names)) for node, names in self._last_seed_groups.items()

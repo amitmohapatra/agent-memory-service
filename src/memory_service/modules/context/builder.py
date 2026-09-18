@@ -60,6 +60,31 @@ _ROLLING_SYSTEM = (
 )
 
 
+#: Un-reranked items were never judged and ranked below everything that was, so their
+#: relevance is mapped into a band strictly beneath the reranked floor. Order is preserved;
+#: the number stops claiming a confidence nobody measured.
+_TAIL_CEILING = 0.05
+
+
+def _relevance(c: Candidate) -> tuple[float, str, float]:
+    """The raw ranking number, what produced it, and a comparable 0..1 relevance.
+
+    One field used to carry three incompatible scales: a cross-encoder logit (-11..+11) for
+    items the reranker judged, an RRF fusion score (~0.001..0.25) for everything past
+    ``candidate_k``, and a hardcoded 1.0 for exact identifier hits. In one measured response
+    rank 27 scored +0.067 while rank 1 scored -4.14, so any client that sorted or thresholded
+    on it got the ranking exactly backwards.
+    """
+    if c.rerank_score is not None:
+        # a calibrated P(relevant): the cross-encoder applies its sigmoid
+        value = min(max(float(c.rerank_score), 0.0), 1.0)
+        return float(c.rerank_score), "cross_encoder", value
+    if "exact" in (c.retrievers or []):
+        return float(c.score), "exact", 1.0
+    # RRF scores are sums of 1/(k+rank): bounded and monotone in rank, but not a probability
+    return float(c.score), "fusion", min(float(c.score), 1.0) * _TAIL_CEILING
+
+
 def candidate_to_item(c: Candidate) -> ContextItem:
     p = c.payload
     citation = {

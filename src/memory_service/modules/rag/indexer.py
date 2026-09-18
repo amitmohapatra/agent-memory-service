@@ -21,7 +21,7 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.models import EmbeddingProvider, SparseEncoder
-from memory_service.ports.search import CollectionSpec, SearchRecord, SearchStore
+from memory_service.ports.search import CollectionSpec, SearchFilter, SearchRecord, SearchStore
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
@@ -150,14 +150,44 @@ class Indexer:
                     indexed_at=datetime.now(UTC),
                 )
                 await uow.commit()
+            stale = await self._purge_superseded(
+                tenant_id, document_id, keep={c.chunk_id for c in all_chunks}
+            )
         log.info(
             "index.document_done",
             tenant_id=tenant_id,
             document_id=document_id,
             chunks=n,
             summaries=len(summaries),
+            superseded=stale,
         )
         return n
+
+    async def _purge_superseded(self, tenant_id: str, document_id: str, *, keep: set[str]) -> int:
+        """Drop index entries for chunks this document no longer has.
+
+        Parsing assigns fresh chunk and node ids, so a re-parse writes a whole new generation
+        of vectors and leaves the previous one behind. Measured on a running service: one
+        upload, retried three times by the job's own retry policy, left **72 vectors for 10
+        chunks** — four generations, of which Postgres kept one. The orphans are not inert:
+        they take top ranks, occupy evidence seeds, and their node ids resolve to nothing, so
+        the evidence stage silently reported COMPLETE for a check it could not run.
+
+        The index must mirror the document's chunks, so anything not in ``keep`` goes. The
+        summary records share the document filter and are rewritten on every pass, so they are
+        kept by id rather than by generation.
+        """
+        collection = self.collection(KNOWLEDGE)
+        flt = SearchFilter(tenant_id=tenant_id, must={"document_id": document_id})
+        try:
+            present = await self.store.record_ids(collection, flt)
+        except Exception as exc:  # a purge failure must not fail the indexing that preceded it
+            log.warning("index.purge_failed", document_id=document_id, error=type(exc).__name__)
+            return 0
+        stale = [r for r in present if r.startswith("chk_") and r not in keep]
+        if stale:
+            await self.store.delete(collection, stale)
+        return len(stale)
 
     async def _index_summaries(
         self,

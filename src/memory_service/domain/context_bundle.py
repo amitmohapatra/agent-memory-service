@@ -8,7 +8,7 @@ everything; it contains bounded, ranked, provenance-carrying evidence.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,7 +25,15 @@ class ContextItem(BaseModel):
     item_id: str
     representation: Representation
     text: str
+    #: The raw number the ranking stage produced. Kept for debugging; its meaning depends on
+    #: ``score_kind``, so it is *not* comparable between items. Use ``relevance``.
     score: float = 0.0
+    #: Comparable across every item in the bundle, 0..1, higher is better. This is the field
+    #: to threshold and to show a user.
+    relevance: float = Field(default=0.0, ge=0.0, le=1.0)
+    #: Where ``score`` came from: a cross-encoder probability, a fusion rank score, or an
+    #: exact identifier hit.
+    score_kind: Literal["cross_encoder", "fusion", "exact"] = "fusion"
     retrievers: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
     citation: str = Field(..., description="stable citation key")

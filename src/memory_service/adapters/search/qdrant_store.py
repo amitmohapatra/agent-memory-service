@@ -184,6 +184,21 @@ class QdrantSearchStore:
         )
         return before
 
+    async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
+        name, out, offset = self._name(collection), [], None
+        while True:
+            points, offset = await self._client.scroll(
+                collection_name=name,
+                scroll_filter=_filter(flt),
+                limit=512,
+                offset=offset,
+                with_payload=["record_id"],
+                with_vectors=False,
+            )
+            out.extend(str((p.payload or {}).get("record_id", p.id)) for p in points)
+            if offset is None:
+                return out
+
     def _hit(self, p: Any, retriever: Retriever) -> SearchHit:
         payload = dict(p.payload or {})
         return SearchHit(

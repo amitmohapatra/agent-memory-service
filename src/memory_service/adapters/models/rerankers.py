@@ -83,6 +83,9 @@ class CrossEncoderReranker:
                 f"reranker {source!r} could not be loaded ({type(exc).__name__}); "
                 "set MEMORY__MODELS__RERANKER__MODEL_PATH"
             ) from exc
+        import torch
+
+        self._sigmoid = torch.nn.Sigmoid()
         self.settings = settings
         self.info = ProviderInfo(
             name=settings.model,
@@ -92,9 +95,22 @@ class CrossEncoderReranker:
         )
 
     def _score(self, query: str, documents: Sequence[str]) -> list[float]:
+        """Relevance in 0..1, not a raw logit.
+
+        These cross-encoders are trained with binary cross-entropy, so the sigmoid of the
+        logit is a calibrated P(relevant) — which is what sentence-transformers applies by
+        default for a single-label model. Ours came back with ``activation_fn=Identity()``
+        because the model directory carries no ``modules.json``, so a freshly constructed
+        CrossEncoder gets no activation and we were publishing logits in the -11..+11 range
+        as if they were scores. Asking for the sigmoid explicitly removes the dependence on
+        what happens to be in the weights directory.
+        """
         pairs = [(query, d) for d in documents]
         out = self._model.predict(
-            pairs, batch_size=self.settings.batch_size, show_progress_bar=False
+            pairs,
+            batch_size=self.settings.batch_size,
+            show_progress_bar=False,
+            activation_fn=self._sigmoid,
         )
         return [float(x) for x in out]
 
