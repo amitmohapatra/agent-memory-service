@@ -33,7 +33,7 @@ MODELS_DIR = models_dir()
 
 NO_WEIGHTS = "no model weights — run `make models` or set MEMORY_MODELS_DIR"
 NO_RUNTIME = (
-    "the [models] extra is not installed (torch/onnxruntime publish no macOS x86_64 wheels) "
+    "the 'models' extra is not installed (torch/onnxruntime publish no macOS x86_64 wheels) "
     "— run `make model-test` to run this in the Linux runtime image"
 )
 
