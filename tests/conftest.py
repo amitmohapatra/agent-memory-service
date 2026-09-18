@@ -62,18 +62,30 @@ def _deep_merge(base: dict, extra: dict) -> dict:
     return out
 
 
+#: The suite gets a database of its own.
+#:
+#: Tests truncate tables and hold locks; the dev stack's worker polls the same database and
+#: claims jobs out from under them. Sharing "memory" with a running `docker compose` made the
+#: suite fail in ways that had nothing to do with the code: a multi-agent test that runs in
+#: 1.2 s idle timed out at 120 s waiting on a lock, and queue tests had their jobs stolen.
+#: Point at the dev database explicitly with MEMORY__DATABASE__URL if that is what you want.
 DB_URL = os.environ.get(
-    "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
+    "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory_tests"
+)
+
+
+#: Where to connect to create the databases above; "postgres" always exists.
+ADMIN_URL = os.environ.get(
+    "MEMORY_TEST_ADMIN_URL", "postgresql://memory:memory@localhost:5432/postgres"
 )
 
 
 def pg_reachable() -> bool:
+    """Whether the *server* is up. The suite's own databases are created on demand."""
     import psycopg
 
     try:
-        with psycopg.connect(
-            DB_URL.replace("postgresql+psycopg://", "postgresql://"), connect_timeout=2
-        ):
+        with psycopg.connect(ADMIN_URL, connect_timeout=2):
             return True
     except Exception:
         return False
@@ -99,10 +111,10 @@ APP_DB_URL = DB_URL.rsplit("/", 1)[0] + "/" + APP_DB_NAME
 
 
 def _create_database(name: str) -> None:
+    """Create a database if it is not there yet. Safe to call from every session."""
     import psycopg
 
-    admin = DB_URL.replace("postgresql+psycopg://", "postgresql://")
-    with psycopg.connect(admin, autocommit=True) as conn:
+    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
         exists = conn.execute(
             "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
         ).fetchone()
@@ -171,6 +183,7 @@ def _migrated_database() -> None:
     from alembic import command
     from alembic.config import Config
 
+    _create_database(DB_URL.rsplit("/", 1)[-1])
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", DB_URL)
     command.upgrade(cfg, "head")

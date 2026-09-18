@@ -12,9 +12,7 @@ from memory_service.__about__ import __version__
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
 
-DB_URL = os.environ.get(
-    "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
-)
+from tests.conftest import DB_URL  # noqa: E402  (one definition, see tests/conftest.py)
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
