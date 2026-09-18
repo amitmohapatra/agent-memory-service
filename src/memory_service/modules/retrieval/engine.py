@@ -192,7 +192,21 @@ class RetrievalEngine:
             if routed.identifiers and self.cfg.exact:
                 candidates.extend(await self._exact(ctx, routed.identifiers, visibility))
                 diagnostics["exact_hits"] = len(candidates)
+                if not candidates:
+                    diagnostics["exact_fallback"] = True
             # 2. hybrid lexical + dense with native RRF inside the store
+            #
+            # An identifier lookup that found nothing has to fall back to ranked search, and
+            # that fallback has to include memories. The router sets needs_memories=False for
+            # EXACT_IDENTIFIER — reasonable when the lookup succeeds, since an exact hit beats
+            # anything ranking could offer — but it was applied to the fallback as well. So
+            # "what about SKU-88?" searched everything except memories and returned nothing,
+            # while the vaguer "which products are discontinued" found the very same memory.
+            # Asking about a specific thing is the most natural question there is; it must not
+            # be the one that fails.
+            exact_lookup_found_nothing = (
+                routed.query_type is QueryType.EXACT_IDENTIFIER and not candidates
+            )
             if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
                 wanted = list(kinds)
                 if routed.needs_summaries and "summary" not in wanted:
@@ -201,7 +215,9 @@ class RetrievalEngine:
                 for kind in wanted:
                     if kind == "chunk" and not routed.needs_knowledge:
                         continue
-                    if kind == "memory" and not routed.needs_memories:
+                    if kind == "memory" and not (
+                        routed.needs_memories or exact_lookup_found_nothing
+                    ):
                         continue
                     hits = await self._hybrid(
                         search_text, visibility, kind=kind, document_ids=document_ids
