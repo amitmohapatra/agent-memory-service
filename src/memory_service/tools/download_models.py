@@ -101,7 +101,10 @@ MODELS: tuple[Model, ...] = (
         "reranker",
         "English-only CPU-light reranker",
     ),
-    Model("sparse", "prithivida/Splade_PP_en_v1", "sparse", "SPLADE learned sparse (gated)"),
+    # Qdrant's mirror, not the author's repository: fastembed loads its own ONNX export, and
+    # prithivida/Splade_PP_en_v1 ships one whose inputs are named input_mask/segment_ids —
+    # which fastembed does not feed, so it fails with "Required inputs are missing".
+    Model("sparse", "Qdrant/Splade_PP_en_v1", "sparse", "SPLADE learned sparse (gated)"),
     Model(
         "late-interaction",
         "answerdotai/answerai-colbert-small-v1",

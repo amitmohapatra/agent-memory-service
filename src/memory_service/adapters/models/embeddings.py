@@ -22,6 +22,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from memory_service.config.settings import EmbeddingSettings
+from memory_service.adapters.models._precision import cpu_dtype_kwargs
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo
 
@@ -79,6 +80,8 @@ class SentenceTransformersEmbedding:
         )
         source = settings.model_path or settings.model
         kwargs: dict[str, Any] = {"device": settings.device, "backend": backend}
+        if backend == "torch" and (dtype := cpu_dtype_kwargs(settings.device)):
+            kwargs["model_kwargs"] = dtype  # see _precision: half precision on CPU is worse
         if settings.model_path:
             kwargs["local_files_only"] = True
         try:

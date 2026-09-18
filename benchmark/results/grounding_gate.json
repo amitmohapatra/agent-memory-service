@@ -80,7 +80,7 @@
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "fa88b3144123e281f6458da2689c9941b8de1f11",
+    "git_commit": "dc5e73b3d8d5a748f6ef2d3a1b3d0bccf53a7b04",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -133,15 +133,15 @@
         "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
       },
       "sparse": {
-        "repo": "prithivida/Splade_PP_en_v1",
-        "revision": "762be6a7206e2f299182705972a65e5c46e62be2"
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
       }
     },
     "packages": {
       "docling": "not-installed",
       "fastapi": "0.141.1",
-      "fastembed": "not-installed",
-      "onnxruntime": "not-installed",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.19.2",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
       "sentence-transformers": "not-installed",
@@ -152,7 +152,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-15T11:59:09.317178+00:00"
+    "timestamp": "2026-09-18T08:49:44.084806+00:00"
   },
   "representative": false,
   "rows": [

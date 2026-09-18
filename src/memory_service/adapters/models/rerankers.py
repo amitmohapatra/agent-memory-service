@@ -10,6 +10,7 @@ from typing import Any
 
 from memory_service.adapters.models.sparse import tokenize
 from memory_service.config.settings import RerankerSettings
+from memory_service.adapters.models._precision import cpu_dtype_kwargs
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo, RerankResult
 
@@ -71,6 +72,8 @@ class CrossEncoderReranker:
         kwargs: dict[str, Any] = {"device": "cpu"}
         if settings.provider == "onnx":
             kwargs["backend"] = "onnx"
+        else:
+            kwargs["model_kwargs"] = cpu_dtype_kwargs()
         if settings.model_path:
             kwargs["local_files_only"] = True
         try:

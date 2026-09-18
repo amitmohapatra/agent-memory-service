@@ -8,7 +8,9 @@ when the weights are absent — the benchmark harness records that as *skipped*.
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from memory_service.config.settings import EmbeddingSettings
@@ -28,6 +30,32 @@ _LATE_LICENSES = {
 }
 
 
+def _flat_model_dir(model_path: str) -> str:
+    """Give fastembed the one flat directory it expects.
+
+    It loads ``<dir>/model.onnx`` and the tokenizer from that same ``<dir>``, but upstream
+    repositories disagree on the layout: ``answerai-colbert-small-v1`` ships ``model.onnx``
+    at the top level while ``Splade_PP_en_v1`` ships it under ``onnx/``. Rather than ask
+    whoever downloads the weights to rearrange them — or copy hundreds of megabytes — link
+    both layouts into one directory under the cache. The weights are never modified, and a
+    read-only model directory stays read-only.
+    """
+    root = Path(model_path)
+    if (root / "model.onnx").exists() or not (root / "onnx" / "model.onnx").exists():
+        return str(root)
+
+    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    flat = cache / "memory-service" / "flat-models" / root.name
+    flat.mkdir(parents=True, exist_ok=True)
+    for source in [*root.iterdir(), *(root / "onnx").iterdir()]:
+        if source.is_dir():
+            continue
+        link = flat / source.name
+        if not link.exists():
+            link.symlink_to(source.resolve())
+    return str(flat)
+
+
 class FastEmbedSparseEncoder:
     """SPLADE / miniCOIL / BM42 as a :class:`SparseEncoder`. Server-side IDF is off for
     these (the model already weights terms), so collections created for them use
@@ -42,7 +70,7 @@ class FastEmbedSparseEncoder:
             raise DependencyUnavailable("fastembed is required (install [models])") from exc
         kwargs: dict[str, Any] = {"model_name": model, "threads": threads}
         if model_path:
-            kwargs["specific_model_path"] = model_path
+            kwargs["specific_model_path"] = _flat_model_dir(model_path)
             kwargs["local_files_only"] = True
         try:
             self._model = SparseTextEmbedding(**kwargs)
@@ -91,7 +119,7 @@ class FastEmbedLateInteraction:
             raise DependencyUnavailable("fastembed is required (install [models])") from exc
         kwargs: dict[str, Any] = {"model_name": model, "threads": threads}
         if model_path:
-            kwargs["specific_model_path"] = model_path
+            kwargs["specific_model_path"] = _flat_model_dir(model_path)
             kwargs["local_files_only"] = True
         try:
             self._model = LateInteractionTextEmbedding(**kwargs)

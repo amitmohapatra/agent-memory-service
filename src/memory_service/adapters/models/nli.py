@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from memory_service.config.settings import NLISettings
+from memory_service.adapters.models._precision import cpu_dtype_kwargs
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.grounding.lexical import conflicts, content_tokens, coverage
 from memory_service.ports.models import NLIScore, ProviderInfo
@@ -70,7 +71,9 @@ class TransformersNLI:
         kwargs: dict[str, Any] = {"local_files_only": True} if settings.model_path else {}
         try:
             self._tokenizer = AutoTokenizer.from_pretrained(source, **kwargs)
-            self._model = AutoModelForSequenceClassification.from_pretrained(source, **kwargs)
+            self._model = AutoModelForSequenceClassification.from_pretrained(
+                source, **kwargs, **cpu_dtype_kwargs()  # the NLI runs on CPU by design
+            )
         except Exception as exc:
             raise DependencyUnavailable(
                 f"nli model {source!r} could not be loaded ({type(exc).__name__}); "
