@@ -81,6 +81,16 @@ class OpenFGAAuthorizationProvider:
                 config.authorization_model_id = await self._ensure_model(client)
                 client.set_authorization_model_id(config.authorization_model_id)
         except Exception as exc:
+            # The client owns an aiohttp session. Without this, every failed attempt leaked
+            # one — and since self._client is only set on success, a readiness probe polling
+            # a broken OpenFGA leaked a session per poll.
+            await client.close()
+            if isinstance(exc, FileNotFoundError):
+                raise DependencyUnavailable(
+                    f"the OpenFGA authorization model is missing from this deployment "
+                    f"({MODEL_PATH}); it is deploy/openfga/model.fga in the repository and "
+                    f"must be present in the image"
+                ) from exc
             raise DependencyUnavailable(f"OpenFGA unavailable: {type(exc).__name__}") from exc
         self._client = client
         return client

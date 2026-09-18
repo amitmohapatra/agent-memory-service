@@ -97,6 +97,38 @@ services:
       postgres:
         condition: service_healthy
 
+  # ------------------------------------------------------------------ one-shot setup
+  # `docker compose up` on a fresh checkout has to produce a working service, so the two
+  # things a working service needs that a checkout does not carry — the model weights and
+  # the database schema — are created here rather than being left as manual steps whose
+  # absence shows up as a crash loop at startup.
+
+  model-fetch:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    # ~1 GB the first time; afterwards each model is recognised as present and skipped.
+    entrypoint: ["python", "-m", "memory_service.tools.download_models", "--dir", "/models"]
+    user: root                      # ./models belongs to the host user, not to `nobody`
+    restart: "no"
+    volumes:
+      - ./models:/models
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    entrypoint: ["sh", "-c", "alembic upgrade head && python -m memory_service.tools.ensure_queue_schema"]
+    working_dir: /app
+    environment:
+      <<: *common-env
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   memory-api:
     build:
       context: .
@@ -118,6 +150,10 @@ services:
         condition: service_healthy
       openfga:
         condition: service_started
+      model-fetch:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/health/live')"]
       interval: 10s
@@ -142,6 +178,10 @@ services:
         condition: service_healthy
       dragonfly:
         condition: service_healthy
+      model-fetch:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
 
   # ------------------------------------------------------------------ profiles
   # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`

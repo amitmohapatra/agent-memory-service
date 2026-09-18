@@ -29,6 +29,16 @@ from typing import Any
 ALLOW = ["*.json", "*.txt", "*.safetensors", "*.model", "*.py", "*.md"]
 IGNORE = ["*.bin", "*.h5", "*.msgpack", "*.ckpt", "onnx/*", "openvino/*", "*.onnx"]
 
+# ...except for the fastembed adapters, which run the ONNX graph and nothing else. Fetching
+# them under the rules above produced a directory of configuration with no model in it, and
+# the "already downloaded" check looked for safetensors that were never going to be there —
+# so every run re-downloaded a model that could never load.
+ONNX_ALLOW = ["*.json", "*.txt", "*.model", "*.onnx", "*.onnx_data"]
+ONNX_IGNORE = ["*.bin", "*.h5", "*.msgpack", "*.ckpt", "*.safetensors", "openvino/*"]
+
+#: filename glob that says a directory already holds the weights, per runtime
+PRESENT = {"torch": "*.safetensors", "onnx": "*.onnx"}
+
 
 @dataclass(frozen=True)
 class Model:
@@ -37,6 +47,16 @@ class Model:
     role: str
     note: str
     default: bool = False
+    #: "torch" loads safetensors through sentence-transformers; "onnx" is a fastembed export
+    runtime: str = "torch"
+
+    @property
+    def allow(self) -> list[str]:
+        return ONNX_ALLOW if self.runtime == "onnx" else ALLOW
+
+    @property
+    def ignore(self) -> list[str]:
+        return ONNX_IGNORE if self.runtime == "onnx" else IGNORE
 
 
 MODELS: tuple[Model, ...] = (
@@ -104,12 +124,19 @@ MODELS: tuple[Model, ...] = (
     # Qdrant's mirror, not the author's repository: fastembed loads its own ONNX export, and
     # prithivida/Splade_PP_en_v1 ships one whose inputs are named input_mask/segment_ids —
     # which fastembed does not feed, so it fails with "Required inputs are missing".
-    Model("sparse", "Qdrant/Splade_PP_en_v1", "sparse", "SPLADE learned sparse (gated)"),
     Model(
-        "late-interaction",
+        "Splade_PP_en_v1",
+        "Qdrant/Splade_PP_en_v1",
+        "sparse",
+        "SPLADE learned sparse (gated)",
+        runtime="onnx",
+    ),
+    Model(
+        "answerai-colbert-small-v1",
         "answerdotai/answerai-colbert-small-v1",
         "late-interaction",
         "ColBERT multivector rescoring (gated)",
+        runtime="onnx",
     ),
     Model("gliner2-base", "fastino/gliner2-base-v1", "extraction", "zero-shot NER/RE tier"),
 )
@@ -133,14 +160,15 @@ def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
     from huggingface_hub import HfApi, snapshot_download
 
     target = root / model.directory
-    if target.exists() and not force and any(target.glob("*.safetensors")):
+    present = PRESENT[model.runtime]
+    if target.exists() and not force and (any(target.glob(present)) or any(target.glob(f"*/{present}"))):
         revision = HfApi().model_info(model.repo).sha
         return {"repo": model.repo, "revision": revision, "role": model.role, "cached": True}
     snapshot_download(
         model.repo,
         local_dir=str(target),
-        allow_patterns=ALLOW,
-        ignore_patterns=IGNORE,
+        allow_patterns=model.allow,
+        ignore_patterns=model.ignore,
     )
     revision = HfApi().model_info(model.repo).sha
     return {"repo": model.repo, "revision": revision, "role": model.role, "cached": False}

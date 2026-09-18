@@ -38,6 +38,10 @@ COPY sdk ./sdk
 COPY integrations ./integrations
 COPY migrations ./migrations
 COPY alembic.ini ./
+# The OpenFGA authorization model. A deployment writes it to OpenFGA the first time it finds
+# no model there, so leaving it out of the image works right up until the first fresh
+# install — which then fails on a missing file, reported as "OpenFGA unavailable".
+COPY deploy/openfga ./deploy/openfga
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev $(for e in $EXTRAS; do echo --extra $e; done)
 # COPY preserves the builder's permissions: a source tree checked out with a restrictive
@@ -45,7 +49,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # unprivileged runtime user, and the container exits with ModuleNotFoundError. The image
 # must not depend on how the build host happened to be set up. Only the copied sources need
 # this — the virtualenv is created inside the image with normal permissions.
-RUN chmod -R a+rX /app/src /app/sdk /app/integrations /app/migrations /app/alembic.ini
+RUN chmod -R a+rX /app/src /app/sdk /app/integrations /app/migrations /app/alembic.ini /app/deploy
 ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8080
 USER nobody
