@@ -25,7 +25,11 @@ from memory_service.modules.retrieval.engine import RetrievalEngine
 from memory_service.ports.search import SearchRecord
 from tests.security.test_isolation import TENANTS, _keys, _oracle, _spec
 
-pytestmark = pytest.mark.security
+# 288 reader configurations, each running the full retrieval pipeline over every visibility
+# variant of every tenant: this test is legitimately minutes long, and it was finishing in
+# 118 s against the suite-wide 120 s budget. It failed whenever the machine was busy — and a
+# security gate that people learn to re-run is worse than no gate.
+pytestmark = [pytest.mark.security, pytest.mark.timeout(900)]
 
 TEXT = "Adjusted EBITDA increased to EUR 98 million despite lower revenue"
 
