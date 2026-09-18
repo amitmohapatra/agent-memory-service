@@ -46,7 +46,15 @@ async def wire_all(container: Container) -> None:
     _wire_context_preservation(container)
     _wire_advanced_retrieval(container)
     _register_jobs(container)
-    log.info("wiring.done", dependencies=sorted(container.dependencies))
+    log.info(
+        "wiring.done",
+        dependencies=sorted(container.dependencies),
+        # The parser actually in use, not the one configured: an image built without the
+        # docling extra falls back to the builtin parser, and an operator should be able to
+        # see that from the startup log rather than from a document that parsed poorly.
+        parser=getattr(container.document_parser, "info", None)
+        and container.document_parser.info.name,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +218,8 @@ def _wire_archive(container: Container) -> None:
 
 
 def _wire_ingestion(container: Container) -> None:
+    import importlib.util
+
     from memory_service.adapters.parsers.builtin import BuiltinParser
     from memory_service.modules.ingestion.service import IngestionService
 
@@ -217,12 +227,22 @@ def _wire_ingestion(container: Container) -> None:
     builtin = BuiltinParser()
     parser = builtin
     if cfg.parser == "docling":
-        try:
-            from memory_service.adapters.parsers.docling_parser import DoclingParser
+        # DoclingParser imports docling lazily, on its first parse, so constructing it
+        # succeeds in an image built without the extra and the downgrade would only show up
+        # as poorly parsed documents much later. Check the dependency here instead.
+        if importlib.util.find_spec("docling") is None:
+            log.warning(
+                "docling.unavailable",
+                reason="docling is not installed; using the builtin parser",
+                hint='rebuild with --build-arg EXTRAS="gcp models docling"',
+            )
+        else:
+            try:
+                from memory_service.adapters.parsers.docling_parser import DoclingParser
 
-            parser = DoclingParser()
-        except Exception as exc:
-            log.warning("docling.unavailable", error=str(exc))
+                parser = DoclingParser()
+            except Exception as exc:
+                log.warning("docling.unavailable", error=str(exc))
     container.document_parser = parser
     container.services["ingestion"] = IngestionService(
         container.services["uow_factory"],
