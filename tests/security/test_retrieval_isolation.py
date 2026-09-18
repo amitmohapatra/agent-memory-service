@@ -160,12 +160,13 @@ async def test_every_reader_gets_only_authorized_records(engine_and_ids) -> None
         spec = _spec(reader)
         allowed = {rid for rid, obj in by_id.items() if spec.allows(obj["tenant"], _keys(obj))}
         ctx = MemoryExecutionContext(tenant_id=reader["tenant"], user_id=reader["user"])
-        got = {
-            c.record_id
-            for c in (
-                await engine.retrieve(ctx, TEXT, limit=len(by_id), visibility=spec)
-            ).candidates
-        }
+        returned = (await engine.retrieve(ctx, TEXT, limit=len(by_id), visibility=spec)).candidates
+        # Every record here carries the *same* text on purpose, so ranking cannot hide a
+        # leak — which also means deduplication collapses them onto one representative and
+        # records the rest as twins. Completeness is therefore "reachable", not "returned":
+        # every allowed record must be the representative or one of its duplicates.
+        got = {c.record_id for c in returned}
+        got |= {dup for c in returned for dup in (c.payload.get("duplicates") or [])}
         # completeness: the store returns everything the oracle allows (no over-filtering)
         assert got == allowed
         total_returned += len(got)

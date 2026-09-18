@@ -14,6 +14,7 @@ from typing import Any
 
 from memory_service.config.settings import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.ids import content_hash
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -464,8 +465,19 @@ def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
 
 
 def _dedup(candidates: list[Candidate]) -> list[Candidate]:
-    """Merge repeated record ids and collapse identical texts (same ``text_hash``, e.g. the
-    same document uploaded twice) onto the first occurrence, remembering the twins."""
+    """Merge repeated record ids and collapse identical texts onto the first occurrence.
+
+    Collapsing used to apply to chunks only — ``if c.kind == "chunk"`` — because memories
+    carry no ``text_hash`` in their search payload, so there was nothing to group them by.
+    The effect was that identical memories never collapsed at all. Measured on a live
+    bundle: eleven memory items with **two** distinct texts, six copies of one sentence and
+    five of another, crowding out every other piece of evidence. Hashing the text here
+    instead of trusting a payload field fixes it for data already indexed, with no reindex.
+
+    Candidates arrive ranked, so the first occurrence is the best-scoring one; the rest are
+    recorded as ``duplicates`` rather than discarded silently. Every twin already passed the
+    store's visibility filter, so collapsing cannot widen what this caller may see.
+    """
     seen: dict[str, Candidate] = {}
     by_hash: dict[str, Candidate] = {}
     for c in candidates:
@@ -474,12 +486,13 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
             existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
             existing.score = max(existing.score, c.score)
             continue
-        h = c.payload.get("text_hash") if c.kind == "chunk" else None
+        h = c.payload.get("text_hash") or (content_hash(c.text) if c.text else None)
         if h:
             twin = by_hash.get(h)
             if twin is not None:
                 twin.payload.setdefault("duplicates", []).append(c.record_id)
                 twin.score = max(twin.score, c.score)
+                twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
                 continue
             by_hash[h] = c
         seen[c.record_id] = c

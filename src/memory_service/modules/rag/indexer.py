@@ -333,6 +333,9 @@ class Indexer:
                             "observed_at": m.temporal.observed_at.isoformat(),
                             "thread_id": m.scope.thread_id,
                             "text": m.content[:2000],
+                            # so identical memories group in the store's payload rather than
+                            # being rehashed on every retrieval (see engine._dedup)
+                            "text_hash": content_hash(m.content),
                             "representation": "MEMORY",
                         },
                     )

@@ -265,18 +265,42 @@ class ArchiveService:
                 await uow.commit()
 
         # archive checksum mismatch on a sample of verified segments
+        #
+        # A mismatch used to be logged and nothing else, so every reconcile pass rediscovered
+        # the same segment and logged it again — observed firing every five minutes,
+        # indefinitely, on one segment. That is the worst of both: a real corruption is never
+        # acted on, and the noise hides the next one. A durable mismatch is corruption and is
+        # quarantined exactly like a missing object (the source messages stay STAGED and are
+        # requeued); a read that *failed* is transient and is left for the next pass.
         for seg in verified:
             try:
                 ref = await self.blob.head(seg.bucket, seg.key)
-                ok = ref.checksum_sha256 == seg.checksum_sha256 and await self.blob.verify(ref)
-            except Exception:
-                ok = False
-            if not ok:
+                mismatch = ref.checksum_sha256 != seg.checksum_sha256
+                if not mismatch:
+                    mismatch = not await self.blob.verify(ref)
+            except Exception as exc:
+                report["verify_unreadable"] = report.get("verify_unreadable", 0) + 1
+                log.warning(
+                    "archive.verify_unreadable",
+                    segment_id=seg.segment_id,
+                    key=seg.key,
+                    error=type(exc).__name__,
+                )
+                continue
+            if mismatch:
                 report["verify_mismatch"] += 1
                 reconciler_repairs_total.labels("checksum_mismatch").inc()
                 log.error(
-                    "archive.verified_segment_mismatch", segment_id=seg.segment_id, key=seg.key
+                    "archive.verified_segment_mismatch",
+                    segment_id=seg.segment_id,
+                    key=seg.key,
+                    action="quarantined",
                 )
+                async with self.uow_factory() as uow:
+                    await uow.archive.mark_failed(
+                        seg.segment_id, error="checksum mismatch at reconcile"
+                    )
+                    await uow.commit()
         return report
 
     def lifecycle_policy(self) -> dict[str, Any]:
