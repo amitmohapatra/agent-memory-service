@@ -3,9 +3,11 @@ API process both register them so inline/test queues can execute jobs in-process
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from memory_service.domain.revisions import RevisionKind
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import Queue
 
@@ -66,12 +68,48 @@ def register_handlers(container: Container) -> None:
             await graph.enrich_document(payload["tenant_id"], payload["document_id"])
 
     async def memory_index(payload: dict[str, Any]) -> None:
+        tenant_id, memory_ids = payload["tenant_id"], list(payload["memory_ids"])
         indexer = container.services.get("indexer")
         if indexer is not None:
-            await indexer.index_memories(payload["tenant_id"], list(payload["memory_ids"]))
+            await indexer.index_memories(tenant_id, memory_ids)
         graph = container.services.get("graph")
         if graph is not None:
-            await graph.enrich_memories(payload["tenant_id"], list(payload["memory_ids"]))
+            await graph.enrich_memories(tenant_id, memory_ids)
+        await _bump_for(tenant_id, memory_ids)
+
+    async def _bump_for(tenant_id: str, memory_ids: Sequence[str]) -> None:
+        """Move the revisions now that the memory is *findable*, not when it was written.
+
+        The writing transaction already bumps, but it does so while enqueuing this job — so
+        a context request arriving in between builds a bundle that cannot see the new memory
+        yet and caches it under the new revision. Nothing moved the revision again, so that
+        empty bundle stayed addressed for the whole cache TTL: a memory written now was
+        invisible to the query that motivated it for the next five minutes.
+
+        Bumping again here closes the window. It costs one extra build per write, which is
+        the correct trade: a cache that serves answers known to be stale is not a cache.
+        """
+        if not memory_ids:
+            return
+        async with uow_factory() as uow:
+            memories = await uow.memories.get_many(tenant_id, memory_ids)
+            touched = {
+                (kind, ident)
+                for memory in memories
+                for kind, ident in (
+                    (RevisionKind.USER, memory.scope.user_id),
+                    (RevisionKind.THREAD, memory.scope.thread_id),
+                    (RevisionKind.AGENT, memory.scope.agent_id),
+                )
+                if ident
+            }
+            for kind, ident in sorted(touched):
+                await uow.revisions.bump(tenant_id, kind, ident)
+            # A memory with no user, thread or agent is only reachable through the
+            # tenant-wide revision, so that one has to move for it to be seen at all.
+            if not touched and memories:
+                await uow.revisions.bump(tenant_id, RevisionKind.TENANT)
+            await uow.commit()
 
     async def memory_expire(payload: dict[str, Any]) -> None:
         """Mark SHORT_TERM memories past their TTL as EXPIRED and drop them from the index."""

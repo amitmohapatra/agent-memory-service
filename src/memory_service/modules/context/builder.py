@@ -155,10 +155,15 @@ class ContextBuilder:
 
     async def _revision_fingerprint(self, ctx: MemoryExecutionContext) -> str:
         async with self.uow_factory() as uow:
+            # Every revision a bundle's content depends on. AGENT and GRAPH were missing, so
+            # an agent-scoped memory or a graph enrichment bumped a counter nobody read and
+            # the bundle stayed cached regardless.
             keys = [
                 (RevisionKind.TENANT, ""),
                 (RevisionKind.USER, ctx.user_id or ""),
                 (RevisionKind.THREAD, ctx.thread_id or ""),
+                (RevisionKind.AGENT, ctx.agent_id or ""),
+                (RevisionKind.GRAPH, ""),
             ]
             values = await uow.revisions.get_many(ctx.tenant_id, keys)
         return stable_key(*(f"{k}={v}" for k, v in sorted(values.items())))
