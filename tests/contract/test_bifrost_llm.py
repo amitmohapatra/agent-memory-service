@@ -299,6 +299,122 @@ async def _rate_limited(settings) -> str | None:
     return message.strip().splitlines()[-1][-160:] or message[-160:]
 
 
+# --------------------------------- a rate limit has to say how long to wait
+
+
+@respx.mock
+async def test_a_rate_limit_tells_the_caller_how_long_to_wait() -> None:
+    """The SDK parses the delay — Gemini puts it in the response body, not a Retry-After
+    header — and stores it on the exception. `details` carries only what the gateway
+    literally said, so forwarding that alone dropped it, and nothing above this adapter
+    could tell "come back in 30 seconds" from "this is broken". That is the difference
+    between backpressure and an outage.
+    """
+    respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(
+            429,
+            json={
+                "error": {
+                    "code": "429",
+                    "message": (
+                        "Quota exceeded for metric: generate_content_free_tier_requests, "
+                        "limit: 20, model: gemini-3.6-flash\nPlease retry in 28.9s."
+                    ),
+                }
+            },
+        )
+    )
+    llm = BifrostLLM(_settings(max_retries=0))
+
+    with pytest.raises(DependencyUnavailable) as raised:
+        await llm.complete(_messages(), use="summaries")
+
+    assert raised.value.details["retry_after_seconds"] == 28.9
+    # Same key the circuit breaker already uses, so one caller-side branch handles both.
+    assert "llm circuit open" not in str(raised.value)
+    await llm.close()
+
+
+@respx.mock
+async def test_a_rate_limit_with_no_advice_says_nothing_rather_than_guessing() -> None:
+    respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(429, json={"error": {"code": "429", "message": "slow down"}})
+    )
+    llm = BifrostLLM(_settings(max_retries=0))
+
+    with pytest.raises(DependencyUnavailable) as raised:
+        await llm.complete(_messages(), use="summaries")
+
+    assert "retry_after_seconds" not in raised.value.details
+    await llm.close()
+
+
+# ------------------------------- an answer with no content is not a successful call
+
+
+def _exhausted() -> dict:
+    """200 OK, empty string, finish_reason=length — what a reasoning model returns when the
+    output budget went on thinking. Measured against gemini-3.6-flash."""
+    return {
+        "model": "gemini/gemini-3.6-flash",
+        "choices": [{"message": {"role": "assistant", "content": ""}, "finish_reason": "length"}],
+        "usage": {
+            "prompt_tokens": 12,
+            "completion_tokens": 57,
+            "completion_tokens_details": {"reasoning_tokens": 57},
+        },
+    }
+
+
+@respx.mock
+async def test_an_exhausted_budget_is_not_counted_as_a_successful_call() -> None:
+    """The success metric fires the moment the gateway answers 200, which is the right
+    place for latency and tokens and the wrong place to decide the call worked. An
+    exhausted budget was recorded ok and then raised at the call site, so the error rate
+    said the feature was healthy while every caller saw it fail."""
+    respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_exhausted()))
+    llm = BifrostLLM(_settings())
+    ok_before = _counter("summaries", "ok")
+    empty_before = _counter("summaries", "empty_output")
+
+    with pytest.raises(DependencyUnavailable, match="output budget was exhausted"):
+        await llm.complete(_messages(), use="summaries")
+
+    assert _counter("summaries", "empty_output") == empty_before + 1
+    assert _counter("summaries", "ok") == ok_before, (
+        "a call that returned nothing must not also be counted as a success"
+    )
+    await llm.close()
+
+
+@respx.mock
+async def test_source_logging_does_not_change_how_a_failure_presents() -> None:
+    """``log_source_text`` used to re-run the extraction inside the success path to get the
+    text for the log line. On an exhausted budget that raised from _success — after the
+    metrics, outside every except clause in _chat — so none of the failure accounting ran.
+    Turning logging on to investigate a problem must not move where the problem comes from.
+    """
+    respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_exhausted()))
+    llm = BifrostLLM(_settings(), log_source_text=True)
+    empty_before = _counter("summaries", "empty_output")
+
+    with pytest.raises(DependencyUnavailable, match="output budget was exhausted"):
+        await llm.complete(_messages(), use="summaries")
+
+    assert _counter("summaries", "empty_output") == empty_before + 1
+    await llm.close()
+
+
+@respx.mock
+async def test_source_logging_still_records_the_response_when_there_is_one() -> None:
+    respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(200, json=_chat("the answer"))
+    )
+    llm = BifrostLLM(_settings(), log_source_text=True)
+    assert (await llm.complete(_messages(), use="summaries")).text == "the answer"
+    await llm.close()
+
+
 @pytest.mark.bifrost
 async def test_live_bifrost_roundtrip() -> None:
     """Hits the running gateway. Needs MEMORY__MODELS__LLM__ENABLED=true plus model and key."""

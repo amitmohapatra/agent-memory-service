@@ -45,6 +45,18 @@ class LLMOutputInvalid(LLMCallFailed):
     retryable = False
 
 
+def _text_or_none(data: dict[str, Any]) -> str | None:
+    """The response text for a log line. Never raises: logging is not a control path."""
+    try:
+        choice = data["choices"][0]
+        content = (choice.get("message") or {}).get("content")
+    except (KeyError, IndexError, TypeError):
+        return None
+    if isinstance(content, list):
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    return content if isinstance(content, str) else None
+
+
 class DisabledLLM:
     """The LLM port when ``models.llm.enabled=false``: every call is a ProviderNotConfigured."""
 
@@ -135,14 +147,13 @@ class BifrostLLM:
         temperature: float = 0.0,
         use: str = "generic",
     ) -> LLMCompletion:
-        data = await self._chat(
+        return await self._chat(
             [m.model_dump() for m in messages],
             use=use,
             max_tokens=min(max_tokens, self.settings.max_tokens),
             temperature=temperature,
             source=messages,
         )
-        return self._completion(data)
 
     async def structured(
         self,
@@ -160,14 +171,14 @@ class BifrostLLM:
         last_error: Exception | None = None
         # one bounded repair round: feed the validation error back once
         for attempt in range(2):
-            data = await self._chat(
+            completion = await self._chat(
                 turns,
                 use=use,
                 max_tokens=min(max_tokens, self.settings.max_tokens),
                 source=messages,
                 response_format=response_format,
             )
-            text = self._completion(data).text
+            text = completion.text
             try:
                 parsed = _parse_json(text)
                 _validate(parsed, schema)
@@ -205,8 +216,12 @@ class BifrostLLM:
         temperature: float = 0.0,
         source: Sequence[LLMMessage],
         **extra: Any,
-    ) -> dict[str, Any]:
-        """One gateway call, with this service's breaker around the shared client's retries."""
+    ) -> LLMCompletion:
+        """One gateway call, with this service's breaker around the shared client's retries.
+
+        Returns the extracted completion rather than the raw payload: both callers want the
+        text, and the outcome recorded here depends on whether there is any.
+        """
         now = time.monotonic()
         if now < self._circuit_open_until:
             llm_requests_total.labels(use, "circuit_open").inc()
@@ -229,8 +244,23 @@ class BifrostLLM:
                 # Backpressure, not brokenness: the retries are already spent by the time this
                 # surfaces, but the breaker must not count it. See _failure.
                 self._failure(use, "exhausted", trips_circuit=False)
+                # Carry how long to wait. The SDK parses it — Gemini puts the delay in the
+                # response body rather than a Retry-After header — and stores it on the
+                # exception, but `details` is only whatever the gateway literally said, so
+                # forwarding that alone dropped it. Nothing above this adapter could tell
+                # "come back in 30 seconds" from "this is broken", which is the difference
+                # between backpressure and an outage. The key matches the one the circuit
+                # breaker already uses above.
                 raise LLMCallFailed(
-                    "llm gateway rate limited the request", details=exc.details
+                    "llm gateway rate limited the request",
+                    details={
+                        **exc.details,
+                        **(
+                            {"retry_after_seconds": round(exc.retry_after, 1)}
+                            if exc.retry_after is not None
+                            else {}
+                        ),
+                    },
                 ) from exc
             except Unreachable as exc:
                 self._failure(use, "exhausted")
@@ -247,8 +277,21 @@ class BifrostLLM:
                     outcome = f"http_{status}"
                 self._failure(use, outcome)
                 raise LLMCallFailed(str(exc), details=exc.details) from exc
+            # Extract before recording, because the outcome is not known until the content
+            # is. A reasoning model that spends its whole budget thinking answers 200 with
+            # an empty string, and counting that ok — which is what recording here used to
+            # do — made the error rate say the feature was healthy while every caller saw
+            # it fail.
+            try:
+                completion = self._completion(data)
+            except LLMCallFailed:
+                # Not a gateway problem and not transient: the budget is too small for this
+                # model and will be next time too. Tripping the breaker on it would take
+                # out the uses that are working.
+                self._failure(use, "empty_output", trips_circuit=False)
+                raise
             self._success(use, data, time.perf_counter() - started, current, model, source)
-        return data
+        return completion
 
     def _success(
         self,
@@ -281,8 +324,13 @@ class BifrostLLM:
             "latency_ms": round(elapsed * 1000, 1),
         }
         if self.log_source_text:
+            # Read defensively rather than through _completion(): that raises on an
+            # exhausted output budget, and raising *here* would mean the failure came out
+            # of the success path — after the metrics above, outside every except clause
+            # in _chat, so none of the failure accounting ran. Turning logging on to
+            # investigate a problem must not change how that problem presents.
             fields["prompt"] = [m.content for m in messages]
-            fields["response"] = self._completion(data).text
+            fields["response"] = _text_or_none(data)
         log.info("llm.call", **fields)
 
     def _failure(self, use: str, outcome: str, *, trips_circuit: bool = True) -> None:

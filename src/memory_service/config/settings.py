@@ -593,6 +593,31 @@ class Settings(BaseSettings):
             raise ValueError("llm.enabled=true requires models.llm.provider=bifrost")
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")
+        if self.models.llm.enabled and not self.models.llm.uses:
+            # Opting in per use is the design — each path falls back natively, so a use you
+            # have not enabled is a deterministic answer, not a broken one. What is not the
+            # design is the silence: with uses empty the service starts clean, reports
+            # "llm": "bifrost" on /version, and sends the gateway nothing at all. Every one
+            # of the eleven paths quietly takes its fallback, and the only way to find out
+            # is to notice that the token metrics never move.
+            raise ValueError(
+                "llm.enabled=true with models.llm.uses empty: nothing would call the model. "
+                "List the paths that may consult it, e.g. "
+                'MEMORY__MODELS__LLM__USES=["query_expansion","summaries"], or set '
+                "llm.enabled=false."
+            )
+        if self.models.llm.enabled and self.models.llm.fast_uses:
+            # fast_model is a separate credential in practice: it defaults to a different
+            # provider than model does. `self.fast_model or settings.model` in the adapter
+            # does not rescue a mismatch because the default is truthy — so setting MODEL
+            # and forgetting FAST_MODEL sends exactly the fast_uses to whatever the default
+            # happens to be, which on this deployment is a provider with no credit.
+            fast = set(self.models.llm.fast_uses) & set(self.models.llm.uses)
+            if fast and not self.models.llm.fast_model:
+                raise ValueError(
+                    f"models.llm.fast_uses {sorted(fast)} are enabled but fast_model is "
+                    "unset: those uses would silently route somewhere else"
+                )
         return self
 
     def redacted(self) -> dict[str, Any]:
