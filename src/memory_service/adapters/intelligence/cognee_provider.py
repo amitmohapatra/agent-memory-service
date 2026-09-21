@@ -118,4 +118,3 @@ class CogneeMemoryIntelligence:
         return ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="cognee: new"
         )
-

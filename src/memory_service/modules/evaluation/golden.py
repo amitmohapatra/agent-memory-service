@@ -177,5 +177,3 @@ def summarize(results: Sequence[QuestionResult], *, k: int) -> dict[str, Any]:
             for r in all_q
         ],
     }
-
-

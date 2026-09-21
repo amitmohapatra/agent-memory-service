@@ -133,4 +133,3 @@ class LangMemIntelligence:
         return ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="langmem: insert"
         )
-

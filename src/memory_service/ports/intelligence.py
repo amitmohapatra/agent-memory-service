@@ -94,6 +94,7 @@ class MemoryIntelligenceProvider(Protocol):
         ctx: MemoryExecutionContext,
     ) -> ConsolidationOutcome: ...
 
+
 # --------------------------------------------------------------------------
 # Graph
 # --------------------------------------------------------------------------

@@ -223,4 +223,3 @@ async def test_definitions_and_footnotes_still_expand(container, corpus) -> None
     assert "Dortmund" in joined or "Acme Industrial" in joined, (
         "expansion did not bring the referent into the returned context"
     )
-

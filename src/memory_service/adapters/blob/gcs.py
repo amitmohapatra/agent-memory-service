@@ -138,5 +138,3 @@ class GCSBlobStore:
             return True
         except Exception:
             return False
-
-

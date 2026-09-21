@@ -226,5 +226,3 @@ class GraphStage:
                     )
                 )
         return out
-
-

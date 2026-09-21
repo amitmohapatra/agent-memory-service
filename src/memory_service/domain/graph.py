@@ -92,5 +92,3 @@ def layer_for(predicate: str) -> GraphLayer:
     if p in _STRUCTURAL:
         return "structural"
     return "entity"
-
-

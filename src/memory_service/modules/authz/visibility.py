@@ -131,4 +131,3 @@ class VisibilitySpecification(BaseModel):
             must=dict(must),
             must_any={VISIBILITY_FIELD: sorted(self.keys)},
         )
-

@@ -19,5 +19,3 @@ class RevisionKind(StrEnum):
     DOCUMENT = "document"
     GRAPH = "graph"
     AGENT = "agent"
-
-

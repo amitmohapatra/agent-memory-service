@@ -165,4 +165,3 @@ class Mem0MemoryIntelligence:
         return ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason=f"mem0: {kind}"
         )
-

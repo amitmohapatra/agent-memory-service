@@ -77,5 +77,3 @@ def passes_time(r: Relation, *, as_of: datetime | None, valid_at: datetime | Non
         if r.invalidated_at is not None and r.invalidated_at <= valid_at:
             return False
     return True
-
-
