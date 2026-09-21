@@ -131,15 +131,15 @@ MODELS: tuple[Model, ...] = (
         "SPLADE learned sparse (gated)",
         runtime="onnx",
     ),
-    Model(
-        "answerai-colbert-small-v1",
-        "answerdotai/answerai-colbert-small-v1",
-        "late-interaction",
-        "ColBERT multivector rescoring (gated)",
-        runtime="onnx",
-    ),
     Model("gliner2-base", "fastino/gliner2-base-v1", "extraction", "zero-shot NER/RE tier"),
 )
+
+#: Docling resolves its layout and table models through the HuggingFace cache and downloads
+#: them on first use — which is a runtime download the service does not permit, and which
+#: fails outright in the runtime image (it runs as `nobody` with HOME=/nonexistent, so the
+#: first PDF came back as CorruptSource). Fetched here instead, into the directory
+#: MEMORY_DOCLING_ARTIFACTS points at.
+DOCLING_DIRECTORY = "docling"
 
 
 def manifest_path(root: Path) -> Path:
@@ -161,7 +161,11 @@ def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
 
     target = root / model.directory
     present = PRESENT[model.runtime]
-    if target.exists() and not force and (any(target.glob(present)) or any(target.glob(f"*/{present}"))):
+    if (
+        target.exists()
+        and not force
+        and (any(target.glob(present)) or any(target.glob(f"*/{present}")))
+    ):
         revision = HfApi().model_info(model.repo).sha
         return {"repo": model.repo, "revision": revision, "role": model.role, "cached": True}
     snapshot_download(
@@ -174,6 +178,63 @@ def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
     return {"repo": model.repo, "revision": revision, "role": model.role, "cached": False}
 
 
+def _fetch_docling(root: Path, *, force: bool = False) -> None:
+    """Docling ships its own downloader; use it rather than guessing repository names."""
+    target = root / DOCLING_DIRECTORY
+    if target.is_dir() and any(target.iterdir()) and not force:
+        sys.stdout.write(f"{DOCLING_DIRECTORY:38} cached\n")
+        return
+    try:
+        from docling.utils.model_downloader import download_models as fetch
+    except ImportError:
+        sys.stdout.write(
+            f"{DOCLING_DIRECTORY:38} skipped (docling not installed in this environment)\n"
+        )
+        return
+    sys.stdout.write(f"{DOCLING_DIRECTORY:38} <- docling layout/table models ... ")
+    sys.stdout.flush()
+    target.mkdir(parents=True, exist_ok=True)
+    # Exactly the models the parser is configured to use, and no others. The defaults also
+    # pull RapidOCR, code-formula and picture-classifier weights; the parser enables none of
+    # them, and the OCR download fails outright in a slim image (cv2 needs libxcb). Fetching
+    # what is not used is not free - it is disk, image size and a longer first start.
+    fetch(
+        output_dir=target,
+        force=force,
+        progress=False,
+        with_layout=True,
+        with_tableformer=True,
+        with_code_formula=False,
+        with_picture_classifier=False,
+        with_rapidocr=False,
+        with_easyocr=False,
+    )
+    sys.stdout.write("downloaded\n")
+
+
+def _catalogue() -> None:
+    """``--list``: everything ``--only`` will accept."""
+    for m in MODELS:
+        mark = "default  " if m.default else "challenger"
+        sys.stdout.write(f"{mark} {m.directory:38} {m.repo:46} {m.note}\n")
+    sys.stdout.write(
+        f"default   {DOCLING_DIRECTORY:38} {'(docling model_downloader)':46} "
+        "layout + table models for the docling parser\n"
+    )
+
+
+def _selection(only: set[str], fetch_all: bool) -> tuple[list[Model], bool]:
+    """Which catalogue entries to fetch, and whether docling is among them.
+
+    ``docling`` is not a HuggingFace repository in MODELS — docling's own downloader resolves
+    it — but it still has to be addressable by name, or ``--only docling`` fetches nothing and
+    exits 0, which reads as success.
+    """
+    if not only:
+        return [m for m in MODELS if m.default or fetch_all], True
+    return [m for m in MODELS if m.directory in only], DOCLING_DIRECTORY in only
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", default="models", help="target directory (default: models)")
@@ -184,20 +245,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
-        for m in MODELS:
-            mark = "default  " if m.default else "challenger"
-            sys.stdout.write(f"{mark} {m.directory:38} {m.repo:46} {m.note}\n")
+        _catalogue()
         return 0
 
-    wanted = [m for m in MODELS if m.default or args.all]
-    if args.only:
-        wanted = [m for m in MODELS if m.directory in set(args.only)]
-        if not wanted:
-            sys.stderr.write(f"no model matches {args.only}; try --list\n")
-            return 2
+    wanted, want_docling = _selection(set(args.only or ()), args.all)
+    if not wanted and not want_docling:
+        sys.stderr.write(f"no model matches {args.only}; try --list\n")
+        return 2
 
     root = Path(args.dir)
     root.mkdir(parents=True, exist_ok=True)
+    if want_docling:
+        _fetch_docling(root, force=args.force)
     manifest = load_manifest(root)
     failures: list[str] = []
     for model in wanted:

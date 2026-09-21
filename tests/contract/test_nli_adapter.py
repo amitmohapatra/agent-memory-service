@@ -3,9 +3,6 @@ DeBERTa adapter against real weights when ``MEMORY_MODELS_DIR`` holds them."""
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 
 from memory_service.adapters.models.nli import LexicalNLI

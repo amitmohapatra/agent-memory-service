@@ -151,7 +151,7 @@ class TestCandidates:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY__DATABASE__URL")
+@pytest.mark.skipif(not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY_TEST_DATABASE_URL")
 def test_embedding_benchmark_stand_in_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

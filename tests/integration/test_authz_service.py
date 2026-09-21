@@ -40,7 +40,11 @@ async def test_grants_create_expected_tuples(container) -> None:
     assert ("user:u1", "owner", "thread:acme/thr1") in tuples
     assert ("workspace:acme/ws1", "workspace", "thread:acme/thr1") in tuples
     assert ("thread:acme/thr1", "thread", "document:acme/doc1") in tuples
-    assert ("agent:research", "owner", "memory:acme/mem1") in tuples
+    # The agent principal is bound to the user it runs for: agent_id arrives in the request
+    # body and is not authenticated, so an unbound "agent:research" would be the same
+    # principal for every user who named that agent.
+    assert ("agent:u1/research", "owner", "memory:acme/mem1") in tuples
+    assert ("agent:research", "owner", "memory:acme/mem1") not in tuples
     assert await svc.allowed(ctx, "can_read", "document", "doc1")
     assert await svc.allowed(agent_ctx, "can_read", "memory", "mem1")
     assert not await svc.allowed(ctx, "can_read", "memory", "mem1")

@@ -32,20 +32,16 @@ from memory_service.domain.tools import (
     ToolPolicy,
 )
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.tools.cache import CachedOutput, ToolOutputCache, args_hash_for
+from memory_service.modules.tools.cache import ToolOutputCache, args_hash_for
 from memory_service.modules.tools.patterns import best_match, task_pattern
 from memory_service.modules.tools.procedures import (
     Procedure,
-    ProcedureStep,
     decayed,
     mine_procedure,
-    score_tool,
     validate_against_registry,
 )
 from memory_service.modules.tools.trajectories import build_trajectory, flatten
 from memory_service.observability.logging import get_logger
-from memory_service.observability.metrics import stage_seconds
-from memory_service.observability.tracing import span
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
@@ -75,14 +71,6 @@ class ToolSuggestion:
             "warnings": self.warnings,
             "evidence_status": self.evidence_status,
         }
-
-
-@dataclass
-class NextStep:
-    suggestions: list[ToolSuggestion]
-    stop: bool
-    matched_procedure: str | None = None
-    matched_prefix_length: int = 0
 
 
 class ToolMemoryService:
@@ -386,54 +374,6 @@ class ToolMemoryService:
         payload["script"] = procedure.render_script()
         payload["rendered"] = procedure.render()
         return payload
-
-
-def _template(step: ProcedureStep | None) -> dict[str, Any]:
-    if step is None:
-        return {}
-    out: dict[str, Any] = {}
-    for binding in step.bindings:
-        if binding.resolvable_from_trajectory:
-            out[binding.argument] = f"${{step{binding.source_step}.{binding.source_field}}}"
-        elif binding.literal is not None:
-            out[binding.argument] = binding.literal
-    return out
-
-
-def _longest_suffix_match(prefix: Sequence[str], tools: Sequence[str]) -> int:
-    """How far along the procedure the caller already is. The longest prefix of ``tools`` that
-    is a suffix of what has been called wins, so a retried or reordered start still matches."""
-    best = 0
-    for length in range(min(len(prefix), len(tools)), 0, -1):
-        if list(prefix[-length:]) == list(tools[:length]):
-            best = length
-            break
-    return best
-
-
-def _bind_from_prefix(
-    step: ProcedureStep, trajectory: Sequence[dict[str, Any]]
-) -> tuple[dict[str, Any], list[str]]:
-    """Fill the step's arguments from the outputs already produced. Returns the bound arguments
-    and the preconditions that could not be met."""
-    bound: dict[str, Any] = {}
-    unmet: list[str] = []
-    for binding in step.bindings:
-        if not binding.resolvable_from_trajectory:
-            if binding.literal is not None:
-                bound[binding.argument] = binding.literal
-            continue
-        index = binding.source_step
-        if index is None or index >= len(trajectory):
-            unmet.append(f"step{index}.{binding.source_field}")
-            continue
-        outputs = trajectory[index].get("output_fields") or {}
-        field_name = binding.source_field or ""
-        if field_name in outputs:
-            bound[binding.argument] = outputs[field_name]
-        else:
-            unmet.append(f"step{index}.{field_name}")
-    return bound, unmet
 
 
 def _render(value: Any) -> str:

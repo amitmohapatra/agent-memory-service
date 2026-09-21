@@ -79,17 +79,3 @@ def passes_time(r: Relation, *, as_of: datetime | None, valid_at: datetime | Non
     return True
 
 
-def adjudicate(a: Relation, b: Relation) -> tuple[Relation, Relation, str, str]:
-    """Two CURRENT facts in the same slot (subject, predicate) with different objects:
-    the more confident one wins; on a tie the more recently observed one. Returns
-    ``(winner, loser, why, loser_status)`` where the loser is SUPERSEDED when it is the
-    older statement (it was true, then replaced) and INVALIDATED when it is the newer one
-    (a less reliable claim rejected against an established fact)."""
-    if abs(a.confidence - b.confidence) > 1e-9:
-        winner, loser = (a, b) if a.confidence > b.confidence else (b, a)
-        why = f"higher confidence ({winner.confidence:.2f} vs {loser.confidence:.2f})"
-    else:
-        winner, loser = (a, b) if a.observed_at >= b.observed_at else (b, a)
-        why = "more recently observed at equal confidence"
-    loser_status = "SUPERSEDED" if loser.observed_at <= winner.observed_at else "INVALIDATED"
-    return winner, loser, why, loser_status

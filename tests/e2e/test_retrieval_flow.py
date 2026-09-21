@@ -51,7 +51,13 @@ def test_recall_and_context_over_http(client) -> None:
     r = client.post("/v1/recall", headers=H, json={"scope": scope, "query": Q, "limit": 5})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["query_type"] == "DOCUMENT_MULTI_HOP" and body["diagnostics"]["reranked"] is True
+    assert body["query_type"] == "DOCUMENT_MULTI_HOP"
+    # Reranking is off by default: measured significantly worse than fusion alone on this
+    # corpus (p=0.012, docs/MEASUREMENTS.md). The engine only sets this diagnostic when it
+    # actually reranks, so its *absence* is the contract now — asserting that here is what
+    # catches the flag being switched back on without a measurement to justify it.
+    assert "reranked" not in body["diagnostics"]
+    assert body["diagnostics"]["fused_candidates"] > 0
     assert 0 < len(body["results"]) <= 5
     top = body["results"][0]
     assert top["document_id"] == doc_id and top["page"] == 11

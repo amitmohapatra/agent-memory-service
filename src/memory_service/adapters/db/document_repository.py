@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -221,22 +222,6 @@ class SqlDocumentRepository:
                 archived_at=archived_at,
             )
         )
-
-    async def list_staged_archive(
-        self, *, older_than: datetime | None = None, limit: int = 200
-    ) -> list[Document]:
-        stmt = (
-            select(DocumentRow)
-            .where(
-                DocumentRow.archive_status == ArchiveStatus.STAGED.value,
-                DocumentRow.deleted_at.is_(None),
-            )
-            .order_by(DocumentRow.created_at)
-            .limit(limit)
-        )
-        if older_than is not None:
-            stmt = stmt.where(DocumentRow.created_at <= older_than)
-        return [_doc(r) for r in (await self.s.execute(stmt)).scalars().all()]
 
     async def add_version(self, version: DocumentVersion) -> None:
         self.s.add(
@@ -468,26 +453,25 @@ class SqlDocumentRepository:
         *,
         kinds: Sequence[ContextGraphEdge] | None = None,
     ) -> list[ContextEdge]:
-        if not source_ids:
-            return []
-        stmt = select(ContextEdgeRow).where(
-            ContextEdgeRow.tenant_id == tenant_id, ContextEdgeRow.source_id.in_(list(source_ids))
-        )
-        if kinds:
-            stmt = stmt.where(ContextEdgeRow.edge.in_([k.value for k in kinds]))
-        return [_edge(r) for r in (await self.s.execute(stmt)).scalars().all()]
+        return await self._edges(tenant_id, ContextEdgeRow.source_id, source_ids, kinds)
 
-    async def edges_to(
+    async def _edges(
         self,
         tenant_id: str,
-        target_ids: Sequence[str],
-        *,
-        kinds: Sequence[ContextGraphEdge] | None = None,
+        column: Any,
+        ids: Sequence[str],
+        kinds: Sequence[ContextGraphEdge] | None,
     ) -> list[ContextEdge]:
-        if not target_ids:
+        """Context edges on one end of the relation; the direction is the column.
+
+        The two public directions were the same eleven lines with ``source_id`` swapped for
+        ``target_id`` — the largest duplicated block in the code base, and one an added filter
+        would have to be remembered in twice.
+        """
+        if not ids:
             return []
         stmt = select(ContextEdgeRow).where(
-            ContextEdgeRow.tenant_id == tenant_id, ContextEdgeRow.target_id.in_(list(target_ids))
+            ContextEdgeRow.tenant_id == tenant_id, column.in_(list(ids))
         )
         if kinds:
             stmt = stmt.where(ContextEdgeRow.edge.in_([k.value for k in kinds]))

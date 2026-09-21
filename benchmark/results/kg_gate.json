@@ -100,7 +100,7 @@
   "noise_entities": 0,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "00359870050d69c3d6eb16f73caf8c0fcf557088",
+    "git_commit": "402856f803d64a13be60889e659bd12db222019b",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -168,8 +168,8 @@
     "packages": {
       "docling": "not-installed",
       "fastapi": "0.141.1",
-      "fastembed": "0.8.0",
-      "onnxruntime": "1.19.2",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
       "sentence-transformers": "not-installed",
@@ -180,7 +180,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-18T19:34:07.810175+00:00"
+    "timestamp": "2026-09-21T09:17:50.290752+00:00"
   },
   "provider": "native",
   "query_hit_rate": 1.0

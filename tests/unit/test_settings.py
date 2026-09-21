@@ -8,19 +8,14 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
     assert s.models.llm.enabled is False
     assert s.models.embedding.model == "ibm-granite/granite-embedding-small-english-r2"
     assert s.retrieval.bm25 and s.retrieval.dense and s.retrieval.fusion == "rrf"
-    for flag in (
-        "splade",
-        "colbert",
-        "pageindex",
-        "raptor",
-        "graph_ppr",
-        "late_chunking",
-        "minicoil",
-        "graphrag_global",
-    ):
-        assert getattr(s.retrieval, flag) is False, (
-            f"{flag} must be benchmark-gated (off by default)"
-        )
+    # `splade` is the one remaining benchmark-gated retrieval experiment. The other seven
+    # (colbert, pageindex, raptor, graph_ppr, late_chunking, minicoil, graphrag_global) were
+    # removed rather than left off: each named a capability something already-on provides,
+    # so keeping them meant carrying code and configuration that could only ever be verified
+    # to do nothing new.
+    assert s.retrieval.splade is False, "splade must be benchmark-gated (off by default)"
+    # `rerank` is off on measured evidence, not on caution — see RetrievalSettings.rerank.
+    assert s.retrieval.rerank is False
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:

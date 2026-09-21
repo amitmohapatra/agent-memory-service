@@ -111,6 +111,9 @@ class MemoryResult(BaseModel):
     owner_principal: str | None = None
     reinforcement_count: int = 1
     contributors: list[str] = Field(default_factory=list)
+    #: part of reinforcement_count that is the agent restating its own output (never raises
+    #: confidence) — without it, a high count and no contributors cannot be interpreted
+    echoes: int = 0
     contradicts: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
 

@@ -18,27 +18,37 @@ pytestmark = pytest.mark.integration
 
 
 def _candidate(record_id: str, text: str, score: float, *, kind: str = "memory", **payload):
-    return Candidate(record_id=record_id, kind=kind, text=text, score=score,
-                     retrievers=["fusion"], payload=payload)
+    return Candidate(
+        record_id=record_id,
+        kind=kind,
+        text=text,
+        score=score,
+        retrievers=["fusion"],
+        payload=payload,
+    )
 
 
 def test_identical_memories_collapse_onto_the_best_ranked() -> None:
-    out = _dedup([
-        _candidate("mem_a", "SKU-1 was reordered", 0.9),
-        _candidate("mem_b", "SKU-1 was reordered", 0.7),
-        _candidate("mem_c", "SKU-1 was reordered", 0.5),
-        _candidate("mem_d", "SKU-1 ships from EU-1", 0.4),
-    ])
+    out = _dedup(
+        [
+            _candidate("mem_a", "SKU-1 was reordered", 0.9),
+            _candidate("mem_b", "SKU-1 was reordered", 0.7),
+            _candidate("mem_c", "SKU-1 was reordered", 0.5),
+            _candidate("mem_d", "SKU-1 ships from EU-1", 0.4),
+        ]
+    )
     assert [c.record_id for c in out] == ["mem_a", "mem_d"]
     assert out[0].payload["duplicates"] == ["mem_b", "mem_c"]
 
 
 def test_no_twin_is_silently_lost() -> None:
     """A collapsed record is recorded, not discarded — a caller can still reach it."""
-    out = _dedup([
-        _candidate("mem_a", "same", 0.9),
-        _candidate("mem_b", "same", 0.8),
-    ])
+    out = _dedup(
+        [
+            _candidate("mem_a", "same", 0.9),
+            _candidate("mem_b", "same", 0.8),
+        ]
+    )
     reachable = {c.record_id for c in out} | {
         d for c in out for d in (c.payload.get("duplicates") or [])
     }
@@ -56,11 +66,13 @@ def test_the_survivor_keeps_the_best_score_and_every_retriever() -> None:
 
 def test_a_payload_hash_is_used_when_present() -> None:
     """Chunks carry text_hash; that path must keep working without rehashing."""
-    out = _dedup([
-        _candidate("chk_a", "page one", 0.9, kind="chunk", text_hash="h1"),
-        _candidate("chk_b", "page one rendered differently", 0.8, kind="chunk", text_hash="h1"),
-        _candidate("chk_c", "page two", 0.7, kind="chunk", text_hash="h2"),
-    ])
+    out = _dedup(
+        [
+            _candidate("chk_a", "page one", 0.9, kind="chunk", text_hash="h1"),
+            _candidate("chk_b", "page one rendered differently", 0.8, kind="chunk", text_hash="h1"),
+            _candidate("chk_c", "page two", 0.7, kind="chunk", text_hash="h2"),
+        ]
+    )
     assert [c.record_id for c in out] == ["chk_a", "chk_c"]
 
 

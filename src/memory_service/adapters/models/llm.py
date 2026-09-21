@@ -8,19 +8,21 @@ anywhere in this code base (enforced by ``tests/unit/test_architecture.py``).
 Bounded by construction: one timeout per call, ``max_retries`` retries with exponential
 backoff on transient failures (429/5xx/timeouts/connection errors), and a circuit breaker
 that fails fast for ``circuit_open_seconds`` after ``circuit_failure_threshold`` consecutive
-failures. Every call is traced (model, use, tokens, latency), metered and logged without
-prompt text unless ``log_source_text`` is on.
+failures. The timeout and the retries come from the ``bifrost-sdk`` client, shared with the
+agent harness; the breaker is this service's, because only it knows what a failure costs
+here. Every call is traced (model, use, tokens, latency), metered and logged without prompt
+text unless ``log_source_text`` is on.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from collections.abc import Sequence
 from typing import Any
 
 import httpx
+from bifrost_sdk import RETRYABLE, Bifrost, GatewayError, RateLimited, Unreachable
 
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
@@ -31,8 +33,6 @@ from memory_service.observability.tracing import span
 from memory_service.ports.models import LLMCompletion, LLMMessage, ProviderInfo
 
 log = get_logger(__name__)
-
-_RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 
 
 class LLMCallFailed(DependencyUnavailable):
@@ -106,17 +106,20 @@ class BifrostLLM:
         self.model = settings.model
         self.fast_model = settings.fast_model or settings.model
         self.log_source_text = log_source_text
-        headers = {"Content-Type": "application/json"}
-        if settings.api_key is not None:
-            headers["Authorization"] = f"Bearer {settings.api_key.get_secret_value()}"
-        self._client = client or httpx.AsyncClient(
-            base_url=settings.base_url.rstrip("/"),
-            headers=headers,
-            timeout=httpx.Timeout(
-                settings.timeout_seconds, connect=min(5.0, settings.timeout_seconds)
-            ),
+        #: Transport, retries and rate-limit handling live in the shared client; what stays
+        #: here is what is *this service's*: per-use model routing, metrics, spans and the
+        #: circuit breaker. The two were tangled before, and the half that was duplicated in
+        #: the agent harness drifted — both copies read ``Retry-After`` from the header only
+        #: and so ignored the providers that put the delay in the body.
+        self._gateway = Bifrost(
+            settings.base_url,
+            api_key=settings.api_key.get_secret_value() if settings.api_key else None,
+            timeout=settings.timeout_seconds,
+            max_retries=settings.max_retries,
+            backoff_seconds=settings.retry_backoff_seconds,
+            max_tokens=settings.max_tokens,
+            client=client,
         )
-        self._owns_client = client is None
         self._consecutive_failures = 0
         self._circuit_open_until = 0.0
 
@@ -132,13 +135,13 @@ class BifrostLLM:
         temperature: float = 0.0,
         use: str = "generic",
     ) -> LLMCompletion:
-        body = {
-            "model": self.model_for(use),
-            "messages": [m.model_dump() for m in messages],
-            "max_tokens": min(max_tokens, self.settings.max_tokens),
-            "temperature": temperature,
-        }
-        data = await self._chat(body, use=use, messages=messages)
+        data = await self._chat(
+            [m.model_dump() for m in messages],
+            use=use,
+            max_tokens=min(max_tokens, self.settings.max_tokens),
+            temperature=temperature,
+            source=messages,
+        )
         return self._completion(data)
 
     async def structured(
@@ -149,20 +152,21 @@ class BifrostLLM:
         max_tokens: int = 1024,
         use: str = "generic",
     ) -> dict[str, Any]:
-        body = {
-            "model": self.model_for(use),
-            "messages": [m.model_dump() for m in messages],
-            "max_tokens": min(max_tokens, self.settings.max_tokens),
-            "temperature": 0.0,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": "result", "schema": schema, "strict": True},
-            },
+        turns = [m.model_dump() for m in messages]
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {"name": "result", "schema": schema, "strict": True},
         }
         last_error: Exception | None = None
         # one bounded repair round: feed the validation error back once
         for attempt in range(2):
-            data = await self._chat(body, use=use, messages=messages)
+            data = await self._chat(
+                turns,
+                use=use,
+                max_tokens=min(max_tokens, self.settings.max_tokens),
+                source=messages,
+                response_format=response_format,
+            )
             text = self._completion(data).text
             try:
                 parsed = _parse_json(text)
@@ -171,38 +175,38 @@ class BifrostLLM:
             except LLMOutputInvalid as exc:
                 last_error = exc
                 if attempt == 0:
-                    body = {
-                        **body,
-                        "messages": [
-                            *body["messages"],
-                            {"role": "assistant", "content": text[:4000]},
-                            {
-                                "role": "user",
-                                "content": (
-                                    "That output was invalid: "
-                                    f"{exc.message}. Return only JSON matching the schema."
-                                ),
-                            },
-                        ],
-                    }
+                    turns = [
+                        *turns,
+                        {"role": "assistant", "content": text[:4000]},
+                        {
+                            "role": "user",
+                            "content": (
+                                "That output was invalid: "
+                                f"{exc.message}. Return only JSON matching the schema."
+                            ),
+                        },
+                    ]
         llm_requests_total.labels(use, "invalid_output").inc()
         raise last_error or LLMOutputInvalid("structured output invalid")
 
     async def ping(self) -> bool:
-        try:
-            resp = await self._client.get("/models", timeout=3.0)
-        except httpx.HTTPError:
-            return False
-        return resp.status_code < 500
+        return await self._gateway.ping()
 
     async def close(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
+        await self._gateway.aclose()
 
     # ------------------------------------------------------------------ internals
     async def _chat(
-        self, body: dict[str, Any], *, use: str, messages: Sequence[LLMMessage]
+        self,
+        turns: list[dict[str, Any]],
+        *,
+        use: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+        source: Sequence[LLMMessage],
+        **extra: Any,
     ) -> dict[str, Any]:
+        """One gateway call, with this service's breaker around the shared client's retries."""
         now = time.monotonic()
         if now < self._circuit_open_until:
             llm_requests_total.labels(use, "circuit_open").inc()
@@ -210,41 +214,41 @@ class BifrostLLM:
                 "llm circuit open",
                 details={"retry_after_seconds": round(self._circuit_open_until - now, 1)},
             )
-        attempts = self.settings.max_retries + 1
+        model = self.model_for(use)
         started = time.perf_counter()
-        with span("llm.chat", use=use, model=body["model"]) as current:
-            for attempt in range(attempts):
-                try:
-                    resp = await self._client.post("/chat/completions", json=body)
-                except (httpx.TimeoutException, httpx.TransportError) as exc:
-                    err: Exception = DependencyUnavailable(
-                        f"llm gateway unreachable ({type(exc).__name__})"
-                    )
-                    retry = True
-                else:
-                    if resp.status_code < 400:
-                        try:
-                            data = resp.json()
-                        except ValueError as exc:
-                            self._failure(use, "bad_payload")
-                            raise LLMCallFailed("llm gateway returned non-JSON body") from exc
-                        elapsed = time.perf_counter() - started
-                        self._success(use, data, elapsed, current, body, messages)
-                        return data
-                    retry = resp.status_code in _RETRYABLE_STATUS
-                    err = LLMCallFailed(
-                        f"llm gateway returned {resp.status_code}",
-                        details={"status": resp.status_code, "body": resp.text[:300]},
-                    )
-                    if not retry:
-                        self._failure(use, f"http_{resp.status_code}")
-                        raise err
-                if attempt + 1 < attempts and retry:
-                    await asyncio.sleep(self.settings.retry_backoff_seconds * (2**attempt))
-                    continue
+        with span("llm.chat", use=use, model=model) as current:
+            try:
+                data = await self._gateway.complete(
+                    turns,
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    **extra,
+                )
+            except RateLimited as exc:
+                # Backpressure, not brokenness: the retries are already spent by the time this
+                # surfaces, but the breaker must not count it. See _failure.
+                self._failure(use, "exhausted", trips_circuit=False)
+                raise LLMCallFailed(
+                    "llm gateway rate limited the request", details=exc.details
+                ) from exc
+            except Unreachable as exc:
                 self._failure(use, "exhausted")
-                raise err
-        raise LLMCallFailed("unreachable")  # pragma: no cover
+                raise DependencyUnavailable(str(exc)) from exc
+            except GatewayError as exc:
+                status = exc.details.get("status")
+                # A retryable status only reaches here once the client has given up on it;
+                # anything else was refused on the first attempt and is named by its status.
+                if status is None:
+                    outcome = "bad_payload"
+                elif status in RETRYABLE:
+                    outcome = "exhausted"
+                else:
+                    outcome = f"http_{status}"
+                self._failure(use, outcome)
+                raise LLMCallFailed(str(exc), details=exc.details) from exc
+            self._success(use, data, time.perf_counter() - started, current, model, source)
+        return data
 
     def _success(
         self,
@@ -252,7 +256,7 @@ class BifrostLLM:
         data: dict[str, Any],
         elapsed: float,
         current: Any,
-        body: dict[str, Any],
+        model: str,
         messages: Sequence[LLMMessage],
     ) -> None:
         self._consecutive_failures = 0
@@ -271,7 +275,7 @@ class BifrostLLM:
         current.set_attribute("llm.latency_ms", round(elapsed * 1000, 1))
         fields: dict[str, Any] = {
             "use": use,
-            "model": data.get("model") or body["model"],
+            "model": data.get("model") or model,
             "input_tokens": in_tok,
             "output_tokens": out_tok,
             "latency_ms": round(elapsed * 1000, 1),
@@ -281,9 +285,20 @@ class BifrostLLM:
             fields["response"] = self._completion(data).text
         log.info("llm.call", **fields)
 
-    def _failure(self, use: str, outcome: str) -> None:
-        self._consecutive_failures += 1
+    def _failure(self, use: str, outcome: str, *, trips_circuit: bool = True) -> None:
+        """Record a failed call. ``trips_circuit=False`` for backpressure, not brokenness.
+
+        The circuit breaker exists so that a *broken* gateway costs one timeout instead of one
+        per request. A 429 is the opposite situation: the gateway is healthy and telling us to
+        slow down. Counting it as a failure converted "slow down" into "stop", and because the
+        breaker stays open for a fixed window every paced call that followed failed instantly
+        without ever reaching the gateway. Measured on a real run: 17 rate limits tripped the
+        breaker and the next 62 calls failed with "circuit open" having sent nothing at all.
+        """
         llm_requests_total.labels(use, outcome).inc()
+        if not trips_circuit:
+            return
+        self._consecutive_failures += 1
         if self._consecutive_failures >= self.settings.circuit_failure_threshold:
             self._circuit_open_until = time.monotonic() + self.settings.circuit_open_seconds
             log.warning(
@@ -305,6 +320,22 @@ class BifrostLLM:
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMCallFailed("llm gateway returned no choices") from exc
         usage = data.get("usage") or {}
+        # Reasoning models spend the output budget on thinking before they emit anything, so
+        # a too-small `max_tokens` comes back 200 OK with an empty string and a `length`
+        # finish reason. Measured against gemini-3.6-flash: "Reply with exactly: OK" burned 57
+        # reasoning tokens, so max_tokens=16 produced no content at all. Returning "" here let
+        # that reach every call site as a silently degraded answer. Say what happened instead.
+        if not content and choice.get("finish_reason") == "length":
+            reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            raise LLMCallFailed(
+                "llm returned no content: the output budget was exhausted before any text "
+                "was produced (raise models.llm.max_tokens)",
+                details={
+                    "finish_reason": "length",
+                    "completion_tokens": usage.get("completion_tokens"),
+                    "reasoning_tokens": reasoning,
+                },
+            )
         return LLMCompletion(
             text=str(content or ""),
             input_tokens=usage.get("prompt_tokens"),

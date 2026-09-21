@@ -255,7 +255,34 @@ class ContextBuilder:
                         cache_key, bundle.model_dump_json().encode(), ttl_seconds=self.cache_ttl
                     )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
+        await self._record_access(ctx, bundle)
         return bundle
+
+    async def _record_access(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
+        """Count a memory as used when it actually reaches the caller.
+
+        The forgetting policy scores
+        ``importance * 0.5**(idle/half_life) * (1 - 0.5**(accesses + reinforcements))`` and
+        reads ``access_count`` and ``last_accessed_at``. Migration 0006 added those columns for
+        it. Nothing ever incremented them: ``bump_access`` existed on the repository and on the
+        port and had no call site anywhere, so ``access_count`` stayed 0 for every memory and
+        the access term collapsed to the constant 0.5. Decay was running on importance and
+        recency alone, and the "frequently used memories survive" half of the policy silently
+        did nothing — while looking, in the code and in the migration, entirely present.
+
+        Served, not merely retrieved: candidates that were ranked but dropped by the token
+        budget never reached anyone and must not count as use, or every query would reinforce
+        memories nobody read.
+        """
+        ids = [item.item_id for item in bundle.memories if item.item_id]
+        if not ids:
+            return
+        try:
+            async with self.uow_factory() as uow:
+                await uow.memories.bump_access(ctx.tenant_id, ids, at=datetime.now(UTC))
+                await uow.commit()
+        except Exception as exc:  # usage accounting must never fail a read
+            log.warning("memory.access_bump_failed", error_message=str(exc), count=len(ids))
 
     async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:
         """A bundle built earlier under the caller's tenant, while it is still cached."""
@@ -478,13 +505,6 @@ class ContextBuilder:
             revision_fingerprint=revision_fp,
             diagnostics=diagnostics,
         )
-
-
-def _group_targets(result: RetrievalResult) -> list[list[str]]:
-    """Acceptable node ids per required group, in ``required_groups`` order."""
-    targets = result.diagnostics.get("evidence_targets") or {}
-    groups = (result.diagnostics.get("evidence") or {}).get("required_groups", [])
-    return [list(targets.get(g, [])) for g in groups]
 
 
 def rolling_summary(messages: Sequence[Message], *, max_chars: int = 600) -> str:

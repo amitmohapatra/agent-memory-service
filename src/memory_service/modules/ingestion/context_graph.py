@@ -293,6 +293,34 @@ def build_context_graph(
                 add(kid.node_id, kids[i - 1].node_id, ContextGraphEdge.PREVIOUS)
                 add(kids[i - 1].node_id, kid.node_id, ContextGraphEdge.NEXT)
 
+    # Reading order across section boundaries.
+    #
+    # The sibling pass above links children of the *same* parent, so the last paragraph of one
+    # section and the first of the next are never connected — and that is exactly where a
+    # referent goes missing: "Acme is headquartered in Dortmund" under Overview, "the city
+    # hosts its largest facility" under Operations. Neighbour expansion could not cross it, so
+    # the answer reached the model without the thing it refers to.
+    #
+    # Only consecutive *leaves* are linked, and only where the sibling pass did not already
+    # connect them, so this adds one edge pair per section transition rather than growing the
+    # fan-out (already ~10 edges per chunk).
+    leaves = sorted(
+        (
+            n
+            for n in nodes
+            if n.text
+            and n.representation
+            not in (Representation.DOCUMENT, Representation.SECTION, Representation.SUBSECTION)
+        ),
+        key=lambda n: (n.page_start or 0, n.ordinal),
+    )
+    for i in range(1, len(leaves)):
+        previous, current = leaves[i - 1], leaves[i]
+        if previous.parent_id == current.parent_id:
+            continue  # already linked as siblings
+        add(current.node_id, previous.node_id, ContextGraphEdge.PREVIOUS)
+        add(previous.node_id, current.node_id, ContextGraphEdge.NEXT)
+
     # ON_PAGE
     for n in nodes:
         if n.page_start is not None and n.representation not in (

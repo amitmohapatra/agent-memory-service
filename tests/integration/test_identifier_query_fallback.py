@@ -22,8 +22,11 @@ pytestmark = [pytest.mark.integration, requires_pg]
 
 def _ctx() -> MemoryExecutionContext:
     return MemoryExecutionContext(
-        tenant_id="acme", user_id="u-ident", workspace_id="ws1",
-        agent_id="ident-agent", thread_id=new_id("thread"),
+        tenant_id="acme",
+        user_id="u-ident",
+        workspace_id="ws1",
+        agent_id="ident-agent",
+        thread_id=new_id("thread"),
     )
 
 

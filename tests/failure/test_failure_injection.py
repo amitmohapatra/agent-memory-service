@@ -35,7 +35,7 @@ from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.ports.tasks import Queue
 from memory_service.tools.reindex import rebuild_search_index
-from tests.integration.conftest import DB_URL, TABLES, integration_settings, requires_pg
+from tests.integration.conftest import TABLES, integration_settings, requires_pg
 
 pytestmark = [pytest.mark.failure, requires_pg]
 

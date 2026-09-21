@@ -351,36 +351,6 @@ def recency_weight(when: datetime | None, *, now: datetime | None = None) -> flo
     return 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
 
 
-def score_tool(
-    *,
-    in_procedure: bool,
-    procedure_position: int | None,
-    success_rate: float,
-    invocations: int,
-    last_used_at: datetime | None,
-    failed_recently: bool,
-    now: datetime | None = None,
-) -> float:
-    """procedure match x outcome statistics x recency, minus a penalty for a known failure.
-
-    Confidence in the outcome term grows with the number of observations, so one lucky call
-    does not outrank a tool with a long record.
-    """
-    procedure_term = 0.0
-    if in_procedure:
-        procedure_term = 1.0 if procedure_position == 0 else 0.8
-    confidence = min(1.0, invocations / 5.0)
-    outcome_term = success_rate * confidence
-    score = (
-        W_PROCEDURE * procedure_term
-        + W_OUTCOME * outcome_term
-        + W_RECENCY * recency_weight(last_used_at, now=now)
-    )
-    if failed_recently:
-        score -= FAILURE_PENALTY
-    return max(0.0, round(score, 6))
-
-
 def decayed(procedure: Procedure, *, idle_days: float = 60.0, now: datetime | None = None) -> bool:
     """Decay rule: a procedure nobody has used for ``idle_days``, or whose success rate has
     fallen below half, is archived rather than offered."""

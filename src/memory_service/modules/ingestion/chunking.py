@@ -24,7 +24,16 @@ from memory_service.modules.ingestion.context_graph import extract_entities
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
 
-_SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"(])")
+#: Sentence boundary: terminal punctuation followed by whitespace.
+#:
+#: This used to require the *next* character to be uppercase or a digit, which meant text
+#: that does not capitalise sentences never split at all — OCR output, chat logs, and every
+#: non-capitalising script (Chinese, Japanese, Arabic, Hebrew, Devanagari). A paragraph of
+#: such text became one chunk of any size, and the encoder truncated it at its context
+#: window with nothing reporting the loss. Requiring whitespace after the punctuation still
+#: keeps "3.5 million" and "v1.2" intact, which is what the lookahead was really protecting.
+#: The fullwidth forms are CJK sentence terminators, not typos for the ASCII ones.
+_SENTENCE = re.compile(r"(?<=[.!?。！？])\s+")  # noqa: RUF001
 
 _CONTEXT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -53,6 +62,42 @@ _CONTEXT_SYSTEM = (
 _CONTEXT_MAX_CHARS = 400
 
 
+def _document_salience(nodes: list[DocumentNode], *, keep: int = 8) -> list[str]:
+    """The entities this document is *about*, by how often they are named.
+
+    A first attempt walked the node tree upwards, which turned out to be a no-op: the parser
+    gives DOCUMENT and SECTION nodes empty text, so ancestors carry no entities, and the
+    subject of a document is almost always introduced in a *sibling* section — "Acme is
+    headquartered in Dortmund" under Overview, "the city hosts its largest facility" under
+    Operations. Ancestry cannot reach across that; document scope can.
+
+    Frequency is the salience signal: a name repeated through a document is what the document
+    is about, and a name mentioned once is not worth crowding every chunk header with.
+    """
+    counts: dict[str, int] = {}
+    for node in nodes:
+        for name in node.entities or extract_entities(node.text or ""):
+            counts[name] = counts.get(name, 0) + 1
+    return [name for name, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:keep]]
+
+
+def _chunk_entities(
+    node: DocumentNode, document_entities: list[str], *, limit: int = 12
+) -> list[str]:
+    """The node's own entities first, then the document's salient ones.
+
+    This is the deterministic half of what late chunking does with attention — and unlike late
+    chunking it puts the proper noun in the *text*, so BM25 benefits too. That matters more
+    here than the dense side: retrieval on an external corpus held up even with a random
+    embedding, so the lexical path is carrying the result. It also needs no token-level access
+    to the model, so it survives moving inference to a served tier.
+    """
+    seen: dict[str, None] = dict.fromkeys(node.entities or extract_entities(node.text or ""))
+    for name in document_entities:
+        seen.setdefault(name, None)
+    return list(seen)[:limit]
+
+
 def contextual_header(
     *,
     document_title: str,
@@ -73,10 +118,41 @@ def contextual_header(
     return "\n".join(lines)
 
 
+def _hard_split(text: str, max_tokens: int) -> list[str]:
+    """Last-resort split on whitespace when there is no punctuation to cut on.
+
+    Minified JSON, a CSV export stripped of newlines, a scriptio-continua language: none of
+    them contain sentence boundaries, and without this a chunk of any length reaches the
+    encoder, which truncates at its context window and silently drops the tail. The budget
+    has to hold for every input, not only well-formed prose.
+    """
+    words = text.split()
+    if not words:
+        return []
+    parts: list[str] = []
+    current: list[str] = []
+    for word in words:
+        current.append(word)
+        if estimate_tokens(" ".join(current)) >= max_tokens:
+            parts.append(" ".join(current))
+            current = []
+    if current:
+        parts.append(" ".join(current))
+    return parts
+
+
 def _split_sentences(text: str, max_tokens: int, overlap_tokens: int) -> list[str]:
     sentences = [s.strip() for s in _SENTENCE.split(text) if s.strip()]
     if not sentences:
         return [text]
+    # a "sentence" longer than the whole budget is not a sentence
+    expanded: list[str] = []
+    for sentence in sentences:
+        if estimate_tokens(sentence) > max_tokens:
+            expanded.extend(_hard_split(sentence, max_tokens))
+        else:
+            expanded.append(sentence)
+    sentences = expanded
     parts: list[str] = []
     current: list[str] = []
     current_tokens = 0
@@ -152,6 +228,7 @@ def chunk_nodes(
     contextual: bool = True,
 ) -> list[Chunk]:
     chunks: list[Chunk] = []
+    document_entities = _document_salience(nodes)
     for node in nodes:
         if (
             node.representation
@@ -159,7 +236,7 @@ def chunk_nodes(
             or not node.text
         ):
             continue
-        entities = node.entities or extract_entities(node.text)
+        entities = _chunk_entities(node, document_entities)
         tokens = node.token_estimate or estimate_tokens(node.text)
         if tokens <= max_tokens:
             parts = [node.text]

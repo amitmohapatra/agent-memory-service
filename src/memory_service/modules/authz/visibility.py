@@ -132,5 +132,3 @@ class VisibilitySpecification(BaseModel):
             must_any={VISIBILITY_FIELD: sorted(self.keys)},
         )
 
-    def sorted_keys(self) -> list[str]:
-        return sorted(self.keys)

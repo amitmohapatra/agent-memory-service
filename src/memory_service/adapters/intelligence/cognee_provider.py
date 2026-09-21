@@ -119,5 +119,3 @@ class CogneeMemoryIntelligence:
             decision=DedupDecision.CREATE, candidate=candidate, reason="cognee: new"
         )
 
-    async def search_features(self, query: str, ctx: MemoryExecutionContext) -> dict[str, Any]:
-        return {}

@@ -139,8 +139,26 @@ class MemoryExecutionContext(BaseModel):
     # ------------------------------------------------------------------
     @property
     def principal_id(self) -> str:
-        """The acting principal: an agent run if present, else the user, else the service."""
+        """The acting principal: an agent run if present, else the user, else the service.
+
+        An agent principal is **bound to the user it runs for**, because ``agent_id`` arrives
+        in the request body and is not authenticated — only ``tenant_id``, ``user_id`` and
+        ``workspace_id`` come from trusted headers (api/deps.py:85-104). A bare
+        ``agent:{agent_id}`` therefore let any caller assume any agent's identity simply by
+        naming it, and read everything that agent had marked PRIVATE.
+
+        Reproduced against a live service before this was changed: user ``mallory`` sending
+        ``agent_id=worker`` read a PRIVATE memory owned by ``agent:worker`` and written for a
+        different user — HTTP 200. Without the agent_id the same request was correctly 403.
+
+        Two users each running an agent called "research" are two principals, which is also
+        the behaviour anyone would expect. An agent running with no user at all — an
+        ingestion job, an unattended scheduled run — keeps the bare form, since there is no
+        user to bind it to and nothing for a caller to impersonate their way into.
+        """
         if self.agent_id is not None:
+            if self.user_id is not None:
+                return f"agent:{self.user_id}/{self.agent_id}"
             return f"agent:{self.agent_id}"
         if self.user_id is not None:
             return f"user:{self.user_id}"

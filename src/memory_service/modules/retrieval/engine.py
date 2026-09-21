@@ -14,8 +14,8 @@ from typing import Any
 
 from memory_service.config.settings import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.ids import content_hash
 from memory_service.domain.enums import QueryType, Representation
+from memory_service.domain.ids import content_hash
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
@@ -152,6 +152,16 @@ class RetrievalEngine:
         visibility: VisibilitySpecification | None = None,
     ) -> RetrievalResult:
         limit = limit or self.cfg.final_k
+        # Bound the query before anything expensive touches it. See
+        # RetrievalSettings.max_query_chars: the cost of a query is paid again for every
+        # cross-encoder pair, and the embedding models truncate at 512 tokens anyway.
+        if len(query) > self.cfg.max_query_chars:
+            log.warning(
+                "retrieval.query_truncated",
+                original_chars=len(query),
+                kept_chars=self.cfg.max_query_chars,
+            )
+            query = query[: self.cfg.max_query_chars]
         has_thread = ctx.thread_id is not None
         routed = self.router.route(query, has_thread=has_thread)
         search_text = routed.query

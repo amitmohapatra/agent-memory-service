@@ -126,23 +126,6 @@ class AuthorizationService:
                 "Access denied", details={"relation": relation, "object_type": obj_type}
             )
 
-    async def filter_allowed(
-        self, ctx: MemoryExecutionContext, relation: str, obj_type: str, idents: Sequence[str]
-    ) -> list[str]:
-        """Per-object checks for the truncated-scope fallback (bounded by the caller)."""
-        if not idents:
-            return []
-        checks = [
-            AccessCheck(
-                user=ctx.principal_id,
-                relation=relation,
-                object=f"{obj_type}:{object_id(ctx.tenant_id, i)}",
-            )
-            for i in idents
-        ]
-        results = await self.provider.batch_check(checks)
-        return [i for i, ok in zip(idents, results, strict=True) if ok]
-
     # -- grants -----------------------------------------------------------------
     async def grant_thread(
         self, ctx: MemoryExecutionContext, thread_id: str, *, workspace_id: str | None = None

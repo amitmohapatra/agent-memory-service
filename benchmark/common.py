@@ -110,3 +110,38 @@ def write_result(name: str, payload: dict[str, Any]) -> Path:
         json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
     return path
+
+
+async def reset_store(container: object, tenant_id: str) -> dict[str, int]:
+    """Clear everything a benchmark wrote, in *both* stores.
+
+    Every harness here began with ``TRUNCATE`` over the SQL tables and stopped there — and the
+    vector store is a separate server that a SQL truncation does not touch. So each run left
+    its vectors behind and the next run competed against them. Measured: a 600-document
+    SciFact run found 4,288 points under its tenant where ~780 belonged to it, and orphaned
+    vectors from earlier runs took top-ten slots that could never map back to the corpus. The
+    same benchmark scored nDCG@10 = 0.766 on a clean store and 0.358 on a dirty one, with no
+    code change between them.
+
+    Returns what was removed, so a caller can log it rather than assume it worked.
+    """
+    from sqlalchemy import text
+
+    from benchmark.retrieval import TABLES
+    from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
+    from memory_service.ports.search import SearchFilter
+
+    async with container.database.engine.begin() as conn:  # type: ignore[attr-defined]
+        await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+
+    removed: dict[str, int] = {}
+    indexer = container.services["indexer"]  # type: ignore[attr-defined]
+    flt = SearchFilter(tenant_id=tenant_id)
+    for base in (KNOWLEDGE, MEMORIES):
+        name = indexer.collection(base)
+        try:
+            removed[base] = await container.search.delete_by_filter(name, flt)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001 - a missing collection is not a failure
+            removed[base] = -1
+            sys.stderr.write(f"reset_store: {name}: {type(exc).__name__}: {exc}\n")
+    return removed

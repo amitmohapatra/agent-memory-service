@@ -32,7 +32,6 @@ from memory_service.ports.search import (
 
 DENSE = "dense"
 SPARSE = "bm25"
-LATE = "late"
 
 
 def point_id(record_id: str) -> str:
@@ -101,16 +100,6 @@ class QdrantSearchStore:
                     vectors[DENSE] = models.VectorParams(
                         size=spec.dense_dim, distance=models.Distance.COSINE, on_disk=spec.on_disk
                     )
-                if spec.late_interaction_dim:
-                    vectors[LATE] = models.VectorParams(
-                        size=spec.late_interaction_dim,
-                        distance=models.Distance.COSINE,
-                        on_disk=spec.on_disk,
-                        multivector_config=models.MultiVectorConfig(
-                            comparator=models.MultiVectorComparator.MAX_SIM
-                        ),
-                        hnsw_config=models.HnswConfigDiff(m=0),  # reranker-style use only
-                    )
                 sparse = (
                     {
                         SPARSE: models.SparseVectorParams(
@@ -146,8 +135,6 @@ class QdrantSearchStore:
             vector: dict[str, Any] = {}
             if r.dense is not None:
                 vector[DENSE] = list(r.dense)
-            if r.late_interaction:
-                vector[LATE] = [list(v) for v in r.late_interaction]
             if r.sparse is not None:
                 vector[SPARSE] = models.SparseVector(
                     indices=r.sparse.indices, values=r.sparse.values
@@ -237,31 +224,6 @@ class QdrantSearchStore:
                 with_payload=True,
             )
         return [self._hit(p, "bm25") for p in res.points]
-
-    async def search_late(
-        self,
-        collection: str,
-        vectors: Sequence[Sequence[float]],
-        flt: SearchFilter,
-        *,
-        limit: int,
-    ) -> list[SearchHit]:
-        """ColBERT-style MaxSim over the multivector field."""
-        with span("search.late"), stage_seconds.labels("retrieval.late").time():
-            try:
-                res = await self._client.query_points(
-                    collection_name=self._name(collection),
-                    query=[list(v) for v in vectors],
-                    using=LATE,
-                    query_filter=_filter(flt),
-                    limit=limit,
-                    with_payload=True,
-                )
-            except Exception as exc:
-                raise DependencyUnavailable(
-                    f"qdrant late-interaction query failed: {type(exc).__name__}: {exc}"
-                ) from exc
-        return [self._hit(p, "late_interaction") for p in res.points]
 
     async def search_hybrid(
         self,

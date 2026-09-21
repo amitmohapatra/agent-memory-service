@@ -167,7 +167,9 @@ class LangGraphMemory:
         record = self.record_messages if record_messages is None else record_messages
         budget = self.token_budget if token_budget is None else token_budget
         max_rate = (
-            self.max_hallucination_rate if max_hallucination_rate is None else max_hallucination_rate
+            self.max_hallucination_rate
+            if max_hallucination_rate is None
+            else max_hallucination_rate
         )
 
         async def wrapped(state: Any, config=None) -> Any:

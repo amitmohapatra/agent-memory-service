@@ -167,7 +167,9 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     hit = next(i for i in items if "412" in i.text)
     got = await auditor.get_memory(hit.item_id)
     assert got.visibility == "AGENT_GROUP" and got.reinforcement_count == 2
-    assert got.owner_principal == "agent:planner" and got.contributors == ["agent:writer"]
+    # Bound to the user the agent runs for: agent_id is unauthenticated request body.
+    assert got.owner_principal == "agent:u1/planner"
+    assert got.contributors == ["agent:u1/writer"]
     # a conflicting single-valued fact from another agent is kept, linked, never overwritten
     await planner.remember("My manager is Dana.", memory_type="SHARED", visibility="AGENT_GROUP")
     await auditor.remember("My manager is Lee.", memory_type="SHARED", visibility="AGENT_GROUP")

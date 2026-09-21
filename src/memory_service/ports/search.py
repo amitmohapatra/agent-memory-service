@@ -32,9 +32,6 @@ class SearchRecord(BaseModel):
     tenant_id: str
     dense: list[float] | None = None
     sparse: SparseVector | None = None
-    late_interaction: list[list[float]] | None = Field(
-        default=None, description="ColBERT multivectors"
-    )
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -53,7 +50,7 @@ class SearchFilter(BaseModel):
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
 
 
-Retriever = Literal["dense", "sparse", "bm25", "late_interaction", "exact", "fusion"]
+Retriever = Literal["dense", "sparse", "bm25", "exact", "fusion"]
 
 
 class SearchHit(BaseModel):
@@ -72,7 +69,6 @@ class CollectionSpec(BaseModel):
     dense_dim: int | None = None
     sparse: bool = True
     sparse_idf: bool = Field(default=True, description="server-side IDF modifier (BM25)")
-    late_interaction_dim: int | None = None
     on_disk: bool = False
 
 

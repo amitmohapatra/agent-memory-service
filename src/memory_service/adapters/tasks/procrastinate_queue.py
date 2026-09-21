@@ -186,13 +186,6 @@ class ProcrastinateTaskQueue:
             )
         return None
 
-    async def cancel(self, job_id: str) -> bool:
-        await self.open()
-        try:
-            return bool(await self.app.job_manager.cancel_job_by_id_async(int(job_id)))
-        except (ValueError, TypeError, pexc.ProcrastinateException):
-            return False
-
     async def run_worker(
         self, queues: list[Queue] | None = None, *, concurrency: int = 4, wait: bool = True
     ) -> None:

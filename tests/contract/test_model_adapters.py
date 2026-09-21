@@ -179,7 +179,9 @@ async def test_granite_real_weights_contract() -> None:
     """Runs only when real weights are present (MEMORY_MODELS_DIR)."""
     root = os.environ.get("MEMORY_MODELS_DIR")
     if not root:
-        pytest.skip("MEMORY_MODELS_DIR not set — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)")
+        pytest.skip(
+            "MEMORY_MODELS_DIR not set — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)"
+        )
     path = Path(root) / "granite-embedding-small-english-r2"
     if not path.exists():
         pytest.skip(f"{path} not present")

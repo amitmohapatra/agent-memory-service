@@ -55,7 +55,9 @@ async def test_indexing_moves_the_revisions_again_so_a_bundle_cached_mid_write_i
     ctx = _ctx()
     async with container.services["uow_factory"]() as uow:
         await container.services["memory"].submit_observation(
-            uow, ctx, kind=ObservationKind.EVENT,
+            uow,
+            ctx,
+            kind=ObservationKind.EVENT,
             content="SKU-31 is discontinued as of September.",
         )
         await uow.commit()
@@ -91,7 +93,9 @@ async def test_the_bundle_is_rebuilt_once_the_memory_is_indexed(container) -> No
 
     async with container.services["uow_factory"]() as uow:
         await container.services["memory"].submit_observation(
-            uow, ctx, kind=ObservationKind.EVENT,
+            uow,
+            ctx,
+            kind=ObservationKind.EVENT,
             content="SKU-31 is discontinued as of September.",
         )
         await uow.commit()

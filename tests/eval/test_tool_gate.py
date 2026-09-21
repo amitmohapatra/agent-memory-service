@@ -18,7 +18,6 @@ from benchmark.common import RESULTS, provenance
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
-from memory_service.domain.tools import ToolDescriptor, ToolPolicy
 
 pytestmark = pytest.mark.eval
 
@@ -81,7 +80,6 @@ async def test_tool_gate(container, uow_factory) -> None:
     for run in training:
         await _replay(container, service, run)
 
-    all_tools = {c["tool"] for r in runs for c in r["invocations"]}
     ops_tools = {
         c["tool"] for r in runs if r.get("agent_id") == "ops-agent" for c in r["invocations"]
     }

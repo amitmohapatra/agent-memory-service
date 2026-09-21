@@ -155,17 +155,6 @@ class SqlToolRepository:
         ).scalar_one_or_none()
         return _to_descriptor(row) if row is not None else None
 
-    async def list_tools(self, tenant_id: str, *, limit: int = 500) -> list[ToolDescriptor]:
-        rows = (
-            await self.s.execute(
-                select(ToolRow)
-                .where(ToolRow.tenant_id == tenant_id)
-                .order_by(ToolRow.name, ToolRow.version.desc())
-                .limit(limit)
-            )
-        ).scalars()
-        return [_to_descriptor(r) for r in rows]
-
     async def stats(
         self, tenant_id: str, *, names: Sequence[str] | None = None
     ) -> list[ToolOutcomeStats]:
@@ -281,27 +270,6 @@ class SqlToolRepository:
         stmt = stmt.order_by(ToolInvocationRow.occurred_at.desc()).limit(limit)
         return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
 
-    async def successful_runs(
-        self, tenant_id: str, *, task_pattern: str, limit: int = 100
-    ) -> list[str]:
-        stmt = (
-            select(ToolInvocationRow.run_id)
-            .join(
-                RunOutcomeRow,
-                (RunOutcomeRow.run_id == ToolInvocationRow.run_id)
-                & (RunOutcomeRow.tenant_id == ToolInvocationRow.tenant_id),
-            )
-            .where(
-                ToolInvocationRow.tenant_id == tenant_id,
-                ToolInvocationRow.task_pattern == task_pattern,
-                RunOutcomeRow.success.is_(True),
-                ToolInvocationRow.run_id.isnot(None),
-            )
-            .distinct()
-            .limit(limit)
-        )
-        return [r for r in (await self.s.execute(stmt)).scalars() if r]
-
     async def mark_indexed(self, tenant_id: str, invocation_ids: Sequence[str]) -> None:
         if not invocation_ids:
             return
@@ -313,15 +281,6 @@ class SqlToolRepository:
             )
             .values(indexed_at=datetime.now(UTC))
         )
-
-    async def unindexed(
-        self, tenant_id: str | None = None, *, limit: int = 200
-    ) -> list[ToolInvocation]:
-        stmt = select(ToolInvocationRow).where(ToolInvocationRow.indexed_at.is_(None))
-        if tenant_id is not None:
-            stmt = stmt.where(ToolInvocationRow.tenant_id == tenant_id)
-        stmt = stmt.order_by(ToolInvocationRow.occurred_at).limit(limit)
-        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
 
     # ------------------------------------------------------------------ outcomes
     async def set_outcome(self, outcome: RunOutcome) -> None:

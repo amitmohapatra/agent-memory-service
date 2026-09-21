@@ -1,0 +1,311 @@
+{
+  "ablation": {},
+  "abstention_rate_on_adversarial": 0.0,
+  "answer_recall_at_k": 0.2222,
+  "by_category": {
+    "adversarial": {
+      "n": 3,
+      "score": 0.0
+    },
+    "multi_hop": {
+      "n": 2,
+      "score": 0.0
+    },
+    "open_domain": {
+      "n": 1,
+      "score": 0.0
+    },
+    "single_hop": {
+      "n": 4,
+      "score": 0.25
+    },
+    "temporal": {
+      "n": 2,
+      "score": 0.5
+    }
+  },
+  "dataset": {
+    "conversations": 1,
+    "name": "LoCoMo (snap-research/locomo)",
+    "questions": 12
+  },
+  "embedding_provider": "sentence_transformers",
+  "evidence_recall": 0.4444,
+  "k": 10,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-19T22:48:56.411812+00:00"
+  },
+  "query_p50_ms": 1658.9,
+  "query_p95_ms": 2120.7,
+  "records": [
+    {
+      "abstained": false,
+      "answer": "clarinet and violin",
+      "answer_overlap": 0.0,
+      "category": "multi_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3571,
+      "hit": false,
+      "question": "What instruments does Melanie play?",
+      "rendered_chars": 1235,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Mentoring program, school speech",
+      "answer_overlap": 0.0,
+      "category": "multi_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5217,
+      "hit": false,
+      "question": "What events has Caroline participated in to help children?",
+      "rendered_chars": 1472,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "2 July 2023",
+      "answer_overlap": 0.6667,
+      "category": "temporal",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5938,
+      "hit": true,
+      "question": "When did Melanie sign up for a pottery class?",
+      "rendered_chars": 1306,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The weekend before 13 September 2023",
+      "answer_overlap": 0.2,
+      "category": "temporal",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2188,
+      "hit": false,
+      "question": "When did Caroline go biking with friends?",
+      "rendered_chars": 1362,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "LIkely no; though she likes reading, she wants to be a counselor",
+      "answer_overlap": 0.0,
+      "category": "open_domain",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3421,
+      "hit": false,
+      "question": "Would Caroline pursue writing as a career option?",
+      "rendered_chars": 1370,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Melanie's daughter",
+      "answer_overlap": 0.5,
+      "category": "single_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3714,
+      "hit": false,
+      "question": "Whose birthday did Melanie celebrate recently?",
+      "rendered_chars": 1536,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Grateful and thankful for her family",
+      "answer_overlap": 0.0,
+      "category": "single_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5429,
+      "hit": false,
+      "question": "How did Melanie feel after the accident?",
+      "rendered_chars": 1387,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "7 years",
+      "answer_overlap": 0.0,
+      "category": "single_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2857,
+      "hit": false,
+      "question": "How long has Melanie been creating art?",
+      "rendered_chars": 1328,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Her mental health",
+      "answer_overlap": 0.6667,
+      "category": "single_hop",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6111,
+      "hit": true,
+      "question": "What does Melanie say running has been great for?",
+      "rendered_chars": 1093,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "category": "adversarial",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4848,
+      "hit": false,
+      "question": "What was grandpa's gift to Caroline?",
+      "rendered_chars": 1389,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "category": "adversarial",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2292,
+      "hit": false,
+      "question": "What kind of counseling and mental health services is Melanie interested in pursuing?",
+      "rendered_chars": 1300,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "category": "adversarial",
+      "chunks": 0,
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1875,
+      "hit": false,
+      "question": "What setback did Caroline face recently?",
+      "rendered_chars": 1338,
+      "status": "COMPLETE",
+      "strict_substring": false
+    }
+  ],
+  "representative": true,
+  "scoring": {
+    "answer_overlap_hit": 0.6,
+    "evidence_overlap_hit": 0.5,
+    "note": "generation is disabled, so answers are not judged - these are token-recall proxies over the retrieved bundle. Per-question overlaps are in `records`; rescore from them rather than re-running."
+  },
+  "strict_recall": 0.0,
+  "total_seconds": 125.7
+}

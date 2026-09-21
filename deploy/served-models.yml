@@ -1,0 +1,30 @@
+# The service with a *served* model tier: no weights in the API or the worker.
+#
+#   docker compose --profile models -f docker-compose.yml -f deploy/served-models.yml up -d
+#
+# Without this overlay the service loads the models in-process from ./models, which is the
+# right default for a single-machine development run and the wrong one for anything that has
+# to scale: the API, the worker and every model then share one memory budget and one CPU
+# budget, and the only way to add reranking capacity is to add API capacity.
+#
+# With it, each model answers on its own URL and the service holds none of the weights.
+services:
+  memory-api:
+    environment:
+      MEMORY__MODELS__EMBEDDING__URL: http://memory-embed:80
+      MEMORY__MODELS__RERANKER__URL: http://memory-rerank:80
+      MEMORY__MODELS__NLI__URL: http://memory-nli:80
+      MEMORY__MODELS__SPARSE_URL: http://memory-sparse:80
+    depends_on:
+      memory-embed: {condition: service_healthy}
+      memory-rerank: {condition: service_healthy}
+      memory-sparse: {condition: service_healthy}
+  memory-worker:
+    environment:
+      MEMORY__MODELS__EMBEDDING__URL: http://memory-embed:80
+      MEMORY__MODELS__RERANKER__URL: http://memory-rerank:80
+      MEMORY__MODELS__NLI__URL: http://memory-nli:80
+      MEMORY__MODELS__SPARSE_URL: http://memory-sparse:80
+    depends_on:
+      memory-embed: {condition: service_healthy}
+      memory-sparse: {condition: service_healthy}

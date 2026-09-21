@@ -16,7 +16,7 @@ needs the retrieved candidates' payload (document_id, page, text).
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -179,6 +179,3 @@ def summarize(results: Sequence[QuestionResult], *, k: int) -> dict[str, Any]:
     }
 
 
-def alias_for(document_id: str | None, aliases: Mapping[str, str]) -> str | None:
-    """Map a document_id back to its golden alias (aliases: document_id -> alias)."""
-    return aliases.get(document_id or "")

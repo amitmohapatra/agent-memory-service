@@ -522,6 +522,24 @@ wheels = [
 ]
 
 [[package]]
+name = "bifrost-sdk"
+version = "0.1.0"
+source = { editable = "vendor/bifrost-sdk" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "black"
 version = "26.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3804,6 +3822,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "bifrost-sdk" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "openfga-sdk" },
@@ -3922,6 +3941,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.20,<2" },
+    { name = "bifrost-sdk", editable = "vendor/bifrost-sdk" },
     { name = "cognee", marker = "extra == 'cognee'", specifier = ">=1.5" },
     { name = "datasets", marker = "extra == 'eval'", specifier = ">=3" },
     { name = "deepeval", marker = "extra == 'eval'", specifier = ">=4.2" },

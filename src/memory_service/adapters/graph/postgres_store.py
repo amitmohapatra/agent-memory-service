@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from memory_service.adapters.db.orm import GraphEntityAliasRow, GraphEntityRow, GraphRelationRow
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
-from memory_service.domain.ids import stable_key
 from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -273,53 +272,6 @@ class PostgresGraphStore:
         await self.upsert_relations([edge])
         return edge
 
-    async def invalidate_for_document(
-        self,
-        tenant_id: str,
-        document_id: str,
-        *,
-        keep: Sequence[str],
-        at: datetime,
-        reason: str,
-    ) -> int:
-        async with self.session() as s, s.begin():
-            conds = [
-                GraphRelationRow.tenant_id == tenant_id,
-                GraphRelationRow.document_id == document_id,
-                GraphRelationRow.status == "CURRENT",
-            ]
-            if keep:
-                conds.append(GraphRelationRow.relation_id.not_in(list(keep)))
-            res = await s.execute(
-                update(GraphRelationRow)
-                .where(*conds)
-                .values(
-                    status="INVALIDATED",
-                    invalidated_at=at,
-                    updated_at=at,
-                    attributes=GraphRelationRow.attributes.op("||")(
-                        {"invalidation": {"reason": reason, "at": at.isoformat(), "by": None}}
-                    ),
-                )
-                .returning(GraphRelationRow.relation_id)
-            )
-            return len(res.scalars().all())
-
-    async def invalidations(self, tenant_id: str, relation_ids: Sequence[str]) -> list[Relation]:
-        if not relation_ids:
-            return []
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphRelationRow).where(
-                        GraphRelationRow.tenant_id == tenant_id,
-                        GraphRelationRow.predicate == INVALIDATED_BY,
-                        GraphRelationRow.subject_id.in_(list(relation_ids)),
-                    )
-                )
-            ).all()
-        return [_relation(r) for r in rows]
-
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         async with self.session() as s, s.begin():
             res = await s.execute(
@@ -374,25 +326,6 @@ class PostgresGraphStore:
             ).all()
         return [_entity(r) for r in rows]
 
-    async def list_tenant_entities(
-        self, tenant_id: str, *, entity_types: Sequence[str] = (), limit: int = 300
-    ) -> list[Entity]:
-        if limit <= 0:
-            return []
-        conds = [GraphEntityRow.tenant_id == tenant_id]
-        if entity_types:
-            conds.append(GraphEntityRow.entity_type.in_(list(entity_types)))
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphEntityRow)
-                    .where(*conds)
-                    .order_by(GraphEntityRow.mention_count.desc(), GraphEntityRow.canonical_name)
-                    .limit(limit)
-                )
-            ).all()
-        return [_entity(r) for r in rows]
-
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]:
@@ -409,70 +342,6 @@ class PostgresGraphStore:
                 )
             ).all()
         return [_entity(r) for r in rows]
-
-    async def entities_by_id(self, tenant_id: str, entity_ids: Sequence[str]) -> list[Entity]:
-        if not entity_ids:
-            return []
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphEntityRow).where(
-                        GraphEntityRow.tenant_id == tenant_id,
-                        GraphEntityRow.entity_id.in_(list(entity_ids)),
-                    )
-                )
-            ).all()
-        return [_entity(r) for r in rows]
-
-    async def set_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None:
-        if not summaries:
-            return
-        async with self.session() as s, s.begin():
-            for eid, summary in summaries.items():
-                await s.execute(
-                    update(GraphEntityRow)
-                    .where(GraphEntityRow.tenant_id == tenant_id, GraphEntityRow.entity_id == eid)
-                    .values(summary=summary, updated_at=func.now())
-                )
-
-    async def upsert_aliases(self, aliases: Sequence[EntityAlias]) -> None:
-        if not aliases:
-            return
-        async with self.session() as s, s.begin():
-            for a in aliases:
-                stmt = insert(GraphEntityAliasRow).values(
-                    alias_id="als_" + stable_key(a.tenant_id, a.alias, a.entity_id),
-                    tenant_id=a.tenant_id,
-                    alias=a.alias[:300],
-                    entity_id=a.entity_id,
-                    confidence=a.confidence,
-                    source=a.source,
-                )
-                stmt = stmt.on_conflict_do_update(
-                    constraint="uq_graph_entity_alias",
-                    set_={
-                        "confidence": func.greatest(
-                            GraphEntityAliasRow.confidence, stmt.excluded.confidence
-                        ),
-                        "updated_at": func.now(),
-                    },
-                )
-                await s.execute(stmt)
-
-    async def find_aliases(self, tenant_id: str, aliases: Sequence[str]) -> list[EntityAlias]:
-        wanted = [a for a in aliases if a]
-        if not wanted:
-            return []
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphEntityAliasRow).where(
-                        GraphEntityAliasRow.tenant_id == tenant_id,
-                        GraphEntityAliasRow.alias.in_(wanted),
-                    )
-                )
-            ).all()
-        return [_alias(r) for r in rows]
 
     async def neighborhood(
         self,
@@ -557,42 +426,6 @@ class PostgresGraphStore:
             conds.append(GraphRelationRow.status != "INVALIDATED")
         async with self.session() as s:
             rows = (await s.scalars(select(GraphRelationRow).where(*conds))).all()
-        return [_relation(r) for r in rows]
-
-    async def relations_touching(
-        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int = 2000
-    ) -> list[Relation]:
-        if not entity_ids or limit <= 0:
-            return []
-        ids = list(entity_ids)
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphRelationRow)
-                    .where(
-                        GraphRelationRow.tenant_id == tenant_id,
-                        GraphRelationRow.status == "CURRENT",
-                        or_(
-                            GraphRelationRow.subject_id.in_(ids),
-                            GraphRelationRow.object_id.in_(ids),
-                        ),
-                    )
-                    .order_by(GraphRelationRow.confidence.desc(), GraphRelationRow.relation_id)
-                    .limit(limit)
-                )
-            ).all()
-        return [_relation(r) for r in rows]
-
-    async def relations_for_memory(self, tenant_id: str, memory_id: str) -> list[Relation]:
-        async with self.session() as s:
-            rows = (
-                await s.scalars(
-                    select(GraphRelationRow).where(
-                        GraphRelationRow.tenant_id == tenant_id,
-                        GraphRelationRow.memory_id == memory_id,
-                    )
-                )
-            ).all()
         return [_relation(r) for r in rows]
 
     async def count(self, tenant_id: str) -> tuple[int, int]:

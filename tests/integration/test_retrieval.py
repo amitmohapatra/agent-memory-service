@@ -177,7 +177,12 @@ async def test_thread_private_document_is_not_visible_to_other_users(
 
 async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) -> None:
     doc_id = await _ingest(container, uow_factory)
+    # Reranking is off by default now — it measured significantly worse on SciFact (see
+    # RetrievalSettings.rerank). This test is *about* the rerank stage, so it turns the flag
+    # on explicitly rather than inheriting whatever the default happens to be; that keeps the
+    # stage covered while the default reflects the evidence.
     engine = container.services["retrieval"]
+    engine.cfg = engine.cfg.model_copy(update={"rerank": True})
     async with uow_factory() as uow:
         chunks = await uow.documents.list_chunks("acme", doc_id)
     target = next(c for c in chunks if "increased to EUR 98" in c.text)

@@ -42,9 +42,16 @@ class VersionResponse(BaseModel):
     version: str = Field(..., examples=["0.1.0"])
     api_version: str = Field(..., examples=["v1"])
     environment: str = Field(..., examples=["dev"])
+    degraded: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Capabilities running below what was configured — a parser that fell back, a "
+            "stand-in classifier. Empty means the service is what it was asked to be."
+        ),
+    )
     providers: dict[str, Any] = Field(
         default_factory=dict,
-        description="Enabled provider per port (no secrets).",
+        description="The provider actually running per port (no secrets).",
         examples=[
             {
                 "cache": "dragonfly",
@@ -114,11 +121,45 @@ async def version(request: Request) -> VersionResponse:
             "tasks": s.tasks.provider,
             "authorization": s.authorization.provider,
             "policy": s.policy.provider,
-            "embedding": f"{s.models.embedding.provider}:{s.models.embedding.model}",
-            "reranker": f"{s.models.reranker.provider}:{s.models.reranker.model}",
+            "embedding": _active(c.embedding, f"{s.models.embedding.provider}"),
+            "reranker": _active(c.reranker, s.models.reranker.provider),
             "llm": s.models.llm.provider if s.models.llm.enabled else "disabled",
             "memory_intelligence": s.memory_intelligence.provider,
             "graph_enrichment": s.graph_enrichment.provider,
-            "document_parser": s.documents.parser,
+            # what is *running*, not what was asked for: `documents.parser` says "docling"
+            # even in an image built without it, where the builtin is doing the work. An
+            # endpoint that reports the request rather than the reality is worse than silent.
+            "document_parser": _active(c.document_parser, s.documents.parser),
         },
+        degraded=_degraded(c, s),
     )
+
+
+def _active(provider: Any, configured: str) -> str:
+    info = getattr(provider, "info", None)
+    return getattr(info, "name", None) or configured
+
+
+def _degraded(c: Any, s: Any) -> list[str]:
+    """Where the running service is not what the configuration asked for.
+
+    Each of these is a capability that falls back rather than failing, so nothing else in the
+    system reports it: the document parser downgrades to the builtin when docling is absent,
+    and the NLI head downgrades to a lexical stand-in. Both keep serving — with quietly worse
+    output — which is exactly the kind of thing that should be visible without reading logs.
+    """
+    notes: list[str] = []
+    active_parser = _active(c.document_parser, s.documents.parser)
+    if s.documents.parser != active_parser:
+        notes.append(
+            f"document_parser: configured {s.documents.parser!r}, running {active_parser!r}"
+        )
+    if s.models.nli.provider != "disabled" and getattr(c.nli, "representative", True) is False:
+        notes.append("nli: running a non-representative stand-in; grounding verdicts are weak")
+    if (
+        s.retrieval.splade
+        and c.sparse is not None
+        and "splade" not in _active(c.sparse, "").casefold()
+    ):
+        notes.append(f"sparse: splade requested, running {_active(c.sparse, 'bm25')!r}")
+    return notes

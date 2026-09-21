@@ -12,8 +12,6 @@ expansion chunks are visibility-checked against the same specification the store
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import datetime
 from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
@@ -106,14 +104,12 @@ class GraphStage:
         max_facts: int = 12,
         max_expansion_chunks: int = 6,
         max_visited: int = 80,
-        ppr: bool = False,
     ) -> None:
         self.graph = graph
         self.uow_factory = uow_factory
         self.max_facts = max_facts
         self.max_expansion_chunks = max_expansion_chunks
         self.max_visited = max_visited  # retrieval-time traversal is tighter than /v1/graph
-        self.ppr = ppr  # M10: personalised PageRank ranks facts/evidence by graph centrality
 
     async def __call__(
         self,
@@ -130,7 +126,14 @@ class GraphStage:
             answer = await self.graph.query(
                 ctx,
                 query=routed.query,
-                hops=2 if routed.query_type in _MULTI_HOP_TYPES else 1,
+                # Three, not two, for a *two*-hop question. Entities are linked through
+                # the document that mentions them ("mentioned_in"), so two entities in
+                # different chunks of one document are already two graph hops apart before
+                # the question's own hop is spent: Acme -> acme-report -> Westfalen ->
+                # Bergmann answers "who leads the freight operator used by Acme?" and needs
+                # three. At two the traversal stopped on Westfalen and the answer was never
+                # retrieved. ``max_visited`` (80 at retrieval time) is what bounds the cost.
+                hops=3 if routed.query_type in _MULTI_HOP_TYPES else 1,
                 as_of=as_of,
                 visibility=visibility,
                 max_visited=self.max_visited,
@@ -145,34 +148,20 @@ class GraphStage:
                 return candidates
             names = {e.entity_id: e.name for e in answer.entities}
             seeds = {e.entity_id for e in answer.matched}
-            if self.ppr:
-                scores = personalized_pagerank(answer.relations, seeds)
-                ranked = _distinct(
-                    sorted(
-                        answer.relations,
-                        key=lambda r: (
-                            -(scores.get(r.subject_id, 0.0) + scores.get(r.object_id, 0.0))
-                            * r.confidence,
-                            r.relation_id,
-                        ),
-                    )
+            # facts the question names first (predicate cues), then typed facts touching
+            # a seed, structural facts last; one fact per distinct triple
+            ranked = _distinct(
+                sorted(
+                    answer.relations,
+                    key=lambda r: (
+                        r.predicate in _STRUCTURAL,
+                        -_predicate_boost(r.predicate, routed.query),
+                        not (r.subject_id in seeds or r.object_id in seeds),
+                        -r.confidence,
+                        r.relation_id,
+                    ),
                 )
-                diagnostics["graph"]["ppr"] = True
-            else:
-                # facts the question names first (predicate cues), then typed facts touching
-                # a seed, structural facts last; one fact per distinct triple
-                ranked = _distinct(
-                    sorted(
-                        answer.relations,
-                        key=lambda r: (
-                            r.predicate in _STRUCTURAL,
-                            -_predicate_boost(r.predicate, routed.query),
-                            not (r.subject_id in seeds or r.object_id in seeds),
-                            -r.confidence,
-                            r.relation_id,
-                        ),
-                    )
-                )
+            )
             existing_ids = {c.record_id for c in candidates}
             facts = [fact_candidate(r, names) for r in ranked[: self.max_facts]]
             candidates.extend(f for f in facts if f.record_id not in existing_ids)
@@ -239,36 +228,3 @@ class GraphStage:
         return out
 
 
-def as_of_from_query(query: str) -> datetime | None:
-    return parse_date(query)
-
-
-def personalized_pagerank(
-    relations: Sequence[Relation],
-    seeds: set[str],
-    *,
-    alpha: float = 0.15,
-    iterations: int = 30,
-) -> dict[str, float]:
-    """Power iteration on the (undirected, confidence-weighted) neighbourhood graph with the
-    restart vector concentrated on the query's entities. Deterministic and bounded by the
-    traversal cap, so it costs microseconds per query."""
-    nodes: dict[str, list[tuple[str, float]]] = {}
-    for r in relations:
-        nodes.setdefault(r.subject_id, []).append((r.object_id, r.confidence))
-        nodes.setdefault(r.object_id, []).append((r.subject_id, r.confidence))
-    if not nodes:
-        return {}
-    restart = {n: (1.0 / len(seeds) if n in seeds else 0.0) for n in nodes}
-    if not any(restart.values()):
-        restart = {n: 1.0 / len(nodes) for n in nodes}
-    rank = dict(restart)
-    for _ in range(iterations):
-        nxt = {n: alpha * restart[n] for n in nodes}
-        for n, edges in nodes.items():
-            total = sum(w for _, w in edges) or 1.0
-            share = (1 - alpha) * rank[n]
-            for m, w in edges:
-                nxt[m] += share * (w / total)
-        rank = nxt
-    return rank

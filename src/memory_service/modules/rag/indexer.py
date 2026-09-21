@@ -8,9 +8,9 @@ of mixing spaces. Payload carries only security/filter fields and short display 
 from __future__ import annotations
 
 import contextlib
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
 
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
@@ -52,21 +52,23 @@ class Indexer:
         self.embedding_cache_ttl = embedding_cache_ttl
         self.assist = assist or LLMAssist.disabled()
         # M10 (benchmark-gated): ColBERT multivectors are added to chunk records when set
-        self.late_interaction: Any = None
 
     @property
     def fingerprint(self) -> str:
-        late = f"|{self.late_interaction.fingerprint()}" if self.late_interaction else ""
-        return f"{self.embedding.fingerprint()}|{self.sparse.fingerprint()}{late}"
+        return f"{self.embedding.fingerprint()}|{self.sparse.fingerprint()}"
+
+    #: Qdrant accepts letters, digits, hyphen and underscore in a collection name. Anything
+    #: else has to be folded, or a provider whose fingerprint contains a path or a colon
+    #: takes down every write with a 422 that names the collection rather than the cause.
+    _SAFE = re.compile(r"[^a-z0-9_-]+")
 
     def collection(self, base: str) -> str:
-        """Collection name bound to the embedding space (dense + sparse + late fingerprints)."""
+        """Collection name bound to the embedding space (dense + sparse fingerprints)."""
         space = self.fingerprint.replace("|", "__")
-        return f"{base}_{space}".replace("/", "_").replace(".", "_").lower()
+        return self._SAFE.sub("_", f"{base}_{space}".lower())
 
     async def ensure_collections(self) -> None:
         sparse_idf = getattr(self.sparse, "server_side_idf", True)
-        late_dim = self.late_interaction.dimension if self.late_interaction else None
         for base in (KNOWLEDGE, MEMORIES):
             await self.store.ensure_collection(
                 CollectionSpec(
@@ -74,7 +76,6 @@ class Indexer:
                     dense_dim=self.embedding.dimension,
                     sparse=True,
                     sparse_idf=sparse_idf,
-                    late_interaction_dim=late_dim if base == KNOWLEDGE else None,
                 )
             )
 
@@ -206,11 +207,6 @@ class Indexer:
         dense = await self.embed_cached(texts, [content_hash(t) + ":sum" for t in texts])
         sparse = self.sparse.encode_documents(texts)
         # every point in a multivector collection needs the vector (local mode requires it)
-        late = (
-            await self.late_interaction.embed_documents_multi(texts)
-            if self.late_interaction is not None
-            else None
-        )
         records = [
             SearchRecord(
                 record_id=f"sum_{nid}",
@@ -218,7 +214,6 @@ class Indexer:
                 tenant_id=tenant_id,
                 dense=dense[i],
                 sparse=sparse[i],
-                late_interaction=late[i] if late is not None else None,
                 payload={
                     "kind": "summary",
                     "visibility_keys": list(visibility_keys),
@@ -250,11 +245,6 @@ class Indexer:
         texts = [c.contextual_text for c in chunks]
         dense = await self._dense_for_chunks(chunks, texts)
         sparse = self.sparse.encode_documents(texts)
-        late = (
-            await self.late_interaction.embed_documents_multi(texts)
-            if self.late_interaction is not None
-            else None
-        )
         records = [
             SearchRecord(
                 record_id=c.chunk_id,
@@ -262,7 +252,6 @@ class Indexer:
                 tenant_id=c.tenant_id,
                 dense=dense[i],
                 sparse=sparse[i],
-                late_interaction=late[i] if late is not None else None,
                 payload={
                     "kind": "chunk",
                     "visibility_keys": list(visibility_keys),
@@ -356,18 +345,14 @@ class Indexer:
     async def _dense_for_chunks(
         self, chunks: Sequence[Chunk], texts: list[str]
     ) -> list[list[float]]:
-        """Per-chunk embeddings, or late chunking (M10) when the provider supports spans:
-        the document's chunks are embedded as one sequence and pooled per chunk span."""
-        embed_spans = getattr(self.embedding, "embed_spans", None)
-        if embed_spans is None or len(chunks) < 2:
-            return await self.embed_cached(texts, [c.text_hash + ":ctx" for c in chunks])
-        document = ""
-        spans: list[tuple[int, int]] = []
-        for c in chunks:
-            start = len(document)
-            document += c.text + "\n\n"
-            spans.append((start, start + len(c.text)))
-        return await embed_spans(document, spans, texts)
+        """Per-chunk embeddings.
+
+        This used to branch into late chunking when the provider exposed ``embed_spans``. That
+        path is gone with the flag: it needs token-level output, which a served embedding
+        endpoint cannot give — it returns one pooled vector per input — so it was mutually
+        exclusive with running the models as their own tier.
+        """
+        return await self.embed_cached(texts, [c.text_hash + ":ctx" for c in chunks])
 
     async def rebuild_document(self, tenant_id: str, document_id: str) -> int:
         return await self.index_document(tenant_id, document_id, force=True)

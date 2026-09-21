@@ -138,8 +138,11 @@ async def test_shared_group_memory_corroboration_and_conflict(container, uow_fac
         shared = await container.services["memory"].list_memories(uow, auditor)
     revenue = next(m for m in shared if "412" in m.content)
     assert revenue.visibility is Visibility.AGENT_GROUP and revenue.reinforcement_count == 2
-    assert revenue.system_metadata["contributors"] == ["agent:auditor"]
-    assert revenue.owner_principal == "agent:analyst" and revenue.confidence >= 0.7
+    # Agent principals are bound to the user they run for ("agent:<user>/<agent_id>"): the
+    # agent_id arrives unauthenticated in the request body, so the same agent_id acting for
+    # a different user must not be the same principal.
+    assert revenue.system_metadata["contributors"] == ["agent:u1/auditor"]
+    assert revenue.owner_principal == "agent:u1/analyst" and revenue.confidence >= 0.7
     # 2. conflict: a different value for a single-valued slot from another agent is kept as a
     #    contradiction, not silently superseded (no agent overrides another's finding)
     await _observe(

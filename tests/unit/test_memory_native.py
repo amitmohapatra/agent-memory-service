@@ -181,7 +181,7 @@ async def test_classification_defaults_and_hints(native) -> None:
         "principal:acme/user:u1",
     ]
     assert keys_for(scope_for(agent_note, AGENT), Visibility.PRIVATE, AGENT) == [
-        "principal:acme/agent:planner"
+        "principal:acme/agent:u1/planner"
     ]
     now = datetime.now(UTC)
     mem = build_memory(agent_note, AGENT, now=now)

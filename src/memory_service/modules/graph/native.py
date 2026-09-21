@@ -197,19 +197,6 @@ def make_entity(
 _SECTION_NUMBER = re.compile(r"^\s*(?:\d+(?:\.\d+)*\.?|[A-Z]\.|[IVX]+\.)\s+")
 
 
-def _section_title(section_path: str, document_title: str) -> str | None:
-    """Last element of 'Doc > 3. Financial Results > 3.2 Adjusted EBITDA' without numbering."""
-    if not section_path:
-        return None
-    parts = [p.strip() for p in section_path.split(">") if p.strip()]
-    if not parts:
-        return None
-    last = _SECTION_NUMBER.sub("", parts[-1]).strip()
-    if not last or last.casefold() == (document_title or "").casefold():
-        return None
-    return last
-
-
 def _usable_entity(name: str) -> bool:
     canon = canonical_entity(name)
     if canon in _GENERIC or len(canon) < 3:

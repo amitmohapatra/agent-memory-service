@@ -23,6 +23,7 @@ from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash, new_id
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -112,13 +113,6 @@ class ConversationService:
         await self.authz.require(ctx, "can_read", "thread", thread_id)
         return thread
 
-    async def list_threads(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, *, limit: int = 50
-    ) -> list[Thread]:
-        if not ctx.user_id:
-            raise ValidationFailed("user_id is required to list threads")
-        return await uow.threads.list_for_user(ctx.tenant_id, ctx.user_id, limit=limit)
-
     async def delete_thread(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str
     ) -> None:
@@ -148,6 +142,9 @@ class ConversationService:
     ) -> AppendResult:
         if not ctx.thread_id or not ctx.session_id or not ctx.turn_id:
             raise ValidationFailed("thread_id, session_id and turn_id are required for messages")
+        # Same reason as MemoryService.submit_observation: a message is agent-authored text
+        # going into a PostgreSQL `text` column, and a NUL byte in it fails the INSERT.
+        content = sanitise(content)
         if kind is MessageKind.VISIBLE and role not in (
             MessageRole.USER,
             MessageRole.ASSISTANT,

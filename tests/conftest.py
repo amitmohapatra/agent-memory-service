@@ -9,8 +9,39 @@ from collections.abc import AsyncIterator, Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from memory_service.api.app import create_app
-from memory_service.config.settings import Settings, reset_settings_cache
+#: The suite configures the service in code, not from the developer's shell.
+#:
+#: ``MEMORY__*`` is the service's own settings prefix, and a local ``.env`` fills it in. That
+#: file reaches os.environ before this module is imported — the deepeval pytest plugin loads
+#: it — so "the environment is empty in tests" was never true: four model paths were being
+#: inherited from it, pointing at directories that do not exist. They were harmless only
+#: because the stand-in providers never load a model, which is exactly the kind of latency a
+#: latent bug has. Strip them, so a test run means the same thing on every machine.
+#:
+#: ``MEMORY_TEST_*`` is the suite's own namespace and is deliberately kept, as is everything
+#: when ``MEMORY_TEST_PROVIDERS=env`` asks for the real components on purpose.
+if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
+    for _leaked in [k for k in os.environ if k.startswith("MEMORY__")]:
+        del os.environ[_leaked]
+
+from memory_service.api.app import create_app  # noqa: E402 - after the environment is cleaned
+from memory_service.config.settings import Settings, reset_settings_cache  # noqa: E402
+
+#: The suite gets a database of its own.
+#:
+#: Tests truncate tables and hold locks; the dev stack's worker polls the same database and
+#: claims jobs out from under them. Sharing "memory" with a running `docker compose` made the
+#: suite fail in ways that had nothing to do with the code: a multi-agent test that runs in
+#: 1.2 s idle timed out at 120 s waiting on a lock, and queue tests had their jobs stolen.
+#:
+#: Read from MEMORY_TEST_DATABASE_URL and *deliberately not* from MEMORY__DATABASE__URL.
+#: That one is the service's own variable, `.env` sets it to the dev database, and the
+#: deepeval pytest plugin loads `.env` into os.environ before this module is imported — so
+#: an `os.environ.get("MEMORY__DATABASE__URL", ...)` here is not a default with an escape
+#: hatch, it is the dev database every time, and the suite truncated it on every run.
+DB_URL = os.environ.get(
+    "MEMORY_TEST_DATABASE_URL", "postgresql+psycopg://memory:memory@localhost:5432/memory_tests"
+)
 
 
 def _test_settings(**overrides: object) -> Settings:
@@ -30,11 +61,7 @@ def _test_settings(**overrides: object) -> Settings:
         },
         "documents": {"parser": "builtin"},
         "observability": {"otel_enabled": False},
-        "database": {
-            "url": os.environ.get(
-                "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
-            )
-        },
+        "database": {"url": DB_URL},
     }
     for key, value in overrides.items():
         if isinstance(value, dict) and isinstance(base.get(key), dict):
@@ -49,7 +76,10 @@ def _test_settings(**overrides: object) -> Settings:
         for section in ("models", "search", "cache", "authorization", "documents", "retrieval"):
             if isinstance(env_only.get(section), dict):
                 base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
-    return Settings(**base)  # type: ignore[arg-type]
+    # ``_env_file=None`` disables the dotenv source. Stripping MEMORY__* from os.environ is
+    # not enough on its own: pydantic-settings also reads ./.env directly, so a suite run from
+    # the repo root still inherited it. Both doors have to be shut for a run to be hermetic.
+    return Settings(_env_file=None, **base)  # type: ignore[arg-type]
 
 
 def _deep_merge(base: dict, extra: dict) -> dict:
@@ -60,18 +90,6 @@ def _deep_merge(base: dict, extra: dict) -> dict:
         else:
             out[key] = value
     return out
-
-
-#: The suite gets a database of its own.
-#:
-#: Tests truncate tables and hold locks; the dev stack's worker polls the same database and
-#: claims jobs out from under them. Sharing "memory" with a running `docker compose` made the
-#: suite fail in ways that had nothing to do with the code: a multi-agent test that runs in
-#: 1.2 s idle timed out at 120 s waiting on a lock, and queue tests had their jobs stolen.
-#: Point at the dev database explicitly with MEMORY__DATABASE__URL if that is what you want.
-DB_URL = os.environ.get(
-    "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory_tests"
-)
 
 
 #: Where to connect to create the databases above; "postgres" always exists.
@@ -115,9 +133,7 @@ def _create_database(name: str) -> None:
     import psycopg
 
     with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone()
         if not exists:
             conn.execute(f'CREATE DATABASE "{name}"')
 

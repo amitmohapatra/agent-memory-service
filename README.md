@@ -13,13 +13,16 @@ from universal_memory import MemoryClient
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 
 ctx = memory.bind(
-    tenant_id="acme", user_id="u1",
-    thread_id=thread_id, session_id=session_id, turn_id=turn_id,
+    tenant_id="acme",
+    user_id="u1",
+    thread_id=thread_id,
+    session_id=session_id,
+    turn_id=turn_id,
 )
 
 await ctx.chat.user("I'm in Berlin and I prefer short answers.")
-bundle = await ctx.context("draft a reply about the Q3 numbers")   # everything relevant
-answer = await my_agent.run(bundle.rendered)                       # your agent, your model
+bundle = await ctx.context("draft a reply about the Q3 numbers")  # everything relevant
+answer = await my_agent.run(bundle.rendered)  # your agent, your model
 await ctx.chat.assistant(answer)
 ```
 
@@ -180,12 +183,12 @@ from universal_memory import MemoryClient
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 
 ctx = memory.bind(
-    tenant_id=request.tenant_id,     # hard isolation boundary
+    tenant_id=request.tenant_id,  # hard isolation boundary
     workspace_id=request.workspace,  # a project or app
-    user_id=request.user_id,         # who this is for
-    thread_id=request.thread_id,     # the conversation
-    session_id=request.session_id,   # a continuous stretch of it
-    turn_id=request.turn_id,         # this exchange
+    user_id=request.user_id,  # who this is for
+    thread_id=request.thread_id,  # the conversation
+    session_id=request.session_id,  # a continuous stretch of it
+    turn_id=request.turn_id,  # this exchange
 )
 ```
 
@@ -218,11 +221,11 @@ conversation, the relevant memories, document passages, and graph facts — dedu
 ordered. Inspect the parts if you want them separately:
 
 ```python
-bundle.conversation   # recent turns plus a rolling summary
-bundle.memories       # durable facts and preferences
-bundle.knowledge      # document passages, each with document, page and evidence
-bundle.graph_facts    # entity relations
-bundle.evidence       # what was found, what was missing, and the status
+bundle.conversation  # recent turns plus a rolling summary
+bundle.memories  # durable facts and preferences
+bundle.knowledge  # document passages, each with document, page and evidence
+bundle.graph_facts  # entity relations
+bundle.evidence  # what was found, what was missing, and the status
 ```
 
 Need just the search results? `await ctx.recall("...")` returns ranked items.
@@ -274,8 +277,8 @@ sub-agent should flow *down* but not *sideways*; a shared finding should be shar
 ### Each agent run gets its own memory scope
 
 ```python
-researcher = ctx.agent("researcher", agent_group_id="analysis-crew")   # a new run, isolated
-writer     = ctx.agent("writer", agent_group_id="analysis-crew")       # a sibling run
+researcher = ctx.agent("researcher", agent_group_id="analysis-crew")  # a new run, isolated
+writer = ctx.agent("writer", agent_group_id="analysis-crew")  # a sibling run
 
 await researcher.remember("Source A contradicts source B", visibility="RUN")
 ```
@@ -291,7 +294,7 @@ Not the user, not sibling agents, not the next run of the same agent.
 ### Hand-offs flow down, never up or sideways
 
 ```python
-child = researcher.agent("fact-checker")     # spawned by the researcher
+child = researcher.agent("fact-checker")  # spawned by the researcher
 # child sees the researcher's RUN-scoped notes — that is the hand-off
 # writer (a sibling) still sees nothing of either
 ```
@@ -299,10 +302,10 @@ child = researcher.agent("fact-checker")     # spawned by the researcher
 ### Sharing is explicit
 
 ```python
-await researcher.remember(                 # the run must belong to an agent group
+await researcher.remember(  # the run must belong to an agent group
     "FY26 revenue is EUR 412m, confirmed in two sources",
     memory_type="SHARED",
-    visibility="AGENT_GROUP",     # now the whole crew can use it
+    visibility="AGENT_GROUP",  # now the whole crew can use it
 )
 ```
 
@@ -386,7 +389,7 @@ model *cannot* know is what worked here before, which is the one thing this keep
 ```python
 result = await ctx.tools.execute(
     ToolCall(tool="pricing.lookup_price", args={"sku": "SKU-22"}, task=task),
-    executor=my_tool_runner,        # your function, or a call out to an MCP gateway
+    executor=my_tool_runner,  # your function, or a call out to an MCP gateway
 )
 ```
 
@@ -409,9 +412,9 @@ run as a weak positive.
 
 ```python
 report = await ctx.verify(answer, bundle=bundle)
-report.per_claim_hallucination_rate      # 0.0 when every claim is supported
+report.per_claim_hallucination_rate  # 0.0 when every claim is supported
 for claim in report.claims:
-    claim.verdict    # supported | unsupported | contradicted | borderline
+    claim.verdict  # supported | unsupported | contradicted | borderline
 ```
 
 The cascade is deterministic first and expensive last: split the answer into claims, check
@@ -431,7 +434,7 @@ from universal_memory_langgraph import LangGraphMemory
 memory = LangGraphMemory(client, tenant_id="acme", user_id="u1", agent_group_id="crew")
 
 graph.add_node("research", memory.wrap(research_node, agent="researcher", recall="question"))
-graph.add_node("answer",   memory.wrap(answer_node,   recall="question"))
+graph.add_node("answer", memory.wrap(answer_node, recall="question"))
 ```
 
 `recall` names the state key to build the context bundle from (or a callable returning the
@@ -484,14 +487,32 @@ service holds only a Bifrost virtual key (in a git-ignored `secrets.env`); your 
 stay in Bifrost. No provider SDK is importable anywhere in the codebase — a lint rule and an
 architecture test enforce it.
 
+There is deliberately **no gateway service in `docker-compose.yml`**. Starting one from this
+repository's own compose file would put provider keys inside the application's deployment,
+which is the coupling the gateway exists to remove. `deploy/bifrost/` holds an example config
+and nothing that runs.
+
 You choose, per capability, where a model is allowed to help:
 
 ```bash
 MEMORY__MODELS__LLM__ENABLED=true
+MEMORY__MODELS__LLM__PROVIDER=bifrost
+MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
 MEMORY__MODELS__LLM__MODEL=anthropic/claude-sonnet-5              # complex judgement
 MEMORY__MODELS__LLM__FAST_MODEL=anthropic/claude-haiku-4-5        # cheap classification
 MEMORY__MODELS__LLM__USES=["conflict_adjudication","summaries"]
 ```
+
+**Sizing `max_tokens` for a reasoning model.** The output budget is spent on reasoning before
+any text is produced, so a budget that looks generous can return an empty answer. Measured
+against `gemini-3.6-flash`: answering "Reply with exactly: OK" consumed 57 reasoning tokens,
+so `max_tokens=16` produced no content at all. The adapter now raises instead of handing back
+an empty string, and names the cause. Start at `MEMORY__MODELS__LLM__MAX_TOKENS=2048` for a
+reasoning model.
+
+**Rate limits.** A `429` is retried against the gateway's own `Retry-After` header rather than
+the exponential backoff, because a per-minute quota is not something a 1.5-second retry
+schedule can wait out.
 
 Available uses: `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,

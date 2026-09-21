@@ -137,6 +137,17 @@ def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) 
     return [*keys, owner]
 
 
+#: Evidence that only says "an agent said this". Everything else describes the world: a user
+#: message, a file, a tool result, an import.
+_ECHO_SOURCES = frozenset({"agent_result"})
+
+
+def _is_echo(candidate: MemoryCandidate) -> bool:
+    """True when nothing behind this candidate is independent of the agent's own output."""
+    evidence = candidate.evidence
+    return bool(evidence) and all(ev.source_type in _ECHO_SOURCES for ev in evidence)
+
+
 def build_memory(
     candidate: MemoryCandidate, ctx: MemoryExecutionContext, *, now: datetime
 ) -> CanonicalMemory:
@@ -152,6 +163,7 @@ def build_memory(
         owner_principal=ctx.principal_id,
         lifetime=candidate.lifetime,
         memory_type=candidate.memory_type,
+        custom_type=candidate.custom_type,
         content=candidate.content,
         normalized_hash=normalized_hash(candidate.content),
         subject=candidate.subject,
@@ -262,6 +274,8 @@ class ObservationPipeline:
         update: dict[str, Any] = {}
         if h.memory_type:
             update["memory_type"] = h.memory_type
+        if h.custom_type:
+            update["custom_type"] = h.custom_type
         elif o.agent_id and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
             # "my timezone is UTC" said by an agent is about the agent: it becomes the agent's
             # working memory, never a USER memory of the human it acts for (no chat pollution)
@@ -409,7 +423,16 @@ class ObservationPipeline:
             case DedupDecision.REINFORCE | DedupDecision.MERGE if target is not None:
                 target.reinforcement_count += 1
                 contributors = list(target.system_metadata.get("contributors", []))
-                if (
+                if _is_echo(cand):
+                    # The agent restating something it was given is not evidence about the
+                    # world; it is evidence about what the agent said. Counting it closed a
+                    # loop: a memory is retrieved, injected into the prompt, repeated in the
+                    # answer, extracted again, and reinforced — +0.05 a turn until anything
+                    # the agent was once told reads as certain. The repeat is still recorded
+                    # (count and evidence), it just cannot raise confidence.
+                    echoes = int(target.system_metadata.get("echoes", 0)) + 1
+                    target.system_metadata["echoes"] = echoes
+                elif (
                     ctx.principal_id not in contributors
                     and ctx.principal_id != target.owner_principal
                 ):

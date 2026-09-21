@@ -18,7 +18,7 @@ Bifrost gateway call identically.
 
 **Conservative policy defaults, widened only by an admin.** An unregistered or per-call-declared
 tool is `deterministic=false`, `cacheable=false`, `side_effects=unknown`. A declaration made by
-an agent in a request never widens a stored policy; only `POST /v1/tools` under tenant admin
+an agent in a request never widens a stored policy; only `POST /v1/tools` (since removed) under tenant admin
 does. The failure mode this avoids is an agent talking itself into a cache hit for a tool that
 writes.
 

@@ -60,34 +60,10 @@ class Conflict(MemoryServiceError):
     http_status = 409
 
 
-class RateLimited(MemoryServiceError):
-    """Too many requests."""
-
-    code = ErrorCode.RATE_LIMIT
-    http_status = 429
-    retryable = True
-
-
 class DependencyUnavailable(MemoryServiceError):
     """A mandatory backing store or provider is unavailable."""
 
     code = ErrorCode.DEPENDENCY_UNAVAILABLE
-    http_status = 503
-    retryable = True
-
-
-class OperationTimeout(MemoryServiceError):
-    """The operation exceeded its time budget."""
-
-    code = ErrorCode.TIMEOUT
-    http_status = 504
-    retryable = True
-
-
-class RetryableProcessing(MemoryServiceError):
-    """Processing failed transiently; the job will be retried."""
-
-    code = ErrorCode.RETRYABLE_PROCESSING
     http_status = 503
     retryable = True
 

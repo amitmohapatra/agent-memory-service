@@ -46,8 +46,12 @@ async def test_reparsing_replaces_vectors_rather_than_adding_a_generation(contai
     )
     async with container.services["uow_factory"]() as uow:
         handle = await container.services["ingestion"].accept_file(
-            uow, ctx, filename="acme.md", media_type="text/markdown",
-            data=MARKDOWN, title="ACME",
+            uow,
+            ctx,
+            filename="acme.md",
+            media_type="text/markdown",
+            data=MARKDOWN,
+            title="ACME",
         )
         await uow.commit()
     await container.tasks.drain()

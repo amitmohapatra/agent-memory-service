@@ -228,9 +228,6 @@ class DocumentRepository(Protocol):
     async def mark_archived(
         self, tenant_id: str, document_id: str, *, segment_id: str, archived_at: datetime
     ) -> None: ...
-    async def list_staged_archive(
-        self, *, older_than: datetime | None = None, limit: int = 200
-    ) -> list[Document]: ...
     async def add_version(self, version: DocumentVersion) -> None: ...
     async def get_version(
         self, tenant_id: str, document_version_id: str
@@ -266,13 +263,6 @@ class DocumentRepository(Protocol):
         self,
         tenant_id: str,
         source_ids: Sequence[str],
-        *,
-        kinds: Sequence[ContextGraphEdge] | None = None,
-    ) -> list[ContextEdge]: ...
-    async def edges_to(
-        self,
-        tenant_id: str,
-        target_ids: Sequence[str],
         *,
         kinds: Sequence[ContextGraphEdge] | None = None,
     ) -> list[ContextEdge]: ...
@@ -335,9 +325,6 @@ class MemoryRepository(Protocol):
         """True when the memory exists but was soft-deleted (forget is idempotent)."""
         ...
 
-    async def list_unindexed(
-        self, tenant_id: str, *, limit: int = 500
-    ) -> list[CanonicalMemory]: ...
     async def mark_indexed(
         self, memory_ids: Sequence[str], *, fingerprint: str, indexed_at: datetime
     ) -> None: ...
@@ -401,8 +388,6 @@ class ToolRepository(Protocol):
 
     async def get(self, tenant_id: str, tool_id: str) -> ToolDescriptor | None: ...
 
-    async def list_tools(self, tenant_id: str, *, limit: int = 500) -> list[ToolDescriptor]: ...
-
     async def stats(
         self, tenant_id: str, *, names: Sequence[str] | None = None
     ) -> list[ToolOutcomeStats]: ...
@@ -425,15 +410,7 @@ class ToolRepository(Protocol):
         limit: int = 200,
     ) -> list[ToolInvocation]: ...
 
-    async def successful_runs(
-        self, tenant_id: str, *, task_pattern: str, limit: int = 100
-    ) -> list[str]: ...
-
     async def mark_indexed(self, tenant_id: str, invocation_ids: Sequence[str]) -> None: ...
-
-    async def unindexed(
-        self, tenant_id: str | None = None, *, limit: int = 200
-    ) -> list[ToolInvocation]: ...
 
     async def set_outcome(self, outcome: RunOutcome) -> None: ...
 

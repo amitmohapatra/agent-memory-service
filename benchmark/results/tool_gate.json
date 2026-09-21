@@ -37,8 +37,8 @@
     "undeclared_tool_suggestions": 0
   },
   "provenance": {
-    "timestamp": "2026-09-18T19:34:19.591936+00:00",
-    "git_commit": "00359870050d69c3d6eb16f73caf8c0fcf557088",
+    "timestamp": "2026-09-21T09:18:02.524697+00:00",
+    "git_commit": "402856f803d64a13be60889e659bd12db222019b",
     "python": "3.12.14",
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "machine": "x86_64",
@@ -53,8 +53,8 @@
       "sentence-transformers": "not-installed",
       "torch": "not-installed",
       "transformers": "not-installed",
-      "fastembed": "0.8.0",
-      "onnxruntime": "1.19.2",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
       "docling": "not-installed"
     },
     "models": {

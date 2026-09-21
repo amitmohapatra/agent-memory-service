@@ -24,3 +24,8 @@ vendor/
 deploy_key.pub
 *.bundle
 .bench_data/
+benchmark/data/
+deploy/bifrost/*.db
+
+# stray sqlite session file from a test run
+:memory:*

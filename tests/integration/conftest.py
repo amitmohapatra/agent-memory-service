@@ -11,8 +11,8 @@ from sqlalchemy import text
 from memory_service.__about__ import __version__
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
-
 from tests.conftest import DB_URL  # noqa: E402  (one definition, see tests/conftest.py)
+
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
@@ -71,7 +71,7 @@ from tests.support_real import reset_real_backends  # noqa: E402
 REDIS_AVAILABLE = _redis_reachable()
 
 requires_pg = pytest.mark.skipif(
-    not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY__DATABASE__URL"
+    not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY_TEST_DATABASE_URL"
 )
 requires_redis = pytest.mark.skipif(
     not REDIS_AVAILABLE, reason="Redis/Dragonfly not reachable at MEMORY__CACHE__URL"

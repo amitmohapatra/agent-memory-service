@@ -98,7 +98,7 @@ class RecallResponse(BaseModel):
                     "query": "Why did Adjusted EBITDA increase?",
                     "query_type": "DOCUMENT_MULTI_HOP",
                     "results": [],
-                    "diagnostics": {"fused_candidates": 12, "reranked": True},
+                    "diagnostics": {"fused_candidates": 12, "duplicates_collapsed": 2},
                 }
             ]
         }

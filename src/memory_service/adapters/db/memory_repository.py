@@ -293,21 +293,6 @@ class SqlMemoryRepository:
         r = await self.s.get(MemoryRow, memory_id)
         return r is not None and r.tenant_id == tenant_id and r.deleted_at is not None
 
-    async def list_unindexed(self, tenant_id: str, *, limit: int = 500) -> list[CanonicalMemory]:
-        rows = (
-            await self.s.scalars(
-                select(MemoryRow)
-                .where(
-                    MemoryRow.tenant_id == tenant_id,
-                    MemoryRow.indexed_at.is_(None),
-                    MemoryRow.deleted_at.is_(None),
-                )
-                .order_by(MemoryRow.created_at)
-                .limit(limit)
-            )
-        ).all()
-        return [_to_domain(r) for r in rows]
-
     async def mark_indexed(
         self, memory_ids: Sequence[str], *, fingerprint: str, indexed_at: datetime
     ) -> None:

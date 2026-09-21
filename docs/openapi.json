@@ -1436,6 +1436,12 @@
             "title": "Created At",
             "type": "string"
           },
+          "echoes": {
+            "default": 0,
+            "description": "How much of reinforcement_count is the agent restating its own output. Echoes are counted but never raise confidence \u2014 without this the count cannot be read: seven repeats and no contributors is either corroboration or a recall loop.",
+            "title": "Echoes",
+            "type": "integer"
+          },
           "evidence": {
             "items": {
               "additionalProperties": true,
@@ -2195,8 +2201,23 @@
       },
       "ProcessingHintsIn": {
         "additionalProperties": false,
-        "description": "Expert-only overrides; omit for the default 'the service decides' behaviour.",
+        "description": "Expert-only overrides; omit for the default 'the service decides' behaviour.\n\nEvery field here is a *hint*: the service classifies observations on its own, and the\nright call for almost every caller is to send none of them. They exist for the cases\nwhere the caller genuinely knows something the extractor cannot infer \u2014 an import whose\nprovenance is already known, a note that must not outlive the run.\n\nSetting one wrongly is worse than leaving it unset: a hint overrides the classifier, so a\n``memory_type`` that does not match the content makes the memory unreachable by the\nqueries that should find it.",
         "properties": {
+          "custom_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required when memory_type=CUSTOM, and meaningless otherwise: the caller's own label for a record this service's taxonomy has no name for. Without it a CUSTOM memory is rejected, so omitting it turns the hint into a failed write rather than a stored memory.",
+            "examples": [
+              "release_note"
+            ],
+            "title": "Custom Type"
+          },
           "importance": {
             "anyOf": [
               {
@@ -2208,6 +2229,7 @@
                 "type": "null"
               }
             ],
+            "description": "0-1 prior on how much this matters, influencing admission and ranking. Omit unless you have a real signal; a blanket high value just flattens ranking.",
             "examples": [
               0.8
             ],
@@ -2222,6 +2244,7 @@
                 "type": "null"
               }
             ],
+            "description": "How long this should survive. EPHEMERAL: within the turn only. SHORT_TERM: the current thread/session. LONG_TERM: durable, the default for facts about a user or the world. ARCHIVAL: cold storage, retained for audit rather than retrieval. Omit to let the extractor choose from the content.",
             "examples": [
               "LONG_TERM"
             ]
@@ -2235,27 +2258,32 @@
                 "type": "null"
               }
             ],
+            "description": "What kind of thing this is. The ones a caller normally means: SEMANTIC (a fact about the world), PREFERENCE (how the user likes things), EPISODIC (something that happened), DECISION (a choice and its reason), PROCEDURAL (how to do something). ENTITY_SUMMARY, TOOL, OBSERVATION, AGENT, BELIEF, TASK and USER are written by the pipeline itself; setting them by hand mislabels the record. The remaining values (WORKING, CONVERSATION, SHARED, WORK, SKILL, DECISION, FAILURE, OUTCOME, ARTIFACT, KNOWLEDGE_RAG, SUMMARY, DERIVED, POLICY, CUSTOM) are accepted but never produced by extraction \u2014 they exist for callers importing records whose type is already known. Omit unless that is what you are doing.",
             "examples": [
               "PREFERENCE"
             ]
           },
           "skip_embedding": {
             "default": false,
+            "description": "Do not index for semantic search (keyword/graph only).",
             "title": "Skip Embedding",
             "type": "boolean"
           },
           "skip_extraction": {
             "default": false,
+            "description": "Store the observation verbatim without deriving memories from it.",
             "title": "Skip Extraction",
             "type": "boolean"
           },
           "skip_graph": {
             "default": false,
+            "description": "Do not extract entities or relations into the graph.",
             "title": "Skip Graph",
             "type": "boolean"
           },
           "skip_summary": {
             "default": false,
+            "description": "Do not roll this into thread or entity summaries.",
             "title": "Skip Summary",
             "type": "boolean"
           },
@@ -2268,6 +2296,7 @@
                 "type": "null"
               }
             ],
+            "description": "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Each level is a superset of the ones before it. Omit to inherit the scope the observation was submitted in \u2014 which is the safe answer; widening by hand is how one tenant's data reaches another.",
             "examples": [
               "USER"
             ]
@@ -2518,8 +2547,8 @@
         "examples": [
           {
             "diagnostics": {
-              "fused_candidates": 12,
-              "reranked": true
+              "duplicates_collapsed": 2,
+              "fused_candidates": 12
             },
             "query": "Why did Adjusted EBITDA increase?",
             "query_type": "DOCUMENT_MULTI_HOP",
@@ -3351,6 +3380,14 @@
             "title": "Api Version",
             "type": "string"
           },
+          "degraded": {
+            "description": "Capabilities running below what was configured \u2014 a parser that fell back, a stand-in classifier. Empty means the service is what it was asked to be.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
           "environment": {
             "examples": [
               "dev"
@@ -3360,7 +3397,7 @@
           },
           "providers": {
             "additionalProperties": true,
-            "description": "Enabled provider per port (no secrets).",
+            "description": "The provider actually running per port (no secrets).",
             "examples": [
               {
                 "authorization": "openfga",
@@ -7371,6 +7408,30 @@
             "schema": {
               "default": "",
               "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The agent whose procedures to list. Required to see agent-scoped invocations: they are recorded against principal 'agent:<id>', and lineage cannot travel in a header the way tenant/workspace/user do.",
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "The agent whose procedures to list. Required to see agent-scoped invocations: they are recorded against principal 'agent:<id>', and lineage cannot travel in a header the way tenant/workspace/user do.",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Narrow to one workspace.",
+            "in": "query",
+            "name": "workspace_id",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Narrow to one workspace.",
+              "title": "Workspace Id",
               "type": "string"
             }
           },

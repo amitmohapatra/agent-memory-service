@@ -35,15 +35,12 @@ from universal_memory.models import (
     MemoryResult,
     MessageAck,
     MessageInfo,
-    NextSteps,
     ObservationAck,
     Scope,
     ThreadInfo,
-    Tool,
     ToolCall,
     ToolPlan,
     ToolResult,
-    ToolSuggestion,
 )
 from universal_memory.transport import Transport
 
@@ -575,7 +572,17 @@ class ToolsAPI:
         return ToolPlan.model_validate(data)
 
     async def procedures(self, task: str) -> list[dict[str, Any]]:
-        data = await self._ctx._request("GET", "/v1/tools/procedures", params={"task": task})
+        """Procedures mined for a task pattern, in the bound scope.
+
+        The agent travels as a query parameter: invocations are recorded against the
+        principal ``agent:<id>``, and a GET has no body to carry lineage in.
+        """
+        params = {"task": task}
+        if self._ctx.scope.agent_id:
+            params["agent_id"] = self._ctx.scope.agent_id
+        if self._ctx.scope.workspace_id:
+            params["workspace_id"] = self._ctx.scope.workspace_id
+        data = await self._ctx._request("GET", "/v1/tools/procedures", params=params)
         return list(data.get("procedures", []))
 
     async def execute(

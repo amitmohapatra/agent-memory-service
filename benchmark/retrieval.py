@@ -20,9 +20,7 @@ import statistics
 import time
 from pathlib import Path
 
-from sqlalchemy import text
-
-from benchmark.common import provenance, write_result
+from benchmark.common import provenance, reset_store, write_result
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.settings import Settings
@@ -86,12 +84,23 @@ def _pct(xs: list[float], p: float) -> float:
     return round(xs[idx], 2)
 
 
-async def run(copies: int, queries: int) -> dict:
+async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = None) -> dict:
     settings = _settings()
+    if ablate:
+        # Expansion flags cannot be measured on a flat corpus: SciFact abstracts are one
+        # chunk each, so parent/neighbour/definition expansion has no parent, no neighbour
+        # and no cross-chunk definition to reach for, and every ablation of them scored
+        # exactly zero difference. This golden set has section hierarchy, tables, footnotes
+        # and `required_groups` — the mechanism those flags exist to serve — so it is the
+        # instrument that can actually tell whether they earn their cost.
+        settings = settings.model_copy(
+            update={"retrieval": settings.retrieval.model_copy(update=ablate)}
+        )
     container = await build_container(settings, __version__)
     try:
-        async with container.database.engine.begin() as conn:
-            await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        # both stores, not just SQL: the vector store is a separate server and survives a
+        # TRUNCATE, so every previous run's vectors would otherwise compete with this one
+        await reset_store(container, "acme")
         register_handlers(container)
         uow_factory = container.services["uow_factory"]
         ingestion = container.services["ingestion"]
@@ -217,9 +226,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--copies", type=int, default=25)
     parser.add_argument("--queries", type=int, default=30)
+    parser.add_argument(
+        "--off", nargs="*", default=[], metavar="FLAG", help="retrieval flags to disable"
+    )
     parser.add_argument("--out", default="retrieval.json")
     args = parser.parse_args()
-    payload = asyncio.run(run(args.copies, args.queries))
+    payload = asyncio.run(run(args.copies, args.queries, ablate=dict.fromkeys(args.off, False)))
+    payload["ablation"] = dict.fromkeys(args.off, False)
     path = write_result(args.out, payload)
     lat = payload["latency_ms"]
     q = payload["quality"]

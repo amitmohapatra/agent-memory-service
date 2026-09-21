@@ -8,7 +8,6 @@ is synchronous) so the event loop is never blocked.
 from __future__ import annotations
 
 import asyncio
-import base64
 from collections.abc import AsyncIterator
 
 from memory_service.config.settings import BlobSettings
@@ -141,7 +140,3 @@ class GCSBlobStore:
             return False
 
 
-def crc32c_b64(data: bytes) -> str:  # pragma: no cover - helper for tooling
-    import google_crc32c  # type: ignore[import-not-found]
-
-    return base64.b64encode(google_crc32c.value(data).to_bytes(4, "big")).decode()

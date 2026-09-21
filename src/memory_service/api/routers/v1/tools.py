@@ -11,13 +11,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
 from memory_service.domain.enums import Visibility
-from memory_service.domain.tools import ToolDescriptor, ToolPolicy
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -70,21 +69,6 @@ class RegisterToolRequest(BaseModel):
     )
 
 
-class ToolOut(BaseModel):
-    tool_id: str
-    name: str
-    version: int
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    source: str
-    policy: dict[str, Any]
-    stats: dict[str, Any] | None = None
-
-
-class ToolListResponse(BaseModel):
-    tools: list[ToolOut]
-
-
 class DeclaredTool(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -117,18 +101,6 @@ class LookupRequest(BaseModel):
     scope: ScopeBody = Field(default_factory=ScopeBody)
     tool: str
     args: dict[str, Any] = Field(default_factory=dict)
-
-
-class LookupResponse(BaseModel):
-    cached: bool
-    reason: str | None = None
-    age_seconds: float | None = None
-    output_summary: str | None = None
-    output_digest: str | None = None
-    output_blob_ref: str | None = None
-    output_fields: dict[str, Any] = Field(default_factory=dict)
-    invocation_id: str | None = None
-    cache_scope: str | None = None
 
 
 class RecordRequest(BaseModel):
@@ -202,20 +174,6 @@ class SuggestRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
 
 
-class SuggestionOut(BaseModel):
-    tool: str
-    confidence: float
-    argument_template: dict[str, Any] = Field(default_factory=dict)
-    supporting_procedures: list[str] = Field(default_factory=list)
-    supporting_invocations: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    evidence_status: str
-
-
-class SuggestResponse(BaseModel):
-    suggestions: list[SuggestionOut]
-
-
 class TrajectoryStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -258,13 +216,6 @@ class NextRequest(BaseModel):
     trajectory_so_far: list[TrajectoryStep] = Field(default_factory=list)
     available_tools: list[DeclaredTool] = Field(default_factory=list)
     limit: int = Field(default=3, ge=1, le=10)
-
-
-class NextResponse(BaseModel):
-    suggestions: list[SuggestionOut]
-    stop: bool
-    matched_procedure: str | None = None
-    matched_prefix_length: int = 0
 
 
 class PlanRequest(BaseModel):
@@ -425,9 +376,29 @@ async def plan_tools(
     responses=_ERRORS,
 )
 async def list_procedures(
-    request: Request, container: ContainerDep, _: ServicePrincipalDep, task: str = ""
+    request: Request,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+    task: str = "",
+    agent_id: str = Query(
+        default="",
+        description=(
+            "The agent whose procedures to list. Required to see agent-scoped invocations: "
+            "they are recorded against principal 'agent:<id>', and lineage cannot travel in "
+            "a header the way tenant/workspace/user do."
+        ),
+    ),
+    workspace_id: str = Query(default="", description="Narrow to one workspace."),
 ) -> ProceduresResponse:
-    ctx = build_context(request, container, ScopeBody())
+    # A GET has no body, and lineage is body-only everywhere else — so it comes in as query
+    # parameters here. Passing an empty ScopeBody() discarded the caller's agent entirely:
+    # the context fell back to the API-key service principal, which the authorization model
+    # does not define, and every call to this route failed with a 500 from OpenFGA.
+    ctx = build_context(
+        request,
+        container,
+        ScopeBody(agent_id=agent_id or None, workspace_id=workspace_id or None),
+    )
     service = container.services["tool_memory"]
     keys = await _scope_keys(container, ctx)
     async with container.services["uow_factory"]() as uow:

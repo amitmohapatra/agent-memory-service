@@ -178,15 +178,16 @@ class GraphSettings(BaseModel):
 
 
 class EmbeddingSettings(BaseModel):
+    #: Only values that wiring can actually build. "vertex", "openai" and "disabled" were
+    #: declared here but had no branch in wire_models: setting one passed validation and then
+    #: killed startup with NotImplementedError. A configuration surface that advertises what
+    #: it cannot build is worse than a smaller one.
     provider: Literal[
         "sentence_transformers",
         "fastembed",
         "onnx",
         "openvino",
-        "vertex",
-        "openai",
         "hash",
-        "disabled",
     ] = "sentence_transformers"
     model: str = "ibm-granite/granite-embedding-small-english-r2"
     model_path: str | None = Field(default=None, description="local directory with model files")
@@ -196,6 +197,18 @@ class EmbeddingSettings(BaseModel):
     normalize: bool = True
     device: str = "cpu"
     threads: int | None = None
+    #: Set this and the model is served over HTTP instead of loaded into this process; leave
+    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
+    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
+    #: is the only fact an operator should have to supply.
+    url: str | None = Field(
+        default=None, description="inference server URL; unset means load the model in-process"
+    )
+    api_key: SecretStr | None = Field(
+        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
+    )
+    timeout_seconds: float = 30.0
+    max_retries: int = 2
 
 
 class RerankerSettings(BaseModel):
@@ -204,8 +217,22 @@ class RerankerSettings(BaseModel):
     )
     model: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
     model_path: str | None = None
+    #: The dial that decides capacity: one request costs this many cross-encoder pairs, so
+    #: target RPS x candidate_k is the throughput the reranker tier has to sustain.
     candidate_k: int = Field(default=20, description="bounded rerank K; benchmark 15-25")
     batch_size: int = 16
+    #: Set this and the model is served over HTTP instead of loaded into this process; leave
+    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
+    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
+    #: is the only fact an operator should have to supply.
+    url: str | None = Field(
+        default=None, description="inference server URL; unset means load the model in-process"
+    )
+    api_key: SecretStr | None = Field(
+        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
+    )
+    timeout_seconds: float = 30.0
+    max_retries: int = 2
 
 
 class NLISettings(BaseModel):
@@ -216,6 +243,18 @@ class NLISettings(BaseModel):
     model: str = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
     model_path: str | None = Field(default=None, description="local directory with model files")
     batch_size: int = 16
+    #: Set this and the model is served over HTTP instead of loaded into this process; leave
+    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
+    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
+    #: is the only fact an operator should have to supply.
+    url: str | None = Field(
+        default=None, description="inference server URL; unset means load the model in-process"
+    )
+    api_key: SecretStr | None = Field(
+        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
+    )
+    timeout_seconds: float = 30.0
+    max_retries: int = 2
     max_length: int = 512
     supported_threshold: float = Field(
         default=0.5, ge=0.0, le=1.0, description="entailment (or contradiction) score to decide"
@@ -290,8 +329,10 @@ class ModelSettings(BaseModel):
 
     sparse_model: str = "prithivida/Splade_PP_en_v1"
     sparse_model_path: str | None = None
-    late_interaction_model: str = "answerdotai/answerai-colbert-small-v1"
-    late_interaction_model_path: str | None = None
+    #: Inference server for the sparse model. Set it and SPLADE runs on its own tier instead
+    #: of inside the worker — which matters more here than for the other models, because it
+    #: is BERT-sized and runs on every chunk at ingest. Unset means load it in-process.
+    sparse_url: str | None = None
     embedding: EmbeddingSettings = EmbeddingSettings()
     reranker: RerankerSettings = RerankerSettings()
     nli: NLISettings = NLISettings()
@@ -352,6 +393,17 @@ class DocumentSettings(BaseModel):
 
 
 class RetrievalSettings(BaseModel):
+    #: Longest query text that is retrieved on. Anything beyond this is cut.
+    #:
+    #: A query is not free: it is embedded, run through the sparse model, and then paired with
+    #: every reranked candidate — and a cross-encoder pair is as expensive as its longest
+    #: side. Measured on the degenerate-input benchmark, a 2,000-character wall of noise cost
+    #: 20 seconds against 1 second for an ordinary question, on the same corpus. Nothing is
+    #: lost by cutting: the embedding models truncate at 512 tokens regardless, so the text
+    #: past this point never reached the model — it was only ever paid for.
+    max_query_chars: int = Field(
+        default=2048, ge=64, description="query text beyond this is truncated before retrieval"
+    )
     exact: bool = True
     bm25: bool = True
     dense: bool = True
@@ -360,7 +412,28 @@ class RetrievalSettings(BaseModel):
     rrf_k: int = 60
     prefetch_k: int = Field(default=50, description="per-retriever candidates before fusion")
     fused_k: int = Field(default=40, description="candidates after fusion")
-    rerank: bool = True
+    #: Cross-encoder reranking. **Off by default, on measured evidence.**
+    #:
+    #: BeIR/SciFact, 1,000 documents, 70 paired queries, clean vector store, real models:
+    #:
+    #:              recall@10   nDCG@10   p50
+    #:   rerank on     97.14%    79.33%   11,151 ms
+    #:   rerank off    98.57%    84.51%      533 ms
+    #:
+    #: Paired, the reranker rescued *zero* queries the first stage missed and lost one. nDCG
+    #: better on 4 queries, worse on 16, identical on 50 — exact sign test p = 0.012, mean
+    #: delta -0.0518 with a 95% interval of [-0.0917, -0.0120] that excludes zero. It is
+    #: significantly worse here, not merely not better.
+    #:
+    #: The likely mechanism is domain mismatch: ms-marco-MiniLM-L6-v2 is trained on web
+    #: passage ranking, and reordering scientific claim-evidence pairs is not that task. A
+    #: reranker trained in-domain may well earn its place — this setting is about *this*
+    #: default, not about reranking as an idea.
+    #:
+    #: The cost decides it either way. At 11.2 s per query against 0.53 s, 20 RPS needs ~161
+    #: cores with it and ~8 without. A component that is 21x the latency has to buy something,
+    #: and this one is buying a loss.
+    rerank: bool = False
     final_k: int = 20
     contextual_chunks: bool = True
     parent_expansion: bool = True
@@ -372,13 +445,6 @@ class RetrievalSettings(BaseModel):
     abstain_when_insufficient: bool = True
     # benchmark-gated; default off
     splade: bool = False
-    minicoil: bool = False
-    colbert: bool = False
-    pageindex: bool = False
-    raptor: bool = False
-    graph_ppr: bool = False
-    graphrag_global: bool = False
-    late_chunking: bool = False
 
 
 class ContextSettings(BaseModel):

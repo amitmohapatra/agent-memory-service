@@ -32,7 +32,20 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.uow import UnitOfWorkFactory
 
-_WORD = re.compile(r"[a-z][a-z0-9\-]+")
+#: Word characters in *any* script. The original pattern was ``[a-z][a-z0-9\-]+`` — ASCII
+#: only — so ``content_terms`` returned the empty set for every Japanese, Chinese, Korean,
+#: Greek, Cyrillic, Hebrew and Arabic query. Combined with the rule below (an empty term set
+#: used to mean "overlaps everything") the abstention gate could not fire for those languages
+#: at all: measured on the degenerate-input benchmark, a Japanese question against an
+#: English-only corpus came back COMPLETE with ten items attached.
+_WORD = re.compile(r"[^\W\d_][\w\-]*", re.UNICODE)
+
+#: Scripts written without spaces between words. Tokenising those by "word" produces one
+#: giant token that matches nothing but itself, so the standard treatment — Lucene's
+#: CJKAnalyzer, and essentially every engine that indexes Japanese — is overlapping character
+#: bigrams. Ranges: hiragana/katakana, CJK ideographs (incl. extension A and compatibility),
+#: and hangul syllables.
+_CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]+")
 _REQUIRED_EDGES = (
     ContextGraphEdge.DEFINED_BY,
     ContextGraphEdge.FOOTNOTE,
@@ -41,14 +54,24 @@ _REQUIRED_EDGES = (
 
 
 def content_terms(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if w not in STOP_WORDS and len(w) > 2}
+    lowered = text.lower()
+    terms = {w for w in _WORD.findall(lowered) if w not in STOP_WORDS and len(w) > 2}
+    for run in _CJK.findall(lowered):
+        # a lone ideograph is too common to carry signal; bigrams are the usual unit
+        terms.update(run[i : i + 2] for i in range(len(run) - 1))
+    return terms
 
 
 def overlaps(query: str, candidates: Sequence[Candidate]) -> bool:
     """Abstention rule: at least one evidence item shares a content term with the query."""
     q = content_terms(query)
     if not q:
-        return bool(candidates)
+        # Nothing to ground: an empty query, bare punctuation, emoji, or nothing but
+        # stopwords. This used to return ``bool(candidates)`` — vacuously "yes, it overlaps"
+        # — so ``query=""`` was answered with a COMPLETE bundle carrying ten memories. A
+        # question that asks nothing cannot be supported by evidence, and saying COMPLETE
+        # about it is exactly the dishonesty the evidence report exists to prevent.
+        return False
     for c in candidates:
         if c.kind in ("chunk", "memory", "summary") and content_terms(c.text) & q:
             return True

@@ -1,6 +1,19 @@
 # ADR 0012: Advanced retrieval strategies are benchmark-gated extra retrievers
 
-**Status:** accepted · **Date:** 2026-09-15
+**Status:** superseded by measurement, 2026-09-20 · **Date:** 2026-09-15
+
+> **Superseded.** Seven of the strategies this ADR introduced — `minicoil`, `colbert`,
+> `pageindex`, `raptor`, `graph_ppr`, `graphrag_global`, `late_chunking` — have been removed
+> from the codebase, along with `retrieval.rerank` being defaulted off.
+>
+> The gating mechanism this ADR describes was sound and is why removal was cheap: every one
+> was additive and off by default, so nothing depended on them. What it could not settle was
+> whether any of them added a capability the baseline lacked. `tests/eval/test_capability_coverage.py`
+> answers that per strategy, and `docs/MEASUREMENTS.md` records the reranker ablation that
+> decided `rerank` (significantly *worse*, p = 0.012, at 21x the latency).
+>
+> `splade` survives as the one genuinely uncovered capability. The rest of this document is
+> kept as the record of why they were built.
 
 ## Decision
 - **Every advanced strategy is off by default and additive.** A strategy is an *extra

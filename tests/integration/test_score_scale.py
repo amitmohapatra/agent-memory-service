@@ -15,8 +15,7 @@ from memory_service.modules.retrieval.engine import Candidate
 
 
 def _candidate(score: float, *, rerank: float | None = None, retrievers=("fusion",)):
-    c = Candidate(record_id="r", kind="memory", text="t", score=score,
-                  retrievers=list(retrievers))
+    c = Candidate(record_id="r", kind="memory", text="t", score=score, retrievers=list(retrievers))
     c.rerank_score = rerank
     return c
 
@@ -43,8 +42,12 @@ def test_the_unjudged_tail_sits_below_everything_judged() -> None:
 
 
 def test_relevance_is_always_in_range() -> None:
-    for c in (_candidate(0.016, rerank=1.4), _candidate(0.016, rerank=-0.2),
-              _candidate(99.0), _candidate(1.0, retrievers=("exact",))):
+    for c in (
+        _candidate(0.016, rerank=1.4),
+        _candidate(0.016, rerank=-0.2),
+        _candidate(99.0),
+        _candidate(1.0, retrievers=("exact",)),
+    ):
         _, _, relevance = _relevance(c)
         assert 0.0 <= relevance <= 1.0
 

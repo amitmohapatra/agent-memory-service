@@ -65,6 +65,28 @@ def _row_to_thread(r: ThreadRow) -> Thread:
     )
 
 
+async def _next_sequence(session: Any, row: Any, tenant_id: str, thread_id: str) -> int:
+    """The next per-thread sequence number, serialised on the thread row.
+
+    Turns and messages both number themselves within a thread and both need the same lock:
+    without ``FOR UPDATE`` on the thread, two concurrent writers read the same maximum and
+    collide on the unique constraint. The two implementations were identical apart from the
+    table, which is exactly the kind of copy that drifts — one of them had the comment
+    explaining the lock and the other did not.
+    """
+    await session.execute(
+        select(ThreadRow.thread_id)
+        .where(ThreadRow.thread_id == thread_id, ThreadRow.tenant_id == tenant_id)
+        .with_for_update()
+    )
+    current = await session.scalar(
+        select(func.coalesce(func.max(row.sequence), 0)).where(
+            row.thread_id == thread_id, row.tenant_id == tenant_id
+        )
+    )
+    return int(current or 0) + 1
+
+
 class SqlThreadRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
@@ -226,18 +248,7 @@ class SqlTurnRepository:
         )
 
     async def next_sequence(self, tenant_id: str, thread_id: str) -> int:
-        # lock the thread row so concurrent writers serialize on the sequence
-        await self.s.execute(
-            select(ThreadRow.thread_id)
-            .where(ThreadRow.thread_id == thread_id, ThreadRow.tenant_id == tenant_id)
-            .with_for_update()
-        )
-        current = await self.s.scalar(
-            select(func.coalesce(func.max(TurnRow.sequence), 0)).where(
-                TurnRow.thread_id == thread_id, TurnRow.tenant_id == tenant_id
-            )
-        )
-        return int(current or 0) + 1
+        return await _next_sequence(self.s, TurnRow, tenant_id, thread_id)
 
     async def complete(self, tenant_id: str, turn_id: str) -> None:
         await self.s.execute(
@@ -368,17 +379,7 @@ class SqlMessageRepository:
         return _row_to_message(r, atts)
 
     async def next_sequence(self, tenant_id: str, thread_id: str) -> int:
-        await self.s.execute(
-            select(ThreadRow.thread_id)
-            .where(ThreadRow.thread_id == thread_id, ThreadRow.tenant_id == tenant_id)
-            .with_for_update()
-        )
-        current = await self.s.scalar(
-            select(func.coalesce(func.max(MessageRow.sequence), 0)).where(
-                MessageRow.thread_id == thread_id, MessageRow.tenant_id == tenant_id
-            )
-        )
-        return int(current or 0) + 1
+        return await _next_sequence(self.s, MessageRow, tenant_id, thread_id)
 
     async def list_thread(
         self,

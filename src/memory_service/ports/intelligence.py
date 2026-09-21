@@ -34,6 +34,9 @@ class MemoryCandidate(BaseModel):
 
     content: str
     memory_type: MemoryType
+    #: Only meaningful with ``memory_type=CUSTOM``, which carries a caller-defined taxonomy
+    #: and is rejected by CanonicalMemory without it. See ProcessingHints.custom_type.
+    custom_type: str | None = None
     lifetime: Lifetime
     visibility: Visibility | None = None
     subject: str | None = None
@@ -90,11 +93,6 @@ class MemoryIntelligenceProvider(Protocol):
         existing: Sequence[CanonicalMemory],
         ctx: MemoryExecutionContext,
     ) -> ConsolidationOutcome: ...
-
-    async def search_features(self, query: str, ctx: MemoryExecutionContext) -> dict[str, Any]:
-        """Provider-specific retrieval hints (e.g. Mem0 filters). May return {}."""
-        ...
-
 
 # --------------------------------------------------------------------------
 # Graph
@@ -245,23 +243,6 @@ class GraphStore(Protocol):
         the loser and ``attributes`` (which fact won and why). Returns the edge."""
         ...
 
-    async def invalidate_for_document(
-        self,
-        tenant_id: str,
-        document_id: str,
-        *,
-        keep: Sequence[str],
-        at: datetime,
-        reason: str,
-    ) -> int:
-        """Invalidate the document's CURRENT relations that a re-extraction no longer
-        produced (``keep`` = the ids it did produce); the replacement for a hard delete."""
-        ...
-
-    async def invalidations(self, tenant_id: str, relation_ids: Sequence[str]) -> list[Relation]:
-        """The ``invalidated_by`` edges leaving the given relations."""
-        ...
-
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...
 
     async def relations_for_document(
@@ -275,32 +256,9 @@ class GraphStore(Protocol):
         """Every visible relation extracted from a document (audits, evals, exports)."""
         ...
 
-    async def relations_touching(
-        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int = 2000
-    ) -> list[Relation]:
-        """CURRENT relations with either end in ``entity_ids`` regardless of audience
-        (service-internal: summary maintenance applies its own audience rule)."""
-        ...
-
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]: ...
-
-    async def entities_by_id(self, tenant_id: str, entity_ids: Sequence[str]) -> list[Entity]:
-        """Entities by id without audience filtering (service-internal maintenance)."""
-        ...
-
-    async def list_tenant_entities(
-        self, tenant_id: str, *, entity_types: Sequence[str] = (), limit: int = 300
-    ) -> list[Entity]:
-        """Tenant-wide candidates for cross-document resolution, most mentioned first."""
-        ...
-
-    async def set_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None: ...
-
-    async def upsert_aliases(self, aliases: Sequence[EntityAlias]) -> None: ...
-
-    async def find_aliases(self, tenant_id: str, aliases: Sequence[str]) -> list[EntityAlias]: ...
 
     async def ping(self) -> bool: ...
 

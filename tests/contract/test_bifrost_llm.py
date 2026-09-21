@@ -283,8 +283,13 @@ async def test_live_bifrost_roundtrip() -> None:
     llm = BifrostLLM(settings)
     if not await llm.ping():
         pytest.skip(f"Bifrost not reachable at {settings.base_url}")
+    # max_tokens=8 was enough when every model emitted text immediately. A reasoning model
+    # spends the output budget on thinking first — measured against gemini-3.6-flash, "Reply
+    # with exactly: OK" consumed 57 reasoning tokens — so a small budget returns 200 OK with
+    # an empty string and finish_reason="length". The adapter now raises on exactly that
+    # rather than handing back "", which is what this test hit. Ask for a real budget.
     out = await llm.complete(
-        [LLMMessage(role="user", content="Reply with the single word: pong")], max_tokens=8
+        [LLMMessage(role="user", content="Reply with the single word: pong")], max_tokens=1024
     )
     assert "pong" in out.text.lower()
     assert out.input_tokens and out.output_tokens

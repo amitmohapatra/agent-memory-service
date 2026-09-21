@@ -52,7 +52,6 @@ class Container:
     memory_intelligence: Any = None
     graph_store: Any = None
     graph_enrichment: Any = None
-    late_interaction: Any = None
     document_parser: Any = None
     database: Any = None
     services: dict[str, Any] = field(default_factory=dict)

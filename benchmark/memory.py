@@ -23,8 +23,8 @@ from typing import Any
 
 from sqlalchemy import text
 
-from benchmark.common import provenance, write_result
-from benchmark.retrieval import TABLES, _pct, _settings
+from benchmark.common import provenance, reset_store, write_result
+from benchmark.retrieval import _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.domain.context import MemoryExecutionContext
@@ -102,8 +102,9 @@ async def run(n_observations: int) -> dict[str, Any]:
     quality = await _provider_quality(settings)
     container = await build_container(settings, __version__)
     try:
-        async with container.database.engine.begin() as conn:
-            await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        # both stores: the vector store is a separate server and a SQL TRUNCATE
+        # leaves its vectors behind for the next run to retrieve
+        await reset_store(container, "acme")
         register_handlers(container)
         uow_factory = container.services["uow_factory"]
         service = container.services["memory"]

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
-
 
 class RevisionKind(StrEnum):
     TENANT = "tenant"
@@ -23,25 +21,3 @@ class RevisionKind(StrEnum):
     AGENT = "agent"
 
 
-class RevisionKey(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: RevisionKind
-    tenant_id: str
-    object_id: str = Field(default="", description="empty for tenant-level revision")
-
-    def as_string(self) -> str:
-        return f"rev:{self.tenant_id}:{self.kind}:{self.object_id}"
-
-
-class RevisionSet(BaseModel):
-    """Snapshot of the revisions a cached object was built from."""
-
-    model_config = ConfigDict(frozen=True)
-
-    values: dict[str, int] = Field(default_factory=dict)
-
-    def fingerprint(self) -> str:
-        from memory_service.domain.ids import stable_key
-
-        return stable_key(*(f"{k}={v}" for k, v in sorted(self.values.items())))

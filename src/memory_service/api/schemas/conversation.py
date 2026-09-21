@@ -25,18 +25,88 @@ _SCOPE_EXAMPLE: dict[str, Any] = {
 
 
 class ProcessingHintsIn(BaseModel):
-    """Expert-only overrides; omit for the default 'the service decides' behaviour."""
+    """Expert-only overrides; omit for the default 'the service decides' behaviour.
+
+    Every field here is a *hint*: the service classifies observations on its own, and the
+    right call for almost every caller is to send none of them. They exist for the cases
+    where the caller genuinely knows something the extractor cannot infer — an import whose
+    provenance is already known, a note that must not outlive the run.
+
+    Setting one wrongly is worse than leaving it unset: a hint overrides the classifier, so a
+    ``memory_type`` that does not match the content makes the memory unreachable by the
+    queries that should find it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    lifetime: Lifetime | None = Field(default=None, examples=["LONG_TERM"])
-    memory_type: MemoryType | None = Field(default=None, examples=["PREFERENCE"])
-    visibility: Visibility | None = Field(default=None, examples=["USER"])
-    importance: float | None = Field(default=None, ge=0, le=1, examples=[0.8])
-    skip_extraction: bool = False
-    skip_embedding: bool = False
-    skip_graph: bool = False
-    skip_summary: bool = False
+    lifetime: Lifetime | None = Field(
+        default=None,
+        examples=["LONG_TERM"],
+        description=(
+            "How long this should survive. EPHEMERAL: within the turn only. SHORT_TERM: the "
+            "current thread/session. LONG_TERM: durable, the default for facts about a user "
+            "or the world. ARCHIVAL: cold storage, retained for audit rather than retrieval. "
+            "Omit to let the extractor choose from the content."
+        ),
+    )
+    memory_type: MemoryType | None = Field(
+        default=None,
+        examples=["PREFERENCE"],
+        description=(
+            "What kind of thing this is. The ones a caller normally means: SEMANTIC (a fact "
+            "about the world), PREFERENCE (how the user likes things), EPISODIC (something "
+            "that happened), DECISION (a choice and its reason), PROCEDURAL (how to do "
+            "something). ENTITY_SUMMARY, TOOL, OBSERVATION, AGENT, BELIEF, TASK and USER are "
+            "written by the pipeline itself; setting them by hand mislabels the record. The "
+            "remaining values (WORKING, CONVERSATION, SHARED, WORK, SKILL, DECISION, FAILURE, "
+            "OUTCOME, ARTIFACT, KNOWLEDGE_RAG, SUMMARY, DERIVED, POLICY, CUSTOM) are accepted "
+            "but never produced by extraction — they exist for callers importing records whose "
+            "type is already known. Omit unless that is what you are doing."
+        ),
+    )
+    custom_type: str | None = Field(
+        default=None,
+        examples=["release_note"],
+        description=(
+            "Required when memory_type=CUSTOM, and meaningless otherwise: the caller's own "
+            "label for a record this service's taxonomy has no name for. Without it a CUSTOM "
+            "memory is rejected, so omitting it turns the hint into a failed write rather "
+            "than a stored memory."
+        ),
+    )
+    visibility: Visibility | None = Field(
+        default=None,
+        examples=["USER"],
+        description=(
+            "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, "
+            "GROUP, USER, WORKSPACE, TENANT, GLOBAL. Each level is a superset of the ones "
+            "before it. Omit to inherit the scope the observation was submitted in — which is "
+            "the safe answer; widening by hand is how one tenant's data reaches another."
+        ),
+    )
+    importance: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        examples=[0.8],
+        description=(
+            "0-1 prior on how much this matters, influencing admission and ranking. Omit "
+            "unless you have a real signal; a blanket high value just flattens ranking."
+        ),
+    )
+    skip_extraction: bool = Field(
+        default=False,
+        description="Store the observation verbatim without deriving memories from it.",
+    )
+    skip_embedding: bool = Field(
+        default=False, description="Do not index for semantic search (keyword/graph only)."
+    )
+    skip_graph: bool = Field(
+        default=False, description="Do not extract entities or relations into the graph."
+    )
+    skip_summary: bool = Field(
+        default=False, description="Do not roll this into thread or entity summaries."
+    )
 
 
 class AttachmentIn(BaseModel):

@@ -12,8 +12,9 @@ Companion to `TARGET_STACK.md` and `INTEGRATIONS_PLAN.md`.
 
 
 > **Status note (September 2026).** The surface described below was reduced to what is
-> actually used. `POST /v1/tools` (registry), `/v1/tools/lookup` (output cache),
-> `/v1/tools/suggest` and `/v1/tools/next` were removed, along with their SDK methods.
+> actually used. These were all removed, along with their SDK methods:
+> `POST /v1/tools` (registry, removed), `/v1/tools/lookup` (output cache, removed),
+> `/v1/tools/suggest` (removed) and `/v1/tools/next` (removed).
 >
 > Why: the harness — the only client — called `record` and nothing else, and the five other
 > endpoints' sole consumers were this document and the test that checked this document still
@@ -51,7 +52,7 @@ task success sharply (ALFWorld 42% → 78% with the same model, with 37% fewer s
 the winning form pairs concrete examples with abstract guidance rather than either alone.
 We implement exactly that, deterministic first, LLM (via Bifrost) only for abstraction.
 
-### 30.0 Tool registry — how a tool gets known in the first place
+### 30.0 Tool registry — how a tool gets known in the first place (removed)
 
 The memory service never executes tools; they live in the agent framework (LangGraph, ADK,
 CrewAI, an MCP server, plain code). The service only needs a *descriptor* so it can record,
@@ -94,10 +95,11 @@ Recorded idempotently (key = run + step + tool + args_hash). Retention/purge fol
 ### 30.2 Tool-output working memory (short-term)
 
 Per tool a policy: `cacheable: true|false`, `ttl`, `scope: run | thread | user | tenant`.
-`POST /v1/tools/lookup {tool, args}` returns a still-valid identical result (same tenant/scope,
-same `args_hash`, within TTL, tool marked deterministic) so an agent does not call a costly or
-rate-limited tool twice for the same question inside a run or a thread. Never used for
-non-deterministic or side-effecting tools; every cached reply says it is cached and how old.
+**Removed.** `POST /v1/tools/lookup` returned a still-valid identical result within a TTL so
+an agent would not call a costly tool twice for the same question. Nothing called it: the
+harness never looked the cache up, and a cache no client reads is a table that only grows.
+The invocation records it was built on are still written (§30.1) — if replay caching comes
+back it will be a read over those, not a second store.
 
 ### 30.3 Procedural memories (long-term)
 
@@ -114,12 +116,11 @@ unused or repeatedly failing procedures decay and are archived.
 
 ### 30.4 Tool suggestion (what agents ask for)
 
-`POST /v1/tools/suggest {task, available_tools: [{name, description, schema}], context}`
-returns a ranked list: tool, confidence, an argument template, the procedures and past
-invocations that support it (with evidence status), and warnings (known failure modes, cost,
-staleness). Ranking is deterministic (procedure match + outcome statistics + recency),
-optionally re-ranked through Bifrost when the `uses` flag `tool_selection` is on. Only tools
-the agent declares as available are ever suggested; nothing is invented. Memories from other
+**Removed.** `POST /v1/tools/suggest` returned a ranked list of tools for a task. It was
+answering a question that has moved: models now choose tools from the schemas in their own
+context, and a service ranking them from the outside competed with that rather than helping
+it. What survives is the part a model cannot know — which chain has actually worked before,
+served by `/v1/tools/plan` (§30.5). Memories from other
 agents count only if they were shared to the group — the same visibility rules as everything
 else. SDK: `client.tools.suggest()`, `client.tools.record()`, `client.tools.lookup()`,
 `client.tools.procedures()`.
@@ -146,14 +147,9 @@ successful invocation records inside a run: consecutive calls where an output fi
 seen across runs with a good outcome gains support, an edge that preceded failures loses it.
 Bifrost reflection may name and generalise a chain, never invent edges without support.
 
-Two calls serve agents mid-task:
+One call serves agents mid-task (`POST /v1/tools/next` was removed with the rest of the
+advisory surface):
 
-- `POST /v1/tools/next {task, trajectory_so_far: [{tool, args_hash, status, output_summary}],
-  available_tools}` → the ranked next steps given the prefix, each with the argument template
-  already bound from earlier outputs where possible, the supporting chains/procedures, and
-  the stop condition ("after `send_report` there is nothing left to call"). Ranking is
-  deterministic (chain support × precondition satisfaction × outcome stats), optionally
-  re-ranked through Bifrost.
 - `POST /v1/tools/plan {task, available_tools}` → the whole best-known chain for a task
   pattern, as an ordered plan with data-flow bindings, so a planner node can start from a
   validated procedure instead of an empty prompt; the plan carries the evidence that backs it
@@ -177,7 +173,7 @@ hit rate, cache precision (no stale or cross-scope hits = 0 violations), procedu
 after an injected failure, and isolation (an agent never sees another agent's unshared
 invocations). Thresholds are hard gates like the rest.
 
-### 30.8 Tools through Bifrost's MCP gateway (alternative to framework tools)
+### 30.8 Tools through Bifrost's MCP gateway — design only, not implemented
 
 Bifrost is also an MCP gateway: MCP servers (stdio/HTTP/SSE) are registered in Bifrost once,
 their tools are injected into every `/v1/chat/completions` request, tool visibility is
@@ -271,9 +267,9 @@ flowchart LR
   BF -. "agent mode: plugin/OTel → record" .-> I
 ```
 
-**Step 1 — descriptors reach memory.** Bifrost tools: the adapter reads the virtual key's
-tool list (`GET /v1/mcp/tools`) and upserts descriptors with `source=bifrost-mcp` and the
-server name. Local tools: `memory.wrap_tools(ToolNode)` introspects each `@tool` (name,
+**Step 1 — descriptors reach memory.** Bifrost tools (planned, see §30.8): the adapter reads
+the virtual key's tool list (`GET /v1/mcp/tools`, not implemented) and upserts descriptors
+with `source=bifrost-mcp` and the server name. Local tools: `memory.wrap_tools(ToolNode)` introspects each `@tool` (name,
 docstring, args model) and upserts with `source=langgraph`. Same table, same policies; a
 tool is identified by (tenant, name, schema hash), so the same tool used from both places is
 one tool.

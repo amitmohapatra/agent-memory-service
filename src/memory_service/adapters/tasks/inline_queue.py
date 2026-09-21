@@ -69,13 +69,6 @@ class RecordingTaskQueue:
     async def get(self, job_id: str) -> JobInfo | None:
         return self.jobs.get(job_id)
 
-    async def cancel(self, job_id: str) -> bool:
-        info = self.jobs.get(job_id)
-        if info and info.status is JobStatus.PENDING:
-            self.jobs[job_id] = info.model_copy(update={"status": JobStatus.CANCELLED})
-            return True
-        return False
-
     async def drain(self, *, max_rounds: int = 10) -> int:
         """Run all pending jobs (and jobs they enqueue) until none remain."""
         ran = 0

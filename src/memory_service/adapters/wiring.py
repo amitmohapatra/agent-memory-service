@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from memory_service.application.container import Dependency
+from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -34,6 +35,7 @@ async def wire_all(container: Container) -> None:
     _wire_llm(container)
     _wire_conversation(container)
     await _wire_blob(container)
+    await _verify_served_models(container)
     _wire_archive(container)
     _wire_ingestion(container)
     await _wire_search(container)
@@ -44,7 +46,6 @@ async def wire_all(container: Container) -> None:
     _wire_tools(container)
     _wire_graph(container)
     _wire_context_preservation(container)
-    _wire_advanced_retrieval(container)
     _register_jobs(container)
     log.info(
         "wiring.done",
@@ -60,6 +61,28 @@ async def wire_all(container: Container) -> None:
 # ---------------------------------------------------------------------------
 # M1 wiring
 # ---------------------------------------------------------------------------
+
+
+async def _verify_served_models(container: Container) -> None:
+    """Handshake with every model that is served over HTTP, before serving traffic.
+
+    A URL says where to send text, not which model answers. Without this, a URL pointing at
+    the wrong encoder is discovered as bad retrieval weeks later rather than as a startup
+    error — the fingerprint that names the vector collection would have been built from the
+    declared name, so foreign vectors land in the right-looking collection.
+    """
+    for name, provider in (
+        ("embedding", container.embedding),
+        ("reranker", container.reranker),
+        ("nli", container.nli),
+    ):
+        verify = getattr(provider, "verify", None)
+        identify = getattr(provider, "identify", None)
+        if verify is not None:
+            await verify()
+        elif identify is not None:
+            dialect, served = await identify()
+            log.info("model.verified", role=name, dialect=dialect, served=served)
 
 
 async def _wire_cache(container: Container) -> None:
@@ -218,31 +241,27 @@ def _wire_archive(container: Container) -> None:
 
 
 def _wire_ingestion(container: Container) -> None:
-    import importlib.util
 
+    from memory_service.adapters.parsers import register_parsers
     from memory_service.adapters.parsers.builtin import BuiltinParser
     from memory_service.modules.ingestion.service import IngestionService
 
     cfg = container.settings.documents
+    # The registry is the extension point: a new parser is one entry in adapters/parsers,
+    # not a branch here. This used to be a switch statement, which is precisely what
+    # config/registry.py says a provider must never require.
+    register_parsers(container.registries.document_parser)
     builtin = BuiltinParser()
-    parser = builtin
-    if cfg.parser == "docling":
-        # DoclingParser imports docling lazily, on its first parse, so constructing it
-        # succeeds in an image built without the extra and the downgrade would only show up
-        # as poorly parsed documents much later. Check the dependency here instead.
-        if importlib.util.find_spec("docling") is None:
-            log.warning(
-                "docling.unavailable",
-                reason="docling is not installed; using the builtin parser",
-                hint='rebuild with --build-arg EXTRAS="gcp models docling"',
+    parser = container.registries.document_parser.create(cfg.parser)
+    if parser is None:
+        # The chosen parser cannot run here. Falling back is a configured behaviour, not an
+        # accident, and /version reports the difference either way.
+        if not cfg.fallback_parser:
+            raise ProviderNotConfigured(
+                f"documents.parser={cfg.parser!r} cannot be constructed in this image and "
+                "documents.fallback_parser is unset"
             )
-        else:
-            try:
-                from memory_service.adapters.parsers.docling_parser import DoclingParser
-
-                parser = DoclingParser()
-            except Exception as exc:
-                log.warning("docling.unavailable", error=str(exc))
+        parser = container.registries.document_parser.create(cfg.fallback_parser)
     container.document_parser = parser
     container.services["ingestion"] = IngestionService(
         container.services["uow_factory"],
@@ -283,7 +302,11 @@ def _wire_models(container: Container) -> None:
 
     settings = container.settings
     emb_cfg = settings.models.embedding
-    if emb_cfg.provider == "hash":
+    if emb_cfg.url:
+        from memory_service.adapters.models.remote import RemoteEmbedding
+
+        embedding = RemoteEmbedding(emb_cfg)
+    elif emb_cfg.provider == "hash":
         embedding = HashEmbedding(emb_cfg.dimension)
     elif emb_cfg.provider == "fastembed":
         embedding = FastEmbedEmbedding(emb_cfg)
@@ -296,20 +319,19 @@ def _wire_models(container: Container) -> None:
         [*settings.provider_policy.allowed_licenses, "see model card"],
         settings.provider_policy.allow_remote_models,
     )
-    if settings.retrieval.late_chunking:
-        from memory_service.adapters.models.advanced import LateChunkingEmbedding
-
-        embedding = LateChunkingEmbedding(emb_cfg)
     container.embedding = embedding
-    if settings.retrieval.splade or settings.retrieval.minicoil:
+    if settings.retrieval.splade:
         from memory_service.adapters.models.advanced import FastEmbedSparseEncoder
 
-        sparse_model = (
-            settings.models.sparse_model if settings.retrieval.splade else "Qdrant/minicoil-v1"
-        )
-        sparse_encoder = FastEmbedSparseEncoder(
-            sparse_model, model_path=settings.models.sparse_model_path
-        )
+        sparse_model = settings.models.sparse_model
+        if settings.models.sparse_url:
+            from memory_service.adapters.models.remote import RemoteSparse
+
+            sparse_encoder: Any = RemoteSparse(settings.models.sparse_url, sparse_model)
+        else:
+            sparse_encoder = FastEmbedSparseEncoder(
+                sparse_model, model_path=settings.models.sparse_model_path
+            )
         check_provider_policy(
             sparse_encoder.info,
             [*settings.provider_policy.allowed_licenses, "see model card"],
@@ -319,7 +341,11 @@ def _wire_models(container: Container) -> None:
     else:
         container.sparse = Bm25SparseEncoder()
     rr_cfg = settings.models.reranker
-    if rr_cfg.provider == "disabled":
+    if rr_cfg.url:
+        from memory_service.adapters.models.remote import RemoteReranker
+
+        container.reranker = RemoteReranker(rr_cfg)
+    elif rr_cfg.provider == "disabled":
         container.reranker = None
     elif rr_cfg.provider == "lexical":
         container.reranker = LexicalReranker()
@@ -364,8 +390,12 @@ def _wire_nli(container: Container) -> None:
     if cfg.provider == "disabled":
         container.nli = None
         return
-    nli: LexicalNLI | TransformersNLI = LexicalNLI()
-    if cfg.provider == "transformers":
+    nli: Any = LexicalNLI()
+    if cfg.url:
+        from memory_service.adapters.models.remote import RemoteNLI
+
+        nli = RemoteNLI(cfg)
+    elif cfg.provider == "transformers":
         try:
             nli = TransformersNLI(cfg)
         except DependencyUnavailable as exc:
@@ -563,7 +593,6 @@ def _wire_graph(container: Container) -> None:
             graph,
             container.services["uow_factory"],
             max_facts=settings.context.graph_facts_max,
-            ppr=settings.retrieval.graph_ppr,
         )
 
 
@@ -582,42 +611,3 @@ def _wire_context_preservation(container: Container) -> None:
             container.services["uow_factory"], expansion, settings=settings
         )
     container.services["expansion"] = expansion
-
-
-def _wire_advanced_retrieval(container: Container) -> None:
-    """M10 benchmark-gated strategies. Every flag defaults to False; model-backed ones raise
-    DependencyUnavailable at startup when their weights are absent (no silent fallback)."""
-    from memory_service.modules.retrieval.strategies import (
-        LateInteractionRetriever,
-        PageIndexRetriever,
-        RaptorRetriever,
-    )
-
-    settings = container.settings
-    cfg = settings.retrieval
-    engine = container.services["retrieval"]
-    indexer = container.services["indexer"]
-    if cfg.pageindex:
-        engine.retrievers["pageindex"] = PageIndexRetriever(
-            container.services["uow_factory"], container.search, indexer
-        )
-    if cfg.raptor:
-        engine.retrievers["raptor"] = RaptorRetriever(container.search, indexer)
-    if cfg.colbert:
-        from memory_service.adapters.models.advanced import FastEmbedLateInteraction
-        from memory_service.config.registry import check_provider_policy
-
-        encoder = FastEmbedLateInteraction(
-            settings.models.late_interaction_model,
-            model_path=settings.models.late_interaction_model_path,
-        )
-        check_provider_policy(
-            encoder.info,
-            [*settings.provider_policy.allowed_licenses, "see model card"],
-            settings.provider_policy.allow_remote_models,
-        )
-        container.late_interaction = encoder
-        indexer.late_interaction = encoder
-        engine.retrievers["late_interaction"] = LateInteractionRetriever(
-            container.search, indexer, encoder
-        )

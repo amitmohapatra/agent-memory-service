@@ -23,6 +23,13 @@ class ProcessingHints(BaseModel):
 
     lifetime: Lifetime | None = None
     memory_type: MemoryType | None = None
+    #: Required alongside ``memory_type=CUSTOM``, which carries a caller-defined taxonomy.
+    #:
+    #: Without this field CUSTOM was unreachable: ``CanonicalMemory`` rejects it when
+    #: ``custom_type`` is absent, and there was no way to supply one through the import
+    #: surface — so every observation hinted CUSTOM produced a failed job and no memory,
+    #: silently, while the type sat in the admission table looking supported.
+    custom_type: str | None = None
     visibility: Visibility | None = None
     importance: float | None = Field(default=None, ge=0.0, le=1.0)
     skip_extraction: bool = False

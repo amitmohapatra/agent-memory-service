@@ -278,7 +278,7 @@ async def _shared_conflict():
     )
     existing = [build_memory(other, SCOUT, now=datetime.now(UTC))]
     assert existing[0].scope.level.value == "THREAD"
-    assert existing[0].owner_principal == "agent:scout"
+    assert existing[0].owner_principal == "agent:u1/scout"
     cand = await _first(plain, "My timezone is CET.")
     assert (cand.subject, cand.predicate) == (existing[0].subject, existing[0].predicate)
     return cand, existing
@@ -302,7 +302,7 @@ async def test_shared_scope_conflict_is_adjudicated(verdict, decision) -> None:
             cand, existing, CTX
         )
     assert gw.route.call_count == 1
-    assert "agent:scout" in gw.prompts()[0]["messages"][1]["content"]
+    assert "agent:u1/scout" in gw.prompts()[0]["messages"][1]["content"]
     assert out.decision is decision and out.target_memory_id == existing[0].memory_id
 
 

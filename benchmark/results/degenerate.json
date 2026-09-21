@@ -1,0 +1,428 @@
+{
+  "benchmark": "degenerate_input",
+  "observations": [
+    {
+      "case": "empty",
+      "chars": 0,
+      "decisions": {},
+      "ms": 116.1,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "whitespace",
+      "chars": 5,
+      "decisions": {},
+      "ms": 78.0,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "single_char",
+      "chars": 1,
+      "decisions": {},
+      "ms": 70.6,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "nul_bytes",
+      "chars": 17,
+      "decisions": {},
+      "ms": 18.9,
+      "raised": "DataError: (psycopg.DataError) PostgreSQL text fields cannot contain NUL (0x00) bytes\n[SQL: INSERT INTO observations (observation_id, tenant_id, kind, content, content_hash, workspace_id, user_id, thread_id, ses",
+      "stored": 0,
+      "submit_accepted": false
+    },
+    {
+      "case": "huge",
+      "chars": 108000,
+      "decisions": {},
+      "ms": 255.5,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "stack_trace",
+      "chars": 67,
+      "decisions": {},
+      "ms": 78.5,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "truncated_json",
+      "chars": 31,
+      "decisions": {},
+      "ms": 70.6,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "emoji_only",
+      "chars": 3,
+      "decisions": {},
+      "ms": 80.7,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "duplicate_spam",
+      "chars": 24,
+      "decisions": {},
+      "ms": 94.9,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "duplicate_spam_again",
+      "chars": 24,
+      "decisions": {},
+      "ms": 99.6,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    },
+    {
+      "case": "prompt_injection",
+      "chars": 55,
+      "decisions": {},
+      "ms": 73.3,
+      "raised": null,
+      "stored": 0,
+      "submit_accepted": true
+    }
+  ],
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-19T23:07:39.450066+00:00"
+  },
+  "queries": [
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "empty",
+      "chars": 0,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 883.1,
+      "raised": null,
+      "rendered_chars": 1968,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "whitespace",
+      "chars": 7,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 627.8,
+      "raised": null,
+      "rendered_chars": 1968,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "single_char",
+      "chars": 1,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 741.2,
+      "raised": null,
+      "rendered_chars": 2182,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "punctuation",
+      "chars": 8,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 980.5,
+      "raised": null,
+      "rendered_chars": 1968,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "emoji",
+      "chars": 4,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 967.5,
+      "raised": null,
+      "rendered_chars": 2187,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": true,
+      "as_expected": true,
+      "case": "random_ascii",
+      "chars": 25,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 1021.5,
+      "raised": null,
+      "rendered_chars": 2139,
+      "status": "INSUFFICIENT"
+    },
+    {
+      "abstained": true,
+      "as_expected": true,
+      "case": "random_bytes_text",
+      "chars": 2000,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 21026.7,
+      "raised": null,
+      "rendered_chars": 1952,
+      "status": "INSUFFICIENT"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "repeated_token",
+      "chars": 2000,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 9618.0,
+      "raised": null,
+      "rendered_chars": 1968,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "control_chars",
+      "chars": 16,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 1430.0,
+      "raised": null,
+      "rendered_chars": 2183,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "html",
+      "chars": 40,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 1680.4,
+      "raised": null,
+      "rendered_chars": 2000,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "json_blob",
+      "chars": 41,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 1169.2,
+      "raised": null,
+      "rendered_chars": 2000,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": true,
+      "as_expected": true,
+      "case": "sql_ish",
+      "chars": 26,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 888.4,
+      "raised": null,
+      "rendered_chars": 2220,
+      "status": "INSUFFICIENT"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "non_latin",
+      "chars": 12,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 915.1,
+      "raised": null,
+      "rendered_chars": 1968,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": false,
+      "case": "prompt_injection",
+      "chars": 59,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 947.7,
+      "raised": null,
+      "rendered_chars": 2182,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": true,
+      "as_expected": true,
+      "case": "off_corpus_fact",
+      "chars": 38,
+      "chunks": 10,
+      "expects_abstention": true,
+      "ms": 1052.4,
+      "raised": null,
+      "rendered_chars": 2216,
+      "status": "INSUFFICIENT"
+    },
+    {
+      "abstained": false,
+      "as_expected": true,
+      "case": "whole_document_echo",
+      "chars": 331,
+      "chunks": 10,
+      "expects_abstention": false,
+      "ms": 1835.5,
+      "raised": null,
+      "rendered_chars": 2000,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": true,
+      "case": "real_question",
+      "chars": 65,
+      "chunks": 10,
+      "expects_abstention": false,
+      "ms": 1092.1,
+      "raised": null,
+      "rendered_chars": 2183,
+      "status": "COMPLETE"
+    },
+    {
+      "abstained": false,
+      "as_expected": true,
+      "case": "real_question_2",
+      "chars": 54,
+      "chunks": 10,
+      "expects_abstention": false,
+      "ms": 1072.4,
+      "raised": null,
+      "rendered_chars": 2182,
+      "status": "COMPLETE"
+    }
+  ],
+  "summary": {
+    "behaved_as_expected": 7,
+    "memories_after_junk": 0,
+    "observations": 11,
+    "queries": 18,
+    "unexpected": [
+      "empty",
+      "whitespace",
+      "single_char",
+      "punctuation",
+      "emoji",
+      "repeated_token",
+      "control_chars",
+      "html",
+      "json_blob",
+      "non_latin",
+      "prompt_injection"
+    ],
+    "unhandled_exceptions": [
+      "nul_bytes"
+    ]
+  }
+}

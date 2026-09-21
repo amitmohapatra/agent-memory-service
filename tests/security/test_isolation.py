@@ -253,6 +253,16 @@ async def test_agent_inherits_user_access_but_not_user_private_memories() -> Non
     assert not spec.allows(
         "acme", visibility_keys("acme", Visibility.PRIVATE, owner_principal="user:u1")
     )
+    # Its own private memories, under the principal it actually writes with. That principal
+    # is bound to the user the agent runs for (``agent:u1/research``), so the same agent_id
+    # acting for a different user is a different principal.
     assert spec.allows(
+        "acme",
+        visibility_keys("acme", Visibility.PRIVATE, owner_principal=agent_ctx.principal_id),
+    )
+    assert agent_ctx.principal_id == "agent:u1/research"
+    # The unbound form is what made a private memory readable by anyone who named the agent:
+    # nothing may write it, and nothing may read it.
+    assert not spec.allows(
         "acme", visibility_keys("acme", Visibility.PRIVATE, owner_principal="agent:research")
     )

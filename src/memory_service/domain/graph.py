@@ -94,15 +94,3 @@ def layer_for(predicate: str) -> GraphLayer:
     return "entity"
 
 
-def layer_order(query: str) -> tuple[GraphLayer, ...]:
-    """Layer priority for a question: causal first for why/how, temporal first for
-    when/since/before/after/until/as-of, entity first otherwise; structural is always last."""
-    q = f" {query.casefold()} "
-    if any(cue in q for cue in (" why ", " how ", " because ", " reason", " driver", " cause")):
-        return ("causal", "entity", "temporal", "structural")
-    if any(
-        cue in q
-        for cue in (" when ", " since ", " before ", " after ", " until ", " as of ", " date")
-    ):
-        return ("temporal", "entity", "causal", "structural")
-    return ("entity", "causal", "temporal", "structural")

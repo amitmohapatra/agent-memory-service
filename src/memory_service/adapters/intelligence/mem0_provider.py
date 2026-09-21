@@ -166,5 +166,3 @@ class Mem0MemoryIntelligence:
             decision=DedupDecision.CREATE, candidate=candidate, reason=f"mem0: {kind}"
         )
 
-    async def search_features(self, query: str, ctx: MemoryExecutionContext) -> dict[str, Any]:
-        return {"user_id": namespace(ctx)}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from openfga_sdk import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models import (
@@ -141,26 +142,64 @@ class OpenFGAAuthorizationProvider:
         try:
             response = await client.batch_check(ClientBatchCheckRequest(checks=items))
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"OpenFGA batch_check failed: {type(exc).__name__}"
-            ) from exc
+            raise DependencyUnavailable(f"OpenFGA batch_check failed: {_reason(exc)}") from exc
         by_id = {r.correlation_id: bool(r.allowed) for r in response.result}
         return [by_id.get(str(i), False) for i in range(len(checks))]
 
     async def write(
         self, add: Sequence[RelationTuple], delete: Sequence[RelationTuple] = ()
     ) -> None:
+        """Assert a set of relations. A tuple that already holds is not a failure.
+
+        OpenFGA rejects a batch containing a tuple it already has, and its Write is
+        *transactional*: that rejection discards every other tuple in the same call. So one
+        redundant tuple made the whole ACL write fail — and because tuples outlive the rows
+        they describe, re-using a thread id whose rows were deleted became permanently
+        impossible: every message write returned "OpenFGA write failed: ValidationException".
+
+        Redundant tuples are therefore re-applied one at a time, so the genuinely new ones
+        still land and only the ones whose desired state already holds are skipped.
+        """
         client = await self._get_client()
-        body = ClientWriteRequest(
-            writes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in add]
-            or None,
-            deletes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in delete]
-            or None,
-        )
         try:
-            await client.write(body)
+            await self._apply(client, add, delete)
+            return
         except Exception as exc:
-            raise DependencyUnavailable(f"OpenFGA write failed: {type(exc).__name__}") from exc
+            if not _already_satisfied(exc):
+                raise DependencyUnavailable(f"OpenFGA write failed: {_reason(exc)}") from exc
+        for relation in add:
+            await self._apply_one(client, add=(relation,))
+        for relation in delete:
+            await self._apply_one(client, delete=(relation,))
+
+    async def _apply(
+        self, client: Any, add: Sequence[RelationTuple], delete: Sequence[RelationTuple]
+    ) -> None:
+        await client.write(
+            ClientWriteRequest(
+                writes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in add]
+                or None,
+                deletes=[
+                    ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in delete
+                ]
+                or None,
+            )
+        )
+
+    async def _apply_one(
+        self,
+        client: Any,
+        *,
+        add: Sequence[RelationTuple] = (),
+        delete: Sequence[RelationTuple] = (),
+    ) -> None:
+        """One tuple, where "it is already like that" counts as done."""
+        try:
+            await self._apply(client, add, delete)
+        except Exception as exc:
+            if _already_satisfied(exc):
+                return
+            raise DependencyUnavailable(f"OpenFGA write failed: {_reason(exc)}") from exc
 
     async def list_objects(self, user: str, relation: str, object_type: str) -> list[str]:
         client = await self._get_client()
@@ -169,8 +208,22 @@ class OpenFGAAuthorizationProvider:
                 ClientListObjectsRequest(user=user, relation=relation, type=object_type)
             )
         except Exception as exc:
+            if _unknown_subject_type(exc):
+                # The model decides which subject types exist. One it does not define simply
+                # holds no grants, so the honest answer is an empty scope — fail-closed, the
+                # caller sees nothing. Raising here turned "this principal owns nothing" into
+                # a dependency outage: every request authenticated by API key alone (no user,
+                # no agent) resolved to `service:...` and got a 500 from a healthy gateway.
+                log.info(
+                    "authz.subject_type_not_in_model",
+                    user=user,
+                    relation=relation,
+                    object_type=object_type,
+                )
+                return []
             raise DependencyUnavailable(
-                f"OpenFGA list_objects failed: {type(exc).__name__}"
+                f"OpenFGA list_objects failed: {_reason(exc)}",
+                details={"user": user, "relation": relation, "type": object_type},
             ) from exc
         return list(response.objects or [])[: self.max_listed_objects + 1]
 
@@ -185,6 +238,54 @@ class OpenFGAAuthorizationProvider:
     async def close(self) -> None:
         if self._client is not None:
             await self._client.close()
+
+
+#: OpenFGA's code for a write that would not change anything: a tuple that already exists, or
+#: a deletion of one that never did. Both mean the relation is already in the state we asked
+#: for — the same code also covers genuinely malformed input, so the message is checked too.
+_NO_CHANGE_CODE = "write_failed_due_to_invalid_input"
+_NO_CHANGE_TEXT = ("already exist", "did not exist", "does not exist")
+
+
+def _parsed(exc: Exception) -> tuple[str, str]:
+    """``(code, message)`` from an OpenFGA error, however the SDK chose to carry it.
+
+    ``parsed_exception`` is a ``ValidationErrorMessageResponse`` model, not the dict it
+    prints as — reading it with ``.get`` silently matched nothing and made every classifier
+    below fall through to "unknown failure".
+    """
+    parsed = getattr(exc, "parsed_exception", None)
+    if parsed is None:
+        return "", ""
+    if isinstance(parsed, dict):
+        return str(parsed.get("code") or ""), str(parsed.get("message") or "")
+    return str(getattr(parsed, "code", "") or ""), str(getattr(parsed, "message", "") or "")
+
+
+def _unknown_subject_type(exc: Exception) -> bool:
+    """True when the failure is "this subject type is not in the authorization model"."""
+    _, message = _parsed(exc)
+    text = message or str(exc)
+    return "invalid 'user' value" in text and "not found" in text
+
+
+def _reason(exc: Exception) -> str:
+    """The gateway's own message, not just the exception class.
+
+    ``OpenFGA write failed: ValidationException`` says nothing about what was invalid; the
+    cause used to be thrown away here, so identifying one took a manual bisection.
+    """
+    _, message = _parsed(exc)
+    if message:
+        return message[:300]
+    return f"{type(exc).__name__}: {str(exc)[:200]}"
+
+
+def _already_satisfied(exc: Exception) -> bool:
+    code, message = _parsed(exc)
+    if code != _NO_CHANGE_CODE:
+        return False
+    return any(fragment in message for fragment in _NO_CHANGE_TEXT)
 
 
 def _dsl_to_json(dsl: str) -> dict:

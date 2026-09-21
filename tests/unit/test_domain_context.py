@@ -59,7 +59,11 @@ def test_child_agent_inherits_lineage_and_adds_agent_fields() -> None:
     assert child.agent_run_id and child.agent_run_id.startswith("run_")
     assert child.parent_agent_run_id is None
     assert child.causation_id == parent.request_id
-    assert child.principal_id == "agent:research"
+    # Bound to the user it runs for. ``agent_id`` arrives in an unauthenticated request
+    # body, so a bare ``agent:research`` let any caller assume this agent by naming it —
+    # reproduced live: a different user sending agent_id=worker read another user's PRIVATE
+    # memory with HTTP 200.
+    assert child.principal_id == "agent:u1/research"
     grandchild = child.child_agent(agent_id="writer")
     assert grandchild.parent_agent_run_id == child.agent_run_id
 

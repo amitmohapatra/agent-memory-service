@@ -195,6 +195,43 @@ async def test_agent_private_memories_stay_private(container, uow_factory) -> No
     assert (await engine.retrieve(user, "why did revenue fall", kinds=("memory",))).candidates
 
 
+async def test_reading_an_agent_memory_requires_naming_the_agent(container, uow_factory) -> None:
+    """An agent's memory is reachable only by that agent's principal — on every read path.
+
+    Dropping ``agent_id`` is not a narrower view of the same identity, it is a *different*
+    principal (``user:u1`` rather than ``agent:u1/planner``), so the listing (anchored on
+    scope keys) returns nothing and the direct read (checked against visibility keys) is
+    denied. Reproduced against the live service, where the two endpoints disagreeing looked
+    like a bug until the missing query parameter turned out to be the whole difference:
+    ``GET /v1/memories`` and ``GET /v1/memories/{id}`` both take ``?agent_id=``.
+    """
+    thread = new_id("thread")
+    user = U1.model_copy(update={"thread_id": thread})
+    agent = user.model_copy(update={"agent_id": "planner", "agent_run_id": new_id("agent_run")})
+    await _observe(
+        container,
+        uow_factory,
+        agent,
+        "Intermediate plan: audit the Q3 supplier contracts first.",
+        kind=ObservationKind.AGENT_RESULT,
+    )
+    mine = await _memories(uow_factory, agent, container)
+    assert len(mine) == 1
+    memory_id = mine[0].memory_id
+    assert await _memories(uow_factory, user, container) == []
+
+    service = container.services["memory"]
+    async with uow_factory() as uow:
+        assert (await service.get_memory(uow, agent, memory_id)).memory_id == memory_id
+    async with uow_factory() as uow:
+        with pytest.raises(ScopeDenied) as denied:
+            await service.get_memory(uow, user, memory_id)
+    # The denial names the caller's own principal, which is the answer to "why 403?" —
+    # and says nothing about the memory, so it cannot confirm that it exists.
+    assert denied.value.details == {"principal": user.principal_id}
+    assert memory_id not in str(denied.value.details)
+
+
 async def test_forget_and_expiry(container, uow_factory) -> None:
     await _observe(container, uow_factory, U1, "My favourite editor is neovim.")
     mems = await _memories(uow_factory, U1, container)
@@ -239,3 +276,40 @@ async def test_pipeline_is_idempotent_on_replay(container, uow_factory) -> None:
     again = await pipeline.run({"tenant_id": "acme", "observation_id": ack.observation_id})
     assert again == []
     assert len(await _memories(uow_factory, U1, container)) == 1
+
+
+async def test_an_agent_repeating_itself_never_raises_confidence(container, uow_factory) -> None:
+    """The recall loop, closed.
+
+    Retrieval injects a memory into the prompt, the agent's answer restates it, the answer
+    comes back as an observation, and the memory it came from is reinforced. Each turn added
+    +0.05 with no new evidence, so anything the agent was once told drifted to certainty just
+    by being mentioned again. The repeat is still recorded — it just cannot vouch for itself.
+    """
+    ctx = MemoryExecutionContext(
+        tenant_id="acme", user_id="u1", workspace_id="ws1", agent_id="analyst"
+    )
+    answer = "The Q3 revenue figure is 4.2 million."
+    await _observe(container, uow_factory, ctx, answer, kind=ObservationKind.AGENT_RESULT)
+    first = [m for m in await _memories(uow_factory, ctx, container) if m.content == answer]
+    assert len(first) == 1
+    baseline = first[0].confidence
+
+    for _ in range(6):
+        await _observe(container, uow_factory, ctx, answer, kind=ObservationKind.AGENT_RESULT)
+
+    after = next(m for m in await _memories(uow_factory, ctx, container) if m.content == answer)
+    assert after.confidence == baseline, "six self-repeats must not make it more certain"
+    assert after.reinforcement_count == 7, "the repeats are still counted"
+    assert after.system_metadata.get("echoes") == 6, "...and named as echoes"
+
+
+async def test_a_real_source_still_corroborates(container, uow_factory) -> None:
+    """The guard is about the agent's own output, not about repetition."""
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u9", workspace_id="ws1")
+    await _observe(container, uow_factory, ctx, "My timezone is Europe/Berlin.")
+    before = (await _memories(uow_factory, ctx, container))[0].confidence
+    await _observe(container, uow_factory, ctx, "my timezone is Europe/Berlin")
+    after = (await _memories(uow_factory, ctx, container))[0]
+    assert after.reinforcement_count == 2
+    assert after.confidence > before, "a user saying it twice is still corroboration"

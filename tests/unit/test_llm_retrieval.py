@@ -96,7 +96,10 @@ def _engine(parts, assist=None) -> RetrievalEngine:
         store,
         indexer,
         reranker,
-        settings=RetrievalSettings(graph=False),
+        # rerank is off by default now (it measured significantly worse on SciFact — see
+        # RetrievalSettings.rerank); these tests are *about* reranking behaviour, so they
+        # switch it on explicitly rather than depending on what the default happens to be.
+        settings=RetrievalSettings(graph=False, rerank=True),
         rerank_k=5,
         assist=assist,
     )

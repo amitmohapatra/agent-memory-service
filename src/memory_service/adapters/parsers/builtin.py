@@ -13,6 +13,8 @@ from html.parser import HTMLParser
 
 from memory_service.domain.documents import DocumentVersion
 from memory_service.domain.enums import Representation
+from memory_service.domain.errors import ValidationFailed
+from memory_service.domain.text import sanitise
 from memory_service.modules.ingestion.context_graph import build_context_graph
 from memory_service.modules.ingestion.hierarchy import Block, build_hierarchy
 from memory_service.ports.intelligence import ParsedDocument
@@ -26,6 +28,11 @@ _FENCE_RE = re.compile(r"^\s*```")
 _LIST_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 
+#: Control characters that carry no text: C0 except tab/newline/carriage return, and the C1
+#: block. NUL is the dangerous one — PostgreSQL rejects it outright ("text fields cannot
+#: contain NUL (0x00) bytes"), so a single stray byte failed the whole document.parse job and
+#: the legible parts of the document were lost with it. Stripping is strictly better than
+#: failing: the readable text is worth keeping, and a control character never was.
 class BuiltinParser:
     info = ProviderInfo(name="builtin", license="Apache-2.0", origin="internal", locality="local")
     supported_media_types = frozenset(
@@ -42,7 +49,21 @@ class BuiltinParser:
     async def parse(
         self, *, document_id: str, tenant_id: str, filename: str, media_type: str, data: bytes
     ) -> ParsedDocument:
-        text = data.decode("utf-8", errors="replace")
+        # `supported_media_types` above already said this parser handles text formats only,
+        # but nothing enforced it: a PDF routed here — which is what happens when
+        # `documents.parser=docling` falls back in an image built without docling — was
+        # decoded as UTF-8 and indexed as document text. A 39 KB PDF produced 38,494
+        # characters beginning "%PDF-1.7 %âãÏÓ 1 0 obj << /Producer (pypdf)". Embedded,
+        # chunked and stored as knowledge, with one log line as the only sign.
+        #
+        # Refusing is the only safe answer: a document that cannot be parsed must fail
+        # loudly, never enter the index as binary noise.
+        if media_type not in self.supported_media_types:
+            raise ValidationFailed(
+                f"the builtin parser cannot read {media_type!r} ({filename!r}). Rich formats "
+                "need documents.parser=docling in an image built with the docling extra."
+            )
+        text = sanitise(data.decode("utf-8", errors="replace"))
         if media_type == "text/html" or filename.lower().endswith((".html", ".htm")):
             text = html_to_markdown(text)
         title = _title_from(text, filename)

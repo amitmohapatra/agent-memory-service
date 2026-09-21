@@ -58,7 +58,7 @@ Model weights (`models/MANIFEST.json`, git-ignored directory):
 | Reranker (target default) | BAAI/bge-reranker-v2-m3 | 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e |
 | Reranker (CPU-light) | ibm-granite/granite-embedding-reranker-english-r2 | d09d3d6971b689bf9c23839e45a470874d46e13a |
 | Sparse (SPLADE) | Qdrant/Splade_PP_en_v1 (fastembed's own export) | latest |
-| Late interaction | answerdotai/answerai-colbert-small-v1 | 934fa8bb4ce2284f4c2baa232d81aca4d076fa5e |
+| Late interaction | answerdotai/answerai-colbert-small-v1 | 934fa8bb4ce2284f4c2baa232d81aca4d076fa5e | *(removed 2026-09-20, see ADR 0012)* |
 | NLI (grounding) | MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli | 6f5cf0a2b59cabb106aca4c287eed12e357e90eb |
 | Extraction tier | fastino/gliner2-base-v1 | 8437ba583a733d87f56ae902f3b197934eedd58e |
 

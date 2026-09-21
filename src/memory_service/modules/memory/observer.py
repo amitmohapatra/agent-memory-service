@@ -54,7 +54,7 @@ from memory_service.modules.memory.pipeline import (
     keys_for,
 )
 from memory_service.observability.logging import get_logger
-from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate
+from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
@@ -223,17 +223,6 @@ class ThreadObserver:
         )
         return sorted(rows, key=lambda m: int(m.system_metadata.get("sequence_to", 0)))
 
-    async def observe_all(self, *, now: datetime | None = None) -> list[str]:
-        now = now or datetime.now(UTC)
-        async with self.uow_factory() as uow:
-            threads = await uow.threads.list_active(
-                since=now - self.active_window, limit=self.scan_limit
-            )
-        created: list[str] = []
-        for t in threads:
-            created += await self.observe_thread(t.tenant_id, t.thread_id, now=now)
-        return created
-
     async def observe_thread(
         self, tenant_id: str, thread_id: str, *, now: datetime | None = None, force: bool = False
     ) -> list[str]:
@@ -399,55 +388,6 @@ class ObservationReflector:
     def __init__(self, uow_factory: UnitOfWorkFactory, pipeline: ObservationPipeline) -> None:
         self.uow_factory = uow_factory
         self.pipeline = pipeline
-
-    async def reflect_thread(
-        self, tenant_id: str, thread_id: str, *, now: datetime | None = None
-    ) -> list[ConsolidationOutcome]:
-        now = now or datetime.now(UTC)
-        outcomes: list[ConsolidationOutcome] = []
-        async with self.uow_factory() as uow:
-            thread = await uow.threads.get(tenant_id, thread_id)
-            if thread is None:
-                return []
-            rows = await uow.memories.list_scope(
-                tenant_id,
-                scope_keys=[thread_scope(thread).key()],
-                memory_types=[MemoryType.OBSERVATION.value],
-                limit=500,
-            )
-            pending = [m for m in rows if "reflected_at" not in m.system_metadata]
-            if not pending:
-                return []
-            ctx = thread_context(thread)
-            affected: set[str] = set()
-            for obs in sorted(pending, key=lambda m: int(m.system_metadata.get("sequence_to", 0))):
-                candidates = await self._candidates(obs, ctx)
-                affected |= await self.pipeline._apply_all(uow, ctx, candidates, outcomes)
-                obs.system_metadata["reflected_at"] = now.isoformat()
-                obs.updated_at = now
-                await uow.memories.update(obs)
-            if affected:
-                await uow.enqueue(
-                    JobSpec(
-                        task_name=TASK_MEMORY_INDEX,
-                        queue=Queue.EMBEDDING,
-                        payload={"tenant_id": tenant_id, "memory_ids": sorted(affected)},
-                        idempotency_key=f"memidx:reflect-obs:{pending[0].memory_id}",
-                        tenant_id=tenant_id,
-                    )
-                )
-                if ctx.user_id:
-                    await uow.revisions.bump(tenant_id, RevisionKind.USER, ctx.user_id)
-                await uow.revisions.bump(tenant_id, RevisionKind.THREAD, thread_id)
-            await uow.commit()
-        log.info(
-            "memory.observations_reflected",
-            tenant_id=tenant_id,
-            thread_id=thread_id,
-            observations=len(pending),
-            decisions={o.decision.value: 1 for o in outcomes},
-        )
-        return outcomes
 
     async def _candidates(
         self, obs: CanonicalMemory, ctx: MemoryExecutionContext

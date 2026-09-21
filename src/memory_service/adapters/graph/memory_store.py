@@ -82,18 +82,6 @@ class MemoryGraphStore:
         visible.sort(key=lambda e: (-e.mention_count, e.canonical_name))
         return visible[:limit]
 
-    async def list_tenant_entities(
-        self, tenant_id: str, *, entity_types: Sequence[str] = (), limit: int = 300
-    ) -> list[Entity]:
-        types = set(entity_types)
-        found = [
-            e
-            for e in self.entities.values()
-            if e.tenant_id == tenant_id and (not types or e.entity_type in types)
-        ]
-        found.sort(key=lambda e: (-e.mention_count, e.canonical_name))
-        return found[: max(0, limit)]
-
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]:
@@ -103,13 +91,6 @@ class MemoryGraphStore:
             if (e := self.entities.get(i)) is not None
             and e.tenant_id == tenant_id
             and self._visible(e.visibility_keys, scope_keys)
-        ]
-
-    async def entities_by_id(self, tenant_id: str, entity_ids: Sequence[str]) -> list[Entity]:
-        return [
-            e
-            for i in entity_ids
-            if (e := self.entities.get(i)) is not None and e.tenant_id == tenant_id
         ]
 
     async def neighborhood(
@@ -209,36 +190,6 @@ class MemoryGraphStore:
         self.relations[edge.relation_id] = edge
         return edge
 
-    async def invalidate_for_document(
-        self,
-        tenant_id: str,
-        document_id: str,
-        *,
-        keep: Sequence[str],
-        at: datetime,
-        reason: str,
-    ) -> int:
-        kept = set(keep)
-        n = 0
-        for rid, r in list(self.relations.items()):
-            if (
-                r.tenant_id == tenant_id
-                and r.document_id == document_id
-                and r.status == "CURRENT"
-                and rid not in kept
-            ):
-                await self.invalidate(rid, reason=reason, at=at)
-                n += 1
-        return n
-
-    async def invalidations(self, tenant_id: str, relation_ids: Sequence[str]) -> list[Relation]:
-        wanted = set(relation_ids)
-        return [
-            r
-            for r in self.relations.values()
-            if r.tenant_id == tenant_id and r.predicate == INVALIDATED_BY and r.subject_id in wanted
-        ]
-
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         gone = [
             rid
@@ -264,46 +215,6 @@ class MemoryGraphStore:
             and r.document_id == document_id
             and (include_invalidated or r.status != "INVALIDATED")
             and self._visible(r.visibility_keys, scope_keys)
-        ]
-
-    async def relations_for_memory(self, tenant_id: str, memory_id: str) -> list[Relation]:
-        return [
-            r
-            for r in self.relations.values()
-            if r.tenant_id == tenant_id and r.memory_id == memory_id
-        ]
-
-    async def relations_touching(
-        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int = 2000
-    ) -> list[Relation]:
-        wanted = set(entity_ids)
-        out = [
-            r
-            for r in self.relations.values()
-            if r.tenant_id == tenant_id
-            and r.status == "CURRENT"
-            and (r.subject_id in wanted or r.object_id in wanted)
-        ]
-        out.sort(key=lambda r: (-r.confidence, r.relation_id))
-        return out[: max(0, limit)]
-
-    async def set_summaries(self, tenant_id: str, summaries: dict[str, str]) -> None:
-        for eid, text in summaries.items():
-            e = self.entities.get(eid)
-            if e is not None and e.tenant_id == tenant_id:
-                self.entities[eid] = e.model_copy(update={"summary": text})
-
-    async def upsert_aliases(self, aliases: Sequence[EntityAlias]) -> None:
-        for a in aliases:
-            key = (a.tenant_id, a.alias, a.entity_id)
-            prev = self.aliases.get(key)
-            if prev is None or a.confidence > prev.confidence:
-                self.aliases[key] = a
-
-    async def find_aliases(self, tenant_id: str, aliases: Sequence[str]) -> list[EntityAlias]:
-        wanted = {a for a in aliases if a}
-        return [
-            a for (t, alias, _), a in self.aliases.items() if t == tenant_id and alias in wanted
         ]
 
     async def count(self, tenant_id: str) -> tuple[int, int]:

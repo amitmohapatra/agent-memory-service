@@ -17,10 +17,8 @@ import asyncio
 import time
 from typing import Any
 
-from sqlalchemy import text
-
-from benchmark.common import provenance, write_result
-from benchmark.retrieval import FIXTURES, GOLDEN, TABLES, _pct, _settings
+from benchmark.common import provenance, reset_store, write_result
+from benchmark.retrieval import FIXTURES, GOLDEN, _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.settings import Settings
@@ -36,20 +34,14 @@ from memory_service.modules.jobs.registry import register_handlers
 
 STRATEGIES: dict[str, dict[str, Any]] = {
     "baseline": {},
-    "pageindex": {"pageindex": True},
-    "raptor": {"raptor": True},
-    "graph_ppr": {"graph_ppr": True},
-    "pageindex+raptor": {"pageindex": True, "raptor": True},
+    # Seven strategies used to sit here — pageindex, raptor, graph_ppr, colbert, minicoil,
+    # late_chunking and graphrag_global. They were removed rather than left off: each named a
+    # capability something already-on provides, and tests/eval/test_capability_coverage.py
+    # demonstrates each capability surviving without them. `splade` is the one genuinely
+    # uncovered experiment left, so this benchmark is now baseline against it.
     "splade": {"splade": True},
-    "minicoil": {"minicoil": True},
-    "colbert": {"colbert": True},
-    "late_chunking": {"late_chunking": True},
-    "graphrag_global": {"graphrag_global": True},
 }
-_NOT_IMPLEMENTED = {
-    "graphrag_global": "community summaries need an LLM; document-level summaries already "
-    "serve GLOBAL_SUMMARY queries (see ADR 0011)",
-}
+_NOT_IMPLEMENTED: dict[str, str] = {}
 
 
 def _with_flags(settings: Settings, flags: dict[str, Any]) -> Settings:
@@ -95,8 +87,9 @@ async def run_strategy(
     except (DependencyUnavailable, NotImplementedError) as exc:
         return {"skipped": f"{type(exc).__name__}: {exc}"}
     try:
-        async with container.database.engine.begin() as conn:
-            await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        # both stores: the vector store is a separate server and a SQL TRUNCATE
+        # leaves its vectors behind for the next run to retrieve
+        await reset_store(container, "acme")
         golden = GoldenSet.load(GOLDEN)
         ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
         t0 = time.perf_counter()
@@ -145,9 +138,6 @@ async def run_strategy(
             "providers": {
                 "embedding": container.embedding.fingerprint(),
                 "sparse": container.sparse.fingerprint(),
-                "late_interaction": container.late_interaction.fingerprint()
-                if container.late_interaction
-                else None,
                 "representative": not container.embedding.fingerprint().startswith("hash-"),
             },
         }

@@ -21,8 +21,8 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from memory_service.config.settings import EmbeddingSettings
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
+from memory_service.config.settings import EmbeddingSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo
 

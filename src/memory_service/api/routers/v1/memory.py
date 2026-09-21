@@ -83,6 +83,14 @@ class MemoryResponse(BaseModel):
     contributors: list[str] = Field(
         default_factory=list, description="Other principals that corroborated this memory"
     )
+    echoes: int = Field(
+        default=0,
+        description=(
+            "How much of reinforcement_count is the agent restating its own output. Echoes "
+            "are counted but never raise confidence — without this the count cannot be read: "
+            "seven repeats and no contributors is either corroboration or a recall loop."
+        ),
+    )
     contradicts: list[str] = Field(
         default_factory=list, description="CURRENT memories this one conflicts with"
     )
@@ -118,6 +126,7 @@ def memory_to_api(m: CanonicalMemory) -> dict[str, Any]:
         "importance": m.importance,
         "reinforcement_count": m.reinforcement_count,
         "contributors": list(m.system_metadata.get("contributors") or []),
+        "echoes": int(m.system_metadata.get("echoes") or 0),
         "contradicts": list(m.temporal.contradicts),
         "evidence": [e.model_dump(mode="json", exclude_none=True) for e in m.evidence],
         "category": m.system_metadata.get("category"),

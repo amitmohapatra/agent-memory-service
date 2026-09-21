@@ -1,0 +1,30 @@
+# Vendor differences live here, not in the service.
+#
+# The service speaks OpenAI-compatible /v1/embeddings and Cohere-style /v1/rerank. Every
+# vendor quirk — Cohere's input_type, Gemini's batchEmbedContents, Azure's deployment names —
+# is the gateway's problem. Adding a vendor is an entry in this file plus an API key.
+model_list:
+  - model_name: text-embedding-3-small          # MEMORY__MODELS__EMBEDDING__MODEL
+    litellm_params:
+      model: openai/text-embedding-3-small      # 1536 dimensions
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: embed-multilingual-v3           # the multilingual option, hosted
+    litellm_params:
+      model: cohere/embed-multilingual-v3.0     # 1024 dimensions
+      api_key: os.environ/COHERE_API_KEY
+
+  - model_name: gemini-embedding
+    litellm_params:
+      model: gemini/text-embedding-004          # 768 dimensions
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: rerank-multilingual-v3          # MEMORY__MODELS__RERANKER__MODEL
+    litellm_params:
+      model: cohere/rerank-multilingual-v3.0    # the only hosted reranker of the three
+      api_key: os.environ/COHERE_API_KEY
+
+litellm_settings:
+  # Set the embedding dimension on the service to match the model chosen above:
+  # a mismatch is caught at collection creation, not silently tolerated.
+  drop_params: true

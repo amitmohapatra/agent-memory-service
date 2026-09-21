@@ -28,11 +28,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
-
 from benchmark.advanced import _corpus
-from benchmark.common import provenance, write_result
-from benchmark.retrieval import FIXTURES, GOLDEN, TABLES, _pct, _settings
+from benchmark.common import provenance, reset_store, write_result
+from benchmark.retrieval import FIXTURES, GOLDEN, _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.adapters.models.embeddings import HashEmbedding, SentenceTransformersEmbedding
 from memory_service.application.container import build_container
@@ -252,8 +250,9 @@ async def run_candidate(
     settings = with_models(base, embedding=cfg)
     container = await build_container(settings, __version__)
     try:
-        async with container.database.engine.begin() as conn:
-            await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        # both stores: the vector store is a separate server and a SQL TRUNCATE
+        # leaves its vectors behind for the next run to retrieve
+        await reset_store(container, "acme")
         await reset_index(container)
         ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
         t0 = time.perf_counter()

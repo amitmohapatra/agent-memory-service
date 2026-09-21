@@ -9,6 +9,7 @@ work offline.
 from __future__ import annotations
 
 import asyncio
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from memory_service.domain.documents import DocumentVersion
 from memory_service.domain.errors import CorruptSource, DependencyUnavailable
 from memory_service.modules.ingestion.context_graph import build_context_graph
 from memory_service.modules.ingestion.hierarchy import Block, build_hierarchy
+from memory_service.observability.logging import get_logger
 from memory_service.ports.intelligence import ParsedDocument
 from memory_service.ports.models import ProviderInfo
 
@@ -48,6 +50,9 @@ _EXT = {
 }
 
 
+log = get_logger(__name__)
+
+
 class DoclingParser:
     info = ProviderInfo(
         name="docling", license="MIT", origin="docling-project/docling", locality="local"
@@ -59,12 +64,49 @@ class DoclingParser:
         self._converter = None
 
     def _get_converter(self):  # type: ignore[no-untyped-def]
+        """Build the converter against *local* weights.
+
+        A bare ``DocumentConverter()`` resolves its layout and table models through the
+        HuggingFace cache and downloads them on first use. That breaks two rules at once: the
+        service does not download models at runtime (a missing model is a startup error, not
+        a silent stall on the first document), and the runtime image runs as ``nobody`` with
+        ``HOME=/nonexistent``, so the download failed with ``PermissionError`` and every PDF
+        came back as ``CorruptSource``.
+
+        ``MEMORY_DOCLING_ARTIFACTS`` points at the directory ``make models`` populates.
+        """
         if self._converter is None:
             try:
-                from docling.document_converter import DocumentConverter
+                from docling.datamodel.base_models import InputFormat
+                from docling.datamodel.pipeline_options import PdfPipelineOptions
+                from docling.document_converter import DocumentConverter, PdfFormatOption
             except ImportError as exc:
                 raise DependencyUnavailable("docling is not installed (install [docling])") from exc
-            self._converter = DocumentConverter()
+
+            artifacts = os.environ.get("MEMORY_DOCLING_ARTIFACTS") or ""
+            options = PdfPipelineOptions()
+            # Layout and table structure are what this service actually consumes: the context
+            # graph is built from section paths, page numbers and IN_TABLE edges.
+            options.do_table_structure = True
+            # OCR is deliberately off. It is a different capability (scanned images, not
+            # digital PDFs), it pulls a third model family, and its runtime needs cv2 - which
+            # needs libxcb, which a python:slim image does not have. Leaving the default True
+            # meant the first scanned page died with an ImportError from inside a worker
+            # instead of a clear "this build cannot OCR". If OCR is wanted, it needs an image
+            # built for it, and `download_models` has to fetch the rapidocr weights to match.
+            options.do_ocr = False
+            if artifacts and Path(artifacts).is_dir():
+                options.artifacts_path = artifacts
+            else:
+                log.warning(
+                    "docling.artifacts_missing",
+                    path=artifacts or "<unset>",
+                    detail="docling will try to download its models on first use",
+                    hint="run `make models` and set MEMORY_DOCLING_ARTIFACTS",
+                )
+            self._converter = DocumentConverter(
+                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+            )
         return self._converter
 
     async def parse(
@@ -115,8 +157,12 @@ class DoclingParser:
             try:
                 result = converter.convert(str(path))
             except Exception as exc:
+                # The type alone is not actionable. "CorruptSource: ... ImportError" sent two
+                # separate investigations looking at the PDF, when the cause was a missing
+                # shared library inside docling both times. Carry the message.
+                detail = str(exc).strip() or type(exc).__name__
                 raise CorruptSource(
-                    f"docling failed to parse {filename}: {type(exc).__name__}"
+                    f"docling failed to parse {filename}: {type(exc).__name__}: {detail[:300]}"
                 ) from exc
         doc = result.document
         blocks: list[Block] = []

@@ -13,6 +13,7 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
@@ -54,9 +55,7 @@ def _validate_visibility(ctx: MemoryExecutionContext, hints: ProcessingHints | N
             agent_run_id=ctx.agent_run_id,
         )
     except ValueError as exc:
-        raise ValidationFailed(
-            str(exc), details={"visibility": str(requested)}
-        ) from exc
+        raise ValidationFailed(str(exc), details={"visibility": str(requested)}) from exc
 
 
 class MemoryService:
@@ -78,10 +77,17 @@ class MemoryService:
         tool_run_id: str | None = None,
     ) -> ObservationAck:
         _validate_visibility(ctx, hints)
+        # Agents write back whatever their tools produced. A NUL byte anywhere in that text
+        # makes PostgreSQL reject the INSERT outright, so a single stray 0x00 in a tool result
+        # turned a write into a 500 instead of a stored observation. The document path has
+        # been sanitising since an uploaded file did the same thing; this one never was.
+        content = sanitise(content)
         observation = Observation(
             tenant_id=ctx.tenant_id,
             kind=kind,
             content=content,
+            # hashed *after* sanitising, so the same text submitted twice — once with a stray
+            # control character, once without — is recognised as the duplicate it is
             content_hash=content_hash(content),
             workspace_id=ctx.workspace_id,
             user_id=ctx.user_id,
@@ -135,8 +141,15 @@ class MemoryService:
         if memory is None:
             raise NotFound(f"memory {memory_id} not found")
         if not await self._visible(uow, ctx, memory):
-            # do not reveal existence across principals
-            raise ScopeDenied(f"memory {memory_id} is not visible in this scope")
+            # The message must not reveal whether the memory exists. ``principal`` is the
+            # caller's own identity, so it leaks nothing — and it is the answer to the most
+            # common cause of this 403: reading an agent's memory without naming the agent
+            # (``?agent_id=``), which makes the caller ``user:alice`` rather than
+            # ``agent:alice/research``.
+            raise ScopeDenied(
+                f"memory {memory_id} is not visible in this scope",
+                details={"principal": ctx.principal_id},
+            )
         return memory
 
     async def list_memories(
@@ -236,7 +249,10 @@ class MemoryService:
         memory = await self.get_memory(uow, ctx, memory_id)
         owner_ok = memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}")
         if not owner_ok and not await self.authz.is_tenant_admin(ctx):
-            raise ScopeDenied("only the owner (or a tenant admin) can forget a memory")
+            raise ScopeDenied(
+                "only the owner (or a tenant admin) can forget a memory",
+                details={"principal": ctx.principal_id},
+            )
         await uow.memories.forget(ctx.tenant_id, memory_id)
         await uow.enqueue(
             JobSpec(

@@ -209,3 +209,55 @@ async def test_redacted_arguments_never_reach_storage(container) -> None:
     assert "super-secret-value" not in str(rows[0].args_redacted)
     # the hash still covers the real value, so two different tokens are different calls
     assert rows[0].args_hash != ""
+
+
+async def test_the_procedures_route_can_see_an_agents_own_procedures(
+    container, uow_factory
+) -> None:
+    """Over HTTP, not through the service layer.
+
+    Every other test here calls ``service.procedures(uow, ctx, ...)`` directly, which is why
+    the route above it could be broken for months: it passed an empty ``ScopeBody()``, so the
+    caller's ``agent_id`` was discarded, the context fell back to the API-key service
+    principal, and OpenFGA answered "type 'service' not found" — a 500 on every call. The
+    invocations are recorded against ``agent:<id>``; the route has to be able to say so.
+    """
+    from fastapi.testclient import TestClient
+
+    from memory_service.api.app import create_app
+
+    register = container.services["tool_memory"]
+    async with uow_factory() as uow:
+        for run in ("run_a", "run_b"):
+            run_ctx = _ctx(run=run)
+            for step, tool in enumerate((PRICING["name"], CRM["name"]), start=1):
+                await register.record(
+                    uow,
+                    run_ctx,
+                    tool=tool,
+                    args={"sku": "SKU-22"},
+                    status="ok",
+                    task=TASK,
+                    step=step,
+                    visibility=Visibility.RUN,
+                )
+            await register.set_outcome(uow, run_ctx, run_id=run, success=True)
+        await uow.commit()
+
+    headers = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+    with TestClient(create_app(container.settings), raise_server_exceptions=False) as http:
+        scoped = http.get(
+            "/v1/tools/procedures",
+            headers=headers,
+            params={"task": TASK, "agent_id": "pricing-agent"},
+        )
+        assert scoped.status_code == 200, scoped.text
+        procedures = scoped.json()["procedures"]
+        assert procedures, "the agent must be able to read back its own mined procedure"
+        steps = [s["tool"] for s in procedures[0]["steps"]]
+        assert steps == [PRICING["name"], CRM["name"]]
+
+        # and with no agent at all the route still answers cleanly — empty, not a 500 on a
+        # principal type the authorization model does not define
+        bare = http.get("/v1/tools/procedures", headers=headers, params={"task": TASK})
+        assert bare.status_code == 200, bare.text

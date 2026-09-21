@@ -134,5 +134,3 @@ class LangMemIntelligence:
             decision=DedupDecision.CREATE, candidate=candidate, reason="langmem: insert"
         )
 
-    async def search_features(self, query: str, ctx: MemoryExecutionContext) -> dict[str, Any]:
-        return {}
