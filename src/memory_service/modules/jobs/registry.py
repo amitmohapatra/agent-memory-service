@@ -8,6 +8,11 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from memory_service.domain.revisions import RevisionKind
+
+# The canonical name lives with the code that enqueues it, so the producer and the
+# consumer cannot drift — which is exactly how this task came to be enqueued for a
+# year with nothing registered under that string.
+from memory_service.modules.memory.pipeline import TASK_MEMORY_OBSERVE
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import Queue
 
@@ -143,6 +148,35 @@ def register_handlers(container: Container) -> None:
         if reflection is not None:
             await reflection.reflect_all()
 
+    async def memory_observe(payload: dict[str, Any]) -> None:
+        """Compress the turns older than the hot window into observations.
+
+        The handler is registered and the service it needs is **not wired**, deliberately.
+
+        ``ObservationPipeline`` enqueues this task, and nothing was registered under the
+        name — so every one of those jobs failed dispatch with ``KeyError: task
+        'memory.observe' is not registered`` and retried until the outbox row went dead.
+        Registering the handler stops that, whatever is decided below.
+
+        What is *not* decided here is whether ``ThreadObserver`` should run.
+        ``modules/memory/observer.py`` is a complete implementation with settings of its own
+        (``observer_hot_window_messages`` and friends) that nothing constructs and no test
+        covers. Building it makes this handler do real work — and measurably changes
+        behaviour elsewhere: with the observer live, ``test_indexer_and_builder_use_the_model``
+        fails, because a thread that already has an observation no longer needs the context
+        builder to call the model for a conversation summary. That may well be an
+        improvement. It is not one to make silently, on untested code, as a side effect of
+        fixing a dispatch error.
+
+        So: wire it deliberately, with tests, or delete the module and the enqueue. Until
+        then this returns without doing anything, which is exactly what the system did
+        before — minus the poisoned outbox rows.
+        """
+        observer = container.services.get("thread_observer")
+        if observer is None:
+            return
+        await observer.observe_thread(payload["tenant_id"], payload["thread_id"])
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -207,7 +241,22 @@ def register_handlers(container: Container) -> None:
             "periodic.memory_reflect", Queue.RECONCILE, memory_reflect, cron="53 */6 * * *"
         )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
+    # Enqueued by the observation pipeline since before it had a handler.
+    queue.register(TASK_MEMORY_OBSERVE, Queue.RECONCILE, memory_observe, retries=3)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
+    # Registered *and scheduled*. It was only registered, so the handler existed and nothing
+    # ever called it — and the outbox is not an optimisation, it is the only path from a
+    # committed write to the work that turns it into a memory. The fast path after commit is
+    # best-effort by design (a crash between COMMIT and dispatch leaves the row behind), and
+    # this sweep is the repair. Without it those rows sit at attempts=0 forever: measured on
+    # a running service, 441 undispatched rows, 255 of them memory.process_observation, the
+    # oldest 42 minutes old. Every one of those writes was answered 202 and never happened.
+    #
+    # Every minute, not every five: this is the floor on how late a write can become a
+    # memory when the fast path misses it.
+    queue.register_periodic(
+        "periodic.outbox_sweep", Queue.RECONCILE, outbox_sweep, cron="* * * * *"
+    )
     queue.register(TASK_IDEMPOTENCY_PURGE, Queue.RECONCILE, idempotency_purge, retries=0)
     for extra in container.services.get("extra_task_registrars", []):
         extra(container)

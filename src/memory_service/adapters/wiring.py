@@ -518,6 +518,254 @@ def _wire_memory(container: Container) -> None:
     )
 
 
+async def _wire_search(container: Container) -> None:
+    from memory_service.adapters.search.qdrant_store import QdrantSearchStore
+
+    cfg = container.settings.search
+    if cfg.provider == "memory":
+        cfg = cfg.model_copy(update={"qdrant_local_path": ":memory:"})
+    store = QdrantSearchStore(cfg)
+    container.search = store
+    if cfg.qdrant_local_path is None:
+        container.add_dependency(
+            Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
+        )
+
+
+def _wire_models(container: Container) -> None:
+    from memory_service.adapters.models.embeddings import (
+        FastEmbedEmbedding,
+        HashEmbedding,
+        SentenceTransformersEmbedding,
+    )
+    from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
+    from memory_service.adapters.models.sparse import Bm25SparseEncoder
+    from memory_service.config.registry import check_provider_policy
+
+    settings = container.settings
+    emb_cfg = settings.models.embedding
+    if emb_cfg.url:
+        from memory_service.adapters.models.remote import RemoteEmbedding
+
+        embedding = RemoteEmbedding(emb_cfg)
+    elif emb_cfg.provider == "hash":
+        embedding = HashEmbedding(emb_cfg.dimension)
+    elif emb_cfg.provider == "fastembed":
+        embedding = FastEmbedEmbedding(emb_cfg)
+    elif emb_cfg.provider in ("sentence_transformers", "onnx", "openvino"):
+        embedding = SentenceTransformersEmbedding(emb_cfg)
+    else:
+        raise NotImplementedError(f"embedding provider {emb_cfg.provider} not implemented yet")
+    check_provider_policy(
+        embedding.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    container.embedding = embedding
+    if settings.retrieval.splade:
+        from memory_service.adapters.models.advanced import FastEmbedSparseEncoder
+
+        sparse_model = settings.models.sparse_model
+        if settings.models.sparse_url:
+            from memory_service.adapters.models.remote import RemoteSparse
+
+            sparse_encoder: Any = RemoteSparse(settings.models.sparse_url, sparse_model)
+        else:
+            sparse_encoder = FastEmbedSparseEncoder(
+                sparse_model, model_path=settings.models.sparse_model_path
+            )
+        check_provider_policy(
+            sparse_encoder.info,
+            [*settings.provider_policy.allowed_licenses, "see model card"],
+            settings.provider_policy.allow_remote_models,
+        )
+        container.sparse = sparse_encoder
+    else:
+        container.sparse = Bm25SparseEncoder()
+    rr_cfg = settings.models.reranker
+    if rr_cfg.url:
+        from memory_service.adapters.models.remote import RemoteReranker
+
+        container.reranker = RemoteReranker(rr_cfg)
+    elif rr_cfg.provider == "disabled":
+        container.reranker = None
+    elif rr_cfg.provider == "lexical":
+        container.reranker = LexicalReranker()
+    else:
+        container.reranker = CrossEncoderReranker(rr_cfg)
+
+
+def _wire_llm(container: Container) -> None:
+    """The generative model is optional and reachable only through the Bifrost gateway."""
+    from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.modules.llm.assist import LLMAssist
+
+    settings = container.settings
+    cfg = settings.models.llm
+    if not cfg.enabled:
+        container.llm = DisabledLLM()
+        container.services["llm_assist"] = LLMAssist.disabled()
+        return
+    llm = BifrostLLM(cfg, log_source_text=settings.service.log_source_text)
+    check_provider_policy(
+        llm.info, [*settings.provider_policy.allowed_licenses, "see model card"], allow_remote=True
+    )
+    container.llm = llm
+    container.services["llm_assist"] = LLMAssist(llm, cfg)
+    container.add_dependency(
+        Dependency(name="llm", mandatory=False, ping=llm.ping, close=llm.close)
+    )
+
+
+def _wire_nli(container: Container) -> None:
+    """Claim-support classifier + grounding cascade. Like the parser, the model tier degrades
+    to the deterministic stand-in with a warning when its weights cannot be loaded; reports
+    then say ``representative: false``."""
+    from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.domain.errors import DependencyUnavailable
+    from memory_service.modules.grounding.cascade import GroundingCascade
+
+    settings = container.settings
+    cfg = settings.models.nli
+    if cfg.provider == "disabled":
+        container.nli = None
+        return
+    nli: Any = LexicalNLI()
+    if cfg.url:
+        from memory_service.adapters.models.remote import RemoteNLI
+
+        nli = RemoteNLI(cfg)
+    elif cfg.provider == "transformers":
+        try:
+            nli = TransformersNLI(cfg)
+        except DependencyUnavailable as exc:
+            log.warning("nli.unavailable", error=exc.message, fallback="lexical")
+    check_provider_policy(
+        nli.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    container.nli = nli
+    container.services["grounding"] = GroundingCascade(
+        nli, settings=cfg, assist=container.services["llm_assist"]
+    )
+
+
+def _wire_retrieval(container: Container) -> None:
+    from memory_service.modules.context.builder import ContextBuilder
+    from memory_service.modules.memory.ephemeral import EphemeralMemory
+    from memory_service.modules.rag.indexer import Indexer
+    from memory_service.modules.retrieval.engine import RetrievalEngine
+
+    settings = container.settings
+    indexer = Indexer(
+        container.services["uow_factory"],
+        container.search,
+        container.embedding,
+        container.sparse,
+        container.cache,
+        batch_size=settings.models.embedding.batch_size,
+        embedding_cache_ttl=settings.cache.embedding_ttl_seconds,
+        assist=container.services["llm_assist"],
+    )
+    container.services["indexer"] = indexer
+    engine = RetrievalEngine(
+        container.services["uow_factory"],
+        container.services["authz"],
+        container.search,
+        indexer,
+        container.reranker,
+        settings=settings.retrieval,
+        rerank_k=settings.models.reranker.candidate_k,
+        assist=container.services["llm_assist"],
+    )
+    container.services["retrieval"] = engine
+    working = EphemeralMemory(
+        container.cache, ttl_seconds=settings.cache.working_memory_ttl_seconds
+    )
+    container.services["ephemeral_memory"] = working
+    container.services["context_builder"] = ContextBuilder(
+        container.services["uow_factory"],
+        engine,
+        container.services["conversation"],
+        container.cache,
+        settings=settings.context,
+        retrieval=settings.retrieval,
+        cache_ttl_seconds=settings.cache.context_bundle_ttl_seconds,
+        working=working,
+        assist=container.services["llm_assist"],
+    )
+
+
+def _wire_memory(container: Container) -> None:
+    """Memory intelligence: provider (native by default) + observation pipeline + service."""
+    from memory_service.config.registry import check_provider_policy
+    from memory_service.modules.memory.native import NativeMemoryIntelligence
+    from memory_service.modules.memory.pipeline import ObservationPipeline
+    from memory_service.modules.memory.service import MemoryService
+    from memory_service.ports.intelligence import MemoryIntelligenceProvider
+
+    settings = container.settings
+    cfg = settings.memory_intelligence
+    provider: MemoryIntelligenceProvider
+    if cfg.provider == "native":
+        provider = NativeMemoryIntelligence(
+            cfg, container.embedding, assist=container.services["llm_assist"]
+        )
+    elif cfg.provider == "mem0":
+        from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence
+
+        provider = Mem0MemoryIntelligence(settings)
+    elif cfg.provider == "langmem":
+        from memory_service.adapters.intelligence.langmem_provider import LangMemIntelligence
+
+        provider = LangMemIntelligence(settings)
+    elif cfg.provider == "cognee":
+        from memory_service.adapters.intelligence.cognee_provider import CogneeMemoryIntelligence
+
+        provider = CogneeMemoryIntelligence(settings)
+    else:  # pragma: no cover - settings Literal guards this
+        raise NotImplementedError(cfg.provider)
+    check_provider_policy(
+        provider.info,
+        [*settings.provider_policy.allowed_licenses, "see model card"],
+        settings.provider_policy.allow_remote_models,
+    )
+    if provider.info.requires_llm and not settings.models.llm.enabled:
+        raise NotImplementedError(
+            f"memory intelligence provider {cfg.provider!r} requires an LLM; "
+            "set MEMORY__MODELS__LLM__ENABLED=true and configure the model"
+        )
+    container.services["memory_provider"] = provider
+    container.services["observation_pipeline"] = ObservationPipeline(
+        container.services["uow_factory"],
+        provider,
+        settings=cfg,
+        working=container.services.get("ephemeral_memory"),
+    )
+    container.services["memory"] = MemoryService(container.services["authz"])
+    from memory_service.modules.memory.forgetting import ForgettingService
+    from memory_service.modules.memory.reflection import ReflectionService
+
+    container.services["forgetting"] = ForgettingService(
+        container.services["uow_factory"],
+        settings=cfg,
+        cache=container.cache,
+        working_ttl_seconds=settings.cache.working_memory_ttl_seconds,
+    )
+    container.services["reflection"] = ReflectionService(
+        container.services["uow_factory"], assist=container.services["llm_assist"]
+    )
+    # NOT wired, deliberately: "thread_observer" would make modules/memory/observer.py live.
+    # It is a complete implementation that nothing constructs and no test covers, and turning
+    # it on changes behaviour elsewhere — a thread that already carries an observation stops
+    # needing the context builder to call the model for a conversation summary, which
+    # test_indexer_and_builder_use_the_model asserts it does. See the memory.observe handler
+    # in modules/jobs/registry.py for the whole story and the decision it is waiting on.
+
+
 def _wire_tools(container: Container) -> None:
     """Tool memory: registry, invocation records, output cache, chains and procedures."""
     from memory_service.modules.tools.cache import ToolOutputCache

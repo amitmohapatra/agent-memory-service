@@ -100,7 +100,7 @@
   "noise_entities": 0,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "402856f803d64a13be60889e659bd12db222019b",
+    "git_commit": "c08d855e7d3c84d4a90332dd7c54cc5cb4cad4e9",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -180,7 +180,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-21T09:17:50.290752+00:00"
+    "timestamp": "2026-09-21T12:56:29.228585+00:00"
   },
   "provider": "native",
   "query_hit_rate": 1.0

@@ -82,6 +82,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # this — the virtualenv is created inside the image with normal permissions.
 RUN chmod -R a+rX /app/src /app/sdk /app/integrations /app/migrations /app/alembic.ini /app/deploy
 ENV PATH="/opt/venv/bin:$PATH"
+
+# The blob root, owned by the user that will run. A named volume mounted at an empty path
+# takes its ownership from the image, and this path did not exist in the image — so Docker
+# created it root-owned, the process runs as nobody, and every archive write failed with
+# PermissionError. Measured on a running stack: archive.stage_message failed 112 times and
+# retried until each job went dead, with nothing wrong in the code at all.
+RUN mkdir -p /data/blob && chown -R nobody:nogroup /data
+
 EXPOSE 8080
 USER nobody
 CMD ["memory-api"]
