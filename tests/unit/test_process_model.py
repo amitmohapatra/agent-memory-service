@@ -4,7 +4,9 @@ None of this is visible from a request, and all of it decides whether 20 rps is 
 queued: one process is one GIL, and N processes each fanning their BLAS calls over every
 core is thrash rather than throughput. The numbers live in three places that have to agree -
 the setting the entrypoint reads, the image that runs it, and the compose file that caps the
-ingestion container - so they are asserted together.
+ingestion container - so they are asserted together. There is one name for the worker count,
+WEB_CONCURRENCY, and the test below sets it rather than comparing two literals: a number
+asserted equal in two files still drifts from the number the process actually runs.
 """
 
 from __future__ import annotations
@@ -19,6 +21,13 @@ from memory_service.config.settings import Settings
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _no_inherited_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+    """WEB_CONCURRENCY is read from the real environment, so the default is only the default
+    when whatever ran this suite did not already set it."""
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
 
 
 def test_the_api_runs_the_configured_number_of_workers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,17 +57,34 @@ def test_the_worker_count_is_bounded() -> None:
         Settings(_env_file=None, service={"workers": 9})
 
 
+def test_web_concurrency_is_the_worker_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The name the ecosystem sets has to be the name that decides, or an operator who caps
+    a container at one worker silently keeps getting three. Asserting that two literals in
+    two files both read 3 cannot catch that; running the settings with the variable set can.
+    """
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    assert Settings(_env_file=None).service.workers == 1
+    monkeypatch.setenv("WEB_CONCURRENCY", "")
+    assert Settings(_env_file=None).service.workers == 3, "unset by a platform, not a failure"
+    monkeypatch.setenv("WEB_CONCURRENCY", "16")
+    with pytest.raises(ValueError, match="workers"):
+        Settings(_env_file=None)
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+    assert Settings(_env_file=None, service={"workers": 4}).service.workers == 4, (
+        "MEMORY__SERVICE__WORKERS still overrides it"
+    )
+
+
 def test_the_image_pins_workers_and_math_threads() -> None:
     dockerfile = (ROOT / "deploy" / "Dockerfile").read_text()
-    for declaration in (
-        "WEB_CONCURRENCY=3",
-        "MEMORY__SERVICE__WORKERS=3",
-        "OMP_NUM_THREADS=2",
-        "MKL_NUM_THREADS=2",
-    ):
+    for declaration in ("WEB_CONCURRENCY=3", "OMP_NUM_THREADS=2", "MKL_NUM_THREADS=2"):
         assert declaration in dockerfile, declaration
-    # the two names for the same number must not be able to drift apart
-    assert Settings(_env_file=None).service.workers == 3
+    declared = "\n".join(
+        line for line in dockerfile.splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "MEMORY__SERVICE__WORKERS" not in declared, (
+        "one name for the worker count in the image; the second one is what drifts"
+    )
 
 
 def _compose_service(name: str) -> str:
