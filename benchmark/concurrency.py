@@ -20,6 +20,15 @@ This measures all three, for the two models on the hot path:
 
 Nothing here is a pass/fail gate. It prints the shape of the trade-off so the defaults can be
 chosen from evidence rather than from habit.
+
+**What it can still see, now that the models are serialised.** Every in-process model is
+entered through ``adapters/models/_runner.SerialRunner`` — one thread, one caller at a time
+— so the fan-out described above no longer happens and cannot be measured here. The
+throughput curve is therefore flat by construction: it measures queueing in front of one
+model, not parallelism inside it. The agreement check is comparing serial results against
+serial results and can no longer detect shared-module state. Both remain useful as the
+record of what the gate does to the numbers; neither is evidence about concurrent entry any
+more. Measuring that again means removing the runner first.
 """
 
 from __future__ import annotations
@@ -131,6 +140,9 @@ async def run(workers: list[int], rounds: int) -> dict:
     try:
         import torch
 
+        # What the encoder runs at, which is DenseModel.threads when the environment field
+        # is unset — and it is unset by default.
+        encoder_threads = getattr(container.embedding, "threads", None)
         points = []
         for w in workers:
             point = await _measure(container, w, rounds)
@@ -148,6 +160,8 @@ async def run(workers: list[int], rounds: int) -> dict:
             "torch_interop_threads": torch.get_num_interop_threads(),
             "default_executor_max_workers": min(32, (os.cpu_count() or 1) + 4),
             "configured_models_threads": settings.models.embedding.threads,
+            "encoder_threads": encoder_threads,
+            "models_serialised": True,
             "configured_worker_concurrency": settings.tasks.worker_concurrency,
         },
         "points": points,
