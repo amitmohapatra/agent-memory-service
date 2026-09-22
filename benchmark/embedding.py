@@ -41,7 +41,7 @@ from benchmark.evaluation.golden import (
 )
 from benchmark.retrieval import FIXTURES, GOLDEN, _pct, _settings
 from memory_service.__about__ import __version__
-from memory_service.adapters.models.embeddings import HashEmbedding, SentenceTransformersEmbedding
+from memory_service.adapters.models.embeddings import HashEmbedding, load_dense
 from memory_service.application.container import Overrides, build_container
 from memory_service.config.constants import DenseModel
 from memory_service.config.settings import Settings
@@ -116,9 +116,11 @@ async def reset_index(container: Any) -> None:
 
 
 def load_embedding(spec: DenseModel | None, *, threads: int | None = None) -> Any:
+    """The same factory the service wires, so the runner timed here is the runner that
+    ``spec.runtime`` would put behind ``/v1/context``."""
     if spec is None:
         return HashEmbedding(STAND_IN_DIMENSION)
-    return SentenceTransformersEmbedding(spec, threads=threads)
+    return load_dense(spec, threads=threads)
 
 
 def sample_documents(golden: GoldenSet, n: int = BATCH_DOCUMENTS) -> list[str]:
@@ -221,9 +223,14 @@ async def run_candidate(
     spec: DenseModel | None, *, base: Settings, copies: int, batches: int
 ) -> dict[str, Any]:
     head = (
-        {"model": spec.id, "backend": spec.backend, "model_path": spec.model_path}
+        {
+            "model": spec.id,
+            "runtime": spec.runtime,
+            "backend": spec.backend,
+            "model_path": spec.model_path,
+        }
         if spec is not None
-        else {"model": STAND_IN, "backend": "hash", "model_path": None}
+        else {"model": STAND_IN, "runtime": "hash", "backend": "hash", "model_path": None}
     )
     threads = base.models.embedding.threads
     t0 = time.perf_counter()
@@ -236,6 +243,9 @@ async def run_candidate(
     embed_ms = await embed_latency(
         model, sample_documents(golden), [q.query for q in golden.questions], batches=batches
     )
+    # What the model ran at, not what the environment asked for: the setting is None by
+    # default and each adapter falls back to ``DenseModel.threads``.
+    model_threads = getattr(model, "threads", None)
     del model
 
     container = await build_container(base, __version__, overrides=candidate_overrides(spec))
@@ -261,7 +271,7 @@ async def run_candidate(
             **head,
             "fingerprint": fingerprint,
             "dimension": int(container.embedding.dimension),
-            "threads": threads,
+            "threads": model_threads,
             "load_seconds": load_seconds,
             "embed_ms": embed_ms,
             "index_seconds": index_seconds,

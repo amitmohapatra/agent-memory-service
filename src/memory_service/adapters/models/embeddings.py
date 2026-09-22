@@ -11,6 +11,8 @@
 
 All three expose ``fingerprint()`` (model + runtime + graph file + dimension), which is
 baked into collection names and cache keys so a model swap can never mix vector spaces.
+``load_dense(spec)`` is how the two real ones are reached: the runtime is chosen once, here,
+not once per caller.
 
 The two real encoders are entered through a ``SerialRunner``: one thread, one caller at a
 time, with the intra-op thread count pinned to ``DenseModel.threads``.
@@ -279,6 +281,20 @@ class OnnxEmbedding:
 
     def close(self) -> None:
         self._runner.close()
+
+
+def load_dense(
+    spec: DenseModel, *, threads: int | None = None
+) -> OnnxEmbedding | SentenceTransformersEmbedding:
+    """The dense encoder ``spec.runtime`` names.
+
+    One place makes this choice. Two runners that answer the same calls are exactly the
+    shape of bug where a harness times one and stamps the artifact with the other's
+    fingerprint, so wiring and the benchmarks come through here rather than each deciding.
+    """
+    if spec.runtime == "onnx":
+        return OnnxEmbedding(spec, threads=threads)
+    return SentenceTransformersEmbedding(spec, threads=threads)
 
 
 def _load_graph(spec: DenseModel, threads: int) -> _OnnxEncoder:
