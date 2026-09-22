@@ -485,11 +485,17 @@ def _wire_graph(container: Container) -> None:
     container.services["graph"] = graph
     if container.tuning.retrieval.graph:
         engine = container.services["retrieval"]
-        engine.post_stages["graph"] = GraphStage(
+        stage = GraphStage(
             graph,
             container.services["uow_factory"],
             max_facts=container.tuning.context.graph_facts_max,
+            budget_seconds=container.tuning.graph.prefetch_budget_ms / 1000,
+            max_parked=container.tuning.graph.max_parked_traversals,
         )
+        engine.post_stages["graph"] = stage
+        # Traversals that outran their budget are still holding pooled connections; shutdown
+        # waits for them rather than exiting with statements open on the pool.
+        container.add_closer("graph_stage", stage.drain)
 
 
 def _wire_context_preservation(container: Container) -> None:
