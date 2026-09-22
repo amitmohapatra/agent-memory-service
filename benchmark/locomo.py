@@ -209,9 +209,12 @@ ANSWER_SYSTEM = (
     "the names, dates, places and qualifiers the context gives - do not shorten them. "
     "When asked when, work out the actual date from the dated entries and state it. When "
     "asked what someone would likely do, feel or choose, infer it from what the context "
-    "shows about them. Reply with exactly: I don't know. - only when nothing in the "
-    "context bears on the question. Never use outside knowledge. One short phrase or "
-    "sentence."
+    "shows about them. Check the question's premise against the context: if it attributes "
+    "something to the wrong person, or asks about an event the context never records, reply "
+    "with exactly: I don't know. If the context ends with an Evidence status other than "
+    "COMPLETE, answer only when the context explicitly states the fact for the person asked "
+    "about; otherwise reply with exactly: I don't know. Never use outside knowledge. One "
+    "short phrase or sentence."
 )
 
 JUDGE_SCHEMA = {

@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import pytest
 
-from memory_service.modules.context.evidence import content_terms, overlaps
+from memory_service.modules.context.evidence import content_terms, overlaps, unsupported_subject
 
 
 class _C:
-    """Enough of a Candidate for ``overlaps``."""
+    """Enough of a Candidate for ``overlaps`` and ``unsupported_subject``."""
 
-    def __init__(self, text: str, kind: str = "memory") -> None:
+    def __init__(self, text: str, kind: str = "memory", subject: str | None = None) -> None:
         self.text, self.kind = text, kind
+        self.payload = {"subject": subject} if subject else {}
 
 
 CORPUS = [_C("The FOMC held the federal funds rate at 5.25 to 5.50 percent in January 2024")]
@@ -73,3 +74,50 @@ def test_the_query_cap_default_is_generous_enough_for_real_questions() -> None:
     assert cfg.max_query_chars >= 2048
     long_but_real = "Summarise everything the committee said about inflation. " * 8
     assert len(long_but_real) < cfg.max_query_chars
+
+
+# --- the subject rule: a two-person conversation shares terms with any question about
+# --- either person, so ``overlaps`` alone can never see a wrong-person premise.
+
+CONVERSATION = [
+    _C(
+        "[2023-05-20] Caroline: my grandma gave me her necklace, I treasure it",
+        subject="user:caroline",
+    ),
+    _C("[2023-05-21] Melanie: we went camping at the beach with the kids", subject="user:melanie"),
+    _C("[2023-05-22] Caroline: I'm single and honestly enjoying it", subject="user:caroline"),
+]
+
+
+def test_a_question_about_the_wrong_person_is_flagged() -> None:
+    note = unsupported_subject("What was grandma's gift to Melanie?", CONVERSATION)
+    assert note == "no retrieved memory about Melanie mentions gift, grandma"
+    # ...and the plain overlap rule is exactly why this is needed: it says yes
+    assert overlaps("What was grandma's gift to Melanie?", CONVERSATION)
+
+
+def test_a_question_the_right_person_answers_is_not_flagged() -> None:
+    assert unsupported_subject("Where did Melanie go camping?", CONVERSATION) is None
+    assert unsupported_subject("What did Caroline's grandma give her?", CONVERSATION) is None
+
+
+def test_a_person_nobody_mentioned_is_flagged_by_name() -> None:
+    assert unsupported_subject("What does Jonathan do for work?", CONVERSATION) == (
+        "no retrieved memory is about Jonathan"
+    )
+
+
+def test_sentence_openers_and_questions_without_names_are_left_alone() -> None:
+    assert unsupported_subject("What happened at the beach?", CONVERSATION) is None
+    assert unsupported_subject("When was the camping trip?", CONVERSATION) is None
+
+
+def test_a_name_that_opens_the_question_still_counts_when_the_evidence_knows_it() -> None:
+    assert unsupported_subject("Melanie's grandma gave her what?", CONVERSATION) == (
+        "no retrieved memory about Melanie mentions gave, grandma"
+    )
+
+
+def test_document_bundles_are_not_subject_checked() -> None:
+    docs = [_C("Caroline Herschel catalogued nebulae in 1783", kind="chunk")]
+    assert unsupported_subject("What did Melanie catalogue?", docs) is None

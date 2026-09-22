@@ -92,6 +92,91 @@ def _conflicting_memories(candidates: Sequence[Candidate]) -> list[tuple[str, st
     return out
 
 
+_CAPITALISED = re.compile(r"\b([A-Z][a-z]{2,})(?:'s)?\b")
+#: Interrogatives and auxiliaries are not content: "what" is not in the stop list, and a
+#: memory containing it would have counted as supporting the question.
+_FUNCTION_WORDS = frozenset(
+    {
+        "what",
+        "when",
+        "where",
+        "who",
+        "whom",
+        "whose",
+        "which",
+        "why",
+        "how",
+        "did",
+        "does",
+        "do",
+        "was",
+        "were",
+        "is",
+        "are",
+        "has",
+        "have",
+        "had",
+        "would",
+        "could",
+        "should",
+        "will",
+        "can",
+        "may",
+        "might",
+    }
+)
+
+
+def _question_names(query: str, evidence_text: str) -> list[str]:
+    """Capitalised words in the question, taken as names. A sentence-initial one counts
+    only when the evidence itself uses it as a name ("What" opens a question; "Melanie"
+    opens a question about Melanie)."""
+    names: list[str] = []
+    for i, name in enumerate(_CAPITALISED.findall(query)):
+        if i == 0 and query.startswith(name) and name not in evidence_text:
+            continue
+        if name.lower() not in STOP_WORDS and name not in names:
+            names.append(name)
+    return names
+
+
+def _is_about(candidate: Candidate, name: str) -> bool:
+    key = name.lower()
+    subject = str(candidate.payload.get("subject") or "").lower()
+    return key in content_terms(candidate.text) or key in subject
+
+
+def unsupported_subject(query: str, candidates: Sequence[Candidate]) -> str | None:
+    """A note when the question is about a named person the evidence does not support.
+
+    ``overlaps`` asks whether *any* evidence shares a term with the question. On a memory of
+    a conversation between two people that is always true, for any question about either of
+    them - so it never fires on the one failure conversational memory actually produces: a
+    question whose premise is about the wrong person, or an event that never happened.
+    "What was grandma's gift to Melanie?" retrieves Caroline's grandma and Caroline's
+    necklace, shares every term, and reports COMPLETE.
+
+    Deterministic and cheap: for each name the question carries, is there a retrieved
+    memory *about* that name - by subject or by mention - that shares one of the question's
+    other content terms? When none does, the bundle does not establish what was asked, and
+    says so. Returns the note, or None when the question is supported or names nobody.
+    """
+    memories = [c for c in candidates if c.kind == "memory"]
+    if not memories:
+        return None
+    names = _question_names(query, " ".join(c.text for c in memories))
+    if not names:
+        return None
+    others = content_terms(query) - {n.lower() for n in names} - _FUNCTION_WORDS
+    for name in names:
+        about = [c for c in memories if _is_about(c, name)]
+        if not about:
+            return f"no retrieved memory is about {name}"
+        if others and not any(content_terms(c.text) & others for c in about):
+            return f"no retrieved memory about {name} mentions {', '.join(sorted(others)[:4])}"
+    return None
+
+
 class VerificationStage:
     name = "verify"
 
@@ -190,6 +275,14 @@ class VerificationStage:
             seeds = [c for c in candidates if c.kind == "chunk" and c.expansion_edge is None][
                 : self.seeds
             ]
+            if not seeds and self.cfg.subject_evidence_check:
+                # Conversational bundle: no document seeds to derive companions from, so the
+                # subject rule is the only structural check available. INCOMPLETE, not
+                # INSUFFICIENT - evidence exists; it just does not establish what was asked.
+                unsupported = unsupported_subject(routed.query, candidates)
+                if unsupported:
+                    report["status"] = EvidenceStatus.INCOMPLETE.value
+                    report["notes"].append(unsupported)
             groups = await self.required_groups(ctx, seeds)
             report["required_groups"] = sorted(groups)
             # COMPLETE has two very different meanings, and they were indistinguishable: the

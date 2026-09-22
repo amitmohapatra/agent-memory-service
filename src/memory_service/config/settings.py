@@ -459,6 +459,13 @@ class RetrievalSettings(BaseModel):
     evidence_verification: bool = True
     escalation_max_rounds: int = 2
     abstain_when_insufficient: bool = True
+    #: On conversational (memory-only) bundles, require that some retrieved memory *about
+    #: the person the question names* shares a content term with the rest of the question.
+    #: The plain overlap rule above cannot see a wrong-person presupposition — "what was
+    #: grandma's gift to Melanie?" when it was Caroline's grandma — because a two-person
+    #: conversation shares terms with any question about either of them. Measured on LoCoMo:
+    #: every one of 304 bundles, 71 of them unanswerable by construction, reported COMPLETE.
+    subject_evidence_check: bool = True
     # benchmark-gated; default off
     splade: bool = False
 

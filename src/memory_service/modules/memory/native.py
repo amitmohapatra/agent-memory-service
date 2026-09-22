@@ -541,7 +541,7 @@ class NativeMemoryIntelligence:
                 f"predicate={cand.predicate or '-'} object={cand.object or '-'}"
             ),
             schema=_EXTRACTION_SCHEMA,
-            max_tokens=300,
+            max_tokens=1024,
         )
         if out is None:
             return cand
@@ -572,7 +572,10 @@ class NativeMemoryIntelligence:
             system=_WORTHINESS_SYSTEM,
             user=f"Sentence: {s[:_ASSIST_MAX_CHARS]}\nSpeaker: {ctx.principal_id}",
             schema=_WORTHINESS_SCHEMA,
-            max_tokens=200,
+            # Sized for a model that reasons before it writes: at 200, deepseek-flash
+            # spent the whole budget thinking and 12% of calls came back empty (measured
+            # on LoCoMo ingest). The answer itself is still one short JSON object.
+            max_tokens=1024,
         )
         if out is None or out.get("worthy") is not True:
             return None
