@@ -27,6 +27,65 @@ TARGET one package / no open-ended configuration: reachable - settings.py expose
 - **The 300 ms ruler** is HTTP `POST /v1/context`, cold arm (bundle-cache miss), from a separate host, 20 rps sustained for 5 minutes, Postgres/Qdrant/Dragonfly remote, on the 8 vCPU / 16 GB VM. In-process LoCoMo timings are a stage split, not the headline.
 
 
+## Amendments from the gap analysis (2026-09-23)
+
+[GAPS-2026-09.md](GAPS-2026-09.md) ranked the borrowable techniques against a measured failure
+shape and changed this plan in the following places. Where an amendment contradicts a phase step
+below, the amendment wins.
+
+**The failure shape the later phases are aimed at.** v5's 39 wrong answerable answers are 13
+abstentions, 14 partial enumerations (correct under the lenient ruler), 11 wrong instances and
+exactly **one** retrieval failure (`python -m benchmark.failure_taxonomy`). Enumeration
+completeness and the answer protocol are two thirds of what is left; nothing in Phase 2 or 3
+should be justified by accuracy.
+
+**Four defects, fixed ahead of the rest** (they cost tokens and accuracy and nothing to fix):
+the date and speaker are stamped into stored content *and* rendered again, so every line carries
+both twice and every start-anchored ingest rule is blinded by the prefix; retrieval rank is
+discarded before rendering, against a measured 75.8/53.8/63.2 positional effect; principal graph
+nodes carry no bare-name alias while turn prefixes mint resolvable entities; the neighbourhood
+LIMIT orders by a confidence every MENTIONS edge shares. These are folded into Phase 2's branch
+set rather than waiting for Phase 4.
+
+**Phase 3 gains four correctness items**, without which "multilingual" would be a claim about a
+monolingual measurement: verbatim turns are dropped entirely for non-Latin scripts (the sentence
+filter counts ASCII words), so the Phase 3 step 2 gate must assert verbatim count == message count
+on a ja/zh/ar/ru fixture; NFKC + casefold and per-language negation lists must land *with* the
+Unicode tokenizer, because that tokenizer is what first makes non-English merges possible and
+nothing today blocks a negated duplicate; token estimation is `len // 4`, so CJK/Thai/Devanagari is
+silently truncated at the 512-token window; and the gate needs a cross-lingual row (question
+language != memory language) and a code-switched row, plus a Unicode-safe `_normalise` in the
+harness, which today strips every answer to `[a-z0-9]`.
+
+**Phase 4 step 1 (the ruler) is now explicit**: add Mem0's *verbatim* ACCURACY_PROMPT as its own
+ruler (our "lenient" paraphrases a newer prompt that no comparator was graded with), use Mem0's
+verbatim answer prompt for the standard column only, report category 5 as its own column, name the
+judge model in the file and in every record (`--judge-model`, landed), and print the sampling error
+bar - at n=233 it is about ±4.8 pp, wider than most of the gains below.
+
+**Phase 4 step 3** takes its episode boundaries from embedding drift (the session's 35th-percentile
+drift, capped at 25 turns) rather than a fixed 3-5 turn window; zero LLM either way.
+
+**Phase 4 step 5** must emit *dated* aggregates ordered by `observed_at` - the dormant
+`BeliefService` emits an undated, ingest-ordered list, which is the wrong shape for the 14 partial
+enumerations it is meant to answer.
+
+**Phase 4 step 8 gains a precondition and two constraints**: `consolidate()` only reaches dense
+similarity when Jaccard >= 0.5, so an LLM paraphrase can never dedup and every outbox retry would
+double the memory count - fix that first; each extracted fact carries the turn ids it came from;
+and a zero-LLM grounding filter drops any fact whose cited turn shares no content token, number or
+date with it.
+
+**Phase 4 gains a fusion step** (after the instrumentation): weighted RRF or DBSF server-side -
+Qdrant has supported weighted RRF since 1.17 and we run 1.18.2, so no upgrade is needed - fitted
+offline from dumped per-leg gold ranks, and spent on halving retrieval depth rather than on recall
+we already have. It requires the instrumentation named next.
+
+**Instrumentation first**: the harness stores a bundle as four integers, so no fusion weight, depth
+or salience decision can be evidenced. Dump per-item `[record_id, kind, retrievers, fused_rank]`
+and the gold turns' rank in the dense-only, sparse-only and fused lists before tuning any of it.
+
+
 ## Phase 0 - Instrument and baseline at HEAD (measure before tuning; nothing below is credited without these artifacts)
 
 **Goal.** Replace every stale, estimated or cross-machine number with one measured at HEAD 104fd01, and obtain the single decision number the whole latency/throughput plan hangs on: the 2-thread int8 ONNX query-encode cost on the target 8 vCPU VM.
