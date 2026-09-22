@@ -527,12 +527,6 @@ def _wire_memory(container: Container) -> None:
     container.services["reflection"] = ReflectionService(
         container.services["uow_factory"], assist=container.services["llm_assist"]
     )
-    # NOT wired, deliberately: "thread_observer" would make modules/memory/observer.py live.
-    # It is a complete implementation that nothing constructs and no test covers, and turning
-    # it on changes behaviour elsewhere — a thread that already carries an observation stops
-    # needing the context builder to call the model for a conversation summary, which
-    # test_indexer_and_builder_use_the_model asserts it does. See the memory.observe handler
-    # in modules/jobs/registry.py for the whole story and the decision it is waiting on.
 
 
 def _wire_tools(container: Container) -> None:

@@ -163,7 +163,7 @@ async def test_extraction_kinds_and_temporal(native) -> None:
     assert event[0].memory_type is MemoryType.EPISODIC
     multi = await _extract(native, "My name is Amit and my timezone is CET. I prefer tea.")
     assert [c.predicate for c in _extracted(multi)] == ["name", "timezone", "prefers"]
-    # Inside a thread (CTX has thr_1) ThreadObserver keeps the turn, so no verbatim copy;
+    # Inside a thread (CTX has thr_1) the thread itself keeps the turn, so no verbatim copy;
     # outside one the turn itself is kept alongside the facts, last, so ranking prefers the
     # parsed fact over the transcript it came from.
     assert [c.predicate for c in multi][-1] == "prefers"

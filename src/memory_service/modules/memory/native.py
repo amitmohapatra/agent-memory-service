@@ -499,9 +499,9 @@ class NativeMemoryIntelligence:
         """
         if not self.cfg.keep_verbatim_turns or kind is not ObservationKind.MESSAGE:
             return None
-        # Only where nothing else will keep the turn. Inside a thread, ThreadObserver
-        # already compresses turns into observational memory with the thread's own scoping;
-        # a second verbatim copy would double-store every message. And an agent's messages
+        # Only where nothing else will keep the turn. Inside a thread the hot-thread cache
+        # and the archive already hold every message with the thread's own scoping, so a
+        # verbatim copy would double-store each one. And an agent's messages
         # are its working chatter: classify() gives a generic OBSERVATION thread/workspace
         # visibility, which leaked "Thinking: ..." into the user's memory the first time
         # this ran without the guard (tests/integration/test_multi_agent.py caught it).

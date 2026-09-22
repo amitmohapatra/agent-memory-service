@@ -18,7 +18,6 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
-    ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
@@ -48,7 +47,6 @@ log = get_logger(__name__)
 
 TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
-TASK_MEMORY_OBSERVE = "memory.observe"
 
 SHORT_TERM_TTL = timedelta(days=7)
 
@@ -201,7 +199,6 @@ class ObservationPipeline:
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
         landing: LandingReflection | None = None,
-        observe_threads: bool = True,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
@@ -209,7 +206,6 @@ class ObservationPipeline:
         self.working = working
         self.gate = gate
         self.landing = landing
-        self.observe_threads = observe_threads
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -241,8 +237,6 @@ class ObservationPipeline:
             )
             async with self.uow_factory() as uow:
                 affected = await self._apply_all(uow, ctx, candidates, outcomes, hinted=hinted)
-                if self.observe_threads and observation.kind is ObservationKind.MESSAGE:
-                    await self._maybe_observe(uow, ctx)
                 if affected:
                     await uow.enqueue(
                         JobSpec(
@@ -287,29 +281,6 @@ class ObservationPipeline:
         if h.importance is not None:
             update["importance"] = h.importance
         return c.model_copy(update=update) if update else c
-
-    async def _maybe_observe(self, uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
-        """Ask the observer to compress turns that fell out of the hot window, once per batch
-        of new messages (the observer itself is idempotent over already covered turns)."""
-        if not ctx.thread_id:
-            return
-        latest = await uow.messages.list_thread(ctx.tenant_id, ctx.thread_id, limit=1)
-        if not latest:
-            return
-        older = latest[-1].sequence - self.cfg.observer_hot_window_messages
-        if older < self.cfg.observer_batch_messages:
-            return
-        await uow.enqueue(
-            JobSpec(
-                task_name=TASK_MEMORY_OBSERVE,
-                queue=Queue.RECONCILE,
-                payload={"tenant_id": ctx.tenant_id, "thread_id": ctx.thread_id},
-                idempotency_key=(
-                    f"memobs:{ctx.thread_id}:{older // self.cfg.observer_batch_messages}"
-                ),
-                tenant_id=ctx.tenant_id,
-            )
-        )
 
     async def _deferred_before(self, ctx: MemoryExecutionContext, cand: MemoryCandidate) -> bool:
         if self.working is None:

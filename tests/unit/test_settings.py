@@ -86,7 +86,7 @@ def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
 
     ``uses`` defaults to empty and ``wants()`` requires membership, so
     ``enabled=true`` on its own started cleanly, reported ``"llm": "bifrost"`` on
-    /version, and sent the gateway nothing at all. All eleven paths quietly took their
+    /version, and sent the gateway nothing at all. All ten paths quietly took their
     native fallback, and the only way to notice was that the token metrics never moved.
     """
     with pytest.raises(ValidationError, match="nothing would call the model"):

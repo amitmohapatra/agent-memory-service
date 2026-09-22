@@ -142,8 +142,8 @@ def _extracted(cands):
 
 
 async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
-    # No rule matches this sentence, and CTX is inside a thread - where ThreadObserver, not
-    # the verbatim copy, is the mechanism - so the native path produces nothing at all.
+    # No rule matches this sentence, and CTX is inside a thread - where the thread, not
+    # a verbatim copy, keeps the turn - so the native path produces nothing at all.
     # That is the gap ambiguous_worthiness exists to close.
     assert await _native().extract(_obs(UNMATCHED), CTX) == []
     reply = {"worthy": True, "memory_type": "SEMANTIC", "content": "Standup is in the afternoon"}
