@@ -81,3 +81,21 @@ def test_a_second_event_loop_gets_a_second_semaphore() -> None:
         assert asyncio.run(runner.run(lambda: 2)) == 2
     finally:
         runner.close()
+
+
+async def test_a_cancelled_caller_keeps_the_gate_until_the_model_is_out() -> None:
+    """A client disconnect cancels the awaiting coroutine, but the executor thread is
+    already inside the model and cannot be recalled. If the permit went back on
+    cancellation, the next caller would enter while the first encode was still running."""
+    runner = SerialRunner("test")
+    body = Occupancy()
+    try:
+        first = asyncio.ensure_future(runner.run(body, 0.2))
+        await asyncio.sleep(0.05)  # long enough to be inside the body
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert await runner.run(body, 0.0) == 2
+    finally:
+        runner.close()
+    assert body.peak == 1

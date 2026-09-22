@@ -15,6 +15,11 @@ The semaphore is rebuilt when the running loop changes. A benchmark harness that
 ``asyncio.run`` twice around one container would otherwise meet "is bound to a different
 event loop" on its second run, which is a fact about the primitive rather than about the
 model.
+
+A cancelled caller keeps its permit until the model is out. ``run_in_executor`` cannot take
+back a job the thread has already started, so releasing the gate on cancellation — a client
+disconnect, a request timeout — would let the next caller in while the previous encode is
+still inside the model, which is the one thing this class exists to prevent.
 """
 
 from __future__ import annotations
@@ -47,7 +52,15 @@ class SerialRunner:
     async def run(self, fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
         loop = asyncio.get_running_loop()
         async with self._semaphore(loop):
-            return await loop.run_in_executor(self._executor, partial(fn, *args, **kwargs))
+            running = loop.run_in_executor(self._executor, partial(fn, *args, **kwargs))
+            try:
+                return await asyncio.shield(running)
+            finally:
+                # Cancelling the caller does not cancel a started job. Hold the permit
+                # until the thread is out, or "one caller at a time" ends at the first
+                # disconnect.
+                if not running.done():
+                    await asyncio.gather(running, return_exceptions=True)
 
     def close(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)
