@@ -16,6 +16,9 @@ from memory_service.domain.enums import EvidenceStatus, QueryType, Representatio
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 
+#: What produced ``ContextItem.score``; the scales are not comparable across kinds.
+ScoreKind = Literal["cross_encoder", "fusion", "exact"]
+
 
 class ContextItem(BaseModel):
     """One ranked piece of context."""
@@ -33,7 +36,7 @@ class ContextItem(BaseModel):
     relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Where ``score`` came from: a cross-encoder probability, a fusion rank score, or an
     #: exact identifier hit.
-    score_kind: Literal["cross_encoder", "fusion", "exact"] = "fusion"
+    score_kind: ScoreKind = "fusion"
     retrievers: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
     citation: str = Field(..., description="stable citation key")

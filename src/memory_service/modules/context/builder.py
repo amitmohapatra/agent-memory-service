@@ -23,6 +23,7 @@ from memory_service.domain.context_bundle import (
     ContextItem,
     ConversationWindow,
     EvidenceReport,
+    ScoreKind,
     UnusedEvidence,
 )
 from memory_service.domain.conversation import Message
@@ -69,7 +70,7 @@ _ROLLING_SYSTEM = (
 _TAIL_CEILING = 0.05
 
 
-def _relevance(c: Candidate) -> tuple[float, str, float]:
+def _relevance(c: Candidate) -> tuple[float, ScoreKind, float]:
     """The raw ranking number, what produced it, and a comparable 0..1 relevance.
 
     One field used to carry three incompatible scales: a cross-encoder logit (-11..+11) for

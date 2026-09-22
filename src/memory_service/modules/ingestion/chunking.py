@@ -62,7 +62,7 @@ _CONTEXT_SYSTEM = (
 _CONTEXT_MAX_CHARS = 400
 
 
-def _document_salience(nodes: list[DocumentNode], *, keep: int = 8) -> list[str]:
+def _document_salience(nodes: Iterable[DocumentNode], *, keep: int = 8) -> list[str]:
     """The entities this document is *about*, by how often they are named.
 
     A first attempt walked the node tree upwards, which turned out to be a no-op: the parser

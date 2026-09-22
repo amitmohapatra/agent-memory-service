@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import MemoryRow
@@ -374,7 +375,7 @@ class SqlMemoryRepository:
             )
             .values(access_count=MemoryRow.access_count + 1, last_accessed_at=at)
         )
-        return int(result.rowcount or 0)
+        return int(cast("CursorResult[Any]", result).rowcount or 0)
 
     async def list_idle(
         self, *, idle_before: datetime, limit: int = 500, tenant_id: str | None = None
