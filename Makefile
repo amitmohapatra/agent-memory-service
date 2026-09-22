@@ -53,11 +53,12 @@ dev-up: vendor ## Start dev stack (postgres, qdrant, dragonfly, openfga, api, wo
 dev-down: ## Stop dev stack
 	$(COMPOSE) down -v
 
-models: ## Download the default model weights into ./models (git-ignored)
+models: ## Download the frozen model set (+ docling artifacts) into ./models (git-ignored)
 	$(PY) python -m memory_service.tools.download_models
 
-models-all: ## Download the defaults plus every benchmark challenger
-	$(PY) python -m memory_service.tools.download_models --all
+models-all: ## The frozen set plus every benchmark challenger listed in benchmark/challengers.txt
+	$(PY) python -m memory_service.tools.download_models
+	$(PY) python -m memory_service.tools.download_models --challengers benchmark/challengers.txt
 
 migrate: ## Apply database migrations
 	$(PY) alembic upgrade head

@@ -1,18 +1,18 @@
-"""Fetch the local model weights into ``models/`` (git-ignored).
+"""Fetch the frozen model set into ``models/`` (git-ignored).
 
-    uv run python -m memory_service.tools.download_models            # the defaults
-    uv run python -m memory_service.tools.download_models --all      # + benchmark challengers
+    uv run python -m memory_service.tools.download_models            # the frozen set + docling
     uv run python -m memory_service.tools.download_models --list
+    uv run python -m memory_service.tools.download_models --challengers benchmark/challengers.txt
 
-The service reads weights from local directories and never downloads at runtime: a missing
-model is a startup error, not a silent fall back to a stand-in. This is the one command that
-puts them in place, and it records the exact revision of each in ``models/MANIFEST.json`` so a
-benchmark result can name the weights it was produced with.
+The catalogue *is* ``constants.FROZEN_MODELS``: the directories this fetches are the ones the
+service loads, named after the model they hold, so the manifest, the directory and the code
+cannot drift apart. The service never downloads at runtime; a missing model is a startup
+error, not a silent fall back to a stand-in. ``models/MANIFEST.json`` records the exact
+revision of each so a benchmark result can name the weights it was produced with.
 
-Each directory is named after the model it holds, so the manifest, the directory and the
-configuration cannot drift apart: swapping the default embedding is a visible change to
-``MEMORY__MODELS__EMBEDDING__MODEL_PATH``, not a different model quietly appearing under a
-generic ``models/embedding`` path.
+Benchmark challengers (other encoders, rerankers, learned sparse) are not in the catalogue
+any more - ~7 GB of weights with no production code path. ``benchmark/challengers.txt``
+lists them for an ad-hoc ``--challengers`` fetch.
 """
 
 from __future__ import annotations
@@ -29,10 +29,10 @@ from typing import Any
 ALLOW = ["*.json", "*.txt", "*.safetensors", "*.model", "*.py", "*.md"]
 IGNORE = ["*.bin", "*.h5", "*.msgpack", "*.ckpt", "onnx/*", "openvino/*", "*.onnx"]
 
-# ...except for the fastembed adapters, which run the ONNX graph and nothing else. Fetching
-# them under the rules above produced a directory of configuration with no model in it, and
-# the "already downloaded" check looked for safetensors that were never going to be there —
-# so every run re-downloaded a model that could never load.
+# ...except for ONNX runtimes, which run the graph and nothing else. Fetching those under
+# the rules above produced a directory of configuration with no model in it, and the
+# "already downloaded" check looked for safetensors that were never going to be there — so
+# every run re-downloaded a model that could never load.
 ONNX_ALLOW = ["*.json", "*.txt", "*.model", "*.onnx", "*.onnx_data"]
 ONNX_IGNORE = ["*.bin", "*.h5", "*.msgpack", "*.ckpt", "*.safetensors", "openvino/*"]
 
@@ -47,7 +47,7 @@ class Model:
     role: str
     note: str
     default: bool = False
-    #: "torch" loads safetensors through sentence-transformers; "onnx" is a fastembed export
+    #: "torch" loads safetensors through sentence-transformers; "onnx" fetches the graph only
     runtime: str = "torch"
 
     @property
@@ -59,80 +59,38 @@ class Model:
         return ONNX_IGNORE if self.runtime == "onnx" else IGNORE
 
 
-MODELS: tuple[Model, ...] = (
-    # ---- defaults: what a normal deployment runs -------------------------------------
-    Model(
-        "granite-embedding-small-english-r2",
-        "ibm-granite/granite-embedding-small-english-r2",
-        "embedding",
-        "default dense encoder, 384-dim: lowest query p95 of the candidates benchmarked",
-        default=True,
-    ),
-    Model(
-        "ms-marco-MiniLM-L6-v2",
-        "cross-encoder/ms-marco-MiniLM-L6-v2",
-        "reranker",
-        "default cross-encoder: the only one measured inside a CPU latency budget",
-        default=True,
-    ),
-    Model(
-        "deberta-v3-base-mnli-fever-anli",
-        "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
-        "nli",
-        "claim-support classifier for the grounding cascade",
-        default=True,
-    ),
-    # ---- challengers: only needed to re-run the benchmarks ---------------------------
-    Model(
-        "bge-small-en-v1.5",
-        "BAAI/bge-small-en-v1.5",
-        "embedding",
-        "384-dim, indexes ~3x faster but a higher query p95",
-    ),
-    Model(
-        "granite-embedding-english-r2",
-        "ibm-granite/granite-embedding-english-r2",
-        "embedding",
-        "English-only, 768-dim",
-    ),
-    Model("bge-base-en-v1.5", "BAAI/bge-base-en-v1.5", "embedding", "768-dim, ~2x the query cost"),
-    Model("bge-m3", "BAAI/bge-m3", "embedding", "multilingual, 1024-dim, 8k context"),
-    Model(
-        "qwen3-embedding-0.6b",
-        "Qwen/Qwen3-Embedding-0.6B",
-        "embedding",
-        "multilingual, 1024-dim; 2.0s per query on CPU, needs a GPU",
-    ),
-    Model(
-        "gte-multilingual-base",
-        "Alibaba-NLP/gte-multilingual-base",
-        "embedding",
-        "multilingual, 768-dim",
-    ),
-    Model(
-        "bge-reranker-v2-m3",
-        "BAAI/bge-reranker-v2-m3",
-        "reranker",
-        "higher quality, GPU only: 35.8s for 20 candidates on CPU",
-    ),
-    Model(
-        "granite-embedding-reranker-english-r2",
-        "ibm-granite/granite-embedding-reranker-english-r2",
-        "reranker",
-        "English-only CPU-light reranker",
-    ),
-    # Qdrant's mirror, not the author's repository: fastembed loads its own ONNX export, and
-    # prithivida/Splade_PP_en_v1 ships one whose inputs are named input_mask/segment_ids —
-    # which fastembed does not feed, so it fails with "Required inputs are missing".
-    Model(
-        "Splade_PP_en_v1",
-        "Qdrant/Splade_PP_en_v1",
-        "sparse",
-        "SPLADE learned sparse (gated)",
-        runtime="onnx",
-    ),
-    Model("gliner2-base", "fastino/gliner2-base-v1", "extraction", "zero-shot NER/RE tier"),
-)
+def _frozen() -> tuple[Model, ...]:
+    """The catalogue, derived from the frozen set so the two cannot disagree."""
+    from memory_service.config.constants import FROZEN_MODELS
+
+    dense, nli, reranker = FROZEN_MODELS.dense, FROZEN_MODELS.nli, FROZEN_MODELS.reranker
+    out = [
+        Model(
+            dense.local_dir,
+            dense.id,
+            "embedding",
+            f"the dense encoder, {dense.dimension}-dim ({dense.backend} backend)",
+            default=True,
+            runtime="onnx" if dense.backend != "torch" else "torch",
+        ),
+        Model(
+            nli.local_dir,
+            nli.id,
+            "nli",
+            "claim-support classifier for the grounding cascade",
+            default=True,
+        ),
+    ]
+    if reranker is not None:
+        out.append(
+            Model(
+                reranker.local_dir, reranker.id, "reranker", "cross-encoder reranker", default=True
+            )
+        )
+    return tuple(out)
+
+
+MODELS: tuple[Model, ...] = _frozen()
 
 #: Docling resolves its layout and table models through the HuggingFace cache and downloads
 #: them on first use — which is a runtime download the service does not permit, and which
@@ -165,8 +123,18 @@ def load_manifest(root: Path) -> dict[str, Any]:
         return {}
     if not isinstance(stored, dict):
         return {}
-    known = {m.directory for m in MODELS} | {DOCLING_DIRECTORY}
+    known = {m.directory for m in MODELS} | {DOCLING_DIRECTORY} | _challenger_directories()
     return {k: v for k, v in stored.items() if k in known}
+
+
+def _challenger_directories() -> set[str]:
+    """Challenger entries stay in the manifest while the file that names them exists: a
+    benchmark result produced with one must still be able to name its weights."""
+    path = Path(__file__).resolve().parents[3] / "benchmark" / "challengers.txt"
+    try:
+        return {m.directory for m in load_challengers(path)} if path.is_file() else set()
+    except SystemExit:
+        return set()
 
 
 def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
@@ -226,32 +194,54 @@ def _fetch_docling(root: Path, *, force: bool = False) -> None:
 
 
 def _catalogue() -> None:
-    """``--list``: everything ``--only`` will accept."""
+    """``--list``: the frozen set, which is everything ``--only`` will accept."""
     for m in MODELS:
-        mark = "default  " if m.default else "challenger"
-        sys.stdout.write(f"{mark} {m.directory:38} {m.repo:46} {m.note}\n")
+        sys.stdout.write(f"frozen    {m.directory:38} {m.repo:46} {m.note}\n")
     sys.stdout.write(
-        f"default   {DOCLING_DIRECTORY:38} {'(docling model_downloader)':46} "
+        f"frozen    {DOCLING_DIRECTORY:38} {'(docling model_downloader)':46} "
         "layout + table models for the docling parser\n"
     )
 
 
-def _selection(only: set[str], fetch_all: bool) -> tuple[list[Model], bool]:
-    """Which catalogue entries to fetch, and whether docling is among them.
+def load_challengers(path: Path) -> tuple[Model, ...]:
+    """``benchmark/challengers.txt``: one ``directory repo role [runtime]`` per line."""
+    out: list[Model] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) not in (3, 4):
+            raise SystemExit(f"{path}: expected 'directory repo role [runtime]', got {raw!r}")
+        directory, repo, role = parts[:3]
+        runtime = parts[3] if len(parts) == 4 else "torch"
+        out.append(Model(directory, repo, role, "benchmark challenger", runtime=runtime))
+    return tuple(out)
+
+
+def _selection(
+    only: set[str], catalogue: tuple[Model, ...], *, challengers: bool
+) -> tuple[list[Model], bool]:
+    """Which entries to fetch, and whether docling is among them.
 
     ``docling`` is not a HuggingFace repository in MODELS — docling's own downloader resolves
     it — but it still has to be addressable by name, or ``--only docling`` fetches nothing and
-    exits 0, which reads as success.
+    exits 0, which reads as success. A challenger fetch never pulls docling.
     """
     if not only:
-        return [m for m in MODELS if m.default or fetch_all], True
-    return [m for m in MODELS if m.directory in only], DOCLING_DIRECTORY in only
+        return list(catalogue), not challengers
+    return [m for m in catalogue if m.directory in only], DOCLING_DIRECTORY in only
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", default="models", help="target directory (default: models)")
-    parser.add_argument("--all", action="store_true", help="also fetch the benchmark challengers")
+    parser.add_argument(
+        "--challengers",
+        type=Path,
+        default=None,
+        help="fetch the benchmark challengers listed in this file instead of the frozen set",
+    )
     parser.add_argument("--only", nargs="*", help="fetch these directory names only")
     parser.add_argument("--force", action="store_true", help="re-download even when present")
     parser.add_argument("--list", action="store_true", help="show the catalogue and exit")
@@ -261,7 +251,10 @@ def main(argv: list[str] | None = None) -> int:
         _catalogue()
         return 0
 
-    wanted, want_docling = _selection(set(args.only or ()), args.all)
+    catalogue = load_challengers(args.challengers) if args.challengers else MODELS
+    wanted, want_docling = _selection(
+        set(args.only or ()), catalogue, challengers=args.challengers is not None
+    )
     if not wanted and not want_docling:
         sys.stderr.write(f"no model matches {args.only}; try --list\n")
         return 2

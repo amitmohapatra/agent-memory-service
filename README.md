@@ -111,18 +111,21 @@ pip install -e sdk/python        # the universal-memory SDK
 
 ### What actually runs
 
-`make models` fetches three defaults into `models/`, each in a directory named after the model
-so the configuration and the weights cannot drift apart:
+`make models` fetches the frozen set into `models/`, each in a directory named after the
+model. The set is `FROZEN_MODELS` in `src/memory_service/config/constants.py`, and the
+download catalogue is derived from it, so the code and the weights cannot drift apart:
 
-| Role | Default | Size | Why |
+| Role | Frozen | Size | Why |
 |---|---|---|---|
 | Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
-| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | 26x cheaper than the next option and the only one close to a CPU budget |
+| Sparse | BM25 (client term frequencies, Qdrant server-side IDF) | — | no weights |
+| Reranker | none | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
-`make models-all` additionally fetches the benchmark challengers (BGE small/base/M3, Granite
-R2 base, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
-to re-run `make bench-embedding` / `make bench-reranker`.
+The benchmark challengers (BGE small/base/M3, Granite R2 base, GTE, Qwen3-Embedding,
+bge-reranker-v2-m3, SPLADE, GLiNER2, the former reranker) are listed in
+`benchmark/challengers.txt`; `make models-all` fetches them, and only `make bench-embedding`
+/ `make bench-reranker` ever load one.
 
 **These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
 candidate through the real pipeline and the golden set; the numbers below are from

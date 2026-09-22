@@ -1,0 +1,23 @@
+# Benchmark challengers: weights the product does not ship and never loads.
+#
+# The catalogue in src/memory_service/tools/download_models.py is the frozen set
+# (src/memory_service/config/constants.py) and nothing else; these ~7 GB existed on disk with
+# no production code path. Fetch one when re-running `make bench-embedding` /
+# `make bench-reranker` needs it:
+#
+#     uv run python -m memory_service.tools.download_models --challengers benchmark/challengers.txt --only bge-small-en-v1.5
+#
+# Format: directory  repo  role  [runtime]   (runtime: torch | onnx; default torch)
+#
+# Removed from the catalogue on 2026-09-22 (Phase 1 of docs/ROADMAP-2026-09.md):
+ms-marco-MiniLM-L6-v2                 cross-encoder/ms-marco-MiniLM-L6-v2                 reranker    # the former default; off on measured evidence (SciFact -5.2 nDCG, p=0.012)
+bge-small-en-v1.5                     BAAI/bge-small-en-v1.5                              embedding   # 384-dim, indexes ~3x faster but a higher query p95
+granite-embedding-english-r2          ibm-granite/granite-embedding-english-r2            embedding   # English-only, 768-dim
+bge-base-en-v1.5                      BAAI/bge-base-en-v1.5                               embedding   # 768-dim, ~2x the query cost
+bge-m3                                BAAI/bge-m3                                         embedding   # multilingual, 1024-dim, 8k context; kill list: 2.2 s/query on this CPU class
+qwen3-embedding-0.6b                  Qwen/Qwen3-Embedding-0.6B                           embedding   # multilingual, 1024-dim; needs a GPU
+gte-multilingual-base                 Alibaba-NLP/gte-multilingual-base                   embedding   # multilingual, 768-dim; trust_remote_code
+bge-reranker-v2-m3                    BAAI/bge-reranker-v2-m3                             reranker    # 35.8 s for 20 candidates on CPU
+granite-embedding-reranker-english-r2 ibm-granite/granite-embedding-reranker-english-r2   reranker    # English-only CPU-light reranker
+Splade_PP_en_v1                       Qdrant/Splade_PP_en_v1                              sparse onnx # learned sparse; the SPLADE leg was removed with the freeze
+gliner2-base                          fastino/gliner2-base-v1                             extraction  # zero-shot NER/RE; never imported
