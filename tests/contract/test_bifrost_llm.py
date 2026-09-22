@@ -34,7 +34,6 @@ SCHEMA = {
 def _settings(**overrides: object) -> LLMSettings:
     base: dict[str, object] = {
         "enabled": True,
-        "provider": "bifrost",
         "base_url": BASE,
         "api_key": SecretStr("vk-test"),
         "model": "openai/gpt-4.1",
@@ -84,11 +83,9 @@ def test_construction_guards() -> None:
         BifrostLLM(LLMSettings(enabled=True, provider="bifrost", model=None))
 
 
-def test_settings_reject_non_bifrost_provider() -> None:
-    with pytest.raises(ValueError, match="bifrost"):
-        Settings(models={"llm": {"enabled": True, "provider": "disabled"}})  # type: ignore[arg-type]
+def test_an_enabled_llm_must_name_a_model() -> None:
     with pytest.raises(ValueError, match="model"):
-        Settings(models={"llm": {"enabled": True, "provider": "bifrost", "model": None}})  # type: ignore[arg-type]
+        Settings(models={"llm": {"enabled": True, "model": None}})  # type: ignore[arg-type]
     defaults = LLMSettings()
     assert defaults.model.startswith("anthropic/claude") and defaults.fast_model.startswith(
         "anthropic/claude"

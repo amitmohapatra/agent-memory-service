@@ -347,7 +347,7 @@ async def run(
     if judge and not getattr(llm, "enabled", False):
         raise SystemExit(
             "--judge needs a generative model: set models.llm.enabled=true, "
-            "models.llm.provider=bifrost and a models.llm.model the gateway serves."
+            "models.llm.enabled=true and a models.llm.model the gateway serves."
         )
     per_category: dict[int, dict[str, int]] = defaultdict(lambda: {"n": 0, "hit": 0})
     records: list[dict] = []

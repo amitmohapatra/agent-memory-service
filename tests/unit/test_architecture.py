@@ -90,12 +90,21 @@ def test_no_llm_provider_sdk_anywhere_under_src() -> None:
     assert not offenders, "LLM SDK imported outside Bifrost:\n" + "\n".join(offenders)
 
 
-def test_llm_settings_only_allow_bifrost() -> None:
-    from typing import get_args
+def test_llm_settings_offer_no_way_to_name_a_provider() -> None:
+    """The gateway is the only way out, and there is no field that could say otherwise.
 
+    This used to assert that `provider` was a Literal["disabled", "bifrost"], which made the
+    guarantee a matter of keeping a two-value enum two-valued. The field is gone: a
+    deployment can point `base_url` at a different gateway, which is the operator's business,
+    but nothing in the settings can select a provider SDK — there is no key for it, so there
+    is nothing to widen by accident. `test_no_llm_provider_sdk_anywhere_under_src` covers the
+    other half: none of them is importable either.
+    """
     from memory_service.config.settings import LLMSettings
 
-    assert set(get_args(LLMSettings.model_fields["provider"].annotation)) == {"disabled", "bifrost"}
+    fields = set(LLMSettings.model_fields)
+    assert "provider" not in fields
+    assert not {f for f in fields if "provider" in f or "vendor" in f}
 
 
 def test_domain_does_not_import_application_adapters_or_frameworks() -> None:

@@ -460,7 +460,7 @@ def test_reflect_job_is_registered_only_with_the_flag(make_settings) -> None:
 
     off = handlers(enabled=False)
     assert "memory.reflect" not in off.handlers and "periodic.memory_reflect" not in off.periodic
-    enabled = {"enabled": True, "provider": "bifrost", "model": "test/strong"}
+    enabled = {"enabled": True, "model": "test/strong"}
     without_use = handlers(**enabled, uses=["summaries"])
     assert "memory.reflect" not in without_use.handlers
     on = handlers(**enabled, uses=["reflection"])

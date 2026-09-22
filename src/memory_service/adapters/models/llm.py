@@ -8,10 +8,12 @@ anywhere in this code base (enforced by ``tests/unit/test_architecture.py``).
 Bounded by construction: one timeout per call, ``max_retries`` retries with exponential
 backoff on transient failures (429/5xx/timeouts/connection errors), and a circuit breaker
 that fails fast for ``circuit_open_seconds`` after ``circuit_failure_threshold`` consecutive
-failures. The timeout and the retries come from the ``bifrost-sdk`` client, shared with the
-agent harness; the breaker is this service's, because only it knows what a failure costs
-here. Every call is traced (model, use, tokens, latency), metered and logged without prompt
-text unless ``log_source_text`` is on.
+failures. All three come from the ``bifrost-sdk`` client, shared with the agent harness —
+the breaker was this service's until it turned out to be the same thirty lines there, with
+different defaults for the same gateway. What is this service's is the per-use model
+routing, the metrics and spans, and the mapping of the client's errors into the domain's.
+Every call is traced (model, use, tokens, latency), metered and logged without prompt text
+unless ``log_source_text`` is on.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import httpx
-from bifrost_sdk import RETRYABLE, Bifrost, GatewayError, RateLimited, Unreachable
+from bifrost_sdk import RETRYABLE, Bifrost, CircuitOpen, GatewayError, RateLimited, Unreachable
 
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
@@ -110,19 +112,20 @@ class BifrostLLM:
         log_source_text: bool = False,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        if settings.provider != "bifrost" or not settings.enabled:
-            raise ProviderNotConfigured("models.llm.provider must be 'bifrost' with enabled=true")
+        if not settings.enabled:
+            raise ProviderNotConfigured("models.llm.enabled must be true")
         if not settings.model:
             raise ProviderNotConfigured("models.llm.model is required")
         self.settings = settings
         self.model = settings.model
         self.fast_model = settings.fast_model or settings.model
         self.log_source_text = log_source_text
-        #: Transport, retries and rate-limit handling live in the shared client; what stays
-        #: here is what is *this service's*: per-use model routing, metrics, spans and the
-        #: circuit breaker. The two were tangled before, and the half that was duplicated in
-        #: the agent harness drifted — both copies read ``Retry-After`` from the header only
-        #: and so ignored the providers that put the delay in the body.
+        #: Transport, retries, rate-limit handling and the breaker all live in the shared
+        #: client; what stays here is what is *this service's*: per-use model routing,
+        #: metrics, spans and the mapping into this service's error vocabulary. The breaker
+        #: was the last thing duplicated — the same thirty lines lived in the agent harness,
+        #: with different defaults for the same gateway — so the thresholds are passed and
+        #: the mechanism is not re-implemented.
         self._gateway = Bifrost(
             settings.base_url,
             api_key=settings.api_key.get_secret_value() if settings.api_key else None,
@@ -130,10 +133,10 @@ class BifrostLLM:
             max_retries=settings.max_retries,
             backoff_seconds=settings.retry_backoff_seconds,
             max_tokens=settings.max_tokens,
+            circuit_failure_threshold=settings.circuit_failure_threshold,
+            circuit_open_seconds=settings.circuit_open_seconds,
             client=client,
         )
-        self._consecutive_failures = 0
-        self._circuit_open_until = 0.0
 
     # ------------------------------------------------------------------ port
     def model_for(self, use: str) -> str:
@@ -217,18 +220,11 @@ class BifrostLLM:
         source: Sequence[LLMMessage],
         **extra: Any,
     ) -> LLMCompletion:
-        """One gateway call, with this service's breaker around the shared client's retries.
+        """One gateway call, in this service's error vocabulary.
 
         Returns the extracted completion rather than the raw payload: both callers want the
         text, and the outcome recorded here depends on whether there is any.
         """
-        now = time.monotonic()
-        if now < self._circuit_open_until:
-            llm_requests_total.labels(use, "circuit_open").inc()
-            raise DependencyUnavailable(
-                "llm circuit open",
-                details={"retry_after_seconds": round(self._circuit_open_until - now, 1)},
-            )
         model = self.model_for(use)
         started = time.perf_counter()
         with span("llm.chat", use=use, model=model) as current:
@@ -240,10 +236,16 @@ class BifrostLLM:
                     temperature=temperature,
                     **extra,
                 )
+            except CircuitOpen as exc:
+                # Nothing was sent: the shared client's breaker is open after consecutive
+                # failures, so this call fails immediately instead of paying the timeout.
+                llm_requests_total.labels(use, "circuit_open").inc()
+                log.warning("llm.circuit_open", use=use, retry_after=exc.retry_after)
+                raise DependencyUnavailable("llm circuit open", details=exc.details) from exc
             except RateLimited as exc:
-                # Backpressure, not brokenness: the retries are already spent by the time this
-                # surfaces, but the breaker must not count it. See _failure.
-                self._failure(use, "exhausted", trips_circuit=False)
+                # Backpressure, not brokenness. The retries are already spent by the time
+                # this surfaces; the shared breaker deliberately does not count it.
+                self._failure(use, "exhausted")
                 # Carry how long to wait. The SDK parses it — Gemini puts the delay in the
                 # response body rather than a Retry-After header — and stores it on the
                 # exception, but `details` is only whatever the gateway literally said, so
@@ -286,9 +288,10 @@ class BifrostLLM:
                 completion = self._completion(data)
             except LLMCallFailed:
                 # Not a gateway problem and not transient: the budget is too small for this
-                # model and will be next time too. Tripping the breaker on it would take
-                # out the uses that are working.
-                self._failure(use, "empty_output", trips_circuit=False)
+                # model and will be next time too. The shared client already recorded the
+                # call as a success, so this does not reach the breaker — which is right:
+                # tripping on it would take out the uses that are working.
+                self._failure(use, "empty_output")
                 raise
             self._success(use, data, time.perf_counter() - started, current, model, source)
         return completion
@@ -302,7 +305,6 @@ class BifrostLLM:
         model: str,
         messages: Sequence[LLMMessage],
     ) -> None:
-        self._consecutive_failures = 0
         usage = data.get("usage") or {}
         in_tok = usage.get("prompt_tokens")
         out_tok = usage.get("completion_tokens")
@@ -333,27 +335,16 @@ class BifrostLLM:
             fields["response"] = _text_or_none(data)
         log.info("llm.call", **fields)
 
-    def _failure(self, use: str, outcome: str, *, trips_circuit: bool = True) -> None:
-        """Record a failed call. ``trips_circuit=False`` for backpressure, not brokenness.
+    def _failure(self, use: str, outcome: str) -> None:
+        """Record a failed call under the outcome that caused it.
 
-        The circuit breaker exists so that a *broken* gateway costs one timeout instead of one
-        per request. A 429 is the opposite situation: the gateway is healthy and telling us to
-        slow down. Counting it as a failure converted "slow down" into "stop", and because the
-        breaker stays open for a fixed window every paced call that followed failed instantly
-        without ever reaching the gateway. Measured on a real run: 17 rate limits tripped the
-        breaker and the next 62 calls failed with "circuit open" having sent nothing at all.
+        Whether it also opens the circuit is the shared client's decision now, and the rule
+        it applies is the one this service learned: a 429 is the gateway healthy and asking
+        for less, not the gateway broken. Counting it converted "slow down" into "stop" —
+        measured on a real run, 17 rate limits tripped the breaker and the next 62 calls
+        failed with "circuit open" having sent nothing at all.
         """
         llm_requests_total.labels(use, outcome).inc()
-        if not trips_circuit:
-            return
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self.settings.circuit_failure_threshold:
-            self._circuit_open_until = time.monotonic() + self.settings.circuit_open_seconds
-            log.warning(
-                "llm.circuit_open",
-                failures=self._consecutive_failures,
-                open_seconds=self.settings.circuit_open_seconds,
-            )
 
     @staticmethod
     def _completion(data: dict[str, Any]) -> LLMCompletion:

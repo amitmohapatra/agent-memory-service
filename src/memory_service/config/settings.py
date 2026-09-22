@@ -283,8 +283,13 @@ class LLMSettings(BaseModel):
     """Generative model access. The only provider is the Bifrost gateway (OpenAI-compatible);
     provider keys live in Bifrost, the service holds a Bifrost *virtual key*."""
 
+    #: The gateway is the only provider there is, so ``enabled`` says everything a second
+    #: ``provider`` field could. It used to be both, as ``enabled: bool`` and
+    #: ``provider: Literal["disabled", "bifrost"]``, kept in agreement by a validator whose
+    #: entire job was to reject the two spellings of "off" that disagreed. Two fields that
+    #: must always agree are one field; /version still reports "bifrost" or "disabled",
+    #: derived from this.
     enabled: bool = False
-    provider: Literal["disabled", "bifrost"] = "disabled"
     base_url: str = Field(
         default="http://localhost:8090/v1", description="Bifrost OpenAI-compatible endpoint"
     )
@@ -573,8 +578,6 @@ class Settings(BaseSettings):
                 raise ValueError("authorization.provider=memory is not allowed in prod")
             if self.blob.provider in ("memory", "filesystem"):
                 raise ValueError("blob.provider must be gcs in prod")
-        if self.models.llm.enabled and self.models.llm.provider == "disabled":
-            raise ValueError("llm.enabled=true requires models.llm.provider=bifrost")
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")
         if self.models.llm.enabled and not self.models.llm.uses:

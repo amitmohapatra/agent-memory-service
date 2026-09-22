@@ -462,8 +462,8 @@ MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r
 MEMORY__MODELS__RERANKER__MODEL_PATH=./models/ms-marco-MiniLM-L6-v2
 
 # Optional LLM — off by default, and only ever through a Bifrost gateway. Enabling it also
-# needs PROVIDER, MODEL and USES: with USES empty nothing would call the model, and startup
-# refuses that rather than reporting an LLM it never consults.
+# needs MODEL and USES: with USES empty nothing would call the model, and startup refuses
+# that rather than reporting an LLM it never consults.
 MEMORY__MODELS__LLM__ENABLED=false
 ```
 
@@ -492,7 +492,6 @@ You choose, per capability, where a model is allowed to help:
 
 ```bash
 MEMORY__MODELS__LLM__ENABLED=true
-MEMORY__MODELS__LLM__PROVIDER=bifrost
 MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
 MEMORY__MODELS__LLM__MODEL=anthropic/claude-sonnet-5              # complex judgement
 MEMORY__MODELS__LLM__FAST_MODEL=anthropic/claude-haiku-4-5        # cheap classification
@@ -506,9 +505,20 @@ so `max_tokens=16` produced no content at all. The adapter now raises instead of
 an empty string, and names the cause. Start at `MEMORY__MODELS__LLM__MAX_TOKENS=2048` for a
 reasoning model.
 
-**Rate limits.** A `429` is retried against the gateway's own `Retry-After` header rather than
-the exponential backoff, because a per-minute quota is not something a 1.5-second retry
-schedule can wait out.
+**Rate limits.** A `429` is retried against the delay the gateway asks for rather than the
+exponential backoff, because a per-minute quota is not something a 1.5-second retry schedule
+can wait out. The delay is read from the `Retry-After` header *and* from the response body,
+because some providers only put it there — Gemini answers "Please retry in 59.18s" in prose.
+A `429` also never opens the circuit breaker: backpressure is the gateway working, and
+counting it turns "slow down" into "stop".
+
+**How much of this is configuration.** Five of these variables are this service's own policy
+— whether a model may be consulted at all, which capabilities may consult it, and which of
+the two models each gets. The rest (`BASE_URL`, `API_KEY`, `MAX_TOKENS`, `TIMEOUT_SECONDS`,
+`MAX_RETRIES`, `RETRY_BACKOFF_SECONDS`, `CIRCUIT_FAILURE_THRESHOLD`, `CIRCUIT_OPEN_SECONDS`)
+are passed straight to the shared [`bifrost-sdk`](https://github.com/amitmohapatra/bifrost-sdk)
+client, which owns the transport, the retries, the rate-limit parsing and the breaker — the
+same client the agent harness uses, so neither service can learn a lesson the other misses.
 
 Available uses: `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,

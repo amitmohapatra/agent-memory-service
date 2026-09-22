@@ -58,11 +58,15 @@ def test_prod_guards_reject_dev_only_providers() -> None:
         )
 
 
-def test_llm_enabled_requires_provider() -> None:
-    with pytest.raises(ValueError, match="provider=bifrost"):
-        Settings(models={"llm": {"enabled": True, "provider": "disabled"}})
+def test_llm_enabled_requires_a_model() -> None:
+    """An LLM that is on and has no model name is a startup failure, not a runtime one.
+
+    The companion check — that `enabled` and a separate `provider` field agreed — is gone
+    with the field. Two settings that had to be kept in agreement were one setting.
+    """
     with pytest.raises(ValueError, match="models.llm.model"):
-        Settings(models={"llm": {"enabled": True, "provider": "bifrost", "model": None}})
+        Settings(models={"llm": {"enabled": True, "model": None}})
+    assert Settings(models={"llm": {"enabled": False}}).models.llm.enabled is False
 
 
 def test_redacted_hides_secrets() -> None:
@@ -88,7 +92,6 @@ def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
             models={
                 "llm": {
                     "enabled": True,
-                    "provider": "bifrost",
                     "model": "gemini/gemini-3.6-flash",
                 }
             }
@@ -100,7 +103,6 @@ def test_naming_a_use_is_enough_to_be_accepted() -> None:
         models={
             "llm": {
                 "enabled": True,
-                "provider": "bifrost",
                 "model": "gemini/gemini-3.6-flash",
                 "fast_model": "gemini/gemini-3.6-flash",
                 "uses": ["query_expansion", "summaries"],
@@ -122,7 +124,6 @@ def test_an_enabled_fast_use_without_a_fast_model_is_refused() -> None:
             models={
                 "llm": {
                     "enabled": True,
-                    "provider": "bifrost",
                     "model": "gemini/gemini-3.6-flash",
                     "fast_model": None,
                     "uses": ["query_expansion"],
@@ -137,7 +138,6 @@ def test_a_slow_only_use_list_does_not_need_a_fast_model() -> None:
         models={
             "llm": {
                 "enabled": True,
-                "provider": "bifrost",
                 "model": "gemini/gemini-3.6-flash",
                 "fast_model": None,
                 "uses": ["summaries"],

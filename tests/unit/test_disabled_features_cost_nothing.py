@@ -54,21 +54,28 @@ def test_colbert_left_no_configuration_behind() -> None:
             )
 
 
-def test_every_memory_env_var_in_compose_maps_to_a_real_setting() -> None:
+def test_every_memory_env_var_maps_to_a_real_setting() -> None:
     """The general form of the bug above: a variable nobody reads looks configured and is
     inert, and nothing warns because extra="ignore" is what lets unrelated env vars coexist.
+
+    Every file that sets one, not just compose. `.env` is the file a developer actually
+    edits, and it was the one carrying MEMORY__MODELS__LLM__PROVIDER after the field was
+    removed — checking only compose would have called that clean.
     """
     import re
 
-    compose = (ROOT / "docker-compose.yml").read_text()
     settings = Settings(_env_file=None)
-    unknown = []
-    for var in sorted(set(re.findall(r"MEMORY__[A-Z0-9_]+", compose))):
-        node, parts = settings, var.removeprefix("MEMORY__").lower().split("__")
-        for part in parts:
-            fields = getattr(type(node), "model_fields", {})
-            if part not in fields:
-                unknown.append(var)
-                break
-            node = getattr(node, part)
-    assert not unknown, f"compose sets variables no setting reads: {unknown}"
+    unknown: dict[str, list[str]] = {}
+    for name in ("docker-compose.yml", ".env", ".env.example"):
+        path = ROOT / name
+        if not path.exists():
+            continue
+        for var in sorted(set(re.findall(r"MEMORY__[A-Z0-9_]+", path.read_text()))):
+            node, parts = settings, var.removeprefix("MEMORY__").lower().split("__")
+            for part in parts:
+                fields = getattr(type(node), "model_fields", {})
+                if part not in fields:
+                    unknown.setdefault(name, []).append(var)
+                    break
+                node = getattr(node, part)
+    assert not unknown, f"variables no setting reads: {unknown}"

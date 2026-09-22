@@ -16,7 +16,6 @@ from memory_service.config.settings import LLMSettings
 def _settings(**over: object) -> LLMSettings:
     base = {
         "enabled": True,
-        "provider": "bifrost",
         "base_url": "http://gateway/v1",
         "model": "gemini/gemini-3.6-flash",
         "max_retries": 1,

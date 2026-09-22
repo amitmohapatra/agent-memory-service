@@ -35,7 +35,6 @@ BASE = "http://bifrost.test/v1"
 def llm_settings(uses: Sequence[LLMUse] = (), **overrides: Any) -> LLMSettings:
     base: dict[str, Any] = {
         "enabled": True,
-        "provider": "bifrost",
         "base_url": BASE,
         "api_key": SecretStr("vk-test"),
         "model": "test/strong",

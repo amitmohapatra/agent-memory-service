@@ -371,7 +371,6 @@ services:
   # own deployment, which is the coupling the gateway exists to remove.
   #
   #   MEMORY__MODELS__LLM__ENABLED=true
-  #   MEMORY__MODELS__LLM__PROVIDER=bifrost
   #   MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
   #   MEMORY__MODELS__LLM__MODEL=<provider>/<model>
   #   MEMORY__MODELS__LLM__API_KEY=<virtual key issued by the gateway, not a provider key>
