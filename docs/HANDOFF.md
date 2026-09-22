@@ -1,6 +1,6 @@
 # Handoff: where the memory-service programme stands
 
-Written 2026-09-23 00:20 IST at commit `cb60bc8` so that whoever continues — a person or an
+Written 2026-09-23 00:20 IST at commit `cb60bc8`, updated 00:45 at `7836657` so that whoever continues — a person or an
 agent, after a model change or a fresh session — can pick up without the conversation
 history. The plan of record is [ROADMAP-2026-09.md](ROADMAP-2026-09.md); this file is the
 state of execution against it. Update it whenever a phase step lands or a decision changes.
@@ -27,7 +27,7 @@ state of execution against it. Update it whenever a phase step lands or a decisi
 ## Done (all on main)
 
 - Batch 1–3 retrieval/answerer work: depth 100, answer prompt without status-abstention, dated chronological rendering, encoder before I/O, concurrent per-kind searches, GraphStage prefetch, access bump off the request path, `current` BOOL payload index, routing tightened (multi-hop 113 → 31 of 304), adapter repair round after the envelope fallback, harness retries on store hiccups and keeps partial results.
-- **Phase 1**: observer, challengers (mem0/langmem/cognee/graphiti), served-model tier + litellm gateway, YAML source, dead Literals and ~140 dead functions removed; `config/constants.py` holds the frozen models and tuning; `Settings` = 39 env fields with SecretStr credentials; test/benchmark stand-ins go through `build_container(overrides=Overrides(...))` / `create_app(settings, overrides=...)`; `benchmark/env.py` (BenchEnv) replaces the Makefile's repeated env blocks; API enums + bounds + 422 mapping; OpenAPI and SDK regenerated. Every suite green: unit 403, contract 92, integration 144, e2e 24, eval 12, failure 6, security 10. Pyright: 4 pre-existing errors (memory_repository.py:377, context/builder.py:121, chunking.py:231, forgetting.py:184) — fix next.
+- **Phase 1**: observer, challengers (mem0/langmem/cognee/graphiti), served-model tier + litellm gateway, YAML source, dead Literals and ~140 dead functions removed; `config/constants.py` holds the frozen models and tuning; `Settings` = 39 env fields with SecretStr credentials; test/benchmark stand-ins go through `build_container(overrides=Overrides(...))` / `create_app(settings, overrides=...)`; `benchmark/env.py` (BenchEnv) replaces the Makefile's repeated env blocks; API enums + bounds + 422 mapping; OpenAPI and SDK regenerated. Every suite green: unit 403, contract 92, integration 144, e2e 24, eval 12, failure 6, security 10. Pyright: 0 errors (`7836657`).
 
 ## Running or pending when this was written
 
@@ -36,7 +36,7 @@ state of execution against it. Update it whenever a phase step lands or a decisi
 
 ## Next, in order
 
-1. Fix the 4 Pyright errors (`make typecheck` green). Commit.
+1. ~~Fix the 4 Pyright errors~~ done (`7836657`).
 2. **Phase 2 (hot path)** — every gate is a VM measurement, but the code can land now:
    own `onnxruntime` runner for the encoder (tokenizer + session + CLS pooling + normalise; the sentence-transformers ONNX backend is *not* usable: `optimum-onnx` pins `optimum~=2.1`, incompatible with sentence-transformers 6), 2 intra-op threads, one executor + semaphore per worker, fingerprint includes the graph file; `WEB_CONCURRENCY=3`, `OMP_NUM_THREADS=2`; Qdrant gRPC + payload projection (`with_payload` include list under a unit test) + `on_disk_payload=False` for memories; one retrieval knob `final_k` (derived prefetch/fused = ceil(1.25×), gated on evidence recall ≥ 0.987); one serialisation pass + gzip; rate limit default 6000; `pool_pre_ping=False` + recycle; GIN index on `graph_entities.aliases` + graph wall budget via a shielded task; bulk access bumps; retry idempotent Qdrant reads once on connection errors (seen 4× in 304 queries through Docker's host gateway); pure-ASGI middleware; OTel gated. Gate on the VM: `uv run python -m benchmark.load.run --base-url http://<api-host>:8080 --api-key <key> -u 20 -r 20 -t 300s --arm cold` → rps ≥ 20, `/v1/context` p99 ≤ 300, no failures.
 3. **Phase 1 leftovers**: bake weights into the image (int8 encoder, NLI, docling), compose → 3 services + `local-dbs` profile, `HF_HUB_OFFLINE=1`.
