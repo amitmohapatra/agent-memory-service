@@ -70,6 +70,55 @@ class CollectionSpec(BaseModel):
     sparse: bool = True
     sparse_idf: bool = Field(default=True, description="server-side IDF modifier (BM25)")
     on_disk: bool = False
+    on_disk_payload: bool = Field(
+        default=True,
+        description="keep payloads on disk; False for a collection small enough to hold in RAM",
+    )
+
+
+#: The payload keys a reader is allowed to rely on, and therefore the only ones a store has
+#: to return. Every key here is read somewhere in the retrieval path (the retrieval engine,
+#: the context builder, evidence, expansion, the graph stage) or by the store itself; a
+#: unit test re-derives the set from those files and fails when the two drift apart.
+#:
+#: What is *not* here matters as much: a hit used to arrive with its whole payload, so the
+#: security metadata a filter had already applied inside the store (tenant_id aside) and the
+#: indexing bookkeeping travelled back over the wire and were parsed under the GIL for every
+#: candidate of every query.
+#:
+#: Declared, because the plan said otherwise: ``contributors``, ``owner_principal``,
+#: ``visibility`` and ``status`` are projected, and the Phase 2 plan listed them among the
+#: fields to never return. They are kept because they are *read* - the context builder
+#: copies them into ``ContextItem.attributes``, so they are part of the API response today
+#: and have been since before this projection existed. Dropping them here would not be a
+#: wire optimisation, it would be an API change made silently, and the field these three
+#: protect (visibility) is enforced by the store-side filter, not by what comes back. The
+#: cost is four short scalars per hit. Removing them is a decision about the response
+#: schema and belongs where that is versioned, not here.
+PAYLOAD_FIELDS: tuple[str, ...] = (
+    "attributes",
+    "chunk_id",
+    "confidence",
+    "contradicts",
+    "contributors",
+    "document_id",
+    "kind",
+    "memory_type",
+    "node_id",
+    "object",
+    "observed_at",
+    "owner_principal",
+    "page",
+    "predicate",
+    "record_id",
+    "section_path",
+    "status",
+    "subject",
+    "tenant_id",
+    "text",
+    "text_hash",
+    "visibility",
+)
 
 
 @runtime_checkable

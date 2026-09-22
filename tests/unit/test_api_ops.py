@@ -28,6 +28,22 @@ def test_live_ready_version_metrics(client: TestClient) -> None:
     assert metrics.status_code == 200 and b"memory_http_requests_total" in metrics.content
 
 
+def test_metrics_says_which_worker_it_is_counting(client: TestClient) -> None:
+    """Every series on this endpoint is one process's own memory. With three workers behind
+    one socket that is about a third of the traffic, picked by whoever accepted the scrape,
+    and the Phase-2 gate reads its numbers from here - so the endpoint says so itself rather
+    than leaving a reader to discover it from a dashboard that will not add up."""
+    from memory_service.observability.metrics import render_metrics
+
+    body = client.get("/metrics").content
+    assert b"memory_api_workers" in body, "the divisor is not readable by a dashboard"
+    assert body.startswith(b"# SCOPE:"), "the divisor is not readable by a human"
+
+    payload, _ = render_metrics(3)
+    assert b"one API worker process (pid" in payload and b"of 3" in payload
+    assert b"WEB_CONCURRENCY=1" in payload, "and it says how to get a whole number instead"
+
+
 def test_swagger_redoc_openapi_available(client: TestClient) -> None:
     assert client.get("/docs").status_code == 200
     assert client.get("/redoc").status_code == 200

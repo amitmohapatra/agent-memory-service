@@ -85,9 +85,14 @@ def _leaves(model: type, prefix: str = "") -> list[str]:
 def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     """206 leaf fields became ~40: every model, depth, budget, timeout and threshold is a
     constant now (config/constants.py). Growing this number needs a reason that is about a
-    deployment, not about tuning."""
+    deployment, not about tuning.
+
+    39 -> 41 in Phase 2, for two facts about a host rather than two tunings: how many worker
+    processes this machine's cores are worth (``service.workers``) and which port the Qdrant
+    beside it publishes gRPC on (``search.qdrant_grpc_port``).
+    """
     leaves = _leaves(Settings)
-    assert len(leaves) <= 40, f"{len(leaves)} env fields: {leaves}"
+    assert len(leaves) <= 41, f"{len(leaves)} env fields: {leaves}"
     for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 

@@ -93,6 +93,16 @@ async def test_incr_counts_from_zero_and_accumulates(cache) -> None:
     await cache.delete(key)
 
 
+async def test_incr_window_counts_and_expires_in_one_round_trip(cache) -> None:
+    """What the rate limiter runs on every request: the count comes back, and the key is not
+    left behind forever when the window is over."""
+    key = _key()
+    assert await cache.incr_window(key, ttl_seconds=1) == 1
+    assert await cache.incr_window(key, ttl_seconds=1) == 2
+    await asyncio.sleep(1.6)
+    assert await cache.get(key) is None, "a window counter must expire on its own"
+
+
 async def test_mget_and_mset_preserve_order_and_gaps(cache) -> None:
     keys = [_key() for _ in range(3)]
     await cache.mset({keys[0]: b"0", keys[2]: b"2"})

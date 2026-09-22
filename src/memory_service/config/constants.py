@@ -180,6 +180,18 @@ HEADERS = Headers()
 class DatabaseTuning:
     pool_timeout_seconds: float = 5.0
     statement_timeout_ms: int = 15_000
+    #: A pooled connection is thrown away and reopened after this long. It replaces the
+    #: pre-ping, which cost a round trip on every checkout - up to three per request against
+    #: a remote database - to catch a connection closed by the server, a proxy or an idle
+    #: timeout while the pool held it.
+    #:
+    #: It only makes that case rare if it is shorter than whatever closes connections on the
+    #: other side, and the usual things are not long: pgbouncer's server_idle_timeout
+    #: defaults to 600 s and managed PostgreSQL offerings idle out between 5 and 10 minutes.
+    #: At 1800 s the window was wider than all of them and the "rare" in that sentence was
+    #: not earned. Five minutes is inside every one of them; the cost is 24 connections
+    #: (8 per process, three API workers) reopened every five idle minutes.
+    pool_recycle_seconds: int = 300
     #: libpq gives up on opening a connection after this long. Without it libpq waits
     #: indefinitely, and "indefinitely" is reachable: a PostgreSQL container whose port is
     #: still published but whose server has stopped answering completes the TCP handshake

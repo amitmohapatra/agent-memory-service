@@ -269,6 +269,38 @@ claimed the adversarial category had been measured. A judged run now counts its 
 and says so in `caveats`, and `abstention_measurable` is false unless the judge actually
 answered.
 
+## 5c. What the Phase-2 gate has to know before it reads /metrics — 2026-09-23
+
+Not a measurement: a correction to how the measurements of the next phase must be taken.
+Recorded here because it would otherwise be discovered as a number that does not add up.
+
+**The registry is per process, and the API now runs three of them.** `prometheus_client`
+keeps counters in the memory of the process that incremented them. Three uvicorn workers
+share one listening socket, so a scrape of `/metrics` is answered by whichever worker
+accepts that connection. Every series on that endpoint is therefore one worker's share —
+roughly a third of the traffic, from a different worker each time, so a counter read across
+two scrapes can go *down*. The roadmap's own verification commands read exactly these:
+
+- Phase 0 step 9: `curl -s localhost:8080/metrics | grep memory_stage_seconds_bucket | grep stage="encode"`
+- Phase 2 step 7: `curl -s localhost:8080/metrics | grep http_requests_total | grep 429`
+
+Both are one-third samples as the service ships. **The gate must scrape with one worker**
+(`WEB_CONCURRENCY=1`, which now genuinely sets the worker count) **or run the client in
+multiprocess mode** (`PROMETHEUS_MULTIPROC_DIR` + `MultiProcessCollector`, which is not
+wired). A throughput or CPU number taken from a three-worker scrape is not wrong by a
+constant factor, so it cannot be scaled back up afterwards.
+
+Until multiprocess collection is wired, `/metrics` says this itself: it exposes
+`memory_api_workers` as the divisor and prefixes the exposition with a `# SCOPE:` comment
+block naming the pid and the worker count.
+
+**A known tail contributor, for whoever reads the p99.** An idempotent Qdrant read that hits
+a connection-level failure is retried once after a jittered pause of 50–100 ms
+(`_RETRY_PAUSE_SECONDS`). The worst case for such a read is one timeout plus 100 ms plus the
+second attempt, against a 300 ms budget. It is rare — four occurrences in 304 judged
+queries through Docker's host gateway — but it is in the tail the gate measures, and
+`memory_search_read_retries_total` counts every occurrence, per operation.
+
 ## 6. What is not measured yet
 
 - Document-RAG reranker ablation (running; 600-document SciFact subset, one shared index)

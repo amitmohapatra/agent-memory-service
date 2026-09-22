@@ -6,6 +6,9 @@ Sources, highest precedence first:
 2. ``.env`` then ``secrets.env`` in the working directory
 3. defaults below
 
+``WEB_CONCURRENCY`` is the one variable read outside that scheme: it is the ecosystem's name
+for ``service.workers``, and it supplies that field's default (see ``_workers_default``).
+
 Only topology and credentials live here - where the stores are, how to authenticate, whether
 the generative model is on and where its gateway is. Everything that makes the product what
 it is (models, retrieval depth, budgets, timeouts, thresholds) is a constant in
@@ -17,6 +20,7 @@ Every credential is a ``SecretStr`` and ``Settings.redacted()`` masks all of the
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -28,21 +32,61 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 
 
+#: Worker processes when nothing says otherwise. One process is one GIL, and one GIL does
+#: not serve the target rate; three is what the 8 vCPU target has room for beside two math
+#: threads each.
+_DEFAULT_WORKERS = 3
+
+
+def _workers_default() -> int:
+    """``WEB_CONCURRENCY`` is this number under the name the rest of the ecosystem uses.
+
+    Gunicorn, uvicorn and every PaaS that sizes a container read it, so an operator who sets
+    it expects to be obeyed - and the image sets it rather than a second name of our own. It
+    is only the *default* here: ``MEMORY__SERVICE__WORKERS`` still wins where someone wants
+    the two to differ. A value that is not a number at all is ignored rather than fatal
+    (an empty ``WEB_CONCURRENCY=`` is a common way for a platform to say "unset"); a number
+    outside 1-8 is not ignored, it fails validation below, because silently serving three
+    workers to someone who asked for sixteen is the drift this is meant to remove.
+    """
+    raw = os.environ.get("WEB_CONCURRENCY")
+    if raw is None:
+        return _DEFAULT_WORKERS
+    try:
+        return int(raw)
+    except ValueError:
+        return _DEFAULT_WORKERS
+
+
 class ServiceSettings(BaseModel):
     environment: Literal["dev", "test", "staging", "prod"] = "dev"
     port: int = 8080
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = True
     rate_limit_per_minute: int = Field(
-        default=1200,
+        default=6000,
         description="Requests per tenant per minute (0 disables); counted in the cache",
+    )
+    workers: int = Field(
+        default_factory=_workers_default,
+        # the factory reads the environment, so the bounds below have to apply to what it
+        # returns as well as to what someone passes; pydantic does not check defaults unless
+        # it is told to
+        validate_default=True,
+        ge=1,
+        le=8,
+        description="uvicorn worker processes (defaults to WEB_CONCURRENCY); "
+        "one container, one model set and one pool each",
     )
 
 
 class DatabaseSettings(BaseModel):
+    #: Per *process*, not per service: with three API workers and a worker container the
+    #: pools add up, so 8+8 each keeps the total inside a default max_connections while
+    #: leaving every request the two or three checkouts it takes.
     url: SecretStr = SecretStr("postgresql+psycopg://memory:memory@localhost:5432/memory")
-    pool_size: int = 10
-    max_overflow: int = 10
+    pool_size: int = 8
+    max_overflow: int = 8
 
     @property
     def dsn(self) -> str:
@@ -105,6 +149,9 @@ class SearchSettings(BaseModel):
     """A Qdrant server. qdrant-client local mode is a test seam on ``Overrides``."""
 
     qdrant_url: str = "http://localhost:6333"
+    #: Qdrant's second port. The client talks gRPC to it for every query; the URL above stays
+    #: the REST endpoint, which is what the dashboard and the snapshot API speak.
+    qdrant_grpc_port: int = 6334
     qdrant_api_key: SecretStr | None = None
 
 
@@ -201,7 +248,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    service: ServiceSettings = ServiceSettings()
+    #: built per Settings() rather than once at import, so ``workers`` reads the
+    #: environment the process actually has (see ``_workers_default``)
+    service: ServiceSettings = Field(default_factory=ServiceSettings)
     database: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
     tasks: TaskSettings = TaskSettings()

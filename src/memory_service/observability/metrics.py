@@ -1,6 +1,23 @@
-"""Prometheus metrics. One registry per process; exposed on /metrics."""
+"""Prometheus metrics. One registry per process; exposed on /metrics.
+
+One registry per process is the whole story on a multi-worker container, and it is a story
+the endpoint has to tell. prometheus_client keeps counters in process memory; the API runs
+``service.workers`` uvicorn processes sharing one listening socket, so a scrape is answered
+by whichever worker accepts that connection. Every counter here is therefore one worker's
+share of the traffic - about 1/N of it, and not the same worker twice in a row, so a counter
+read across two scrapes can go down.
+
+Multiprocess collection (``PROMETHEUS_MULTIPROC_DIR`` plus ``MultiProcessCollector``) is the
+fix, and it is a change with its own weight: every metric must be constructed after the
+directory exists, gauges need a declared aggregation mode, histograms lose their per-process
+``_created`` series, and every worker exit needs ``mark_process_dead``. Until that is done,
+``render_metrics`` says plainly what the numbers are, and docs/MEASUREMENTS.md records that
+a gate reading this endpoint must scrape with one worker.
+"""
 
 from __future__ import annotations
+
+import os
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -101,5 +118,32 @@ grounding_claims_total = Counter(
 )
 
 
-def render_metrics() -> tuple[bytes, str]:
-    return generate_latest(REGISTRY), CONTENT_TYPE_LATEST
+api_workers = Gauge(
+    "memory_api_workers",
+    "API worker processes in this container; the series here belong to one of them",
+    registry=REGISTRY,
+)
+
+
+def render_metrics(workers: int = 1) -> tuple[bytes, str]:
+    """The exposition, preceded by whose numbers it is.
+
+    ``workers`` is ``service.workers`` as this process was configured with. It is exposed as
+    a series (``memory_api_workers``) so a dashboard can see the divisor, and repeated in a
+    comment block so a human running ``curl | grep`` sees it too - the comment lines are
+    ignored by any Prometheus parser, which treats a ``#`` that is not HELP or TYPE as a
+    comment.
+    """
+    api_workers.set(workers)
+    if workers > 1:
+        banner = (
+            f"# SCOPE: this is one API worker process (pid {os.getpid()}) of {workers}.\n"
+            f"# Counters and histograms live in process memory and the listening socket hands\n"
+            f"# each scrape to whichever worker accepts it, so every series below is roughly\n"
+            f"# 1/{workers} of the traffic and jumps between scrapes rather than rising.\n"
+            "# To read a service-wide total: scrape with WEB_CONCURRENCY=1, or run the client\n"
+            "# in multiprocess mode (PROMETHEUS_MULTIPROC_DIR).\n"
+        )
+    else:
+        banner = "# SCOPE: this is the only API worker process; the series below are the whole.\n"
+    return banner.encode() + generate_latest(REGISTRY), CONTENT_TYPE_LATEST

@@ -33,6 +33,15 @@ class CacheProvider(Protocol):
 
     async def incr(self, key: str, *, amount: int = 1) -> int: ...
 
+    async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
+        """Increment a counter and (re)set its expiry in one round trip.
+
+        A fixed-window counter is INCR plus EXPIRE, and issued separately that is two waits
+        on a remote cache for every request that passes through the rate limiter. The key
+        already carries its window, so refreshing the expiry on each hit cannot extend a
+        window; it only keeps the row alive until the window is over."""
+        ...
+
     async def mget(self, keys: Sequence[str]) -> list[bytes | None]: ...
 
     async def mset(self, items: Mapping[str, bytes], *, ttl_seconds: int | None = None) -> None: ...

@@ -107,8 +107,13 @@ async def ready(request: Request, response: Response) -> ReadyResponse:
 @router.get(
     "/metrics", summary="Prometheus metrics", response_class=Response, include_in_schema=True
 )
-async def metrics() -> Response:
-    payload, content_type = render_metrics()
+async def metrics(request: Request) -> Response:
+    """The registry of the worker that answered this scrape, saying so.
+
+    The worker count is passed in because the registry has no way of knowing it: this is one
+    of ``service.workers`` processes behind one socket, and what it holds is its own share.
+    """
+    payload, content_type = render_metrics(_container(request).settings.service.workers)
     return Response(content=payload, media_type=content_type)
 
 

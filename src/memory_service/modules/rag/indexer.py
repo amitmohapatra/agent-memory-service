@@ -93,6 +93,11 @@ class Indexer:
                     dense_dim=self.embedding.dimension,
                     sparse=True,
                     sparse_idf=sparse_idf,
+                    # Memories are small and every query reads them: holding their payloads
+                    # in RAM costs a few MB and saves a page-cache read per returned hit on
+                    # the remote store. Knowledge chunks are the bulk of the index and stay
+                    # on disk.
+                    on_disk_payload=base != MEMORIES,
                 )
             )
 
