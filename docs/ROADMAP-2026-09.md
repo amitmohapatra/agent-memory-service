@@ -331,6 +331,18 @@ and the gold turns' rank in the dense-only, sparse-only and fused lists before t
    - Verify: contract tests for X-Request-Id and 429 behaviour green; load run unchanged or better.
 
 
+> **Superseded in part by [FREEZE-multilingual.md](FREEZE-multilingual.md) (2026-09-23).** An
+> eleven-agent pass over primary sources corrected this phase in four places: the shipping graph is
+> **ONNX fp32, not int8** (int8 measured slower and lossier here, and the graph file is inside the
+> collection fingerprint, so the choice must be made on the VM *before* the one reindex); the
+> fallback is **not** `multilingual-e5-small` (its only int8 graph targets an ISA this hardware
+> lacks, it loses on both axes, and it needs query/passage prefixes this codebase never sends); the
+> sparse tokenizer must be a **new** `text/` module, because both reference implementations this
+> phase says to lift are themselves broken for Devanagari, Khmer, Myanmar and CJK sentence
+> splitting; and the NLI swap carries a **published English regression** (MNLI 0.857 vs 0.903,
+> ANLI 0.537 vs 0.579, FEVER 0.761 vs 0.777) that this phase never priced. Read that document
+> first; the steps below remain useful as the task list.
+
 ## Phase 3 - Multilingual on the frozen set (encoder decision gated on Phase-0/2 numbers)
 
 **Goal.** Non-Latin queries get dense AND sparse retrieval, extraction and grounding; the only generative path is language-pinned and guarded; the collection dimension stays 384.
