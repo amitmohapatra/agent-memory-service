@@ -1,4 +1,9 @@
-"""SDK-facing models. Mirrors the public API contract; no internal types leak here."""
+"""SDK-facing models. Mirrors the public API contract; no internal types leak here.
+
+The closed vocabularies below are the API's enums spelled as Literals, so a wrong value is
+a type error in the caller's editor and a 422 from the service, never a silent no-op. They
+are kept in step with the service by a test in the service repository.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +11,119 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# --------------------------------------------------------------------------- vocabularies
+
+MemoryType = Literal[
+    "WORKING",
+    "CONVERSATION",
+    "EPISODIC",
+    "SEMANTIC",
+    "PROCEDURAL",
+    "USER",
+    "PREFERENCE",
+    "AGENT",
+    "SHARED",
+    "TASK",
+    "WORK",
+    "TOOL",
+    "SKILL",
+    "DECISION",
+    "FAILURE",
+    "OUTCOME",
+    "ARTIFACT",
+    "KNOWLEDGE_RAG",
+    "SUMMARY",
+    "DERIVED",
+    "POLICY",
+    "OBSERVATION",
+    "BELIEF",
+    "ENTITY_SUMMARY",
+    "CUSTOM",
+]
+Lifetime = Literal["EPHEMERAL", "SHORT_TERM", "LONG_TERM", "ARCHIVAL"]
+Visibility = Literal[
+    "PRIVATE",
+    "USER",
+    "GROUP",
+    "AGENT_GROUP",
+    "RUN",
+    "THREAD",
+    "WORK",
+    "WORKSPACE",
+    "TENANT",
+    "GLOBAL",
+]
+ScopeLevel = Literal[
+    "AGENT", "AGENT_GROUP", "WORK", "THREAD", "USER", "GROUP", "WORKSPACE", "TENANT", "GLOBAL"
+]
+TemporalStatus = Literal[
+    "CURRENT", "SUPERSEDED", "EXPIRED", "CONTRADICTED", "RETRACTED", "ARCHIVED"
+]
+Representation = Literal[
+    "RAW_FILE",
+    "DOCUMENT",
+    "DOCUMENT_VERSION",
+    "SECTION",
+    "SUBSECTION",
+    "PARAGRAPH",
+    "TABLE",
+    "CODE_BLOCK",
+    "CHUNK",
+    "SUMMARY",
+    "ENTITY",
+    "RELATION",
+    "EMBEDDING",
+    "MESSAGE",
+    "MEMORY",
+]
+QueryType = Literal[
+    "EXACT_IDENTIFIER",
+    "CONVERSATION_HISTORY",
+    "USER_MEMORY",
+    "DECISION",
+    "DOCUMENT_LOCAL",
+    "DOCUMENT_MULTI_HOP",
+    "ENTITY_RELATION",
+    "TEMPORAL",
+    "GLOBAL_SUMMARY",
+    "GENERAL_SEMANTIC",
+]
+EvidenceStatus = Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
+MessageRole = Literal["USER", "ASSISTANT", "SYSTEM", "TOOL", "AGENT"]
+MessageKind = Literal["VISIBLE", "INTERNAL"]
+ObservationKind = Literal[
+    "MESSAGE", "FILE", "AGENT_RESULT", "TOOL_RESULT", "DECISION", "FEEDBACK", "EVENT", "IMPORT"
+]
+JobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "RETRYING", "CANCELLED"]
+DocumentStatus = Literal["STAGED", "READY", "FAILED"]
+ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
+#: What ``recall`` searches: document passages, canonical memories, rolled-up summaries.
+RecallKind = Literal["chunk", "memory", "summary"]
+#: What ``verify`` accepts as an item's kind: a bundle item's representation or the record
+#: kind of an unused item.
+EvidenceKind = Literal[
+    "CHUNK",
+    "TABLE",
+    "PARAGRAPH",
+    "SECTION",
+    "SUBSECTION",
+    "CODE_BLOCK",
+    "chunk",
+    "SUMMARY",
+    "summary",
+    "ENTITY",
+    "RELATION",
+    "MEMORY",
+    "memory",
+    "fact",
+]
+ClaimVerdictValue = Literal["supported", "unsupported", "contradicted", "borderline"]
+GroundingMethod = Literal["citation", "nli", "judge"]
+ToolSource = Literal["bifrost-mcp", "langgraph", "adk", "crewai", "mcp", "manual"]
+ToolStatus = Literal["ok", "error", "timeout", "rejected"]
+SideEffects = Literal["none", "read", "write", "external", "unknown"]
+CacheScope = Literal["run", "thread", "user", "tenant"]
 
 
 class Scope(BaseModel):
@@ -72,7 +190,7 @@ class JobHandle(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     job_id: str
-    status: str
+    status: JobStatus
     attempts: int = 0
     last_error: str | None = None
 
@@ -94,14 +212,14 @@ class MemoryResult(BaseModel):
 
     memory_id: str
     content: str
-    memory_type: str
-    lifetime: str
-    visibility: str
-    scope_level: str | None = None
+    memory_type: MemoryType
+    lifetime: Lifetime
+    visibility: Visibility
+    scope_level: ScopeLevel | None = None
     subject: str | None = None
     predicate: str | None = None
     object: str | None = None
-    temporal_status: str = "CURRENT"
+    temporal_status: TemporalStatus = "CURRENT"
     supersedes: str | None = None
     superseded_by: str | None = None
     importance: float | None = None
@@ -122,7 +240,7 @@ class ContextItem(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     item_id: str
-    representation: str
+    representation: Representation
     text: str
     score: float = 0.0
     citation: str
@@ -152,13 +270,13 @@ class ClaimVerdict(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     claim: str
-    verdict: Literal["supported", "unsupported", "contradicted", "borderline"]
+    verdict: ClaimVerdictValue
     support: float = 0.0
     contradiction: float = 0.0
     evidence_ids: list[str] = Field(default_factory=list)
     contradicted_by: list[str] = Field(default_factory=list)
     citations: list[str] = Field(default_factory=list)
-    method: str = "nli"
+    method: GroundingMethod = "nli"
     notes: list[str] = Field(default_factory=list)
 
 
@@ -190,14 +308,14 @@ class UnusedEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     item_id: str
-    kind: str = "chunk"
+    kind: EvidenceKind = "chunk"
     text: str
 
 
 class EvidenceReport(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    status: Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
+    status: EvidenceStatus
     required_groups: list[str] = Field(default_factory=list)
     satisfied_groups: list[str] = Field(default_factory=list)
     missing_groups: list[str] = Field(default_factory=list)
@@ -214,7 +332,7 @@ class ContextBundle(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     query: str
-    query_type: str
+    query_type: QueryType
     bundle_id: str = ""
     conversation: ConversationWindow
     memories: list[ContextItem] = Field(default_factory=list)
@@ -263,8 +381,8 @@ class DocumentInfo(BaseModel):
     media_type: str
     size_bytes: int
     checksum: str
-    status: str
-    archive_status: str
+    status: DocumentStatus
+    archive_status: ArchiveStatus
     current_version_id: str | None = None
     thread_id: str | None = None
 
@@ -273,8 +391,8 @@ class MessageInfo(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     message_id: str
-    role: str
-    kind: str
+    role: MessageRole
+    kind: MessageKind
     sequence: int
     content: str
     occurred_at: datetime | None = None
@@ -299,7 +417,7 @@ class GraphFact(BaseModel):
     predicate: str
     object: str
     fact_text: str = ""
-    status: str = "CURRENT"
+    status: TemporalStatus = "CURRENT"
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime | None = None
@@ -326,10 +444,10 @@ class ToolPolicyModel(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     deterministic: bool = False
-    side_effects: str = "unknown"
+    side_effects: SideEffects = "unknown"
     cacheable: bool = False
     cache_ttl_seconds: int = 300
-    cache_scope: str = "run"
+    cache_scope: CacheScope = "run"
     cost_hint: float | None = None
     redact: list[str] = Field(default_factory=list)
 
@@ -342,7 +460,7 @@ class Tool(BaseModel):
     version: int = 1
     description: str = ""
     tags: list[str] = Field(default_factory=list)
-    source: str = "manual"
+    source: ToolSource = "manual"
     policy: ToolPolicyModel = Field(default_factory=ToolPolicyModel)
     stats: dict[str, Any] | None = None
 

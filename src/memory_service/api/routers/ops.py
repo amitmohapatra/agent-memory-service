@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
@@ -26,7 +26,12 @@ class DependencyStatus(BaseModel):
 
 
 class ReadyResponse(BaseModel):
-    status: str = Field(..., description="ready | degraded | not_ready", examples=["ready"])
+    status: Literal["ready", "degraded", "not_ready"] = Field(
+        ...,
+        description="ready: every dependency answered; degraded: an optional provider is "
+        "down (served with 200); not_ready: a mandatory store is down (served with 503).",
+        examples=["ready"],
+    )
     dependencies: dict[str, DependencyStatus] = Field(
         default_factory=dict,
         examples=[
@@ -86,6 +91,7 @@ async def ready(request: Request, response: Response) -> ReadyResponse:
     results = await _container(request).readiness()
     mandatory_down = [n for n, r in results.items() if r["mandatory"] and not r["ok"]]
     optional_down = [n for n, r in results.items() if not r["mandatory"] and not r["ok"]]
+    status: Literal["ready", "degraded", "not_ready"]
     if mandatory_down:
         response.status_code = 503
         status = "not_ready"

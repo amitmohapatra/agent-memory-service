@@ -8,8 +8,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ScopeBody
+from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
     ArchiveStatus,
+    JobStatus,
     Lifetime,
     MemoryType,
     MessageKind,
@@ -66,6 +68,7 @@ class ProcessingHintsIn(BaseModel):
     )
     custom_type: str | None = Field(
         default=None,
+        max_length=64,
         examples=["release_note"],
         description=(
             "Required when memory_type=CUSTOM, and meaningless otherwise: the caller's own "
@@ -144,7 +147,7 @@ class CreateThreadRequest(BaseModel):
         examples=["thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"],
     )
     title: str | None = Field(default=None, examples=["Q3 planning"])
-    custom_metadata: dict[str, Any] = Field(default_factory=dict, examples=[{"channel": "web"}])
+    custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"channel": "web"}])
 
 
 class ThreadResponse(BaseModel):
@@ -197,7 +200,14 @@ class CreateMessageRequest(BaseModel):
         description="Lineage: thread/session/turn (+ agent fields for internal messages)",
         examples=[_SCOPE_EXAMPLE],
     )
-    role: MessageRole = Field(..., examples=["USER"])
+    role: MessageRole = Field(
+        ...,
+        description=(
+            "Who produced the message: USER, ASSISTANT or SYSTEM for the visible chat; TOOL "
+            "for a tool's output and AGENT for an internal agent step (kind=INTERNAL)."
+        ),
+        examples=["USER"],
+    )
     kind: MessageKind = Field(
         default=MessageKind.VISIBLE,
         description=(
@@ -213,10 +223,12 @@ class CreateMessageRequest(BaseModel):
     )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
-    custom_metadata: dict[str, Any] = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
+    custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
     occurred_at: datetime | None = Field(default=None, description="Original timestamp for imports")
-    source_system: str | None = Field(default=None, examples=["slack"])
-    source_message_id: str | None = Field(default=None, examples=["1726300000.000100"])
+    source_system: str | None = Field(default=None, max_length=100, examples=["slack"])
+    source_message_id: str | None = Field(
+        default=None, max_length=400, examples=["1726300000.000100"]
+    )
     parent_message_id: str | None = None
 
 
@@ -279,14 +291,26 @@ class MessageResponse(BaseModel):
     thread_id: str
     session_id: str
     turn_id: str
-    role: MessageRole
-    kind: MessageKind
+    role: MessageRole = Field(
+        ...,
+        description="Who produced it: USER, ASSISTANT, SYSTEM, TOOL or AGENT, as recorded.",
+    )
+    kind: MessageKind = Field(
+        ...,
+        description="VISIBLE messages form the chat history; INTERNAL ones are agent/tool steps.",
+    )
     sequence: int
     content: str
     author_principal: str
     agent_run_id: str | None = None
     occurred_at: datetime
-    archive_status: ArchiveStatus
+    archive_status: ArchiveStatus = Field(
+        ...,
+        description=(
+            "Where the content lives: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob "
+            "written and verified) or PURGED (large payload removed from the hot store)."
+        ),
+    )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -330,6 +354,10 @@ class JobResponse(BaseModel):
     job_id: str
     task_name: str
     queue: str
-    status: str
+    status: JobStatus = Field(
+        ...,
+        description="PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts "
+        "exhausted; see last_error), RETRYING (failed, will run again) or CANCELLED.",
+    )
     attempts: int = 0
     last_error: str | None = None

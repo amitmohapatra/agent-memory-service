@@ -7,15 +7,16 @@ inside the caller's tenant, a ``query`` re-runs retrieval under the caller's sco
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.api.schemas.context import GroundingReportBody
 from memory_service.domain.errors import NotFound, ProviderNotConfigured
-from memory_service.modules.grounding.cascade import Evidence, bundle_evidence
+from memory_service.modules.grounding.cascade import Evidence, EvidenceKind, bundle_evidence
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 422, 503)
@@ -82,8 +83,18 @@ class VerifyItem(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_ITEM]})
 
     item_id: str = Field(..., min_length=1, examples=[_ITEM["item_id"]])
-    text: str = Field(..., min_length=1, max_length=20_000, examples=[_ITEM["text"]])
-    kind: str = Field(default="chunk", examples=["chunk"])
+    text: str = Field(..., min_length=1, max_length=4_000, examples=[_ITEM["text"]])
+    kind: EvidenceKind = Field(
+        default="chunk",
+        description=(
+            "What the item is, which decides how good a thing it is to cite: a verifiable "
+            "passage (chunk, CHUNK, TABLE, PARAGRAPH, SECTION, SUBSECTION, CODE_BLOCK) beats "
+            "a summary (summary, SUMMARY), which beats a derived fact (memory, ENTITY, "
+            "RELATION). Send the representation from a bundle's item, or the record kind "
+            "(chunk, memory, summary, fact) from its unused list."
+        ),
+        examples=["chunk"],
+    )
     citation: str | None = Field(default=None, examples=[_ITEM["citation"]])
 
     def to_evidence(self) -> Evidence:
@@ -100,17 +111,17 @@ class VerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_VERIFY_EXAMPLE]})
 
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
-    answer: str = Field(..., min_length=1, max_length=40_000, examples=[_ANSWER])
+    answer: str = Field(..., min_length=1, max_length=8_000, examples=[_ANSWER])
     bundle_id: str | None = Field(default=None, max_length=64, examples=[None])
-    items: list[VerifyItem] | None = Field(default=None, max_length=200, examples=[[_ITEM]])
+    items: list[VerifyItem] | None = Field(default=None, max_length=50, examples=[[_ITEM]])
     unused: list[VerifyItem] | None = Field(
         default=None,
-        max_length=50,
+        max_length=20,
         description="retrieved-but-unused evidence scanned for contradictions",
         examples=[None],
     )
     query: str | None = Field(default=None, min_length=1, max_length=4000, examples=[None])
-    document_ids: list[str] | None = Field(default=None, examples=[None])
+    document_ids: list[str] | None = Field(default=None, max_length=100, examples=[None])
 
     @model_validator(mode="after")
     def _one_source(self) -> VerifyRequest:
@@ -130,39 +141,16 @@ class VerifyRequest(BaseModel):
         return self
 
 
-class ClaimVerdictBody(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"examples": [_CLAIM_EXAMPLE]})
-
-    claim: str
-    verdict: str = Field(..., description="supported | unsupported | contradicted | borderline")
-    support: float
-    contradiction: float
-    evidence_ids: list[str] = Field(default_factory=list)
-    contradicted_by: list[str] = Field(default_factory=list)
-    citations: list[str] = Field(default_factory=list)
-    method: str = Field(..., description="citation | nli | judge")
-    notes: list[str] = Field(default_factory=list)
-
-
-class VerifyResponse(BaseModel):
+class VerifyResponse(GroundingReportBody):
     """GroundingReport: one verdict per claim and the per-claim hallucination rate."""
 
-    model_config = ConfigDict(json_schema_extra={"examples": [_REPORT_EXAMPLE]})
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_REPORT_EXAMPLE]})
 
-    source: str = Field(..., description="bundle | items | query")
-    claims: list[ClaimVerdictBody]
-    supported: int
-    unsupported: int
-    contradicted: int
-    borderline: int
-    per_claim_hallucination_rate: float
-    nli_provider: str
-    representative: bool
-    judge_consulted: int
-    llm_tokens: int
-    evidence_count: int
-    unused_count: int
-    notes: list[str] = Field(default_factory=list)
+    source: Literal["bundle", "items", "query"] = Field(
+        ...,
+        description="Where the evidence came from: bundle (a cached /v1/context bundle), "
+        "items (evidence the caller sent) or query (retrieval re-run under the caller's scope).",
+    )
 
 
 @router.post(
@@ -180,6 +168,7 @@ async def verify(
     if cascade is None:
         raise ProviderNotConfigured("the NLI classifier is disabled in this process")
     builder = container.services["context_builder"]
+    source: Literal["bundle", "items", "query"]
     if body.items:
         source = "items"
         evidence = [i.to_evidence() for i in body.items]

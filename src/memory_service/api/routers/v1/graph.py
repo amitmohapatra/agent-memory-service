@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.domain.enums import TemporalStatus
+from memory_service.domain.evidence import EvidenceRef
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -33,7 +35,12 @@ class GraphQueryRequest(BaseModel):
     as_of: datetime | None = Field(
         default=None, description="temporal view: facts valid at this instant"
     )
-    max_visited: int | None = Field(default=None, ge=1, le=2000)
+    max_visited: int | None = Field(
+        default=None,
+        ge=1,
+        le=500,
+        description="Cap on entities the traversal may visit; omit for the server default",
+    )
 
 
 class EntityOut(BaseModel):
@@ -51,7 +58,11 @@ class FactOut(BaseModel):
     predicate: str
     object: str
     fact_text: str
-    status: str
+    status: TemporalStatus = Field(
+        ...,
+        description="CURRENT unless the query carries as_of, which also returns SUPERSEDED "
+        "facts that held at that instant; facts that were never right are never returned.",
+    )
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime
@@ -62,7 +73,7 @@ class FactOut(BaseModel):
         default_factory=dict,
         description="Structured fact data: period, currency, amount, change, table, page ...",
     )
-    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
 class GraphQueryResponse(BaseModel):
@@ -114,7 +125,7 @@ async def graph_query(
                 predicate=r.predicate,
                 object=names.get(r.object_id, r.object_id),
                 fact_text=r.fact_text,
-                status=r.status,
+                status=TemporalStatus(r.status),
                 valid_from=r.valid_from,
                 valid_to=r.valid_to,
                 observed_at=r.observed_at,
@@ -122,7 +133,7 @@ async def graph_query(
                 memory_id=r.memory_id,
                 document_id=r.document_id,
                 attributes=dict(r.attributes),
-                evidence=[e.model_dump(mode="json", exclude_none=True) for e in r.evidence[:3]],
+                evidence=list(r.evidence[:3]),
             )
             for r in answer.relations
         ],

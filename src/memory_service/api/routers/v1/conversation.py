@@ -25,7 +25,7 @@ from memory_service.api.schemas.conversation import (
     ThreadResponse,
 )
 from memory_service.domain.conversation import Attachment, Message, Thread
-from memory_service.domain.enums import ArchiveStatus
+from memory_service.domain.enums import ArchiveStatus, JobStatus
 from memory_service.domain.errors import NotFound
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.conversation.service import ConversationService
@@ -276,7 +276,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
                 job_id=job_id,
                 task_name=row.task_name,
                 queue=row.queue,
-                status="PENDING",
+                status=JobStatus.PENDING,
                 attempts=row.attempts,
                 last_error=row.last_error,
             )
@@ -286,14 +286,14 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
                 job_id=job_id,
                 task_name=row.task_name,
                 queue=row.queue,
-                status="PENDING",
+                status=JobStatus.PENDING,
                 attempts=row.attempts,
             )
         return JobResponse(
             job_id=job_id,
             task_name=row.task_name,
             queue=row.queue,
-            status=info.status.value,
+            status=info.status,
             attempts=info.attempts,
             last_error=info.last_error,
         )
@@ -304,7 +304,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
         job_id=info.job_id,
         task_name=info.task_name,
         queue=info.queue,
-        status=info.status.value,
+        status=info.status,
         attempts=info.attempts,
         last_error=info.last_error,
     )

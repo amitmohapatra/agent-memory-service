@@ -16,7 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
+from memory_service.domain.tools import ToolSource, ToolStatus
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -45,11 +47,32 @@ class DeclaredTool(BaseModel):
 
     name: str
     description: str = ""
-    schema_: dict[str, Any] | None = Field(default=None, alias="schema")
-    output_schema: dict[str, Any] | None = None
+    schema_: ToolJson | None = Field(default=None, alias="schema")
+    output_schema: ToolJson | None = None
     tags: list[str] = Field(default_factory=list)
-    source: str = "manual"
+    source: ToolSource = Field(
+        default="manual",
+        description=(
+            "Where the tool definition comes from: bifrost-mcp (an MCP server behind the "
+            "Bifrost gateway), mcp (a directly connected MCP server), langgraph, adk or crewai "
+            "(a framework tool node), manual (declared by the caller; the default)."
+        ),
+    )
     server: str | None = None
+
+
+class SubCallIn(BaseModel):
+    """One ``server.tool(...)`` call parsed out of a code-mode script, in script order."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ordinal: int = Field(..., ge=0)
+    tool: str
+    args: ToolJson = Field(default_factory=dict)
+    bindings: dict[str, str] = Field(
+        default_factory=dict,
+        description="argument path -> expression it was bound from (e.g. 'id': 'step0.result.id')",
+    )
 
 
 class RecordRequest(BaseModel):
@@ -76,17 +99,28 @@ class RecordRequest(BaseModel):
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     tool: str
-    args: dict[str, Any] = Field(default_factory=dict)
-    output: Any = None
+    args: ToolJson = Field(default_factory=dict)
+    output: ToolOutput = None
     output_summary: str | None = None
-    status: str = "ok"
+    status: ToolStatus = Field(
+        default="ok",
+        description="How the call ended: ok, error (the tool raised; name it in error_class), "
+        "timeout, or rejected (the agent or a policy refused to run it).",
+    )
     error_class: str | None = None
     latency_ms: float | None = Field(default=None, ge=0.0)
     cost: float | None = Field(default=None, ge=0.0)
     task: str = ""
     step: int | None = Field(default=None, ge=0)
-    sub_calls: list[dict[str, Any]] = Field(default_factory=list)
-    visibility: str = Field(default="RUN", description="RUN | AGENT_GROUP | USER | THREAD | ...")
+    sub_calls: list[SubCallIn] = Field(default_factory=list, max_length=64)
+    visibility: Visibility = Field(
+        default=Visibility.RUN,
+        description=(
+            "Who may see the record, narrowest first: PRIVATE, RUN (this agent run and the "
+            "runs it spawns; the default), THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, "
+            "TENANT, GLOBAL."
+        ),
+    )
 
 
 class RecordResponse(BaseModel):
@@ -208,8 +242,8 @@ async def record_tool(
             cost=body.cost,
             task=body.task,
             step=body.step,
-            sub_calls=body.sub_calls,
-            visibility=Visibility(body.visibility),
+            sub_calls=[c.model_dump() for c in body.sub_calls],
+            visibility=body.visibility,
         )
         await uow.commit()
     known = {i.invocation_id for i in before}
