@@ -19,6 +19,7 @@ unless ``log_source_text`` is on.
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Sequence
 from typing import Any
@@ -35,6 +36,9 @@ from memory_service.observability.tracing import span
 from memory_service.ports.models import LLMCompletion, LLMMessage, ProviderInfo
 
 log = get_logger(__name__)
+
+#: The only status for which falling back to a prompt-shaped schema is correct.
+_BAD_REQUEST = 400
 
 
 class LLMCallFailed(DependencyUnavailable):
@@ -57,6 +61,33 @@ def _text_or_none(data: dict[str, Any]) -> str | None:
     if isinstance(content, list):
         return "".join(part.get("text", "") for part in content if isinstance(part, dict))
     return content if isinstance(content, str) else None
+
+
+_NO_RESPONSE_FORMAT = re.compile(
+    r"response_format|json_schema|structured output|constrained decoding", re.IGNORECASE
+)
+
+
+def _unsupported_response_format(exc: LLMCallFailed) -> bool:
+    """Whether the gateway refused the request *because* of the JSON envelope.
+
+    Narrow on purpose: a 400 that is not about the envelope is a real bad request, and
+    retrying it without constrained decoding would hide a genuine bug behind a slower path.
+    """
+    if exc.details.get("status") != _BAD_REQUEST:
+        return False
+    return bool(_NO_RESPONSE_FORMAT.search(str(exc.details.get("body") or "")))
+
+
+def _json_only_instruction(schema: dict[str, Any]) -> dict[str, Any]:
+    """The schema as a prompt, for models that cannot be constrained by the API."""
+    return {
+        "role": "user",
+        "content": (
+            "Reply with a single JSON object and nothing else - no prose, no code fence. "
+            f"It must match this JSON Schema:\n{json.dumps(schema)}"
+        ),
+    }
 
 
 class DisabledLLM:
@@ -167,20 +198,39 @@ class BifrostLLM:
         use: str = "generic",
     ) -> dict[str, Any]:
         turns = [m.model_dump() for m in messages]
-        response_format = {
+        response_format: dict[str, Any] | None = {
             "type": "json_schema",
             "json_schema": {"name": "result", "schema": schema, "strict": True},
         }
         last_error: Exception | None = None
         # one bounded repair round: feed the validation error back once
         for attempt in range(2):
-            completion = await self._chat(
-                turns,
-                use=use,
-                max_tokens=min(max_tokens, self.settings.max_tokens),
-                source=messages,
-                response_format=response_format,
-            )
+            try:
+                # Omit the key entirely on the fallback attempt. Passing
+                # ``response_format=None`` still puts ``"response_format": null`` on the
+                # wire, which the provider that refused the envelope refuses again.
+                envelope = {"response_format": response_format} if response_format else {}
+                completion = await self._chat(
+                    turns,
+                    use=use,
+                    max_tokens=min(max_tokens, self.settings.max_tokens),
+                    source=messages,
+                    **envelope,
+                )
+            except LLMCallFailed as exc:
+                # Not every model behind the gateway implements constrained decoding.
+                # DeepSeek answers `400 "This response_format type is unavailable now"`,
+                # and because the envelope is attached to every structured call, one
+                # unsupported model turned *all* of them into hard failures — 288 of 304 in
+                # one benchmark run. Ask for the JSON in the prompt instead and parse it;
+                # the validate-and-repair loop below is unchanged, so the contract the
+                # caller relies on is the same either way.
+                if response_format is None or not _unsupported_response_format(exc):
+                    raise
+                log.info("llm.structured_fallback", use=use, reason="response_format_unsupported")
+                response_format = None
+                turns = [*turns, _json_only_instruction(schema)]
+                continue
             text = completion.text
             try:
                 parsed = _parse_json(text)

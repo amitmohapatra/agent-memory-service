@@ -66,7 +66,7 @@ def test_every_memory_env_var_maps_to_a_real_setting() -> None:
 
     settings = Settings(_env_file=None)
     unknown: dict[str, list[str]] = {}
-    for name in ("docker-compose.yml", ".env", ".env.example"):
+    for name in ("docker-compose.yml", ".env", ".env.example", "Makefile"):
         path = ROOT / name
         if not path.exists():
             continue

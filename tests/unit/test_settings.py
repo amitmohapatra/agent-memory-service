@@ -5,7 +5,7 @@ from memory_service.config.settings import Settings
 
 
 def test_defaults_are_cpu_first_and_llm_disabled() -> None:
-    s = Settings()
+    s = Settings(_env_file=None)
     assert s.models.llm.enabled is False
     assert s.models.embedding.model == "ibm-granite/granite-embedding-small-english-r2"
     assert s.retrieval.bm25 and s.retrieval.dense and s.retrieval.fusion == "rrf"
@@ -22,7 +22,7 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEMORY__CACHE__PROVIDER", "valkey")
     monkeypatch.setenv("MEMORY__RETRIEVAL__RRF_K", "42")
-    s = Settings()
+    s = Settings(_env_file=None)
     assert s.cache.provider == "valkey"
     assert s.retrieval.rrf_k == 42
 
@@ -43,15 +43,17 @@ def test_yaml_file_source(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_prod_guards_reject_dev_only_providers() -> None:
     with pytest.raises(ValueError, match="trusted_dev"):
-        Settings(service={"environment": "prod"})
+        Settings(_env_file=None, service={"environment": "prod"})
     with pytest.raises(ValueError, match="authorization.provider=memory"):
         Settings(
+            _env_file=None,
             service={"environment": "prod"},
             authentication={"mode": "jwt"},
             authorization={"provider": "memory"},
         )
     with pytest.raises(ValueError, match="blob.provider"):
         Settings(
+            _env_file=None,
             service={"environment": "prod"},
             authentication={"mode": "jwt"},
             blob={"provider": "filesystem"},
@@ -65,12 +67,12 @@ def test_llm_enabled_requires_a_model() -> None:
     with the field. Two settings that had to be kept in agreement were one setting.
     """
     with pytest.raises(ValueError, match="models.llm.model"):
-        Settings(models={"llm": {"enabled": True, "model": None}})
-    assert Settings(models={"llm": {"enabled": False}}).models.llm.enabled is False
+        Settings(_env_file=None, models={"llm": {"enabled": True, "model": None}})
+    assert Settings(_env_file=None, models={"llm": {"enabled": False}}).models.llm.enabled is False
 
 
 def test_redacted_hides_secrets() -> None:
-    s = Settings(authorization={"openfga_api_token": "supersecret"})
+    s = Settings(_env_file=None, authorization={"openfga_api_token": "supersecret"})
     dumped = s.redacted()
     assert "supersecret" not in str(dumped)
     assert "trusted_dev_api_keys" not in dumped["authentication"]
@@ -89,17 +91,19 @@ def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
     """
     with pytest.raises(ValidationError, match="nothing would call the model"):
         Settings(
+            _env_file=None,
             models={
                 "llm": {
                     "enabled": True,
                     "model": "gemini/gemini-3.6-flash",
                 }
-            }
+            },
         )
 
 
 def test_naming_a_use_is_enough_to_be_accepted() -> None:
     settings = Settings(
+        _env_file=None,
         models={
             "llm": {
                 "enabled": True,
@@ -107,7 +111,7 @@ def test_naming_a_use_is_enough_to_be_accepted() -> None:
                 "fast_model": "gemini/gemini-3.6-flash",
                 "uses": ["query_expansion", "summaries"],
             }
-        }
+        },
     )
     llm = settings.models.llm
     assert llm.wants("query_expansion") and llm.wants("summaries")
@@ -121,6 +125,7 @@ def test_an_enabled_fast_use_without_a_fast_model_is_refused() -> None:
     exactly the fast_uses somewhere the operator never chose."""
     with pytest.raises(ValidationError, match="fast_model is unset"):
         Settings(
+            _env_file=None,
             models={
                 "llm": {
                     "enabled": True,
@@ -128,13 +133,14 @@ def test_an_enabled_fast_use_without_a_fast_model_is_refused() -> None:
                     "fast_model": None,
                     "uses": ["query_expansion"],
                 }
-            }
+            },
         )
 
 
 def test_a_slow_only_use_list_does_not_need_a_fast_model() -> None:
     """The check is about overlap, not about fast_model always being set."""
     settings = Settings(
+        _env_file=None,
         models={
             "llm": {
                 "enabled": True,
@@ -142,6 +148,6 @@ def test_a_slow_only_use_list_does_not_need_a_fast_model() -> None:
                 "fast_model": None,
                 "uses": ["summaries"],
             }
-        }
+        },
     )
     assert settings.models.llm.wants("summaries")

@@ -14,7 +14,12 @@ import pytest
 import respx
 from pydantic import SecretStr
 
-from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM, LLMOutputInvalid
+from memory_service.adapters.models.llm import (
+    BifrostLLM,
+    DisabledLLM,
+    LLMCallFailed,
+    LLMOutputInvalid,
+)
 from memory_service.config.settings import LLMSettings, Settings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
@@ -452,3 +457,54 @@ async def test_live_bifrost_roundtrip() -> None:
     if os.environ.get("MEMORY_BIFROST_RECORD"):
         print({"model": out.model, "input_tokens": out.input_tokens})  # noqa: T201
     await llm.close()
+
+
+@respx.mock
+async def test_structured_falls_back_when_the_model_rejects_response_format() -> None:
+    """A model that cannot be constrained by the API must still produce structured output.
+
+    DeepSeek answers `400 "This response_format type is unavailable now"`, and because the
+    envelope was attached to every structured call, one unsupported model turned all of
+    them into hard failures — 288 of 304 in a single benchmark run.
+    """
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        if "response_format" in body:
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "type": "invalid_request_error",
+                        "message": "This response_format type is unavailable now",
+                    }
+                },
+            )
+        return httpx.Response(200, json=_chat('{"worthy": true, "reason": "fact"}'))
+
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
+    llm = BifrostLLM(_settings())
+    out = await llm.structured(
+        [LLMMessage(role="user", content="grade this")],
+        schema=SCHEMA,
+        use="ambiguous_worthiness",
+    )
+    assert out == {"worthy": True, "reason": "fact"}
+    assert "response_format" in seen[0], "the first attempt should still ask for the envelope"
+    assert "response_format" not in seen[1], "the retry must drop it"
+    assert "JSON Schema" in seen[1]["messages"][-1]["content"], "schema moves into the prompt"
+
+
+@respx.mock
+async def test_a_bad_request_that_is_not_about_the_envelope_still_raises() -> None:
+    """The fallback is narrow: an unrelated 400 is a real bug and must not be retried."""
+    respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(
+            400, json={"error": {"message": "max_tokens must be a positive integer"}}
+        )
+    )
+    llm = BifrostLLM(_settings())
+    with pytest.raises(LLMCallFailed):
+        await llm.structured([LLMMessage(role="user", content="x")], schema=SCHEMA, use="generic")

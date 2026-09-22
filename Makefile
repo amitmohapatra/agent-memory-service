@@ -159,7 +159,12 @@ BENCH_QDRANT_URL ?= http://host.docker.internal:6333
 #: The gateway, reached from inside the benchmark container. It holds the provider key;
 #: the service is only ever told a URL and a model name.
 BIFROST_URL ?= http://host.docker.internal:8091/v1
-BENCH_LLM_MODEL ?= gemini/gemini-3.6-flash
+# DeepSeek V4.1-Flash. Flash only, on purpose: the judge and the answerer are
+# classification-sized calls, and the cheap tier is $0.30/$1.20 per 1M tokens
+# ($0.15/$0.60 off-peak) against deepseek-v4-pro at $0.435/$0.87. It also limits by
+# concurrency rather than a daily quota, which is what broke the last judged run:
+# 17 HTTP 429s from a free Gemini key, then 62 calls the circuit breaker refused.
+BENCH_LLM_MODEL ?= deepseek/deepseek-flash
 BENCH_LIMIT ?=
 
 bench-db: ## Create and migrate the benchmark databases (idempotent, safe to re-run)
@@ -197,7 +202,7 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
 	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.locomo $(LOCOMO_ARGS)'
 
@@ -229,14 +234,14 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
 	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  -e MEMORY__MODELS__LLM__ENABLED=true \
-	  -e MEMORY__MODELS__LLM__PROVIDER=bifrost \
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=2048 \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__MAX_TOKENS=4096 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \
@@ -283,7 +288,7 @@ bench-concurrency: ## How much parallelism the model tier wants, and what it cos
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
 	  -e MEMORY__MODELS__NLI__PROVIDER=lexical -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
-	  -e MEMORY__MODELS__THREADS="$(BENCH_THREADS)" \
+	  -e MEMORY__MODELS__EMBEDDING__THREADS="$(BENCH_THREADS)" \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS)'
 

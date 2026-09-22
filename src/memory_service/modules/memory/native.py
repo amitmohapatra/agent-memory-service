@@ -467,7 +467,57 @@ class NativeMemoryIntelligence:
                     continue
                 seen.add(key)
                 out.append(cand)
+        verbatim = self._verbatim(text, ctx, evidence, kind)
+        if verbatim is not None and normalized_hash(verbatim.content) not in seen:
+            out.append(verbatim)
         return out
+
+    def _verbatim(
+        self,
+        text: str,
+        ctx: MemoryExecutionContext,
+        evidence: list[EvidenceRef],
+        kind: ObservationKind,
+    ) -> MemoryCandidate | None:
+        """The turn as it was said, so that what no rule matched is still retrievable.
+
+        The rules above are first-person: "I work at X", "my favourite is Y". A conversation
+        *about* someone is third-person, matches nothing, and used to be dropped entirely —
+        measured on LoCoMo, 452 of 788 turns produced no candidate at all, which put the
+        answer out of reach of every retriever before ranking was ever consulted. The
+        platitude was kept and the fact was lost: "Unconditional love is so important" was
+        stored while "camping at the beach", in the same turn, was not.
+
+        Deliberately an OBSERVATION. That type is in DERIVED_MEMORY_TYPES, which landing.py
+        excludes from supersession and reflection, so a verbatim turn can never be mistaken
+        for an asserted fact or merged with one. Any other memory type here would quietly
+        feed raw chatter into the consolidation machinery.
+        """
+        if not self.cfg.keep_verbatim_turns or kind is not ObservationKind.MESSAGE:
+            return None
+        body = text.strip()
+        if not body:
+            return None
+        # Reuse the noise rules the extractor already trusts rather than inventing a second
+        # notion of "not worth keeping". A bare question or a greeting carries no fact, so
+        # storing it verbatim only dilutes retrieval — which is the one risk this whole
+        # change runs. Anything that is neither is kept, including the third-person
+        # narrative that no extraction rule can parse.
+        if _QUESTION.search(body) or _CHITCHAT.match(body):
+            return None
+        return MemoryCandidate(
+            content=body[: self.cfg.verbatim_max_chars],
+            memory_type=MemoryType.OBSERVATION,
+            lifetime=Lifetime.LONG_TERM,
+            subject=_user_subject(ctx),
+            predicate="said",
+            evidence=evidence,
+            # Below every rule-extracted candidate: a parsed fact outranks the raw turn it
+            # came from, so ranking prefers the answer over the transcript when both match.
+            importance=0.25,
+            confidence=0.99,  # nobody is guessing what was said
+            category="verbatim_turn",
+        )
 
     def _worth_asking(self, s: str) -> bool:
         return (

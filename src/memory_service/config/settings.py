@@ -353,6 +353,22 @@ class MemoryIntelligenceSettings(BaseModel):
     admission_defer_band: float = Field(
         default=0.08, ge=0.0, le=1.0, description="score band below the minimum that defers"
     )
+    #: Keep the turn itself, not only what the rules could parse out of it.
+    #:
+    #: Extraction is rule-based and first-person ("I work at X"). A conversation *about*
+    #: someone — third-person narrative, which is most real dialogue — matches nothing, and
+    #: `_from_sentence` returns None. Measured on LoCoMo: 452 of 788 turns (57.4%) produced
+    #: no candidate at all, so the text was never indexed and no retriever could reach it.
+    #: The perfect-retrieval ceiling under that regime is 0.098; keeping the turn verbatim
+    #: raises it to 0.685.
+    #:
+    #: The verbatim copy is an OBSERVATION, which is in DERIVED_MEMORY_TYPES, so it is
+    #: excluded from supersession and reflection (landing.py:63, :77) and cannot disturb the
+    #: fact machinery or the false-merge gate. It augments the rule output; it never
+    #: replaces it.
+    keep_verbatim_turns: bool = True
+    #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
+    verbatim_max_chars: int = Field(default=2000, ge=200)
     # observational memory per thread
     observer_hot_window_messages: int = Field(default=20, ge=1)
     observer_batch_messages: int = Field(default=10, ge=1)
@@ -410,8 +426,8 @@ class RetrievalSettings(BaseModel):
     graph: bool = True
     fusion: Literal["rrf", "dbsf", "none"] = "rrf"
     rrf_k: int = 60
-    prefetch_k: int = Field(default=50, description="per-retriever candidates before fusion")
-    fused_k: int = Field(default=40, description="candidates after fusion")
+    prefetch_k: int = Field(default=100, description="per-retriever candidates before fusion")
+    fused_k: int = Field(default=100, description="candidates after fusion")
     #: Cross-encoder reranking. **Off by default, on measured evidence.**
     #:
     #: BeIR/SciFact, 1,000 documents, 70 paired queries, clean vector store, real models:
@@ -434,7 +450,7 @@ class RetrievalSettings(BaseModel):
     #: cores with it and ~8 without. A component that is 21x the latency has to buy something,
     #: and this one is buying a loss.
     rerank: bool = False
-    final_k: int = 20
+    final_k: int = 50
     contextual_chunks: bool = True
     parent_expansion: bool = True
     neighbor_expansion: bool = True
@@ -448,10 +464,18 @@ class RetrievalSettings(BaseModel):
 
 
 class ContextSettings(BaseModel):
-    token_budget: int = 6000
+    token_budget: int = 8000
     conversation_max_messages: int = 20
     conversation_token_budget: int = 2000
-    memories_max: int = 12
+    #: Keep what the engine ranked, and let the token budget do the bounding.
+    #:
+    #: This was 12 against RetrievalSettings.final_k = 20, so eight already-retrieved,
+    #: already-ranked candidates were dropped for free — and the bundles that survived used
+    #: 5.8% of the 6000-token budget (measured: median 1380 rendered chars, ~345 tokens).
+    #: Two numbers that must agree were written down twice and drifted. For reference, Mem0
+    #: publishes 6,956 tokens per retrieval at 92.5 on LoCoMo; a bundle spending 345 is not
+    #: competing on the same axis. token_budget stays the real constraint.
+    memories_max: int = 50
     knowledge_max: int = 12
     graph_facts_max: int = 12
     summaries_max: int = 4

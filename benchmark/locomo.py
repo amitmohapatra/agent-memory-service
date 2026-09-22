@@ -196,10 +196,22 @@ def _evidence_ids(item: dict) -> list[str]:
 #: path can express that — the abstention gate is lexical and these questions share every
 #: term with the conversation — so until something *generates*, "did it abstain?" has no
 #: answer to read. With generation on, it is simply whether the model said it did not know.
+#: Measured against deepseek-flash on 304 questions: the previous wording ("never guess,
+#: as few words as possible") abstained on 58 questions whose evidence was in the bundle
+#: (69% of open_domain, 30% of temporal) and shortened 16 correct answers into ones the
+#: judge rejected ("Transgender." for "Transgender woman"). Inference from the context and
+#: keeping the qualifiers are what the categories ask for; abstaining is still the only
+#: correct answer when nothing in the context bears on the question.
 ANSWER_SYSTEM = (
-    "You answer strictly from the CONTEXT provided. If the context does not contain the "
-    "answer, reply with exactly: I don't know. Never guess, never use outside knowledge. "
-    "Answer in as few words as possible."
+    "You answer questions about a person's life using only the CONTEXT: dated memories "
+    "from their conversations. Read all of it; the answer is often spread across several "
+    "entries or has to be reasoned from them. Answer directly and specifically, keeping "
+    "the names, dates, places and qualifiers the context gives - do not shorten them. "
+    "When asked when, work out the actual date from the dated entries and state it. When "
+    "asked what someone would likely do, feel or choose, infer it from what the context "
+    "shows about them. Reply with exactly: I don't know. - only when nothing in the "
+    "context bears on the question. Never use outside knowledge. One short phrase or "
+    "sentence."
 )
 
 JUDGE_SCHEMA = {
@@ -278,7 +290,10 @@ async def _answer(llm, bundle_text: str, question: str) -> str:
             LLMMessage(role="system", content=ANSWER_SYSTEM),
             LLMMessage(role="user", content=f"CONTEXT:\n{bundle_text}\n\nQUESTION: {question}"),
         ],
-        max_tokens=1024,
+        # Generous on purpose: a model that reasons before it answers spends the output
+        # budget on thinking first and returns an empty string when it runs out. Measured
+        # here: 16 of 304 answers came back empty at 1024 against deepseek-flash.
+        max_tokens=4096,
         use="grounding_judge",
     )
     return (completion.text or "").strip()
@@ -310,7 +325,7 @@ async def _judge(llm, question: str, gold: str, got: str) -> dict:
             ),
         ],
         schema=JUDGE_SCHEMA,
-        max_tokens=1024,
+        max_tokens=4096,
         use="grounding_judge",
     )
 
@@ -652,8 +667,12 @@ def main() -> int:
     parser.add_argument(
         "--calls-per-minute",
         type=float,
-        default=10.0,
-        help="gateway call budget for --judge (a free Gemini key allows about ten)",
+        default=120.0,
+        help=(
+            "gateway call budget for --judge. A free Gemini key allowed about ten; "
+            "DeepSeek limits by concurrency rather than a daily quota, so 120 is safe and "
+            "turns a multi-hour judged run into a bounded one."
+        ),
     )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()

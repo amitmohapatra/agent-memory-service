@@ -48,7 +48,10 @@ def _llm_provenance() -> dict[str, Any]:
     from memory_service.config.settings import Settings
 
     llm = Settings().models.llm
-    out: dict[str, Any] = {"enabled": llm.enabled, "provider": "bifrost" if llm.enabled else None}
+    out: dict[str, Any] = {
+        "enabled": llm.enabled,
+        "provider": "bifrost" if llm.enabled else "disabled",
+    }
     if llm.enabled:
         out.update({"model": llm.model, "fast_model": llm.fast_model, "uses": list(llm.uses)})
         try:

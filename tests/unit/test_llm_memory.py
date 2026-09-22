@@ -128,11 +128,26 @@ async def test_extraction_refinement_not_consulted_when_flag_off_or_confident() 
     assert gw.route.call_count == 0
 
 
+def _extracted(cands):
+    """What extraction understood, without the verbatim copy of the turn.
+
+    `keep_verbatim_turns` makes every substantive MESSAGE also produce an OBSERVATION of
+    itself, so a turn no rule could parse stays retrievable. These tests are about whether
+    the *assist* produced a candidate, which is a separate question.
+    """
+    return [c for c in cands if c.category != "verbatim_turn"]
+
+
 # --- ambiguous_worthiness ------------------------------------------------------------------
 
 
 async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
-    assert await _native().extract(_obs(UNMATCHED), CTX) == []
+    # No rule matches this sentence, so the only thing the native path produces is the
+    # verbatim turn (keep_verbatim_turns) — there is no *extracted* candidate to find.
+    # That is the gap ambiguous_worthiness exists to close, and the assist is additive:
+    # its candidate is appended before the verbatim copy, which stays at the end.
+    baseline = await _native().extract(_obs(UNMATCHED), CTX)
+    assert [c.category for c in baseline] == ["verbatim_turn"]
     reply = {"worthy": True, "memory_type": "SEMANTIC", "content": "Standup is in the afternoon"}
     with mocked_gateway([reply]) as gw:
         cands = await _native(gw.assist(uses=["ambiguous_worthiness"])).extract(
@@ -140,7 +155,7 @@ async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
         )
     assert gw.route.call_count == 1
     assert gw.prompts()[0]["model"] == "test/fast"
-    assert len(cands) == 1
+    assert [c.category for c in cands] == ["assisted", "verbatim_turn"]
     cand = cands[0]
     assert cand.content == "Standup is in the afternoon"
     assert cand.memory_type is MemoryType.SEMANTIC and cand.confidence == 0.6
@@ -169,32 +184,42 @@ async def test_worthiness_drops_unless_answer_validates(reply) -> None:
         cands = await _native(gw.assist(uses=["ambiguous_worthiness"])).extract(
             _obs(UNMATCHED), CTX
         )
-    assert cands == []
+    assert _extracted(cands) == []
 
 
 async def test_worthiness_skips_questions_and_chitchat_and_is_bounded() -> None:
     reply = {"worthy": True, "memory_type": "SEMANTIC", "content": "Something durable"}
     with mocked_gateway([reply]) as gw:
         provider = _native(gw.assist(uses=["ambiguous_worthiness"]))
+        # Questions are skipped by the assist AND kept out of the verbatim store, so a
+        # question produces nothing at all — the one input where both rules agree.
         assert await provider.extract(_obs("What time is the standup?"), CTX) == []
         assert await provider.extract(_obs("Can you move the standup?"), CTX) == []
         assert gw.route.call_count == 0
         many = " ".join(f"Item {i} sits quietly on the shelf." for i in range(12))
         cands = await provider.extract(_obs(many), CTX)
     assert gw.route.call_count == 8
-    assert len(cands) == 1  # identical normalized content is collapsed
+    assert len(_extracted(cands)) == 1  # identical normalized content is collapsed
 
 
 async def test_worthiness_falls_back_to_drop_when_gateway_fails_or_flag_off() -> None:
     with mocked_gateway(failing=True) as gw:
         assert (
-            await _native(gw.assist(uses=["ambiguous_worthiness"])).extract(_obs(UNMATCHED), CTX)
+            _extracted(
+                await _native(gw.assist(uses=["ambiguous_worthiness"])).extract(
+                    _obs(UNMATCHED), CTX
+                )
+            )
             == []
         )
     assert gw.route.call_count >= 1
     with mocked_gateway(['{"worthy": true, "memory_type": "SEMANTIC", "content": "x"}']) as gw:
         assert (
-            await _native(gw.assist(uses=["ambiguous_extraction"])).extract(_obs(UNMATCHED), CTX)
+            _extracted(
+                await _native(gw.assist(uses=["ambiguous_extraction"])).extract(
+                    _obs(UNMATCHED), CTX
+                )
+            )
             == []
         )
     assert gw.route.call_count == 0

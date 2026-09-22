@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
+from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.logging import get_logger
@@ -28,6 +29,23 @@ log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
+
+
+def memory_index_text(m: CanonicalMemory) -> str:
+    """What gets embedded and BM25-indexed for a memory: the fact *with its context*.
+
+    Documents already do this — a chunk is indexed as ``contextual_text``, not ``text`` —
+    and memories were the one collection that skipped it: ``"semantic: <content>"``, no date,
+    no subject. The date and the subject are both on the object and both written to the
+    payload, so the system was handed the attribution and threw it away before indexing.
+    On dated conversational memory every question is "who did what, when"; a temporal
+    query ("when did Caroline ...") cannot lexically match a fact whose index text has no
+    date, and a dense query is pulled toward the wrong person when the subject is absent.
+    """
+    when = m.temporal.observed_at.date().isoformat()
+    subject = (m.subject or "").split(":", 1)[-1].strip()
+    who = f" {subject}:" if subject and not subject.startswith(("thr_", "run_")) else ""
+    return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
 
 
 class Indexer:
@@ -294,8 +312,10 @@ class Indexer:
                 span("index.memories", tenant_id=tenant_id),
                 stage_seconds.labels("index.memories").time(),
             ):
-                texts = [f"{m.memory_type.value.lower()}: {m.content}" for m in live]
-                dense = await self.embed_cached(texts, [m.normalized_hash + ":mem" for m in live])
+                texts = [memory_index_text(m) for m in live]
+                # ":mem2": the text changed shape, so vectors cached under the old key
+                # would be embeddings of a different string.
+                dense = await self.embed_cached(texts, [m.normalized_hash + ":mem2" for m in live])
                 sparse = self.sparse.encode_documents(texts)
                 records = [
                     SearchRecord(

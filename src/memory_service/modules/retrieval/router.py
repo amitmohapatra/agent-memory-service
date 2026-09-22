@@ -23,16 +23,23 @@ _DECISION = re.compile(
     r"\b(why did we (?:decide|choose|pick|go with)|decision|decided|agreed|rationale|trade-?off|chose|why was .* (?:chosen|rejected))\b",
     re.IGNORECASE,
 )
+#: The bare interrogatives were missing, and they are how people actually ask about time.
+#: Measured on LoCoMo, only 1 of 26 temporal questions routed TEMPORAL, because every one
+#: of them opens "When did ..." and the pattern below had "since|before|after" but no "when".
 _TEMPORAL = re.compile(
-    r"\b(as of|since|before|after|until|between|last (?:week|month|quarter|year)|this (?:week|month|quarter|year)|in (?:19|20)\d{2}|q[1-4]\b|fy\d{2}|\d{4}-\d{2}-\d{2}|yesterday|today|latest|current(?:ly)?|previous|history of|changed over|over time|timeline)\b",
+    r"\b(when (?:did|was|were|does|do|is|are|will)|what (?:year|month|date|day|time)|how long (?:ago|did|has|have)|what time|as of|since|before|after|until|between|last (?:week|month|quarter|year)|this (?:week|month|quarter|year)|in (?:19|20)\d{2}|q[1-4]\b|fy\d{2}|\d{4}-\d{2}-\d{2}|yesterday|today|latest|current(?:ly)?|previous|history of|changed over|over time|timeline)\b",
     re.IGNORECASE,
 )
 _GLOBAL = re.compile(
     r"\b(overall|summar(?:y|ise|ize)|across (?:the|this|all)|main (?:themes|risks|points)|major (?:risks|themes|changes)|key (?:takeaways|points|risks)|what is this (?:document|report|file) about|high[- ]level|big picture|tl;?dr)\b",
     re.IGNORECASE,
 )
+#: Contrastive connectives only ("despite", "compare", "difference between") miss the other
+#: shape of a multi-fact question: enumeration. "What activities does X do?" and "Where has X
+#: travelled?" need every mention across sessions gathered, which is the same traversal.
+#: Measured on LoCoMo, 1 of 16 multi_hop questions routed DOCUMENT_MULTI_HOP.
 _MULTI_HOP = re.compile(
-    r"\b(why did .* (?:despite|although|even though|while)|despite|even though|although|compare|comparison|difference between|how does .* (?:affect|impact|relate to)|relationship between|reconcile|explain (?:how|why) .* and\b|both .* and)\b",
+    r"\b(why did .* (?:despite|although|even though|while)|despite|even though|although|compare|comparison|difference between|how does .* (?:affect|impact|relate to)|relationship between|reconcile|explain (?:how|why) .* and\b|both .* and|how many times|what (?:kind of |sort of |type of )?\w+ (?:does|do|did|has|have) \w+|where (?:has|have|did) \w+|list (?:all|every|the))\b",
     re.IGNORECASE,
 )
 _ENTITY = re.compile(

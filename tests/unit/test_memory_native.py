@@ -67,6 +67,18 @@ async def _extract(native, text, **kw):
     ]
 
 
+def _extracted(cands):
+    """Rule- or assist-extracted candidates only, without the verbatim turn.
+
+    `keep_verbatim_turns` makes every substantive MESSAGE also produce an OBSERVATION copy
+    of itself, so that a turn no rule could parse is still retrievable. These tests are
+    about what extraction *understood*, which is a different question, and the guarantee
+    they protect is unchanged: noise never becomes an asserted fact. A verbatim turn is an
+    OBSERVATION, which DERIVED_MEMORY_TYPES excludes from supersession and reflection.
+    """
+    return [c for c in cands if c.category != "verbatim_turn"]
+
+
 # --- text utilities --------------------------------------------------------------------
 
 
@@ -125,7 +137,7 @@ async def test_extraction_rules(native, text, mtype, predicate, obj) -> None:
 
 async def test_extraction_skips_noise_and_questions(native) -> None:
     for text in ("What is my timezone?", "Thanks!", "ok", "it was a long day and nothing worked"):
-        assert await _extract(native, text) == [], text
+        assert _extracted(await _extract(native, text)) == [], text
     assert await _extract(native, "My timezone is CET.", skip_extraction=True) == []
 
 
@@ -150,7 +162,10 @@ async def test_extraction_kinds_and_temporal(native) -> None:
     event = await _extract(native, "Yesterday the deploy failed because of a missing migration.")
     assert event[0].memory_type is MemoryType.EPISODIC
     multi = await _extract(native, "My name is Amit and my timezone is CET. I prefer tea.")
-    assert [c.predicate for c in multi] == ["name", "timezone", "prefers"]
+    assert [c.predicate for c in _extracted(multi)] == ["name", "timezone", "prefers"]
+    # ...and the turn itself is kept alongside them, last, so ranking prefers the parsed
+    # fact over the transcript it came from.
+    assert [c.predicate for c in multi][-1] == "said"
     proc = await _extract(
         native, "To deploy the API, run make release and then check the dashboard."
     )
