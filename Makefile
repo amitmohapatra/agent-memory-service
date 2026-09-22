@@ -304,8 +304,19 @@ bench-storage: ## Archive segment / storage benchmark
 BASE_URL ?= http://localhost:8080
 API_KEY ?= dev-key
 
-load-test: ## Locust load test (headless) -> benchmark/results/load_test.json (BASE_URL, API_KEY)
-	$(PY) python -m benchmark.load.run --base-url $(BASE_URL) --api-key $(API_KEY) -u 20 -r 5 -t 60s
+load-test: ## Locust load test (headless) -> benchmark/results/$(LOAD_OUT) (BASE_URL, API_KEY, LOAD_RPS, LOAD_ARM)
+	@# LOAD_RPS is the offered rate: the locustfile paces each user at one request a second,
+	@# so users == requests per second. The cold arm salts every query so the bundle cache
+	@# misses. Run this from a quiet box - and, for a real number, from a different one.
+	$(PY) python -m benchmark.load.run --base-url $(BASE_URL) --api-key $(API_KEY) \
+	  -u $(LOAD_RPS) -r $(LOAD_RPS) -t $(LOAD_TIME) --arm $(LOAD_ARM) \
+	  --sample $(LOAD_SAMPLE) --out $(LOAD_OUT)
+
+LOAD_RPS ?= 10
+LOAD_TIME ?= 300s
+LOAD_ARM ?= cold
+LOAD_SAMPLE ?= memory-service-memory-api-1
+LOAD_OUT ?= load_test.json
 
 gates-network: ## Network-hop gates against a deployed api + real workers (BASE_URL, API_KEY): durability_network, performance_network, load_test
 	$(PY) python -m benchmark.deployed --base-url $(BASE_URL) --api-key $(API_KEY)

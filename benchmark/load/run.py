@@ -1,11 +1,20 @@
 """Headless Locust run against a deployed instance, reduced to ``load_test.json``.
 
-    uv run python -m benchmark.load.run --base-url http://memory-api:8080 -u 20 -r 5 -t 60s
+    uv run python -m benchmark.load.run --base-url http://localhost:8080 -u 10 -r 10 -t 300s
 
 Runs ``benchmark/load/locustfile.py`` with ``--csv`` and turns Locust's per-endpoint
 statistics (requests, failures, RPS, p50/p95/p99) and failure table into one artifact with
 provenance. The Locust exit status is recorded, not interpreted: the artifact is evidence
 for the final report, the p95 gates are ``performance_network.json``.
+
+The offered rate is the user count (the locustfile paces each user at one request per
+second), so ``-u 10`` aims at ten requests per second. ``--arm cold`` (the default) salts
+every query so the bundle cache always misses; ``--arm warm`` repeats a small set.
+
+While the run is in flight the container's own CPU and memory are sampled once a second
+(``docker stats``) and summarised into the artifact, because a throughput number without
+the CPU it cost cannot be extrapolated to another machine: what travels between boxes is
+core-seconds per request, not the rate.
 """
 
 from __future__ import annotations
@@ -14,9 +23,12 @@ import argparse
 import csv
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -106,8 +118,105 @@ def load_report(
     }
 
 
+class _ResourceSampler:
+    """``docker stats`` for the named containers, once a second, in a background thread.
+
+    Sampling is best-effort: a box without a docker socket, or a container that restarts
+    mid-run, must not fail a load test. What it cannot sample it reports as absent rather
+    than as zero.
+    """
+
+    def __init__(self, containers: list[str], interval: float = 1.0) -> None:
+        self.containers = containers
+        self.interval = interval
+        self.samples: dict[str, list[tuple[float, float]]] = {c: [] for c in containers}
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> _ResourceSampler:
+        if self.containers:
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                out = subprocess.run(  # noqa: S603 - fixed argv
+                    [
+                        "docker",
+                        "stats",
+                        "--no-stream",
+                        "--format",
+                        "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}",
+                        *self.containers,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+            except Exception:  # noqa: BLE001 - sampling must never fail the run
+                self._stop.wait(self.interval)
+                continue
+            for line in out.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) != 3 or parts[0] not in self.samples:
+                    continue
+                cpu = _num(parts[1].rstrip("%"))
+                mem = re.match(r"([0-9.]+)\s*([KMGT]?i?B)", parts[2].strip())
+                mib = 0.0
+                if mem:
+                    scale = {"B": 1 / 2**20, "KiB": 1 / 1024, "MiB": 1.0, "GiB": 1024.0}
+                    mib = float(mem.group(1)) * scale.get(mem.group(2), 1.0)
+                self.samples[parts[0]].append((cpu, mib))
+            self._stop.wait(self.interval)
+
+    def report(self, *, requests: int, seconds: float) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for name, rows in self.samples.items():
+            if not rows:
+                out[name] = {"samples": 0}
+                continue
+            cpu = sorted(r[0] for r in rows)
+            mem = [r[1] for r in rows]
+            mean_cpu = sum(cpu) / len(cpu)
+            entry = {
+                "samples": len(rows),
+                "cpu_percent_mean": round(mean_cpu, 1),
+                "cpu_percent_p95": round(cpu[int(len(cpu) * 0.95) - 1], 1),
+                "rss_mib_mean": round(sum(mem) / len(mem), 1),
+                "rss_mib_max": round(max(mem), 1),
+                "rss_drift_percent": round(100 * (mem[-1] - mem[0]) / max(mem[0], 1), 1),
+            }
+            if requests:
+                # The portable number: one request's cost in core-seconds. Multiply by a
+                # target rate to size any other box (cores >= rate x core_seconds).
+                entry["core_seconds_per_request"] = round(mean_cpu / 100 * seconds / requests, 4)
+            out[name] = entry
+        return out
+
+
+def _run_seconds(run_time: str) -> float:
+    match = re.fullmatch(r"(\d+)([smh]?)", run_time.strip())
+    if not match:
+        return 0.0
+    return int(match.group(1)) * {"": 1, "s": 1, "m": 60, "h": 3600}[match.group(2)]
+
+
 def run_locust(
-    base_url: str, users: int, spawn_rate: float, run_time: str, api_key: str, csv_prefix: Path
+    base_url: str,
+    users: int,
+    spawn_rate: float,
+    run_time: str,
+    api_key: str,
+    csv_prefix: Path,
+    arm: str = "cold",
 ) -> int:
     argv = [
         sys.executable,
@@ -128,7 +237,7 @@ def run_locust(
         str(csv_prefix),
         "--only-summary",
     ]
-    env = {**os.environ, "MEMORY_API_KEY": api_key}
+    env = {**os.environ, "MEMORY_API_KEY": api_key, "MEMORY_LOAD_ARM": arm}
     return subprocess.call(argv, env=env)  # noqa: S603 - fixed argv
 
 
@@ -139,12 +248,34 @@ def main() -> int:
     parser.add_argument("-u", "--users", type=int, default=20)
     parser.add_argument("-r", "--spawn-rate", type=float, default=5)
     parser.add_argument("-t", "--run-time", default="60s")
+    parser.add_argument(
+        "--arm",
+        choices=("cold", "warm"),
+        default="cold",
+        help="cold salts every query so the bundle cache misses; warm repeats a small set",
+    )
+    parser.add_argument(
+        "--sample",
+        default="",
+        help="comma-separated container names to sample CPU and memory from during the run",
+    )
+    parser.add_argument("--out", default="load_test.json", help="artifact filename")
     args = parser.parse_args()
+    containers = [c for c in args.sample.split(",") if c.strip()]
     with tempfile.TemporaryDirectory(prefix="memory-load-") as tmp:
         prefix = Path(tmp) / "load"
-        status = run_locust(
-            args.base_url, args.users, args.spawn_rate, args.run_time, args.api_key, prefix
-        )
+        started = time.perf_counter()
+        with _ResourceSampler(containers) as sampler:
+            status = run_locust(
+                args.base_url,
+                args.users,
+                args.spawn_rate,
+                args.run_time,
+                args.api_key,
+                prefix,
+                args.arm,
+            )
+        elapsed = time.perf_counter() - started
         stats_path = prefix.with_name("load_stats.csv")
         failures_path = prefix.with_name("load_failures.csv")
         stats_csv = stats_path.read_text(encoding="utf-8") if stats_path.is_file() else ""
@@ -158,8 +289,14 @@ def main() -> int:
         run_time=args.run_time,
         exit_status=status,
     )
+    payload["arm"] = args.arm
+    payload["target_rps"] = args.users
+    payload["resources"] = sampler.report(
+        requests=payload["total_requests"],
+        seconds=min(elapsed, _run_seconds(args.run_time) or elapsed),
+    )
     payload["provenance"] = provenance()
-    path = write_result("load_test.json", payload)
+    path = write_result(args.out, payload)
     print(f"wrote {path}")
     agg = payload["aggregated"]
     print(
@@ -169,6 +306,12 @@ def main() -> int:
     )
     for name, e in payload["endpoints"].items():
         print(f"  {name:32} n={e['requests']:6} fail={e['failures']:4} p95={e['p95_ms']:8.1f}ms")
+    for name, r in payload["resources"].items():
+        if r.get("samples"):
+            print(
+                f"  {name:32} cpu_mean={r['cpu_percent_mean']}% rss_max={r['rss_mib_max']}MiB "
+                f"core_s/req={r.get('core_seconds_per_request')}"
+            )
     return 0 if stats_csv else 1
 
 
