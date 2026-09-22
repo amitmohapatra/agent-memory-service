@@ -27,7 +27,13 @@ from memory_service.adapters.search.qdrant_store import (
     search_read_retries_total,
 )
 from memory_service.config.settings import SearchSettings
-from memory_service.ports.search import PAYLOAD_FIELDS, SearchFilter, SparseVector
+from memory_service.domain.errors import DependencyUnavailable
+from memory_service.ports.search import (
+    PAYLOAD_FIELDS,
+    CollectionSpec,
+    SearchFilter,
+    SparseVector,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -233,12 +239,13 @@ def _flt() -> SearchFilter:
     return SearchFilter(tenant_id="acme")
 
 
-def _retries() -> float:
+def _retries(operation: str | None = None) -> float:
     return sum(
         sample.value
         for metric in search_read_retries_total.collect()
         for sample in metric.samples
         if sample.name.endswith("_total")
+        and (operation is None or sample.labels.get("operation") == operation)
     )
 
 
@@ -290,6 +297,51 @@ async def test_a_second_failure_is_not_retried_again() -> None:
     with pytest.raises(httpx.ConnectError):
         await _store(client).search_dense("c", [0.1] * 4, _flt(), limit=5)
     assert len(client.calls) == 2, "one retry, not a loop"
+
+
+@pytest.mark.parametrize("operation", ["retrieve", "count", "scroll"])
+async def test_the_other_reads_are_retried_too(operation: str) -> None:
+    """The retry lives in _read, so every read gets it - but only search_dense was ever
+    exercised, and scroll is the one that carries an offset through a default argument."""
+    client = FakeClient(error=httpx.ConnectError("down"), fail_times=1)
+    store = _store(client)
+    if operation == "retrieve":
+        assert [r.record_id for r in await store.get("c", ["r1"])] == ["r1"]
+    elif operation == "count":
+        assert await store.count("c", _flt()) == 3
+    else:
+        assert await store.record_ids("c", _flt()) == ["r1"]
+    assert [name for name, _ in client.calls] == [operation, operation]
+
+
+async def test_a_retried_scroll_page_asks_for_the_offset_it_was_on() -> None:
+    """``lambda offset=offset`` binds the page this attempt is fetching. Bound wrong, the
+    retry restarts from the first page and record_ids returns the first page twice."""
+
+    class _Pages(FakeClient):
+        async def scroll(self, **kwargs: Any) -> tuple[list[_Point], Any]:
+            self.calls.append(("scroll", kwargs))
+            self._maybe_fail()
+            first = kwargs["offset"] is None
+            return [_Point(id="p1" if first else "p2", payload={"record_id": "r2"})], (
+                "page-2" if first else None
+            )
+
+    client = _Pages(error=httpx.ConnectError("down"), fail_times=1)
+    # fails the first page, retries it, then asks for page two: three calls, two pages
+    assert await _store(client).record_ids("c", _flt()) == ["r2", "r2"]
+    assert [kwargs["offset"] for _, kwargs in client.calls] == [None, None, "page-2"]
+
+
+async def test_a_one_armed_hybrid_is_counted_as_the_read_it_is() -> None:
+    """A query with only a dense prefetch is a dense read; fusing needs two arms. Counted as
+    "hybrid", the retry counter mixes three different reads under one operation."""
+    before = (_retries("dense"), _retries("hybrid"))
+    client = FakeClient(error=httpx.ConnectError("down"), fail_times=1)
+    await _store(client).search_hybrid(
+        "c", dense=[0.1] * 4, sparse=None, flt=_flt(), limit=5, prefetch_limit=8
+    )
+    assert (_retries("dense"), _retries("hybrid")) == (before[0] + 1, before[1])
 
 
 async def test_an_ordinary_error_is_not_retried() -> None:
@@ -366,3 +418,46 @@ async def test_the_memories_collection_keeps_its_payload_in_memory() -> None:
     await indexer.ensure_collections()
     assert specs[indexer.collection(MEMORIES)] is False
     assert specs[indexer.collection(KNOWLEDGE)] is True
+
+
+# --- two workers starting against one empty Qdrant --------------------------------------
+
+
+class _RacingClient:
+    """Answers "no such collection", then has one by the time the create is attempted."""
+
+    def __init__(self, exists_after_create: bool = True) -> None:
+        self.exists = False
+        self.exists_after_create = exists_after_create
+        self.indexed: list[str] = []
+
+    async def collection_exists(self, name: str) -> bool:
+        return self.exists
+
+    async def create_collection(self, **kwargs: Any) -> None:
+        self.exists = self.exists_after_create
+        raise ValueError(f"Collection `{kwargs['collection_name']}` already exists!")
+
+    async def get_collection(self, name: str) -> Any:
+        return type("Info", (), {"payload_schema": {}})()
+
+    async def create_payload_index(self, name: str, *, field_name: str, **kwargs: Any) -> None:
+        self.indexed.append(field_name)
+
+
+async def test_a_collection_another_worker_created_first_is_not_a_failure() -> None:
+    """Three API workers start cold against one Qdrant and all three see an empty store, so
+    two of them create the same collection. The one that loses used to answer
+    DependencyUnavailable and never become ready, over the outcome it had asked for."""
+    client = _RacingClient()
+    store = _store(client)  # type: ignore[arg-type]
+    await store.ensure_collection(CollectionSpec(name="memories", dense_dim=4))
+    assert client.indexed, "the loser still has to ensure the payload indexes exist"
+
+
+async def test_a_create_that_leaves_no_collection_still_fails() -> None:
+    client = _RacingClient(exists_after_create=False)
+    with pytest.raises(DependencyUnavailable):
+        await _store(client).ensure_collection(  # type: ignore[arg-type]
+            CollectionSpec(name="memories", dense_dim=4)
+        )

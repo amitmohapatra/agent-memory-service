@@ -185,14 +185,24 @@ class QdrantSearchStore:
                     if spec.sparse
                     else None
                 )
-                await self._client.create_collection(
-                    collection_name=name,
-                    vectors_config=vectors,
-                    sparse_vectors_config=sparse,
-                    on_disk_payload=spec.on_disk_payload
-                    and SEARCH.on_disk_payload
-                    and not self._local,
-                )
+                try:
+                    await self._client.create_collection(
+                        collection_name=name,
+                        vectors_config=vectors,
+                        sparse_vectors_config=sparse,
+                        on_disk_payload=spec.on_disk_payload
+                        and SEARCH.on_disk_payload
+                        and not self._local,
+                    )
+                except Exception:
+                    # Check-then-create, and three API workers start cold against the same
+                    # Qdrant at the same time: two of them see "does not exist" and both
+                    # create it, and the loser used to answer DependencyUnavailable - a
+                    # worker that never became ready because another one did its work. The
+                    # collection existing is the outcome this method wanted; only a failure
+                    # that left it absent is a failure.
+                    if not await self._client.collection_exists(name):
+                        raise
             if not self._local:  # local mode has no payload indexes
                 await self._ensure_payload_indexes(name)
         except Exception as exc:
@@ -348,8 +358,12 @@ class QdrantSearchStore:
             return []
         if len(prefetch) == 1:
             single = prefetch[0]
+            # one arm is not a hybrid query, and counting its retries as one makes
+            # memory_search_read_retries_total{operation="hybrid"} a number about two
+            # different reads
+            retriever: Retriever = "dense" if single.using == DENSE else "bm25"
             res = await _read(
-                "hybrid",
+                retriever,
                 lambda: self._client.query_points(
                     collection_name=self._name(collection),
                     query=single.query,
@@ -359,7 +373,6 @@ class QdrantSearchStore:
                     with_payload=_PAYLOAD,
                 ),
             )
-            retriever: Retriever = "dense" if single.using == DENSE else "bm25"
             return [self._hit(p, retriever) for p in res.points]
         with span("search.hybrid"), stage_seconds.labels("retrieval.hybrid").time():
             try:
