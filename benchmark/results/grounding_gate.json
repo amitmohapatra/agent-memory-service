@@ -14,7 +14,7 @@
       "total": 6
     },
     "paraphrase": {
-      "correct": 4,
+      "correct": 6,
       "total": 6
     },
     "polarity": {
@@ -26,7 +26,7 @@
       "total": 2
     },
     "unrelated": {
-      "correct": 2,
+      "correct": 3,
       "total": 3
     },
     "unused": {
@@ -39,20 +39,15 @@
     }
   },
   "claims": 42,
-  "failures": [
-    "paraphrase-01: expected ['supported'], got ['borderline']",
-    "paraphrase-02: expected ['supported'], got ['borderline']",
-    "unrelated-03: expected ['unsupported'], got ['borderline']"
-  ],
+  "failures": [],
   "gate": "grounding",
   "golden_set": "grounding_claims_v1",
-  "nli_provider": "lexical-nli-v1",
-  "note": "lexical NLI is a deterministic stand-in; only the deterministic categories are asserted and the quality numbers are not representative",
+  "nli_provider": "nli-deberta-v3-base-mnli-fever-anli",
   "per_verdict": {
     "borderline": {
       "fn": 0,
-      "fp": 3,
-      "precision": 0.0,
+      "fp": 0,
+      "precision": null,
       "recall": null,
       "tp": 0
     },
@@ -64,29 +59,29 @@
       "tp": 16
     },
     "supported": {
-      "fn": 2,
+      "fn": 0,
       "fp": 0,
       "precision": 1.0,
-      "recall": 0.8889,
-      "tp": 16
+      "recall": 1.0,
+      "tp": 18
     },
     "unsupported": {
-      "fn": 1,
+      "fn": 0,
       "fp": 0,
       "precision": 1.0,
-      "recall": 0.875,
-      "tp": 7
+      "recall": 1.0,
+      "tp": 8
     }
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "81ee60eff2ccfc24de604e375baf709a4d2ee409",
+    "git_commit": "unknown",
     "llm": {
       "enabled": false,
       "provider": "disabled"
     },
     "machine": "x86_64",
-    "memory_gb": null,
+    "memory_gb": 6.8,
     "models": {
       "bge-reranker-v2-m3": {
         "repo": "BAAI/bge-reranker-v2-m3",
@@ -146,23 +141,23 @@
       }
     },
     "packages": {
-      "docling": "not-installed",
+      "docling": "2.127.0",
       "fastapi": "0.141.1",
-      "fastembed": "not-installed",
-      "onnxruntime": "not-installed",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
-      "sentence-transformers": "not-installed",
+      "sentence-transformers": "6.0.1",
       "sqlalchemy": "2.0.53",
-      "torch": "not-installed",
-      "transformers": "not-installed",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
       "zstandard": "0.25.0"
     },
-    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
     "python": "3.12.14",
-    "timestamp": "2026-09-22T17:43:46.487667+00:00"
+    "timestamp": "2026-09-22T22:26:06.275992+00:00"
   },
-  "representative": false,
+  "representative": true,
   "rows": [
     {
       "category": "verbatim",
@@ -285,9 +280,9 @@
       "methods": [
         "nli"
       ],
-      "ok": false,
+      "ok": true,
       "predicted": [
-        "borderline"
+        "supported"
       ]
     },
     {
@@ -299,9 +294,9 @@
       "methods": [
         "nli"
       ],
-      "ok": false,
+      "ok": true,
       "predicted": [
-        "borderline"
+        "supported"
       ]
     },
     {
@@ -663,9 +658,9 @@
       "methods": [
         "nli"
       ],
-      "ok": false,
+      "ok": true,
       "predicted": [
-        "borderline"
+        "unsupported"
       ]
     },
     {
