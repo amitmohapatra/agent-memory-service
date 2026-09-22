@@ -247,6 +247,40 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS)'
 
+bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (inside the runtime image)
+	@# The other public conversational-memory benchmark the field quotes (Mem0 94.4,
+	@# Zep 90.2). Same environment as bench-locomo-judged so the two are comparable
+	@# with each other; the harness fetches the dataset from the HF hub on first use.
+	docker run --rm --user root \
+	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
+	  --add-host host.docker.internal:host-gateway \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  -e PYTHONFAULTHANDLER=1 \
+	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
+	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
+	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e MEMORY__BLOB__PROVIDER=memory \
+	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
+	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
+	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
+	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
+	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
+	  -e MEMORY__MODELS__LLM__ENABLED=true \
+	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
+	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
+	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__MAX_TOKENS=4096 \
+	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
+	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
+	  --entrypoint sh memory-service-memory-api -c \
+	  '/opt/venv/bin/python -m benchmark.public --suite longmemeval --configs native $(LME_ARGS)'
+
+LME_ARGS ?=
+
 bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sections, tables, footnotes)
 	@# The instrument for the expansion flags. A flat corpus cannot measure them: SciFact
 	@# abstracts are one chunk each, so parent/neighbour/definition expansion never fires and

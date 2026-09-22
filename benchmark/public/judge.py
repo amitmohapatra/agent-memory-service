@@ -99,7 +99,7 @@ def answer_prompt(context: str, question: str, date: str | None) -> str:
 
 
 async def generate_answer(
-    llm: Any, *, context: str, question: str, date: str | None, max_tokens: int = 256
+    llm: Any, *, context: str, question: str, date: str | None, max_tokens: int = 2048
 ) -> str:
     completion = await llm.complete(
         [
@@ -116,7 +116,11 @@ async def generate_answer(
 async def judge_once(llm: Any, prompt: str) -> bool:
     completion = await llm.complete(
         [LLMMessage(role="user", content=prompt)],
-        max_tokens=10,
+        # Ten was enough for a model that answers "yes"/"no" directly. deepseek-flash
+        # reasons before it writes and returns nothing when the budget runs out first -
+        # measured three times today in three different callers. The verdict is still
+        # one word; the budget is for the thinking that precedes it.
+        max_tokens=1024,
         temperature=0.0,
         use=JUDGE_USE,
     )
