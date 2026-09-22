@@ -135,6 +135,14 @@ async def version(request: Request) -> VersionResponse:
 
 
 def _active(provider: Any, configured: str) -> str:
+    """What is actually running, not what was configured.
+
+    ``None`` means the component was never built, and saying so matters: the reranker is
+    off by default and used to be reported here by its configured provider name, so
+    /version named a cross-encoder that had never been loaded and would never be called.
+    """
+    if provider is None:
+        return "disabled"
     info = getattr(provider, "info", None)
     return getattr(info, "name", None) or configured
 
@@ -161,4 +169,6 @@ def _degraded(c: Any, s: Any) -> list[str]:
         and "splade" not in _active(c.sparse, "").casefold()
     ):
         notes.append(f"sparse: splade requested, running {_active(c.sparse, 'bm25')!r}")
+    if s.retrieval.rerank and c.reranker is None:
+        notes.append("rerank: requested, but no reranker was built; results are unreranked")
     return notes

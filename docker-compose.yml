@@ -399,7 +399,6 @@ services:
       MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
       MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
       MEMORY__MODELS__SPARSE_MODEL_PATH: /models/Splade_PP_en_v1
-      MEMORY__MODELS__LATE_INTERACTION_MODEL_PATH: /models/answerai-colbert-small-v1
       MEMORY__BLOB__FILESYSTEM_ROOT: /app/.blob
       UV_PROJECT_ENVIRONMENT: /opt/venv
     volumes:

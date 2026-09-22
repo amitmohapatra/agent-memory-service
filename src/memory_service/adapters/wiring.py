@@ -341,7 +341,16 @@ def _wire_models(container: Container) -> None:
     else:
         container.sparse = Bm25SparseEncoder()
     rr_cfg = settings.models.reranker
-    if rr_cfg.url:
+    if not settings.retrieval.rerank:
+        # Guarded by its own flag, the way `splade` above already is. Without this the
+        # cross-encoder was constructed whatever `retrieval.rerank` said — 566 MB of weights
+        # loaded into both the API and the worker at startup, reported on /version as an
+        # active provider, and never called, because engine.py guards the only call site on
+        # `cfg.rerank`. Reranking is off by default on measured evidence: on document RAG it
+        # was *worse* and twelve times slower (nDCG 80.54% -> 76.64%, p50 895 ms -> 10,868 ms,
+        # docs/MEASUREMENTS.md §3b). Turning the flag on loads the model again.
+        container.reranker = None
+    elif rr_cfg.url:
         from memory_service.adapters.models.remote import RemoteReranker
 
         container.reranker = RemoteReranker(rr_cfg)
