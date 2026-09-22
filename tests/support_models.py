@@ -7,8 +7,8 @@ Two different reasons a model test cannot run, which were previously reported as
   macOS x86_64 wheels, so on an Intel Mac the ``[models]`` extra is unavailable at any
   version. Those tests run in the Linux runtime image instead: ``make model-test``.
 
-fastembed-based adapters (SPLADE, ColBERT) need only onnxruntime and do run natively, so
-they should not be swept into the same skip.
+The sparse encoder is client-side BM25 and needs neither weights nor that runtime, so it is
+never behind these skips; the dense encoder, the NLI head and the benchmark rerankers are.
 """
 
 from __future__ import annotations

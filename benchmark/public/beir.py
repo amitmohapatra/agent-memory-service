@@ -27,7 +27,6 @@ from memory_service.modules.jobs.registry import register_handlers
 
 STRATEGIES: dict[str, dict[str, Any]] = {
     "baseline": {},
-    "splade": {"splade": True},
     "minicoil": {"minicoil": True},
     "colbert": {"colbert": True},
     "pageindex": {"pageindex": True},

@@ -51,7 +51,7 @@ HOT      Dragonfly      recent thread, working memory, caches (never source of t
 WARM     PostgreSQL     threads/sessions/turns/messages, observations, canonical memories,
                         evidence refs, documents/nodes/chunks metadata, jobs, revisions,
                         archive manifests, eval metadata
-SEARCH   Qdrant         BM25 sparse + dense (+ optional SPLADE/ColBERT) — rebuildable
+SEARCH   Qdrant         BM25 sparse + dense — rebuildable
 ARCHIVE  GCS            raw chat segments (JSONL+zstd), raw files, imports, old versions
 ```
 

@@ -67,10 +67,6 @@ class ThreadRepository(Protocol):
     ) -> list[Thread]: ...
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool: ...
 
-    async def list_active(self, *, since: datetime, limit: int = 500) -> list[Thread]:
-        """Threads updated at or after ``since`` across tenants."""
-        ...
-
 
 @runtime_checkable
 class SessionRepository(Protocol):

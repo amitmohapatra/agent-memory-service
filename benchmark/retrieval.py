@@ -4,9 +4,10 @@ providers the environment configures.
 
     uv run python -m benchmark.retrieval --copies 40 --queries 30
 
-Provider selection comes from the normal settings (env ``MEMORY__MODELS__EMBEDDING__PROVIDER``
-etc.), so the same script benchmarks the hash stand-in or Granite via sentence-transformers.
-The result records the provider fingerprints and whether they are representative.
+The encoder is ``BENCH_EMBEDDING`` (``benchmark/env.py``): ``frozen`` for the shipped
+Granite weights, ``hash`` for the deterministic stand-in, defaulting to whichever the model
+roots can satisfy. The result records the provider fingerprints and whether they are
+representative.
 PostgreSQL must be reachable; Qdrant runs in local mode unless ``BENCH_SEARCH=qdrant`` and
 ``MEMORY__SEARCH__QDRANT_URL`` are set (see ``benchmark/env.py``).
 """

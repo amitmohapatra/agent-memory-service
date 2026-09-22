@@ -1,7 +1,7 @@
 """Public benchmark harness (TARGET_STACK change 18/19).
 
     uv run python -m benchmark.public --suite all
-    uv run python -m benchmark.public --suite beir --datasets nfcorpus --strategies baseline,splade --max-docs 500 --max-queries 50
+    uv run python -m benchmark.public --suite beir --datasets nfcorpus --strategies baseline,colbert --max-docs 500 --max-queries 50
     uv run python -m benchmark.public --suite longmemeval --configs native,bifrost --judge-runs 5 --max-questions 100
 
 Results carry provenance and ``representative`` (real embedding weights AND an LLM behind

@@ -147,6 +147,59 @@ class TestCandidates:
             assert getattr(with_spec, name) == getattr(base, name) == getattr(stand_in, name)
 
 
+@pytest.mark.unit
+class TestBenchEnvEmbeddingDefault:
+    """The host default follows the weights: a ``make gates`` on a checkout without
+    ``make models`` must run the labelled stand-in, not load the frozen encoder or die.
+    The container path pins ``BENCH_EMBEDDING=frozen`` in the Makefile and is not a default."""
+
+    @staticmethod
+    def _roots(monkeypatch: pytest.MonkeyPatch, root: Path, *, weights: bool) -> None:
+        from memory_service.config import constants
+
+        if weights:
+            (root / constants.FROZEN_MODELS.dense.local_dir).mkdir(parents=True)
+        monkeypatch.setattr(constants, "MODEL_ROOTS", (root,))
+        monkeypatch.delenv("BENCH_EMBEDDING", raising=False)
+
+    def test_frozen_when_the_dense_weights_resolve(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from benchmark.env import BenchEnv, default_embedding
+
+        self._roots(monkeypatch, tmp_path, weights=True)
+        assert default_embedding() == "frozen"
+        env = BenchEnv.from_environ()
+        assert env.embedding == "frozen" and BenchEnv().embedding == "frozen"
+        overrides = env.overrides()
+        assert overrides.embedding is None and overrides.document_parser is None
+
+    def test_hash_stand_in_when_no_root_holds_them(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from benchmark.env import BenchEnv, default_embedding
+
+        self._roots(monkeypatch, tmp_path, weights=False)
+        assert default_embedding() == "hash"
+        env = BenchEnv.from_environ()
+        assert env.embedding == "hash" and BenchEnv().embedding == "hash"
+        overrides = env.overrides()
+        assert overrides.embedding == "hash" and overrides.embedding_dimension == 64
+        assert overrides.document_parser == "builtin"
+
+    def test_the_variable_wins_over_the_weights(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from benchmark.env import BenchEnv
+
+        self._roots(monkeypatch, tmp_path, weights=True)
+        monkeypatch.setenv("BENCH_EMBEDDING", "hash")
+        assert BenchEnv.from_environ().embedding == "hash"
+        self._roots(monkeypatch, tmp_path / "empty", weights=False)
+        monkeypatch.setenv("BENCH_EMBEDDING", "frozen")
+        assert BenchEnv.from_environ().embedding == "frozen"
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY_TEST_DATABASE_URL")
 def test_embedding_benchmark_stand_in_end_to_end(

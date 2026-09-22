@@ -1,6 +1,6 @@
 """Critical retrieval gates (M6 baseline): Recall@20 = 1.00 and Evidence-Group Recall = 1.00
 over the golden set, with a same-scope distractor document indexed. Writes the evidence file
-``benchmark/results/retrieval_gate.json`` consumed by ``memory_service.tools.release_gate``.
+``benchmark/results/retrieval_gate.json`` consumed by ``benchmark.release_gate``.
 
 Provenance matters: in the sandbox this runs with the deterministic hash embedding, which is
 NOT representative of Granite quality. The result file says so (``representative: false``);

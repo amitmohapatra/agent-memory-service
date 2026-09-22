@@ -43,7 +43,7 @@ setup: vendor ## Create .venv with uv and install all extras + dev tools
 	$(UV) sync --all-extras --dev
 	$(PY) pre-commit install || true
 
-setup-min: vendor ## Minimal install (core + dev, no models/docling/cognee)
+setup-min: vendor ## Minimal install (core + dev, no models/docling)
 	$(UV) venv .venv --python 3.12
 	$(UV) sync --dev
 
@@ -173,9 +173,12 @@ BENCH_LIMIT ?=
 #: Every containerised benchmark runs through this one block. It passes exactly what the
 #: harness reads and nothing else: the database this benchmark owns, the Qdrant server, the
 #: BENCH_* switches that benchmark/env.py (BenchEnv) turns into build_container overrides,
-#: and the commit for provenance. Retrieval depth, models and stand-ins are NOT here - the
-#: seven copies of this block that used to carry ~25 -e lines each are where the shipped
-#: service and the benchmarked service drifted apart (three tunings of one retriever).
+#: and the commit for provenance. The embedding is pinned to the frozen weights baked under
+#: /models: BenchEnv's weights-follow default (the hash stand-in when ./models is missing)
+#: is for a host checkout, never for the image. Retrieval depth, models and stand-ins are
+#: NOT here - the seven copies of this block that used to carry ~25 -e lines each are where
+#: the shipped service and the benchmarked service drifted apart (three tunings of one
+#: retriever).
 #:   $(1) database URL   $(2) extra -e flags   $(3) the command inside the image
 define bench-run
 	docker run --rm --user root \
@@ -185,7 +188,8 @@ define bench-run
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e GIT_COMMIT=$(shell git rev-parse HEAD) \
 	  -e MEMORY__DATABASE__URL="$(1)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e BENCH_EMBEDDING=frozen \
+	  -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  $(2) \
 	  --entrypoint sh memory-service-memory-api -c '$(3)'
 endef
@@ -321,7 +325,7 @@ gates: ## Produce every release-gate artifact under benchmark/results/
 	$(PY) python -m benchmark.retrieval
 	$(PY) python -m benchmark.memory
 
-examples: ## Run the SDK tour against a running server (./examples/run_server.sh)
+examples: ## Run the SDK tour against a running server (uv run python examples/serve.py)
 	$(PY) python examples/sdk_tour.py
 
 reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebuild)

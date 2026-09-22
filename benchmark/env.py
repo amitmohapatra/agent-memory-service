@@ -10,11 +10,11 @@ the product does not have. The Makefile passes exactly these variables and nothi
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from memory_service.application.container import Overrides
-from memory_service.config.constants import CONTEXT, RETRIEVAL
+from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL, local_model_path
 
 #: Retrieval depth of the judged LoCoMo / LongMemEval runs - the values every judged result
 #: on disk was produced with (Makefile -e flags, before they became constants here). The
@@ -43,6 +43,19 @@ def _flag(name: str, default: str) -> str:
     return (os.environ.get(name) or default).strip().lower()
 
 
+def default_embedding() -> Literal["frozen", "hash"]:
+    """``frozen`` when the dense weights are under a model root, ``hash`` otherwise.
+
+    The container path (Makefile ``bench-run``) always passes ``BENCH_EMBEDDING=frozen``: the
+    image bakes the weights under ``/models`` and a missing model there is a build error. A
+    host checkout may not have run ``make models``, and ``make gates`` on such a host must
+    still produce its artifacts - marked ``representative: false`` - rather than load the real
+    encoder or die trying. The stand-in is selected by the absence of the weights, never by a
+    quiet fallback inside the adapter: the adapter itself still refuses to run without them.
+    """
+    return "frozen" if local_model_path(FROZEN_MODELS.dense.local_dir) is not None else "hash"
+
+
 @dataclass(frozen=True)
 class BenchEnv:
     #: ``qdrant``: the real server at ``MEMORY__SEARCH__QDRANT_URL``. ``memory``: qdrant-client
@@ -56,8 +69,9 @@ class BenchEnv:
     #: ``shipped``: the frozen constants. ``judged``: the depth above.
     depth: Literal["shipped", "judged"] = "shipped"
     #: ``hash`` replaces the frozen encoder with the deterministic stand-in; every result
-    #: produced that way is labelled ``representative: false``.
-    embedding: Literal["frozen", "hash"] = "frozen"
+    #: produced that way is labelled ``representative: false``. The default follows the
+    #: weights (``default_embedding``): frozen when they are present, the stand-in when not.
+    embedding: Literal["frozen", "hash"] = field(default_factory=default_embedding)
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -65,7 +79,7 @@ class BenchEnv:
             "search": _flag("BENCH_SEARCH", cls.search),
             "graph_enrichment": _flag("BENCH_GRAPH_ENRICHMENT", cls.graph_enrichment),
             "depth": _flag("BENCH_DEPTH", cls.depth),
-            "embedding": _flag("BENCH_EMBEDDING", cls.embedding),
+            "embedding": _flag("BENCH_EMBEDDING", default_embedding()),
         }
         allowed = {
             "search": ("qdrant", "memory"),
@@ -86,6 +100,10 @@ class BenchEnv:
         (neither is what a benchmark measures), the lexical NLI (grounding is not scored by
         these harnesses and the DeBERTa head costs 700 MB per process), local-mode Qdrant
         unless ``BENCH_SEARCH=qdrant``, and the depth ``BENCH_DEPTH`` names.
+
+        Under the hash stand-in the document parser is the builtin one too: a host without
+        the weights has no docling artifacts either, and the artifacts such a run produces
+        are already non-representative.
         """
         base = Overrides(
             cache="memory",
@@ -96,6 +114,7 @@ class BenchEnv:
             search="memory" if self.search == "memory" else None,
             graph_enrichment="disabled" if self.graph_enrichment == "disabled" else None,
             embedding="hash" if self.embedding == "hash" else None,
+            document_parser="builtin" if self.embedding == "hash" else None,
             retrieval=JUDGED_RETRIEVAL if self.depth == "judged" else None,
             context=JUDGED_CONTEXT if self.depth == "judged" else None,
         )

@@ -99,7 +99,7 @@ make migrate        # the same schemas
 
 The service reads its weights from local directories and never downloads at run time, so a
 missing model is a startup error rather than a silent fall back to something weaker. (The test
-suite and `examples/run_server.sh` do have a deterministic stand-in, which is why they run
+suite and `examples/serve.py` do have a deterministic stand-in, which is why they run
 without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
@@ -161,10 +161,11 @@ is a code change, reviewed like one, never an env edit. Changing the embedding c
 vector space, so **re-index after a swap** (`make reindex`); the model, backend, ONNX graph and
 dimension are part of the collection name, so old and new vectors can never silently mix.
 
-**Where the stand-in applies.** The test suite and `examples/run_server.sh` fall back to a
-deterministic hash embedding when `models/` is absent, so they exercise the plumbing without a
-download. `run_server.sh` prints which mode it is in, and any benchmark produced that way is
-labelled `representative: false`. Never read a retrieval number that carries that flag.
+**Where the stand-in applies.** The test suite, `examples/serve.py` and a host-side `make gates`
+fall back to a deterministic hash embedding when `models/` is absent, so they exercise the
+plumbing without a download. The stand-in is an `Overrides` field on the container, never a
+setting; `serve.py` prints which mode it is in, and any benchmark produced that way is labelled
+`representative: false`. Never read a retrieval number that carries that flag.
 
 ---
 
