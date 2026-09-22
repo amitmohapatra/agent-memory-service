@@ -60,13 +60,11 @@ cognee = ["cognee>=1.5"]
 graphiti = ["graphiti-core>=0.30"]
 # Evaluation frameworks
 eval = ["deepeval>=4.2", "ragas>=0.4", "datasets>=3", "nltk>=3.9"]
-# Vectorless tree retrieval (benchmark-gated)
-pageindex = ["pageindex>=0.2"]
 # Load testing
 load = ["locust>=2.46"]
 # Everything except dev tooling
 all = [
-  "memory-service[gcp,docling,models,memory-providers,cognee,graphiti,eval,pageindex,load]",
+  "memory-service[gcp,docling,models,memory-providers,cognee,graphiti,eval,load]",
 ]
 
 [dependency-groups]

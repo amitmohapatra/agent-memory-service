@@ -314,23 +314,3 @@ class DocumentParser(Protocol):
         media_type: str,
         data: bytes,
     ) -> ParsedDocument: ...
-
-
-# --------------------------------------------------------------------------
-# Policy
-# --------------------------------------------------------------------------
-
-
-class PolicyDecision(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    allowed: bool
-    reason: str = ""
-    obligations: dict[str, Any] = Field(default_factory=dict)
-
-
-@runtime_checkable
-class PolicyProvider(Protocol):
-    """OPA optional. Answers 'is this operation permitted under policy?'."""
-
-    async def evaluate(self, policy: str, input_data: dict[str, Any]) -> PolicyDecision: ...

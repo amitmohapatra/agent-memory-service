@@ -11,7 +11,6 @@ from memory_service.application.container import Container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ValidationFailed
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
-from memory_service.modules.authz.service import AuthorizationService
 from memory_service.observability.logging import bind_log_context
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -158,7 +157,3 @@ async def get_header_context(
 
 
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
-
-
-def get_authz(container: ContainerDep) -> AuthorizationService:
-    return container.services["authz"]

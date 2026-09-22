@@ -1,8 +1,7 @@
-"""Benchmark-gated model adapters (M10): learned sparse (SPLADE / miniCOIL / BM42 via
-fastembed), late interaction (ColBERT via fastembed) and late chunking (long-context
-sentence-transformers). Each declares its license/origin, loads only from local files when a
-``model_path`` is given, and fails with ``DependencyUnavailable`` (never a silent fallback)
-when the weights are absent — the benchmark harness records that as *skipped*.
+"""Benchmark-gated learned-sparse encoder (SPLADE / miniCOIL / BM42 via fastembed). It
+declares its license/origin, loads only from local files when a ``model_path`` is given, and
+fails with ``DependencyUnavailable`` (never a silent fallback) when the weights are absent —
+the benchmark harness records that as *skipped*.
 """
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ _SPARSE_LICENSES = {
     "prithivida/Splade_PP_en_v1": "Apache-2.0",
     "Qdrant/bm42-all-minilm-l6-v2-attentions": "Apache-2.0",
 }
-_LATE_LICENSES = {}
 
 
 def _flat_model_dir(model_path: str) -> str:

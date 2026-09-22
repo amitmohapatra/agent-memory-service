@@ -522,7 +522,7 @@ same client the agent harness uses, so neither service can learn a lesson the ot
 
 Available uses: `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,
-`chunk_context`, `tool_reflection`, `grounding_judge`.
+`chunk_context`, `grounding_judge`.
 
 Each one is consulted **only** when the deterministic path signals genuine ambiguity, and any
 failure — gateway down, bad output, timeout — falls back to the deterministic result. Turning

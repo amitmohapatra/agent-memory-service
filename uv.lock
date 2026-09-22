@@ -3827,7 +3827,6 @@ all = [
     { name = "nltk" },
     { name = "onnxruntime" },
     { name = "optimum" },
-    { name = "pageindex" },
     { name = "ragas" },
     { name = "sentence-transformers" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
@@ -3872,9 +3871,6 @@ models = [
     { name = "torchvision", version = "0.29.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torchvision", version = "0.29.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
 ]
-pageindex = [
-    { name = "pageindex" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -3913,7 +3909,7 @@ requires-dist = [
     { name = "langmem", marker = "extra == 'memory-providers'", specifier = ">=0.0.30" },
     { name = "locust", marker = "extra == 'load'", specifier = ">=2.46" },
     { name = "mem0ai", marker = "extra == 'memory-providers'", specifier = ">=2.0" },
-    { name = "memory-service", extras = ["gcp", "docling", "models", "memory-providers", "cognee", "graphiti", "eval", "pageindex", "load"], marker = "extra == 'all'" },
+    { name = "memory-service", extras = ["gcp", "docling", "models", "memory-providers", "cognee", "graphiti", "eval", "load"], marker = "extra == 'all'" },
     { name = "nltk", marker = "extra == 'eval'", specifier = ">=3.9" },
     { name = "onnxruntime", marker = "extra == 'models'", specifier = ">=1.30" },
     { name = "openfga-sdk", specifier = ">=0.10,<1" },
@@ -3924,7 +3920,6 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.44" },
     { name = "optimum", marker = "extra == 'models'", specifier = ">=2.3" },
     { name = "orjson", specifier = ">=3.12" },
-    { name = "pageindex", marker = "extra == 'pageindex'", specifier = ">=0.2" },
     { name = "procrastinate", extras = ["psycopg"], specifier = ">=3.9,<4" },
     { name = "prometheus-client", specifier = ">=0.26" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3,<4" },
@@ -3948,7 +3943,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.53" },
     { name = "zstandard", specifier = ">=0.25" },
 ]
-provides-extras = ["gcp", "docling", "models", "memory-providers", "cognee", "graphiti", "eval", "pageindex", "load", "all"]
+provides-extras = ["gcp", "docling", "models", "memory-providers", "cognee", "graphiti", "eval", "load", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -4990,19 +4985,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
-]
-
-[[package]]
-name = "pageindex"
-version = "0.2.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "openai" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/33/cc/27fb5f21b9ea91ed4b74a4d31190271b820955e71a323f260e138f50ef83/pageindex-0.2.8.tar.gz", hash = "sha256:b5baeed581a974cc8348b96527916e9021d48513c2310bb9b3f66a8b677e610c", size = 4986, upload-time = "2026-03-15T20:13:01.554Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/6e/e4ca8bd2453d19aae7d134f5ea37abe3c2f625dd1a5164fcca520d36da5a/pageindex-0.2.8-py3-none-any.whl", hash = "sha256:723321734061990420a338f223abe651502ff082c228d112f9d9bc39e8deaed0", size = 5977, upload-time = "2026-03-15T20:13:00.517Z" },
 ]
 
 [[package]]
