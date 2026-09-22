@@ -33,6 +33,7 @@ import time
 from sqlalchemy import text
 
 from benchmark.common import provenance, reset_store, write_result
+from benchmark.env import bench_overrides
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -149,7 +150,7 @@ def _status(bundle: object) -> str:
 
 async def run() -> dict:
     settings = _settings()
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     try:
         await reset_store(container, TENANT)
         register_handlers(container)

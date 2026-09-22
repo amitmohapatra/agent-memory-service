@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
+from benchmark.env import bench_overrides
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -457,7 +458,7 @@ async def run(
         settings = settings.model_copy(
             update={"retrieval": settings.retrieval.model_copy(update=ablate)}
         )
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     llm = container.llm if judge else None
     pacer = _Pacer(calls_per_minute)
     if judge and not getattr(llm, "enabled", False):

@@ -115,7 +115,7 @@ PostgreSQL, a per-tenant rate limit with a shared counter that fails open, and t
 ```bash
 make validate            # lint, types, every suite, all gate artifacts, then the evaluator
 make gates               # only the artifacts under benchmark/results/
-uv run python -m memory_service.tools.release_gate
+uv run python -m benchmark.release_gate
 ```
 
 With real weights in `models/` and the compose stack up (`make dev-up`), set the

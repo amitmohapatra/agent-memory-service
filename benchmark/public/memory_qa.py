@@ -21,6 +21,7 @@ from typing import Any, get_args
 
 from sqlalchemy import text
 
+from benchmark.env import bench_overrides
 from benchmark.public.data import Conversation, MemoryDataset, Question
 from benchmark.public.judge import anscheck_prompt, generate_answer, judge_once
 from benchmark.public.metrics import grouped_judge_summary, locomo_score, stemmer_name
@@ -176,7 +177,7 @@ async def run_config(
     if not settings.models.llm.enabled:
         return {"skipped": LLM_DISABLED, "config": config}
     try:
-        container = await build_container(settings, __version__)
+        container = await build_container(settings, __version__, overrides=bench_overrides())
     except (DependencyUnavailable, NotImplementedError, ProviderNotConfigured, ImportError) as exc:
         return {"skipped": f"{type(exc).__name__}: {exc}", "config": config}
     costs: dict[str, Any] = {}

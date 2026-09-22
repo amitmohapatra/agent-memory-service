@@ -12,15 +12,12 @@ name: memory-service
 # duplicated line in .env is a value that looks set and is not.
 x-common-env: &common-env
   MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
-  MEMORY__CACHE__PROVIDER: dragonfly
   MEMORY__CACHE__URL: redis://dragonfly:6379/0
-  MEMORY__SEARCH__PROVIDER: qdrant
   MEMORY__SEARCH__QDRANT_URL: http://qdrant:6333
   MEMORY__AUTHORIZATION__PROVIDER: openfga
   MEMORY__AUTHORIZATION__OPENFGA_API_URL: http://openfga:8080
   MEMORY__BLOB__PROVIDER: filesystem
   MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
-  MEMORY__TASKS__PROVIDER: procrastinate
   MEMORY__MODELS__EMBEDDING__MODEL: ibm-granite/granite-embedding-small-english-r2
   MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
   MEMORY__MODELS__EMBEDDING__DIMENSION: "384"
@@ -253,7 +250,6 @@ services:
       <<: *common-env
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
       MEMORY__SERVICE__LOG_LEVEL: WARNING
-      MEMORY_MODELS_DIR: /models
       MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
       MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
       MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli

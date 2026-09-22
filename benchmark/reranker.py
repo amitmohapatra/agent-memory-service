@@ -36,6 +36,8 @@ from benchmark.embedding import (
     stand_in_base,
     with_models,
 )
+from benchmark.env import bench_overrides
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.retrieval import GOLDEN, TABLES, _pct
 from memory_service.__about__ import __version__
 from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
@@ -43,7 +45,6 @@ from memory_service.application.container import build_container
 from memory_service.config.settings import RerankerSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import DependencyUnavailable
-from memory_service.modules.evaluation.golden import GoldenSet
 from memory_service.ports.models import ProviderInfo, Reranker, RerankResult
 
 MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
@@ -119,7 +120,7 @@ def _timing(ms: list[float]) -> dict[str, Any]:
 async def run(*, copies: int, stand_in: bool = False) -> dict[str, Any]:
     settings = stand_in_base(bench_settings()) if stand_in else bench_settings()
     settings = with_models(settings, reranker=RerankerSettings(provider="disabled"))
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     engine = container.services["retrieval"]
     original = (engine.reranker, engine.rerank_k)
     try:

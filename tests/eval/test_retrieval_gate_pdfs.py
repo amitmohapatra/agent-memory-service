@@ -10,14 +10,15 @@ from pathlib import Path
 
 import pytest
 from benchmark.common import RESULTS, provenance
-
-from memory_service.domain.context import MemoryExecutionContext
-from memory_service.modules.evaluation.golden import (
+from benchmark.evaluation import CRITICAL_RECALL_K
+from benchmark.evaluation.golden import (
     GoldenSet,
     RetrievedChunk,
     evaluate_question,
     summarize,
 )
+
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.jobs.registry import register_handlers
 
 pytestmark = [pytest.mark.eval, pytest.mark.models]
@@ -54,7 +55,7 @@ async def test_pdf_critical_recall_and_evidence_group_gates(container, uow_facto
             doc = await uow.documents.get(CTX.tenant_id, document_id)
             assert doc is not None and doc.status.value == "READY", (alias, doc)
     engine = container.services["retrieval"]
-    k = container.settings.evaluation.critical_recall_k
+    k = CRITICAL_RECALL_K
     results = []
     evidence_status: dict[str, str] = {}
     for q in golden.questions:

@@ -92,7 +92,7 @@ model-test: ## Local-model contract tests against real weights, inside the runti
 	@# which already carries the runtime. ./models is mounted read-only.
 	docker run --rm --user root \
 	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  -e MEMORY_MODELS_DIR=/models -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  --entrypoint sh memory-service-memory-api -c '\
 	    uv pip install -q pytest pytest-asyncio anyio && cd /app && \
 	    /opt/venv/bin/python -m pytest $(MODEL_TESTS) -q -p no:randomly -p no:cacheprovider'
@@ -141,7 +141,7 @@ PG_CONTAINER ?= memory-service-postgres-1
 
 #: Benchmarks run against the *real* Qdrant, not the in-process one.
 #:
-#: `search=memory` puts qdrant-client in local mode, and local mode is an exact brute-force
+#: `BENCH_SEARCH=memory` puts qdrant-client in local mode, and local mode is an exact brute-force
 #: scan with no HNSW index. That is fine for a fixture-sized corpus and quietly invalidates
 #: anything larger: every de-duplication lookup during indexing scans the whole collection,
 #: so ingest becomes O(n²) and queries O(n). Measured on BeIR/SciFact — the first 250
@@ -196,8 +196,7 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -228,8 +227,7 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -261,8 +259,7 @@ bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -298,8 +295,7 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -336,8 +332,7 @@ bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sectio
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_GOLDEN)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
@@ -358,8 +353,7 @@ bench-concurrency: ## How much parallelism the model tier wants, and what it cos
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=memory -e MEMORY__BLOB__PROVIDER=memory \
+	  -e BENCH_SEARCH=memory -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
@@ -379,8 +373,7 @@ bench-degenerate: bench-db ## Behaviour on empty/garbage/hostile input, real mod
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DEGEN)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -401,8 +394,7 @@ bench-external: bench-db ## Retrieval quality on an external corpus, with the re
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
-	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
-	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
 	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
@@ -421,7 +413,7 @@ bench-model-throughput: ## Per-model items/sec for capacity planning (run this O
 	@# hardware you intend to deploy, then divide the target RPS by the measured rate.
 	docker run --rm --user root \
 	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv -e MEMORY_MODELS_DIR=/models \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.model_throughput --threads $(THREADS)'
 
@@ -483,7 +475,7 @@ validate: ## Full release gate: lint, types, every suite, gate artifacts, then t
 	$(MAKE) lint
 	$(MAKE) typecheck
 	$(MAKE) gates
-	$(PY) python -m memory_service.tools.release_gate
+	$(PY) python -m benchmark.release_gate
 
 clean:
 	rm -rf .venv .pytest_cache .ruff_cache .mypy_cache dist build .blob

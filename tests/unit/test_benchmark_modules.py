@@ -120,7 +120,7 @@ class TestCandidates:
         }
 
     def test_sample_documents_cycles_to_batch_size(self) -> None:
-        from memory_service.modules.evaluation.golden import GoldenSet
+        from benchmark.evaluation.golden import GoldenSet
 
         docs = embedding.sample_documents(GoldenSet.load(embedding.GOLDEN))
         assert len(docs) == embedding.BATCH_DOCUMENTS
@@ -140,11 +140,11 @@ class TestCandidates:
         from memory_service.config.settings import Settings
 
         base = Settings(
-            search={"provider": "qdrant", "qdrant_url": "http://q:6333"},
+            search={"qdrant_url": "http://q:6333"},
             models={"embedding": {"provider": "onnx", "dimension": 768}},
         )
         stand_in = embedding.stand_in_base(base)
-        assert stand_in.search.provider == "qdrant"
+        assert stand_in.search.qdrant_url == "http://q:6333"
         assert stand_in.models.embedding.provider == "hash"
         assert stand_in.models.embedding.dimension == 64
         assert stand_in.models.reranker.provider == "lexical"
@@ -155,8 +155,9 @@ class TestCandidates:
 def test_embedding_benchmark_stand_in_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for section in ("SEARCH", "CACHE", "AUTHORIZATION", "TASKS", "BLOB"):
+    for section in ("AUTHORIZATION", "BLOB"):
         monkeypatch.setenv(f"MEMORY__{section}__PROVIDER", "memory")
+    monkeypatch.setenv("BENCH_SEARCH", "memory")
     out = tmp_path / "embedding.json"
     embedding.main(["--quick", "--stand-in", "--copies", "1", "--batches", "1", "--out", str(out)])
 

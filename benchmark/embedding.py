@@ -30,18 +30,20 @@ from typing import Any
 
 from benchmark.advanced import _corpus
 from benchmark.common import provenance, reset_store, write_result
+from benchmark.env import BENCH, bench_overrides
+from benchmark.evaluation import CRITICAL_RECALL_K
+from benchmark.evaluation.golden import (
+    GoldenSet,
+    RetrievedChunk,
+    evaluate_question,
+    summarize,
+)
 from benchmark.retrieval import FIXTURES, GOLDEN, _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.adapters.models.embeddings import HashEmbedding, SentenceTransformersEmbedding
 from memory_service.application.container import build_container
 from memory_service.config.settings import EmbeddingSettings, RerankerSettings, Settings
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.modules.evaluation.golden import (
-    GoldenSet,
-    RetrievedChunk,
-    evaluate_question,
-    summarize,
-)
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 from memory_service.ports.search import SearchFilter
 
@@ -99,11 +101,9 @@ def with_models(
 
 
 def bench_settings() -> Settings:
-    """``benchmark.retrieval._settings()`` (environment providers apply) with the in-process
-    task queue: the corpus is drained synchronously, which only that provider supports."""
-    data = _settings().model_dump()
-    data["tasks"] = {**data["tasks"], "provider": "memory"}
-    return Settings(**data)
+    """``benchmark.retrieval._settings()``: environment providers apply. The in-process task
+    queue the corpus is drained through comes from ``bench_overrides()``."""
+    return _settings()
 
 
 def stand_in_base(base: Settings) -> Settings:
@@ -117,13 +117,13 @@ def stand_in_base(base: Settings) -> Settings:
 
 async def reset_index(container: Any) -> None:
     """Server-side Qdrant collections and a shared cache outlive the PostgreSQL truncate."""
-    search_cfg = container.settings.search
-    if search_cfg.provider == "qdrant" and search_cfg.qdrant_local_path is None:
+    stand_ins = container.overrides
+    if stand_ins.search is None and stand_ins.qdrant_local_path is None:
         indexer = container.services["indexer"]
         for base in (KNOWLEDGE, MEMORIES):
             await container.search.drop_collection(indexer.collection(base))
         await indexer.ensure_collections()
-    if container.cache is not None and container.settings.cache.provider != "memory":
+    if container.cache is not None and stand_ins.cache is None:
         keys = [key async for key in container.cache.scan("*")]
         if keys:
             await container.cache.delete(*keys)
@@ -248,7 +248,7 @@ async def run_candidate(
     del model
 
     settings = with_models(base, embedding=cfg)
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     try:
         # both stores: the vector store is a separate server and a SQL TRUNCATE
         # leaves its vectors behind for the next run to retrieve
@@ -262,7 +262,7 @@ async def run_candidate(
         points = await container.search.count(
             indexer.collection(KNOWLEDGE), SearchFilter(tenant_id="acme")
         )
-        k = settings.evaluation.critical_recall_k
+        k = CRITICAL_RECALL_K
         quality, recall_ms = await golden_quality(
             container.services["retrieval"], golden, aliases, ctx, k=k
         )
@@ -305,7 +305,7 @@ async def run(
         "verdict": pick_default(rows, embedding_cost),
         "providers": {
             "reranker": base.models.reranker.provider,
-            "search": base.search.provider,
+            "search": BENCH.search,
             "representative": bool(ran) and all(row["representative"] for row in ran),
         },
         "note": (

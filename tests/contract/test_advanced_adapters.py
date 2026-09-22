@@ -31,7 +31,7 @@ def test_a_missing_sparse_model_fails_loudly(tmp_path: Path) -> None:
         FastEmbedSparseEncoder("prithivida/Splade_PP_en_v1", model_path=str(tmp_path / "none"))
 
 
-async def test_wiring_refuses_splade_without_weights(make_settings) -> None:
+async def test_wiring_refuses_splade_without_weights(make_settings, overrides) -> None:
     """A deployment that turns splade on without the weights must not start degraded."""
     from memory_service.__about__ import __version__
     from memory_service.application.container import build_container
@@ -40,4 +40,4 @@ async def test_wiring_refuses_splade_without_weights(make_settings) -> None:
         retrieval={"splade": True}, models={"sparse_model_path": "/nonexistent"}
     )
     with pytest.raises(DependencyUnavailable):
-        await build_container(settings, __version__)
+        await build_container(settings, __version__, overrides=overrides)

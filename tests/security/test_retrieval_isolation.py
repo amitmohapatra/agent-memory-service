@@ -96,7 +96,7 @@ class _NoUoW:
 
 @pytest.fixture(scope="module")
 async def engine_and_ids() -> tuple[RetrievalEngine, dict[str, dict[str, Any]]]:
-    store = QdrantSearchStore(SearchSettings(provider="memory", qdrant_local_path=":memory:"))
+    store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = HashEmbedding(dimension=32)
     sparse = Bm25SparseEncoder()
     indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]

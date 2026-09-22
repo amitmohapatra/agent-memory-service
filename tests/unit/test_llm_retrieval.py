@@ -59,7 +59,7 @@ class _NoUoW:
 
 @pytest.fixture
 async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchStore]:
-    store = QdrantSearchStore(SearchSettings(provider="memory", qdrant_local_path=":memory:"))
+    store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = _SpyEmbedding()
     sparse = Bm25SparseEncoder()
     indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]

@@ -10,7 +10,7 @@ OpenAPI schema. A test asserts those two lists agree, so they cannot drift.
 
 Each factory returns ``None`` when its dependency is absent, which is how a parser reports
 "I cannot run here" without the caller knowing why. The caller decides what to do about it:
-fall back if ``fallback_parser`` says so, and say so in ``/version.degraded`` either way.
+fall back to the builtin, and say so in ``/version.degraded``.
 """
 
 from __future__ import annotations

@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from memory_service.config.settings import Settings
+from benchmark.evaluation import BUDGETS, CRITICAL_RECALL_K, FALSE_MERGE_RATE_MAX
 
 RESULTS = Path("benchmark/results")
 
@@ -92,13 +92,12 @@ def _check_budgets(perf: dict[str, Any], budgets: dict[str, float], label: str) 
     return failures
 
 
-def evaluate(settings: Settings | None = None) -> tuple[bool, list[str]]:
-    ok, failures, _ = evaluate_with_notes(settings)
+def evaluate() -> tuple[bool, list[str]]:
+    ok, failures, _ = evaluate_with_notes()
     return ok, failures
 
 
-def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[str], list[str]]:
-    settings = settings or Settings()
+def evaluate_with_notes() -> tuple[bool, list[str], list[str]]:
     failures: list[str] = []
 
     durability = _load("durability.json")
@@ -134,7 +133,7 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
     if retrieval is None:
         failures.append("retrieval_gate.json missing (critical recall gates have no evidence)")
     else:
-        k = settings.evaluation.critical_recall_k
+        k = CRITICAL_RECALL_K
         if retrieval.get("critical_recall_at_k", 0.0) < 1.0 or retrieval.get("k") != k:
             failures.append(
                 f"critical Recall@{k} = {retrieval.get('critical_recall_at_k')} at k={retrieval.get('k')} (must be 1.00 at k={k})"
@@ -147,9 +146,9 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
     memory = _load("memory_gate.json")
     if memory is None:
         failures.append("memory_gate.json missing (false-merge gate has no evidence)")
-    elif memory.get("false_merge_rate", 1.0) > settings.memory_intelligence.false_merge_rate_max:
+    elif memory.get("false_merge_rate", 1.0) > FALSE_MERGE_RATE_MAX:
         failures.append(
-            f"false merge rate {memory.get('false_merge_rate')} > {settings.memory_intelligence.false_merge_rate_max}"
+            f"false merge rate {memory.get('false_merge_rate')} > {FALSE_MERGE_RATE_MAX}"
         )
 
     kg = _load("kg_gate.json")
@@ -167,11 +166,11 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
             failures.append(f"KG query hit rate = {kg.get('query_hit_rate')} (must be 1.00)")
 
     budgets = {
-        "chat_accept_p95_ms": settings.budgets.chat_accept_p95_ms,
-        "cached_context_p95_ms": settings.budgets.cached_context_p95_ms,
-        "recall_p95_ms": settings.budgets.recall_p95_ms,
-        "context_bundle_p95_ms": settings.budgets.context_bundle_p95_ms,
-        "file_accept_p95_ms": settings.budgets.file_accept_p95_ms,
+        "chat_accept_p95_ms": BUDGETS.chat_accept_p95_ms,
+        "cached_context_p95_ms": BUDGETS.cached_context_p95_ms,
+        "recall_p95_ms": BUDGETS.recall_p95_ms,
+        "context_bundle_p95_ms": BUDGETS.context_bundle_p95_ms,
+        "file_accept_p95_ms": BUDGETS.file_accept_p95_ms,
     }
     perf = _load("performance.json")
     if perf is None:

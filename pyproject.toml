@@ -29,7 +29,6 @@ dependencies = [
   "zstandard>=0.25",
   "orjson>=3.12",
   "structlog>=25.2",
-  "pyyaml>=6",
   "httpx>=0.28",
   # The gateway client, shared with the agent harness so its retry and rate-limit
   # handling has one implementation rather than two that drift.

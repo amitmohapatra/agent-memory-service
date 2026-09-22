@@ -447,7 +447,7 @@ convenience, not a requirement.
 
 ## Configuration
 
-Everything is environment variables (or `config/memory.yaml`); copy `.env.example` to `.env`.
+Everything is environment variables; copy `.env.example` to `.env`.
 The ones that actually matter:
 
 ```bash

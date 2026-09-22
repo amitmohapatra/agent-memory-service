@@ -29,6 +29,8 @@ import httpx
 from sqlalchemy import text
 
 from benchmark.common import provenance, write_result
+from benchmark.env import BENCH, bench_overrides
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.harness import (
     FIXTURE_REPORT,
     H,
@@ -43,7 +45,6 @@ from benchmark.retrieval import GOLDEN, TABLES, _settings
 from memory_service.__about__ import __version__
 from memory_service.api.app import create_app
 from memory_service.application.container import build_container
-from memory_service.modules.evaluation.golden import GoldenSet
 from memory_service.modules.jobs.registry import register_handlers
 
 __all__ = ["H", "main", "run"]
@@ -51,7 +52,7 @@ __all__ = ["H", "main", "run"]
 
 async def run(copies: int, requests: int) -> dict[str, Any]:
     settings = _settings()
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     register_handlers(container)
     app = create_app(settings, container=container)
     golden = GoldenSet.load(GOLDEN)
@@ -93,12 +94,12 @@ async def run(copies: int, requests: int) -> dict[str, Any]:
                 "providers": {
                     "embedding": container.embedding.fingerprint(),
                     "reranker": type(container.reranker).__name__ if container.reranker else None,
-                    "search": settings.search.provider,
-                    "cache": settings.cache.provider,
+                    "search": BENCH.search,
+                    "cache": "memory",
                     "blob": settings.blob.provider,
-                    "tasks": settings.tasks.provider,
+                    "tasks": "memory",
                     "representative": not container.embedding.fingerprint().startswith("hash-")
-                    and settings.search.provider != "memory",
+                    and BENCH.search != "memory",
                 },
             }
         )

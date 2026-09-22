@@ -13,7 +13,7 @@ from memory_service.api.errors import install_error_handlers
 from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddleware
 from memory_service.api.openapi import custom_openapi
 from memory_service.api.routers import ops
-from memory_service.application.container import Container, build_container
+from memory_service.application.container import Container, Overrides, build_container
 from memory_service.config.settings import Settings, get_settings
 from memory_service.observability.logging import configure_logging, get_logger
 from memory_service.observability.tracing import configure_tracing
@@ -21,14 +21,22 @@ from memory_service.observability.tracing import configure_tracing
 log = get_logger(__name__)
 
 
-def create_app(settings: Settings | None = None, *, container: Container | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    container: Container | None = None,
+    overrides: Overrides | None = None,
+) -> FastAPI:
+    """``overrides`` swaps backing stores for in-process stand-ins (tests and benchmarks)."""
     settings = settings or get_settings()
     configure_logging(settings.service.log_level, settings.service.log_json)
     configure_tracing(settings.observability, settings.service.name, __version__)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        app.state.container = container or await build_container(settings, __version__)
+        app.state.container = container or await build_container(
+            settings, __version__, overrides=overrides
+        )
         log.info("app.started", version=__version__, environment=settings.service.environment)
         try:
             yield

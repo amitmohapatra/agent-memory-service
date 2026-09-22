@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import text
 
+from benchmark.env import bench_overrides
 from benchmark.public.data import BeirDataset
 from benchmark.public.metrics import doc_ranking, evaluate_run
 from benchmark.retrieval import TABLES, _pct, _settings
@@ -82,7 +83,7 @@ async def run_strategy(
 ) -> dict[str, Any]:
     settings = strategy_settings(_settings(), flags)
     try:
-        container = await build_container(settings, __version__)
+        container = await build_container(settings, __version__, overrides=bench_overrides())
     except (DependencyUnavailable, NotImplementedError) as exc:
         return {"skipped": f"{type(exc).__name__}: {exc}", "flags": flags}
     try:

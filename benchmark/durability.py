@@ -30,6 +30,7 @@ import httpx
 from sqlalchemy import text
 
 from benchmark.common import provenance, write_result
+from benchmark.env import bench_overrides
 from benchmark.harness import (
     FACTS,
     FIXTURE_REPORT,
@@ -130,7 +131,7 @@ async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, A
     data = settings.model_dump()
     data["blob"] = {"provider": "filesystem", "filesystem_root": str(root)}
     settings = type(settings)(**data)
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     register_handlers(container)
     chaos = Chaos(container)
     app = create_app(settings, container=container)

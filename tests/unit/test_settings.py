@@ -8,7 +8,7 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
     s = Settings(_env_file=None)
     assert s.models.llm.enabled is False
     assert s.models.embedding.model == "ibm-granite/granite-embedding-small-english-r2"
-    assert s.retrieval.bm25 and s.retrieval.dense and s.retrieval.fusion == "rrf"
+    assert s.retrieval.bm25 and s.retrieval.dense
     # `splade` is the one remaining benchmark-gated retrieval experiment. The other seven
     # (colbert, pageindex, raptor, graph_ppr, late_chunking, minicoil, graphrag_global) were
     # removed rather than left off: each named a capability something already-on provides,
@@ -20,25 +20,25 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MEMORY__CACHE__PROVIDER", "valkey")
+    monkeypatch.setenv("MEMORY__DATABASE__POOL_SIZE", "3")
     monkeypatch.setenv("MEMORY__RETRIEVAL__RRF_K", "42")
     s = Settings(_env_file=None)
-    assert s.cache.provider == "valkey"
+    assert s.database.pool_size == 3
     assert s.retrieval.rrf_k == 42
 
 
-def test_yaml_file_source(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # _env_file=None isolates the test from a developer's .env, which legitimately outranks
-    # the YAML source and would otherwise decide the assertions below.
-    cfg = tmp_path / "memory.yaml"
-    cfg.write_text("search:\n  provider: memory\nmodels:\n  llm:\n    enabled: false\n")
-    monkeypatch.setenv("MEMORY_CONFIG_FILE", str(cfg))
-    monkeypatch.delenv("MEMORY__SEARCH__PROVIDER", raising=False)
-    s = Settings(_env_file=None)
-    assert s.search.provider == "memory"
-    # env still wins over yaml
-    monkeypatch.setenv("MEMORY__SEARCH__PROVIDER", "qdrant")
-    assert Settings(_env_file=None).search.provider == "qdrant"
+def test_the_test_stand_ins_are_not_settings() -> None:
+    """A deployment cannot be pointed at an in-memory queue or a dict cache by an env file.
+
+    ``cache.provider=memory``, ``search.provider=memory`` and ``tasks.provider=inline`` were
+    settings, so the suite's stand-ins were part of the operator surface. They are
+    ``build_container(overrides=...)`` now, reachable from code only.
+    """
+    from memory_service.config.settings import CacheSettings, SearchSettings, TaskSettings
+
+    for section in (CacheSettings, SearchSettings, TaskSettings):
+        assert "provider" not in section.model_fields, section.__name__
+    assert "qdrant_local_path" not in SearchSettings.model_fields
 
 
 def test_prod_guards_reject_dev_only_providers() -> None:

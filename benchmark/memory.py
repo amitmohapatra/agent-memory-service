@@ -22,12 +22,14 @@ from typing import Any
 from sqlalchemy import text
 
 from benchmark.common import provenance, reset_store, write_result
+from benchmark.env import bench_overrides
+from benchmark.evaluation import BUDGETS
+from benchmark.evaluation.memory_pairs import evaluate_pairs, load_pairs
 from benchmark.retrieval import _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
-from memory_service.modules.evaluation.memory_pairs import evaluate_pairs, load_pairs
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 
@@ -81,7 +83,7 @@ async def _provider_quality(settings) -> dict[str, Any]:
 async def run(n_observations: int) -> dict[str, Any]:
     settings = _settings()
     quality = await _provider_quality(settings)
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     try:
         # both stores: the vector store is a separate server and a SQL TRUNCATE
         # leaves its vectors behind for the next run to retrieve
@@ -134,8 +136,8 @@ async def run(n_observations: int) -> dict[str, Any]:
                 "memories_rows": rows,
                 "memories_current": current,
             },
-            "budgets_ms": {"chat_accept_p95": settings.budgets.chat_accept_p95_ms},
-            "provider": settings.memory_intelligence.provider,
+            "budgets_ms": {"chat_accept_p95": BUDGETS.chat_accept_p95_ms},
+            "provider": "native",
             "llm_enabled": settings.models.llm.enabled,
             "provenance": provenance(),
         }

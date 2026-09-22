@@ -15,7 +15,7 @@ HEADERS = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme"}
 def test_version_reports_the_parser_that_is_actually_running(make_settings) -> None:
     """``documents.parser`` defaults to docling, which is absent in an image built without
     the extra — the builtin does the work and the endpoint used to report "docling" anyway."""
-    settings = make_settings(documents={"parser": "docling", "fallback_parser": "builtin"})
+    settings = make_settings(documents={"parser": "docling"})
     with TestClient(create_app(settings), raise_server_exceptions=False) as client:
         body = client.get("/version", headers=HEADERS).json()
 

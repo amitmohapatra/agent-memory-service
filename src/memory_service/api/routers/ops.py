@@ -115,10 +115,14 @@ async def version(request: Request) -> VersionResponse:
         api_version=s.service.api_version,
         environment=s.service.environment,
         providers={
-            "cache": s.cache.provider,
-            "search": s.search.provider,
+            # what is *running*: the stand-ins a test or benchmark asked for through
+            # build_container(overrides=...) are not settings, so they can only be read here
+            "cache": _active(c.cache, "redis-protocol"),
+            "search": "qdrant-local"
+            if c.overrides.search or c.overrides.qdrant_local_path
+            else "qdrant",
             "blob": s.blob.provider,
-            "tasks": s.tasks.provider,
+            "tasks": _active(c.tasks, "procrastinate"),
             "authorization": s.authorization.provider,
             "embedding": _active(c.embedding, f"{s.models.embedding.provider}"),
             "reranker": _active(c.reranker, s.models.reranker.provider),

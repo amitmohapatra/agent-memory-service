@@ -16,10 +16,10 @@ from typing import Any
 
 import httpx
 
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.retrieval import FIXTURES, _pct
 from memory_service.config.settings import Settings
 from memory_service.domain.ids import new_id
-from memory_service.modules.evaluation.golden import GoldenSet
 
 H = {"X-API-Key": "bench", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
 FACTS = [

@@ -33,6 +33,7 @@ import sys
 import time
 
 from benchmark.common import provenance, write_result
+from benchmark.env import bench_overrides
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -126,7 +127,7 @@ async def _measure(container, workers: int, rounds: int) -> dict:
 
 async def run(workers: list[int], rounds: int) -> dict:
     settings = _settings()
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     try:
         import torch
 

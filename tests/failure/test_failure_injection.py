@@ -35,7 +35,12 @@ from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.ports.tasks import Queue
 from memory_service.tools.reindex import rebuild_search_index
-from tests.integration.conftest import TABLES, integration_settings, requires_pg
+from tests.integration.conftest import (
+    TABLES,
+    integration_overrides,
+    integration_settings,
+    requires_pg,
+)
 
 pytestmark = [pytest.mark.failure, requires_pg]
 
@@ -79,11 +84,13 @@ async def test_worker_kill_requeues_the_job_and_processes_once(
     # shared one a running ``docker compose`` worker claims the job before this test's does.
     settings = integration_settings(
         make_settings,
-        tasks={"provider": "procrastinate"},
         database={"url": isolated_app_database},
         blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     )
-    container = await build_container(settings, __version__)
+    # the real queue: this is the one scenario that kills a worker mid-job
+    container = await build_container(
+        settings, __version__, overrides=integration_overrides(tasks=None)
+    )
     try:
         async with container.database.engine.begin() as conn:
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))

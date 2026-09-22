@@ -1,22 +1,21 @@
 """Typed configuration. Sources, highest precedence first:
 
 1. environment variables (``MEMORY__SECTION__KEY``; nested with ``__``)
-2. a YAML file named by ``MEMORY_CONFIG_FILE`` (default ``config/memory.yaml`` if present)
+2. ``.env`` then ``secrets.env`` in the working directory
 3. defaults below
 
-Every provider is chosen here. Domain code never reads environment variables.
+Every provider is chosen here. Domain code never reads environment variables. The in-process
+stand-ins the test suite runs on are not configuration: see
+``memory_service.application.container.Overrides``.
 """
 
 from __future__ import annotations
 
-import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Any, Literal
 
-import yaml
 from pydantic import BaseModel, Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -57,7 +56,6 @@ class DatabaseSettings(BaseModel):
     #: readiness probe exists to report is the one it cannot survive. Bounded here so
     #: /health/ready always answers.
     connect_timeout_seconds: int = 5
-    echo: bool = False
 
     @property
     def sync_url(self) -> str:
@@ -77,7 +75,9 @@ class DatabaseSettings(BaseModel):
 
 
 class CacheSettings(BaseModel):
-    provider: Literal["dragonfly", "valkey", "redis", "memory", "disabled"] = "dragonfly"
+    """One redis-protocol cache (the dev stack runs Dragonfly). The in-memory stand-in and
+    "no cache" are test seams on ``Overrides``, not spellings of ``provider``."""
+
     url: str = "redis://localhost:6379/0"
     hot_thread_ttl_seconds: int = 6 * 3600
     hot_thread_max_messages: int = 200
@@ -90,7 +90,9 @@ class CacheSettings(BaseModel):
 
 
 class TaskSettings(BaseModel):
-    provider: Literal["procrastinate", "inline", "memory"] = "procrastinate"
+    """Procrastinate on the application database; the inline/recording queues are test
+    seams on ``Overrides``."""
+
     worker_concurrency: int = 4
     default_retries: int = 5
     job_timeout_seconds: int = 600
@@ -102,15 +104,11 @@ class TaskSettings(BaseModel):
 
 
 class AuthenticationSettings(BaseModel):
-    mode: Literal["trusted_dev", "jwt", "gcp_iam", "mtls"] = "trusted_dev"
+    mode: Literal["trusted_dev", "jwt"] = "trusted_dev"
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     jwt_jwks_url: str | None = None
-    jwt_hs256_secret: SecretStr | None = Field(
-        default=None, description="dev/test symmetric key only"
-    )
     trusted_dev_api_keys: list[str] = Field(default_factory=lambda: ["dev-key"])
-    gcp_allowed_service_accounts: list[str] = Field(default_factory=list)
     header_tenant: str = "X-Memory-Tenant"
     header_workspace: str = "X-Memory-Workspace"
     header_user: str = "X-Memory-User"
@@ -155,13 +153,10 @@ class ArchiveSettings(BaseModel):
 
 
 class SearchSettings(BaseModel):
-    provider: Literal["qdrant", "memory"] = "qdrant"
+    """A Qdrant server. qdrant-client local mode is a test seam on ``Overrides``."""
+
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
-    qdrant_local_path: str | None = Field(
-        default=None,
-        description="use qdrant-client local mode (':memory:' or a path) instead of a server",
-    )
     collection_prefix: str = "mem"
     on_disk_payload: bool = True
     timeout_seconds: float = 5.0
@@ -303,7 +298,6 @@ class MemoryIntelligenceSettings(BaseModel):
     dedup_lexical_threshold: float = 0.92
     dedup_dense_threshold: float = 0.90
     dedup_candidate_k: int = 20
-    false_merge_rate_max: float = Field(default=0.01, description="release gate threshold")
     # admission gate (worthiness x novelty x confidence x expected utility -> admit/defer/reject)
     admission_worthiness_min: float = Field(default=0.35, ge=0.0, le=1.0)
     admission_confidence_min: float = Field(default=0.3, ge=0.0, le=1.0)
@@ -345,8 +339,8 @@ class GraphEnrichmentSettings(BaseModel):
 
 
 class DocumentSettings(BaseModel):
+    #: ``builtin`` is also the fallback when docling cannot be constructed in this image.
     parser: Literal["docling", "builtin"] = "docling"
-    fallback_parser: Literal["builtin"] = "builtin"
     max_chunk_tokens: int = 400
     min_chunk_tokens: int = 40
     chunk_overlap_tokens: int = 40
@@ -372,7 +366,9 @@ class RetrievalSettings(BaseModel):
     bm25: bool = True
     dense: bool = True
     graph: bool = True
-    fusion: Literal["rrf", "dbsf", "none"] = "rrf"
+    #: Reciprocal rank fusion of the dense and sparse prefetches, natively in Qdrant. There
+    #: used to be a ``fusion`` Literal with ``dbsf`` and ``none`` beside ``rrf``; neither was
+    #: implemented (both fell into a client-side RRF), so the choice was not one.
     rrf_k: int = 60
     prefetch_k: int = Field(default=100, description="per-retriever candidates before fusion")
     fused_k: int = Field(default=100, description="candidates after fusion")
@@ -399,7 +395,6 @@ class RetrievalSettings(BaseModel):
     #: and this one is buying a loss.
     rerank: bool = False
     final_k: int = 50
-    contextual_chunks: bool = True
     parent_expansion: bool = True
     neighbor_expansion: bool = True
     definition_expansion: bool = True
@@ -436,52 +431,15 @@ class ContextSettings(BaseModel):
     summaries_max: int = 4
 
 
-class EvaluationSettings(BaseModel):
-    enabled: bool = True
-    critical_recall_k: int = 20
-
-
 class ObservabilitySettings(BaseModel):
     otel_enabled: bool = True
     otel_exporter: Literal["none", "console", "otlp"] = "none"
     otel_endpoint: str | None = None
 
 
-class PerformanceBudgets(BaseModel):
-    """Benchmark targets in milliseconds (p95). Targets, not promises."""
-
-    chat_accept_p95_ms: float = 100
-    cached_context_p95_ms: float = 75
-    recall_p95_ms: float = 300
-    context_bundle_p95_ms: float = 400
-    file_accept_p95_ms: float = 200
-
-
 # ---------------------------------------------------------------------------
 # Root
 # ---------------------------------------------------------------------------
-
-
-def _yaml_source_factory(settings_cls: type[BaseSettings]) -> PydanticBaseSettingsSource:
-    class YamlSource(PydanticBaseSettingsSource):
-        def __init__(self, cls: type[BaseSettings]):
-            super().__init__(cls)
-            path = os.environ.get("MEMORY_CONFIG_FILE")
-            candidates = [Path(path)] if path else [Path("config/memory.yaml"), Path("memory.yaml")]
-            self._data: dict[str, Any] = {}
-            for candidate in candidates:
-                if candidate.is_file():
-                    with candidate.open("r", encoding="utf-8") as fh:
-                        self._data = yaml.safe_load(fh) or {}
-                    break
-
-        def get_field_value(self, field: Any, field_name: str) -> tuple[Any, str, bool]:
-            return self._data.get(field_name), field_name, False
-
-        def __call__(self) -> dict[str, Any]:
-            return dict(self._data)
-
-    return YamlSource(settings_cls)
 
 
 class Settings(BaseSettings):
@@ -511,26 +469,7 @@ class Settings(BaseSettings):
     documents: DocumentSettings = DocumentSettings()
     retrieval: RetrievalSettings = RetrievalSettings()
     context: ContextSettings = ContextSettings()
-    evaluation: EvaluationSettings = EvaluationSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
-    budgets: PerformanceBudgets = PerformanceBudgets()
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return (
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            _yaml_source_factory(settings_cls),
-            file_secret_settings,
-        )
 
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:

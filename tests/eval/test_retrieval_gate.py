@@ -14,14 +14,15 @@ from pathlib import Path
 
 import pytest
 from benchmark.common import RESULTS, provenance
-
-from memory_service.domain.context import MemoryExecutionContext
-from memory_service.modules.evaluation.golden import (
+from benchmark.evaluation import CRITICAL_RECALL_K
+from benchmark.evaluation.golden import (
     GoldenSet,
     RetrievedChunk,
     evaluate_question,
     summarize,
 )
+
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.jobs.registry import register_handlers
 
 pytestmark = pytest.mark.eval
@@ -56,7 +57,7 @@ async def test_critical_recall_and_evidence_group_gates(container, uow_factory) 
     golden = GoldenSet.load(GOLDEN)
     aliases = await _ingest_all(container, uow_factory, golden)
     engine = container.services["retrieval"]
-    k = container.settings.evaluation.critical_recall_k
+    k = CRITICAL_RECALL_K
     results = []
     evidence_status: dict[str, str] = {}
     for q in golden.questions:

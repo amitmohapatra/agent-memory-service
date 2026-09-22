@@ -19,7 +19,7 @@ import pytest
 from sqlalchemy import text
 
 from memory_service import __version__
-from memory_service.application.container import build_container
+from memory_service.application.container import Overrides, build_container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
@@ -28,68 +28,55 @@ from tests.integration.conftest import PG_AVAILABLE, TABLES
 
 pytestmark = [pytest.mark.contract, pytest.mark.usefixtures()]
 
-#: name -> settings overrides. Everything not named here stays at the suite's hermetic default.
-PROFILES: dict[str, dict] = {
+#: name -> (settings sections, stand-ins). Everything not named stays at the suite's default.
+#: The stand-ins are ``build_container`` overrides, not settings: a deployment cannot reach
+#: the in-memory queue or the dict cache through an env file, only a test can.
+PROFILES: dict[str, tuple[dict, Overrides]] = {
     # what CI and a laptop run: nothing outside the process
-    "all-in-process": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-    },
+    "all-in-process": (
+        {"blob": {"provider": "memory"}},
+        Overrides(cache="memory", tasks="memory", search="memory"),
+    ),
     # the dev stack shape: real cache and real vector store
-    "server-backed": {
-        "cache": {"provider": "dragonfly"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "qdrant"},
-        "blob": {"provider": "memory"},
-    },
+    "server-backed": ({"blob": {"provider": "memory"}}, Overrides(tasks="memory")),
     # a cache outage must degrade, not fail: the canonical store still answers
-    "no-cache": {
-        "cache": {"provider": "disabled"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-    },
+    "no-cache": (
+        {"blob": {"provider": "memory"}},
+        Overrides(cache="disabled", tasks="memory", search="memory"),
+    ),
     # graph enrichment is optional; memories must still land without it
-    "no-graph": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "graph_enrichment": {"provider": "disabled"},
-    },
-    # no generative model at all — the rule-based path has to carry the service
-    "no-llm": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {"llm": {"enabled": False}},
-    },
+    "no-graph": (
+        {"blob": {"provider": "memory"}, "graph_enrichment": {"provider": "disabled"}},
+        Overrides(cache="memory", tasks="memory", search="memory"),
+    ),
+    # no generative model at all - the rule-based path has to carry the service
+    "no-llm": (
+        {"blob": {"provider": "memory"}, "models": {"llm": {"enabled": False}}},
+        Overrides(cache="memory", tasks="memory", search="memory"),
+    ),
 }
 
 
 @pytest.fixture(params=sorted(PROFILES), ids=lambda n: n)
-def profile(request: pytest.FixtureRequest) -> tuple[str, dict]:
-    return request.param, PROFILES[request.param]
+def profile(request: pytest.FixtureRequest) -> tuple[str, dict, Overrides]:
+    return (request.param, *PROFILES[request.param])
 
 
 async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path) -> None:
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
-    name, overrides = profile
+    name, profile_sections, stand_ins = profile
     sections: dict = {
         "database": {"url": DB_URL},
         "blob": {"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     }
-    for key, value in overrides.items():  # the profile wins over the defaults above
+    for key, value in profile_sections.items():  # the profile wins over the defaults above
         sections[key] = {**sections.get(key, {}), **value} if isinstance(value, dict) else value
     if sections["blob"].get("provider") == "memory":
         sections["blob"] = {"provider": "memory"}
     settings = make_settings(**sections)
 
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=stand_ins)
     try:
         async with container.database.engine.begin() as conn:
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))

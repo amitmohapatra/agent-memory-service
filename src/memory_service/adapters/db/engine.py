@@ -29,7 +29,6 @@ class Database:
             max_overflow=settings.max_overflow,
             pool_timeout=settings.pool_timeout_seconds,
             pool_pre_ping=True,
-            echo=settings.echo,
             connect_args={
                 "options": f"-c statement_timeout={settings.statement_timeout_ms}",
                 "connect_timeout": settings.connect_timeout_seconds,

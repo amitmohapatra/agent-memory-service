@@ -48,6 +48,8 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from benchmark.common import provenance, write_result
+from benchmark.env import BENCH, bench_overrides
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.harness import (
     FIXTURE_REPORT,
     Acked,
@@ -67,7 +69,6 @@ from benchmark.retrieval import GOLDEN, TABLES
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.settings import Settings
-from memory_service.modules.evaluation.golden import GoldenSet
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 
 ENTRYPOINTS = {"memory-worker": "run_worker", "memory-api": "run_api"}
@@ -301,19 +302,18 @@ class Db:
 async def reset_backends(settings: Settings) -> dict[str, Any]:
     """Drop the search collections and flush the cache the way the real-component test
     fixtures do; PostgreSQL is truncated separately."""
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     dropped: list[str] = []
     flushed = 0
     try:
-        search = settings.search
-        if search.provider == "qdrant" and search.qdrant_local_path is None:
+        if BENCH.search == "qdrant":
             indexer = container.services["indexer"]
             for base in (KNOWLEDGE, MEMORIES):
                 name = indexer.collection(base)
                 if await container.search.drop_collection(name):
                     dropped.append(name)
             await indexer.ensure_collections()
-        if container.cache is not None and settings.cache.provider != "memory":
+        if container.cache is not None and bench_overrides().cache is None:
             keys = [key async for key in container.cache.scan("*")]
             if keys:
                 flushed = int(await container.cache.delete(*keys))

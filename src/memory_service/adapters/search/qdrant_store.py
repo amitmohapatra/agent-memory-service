@@ -5,7 +5,8 @@ Qdrant's server-side IDF modifier, so BM25 scoring happens in the store. Hybrid 
 ``query_points`` with two prefetches fused by native RRF. Every query carries a tenant
 filter and a ``visibility_keys`` MatchAny filter that Qdrant applies before ranking.
 
-``qdrant_local_path`` (e.g. ``:memory:``) runs the same client API in-process for tests.
+``local_path`` (e.g. ``:memory:``) runs the same client API in-process for tests; it is a
+``build_container`` override, never a setting.
 """
 
 from __future__ import annotations
@@ -74,13 +75,13 @@ class QdrantSearchStore:
         data_residency="deployment",
     )
 
-    def __init__(self, settings: SearchSettings) -> None:
+    def __init__(self, settings: SearchSettings, *, local_path: str | None = None) -> None:
         self.settings = settings
-        if settings.qdrant_local_path:
+        if local_path:
             self._client = (
-                AsyncQdrantClient(location=settings.qdrant_local_path)
-                if settings.qdrant_local_path == ":memory:"
-                else AsyncQdrantClient(path=settings.qdrant_local_path)
+                AsyncQdrantClient(location=local_path)
+                if local_path == ":memory:"
+                else AsyncQdrantClient(path=local_path)
             )
             self._local = True
         else:

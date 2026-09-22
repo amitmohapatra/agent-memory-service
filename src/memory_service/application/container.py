@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
@@ -30,10 +30,50 @@ class Dependency:
     close: Callable[[], Awaitable[None]] | None = None
 
 
+@dataclass(frozen=True)
+class Overrides:
+    """In-process stand-ins for the backing stores, for tests and benchmarks.
+
+    None of these is reachable from the environment. They used to be provider values in
+    ``Settings`` (``cache.provider=memory``, ``search.provider=memory``,
+    ``tasks.provider=inline``), which made the test suite's stand-ins part of the operator's
+    configuration surface: a deployment could be pointed at an in-memory queue by a typo in
+    an env file. The shipped service has exactly one implementation per port; a test that
+    needs something else says so here, in code, when it builds its container.
+
+    ``None`` means "the real adapter, from ``Settings``".
+    """
+
+    #: ``memory``: a dict-backed cache. ``disabled``: no cache at all, which the service
+    #: must degrade under (every read falls through to the canonical store).
+    cache: Literal["memory", "disabled"] | None = None
+    #: ``memory``: qdrant-client local mode (``:memory:``) in this process. Exact brute-force
+    #: scan, no HNSW: fine for a fixture-sized corpus, quietly O(n) beyond that.
+    search: Literal["memory"] | None = None
+    #: A directory for qdrant-client local mode when the vectors must outlive the process.
+    qdrant_local_path: str | None = None
+    #: ``inline``: run each job as soon as the outbox relay dispatches it. ``memory``: record
+    #: jobs and run them on ``drain()``.
+    tasks: Literal["inline", "memory"] | None = None
+
+    def summary(self) -> dict[str, str]:
+        """The stand-ins in force, for the startup log and /version."""
+        return {
+            name: str(value)
+            for name, value in (
+                ("cache", self.cache),
+                ("search", self.search or self.qdrant_local_path),
+                ("tasks", self.tasks),
+            )
+            if value is not None
+        }
+
+
 @dataclass
 class Container:
     settings: Settings
     version: str
+    overrides: Overrides = field(default_factory=Overrides)
     registries: Registries = field(default_factory=get_registries)
     dependencies: dict[str, Dependency] = field(default_factory=dict)
 
@@ -88,10 +128,15 @@ class Container:
                 log.warning("dependency.close_failed", dependency=name)
 
 
-async def build_container(settings: Settings, version: str) -> Container:
-    """Wire providers for the configured environment. Extended in later milestones."""
+async def build_container(
+    settings: Settings, version: str, *, overrides: Overrides | None = None
+) -> Container:
+    """Wire providers for the configured environment.
+
+    ``overrides`` swaps backing stores for in-process stand-ins; production never passes it.
+    """
     from memory_service.adapters import wire_adapters
 
-    container = Container(settings=settings, version=version)
+    container = Container(settings=settings, version=version, overrides=overrides or Overrides())
     await wire_adapters(container)
     return container

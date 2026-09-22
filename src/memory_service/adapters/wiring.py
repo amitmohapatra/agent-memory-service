@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from memory_service.application.container import Dependency
-from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -19,12 +18,10 @@ async def wire_all(container: Container) -> None:
     log.info(
         "wiring.start",
         environment=settings.service.environment,
-        cache=settings.cache.provider,
-        search=settings.search.provider,
         blob=settings.blob.provider,
-        tasks=settings.tasks.provider,
         authorization=settings.authorization.provider,
         llm_enabled=settings.models.llm.enabled,
+        stand_ins=container.overrides.summary(),
     )
     await _wire_cache(container)
     await _wire_database(container)
@@ -63,18 +60,18 @@ async def wire_all(container: Container) -> None:
 
 
 async def _wire_cache(container: Container) -> None:
-    cfg = container.settings.cache
-    if cfg.provider == "disabled":
+    stand_in = container.overrides.cache
+    if stand_in == "disabled":
         container.cache = None
         return
-    if cfg.provider == "memory":
+    if stand_in == "memory":
         from memory_service.adapters.cache.memory_cache import MemoryCache
 
         container.cache = MemoryCache()
     else:
         from memory_service.adapters.cache.redis_cache import RedisCache
 
-        container.cache = RedisCache(cfg)
+        container.cache = RedisCache(container.settings.cache)
     cache = container.cache
     container.add_dependency(
         Dependency(name="cache", mandatory=False, ping=cache.ping, close=cache.close)
@@ -93,7 +90,16 @@ async def _wire_database(container: Container) -> None:
 
 async def _wire_tasks(container: Container) -> None:
     cfg = container.settings.tasks
-    if cfg.provider == "procrastinate":
+    stand_in = container.overrides.tasks
+    if stand_in == "inline":
+        from memory_service.adapters.tasks.inline_queue import InlineTaskQueue
+
+        container.tasks = InlineTaskQueue()
+    elif stand_in == "memory":
+        from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
+
+        container.tasks = RecordingTaskQueue()
+    else:
         from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
 
         queue = ProcrastinateTaskQueue(
@@ -105,14 +111,6 @@ async def _wire_tasks(container: Container) -> None:
         container.add_dependency(
             Dependency(name="task_queue", mandatory=True, ping=queue.ping, close=queue.close)
         )
-    elif cfg.provider == "inline":
-        from memory_service.adapters.tasks.inline_queue import InlineTaskQueue
-
-        container.tasks = InlineTaskQueue()
-    else:
-        from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
-
-        container.tasks = RecordingTaskQueue()
 
 
 def _wire_uow(container: Container) -> None:
@@ -148,11 +146,7 @@ def _wire_services(container: Container) -> None:
 
     settings = container.settings
     container.services["idempotency"] = IdempotencyService(container.cache)
-    from memory_service.adapters.auth.gcp_id_token import verify_google_id_token
-
-    container.services["authenticator"] = ServiceAuthenticator(
-        settings.authentication, gcp_verifier=verify_google_id_token
-    )
+    container.services["authenticator"] = ServiceAuthenticator(settings.authentication)
     container.services["authz"] = AuthorizationService(
         container.authorization,
         container.cache,
@@ -231,14 +225,10 @@ def _wire_ingestion(container: Container) -> None:
     builtin = BuiltinParser()
     parser = container.registries.document_parser.create(cfg.parser)
     if parser is None:
-        # The chosen parser cannot run here. Falling back is a configured behaviour, not an
-        # accident, and /version reports the difference either way.
-        if not cfg.fallback_parser:
-            raise ProviderNotConfigured(
-                f"documents.parser={cfg.parser!r} cannot be constructed in this image and "
-                "documents.fallback_parser is unset"
-            )
-        parser = container.registries.document_parser.create(cfg.fallback_parser)
+        # The chosen parser cannot run here (an image built without the docling extra).
+        # Falling back to the builtin is the designed behaviour, not an accident, and
+        # /version reports the difference.
+        parser = builtin
     container.document_parser = parser
     container.services["ingestion"] = IngestionService(
         container.services["uow_factory"],
@@ -256,12 +246,11 @@ def _wire_ingestion(container: Container) -> None:
 async def _wire_search(container: Container) -> None:
     from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 
-    cfg = container.settings.search
-    if cfg.provider == "memory":
-        cfg = cfg.model_copy(update={"qdrant_local_path": ":memory:"})
-    store = QdrantSearchStore(cfg)
+    stand_in = container.overrides
+    local = ":memory:" if stand_in.search == "memory" else stand_in.qdrant_local_path
+    store = QdrantSearchStore(container.settings.search, local_path=local)
     container.search = store
-    if cfg.qdrant_local_path is None:
+    if local is None:
         container.add_dependency(
             Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
         )
