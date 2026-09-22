@@ -90,7 +90,10 @@ class AuthorizationService:
         means this call does no cache read at all, which is a resolve on every query.
         """
         fingerprint = revision_fingerprint
-        raw = cached_scope
+        # ``self.cache`` is None when the decision cache is off, and that switch is the one
+        # reached for during a stale-permission incident: bytes a caller read from the scope
+        # key on its own handle must not slip past it.
+        raw = cached_scope if self.cache is not None else None
         if fingerprint is None:
             fingerprint = "0"
             if revisions is not None:
