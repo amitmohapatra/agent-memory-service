@@ -200,7 +200,14 @@ class CreateMessageRequest(BaseModel):
         description="Lineage: thread/session/turn (+ agent fields for internal messages)",
         examples=[_SCOPE_EXAMPLE],
     )
-    role: MessageRole = Field(..., examples=["USER"])
+    role: MessageRole = Field(
+        ...,
+        description=(
+            "Who produced the message: USER, ASSISTANT or SYSTEM for the visible chat; TOOL "
+            "for a tool's output and AGENT for an internal agent step (kind=INTERNAL)."
+        ),
+        examples=["USER"],
+    )
     kind: MessageKind = Field(
         default=MessageKind.VISIBLE,
         description=(
@@ -284,14 +291,26 @@ class MessageResponse(BaseModel):
     thread_id: str
     session_id: str
     turn_id: str
-    role: MessageRole
-    kind: MessageKind
+    role: MessageRole = Field(
+        ...,
+        description="Who produced it: USER, ASSISTANT, SYSTEM, TOOL or AGENT, as recorded.",
+    )
+    kind: MessageKind = Field(
+        ...,
+        description="VISIBLE messages form the chat history; INTERNAL ones are agent/tool steps.",
+    )
     sequence: int
     content: str
     author_principal: str
     agent_run_id: str | None = None
     occurred_at: datetime
-    archive_status: ArchiveStatus
+    archive_status: ArchiveStatus = Field(
+        ...,
+        description=(
+            "Where the content lives: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob "
+            "written and verified) or PURGED (large payload removed from the hot store)."
+        ),
+    )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 

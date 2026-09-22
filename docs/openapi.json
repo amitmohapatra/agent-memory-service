@@ -730,6 +730,7 @@
           },
           "role": {
             "$ref": "#/components/schemas/MessageRole",
+            "description": "Who produced the message: USER, ASSISTANT or SYSTEM for the visible chat; TOOL for a tool's output and AGENT for an internal agent step (kind=INTERNAL).",
             "examples": [
               "USER"
             ]
@@ -2375,7 +2376,8 @@
             "title": "Agent Run Id"
           },
           "archive_status": {
-            "$ref": "#/components/schemas/ArchiveStatus"
+            "$ref": "#/components/schemas/ArchiveStatus",
+            "description": "Where the content lives: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob written and verified) or PURGED (large payload removed from the hot store)."
           },
           "attachments": {
             "items": {
@@ -2398,7 +2400,8 @@
             "type": "object"
           },
           "kind": {
-            "$ref": "#/components/schemas/MessageKind"
+            "$ref": "#/components/schemas/MessageKind",
+            "description": "VISIBLE messages form the chat history; INTERNAL ones are agent/tool steps."
           },
           "message_id": {
             "title": "Message Id",
@@ -2410,7 +2413,8 @@
             "type": "string"
           },
           "role": {
-            "$ref": "#/components/schemas/MessageRole"
+            "$ref": "#/components/schemas/MessageRole",
+            "description": "Who produced it: USER, ASSISTANT, SYSTEM, TOOL or AGENT, as recorded."
           },
           "sequence": {
             "title": "Sequence",
@@ -2523,6 +2527,7 @@
           "kind": {
             "$ref": "#/components/schemas/ObservationKind",
             "default": "EVENT",
+            "description": "What happened: MESSAGE, FILE, AGENT_RESULT, TOOL_RESULT, DECISION, FEEDBACK, EVENT (anything else worth remembering) or IMPORT (bulk-loaded from another system). Steers extraction; it is not a memory type.",
             "examples": [
               "EVENT"
             ]

@@ -52,7 +52,15 @@ class ObservationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_OBS_EXAMPLE]})
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
-    kind: ObservationKind = Field(default=ObservationKind.EVENT, examples=["EVENT"])
+    kind: ObservationKind = Field(
+        default=ObservationKind.EVENT,
+        description=(
+            "What happened: MESSAGE, FILE, AGENT_RESULT, TOOL_RESULT, DECISION, FEEDBACK, "
+            "EVENT (anything else worth remembering) or IMPORT (bulk-loaded from another "
+            "system). Steers extraction; it is not a memory type."
+        ),
+        examples=["EVENT"],
+    )
     content: str = Field(..., min_length=1, max_length=100_000)
     hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
     custom_metadata: CustomMetadata = Field(default_factory=dict)

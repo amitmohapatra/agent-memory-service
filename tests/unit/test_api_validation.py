@@ -112,8 +112,15 @@ def test_file_visibility_form_field_is_an_enum(client: TestClient) -> None:
     assert _locs(r) == {"body.visibility"}
 
 
-def test_pydantic_validation_error_raised_inside_a_handler_is_a_422(settings) -> None:
-    """A model validated by hand inside a handler is still the caller's input."""
+def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings) -> None:
+    """Input is validated at the edge; a ValidationError past it is a bug, not a 422.
+
+    Every request field is typed on the route signature, and the two by-hand coercions that
+    remain (the /v1/files form, the execution context) catch their own ValidationError and
+    raise ValidationFailed. So a pydantic failure that escapes a handler means the service
+    built a bad model from its own data, and it must surface as an INTERNAL 500 carrying the
+    request id, not be dressed up as the caller's mistake.
+    """
 
     class Inner(BaseModel):
         n: int
@@ -127,10 +134,12 @@ def test_pydantic_validation_error_raised_inside_a_handler_is_a_422(settings) ->
 
     app.include_router(router)
     with TestClient(app, raise_server_exceptions=False) as c:
-        r = c.post("/coerce", json={"n": "not a number"})
-        assert r.status_code == 422, r.text
-        errors = _errors(r)
-        assert errors[0]["loc"] == ["n"] and errors[0]["type"] == "int_parsing"
+        r = c.post("/coerce", json={"n": "not a number"}, headers={"X-Request-ID": "req_test"})
+        assert r.status_code == 500, r.text
+        error = r.json()["error"]
+        assert error["code"] == "INTERNAL" and error["retryable"] is False
+        # the request id rides in the envelope (the 500 path bypasses the header middleware)
+        assert error["trace_id"] == "req_test"
         # the input value is not echoed back: the envelope never contains source text
         assert "not a number" not in r.text
 
