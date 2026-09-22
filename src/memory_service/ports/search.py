@@ -85,6 +85,16 @@ class CollectionSpec(BaseModel):
 #: security metadata a filter had already applied inside the store (tenant_id aside) and the
 #: indexing bookkeeping travelled back over the wire and were parsed under the GIL for every
 #: candidate of every query.
+#:
+#: Declared, because the plan said otherwise: ``contributors``, ``owner_principal``,
+#: ``visibility`` and ``status`` are projected, and the Phase 2 plan listed them among the
+#: fields to never return. They are kept because they are *read* - the context builder
+#: copies them into ``ContextItem.attributes``, so they are part of the API response today
+#: and have been since before this projection existed. Dropping them here would not be a
+#: wire optimisation, it would be an API change made silently, and the field these three
+#: protect (visibility) is enforced by the store-side filter, not by what comes back. The
+#: cost is four short scalars per hit. Removing them is a decision about the response
+#: schema and belongs where that is versioned, not here.
 PAYLOAD_FIELDS: tuple[str, ...] = (
     "attributes",
     "chunk_id",
