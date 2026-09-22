@@ -202,6 +202,22 @@ class Container:
                 await dep.close()
             except Exception:
                 log.warning("dependency.close_failed", dependency=name)
+        self._close_models()
+
+    def _close_models(self) -> None:
+        """In-process models are not dependencies — there is nothing to ping — but each one
+        owns a thread. The API builds one container per process and would not notice; the
+        benchmarks build one per candidate, and the threads would accumulate across the run.
+        """
+        for name in ("embedding", "reranker", "nli"):
+            model = getattr(self, name, None)
+            closer = getattr(model, "close", None)
+            if closer is None:
+                continue
+            try:
+                closer()
+            except Exception:
+                log.warning("model.close_failed", model=name)
 
 
 async def build_container(

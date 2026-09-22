@@ -3,6 +3,14 @@
     uv run python -m memory_service.tools.download_models            # the frozen set + docling
     uv run python -m memory_service.tools.download_models --list
     uv run python -m memory_service.tools.download_models --challengers benchmark/challengers.txt
+    python -m memory_service.tools.download_models --export-onnx models/<dir>   # in the image
+    python -m memory_service.tools.download_models --measure-onnx models/<dir> --out r.json
+
+``--export-onnx`` and ``--measure-onnx`` are the other half of "the service never downloads
+at runtime": the hub publishes no ONNX graph for granite-embedding-small-english-r2, so the
+graph the ONNX runner loads is exported from the checkpoint that is already on disk, by a
+command in this repository, and then measured against the torch runner before anything is
+allowed to believe it. Both need torch and onnxruntime, so both run inside the runtime image.
 
 The catalogue *is* ``constants.FROZEN_MODELS``: the directories this fetches are the ones the
 service loads, named after the model they hold, so the manifest, the directory and the code
@@ -19,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -193,6 +202,337 @@ def _fetch_docling(root: Path, *, force: bool = False) -> None:
     sys.stdout.write("downloaded\n")
 
 
+# ---------------------------------------------------------------------------
+# ONNX export and the measurement that decides whether to use it
+# ---------------------------------------------------------------------------
+
+#: Opset 17 is where LayerNormalization became one node instead of eight, which is most of
+#: what makes the fp32 CPU graph worth exporting at all.
+OPSET = 17
+GRAPH_DIR = "onnx"
+FP32_GRAPH = "model.onnx"
+INT8_GRAPH = "model_qint8.onnx"
+
+#: Forty short queries and ten passages, fixed so two runs of --measure-onnx are comparable.
+#: Nothing is measured on text that has never been seen; these are LoCoMo-shaped.
+QUERIES = [
+    "What did Caroline say about the painting class?",
+    "When did Melanie move to Seattle?",
+    "Who introduced John to his running club?",
+    "How long has Angela been playing the cello?",
+    "Where did they go on the anniversary trip?",
+    "What was the name of the dog?",
+    "Which restaurant did they argue about?",
+    "Why did Nate leave the startup?",
+    "What did the doctor recommend for the knee?",
+    "How many siblings does Joanna have?",
+    "What time does the ferry leave?",
+    "Which book did Caroline recommend in March?",
+    "What did they plant in the garden last spring?",
+    "Who paid for the concert tickets?",
+    "When was the wedding anniversary?",
+    "What is the name of Melanie's sister?",
+    "Where does Angela work now?",
+    "What did John think of the new apartment?",
+    "How did the job interview go?",
+    "Which city did they visit first?",
+    "What did she buy at the farmers market?",
+    "Who taught him to cook?",
+    "When did the renovation finish?",
+    "What happened to the old car?",
+    "Which team did he support?",
+    "What did the therapist suggest?",
+    "Where did they meet for coffee?",
+    "How much did the camera cost?",
+    "What did they name the new cat?",
+    "When does the lease end?",
+    "Who sent the birthday card?",
+    "What did Melanie study at university?",
+    "Which medication was changed?",
+    "What did they watch on Friday night?",
+    "How far is the hike?",
+    "Who organised the surprise party?",
+    "What did he say about the promotion?",
+    "When did they adopt the second dog?",
+    "Which flight was delayed?",
+    "What did the landlord agree to fix?",
+]
+PASSAGES = [
+    "Caroline mentioned that the painting class she joined in February meets every Tuesday "
+    "evening at the community centre, and that the instructor, a retired art teacher named "
+    "Dev, has been unusually patient with beginners.",
+    "Melanie moved to Seattle in the autumn of 2022 after her partner accepted a position "
+    "at a hospital there; she described the first winter as darker than she expected and "
+    "said she missed the dry heat of Phoenix more than she thought she would.",
+    "John was introduced to the running club by a colleague from his previous job, and he "
+    "now runs with them three mornings a week along the river path, which he says has done "
+    "more for his sleep than anything a doctor prescribed.",
+    "Angela has played the cello since she was nine, taking a long break during her "
+    "twenties, and returned to it two years ago after finding her old instrument in her "
+    "mother's attic during a move.",
+    "The anniversary trip was to a small town on the coast where they had stayed once "
+    "before, ten years earlier, and they were surprised to find the same bakery open and "
+    "run by the same family.",
+    "Adjusted EBITDA increased to EUR 98 million from EUR 81 million despite lower revenue, "
+    "driven mainly by restructuring savings realised in the second half and a one-off "
+    "release of a litigation provision that the footnotes describe in some detail.",
+    "The data centre migration finished on schedule in March, two weeks ahead of the "
+    "contractual deadline, although the team reported that the final cutover weekend "
+    "required a rollback of one storage cluster and a second attempt.",
+    "Nate left the startup after the second funding round, citing a disagreement about the "
+    "direction of the product rather than anything personal, and he took several months off "
+    "before joining a larger company in a similar role.",
+    "The doctor recommended physiotherapy twice a week for the knee rather than surgery, "
+    "and said that the imaging showed wear consistent with age and running rather than a "
+    "tear that would need repair.",
+    "They planted tomatoes, beans and far too much mint in the garden last spring; the mint "
+    "took over the bed by July and they spent most of August pulling it out again.",
+]
+
+
+def _texts() -> list[str]:
+    return [*QUERIES, *PASSAGES]
+
+
+def _percentiles(values: list[float]) -> dict[str, float]:
+    ordered = sorted(values)
+
+    def at(q: float) -> float:
+        return ordered[min(len(ordered) - 1, int(q * len(ordered)))]
+
+    return {
+        "mean_ms": round(sum(ordered) / len(ordered), 2),
+        "p50_ms": round(at(0.50), 2),
+        "p95_ms": round(at(0.95), 2),
+    }
+
+
+def _export_once(source: str, target: Path, *, attention: str, dynamo: bool) -> None:
+    """Trace the checkpoint to *target*, or leave whatever was there untouched.
+
+    The trace is written to a sibling and moved into place on success, because an attempt
+    that dies part-way through writing 191 MB otherwise leaves a truncated graph behind —
+    one that ``export_onnx`` has already reported as failed and that the ONNX runner would
+    then load, or refuse to, at the next start.
+    """
+    import torch
+    from transformers import AutoModel
+
+    model = AutoModel.from_pretrained(
+        source, dtype=torch.float32, attn_implementation=attention
+    ).eval()
+    # Two rows of different lengths so the dynamic axes are exercised by the trace rather
+    # than folded into constants.
+    ids = torch.cat(
+        [torch.randint(1, 1000, (1, 24)), torch.randint(1, 1000, (1, 24))], dim=0
+    ).long()
+    mask = torch.ones_like(ids)
+    mask[1, 16:] = 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(target.name + ".partial")
+    try:
+        torch.onnx.export(
+            model,
+            (ids, mask),
+            str(partial),
+            input_names=["input_ids", "attention_mask"],
+            output_names=["last_hidden_state"],
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "sequence"},
+                "attention_mask": {0: "batch", 1: "sequence"},
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+            },
+            opset_version=OPSET,
+            dynamo=dynamo,
+        )
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+    os.replace(partial, target)
+
+
+def export_onnx(directory: Path) -> int:
+    """Write ``<directory>/onnx/model.onnx`` and ``model_qint8.onnx`` from the checkpoint.
+
+    Every attempt that fails is reported with what it was and why. A graph is never written
+    from a fallback that silently changed the model: if none of the attempts traces, this
+    says so and exits non-zero, because a wrong graph produces vectors rather than errors.
+    """
+    if not (directory / "config.json").is_file():
+        sys.stderr.write(f"{directory} does not hold a transformers checkpoint\n")
+        return 2
+    try:
+        import onnx  # noqa: F401  - onnxruntime.quantization imports it
+        import torch  # noqa: F401
+        import transformers  # noqa: F401
+    except ImportError as exc:
+        sys.stderr.write(
+            f"--export-onnx needs torch, transformers and onnx ({exc}); run it inside the "
+            "runtime image, not on the host\n"
+        )
+        return 2
+
+    graph = directory / GRAPH_DIR / FP32_GRAPH
+    # ModernBERT's masking helper traces under the TorchScript exporter with eager attention;
+    # the other two are here because the roadmap says to try them before giving up, not
+    # because either is known to work.
+    attempts = (("eager", False), ("eager", True), ("sdpa", False))
+    failures: list[str] = []
+    for attention, dynamo in attempts:
+        label = f"attn={attention} dynamo={dynamo}"
+        sys.stdout.write(f"export {label} ... ")
+        sys.stdout.flush()
+        try:
+            _export_once(str(directory), graph, attention=attention, dynamo=dynamo)
+        except Exception as exc:
+            failures.append(f"{label}: {type(exc).__name__}: {str(exc)[:300]}")
+            sys.stdout.write("failed\n")
+            continue
+        sys.stdout.write(f"wrote {graph} ({graph.stat().st_size / 1e6:.0f} MB)\n")
+        break
+    else:
+        sys.stderr.write("no exporter configuration traced this checkpoint:\n")
+        for failure in failures:
+            sys.stderr.write(f"  {failure}\n")
+        return 1
+
+    from onnxruntime.quantization import QuantType, quantize_dynamic
+
+    int8 = directory / GRAPH_DIR / INT8_GRAPH
+    sys.stdout.write("quantize weight_type=QInt8 ... ")
+    sys.stdout.flush()
+    quantize_dynamic(str(graph), str(int8), weight_type=QuantType.QInt8)
+    sys.stdout.write(f"wrote {int8} ({int8.stat().st_size / 1e6:.0f} MB)\n")
+
+    for name, cosine in _agreement(directory, (FP32_GRAPH, INT8_GRAPH)).items():
+        sys.stdout.write(f"{name:22} min cosine vs torch {cosine:.4f}\n")
+    return 0
+
+
+def _agreement(directory: Path, graphs: tuple[str, ...]) -> dict[str, float]:
+    """The lowest cosine between each graph's vectors and the torch runner's, over the same
+    fifty texts. This is the number that says whether a graph is the same model."""
+    import asyncio
+
+    from memory_service.adapters.models.embeddings import (
+        OnnxEmbedding,
+        SentenceTransformersEmbedding,
+    )
+    from memory_service.config.constants import FROZEN_MODELS
+
+    texts = _texts()
+    spec = FROZEN_MODELS.dense.model_copy(update={"model_path": str(directory)})
+    reference = asyncio.run(SentenceTransformersEmbedding(spec).embed_documents(texts))
+    out: dict[str, float] = {}
+    for name in graphs:
+        graph_spec = spec.model_copy(update={"runtime": "onnx", "graph_file": f"onnx/{name}"})
+        ours = asyncio.run(OnnxEmbedding(graph_spec).embed_documents(texts))
+        out[name] = min(
+            sum(a * b for a, b in zip(u, v, strict=True))
+            for u, v in zip(ours, reference, strict=True)
+        )
+    return out
+
+
+def measure_onnx(directory: Path, out: Path, *, threads: int, warmups: int = 5) -> int:
+    """Time one query at a time on each runner and write the artifact.
+
+    Single-query, because that is the shape of the hot path: at 20 rps a 10 ms batching
+    window collects a mean batch of 1.2, so a throughput number measured on batches of 32
+    says nothing about ``POST /v1/context``.
+    """
+    import asyncio
+    import platform
+    import time
+    from datetime import UTC, datetime
+
+    from memory_service.adapters.models.embeddings import (
+        OnnxEmbedding,
+        SentenceTransformersEmbedding,
+    )
+    from memory_service.config.constants import FROZEN_MODELS
+
+    spec = FROZEN_MODELS.dense.model_copy(update={"model_path": str(directory)})
+    runners: dict[str, Any] = {"torch_fp32": SentenceTransformersEmbedding(spec, threads=threads)}
+    for label, name in (("onnx_fp32", FP32_GRAPH), ("onnx_int8", INT8_GRAPH)):
+        graph = directory / GRAPH_DIR / name
+        if not graph.is_file():
+            sys.stderr.write(f"{graph} is not there; run --export-onnx first\n")
+            return 2
+        runners[label] = OnnxEmbedding(
+            spec.model_copy(update={"runtime": "onnx", "graph_file": f"onnx/{name}"}),
+            threads=threads,
+        )
+
+    async def time_one(runner: Any) -> list[float]:
+        for query in QUERIES[:warmups]:
+            await runner.embed_query(query)
+        timings: list[float] = []
+        for query in QUERIES:
+            start = time.perf_counter()
+            await runner.embed_query(query)
+            timings.append((time.perf_counter() - start) * 1000.0)
+        return timings
+
+    results: dict[str, Any] = {}
+    for label, runner in runners.items():
+        timings = asyncio.run(time_one(runner))
+        results[label] = {
+            **_percentiles(timings),
+            "encodes": len(timings),
+            "fingerprint": runner.fingerprint(),
+            "dimension": runner.dimension,
+        }
+        sys.stdout.write(f"{label:12} {results[label]['mean_ms']:8.1f} ms mean\n")
+
+    baseline = results["torch_fp32"]["mean_ms"]
+    for row in results.values():
+        row["speedup_vs_torch_fp32"] = round(baseline / row["mean_ms"], 2)
+    for name, cosine in _agreement(directory, (FP32_GRAPH, INT8_GRAPH)).items():
+        results["onnx_fp32" if name == FP32_GRAPH else "onnx_int8"]["min_cosine_vs_torch"] = round(
+            cosine, 6
+        )
+
+    document = {
+        "benchmark": "encoder_runtime",
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "provenance": {
+            "model_dir": str(directory),
+            "model": FROZEN_MODELS.dense.id,
+            "threads": threads,
+            "warmups": warmups,
+            "queries": len(QUERIES),
+            "cosine_texts": len(_texts()),
+            "platform": platform.platform(),
+            "processor": platform.processor() or "unknown",
+            "cpu_count": os.cpu_count(),
+            "versions": {
+                name: _version(name)
+                for name in ("torch", "onnxruntime", "sentence-transformers", "transformers")
+            },
+            "caveat": (
+                "A 4-core Docker VM without AVX2. Absolute milliseconds here describe this "
+                "box and nothing else; only the ratios between the three runners travel to "
+                "the 8 vCPU target VM, and even those move with AVX2/AVX-512."
+            ),
+        },
+        "runners": results,
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+    sys.stdout.write(f"\nwrote {out}\n")
+    return 0
+
+
+def _version(package: str) -> str:
+    from importlib.metadata import version
+
+    try:
+        return version(package)
+    except Exception:
+        return "unknown"
+
+
 def _catalogue() -> None:
     """``--list``: the frozen set, which is everything ``--only`` will accept."""
     for m in MODELS:
@@ -245,11 +585,45 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", nargs="*", help="fetch these directory names only")
     parser.add_argument("--force", action="store_true", help="re-download even when present")
     parser.add_argument("--list", action="store_true", help="show the catalogue and exit")
+    parser.add_argument(
+        "--export-onnx",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="export DIR's checkpoint to DIR/onnx/{model,model_qint8}.onnx (runtime image only)",
+    )
+    parser.add_argument(
+        "--measure-onnx",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="time torch fp32 vs the two graphs in DIR/onnx and write --out",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("benchmark/results/encoder_runtime.json"),
+        help="where --measure-onnx writes its artifact",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        help="intra-op threads for --measure-onnx (default: the frozen DenseModel.threads)",
+    )
     args = parser.parse_args(argv)
 
     if args.list:
         _catalogue()
         return 0
+    if args.export_onnx is not None:
+        return export_onnx(args.export_onnx)
+    if args.measure_onnx is not None:
+        from memory_service.config.constants import FROZEN_MODELS
+
+        return measure_onnx(
+            args.measure_onnx, args.out, threads=args.threads or FROZEN_MODELS.dense.threads
+        )
 
     catalogue = load_challengers(args.challengers) if args.challengers else MODELS
     wanted, want_docling = _selection(

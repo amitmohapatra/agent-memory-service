@@ -32,9 +32,10 @@ state of execution against them. Update it whenever a phase step lands or a deci
 
 ## Running or pending when this was written
 
-- ~~Technique-mining workflow~~ done: [GAPS-2026-09.md](GAPS-2026-09.md) holds the gap table, the ranked borrow list and the do-not list. Its top four items are in flight in the worktrees below; items 5-12 are Phase 3/4 work.
+- ~~Technique-mining workflow~~ done: [GAPS-2026-09.md](GAPS-2026-09.md) holds the gap table, the ranked borrow list and the do-not list. Items 5-12 there are Phase 3/4 work.
 - `python -m benchmark.failure_taxonomy <judged>.json` classifies a run's wrong answers into abstained / partial / wrong instance / evidence missing. On v5: 13 / 14 / 11 / 1.
-- Phase 2 workflow (three worktree branches: encoder runtime, wire/process model, data path; each adversarially reviewed) launched 2026-09-23 00:50 IST. If it is gone when you read this: `git branch --list 'worktree-*'` and `git worktree list` show what it left; merge order encoder -> wire -> datapath, regenerate docs/openapi.json, run every suite one at a time, then push.
+- Phase 2 landed as four branches (p2-encoder, p2-wire, p2-datapath, p2-render), each adversarially reviewed and its blocking findings fixed. Merge order: encoder -> wire -> datapath -> render, regenerate docs/openapi.json, run every suite one at a time, then push.
+- Merging the encoder branch alone lowers the throughput ceiling: every model is entered through a one-permit gate, so a single uvicorn process serves one encode at a time - about 12 rps at the measured torch p50 of 80.6 ms, about 37 rps at the ONNX 27.3 ms (docs/MEASUREMENTS.md section 7, on a 4-core box without AVX2). The 20 rps gate therefore depends on the wire branch's worker count landing as well; do not read a throughput number taken between the two merges as the system's.
 - Docker: `bifrost-gateway`, `memory-service-postgres-1`, `memory-service-qdrant-1`.
 
 ## Next, in order
