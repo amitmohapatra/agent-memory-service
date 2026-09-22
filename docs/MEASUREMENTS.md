@@ -276,3 +276,58 @@ answered.
   the adversarial category meaningful: the abstention decision that matters lives downstream
   of generation, so with `llm.enabled=false` category 5 cannot be scored at all, and a 0.0
   there is a statement about the setup rather than the system.
+
+## 7. The encoder's runtime: torch, ONNX fp32 and ONNX int8 — 2026-09-23
+
+The encoder is the floor of every retrieval request, so Phase 2 assumed an int8 ONNX graph
+and budgeted around it. Nothing had measured that. This is the first artifact that has.
+
+```bash
+# inside the runtime image; ./models mounted read-write only for the export
+python -m memory_service.tools.download_models --export-onnx /models/granite-embedding-small-english-r2
+python -m memory_service.tools.download_models --measure-onnx /models/granite-embedding-small-english-r2 \
+  --threads 2 --out benchmark/results/encoder_runtime_devbox.json
+```
+
+Forty single-query encodes after five warm-ups, one query at a time, `intra_op_num_threads`
+and `torch.set_num_threads` both 2, on the 4-core no-AVX2 Docker VM with nothing else
+running. `benchmark/results/encoder_runtime_devbox.json` and, forty seconds later,
+`_repeat.json`.
+
+| runner | p50 ms | mean ms | p95 ms | ×torch (mean) | min cosine vs torch |
+|---|---|---|---|---|---|
+| torch fp32 (sentence-transformers) | 80.6 / 80.7 | 83.1 / 81.6 | 128.1 / 111.3 | 1.00 | — |
+| ONNX fp32 (`onnx/model.onnx`) | 27.3 / 19.5 | 30.0 / 24.2 | 51.5 / 52.0 | 2.77 / 3.37 | 1.000000 |
+| ONNX int8 (`onnx/model_qint8.onnx`) | 36.6 / 23.1 | 38.2 / 26.0 | 54.6 / 50.9 | 2.18 / 3.14 | 0.966638 |
+
+Both figures are the two runs. Only the ratios travel: this box has no AVX2, and every
+absolute here is a statement about it. The earlier reading of the same command — torch 142
+ms mean, ONNX fp32 54.9 — was taken while the unit suite was running on the same cores and
+is not used for anything; it is kept here only as the reminder that a 1.7× swing is what a
+busy box does to this measurement.
+
+Two things fall out that the roadmap did not expect.
+
+**int8 is not faster than fp32 here — it is slower, in both runs.** Dynamic quantisation
+pays for itself through VNNI/AVX2 integer kernels, and this CPU has neither, so the int8
+matmuls run on a fallback path and the extra dequantisation is a net loss. The int8 graph
+may still be the right one on the 8 vCPU target VM, where the instructions exist; on the
+evidence available it is not the obvious choice, and "int8 encoder" cannot be written into
+an image bake until a VM number exists. What *is* established is that ONNX beats torch by
+about 3× at p50 on identical hardware, and that this holds for the fp32 graph, which costs
+no accuracy at all.
+
+**int8 costs more accuracy than the usual hand-wave.** Over the fifty fixed texts the worst
+ONNX-int8 vector sits at cosine 0.9667 from its torch counterpart, not the 0.99+ that
+quantisation write-ups quote. fp32 is 1.000000 across all fifty. A 0.967 vector is a
+different vector space in the only sense retrieval cares about — neighbour ordering — and
+that is why the graph file is part of the embedding fingerprint: the two cannot share a
+collection, and switching between them is a reindex, not a restart.
+
+The frozen default stays `runtime="torch"` in this branch. Switching it is one constant in
+`config/constants.py`, and the branch that switches it should be the one holding the
+target-VM measurement, not this one.
+
+`--export-onnx` traces the ModernBERT checkpoint with the TorchScript exporter at opset 17
+with eager attention; the dynamo exporter and SDPA attention are tried in that order if it
+fails, and if none traces, nothing is written. The fp32 graph is 191 MB, the int8 graph 48.
