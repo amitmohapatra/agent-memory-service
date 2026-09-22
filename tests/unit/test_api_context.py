@@ -16,8 +16,8 @@ HEADERS = {
 }
 
 
-def _app(settings):
-    app = create_app(settings)
+def _app(settings, overrides):
+    app = create_app(settings, overrides=overrides)
     router = APIRouter()
 
     @router.post("/echo-context")
@@ -34,8 +34,8 @@ def _app(settings):
     return app
 
 
-def test_headers_and_body_merge(settings) -> None:
-    with TestClient(_app(settings), raise_server_exceptions=False) as c:
+def test_headers_and_body_merge(settings, overrides) -> None:
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post(
             "/echo-context",
             headers=HEADERS,
@@ -54,8 +54,8 @@ def test_headers_and_body_merge(settings) -> None:
         assert body["request_id"] == r.headers["X-Request-ID"]
 
 
-def test_body_cannot_override_trusted_headers(settings) -> None:
-    with TestClient(_app(settings), raise_server_exceptions=False) as c:
+def test_body_cannot_override_trusted_headers(settings, overrides) -> None:
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post("/echo-context", headers=HEADERS, json={"tenant_id": "globex"})
         assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION"
         r = c.post("/echo-context", headers=HEADERS, json={"user_id": "someone-else"})
@@ -70,8 +70,8 @@ def test_body_cannot_override_trusted_headers(settings) -> None:
         assert r.status_code == 422
 
 
-def test_missing_tenant_and_auth(settings) -> None:
-    with TestClient(_app(settings), raise_server_exceptions=False) as c:
+def test_missing_tenant_and_auth(settings, overrides) -> None:
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post("/echo-context", headers={"X-API-Key": "test-key"}, json={})
         assert r.status_code == 422 and "tenant_id" in r.json()["error"]["message"]
         r = c.post("/echo-context", headers={"X-Memory-Tenant": "acme"}, json={})

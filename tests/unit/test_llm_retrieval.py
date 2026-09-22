@@ -11,7 +11,8 @@ from memory_service.adapters.models.embeddings import HashEmbedding
 from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
-from memory_service.config.settings import RetrievalSettings, SearchSettings
+from memory_service.config.constants import RetrievalSettings
+from memory_service.config.settings import SearchSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from memory_service.config.settings import RetrievalSettings
+from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.ids import content_hash

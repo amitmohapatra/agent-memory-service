@@ -200,7 +200,7 @@ async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) ->
     assert res.routed.query_type is QueryType.DOCUMENT_MULTI_HOP
     assert res.diagnostics["reranked"] is True and res.diagnostics["fused_candidates"] >= 5
     evidence = [c for c in res.candidates if c.kind in ("chunk", "memory")]
-    assert len(evidence) <= container.settings.retrieval.final_k
+    assert len(evidence) <= container.tuning.retrieval.final_k
     reranked = [c for c in res.candidates if c.kind == "chunk" and c.expansion_edge is None]
     assert all(c.rerank_score is not None for c in reranked[: engine.rerank_k])
     assert res.candidates[0].record_id == target.chunk_id

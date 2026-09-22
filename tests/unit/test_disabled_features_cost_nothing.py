@@ -1,11 +1,12 @@
 """A feature that is off must not be built, loaded, or advertised.
 
 Three retrieval capabilities were measured and left off: reranking (worse *and* twelve
-times slower on document RAG — docs/MEASUREMENTS.md §3b), SPLADE (benchmark-gated), and
-ColBERT late interaction (removed outright, ADR 0012). Off should mean off all the way
-down, and for the reranker it did not: `_wire_models` branched on the model provider and
-never on `retrieval.rerank`, so a cross-encoder was constructed in both the API and the
-worker whatever the flag said, and /version reported it as an active provider.
+times slower on document RAG — docs/MEASUREMENTS.md §3b), SPLADE (removed with the freeze:
+a BERT-sized pass per document at ingest for an English-only vocabulary) and ColBERT late
+interaction (removed outright, ADR 0012). Off should mean off all the way down, and for the
+reranker it did not: `_wire_models` branched on the model provider and never on
+`retrieval.rerank`, so a cross-encoder was constructed in both the API and the worker
+whatever the flag said, and /version reported it as an active provider.
 
 Nothing called it. `RetrievalEngine` guards its only call site on `cfg.rerank`.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 import pathlib
 
 from memory_service.api.routers.ops import _active
+from memory_service.config.constants import FROZEN_MODELS, RETRIEVAL
 from memory_service.config.settings import Settings
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -22,7 +24,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def test_the_reranker_is_off_by_default() -> None:
     """On measured evidence, not preference. Changing this needs a new measurement."""
-    assert Settings(_env_file=None).retrieval.rerank is False
+    assert RETRIEVAL.rerank is False
+    assert FROZEN_MODELS.reranker is None, "nothing ships to load even if the flag flips"
 
 
 def test_a_disabled_component_reports_disabled_rather_than_its_configured_name() -> None:
@@ -30,14 +33,12 @@ def test_a_disabled_component_reports_disabled_rather_than_its_configured_name()
     assert _active(None, "sentence_transformers") == "disabled"
 
 
-def test_the_reranker_is_guarded_by_its_own_flag_like_splade_is() -> None:
-    """The asymmetry this test exists to prevent: splade's model load sits behind
-    `if settings.retrieval.splade:` and the reranker's sat behind nothing."""
+def test_the_reranker_is_guarded_by_its_own_flag() -> None:
+    """The asymmetry this test exists to prevent: the reranker's model load sat behind
+    nothing, so 566 MB of weights loaded into every process for something nothing called."""
     wiring = (ROOT / "src/memory_service/adapters/wiring.py").read_text()
-    assert "if settings.retrieval.splade:" in wiring
-    assert "if not settings.retrieval.rerank:" in wiring, (
-        "the reranker must not be constructed when retrieval.rerank is false — that loads "
-        "566 MB of weights into every process for something nothing will call"
+    assert "not container.tuning.retrieval.rerank" in wiring, (
+        "the reranker must not be constructed when retrieval.rerank is false"
     )
 
 
@@ -46,6 +47,7 @@ def test_colbert_left_no_configuration_behind() -> None:
     no setting at all — pydantic's extra="ignore" swallowed it silently in both."""
     models = type(Settings(_env_file=None).models)
     assert "late_interaction_model_path" not in models.model_fields
+    assert "sparse_model_path" not in models.model_fields, "SPLADE went the same way"
     for name in ("docker-compose.yml", ".env.example"):
         path = ROOT / name
         if path.exists():

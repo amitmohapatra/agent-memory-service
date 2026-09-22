@@ -28,6 +28,7 @@ from benchmark.evaluation.memory_pairs import evaluate_pairs, load_pairs
 from benchmark.retrieval import _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
+from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
@@ -73,7 +74,7 @@ async def _provider_quality(settings) -> dict[str, Any]:
     ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1", thread_id="t1")
     pairs = load_pairs(PAIRS)
     results: dict[str, Any] = {}
-    native = NativeMemoryIntelligence(settings.memory_intelligence)
+    native = NativeMemoryIntelligence(MEMORY_INTELLIGENCE)
     rep = await evaluate_pairs(native, pairs, ctx)
     rep.pop("per_pair", None)
     results["native"] = rep

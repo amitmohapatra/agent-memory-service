@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.common import provenance, write_result
+from benchmark.env import bench_overrides
 from benchmark.public import beir, memory_qa
 from benchmark.public.data import (
     BEAM_STATUS,
@@ -34,7 +35,7 @@ SUITES = ("beir", "longmemeval", "locomo")
 
 
 def representative(settings: Any) -> dict[str, Any]:
-    embedding_ok = settings.models.embedding.provider != "hash"
+    embedding_ok = bench_overrides().embedding != "hash"
     llm_ok = bool(settings.models.llm.enabled)
     reasons = []
     if not embedding_ok:

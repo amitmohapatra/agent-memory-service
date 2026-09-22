@@ -153,16 +153,10 @@ Three things that table is actually telling you:
   deterministic stand-in and need re-justifying against a deployed instance — see
   [Status](#status-read-this-before-you-trust-a-number).
 
-Swap any of them with configuration; nothing in the code names a model:
-
-```bash
-MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/bge-small-en-v1.5
-MEMORY__MODELS__EMBEDDING__DIMENSION=384
-```
-
-Changing the embedding changes the vector space, so **re-index after a swap**
-(`make reindex`); the dimension and the model fingerprint are part of the collection name, so
-old and new vectors can never silently mix.
+The model set is frozen in `src/memory_service/config/constants.py` (`FROZEN_MODELS`): a swap
+is a code change, reviewed like one, never an env edit. Changing the embedding changes the
+vector space, so **re-index after a swap** (`make reindex`); the model, backend, ONNX graph and
+dimension are part of the collection name, so old and new vectors can never silently mix.
 
 **Where the stand-in applies.** The test suite and `examples/run_server.sh` fall back to a
 deterministic hash embedding when `models/` is absent, so they exercise the plumbing without a
@@ -457,9 +451,8 @@ MEMORY__SEARCH__QDRANT_URL=http://localhost:6333
 MEMORY__CACHE__URL=redis://localhost:6379/0
 MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 
-# Local CPU models (weights live in ./models, git-ignored)
-MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r2
-MEMORY__MODELS__RERANKER__MODEL_PATH=./models/ms-marco-MiniLM-L6-v2
+# The models are not settings: `make models` puts the frozen set in ./models (git-ignored)
+# and the service finds it there, or under /models in the image.
 
 # Optional LLM — off by default, and only ever through a Bifrost gateway. Enabling it also
 # needs MODEL and USES: with USES empty nothing would call the model, and startup refuses

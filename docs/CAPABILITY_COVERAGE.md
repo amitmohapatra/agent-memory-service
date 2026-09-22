@@ -88,7 +88,9 @@ The earlier document argued for cuts from surface area. This one argues from cov
 is the defensible basis, and it reaches a *narrower* conclusion:
 
 - **Cut the seven flags** — each names a capability demonstrably provided by something on.
-- **Keep `splade`** — the only genuinely uncovered retrieval capability.
+- **`splade`** — was kept as the only genuinely uncovered retrieval capability; removed with
+  the Phase-1 freeze (2026-09): a BERT-sized pass per document at ingest for an English-only
+  vocabulary, against a BM25 leg with server-side IDF that is the correct sparse retriever.
 - **Keep all 25 memory types** — reversing the earlier recommendation. They are an import
   surface with correct admission behaviour, not unused enum values.
 - **Alternative providers** (`mem0`, `cognee`, `langmem`, `graphiti`, `docling_graph`) were

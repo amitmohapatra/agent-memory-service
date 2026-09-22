@@ -7,10 +7,11 @@ re-indexed (the fingerprint changes the collection names) and the golden questio
     uv run python -m benchmark.embedding --quick      # torch backends only
     uv run python -m benchmark.embedding --stand-in   # hash embedding; representative=false
 
-Weights are read from ``$MEMORY_MODELS_DIR/<model-dir>`` (default ``./models``). A backend that
+Weights are read from ``./models/<model-dir>`` (or ``/models`` in the image). A backend that
 cannot be loaded (missing extra, impossible ONNX/OpenVINO export, ...) is recorded as
 ``{"skipped": "<ExceptionType>: reason"}`` — never dropped. ``MEMORY__MODELS__EMBEDDING__THREADS``
-bounds the CPU threads of every candidate.
+bounds the CPU threads of every candidate. The challengers here are benchmark candidates,
+never the product: the service ships exactly ``constants.FROZEN_MODELS``.
 
 Verdict rule ("quality first, then speed"): the default is the candidate with the lowest
 (query embed p95 ms, dimension) among those whose critical Recall@k and critical evidence-group
@@ -41,8 +42,9 @@ from benchmark.evaluation.golden import (
 from benchmark.retrieval import FIXTURES, GOLDEN, _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.adapters.models.embeddings import HashEmbedding, SentenceTransformersEmbedding
-from memory_service.application.container import build_container
-from memory_service.config.settings import EmbeddingSettings, RerankerSettings, Settings
+from memory_service.application.container import Overrides, build_container
+from memory_service.config.constants import DenseModel
+from memory_service.config.settings import Settings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 from memory_service.ports.search import SearchFilter
@@ -54,65 +56,49 @@ MODELS: dict[str, tuple[str, int]] = {
     "granite-embedding-english-r2": ("ibm-granite/granite-embedding-english-r2", 768),
     "qwen3-embedding-0.6b": ("Qwen/Qwen3-Embedding-0.6B", 1024),
 }
-BACKENDS = ("sentence_transformers", "onnx", "openvino")
-QUICK_BACKENDS = ("sentence_transformers",)
+BACKENDS = ("torch", "onnx", "openvino")
+QUICK_BACKENDS = ("torch",)
 STAND_IN = "hash-stand-in"
+STAND_IN_DIMENSION = 64
 QUALITY_KEYS = ("critical_recall_at_k", "critical_evidence_group_recall")
 BATCH_DOCUMENTS = 32
 
 
 def models_dir() -> Path:
-    return Path(os.environ.get("MEMORY_MODELS_DIR", "models"))
+    return Path(os.environ.get("BENCH_MODELS_DIR", "models"))
 
 
-def candidates(
-    *, quick: bool = False, stand_in: bool = False, threads: int | None = None
-) -> dict[str, EmbeddingSettings]:
+def candidates(*, quick: bool = False, stand_in: bool = False) -> dict[str, DenseModel | None]:
+    """Name -> dense encoder spec; ``None`` is the hash stand-in."""
     if stand_in:
-        return {STAND_IN: EmbeddingSettings(provider="hash", dimension=64, threads=threads)}
+        return {STAND_IN: None}
     root = models_dir()
-    out: dict[str, EmbeddingSettings] = {}
+    out: dict[str, DenseModel | None] = {}
     for short, (model, dimension) in MODELS.items():
         for backend in QUICK_BACKENDS if quick else BACKENDS:
-            out[f"{short}/{backend}"] = EmbeddingSettings(
-                provider=backend,
-                model=model,
+            out[f"{short}/{backend}"] = DenseModel(
+                id=model,
+                local_dir=short,
                 model_path=str(root / short),
+                backend=backend,  # type: ignore[arg-type]
                 dimension=dimension,
-                threads=threads,
             )
     return out
 
 
-def with_models(
-    base: Settings,
-    *,
-    embedding: EmbeddingSettings | None = None,
-    reranker: RerankerSettings | None = None,
-) -> Settings:
-    data = base.model_dump()
-    models = dict(data["models"])
-    if embedding is not None:
-        models["embedding"] = embedding.model_dump()
-    if reranker is not None:
-        models["reranker"] = reranker.model_dump()
-    data["models"] = models
-    return Settings(**data)
+def candidate_overrides(spec: DenseModel | None, **changes: Any) -> Overrides:
+    """The benchmark stand-ins with this candidate as the encoder (``None``: the hash)."""
+    if spec is None:
+        return bench_overrides(
+            embedding="hash", embedding_dimension=STAND_IN_DIMENSION, dense_model=None, **changes
+        )
+    return bench_overrides(embedding=None, dense_model=spec, **changes)
 
 
 def bench_settings() -> Settings:
     """``benchmark.retrieval._settings()``: environment providers apply. The in-process task
     queue the corpus is drained through comes from ``bench_overrides()``."""
     return _settings()
-
-
-def stand_in_base(base: Settings) -> Settings:
-    """The environment's infrastructure providers with the deterministic model stand-ins."""
-    return with_models(
-        base,
-        embedding=EmbeddingSettings(provider="hash", dimension=64),
-        reranker=RerankerSettings(provider="lexical"),
-    )
 
 
 async def reset_index(container: Any) -> None:
@@ -129,10 +115,10 @@ async def reset_index(container: Any) -> None:
             await container.cache.delete(*keys)
 
 
-def load_embedding(cfg: EmbeddingSettings) -> Any:
-    if cfg.provider == "hash":
-        return HashEmbedding(cfg.dimension)
-    return SentenceTransformersEmbedding(cfg)
+def load_embedding(spec: DenseModel | None, *, threads: int | None = None) -> Any:
+    if spec is None:
+        return HashEmbedding(STAND_IN_DIMENSION)
+    return SentenceTransformersEmbedding(spec, threads=threads)
 
 
 def sample_documents(golden: GoldenSet, n: int = BATCH_DOCUMENTS) -> list[str]:
@@ -232,12 +218,17 @@ async def embed_latency(
 
 
 async def run_candidate(
-    cfg: EmbeddingSettings, *, base: Settings, copies: int, batches: int
+    spec: DenseModel | None, *, base: Settings, copies: int, batches: int
 ) -> dict[str, Any]:
-    head = {"model": cfg.model, "backend": cfg.provider, "model_path": cfg.model_path}
+    head = (
+        {"model": spec.id, "backend": spec.backend, "model_path": spec.model_path}
+        if spec is not None
+        else {"model": STAND_IN, "backend": "hash", "model_path": None}
+    )
+    threads = base.models.embedding.threads
     t0 = time.perf_counter()
     try:
-        model = load_embedding(cfg)
+        model = load_embedding(spec, threads=threads)
     except Exception as exc:  # noqa: BLE001 - a benchmark reports, it does not crash
         return {**head, "skipped": f"{type(exc).__name__}: {exc}"}
     load_seconds = round(time.perf_counter() - t0, 2)
@@ -247,8 +238,7 @@ async def run_candidate(
     )
     del model
 
-    settings = with_models(base, embedding=cfg)
-    container = await build_container(settings, __version__, overrides=bench_overrides())
+    container = await build_container(base, __version__, overrides=candidate_overrides(spec))
     try:
         # both stores: the vector store is a separate server and a SQL TRUNCATE
         # leaves its vectors behind for the next run to retrieve
@@ -271,7 +261,7 @@ async def run_candidate(
             **head,
             "fingerprint": fingerprint,
             "dimension": int(container.embedding.dimension),
-            "threads": cfg.threads,
+            "threads": threads,
             "load_seconds": load_seconds,
             "embed_ms": embed_ms,
             "index_seconds": index_seconds,
@@ -290,12 +280,10 @@ async def run_candidate(
 async def run(
     *, copies: int, batches: int, quick: bool = False, stand_in: bool = False
 ) -> dict[str, Any]:
-    base = stand_in_base(bench_settings()) if stand_in else bench_settings()
+    base = bench_settings()
     rows: dict[str, dict[str, Any]] = {}
-    for name, cfg in candidates(
-        quick=quick, stand_in=stand_in, threads=base.models.embedding.threads
-    ).items():
-        rows[name] = await run_candidate(cfg, base=base, copies=copies, batches=batches)
+    for name, spec in candidates(quick=quick, stand_in=stand_in).items():
+        rows[name] = await run_candidate(spec, base=base, copies=copies, batches=batches)
     ran = [row for row in rows.values() if "skipped" not in row]
     golden = GoldenSet.load(GOLDEN)
     return {
@@ -304,7 +292,7 @@ async def run(
         "candidates": rows,
         "verdict": pick_default(rows, embedding_cost),
         "providers": {
-            "reranker": base.models.reranker.provider,
+            "reranker": "none",
             "search": BENCH.search,
             "representative": bool(ran) and all(row["representative"] for row in ran),
         },

@@ -22,8 +22,8 @@ _REPO = Path(__file__).resolve().parents[1]
 
 
 def models_dir() -> Path | None:
-    """The weights directory: ``MEMORY_MODELS_DIR`` if set, else ``./models`` if present."""
-    if env := os.environ.get("MEMORY_MODELS_DIR"):
+    """The weights directory: ``BENCH_MODELS_DIR`` if set, else ``./models`` if present."""
+    if env := os.environ.get("BENCH_MODELS_DIR"):
         return Path(env)
     default = _REPO / "models"
     return default if default.is_dir() else None
@@ -31,7 +31,7 @@ def models_dir() -> Path | None:
 
 MODELS_DIR = models_dir()
 
-NO_WEIGHTS = "no model weights — run `make models` or set MEMORY_MODELS_DIR"
+NO_WEIGHTS = "no model weights — run `make models` or set BENCH_MODELS_DIR"
 NO_RUNTIME = (
     "the 'models' extra is not installed (torch/onnxruntime publish no macOS x86_64 wheels) "
     "— run `make model-test` to run this in the Linux runtime image"

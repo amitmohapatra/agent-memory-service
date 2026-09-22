@@ -30,7 +30,7 @@ CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
 
 async def test_pdf_critical_recall_and_evidence_group_gates(container, uow_factory) -> None:
     pytest.importorskip("docling")
-    if container.settings.documents.parser != "docling":
+    if getattr(container.document_parser.info, "name", "") != "docling":
         pytest.skip("documents.parser=docling required (MEMORY_TEST_PROVIDERS=env)")
     golden = GoldenSet.load(GOLDEN)
     register_handlers(container)

@@ -2,8 +2,9 @@
 
 The service's own ``MEMORY__*`` surface is topology and credentials only. What a benchmark
 adds on top - whether Qdrant is the real server or the in-process local mode, which stand-ins
-replace the stores that a harness never wants to talk to - is decided here and handed to
-``build_container(overrides=...)``, never smuggled through settings the product does not have.
+replace the stores a harness never wants to talk to, how deep the judged runs retrieve - is
+decided here and handed to ``build_container(overrides=...)``, never smuggled through settings
+the product does not have. The Makefile passes exactly these variables and nothing else.
 """
 
 from __future__ import annotations
@@ -13,6 +14,29 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from memory_service.application.container import Overrides
+from memory_service.config.constants import CONTEXT, RETRIEVAL
+
+#: Retrieval depth of the judged LoCoMo / LongMemEval runs - the values every judged result
+#: on disk was produced with (Makefile -e flags, before they became constants here). The
+#: shipped depth is ``constants.RETRIEVAL`` / ``constants.CONTEXT``; ``BENCH_DEPTH=judged``
+#: selects these. They are benchmark constants, not settings: the kill list forbids any env
+#: override of prefetch/fused/final/memories_max/token_budget.
+PREFETCH_K = 200
+FUSED_K = 200
+FINAL_K = 100
+MEMORIES_MAX = 100
+TOKEN_BUDGET = 12000
+#: the LLM ceiling and patience the judged runs need (a reasoning model spends its output
+#: budget thinking before it emits anything; a judged question is a long call)
+MAX_TOKENS = 16384
+TIMEOUT = 120
+
+JUDGED_RETRIEVAL = RETRIEVAL.model_copy(
+    update={"prefetch_k": PREFETCH_K, "fused_k": FUSED_K, "final_k": FINAL_K}
+)
+JUDGED_CONTEXT = CONTEXT.model_copy(
+    update={"memories_max": MEMORIES_MAX, "token_budget": TOKEN_BUDGET}
+)
 
 
 def _flag(name: str, default: str) -> str:
@@ -26,22 +50,54 @@ class BenchEnv:
     #: corpus and quietly O(n) beyond it (measured on SciFact: nDCG@10 0.012 against a
     #: published ~0.65, and it was the backend, not the retrieval).
     search: Literal["qdrant", "memory"] = "memory"
+    #: ``native`` for the conversational benchmarks (LoCoMo, LongMemEval); ``disabled`` for
+    #: the document benchmarks, which measure retrieval and not the graph.
+    graph_enrichment: Literal["native", "disabled"] = "native"
+    #: ``shipped``: the frozen constants. ``judged``: the depth above.
+    depth: Literal["shipped", "judged"] = "shipped"
+    #: ``hash`` replaces the frozen encoder with the deterministic stand-in; every result
+    #: produced that way is labelled ``representative: false``.
+    embedding: Literal["frozen", "hash"] = "frozen"
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
-        search = _flag("BENCH_SEARCH", cls.search)
-        if search not in ("qdrant", "memory"):
-            raise SystemExit(f"BENCH_SEARCH={search!r}: expected qdrant or memory")
-        return cls(search=search)  # type: ignore[arg-type]
+        values = {
+            "search": _flag("BENCH_SEARCH", cls.search),
+            "graph_enrichment": _flag("BENCH_GRAPH_ENRICHMENT", cls.graph_enrichment),
+            "depth": _flag("BENCH_DEPTH", cls.depth),
+            "embedding": _flag("BENCH_EMBEDDING", cls.embedding),
+        }
+        allowed = {
+            "search": ("qdrant", "memory"),
+            "graph_enrichment": ("native", "disabled"),
+            "depth": ("shipped", "judged"),
+            "embedding": ("frozen", "hash"),
+        }
+        for name, value in values.items():
+            if value not in allowed[name]:
+                raise SystemExit(f"BENCH_{name.upper()}={value!r}: expected one of {allowed[name]}")
+        return cls(**values)  # type: ignore[arg-type]
 
     def overrides(self, **changes: Any) -> Overrides:
-        """The stand-ins every harness runs with: an in-process cache and queue (a benchmark
-        drains its own jobs synchronously, which only the recording queue supports), plus
-        local-mode Qdrant unless ``BENCH_SEARCH=qdrant``."""
+        """The stand-ins every harness runs with.
+
+        An in-process cache and queue (a benchmark drains its own jobs synchronously, which
+        only the recording queue supports), the in-memory authorization model and blob store
+        (neither is what a benchmark measures), the lexical NLI (grounding is not scored by
+        these harnesses and the DeBERTa head costs 700 MB per process), local-mode Qdrant
+        unless ``BENCH_SEARCH=qdrant``, and the depth ``BENCH_DEPTH`` names.
+        """
         base = Overrides(
             cache="memory",
             tasks="memory",
+            authorization="memory",
+            blob="memory",
+            nli="lexical",
             search="memory" if self.search == "memory" else None,
+            graph_enrichment="disabled" if self.graph_enrichment == "disabled" else None,
+            embedding="hash" if self.embedding == "hash" else None,
+            retrieval=JUDGED_RETRIEVAL if self.depth == "judged" else None,
+            context=JUDGED_CONTEXT if self.depth == "judged" else None,
         )
         return replace(base, **changes) if changes else base
 
@@ -51,3 +107,12 @@ BENCH = BenchEnv.from_environ()
 
 def bench_overrides(**changes: Any) -> Overrides:
     return BENCH.overrides(**changes)
+
+
+def bench_retrieval(overrides: Overrides) -> Any:
+    """The retrieval tuning a container built with ``overrides`` runs with."""
+    return overrides.retrieval or RETRIEVAL
+
+
+def bench_context(overrides: Overrides) -> Any:
+    return overrides.context or CONTEXT

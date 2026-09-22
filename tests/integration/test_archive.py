@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -89,9 +90,7 @@ async def test_archive_thread_verifies_then_marks_and_purges_after_grace(
     assert await archive.archive_thread(TENANT, thread.thread_id) == []
     # purge respects the grace period
     assert await archive.purge_staged_payloads() == 0
-    future = datetime.now(UTC) + timedelta(
-        seconds=container.settings.archive.purge_grace_seconds + 1
-    )
+    future = datetime.now(UTC) + timedelta(seconds=container.tuning.archive.purge_grace_seconds + 1)
     assert await archive.purge_staged_payloads(now=future) == 6
     async with uow_factory() as uow:
         purged = await uow.messages.get(TENANT, msgs[2].message_id)
@@ -203,6 +202,6 @@ def test_lifecycle_policy_from_settings(archive) -> None:
     assert archive.lifecycle_policy() == {
         "autoclass": {"enabled": True, "terminalStorageClass": "ARCHIVE"}
     }
-    archive.buckets = archive.buckets.model_copy(update={"lifecycle_policy": "explicit"})
+    archive.lifecycle = replace(archive.lifecycle, policy="explicit")
     rules = archive.lifecycle_policy()["lifecycle"]["rule"]
     assert [r["action"]["storageClass"] for r in rules] == ["NEARLINE", "COLDLINE", "ARCHIVE"]

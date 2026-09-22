@@ -30,14 +30,16 @@ import re
 import sys
 import time
 from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_overrides
+from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
+from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind, Visibility
 from memory_service.domain.observation import ProcessingHints
@@ -451,14 +453,15 @@ async def run(
     )
 
     settings = _settings()
+    overrides = bench_overrides()
     if ablate:
         # An ablation answers "is this component earning its cost?" the only way that means
         # anything: turn it off, measure the same questions, compare. The reranker is ~87% of
         # per-request model cost, so its ablation is the one that decides real money.
-        settings = settings.model_copy(
-            update={"retrieval": settings.retrieval.model_copy(update=ablate)}
+        overrides = replace(
+            overrides, retrieval=bench_retrieval(overrides).model_copy(update=ablate)
         )
-    container = await build_container(settings, __version__, overrides=bench_overrides())
+    container = await build_container(settings, __version__, overrides=overrides)
     llm = container.llm if judge else None
     pacer = _Pacer(calls_per_minute)
     if judge and not getattr(llm, "enabled", False):
@@ -651,7 +654,7 @@ async def run(
     answerable = {c: v for c, v in per_category.items() if c != ADVERSARIAL}
     total_n = sum(v["n"] for v in answerable.values())
     total_hit = sum(v["hit"] for v in answerable.values())
-    embedding = settings.models.embedding.provider
+    embedding = "hash" if overrides.embedding == "hash" else FROZEN_MODELS.dense.id
 
     # Abstention is the headline claim of this product, and this harness cannot measure it
     # in this configuration. The NLI cascade that decides "the evidence does not support this"
@@ -678,7 +681,7 @@ async def run(
             "those questions fell back to token overlap. Scores are a mixture of two "
             "different metrics and should not be compared with a clean run."
         )
-    nli_representative = settings.models.nli.provider not in ("lexical", "hash")
+    nli_representative = overrides.nli is None
     if not llm_on:
         caveats.append(
             "abstention_rate_on_adversarial is NOT a measurement: the NLI cascade scores "
@@ -688,11 +691,11 @@ async def run(
         )
     if not nli_representative:
         caveats.append(
-            f"models.nli.provider={settings.models.nli.provider!r} is a stand-in, not the "
+            f"nli={overrides.nli!r} is a stand-in, not the "
             "entailment model; grounding results are not representative."
         )
     if embedding == "hash":
-        caveats.append("models.embedding.provider='hash' is a stand-in; recall is not real.")
+        caveats.append("embedding='hash' is a stand-in; recall is not real.")
 
     return {
         "dataset": {
@@ -702,11 +705,11 @@ async def run(
         },
         # the depth that was actually used; `--k` only names the file, retrieval reads
         # settings, and a run that said "depth 50" once carried 40 memories in every bundle
-        "k": settings.retrieval.final_k,
+        "k": container.tuning.retrieval.final_k,
         "k_requested": k,
         "settings": {
-            "retrieval": settings.retrieval.model_dump(mode="json"),
-            "context": settings.context.model_dump(mode="json"),
+            "retrieval": container.tuning.retrieval.model_dump(mode="json"),
+            "context": container.tuning.context.model_dump(mode="json"),
             "llm_model": settings.models.llm.model,
         },
         "answer_recall_at_k": round(total_hit / total_n, 4) if total_n else 0.0,

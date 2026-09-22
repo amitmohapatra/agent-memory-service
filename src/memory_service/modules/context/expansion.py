@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from memory_service.config.settings import RetrievalSettings
+from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, ContextEdge
 from memory_service.domain.enums import ContextGraphEdge, QueryType

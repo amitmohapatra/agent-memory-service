@@ -155,9 +155,8 @@ BENCH_TENANT ?= bench_docs
 #: torch intra-op threads for the concurrency benchmark; empty means torch's own default.
 BENCH_THREADS ?=
 BENCH_SEARCH ?= qdrant
-#: The query encoder is the floor of every retrieval (178 ms mean on torch, no AVX2 here);
-#: one variable so an A/B of runtimes is a flag on the same targets.
-BENCH_EMBEDDING_PROVIDER ?= sentence_transformers
+#: The encoder is frozen (src/memory_service/config/constants.py); `make bench-embedding`
+#: is where challengers are compared, never a flag on the product.
 BENCH_QDRANT_URL ?= http://host.docker.internal:6333
 #: The gateway, reached from inside the benchmark container. It holds the provider key;
 #: the service is only ever told a URL and a model name.
@@ -197,14 +196,6 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.locomo $(LOCOMO_ARGS)'
 
@@ -228,24 +219,13 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  -e MEMORY__MODELS__LLM__ENABLED=true \
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
 	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
-	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
-	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
+	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \
@@ -260,24 +240,13 @@ bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  -e MEMORY__MODELS__LLM__ENABLED=true \
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
 	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
-	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
-	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
+	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \
@@ -296,24 +265,13 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
 	  -e MEMORY__MODELS__LLM__ENABLED=true \
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
 	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
-	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
-	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
+	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \
@@ -333,12 +291,7 @@ bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sectio
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_GOLDEN)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e BENCH_GRAPH_ENRICHMENT=disabled \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.retrieval $(GOLDEN_ARGS)'
 
@@ -353,13 +306,8 @@ bench-concurrency: ## How much parallelism the model tier wants, and what it cos
 	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
-	  -e BENCH_SEARCH=memory -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e BENCH_SEARCH=memory \
+	  -e BENCH_GRAPH_ENRICHMENT=disabled \
 	  -e MEMORY__MODELS__EMBEDDING__THREADS="$(BENCH_THREADS)" \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS)'
@@ -374,14 +322,7 @@ bench-degenerate: bench-db ## Behaviour on empty/garbage/hostile input, real mod
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DEGEN)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e BENCH_GRAPH_ENRICHMENT=disabled \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.degenerate $(DEGENERATE_ARGS)'
 
@@ -395,14 +336,7 @@ bench-external: bench-db ## Retrieval quality on an external corpus, with the re
 	  -e PYTHONFAULTHANDLER=1 \
 	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__BLOB__PROVIDER=memory \
-	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
-	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
-	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
-	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
-	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
-	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=disabled \
+	  -e BENCH_GRAPH_ENRICHMENT=disabled \
 	  -e BENCH_TENANT="$(BENCH_TENANT)" \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.external_retrieval $(BENCH_LIMIT)'

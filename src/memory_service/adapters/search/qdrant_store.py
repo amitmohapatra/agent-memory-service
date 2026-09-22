@@ -17,6 +17,7 @@ from typing import Any
 
 from qdrant_client import AsyncQdrantClient, models
 
+from memory_service.config.constants import SEARCH
 from memory_service.config.settings import SearchSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.observability.metrics import stage_seconds
@@ -90,13 +91,13 @@ class QdrantSearchStore:
                 api_key=settings.qdrant_api_key.get_secret_value()
                 if settings.qdrant_api_key
                 else None,
-                timeout=int(settings.timeout_seconds),
+                timeout=int(SEARCH.timeout_seconds),
             )
             self._local = False
         self._known: set[str] = set()
 
     def _name(self, collection: str) -> str:
-        return f"{self.settings.collection_prefix}_{collection}"
+        return f"{SEARCH.collection_prefix}_{collection}"
 
     async def ensure_collection(self, spec: CollectionSpec) -> None:
         name = self._name(spec.name)
@@ -124,7 +125,7 @@ class QdrantSearchStore:
                     collection_name=name,
                     vectors_config=vectors,
                     sparse_vectors_config=sparse,
-                    on_disk_payload=self.settings.on_disk_payload and not self._local,
+                    on_disk_payload=SEARCH.on_disk_payload and not self._local,
                 )
             if not self._local:  # local mode has no payload indexes
                 await self._ensure_payload_indexes(name)

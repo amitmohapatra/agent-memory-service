@@ -10,7 +10,7 @@ from typing import Any
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
 from memory_service.adapters.models.sparse import tokenize
-from memory_service.config.settings import RerankerSettings
+from memory_service.config.constants import CrossEncoderModel
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo, RerankResult
 
@@ -61,36 +61,36 @@ class LexicalReranker:
 class CrossEncoderReranker:
     info: ProviderInfo
 
-    def __init__(self, settings: RerankerSettings) -> None:
+    def __init__(self, spec: CrossEncoderModel) -> None:
         try:
             from sentence_transformers import CrossEncoder
         except ImportError as exc:
             raise DependencyUnavailable(
                 "sentence-transformers is required (install [models])"
             ) from exc
-        source = settings.model_path or settings.model
+        source = spec.source
         kwargs: dict[str, Any] = {"device": "cpu"}
-        if settings.provider == "onnx":
+        if spec.backend == "onnx":
             kwargs["backend"] = "onnx"
         else:
             kwargs["model_kwargs"] = cpu_dtype_kwargs()
-        if settings.model_path:
+        if source != spec.id:
             kwargs["local_files_only"] = True
         try:
             self._model = CrossEncoder(source, **kwargs)
         except Exception as exc:
             raise DependencyUnavailable(
                 f"reranker {source!r} could not be loaded ({type(exc).__name__}); "
-                "set MEMORY__MODELS__RERANKER__MODEL_PATH"
+                "download it under models/ first"
             ) from exc
         import torch
 
         self._sigmoid = torch.nn.Sigmoid()
-        self.settings = settings
+        self.spec = spec
         self.info = ProviderInfo(
-            name=settings.model,
+            name=spec.id,
             license="Apache-2.0",
-            origin="huggingface/" + settings.model,
+            origin="huggingface/" + spec.id,
             locality="local",
         )
 
@@ -108,7 +108,7 @@ class CrossEncoderReranker:
         pairs = [(query, d) for d in documents]
         out = self._model.predict(
             pairs,
-            batch_size=self.settings.batch_size,
+            batch_size=self.spec.batch_size,
             show_progress_bar=False,
             activation_fn=self._sigmoid,
         )
@@ -124,4 +124,4 @@ class CrossEncoderReranker:
         return [RerankResult(index=i, score=scores[i]) for i in order[:top_k]]
 
     def fingerprint(self) -> str:
-        return f"ce-{(self.settings.model_path or self.settings.model).rstrip('/').split('/')[-1]}"
+        return f"ce-{(self.spec.model_path or self.spec.id).rstrip('/').split('/')[-1]}"

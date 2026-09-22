@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
     AdmissionVerdict,

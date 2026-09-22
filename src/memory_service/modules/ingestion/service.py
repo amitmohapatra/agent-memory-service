@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from memory_service.config.settings import DocumentSettings
+from memory_service.config.constants import DocumentSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Document
 from memory_service.domain.enums import ArchiveStatus, ObservationKind, Visibility

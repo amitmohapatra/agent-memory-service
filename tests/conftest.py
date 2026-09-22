@@ -49,16 +49,7 @@ def _test_settings(**overrides: object) -> Settings:
     base = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["test-key"]},
-        "authorization": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {
-            "embedding": {"provider": "hash", "dimension": 64},
-            "reranker": {"provider": "lexical"},
-            "nli": {"provider": "lexical"},
-            "llm": {"enabled": False},
-        },
-        "documents": {"parser": "builtin"},
-        "observability": {"otel_enabled": False},
+        "models": {"llm": {"enabled": False}},
         "database": {"url": DB_URL},
     }
     for key, value in overrides.items():
@@ -67,11 +58,11 @@ def _test_settings(**overrides: object) -> Settings:
         else:
             base[key] = value
     if os.environ.get("MEMORY_TEST_PROVIDERS") == "env":
-        # Real-component runs: the environment's providers (weights, Qdrant server, cache,
-        # OpenFGA, parser, LLM gateway) replace the hermetic stand-ins for these sections
-        # only; tasks/blob stay test-local so drain() and tmp_path semantics hold.
+        # Real-component runs: the environment's stores and gateway (Qdrant server, cache,
+        # OpenFGA, LLM) replace the hermetic stand-ins for these sections only; tasks/blob
+        # stay test-local so drain() and tmp_path semantics hold.
         env_only = Settings().model_dump(exclude_unset=True)
-        for section in ("models", "search", "authorization", "documents", "retrieval"):
+        for section in ("models", "search", "authorization", "cache"):
             if isinstance(env_only.get(section), dict):
                 base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
     # ``_env_file=None`` disables the dotenv source. Stripping MEMORY__* from os.environ is
@@ -81,19 +72,41 @@ def _test_settings(**overrides: object) -> Settings:
 
 
 #: The in-process stand-ins the hermetic suite runs on. They are not settings: a deployment
-#: cannot be pointed at a dict-backed cache or an in-memory queue by an env file, so the suite
-#: names them in code when it builds a container (``build_container(overrides=...)``).
-HERMETIC = Overrides(cache="memory", search="memory", tasks="inline")
+#: cannot be pointed at a dict-backed cache, a hash embedding or an in-memory queue by an env
+#: file, so the suite names them in code when it builds a container
+#: (``build_container(overrides=...)``).
+HERMETIC = Overrides(
+    cache="memory",
+    search="memory",
+    tasks="inline",
+    authorization="memory",
+    blob="memory",
+    embedding="hash",
+    embedding_dimension=64,
+    reranker="lexical",
+    nli="lexical",
+    document_parser="builtin",
+)
 
 
 def _test_overrides(**changes: object) -> Overrides:
-    """``HERMETIC`` with fields replaced; under ``MEMORY_TEST_PROVIDERS=env`` the real cache
-    and Qdrant server take over while the queue stays in-process so ``drain()`` still works."""
+    """``HERMETIC`` with fields replaced; under ``MEMORY_TEST_PROVIDERS=env`` the real stores,
+    weights and parser take over while the queue and blob store stay in-process so ``drain()``
+    and tmp_path semantics hold."""
     from dataclasses import replace
 
     base = HERMETIC
     if os.environ.get("MEMORY_TEST_PROVIDERS") == "env":
-        base = replace(base, cache=None, search=None)
+        base = replace(
+            base,
+            cache=None,
+            search=None,
+            authorization=None,
+            embedding=None,
+            reranker=None,
+            nli=None,
+            document_parser=None,
+        )
     return replace(base, **changes) if changes else base  # type: ignore[arg-type]
 
 

@@ -14,18 +14,13 @@ x-common-env: &common-env
   MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
   MEMORY__CACHE__URL: redis://dragonfly:6379/0
   MEMORY__SEARCH__QDRANT_URL: http://qdrant:6333
-  MEMORY__AUTHORIZATION__PROVIDER: openfga
   MEMORY__AUTHORIZATION__OPENFGA_API_URL: http://openfga:8080
   MEMORY__BLOB__PROVIDER: filesystem
   MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
-  MEMORY__MODELS__EMBEDDING__MODEL: ibm-granite/granite-embedding-small-english-r2
-  MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
-  MEMORY__MODELS__EMBEDDING__DIMENSION: "384"
-  MEMORY__MODELS__RERANKER__MODEL: cross-encoder/ms-marco-MiniLM-L6-v2
-  MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
-  MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
-  # docling resolves its layout and table models from here instead of downloading them
-  # on first use - the image is built with no network at runtime.
+  # The models are not configuration: src/memory_service/config/constants.py names the
+  # frozen set and the service reads each one from /models/<dir> (the ./models mount)
+  # without being told - a wrong dimension or a swapped encoder cannot be set here any more.
+  # docling resolves its layout and table models from the same place.
   MEMORY_DOCLING_ARTIFACTS: /models/docling
   # the image runs as `nobody` with HOME=/nonexistent, so any library that wants a cache
   # directory needs somewhere writable or it dies with PermissionError on first use.
@@ -183,8 +178,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
-      # Startup loads three models from disk — embedding, reranker and a ~700MB NLI
-      # cross-encoder. Measured cold start on 4 CPUs: ~6 minutes. Without a start_period,
+      # Startup loads two models from disk — the embedding encoder and a ~700MB NLI
+      # cross-encoder (no reranker ships). Measured cold start on 4 CPUs with three: ~6
+      # minutes; re-measure once the int8 set is baked (Phase 2). Without a start_period,
       # interval x retries declared the container unhealthy after ~100s while it was still
       # legitimately loading, so `docker compose up` reported a broken stack that was about
       # to be fine. Probes that fail inside this window do not count against `retries`.
@@ -250,10 +246,6 @@ services:
       <<: *common-env
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
       MEMORY__SERVICE__LOG_LEVEL: WARNING
-      MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
-      MEMORY__MODELS__RERANKER__MODEL_PATH: /models/ms-marco-MiniLM-L6-v2
-      MEMORY__MODELS__NLI__MODEL_PATH: /models/deberta-v3-base-mnli-fever-anli
-      MEMORY__MODELS__SPARSE_MODEL_PATH: /models/Splade_PP_en_v1
       MEMORY__BLOB__FILESYSTEM_ROOT: /app/.blob
       UV_PROJECT_ENVIRONMENT: /opt/venv
     volumes:

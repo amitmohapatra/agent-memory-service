@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from memory_service.config.constants import TASKS
 from memory_service.domain.revisions import RevisionKind
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import Queue
@@ -180,7 +181,7 @@ def register_handlers(container: Container) -> None:
                 log.info("reconcile.report", **report)
         recover = getattr(container.tasks, "recover_stalled", None)
         if recover is not None:  # jobs orphaned by a worker that died mid-run
-            await recover(seconds_since_heartbeat=container.settings.tasks.stalled_after_seconds)
+            await recover(seconds_since_heartbeat=TASKS.stalled_after_seconds)
         for extra in container.services.get("extra_reconcilers", []):
             await extra()
 
@@ -197,7 +198,7 @@ def register_handlers(container: Container) -> None:
     queue.register(TASK_MEMORY_FORGET, Queue.RECONCILE, memory_forget, retries=0)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
     queue.register(TASK_ARCHIVE_PURGE, Queue.ARCHIVE, archive_purge, retries=0)
-    every = max(1, container.settings.tasks.periodic_reconcile_seconds // 60)
+    every = max(1, TASKS.periodic_reconcile_seconds // 60)
     queue.register_periodic(
         "periodic.reconcile", Queue.RECONCILE, reconcile, cron=f"*/{min(every, 59)} * * * *"
     )

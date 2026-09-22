@@ -31,8 +31,8 @@ def _pkg(name: str) -> str:
 
 def _model_manifest() -> dict[str, Any]:
     """Model name + revision hash per weight directory (written when the weights are
-    downloaded into ``MEMORY_MODELS_DIR`` / ``./models``)."""
-    root = Path(os.environ.get("MEMORY_MODELS_DIR", "models"))
+    downloaded into ``./models``, or ``BENCH_MODELS_DIR``)."""
+    root = Path(os.environ.get("BENCH_MODELS_DIR", "models"))
     path = root / "MANIFEST.json"
     if not path.is_file():
         return {}

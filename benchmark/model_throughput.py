@@ -22,7 +22,7 @@ from pathlib import Path
 from benchmark.common import provenance, write_result
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = Path(os.environ.get("MEMORY_MODELS_DIR", ROOT / "models"))
+MODELS = Path(os.environ.get("BENCH_MODELS_DIR", ROOT / "models"))
 
 #: representative inputs: a short query, and chunk-sized passages
 QUERY = "What was the revenue impact of the supply chain disruption in the third quarter?"

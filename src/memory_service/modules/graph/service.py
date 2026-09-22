@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from memory_service.config.settings import GraphSettings
+from memory_service.config.constants import GraphSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.memory import Scope
 from memory_service.domain.revisions import RevisionKind

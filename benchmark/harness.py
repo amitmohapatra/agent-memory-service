@@ -16,6 +16,7 @@ from typing import Any
 
 import httpx
 
+from benchmark.evaluation import BUDGETS
 from benchmark.evaluation.golden import GoldenSet
 from benchmark.retrieval import FIXTURES, _pct
 from memory_service.config.settings import Settings
@@ -55,8 +56,8 @@ def new_scope() -> dict[str, str]:
     }
 
 
-def budgets_ms(settings: Settings) -> dict[str, float]:
-    return {key: getattr(settings.budgets, key) for key in BUDGET_KEYS}
+def budgets_ms(settings: Settings | None = None) -> dict[str, float]:
+    return {key: getattr(BUDGETS, key) for key in BUDGET_KEYS}
 
 
 def stats(xs: list[float]) -> dict[str, Any]:

@@ -78,8 +78,9 @@ outgrew the verification budget.
 **Seven of the eight off-by-default retrieval flags — done, 2026-09-20.** `minicoil`,
 `colbert`, `pageindex`, `raptor`, `graph_ppr`, `graphrag_global` and `late_chunking` are
 removed: flags, wiring, adapters, the `strategies` module, the late-interaction vector
-support in the search layer, and 854 MB of ColBERT weights. `splade` remains as the single
-experiment slot, and now runs on its own tier.
+support in the search layer, and 854 MB of ColBERT weights. `splade` remained as the single
+experiment slot until the Phase-1 freeze (2026-09) removed it too: the sparse leg is BM25 with
+server-side IDF, and a learned sparse encoder is a benchmark challenger, never a product flag.
 
 The argument was redundancy, not quality — each named a capability something already-on
 provides — and `tests/eval/test_capability_coverage.py` demonstrates each capability

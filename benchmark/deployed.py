@@ -572,7 +572,7 @@ async def run(args: argparse.Namespace) -> int:
         api_env = {**env, "MEMORY__SERVICE__HOST": "127.0.0.1", "MEMORY__SERVICE__PORT": str(port)}
         api = Managed("api", resolve_cmd(args.api_cmd), api_env, log_dir)
     pool = WorkerPool(resolve_cmd(args.worker_cmd), env, args.workers, log_dir)
-    db = Db(settings.database.url)
+    db = Db(settings.database.dsn)
     code = 1
     try:
         reset: dict[str, Any] = {}

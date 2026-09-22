@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
     DedupDecision,

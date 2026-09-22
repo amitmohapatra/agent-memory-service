@@ -14,7 +14,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from memory_service.config.settings import ArchiveSettings, BlobSettings
+from memory_service.config.constants import BLOB_LIFECYCLE, ArchiveSettings, BlobLifecycle
+from memory_service.config.settings import BlobSettings
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import ArchiveStatus
 from memory_service.domain.errors import CorruptSource, DependencyUnavailable, NotFound
@@ -41,11 +42,13 @@ class ArchiveService:
         *,
         archive: ArchiveSettings,
         blob_settings: BlobSettings,
+        lifecycle: BlobLifecycle = BLOB_LIFECYCLE,
     ) -> None:
         self.uow_factory = uow_factory
         self.blob = blob
         self.cfg = archive
         self.buckets = blob_settings
+        self.lifecycle = lifecycle
 
     # -- write path -------------------------------------------------------------
     async def archive_thread(self, tenant_id: str, thread_id: str) -> list[str]:
@@ -304,15 +307,15 @@ class ArchiveService:
         return report
 
     def lifecycle_policy(self) -> dict[str, Any]:
-        """GCS lifecycle configuration derived from settings (autoclass or explicit tiers)."""
-        if self.buckets.lifecycle_policy == "autoclass":
+        """GCS lifecycle configuration (``constants.BLOB_LIFECYCLE``: autoclass or explicit)."""
+        if self.lifecycle.policy == "autoclass":
             return {"autoclass": {"enabled": True, "terminalStorageClass": "ARCHIVE"}}
         rules = [
             {"action": {"type": "SetStorageClass", "storageClass": cls}, "condition": {"age": days}}
             for cls, days in (
-                ("NEARLINE", self.buckets.explicit_lifecycle_days_nearline),
-                ("COLDLINE", self.buckets.explicit_lifecycle_days_coldline),
-                ("ARCHIVE", self.buckets.explicit_lifecycle_days_archive),
+                ("NEARLINE", self.lifecycle.nearline_days),
+                ("COLDLINE", self.lifecycle.coldline_days),
+                ("ARCHIVE", self.lifecycle.archive_days),
             )
         ]
         return {"lifecycle": {"rule": rules}}

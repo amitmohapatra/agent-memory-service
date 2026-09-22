@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from memory_service.config.constants import HEADERS
 from memory_service.config.settings import AuthenticationSettings
 from memory_service.domain.errors import AuthenticationFailed, DependencyUnavailable
 
@@ -44,9 +45,10 @@ class ServiceAuthenticator:
 
     # -- modes ------------------------------------------------------------------
     def _trusted_dev(self, headers: dict[str, str]) -> ServicePrincipal:
-        key = headers.get(self.settings.header_api_key.lower())
+        key = headers.get(HEADERS.api_key.lower())
         if not key or not any(
-            hmac.compare_digest(key, k) for k in self.settings.trusted_dev_api_keys
+            hmac.compare_digest(key, k.get_secret_value())
+            for k in self.settings.trusted_dev_api_keys
         ):
             raise AuthenticationFailed("Missing or invalid API key")
         return ServicePrincipal(

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.adapters.models.nli import LexicalNLI
-from memory_service.config.settings import NLISettings
+from memory_service.config.constants import NLISettings
 from memory_service.domain.context_bundle import (
     ContextBundle,
     ContextItem,
@@ -44,7 +44,7 @@ E2 = Evidence(
     "chunk_id:chk_2",
 )
 E3 = Evidence("chk_3", "The company does not expect to pay a dividend for FY26.", "chunk")
-SETTINGS = NLISettings(provider="lexical")
+SETTINGS = NLISettings()
 
 
 def cascade(**overrides):

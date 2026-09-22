@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 from bifrost_sdk import RETRYABLE, Bifrost, CircuitOpen, GatewayError, RateLimited, Unreachable
 
+from memory_service.config.constants import LLM_TRANSPORT, LLMTransport
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.cost import record_llm_tokens
@@ -142,6 +143,7 @@ class BifrostLLM:
         *,
         log_source_text: bool = False,
         client: httpx.AsyncClient | None = None,
+        transport: LLMTransport = LLM_TRANSPORT,
     ) -> None:
         if not settings.enabled:
             raise ProviderNotConfigured("models.llm.enabled must be true")
@@ -166,10 +168,10 @@ class BifrostLLM:
             api_key=settings.api_key.get_secret_value() if settings.api_key else None,
             timeout=settings.timeout_seconds,
             max_retries=settings.max_retries,
-            backoff_seconds=settings.retry_backoff_seconds,
+            backoff_seconds=transport.retry_backoff_seconds,
             max_tokens=settings.max_tokens,
-            circuit_failure_threshold=settings.circuit_failure_threshold,
-            circuit_open_seconds=settings.circuit_open_seconds,
+            circuit_failure_threshold=transport.circuit_failure_threshold,
+            circuit_open_seconds=transport.circuit_open_seconds,
             client=client,
         )
 

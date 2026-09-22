@@ -85,33 +85,36 @@ class TestVerdicts:
 @pytest.mark.unit
 class TestCandidates:
     def test_embedding_matrix(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv("MEMORY_MODELS_DIR", str(tmp_path))
-        full = embedding.candidates(threads=3)
+        monkeypatch.setenv("BENCH_MODELS_DIR", str(tmp_path))
+        full = embedding.candidates()
         # derived from the catalogue, so adding a candidate model does not break the test
         assert len(full) == len(embedding.MODELS) * len(embedding.BACKENDS)
-        assert {c.provider for c in full.values()} == set(embedding.BACKENDS)
-        assert {c.dimension for c in full.values()} == {d for _, d in embedding.MODELS.values()}
-        assert all(c.threads == 3 for c in full.values())
+        specs = [c for c in full.values() if c is not None]
+        assert len(specs) == len(full)
+        assert {c.backend for c in specs} == set(embedding.BACKENDS)
+        assert {c.dimension for c in specs} == {d for _, d in embedding.MODELS.values()}
         large = full["granite-embedding-english-r2/onnx"]
-        assert large.model == "ibm-granite/granite-embedding-english-r2"
+        assert large is not None
+        assert large.id == "ibm-granite/granite-embedding-english-r2"
         assert large.model_path == str(tmp_path / "granite-embedding-english-r2")
 
         quick = embedding.candidates(quick=True)
         assert len(quick) == len(embedding.MODELS)
-        assert {c.provider for c in quick.values()} == {"sentence_transformers"}
+        assert {c.backend for c in quick.values() if c is not None} == {"torch"}
 
         stand_in = embedding.candidates(stand_in=True)
         assert list(stand_in) == [embedding.STAND_IN]
-        assert stand_in[embedding.STAND_IN].provider == "hash"
+        assert stand_in[embedding.STAND_IN] is None
 
     def test_reranker_matrix(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv("MEMORY_MODELS_DIR", str(tmp_path))
+        monkeypatch.setenv("BENCH_MODELS_DIR", str(tmp_path))
         full = reranker.candidates()
         assert len(full) == 12
         assert sorted({c.candidate_k for c in full.values()}) == [15, 20, 25]
         ce = full["onnx@k25"]
         assert ce.provider == "onnx"
         assert ce.candidate_k == 25
+        assert ce.model is not None and ce.model.backend == "onnx"
         assert ce.model_path == str(tmp_path / "ms-marco-MiniLM-L6-v2")
         assert full["lexical@k15"].model_path is None
         assert {c.provider for c in reranker.candidates(stand_in=True).values()} == {
@@ -126,28 +129,22 @@ class TestCandidates:
         assert len(docs) == embedding.BATCH_DOCUMENTS
         assert all(len(d) > 40 for d in docs)
 
-    def test_with_models_replaces_only_the_given_sections(self) -> None:
-        from memory_service.config.settings import EmbeddingSettings, Settings
+    def test_candidate_overrides_swap_only_the_encoder(self) -> None:
+        """A candidate replaces the frozen encoder for one container and nothing else: the
+        benchmark stand-ins for the stores stay exactly what ``bench_overrides()`` says."""
+        from benchmark.env import bench_overrides
 
-        base = Settings(models={"reranker": {"provider": "lexical", "candidate_k": 25}})
-        cfg = EmbeddingSettings(provider="onnx", model="m", model_path="/w/m", dimension=768)
-        merged = embedding.with_models(base, embedding=cfg)
-        assert merged.models.embedding == cfg
-        assert merged.models.reranker.provider == "lexical"
-        assert merged.models.reranker.candidate_k == 25
+        from memory_service.config.constants import DenseModel
 
-    def test_stand_in_base_keeps_infrastructure_and_swaps_models(self) -> None:
-        from memory_service.config.settings import Settings
-
-        base = Settings(
-            search={"qdrant_url": "http://q:6333"},
-            models={"embedding": {"provider": "onnx", "dimension": 768}},
-        )
-        stand_in = embedding.stand_in_base(base)
-        assert stand_in.search.qdrant_url == "http://q:6333"
-        assert stand_in.models.embedding.provider == "hash"
-        assert stand_in.models.embedding.dimension == 64
-        assert stand_in.models.reranker.provider == "lexical"
+        spec = DenseModel(id="m", model_path="/w/m", backend="onnx", dimension=768)
+        with_spec = embedding.candidate_overrides(spec)
+        assert with_spec.dense_model == spec and with_spec.embedding is None
+        stand_in = embedding.candidate_overrides(None)
+        assert stand_in.embedding == "hash" and stand_in.dense_model is None
+        assert stand_in.embedding_dimension == embedding.STAND_IN_DIMENSION
+        base = bench_overrides()
+        for name in ("cache", "tasks", "search", "authorization", "blob", "nli"):
+            assert getattr(with_spec, name) == getattr(base, name) == getattr(stand_in, name)
 
 
 @pytest.mark.integration
@@ -155,8 +152,6 @@ class TestCandidates:
 def test_embedding_benchmark_stand_in_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for section in ("AUTHORIZATION", "BLOB"):
-        monkeypatch.setenv(f"MEMORY__{section}__PROVIDER", "memory")
     monkeypatch.setenv("BENCH_SEARCH", "memory")
     out = tmp_path / "embedding.json"
     embedding.main(["--quick", "--stand-in", "--copies", "1", "--batches", "1", "--out", str(out)])

@@ -142,7 +142,7 @@ async def test_global_summary_and_conversation_rolling_summary(container, uow_fa
                 uow, ctx, role=MessageRole.USER, content=f"Turn {i}: " + "detail " * 60
             )
         await uow.commit()
-    small_window = container.settings.context.model_copy(update={"conversation_token_budget": 200})
+    small_window = container.tuning.context.model_copy(update={"conversation_token_budget": 200})
     builder = container.services["context_builder"]
     builder.cfg = small_window
     bundle = await builder.build(ctx, "what did I say earlier in this thread?")

@@ -14,6 +14,7 @@ answer is not a working profile.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 
 import pytest
 from sqlalchemy import text
@@ -34,25 +35,28 @@ pytestmark = [pytest.mark.contract, pytest.mark.usefixtures()]
 PROFILES: dict[str, tuple[dict, Overrides]] = {
     # what CI and a laptop run: nothing outside the process
     "all-in-process": (
-        {"blob": {"provider": "memory"}},
-        Overrides(cache="memory", tasks="memory", search="memory"),
+        {},
+        Overrides(cache="memory", tasks="memory", search="memory", blob="memory"),
     ),
     # the dev stack shape: real cache and real vector store
-    "server-backed": ({"blob": {"provider": "memory"}}, Overrides(tasks="memory")),
+    "server-backed": ({}, Overrides(tasks="memory", blob="memory")),
     # a cache outage must degrade, not fail: the canonical store still answers
-    "no-cache": (
-        {"blob": {"provider": "memory"}},
-        Overrides(cache="disabled", tasks="memory", search="memory"),
-    ),
+    "no-cache": ({}, Overrides(cache="disabled", tasks="memory", search="memory", blob="memory")),
     # graph enrichment is optional; memories must still land without it
     "no-graph": (
-        {"blob": {"provider": "memory"}, "graph_enrichment": {"provider": "disabled"}},
-        Overrides(cache="memory", tasks="memory", search="memory"),
+        {},
+        Overrides(
+            cache="memory",
+            tasks="memory",
+            search="memory",
+            blob="memory",
+            graph_enrichment="disabled",
+        ),
     ),
     # no generative model at all - the rule-based path has to carry the service
     "no-llm": (
-        {"blob": {"provider": "memory"}, "models": {"llm": {"enabled": False}}},
-        Overrides(cache="memory", tasks="memory", search="memory"),
+        {"models": {"llm": {"enabled": False}}},
+        Overrides(cache="memory", tasks="memory", search="memory", blob="memory"),
     ),
 }
 
@@ -72,9 +76,16 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     }
     for key, value in profile_sections.items():  # the profile wins over the defaults above
         sections[key] = {**sections.get(key, {}), **value} if isinstance(value, dict) else value
-    if sections["blob"].get("provider") == "memory":
-        sections["blob"] = {"provider": "memory"}
     settings = make_settings(**sections)
+    # the suite's model stand-ins apply to every profile; the profile decides the stores
+    stand_ins = replace(
+        stand_ins,
+        authorization="memory",
+        embedding="hash",
+        reranker="lexical",
+        nli="lexical",
+        document_parser="builtin",
+    )
 
     container = await build_container(settings, __version__, overrides=stand_ins)
     try:

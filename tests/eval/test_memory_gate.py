@@ -11,7 +11,7 @@ from benchmark.common import RESULTS, provenance
 from benchmark.evaluation import FALSE_MERGE_RATE_MAX
 from benchmark.evaluation.memory_pairs import evaluate_pairs, load_pairs
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 

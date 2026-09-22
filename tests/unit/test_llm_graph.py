@@ -10,7 +10,7 @@ from typing import Any, cast
 import pytest
 
 from memory_service.adapters.graph.memory_store import MemoryGraphStore
-from memory_service.config.settings import GraphSettings
+from memory_service.config.constants import GraphSettings
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.enums import Representation
 from memory_service.domain.evidence import EvidenceRef

@@ -64,7 +64,7 @@ async def _ingest(container, uow_factory, filename: str):
 @pytest.mark.parametrize("filename", sorted(EXPECTATIONS))
 async def test_pdf_lines_tables_pages_and_sections(container, uow_factory, filename) -> None:
     pytest.importorskip("docling")
-    if container.settings.documents.parser != "docling":
+    if getattr(container.document_parser.info, "name", "") != "docling":
         pytest.skip("documents.parser=docling required (MEMORY_TEST_PROVIDERS=env)")
     register_handlers(container)
     doc, version, nodes, chunks = await _ingest(container, uow_factory, filename)

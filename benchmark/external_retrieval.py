@@ -25,12 +25,13 @@ import math
 import os
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from sqlalchemy import text
 
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_overrides
+from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -82,17 +83,18 @@ async def run(
     queries = [q for q in data["queries"] if set(q["relevant"]) & indexed_ids]
 
     settings = _settings()
+    overrides = bench_overrides()
     if ablate:
         # Same switch as the LoCoMo harness. LoCoMo exercises conversational *memory*
         # retrieval; this exercises document RAG over a real corpus with real relevance
         # judgements, which is the case rerankers are actually published on. A component can
         # earn its cost on one and not the other, and that is a configuration answer rather
         # than a delete-it answer — so both have to be measured before either is decided.
-        settings = settings.model_copy(
-            update={"retrieval": settings.retrieval.model_copy(update=ablate)}
+        overrides = replace(
+            overrides, retrieval=bench_retrieval(overrides).model_copy(update=ablate)
         )
-    embedding_provider = settings.models.embedding.provider
-    container = await build_container(settings, __version__, overrides=bench_overrides())
+    embedding_provider = "hash" if overrides.embedding == "hash" else "sentence_transformers"
+    container = await build_container(settings, __version__, overrides=overrides)
     try:
         if not reuse_index:
             cleared = await reset_store(container, TENANT)

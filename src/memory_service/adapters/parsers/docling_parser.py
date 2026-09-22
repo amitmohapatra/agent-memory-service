@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from memory_service.adapters.parsers.builtin import BuiltinParser
+from memory_service.config.constants import DOCLING_ARTIFACTS_DIR, local_model_path
 from memory_service.domain.documents import DocumentVersion
 from memory_service.domain.errors import CorruptSource, DependencyUnavailable
 from memory_service.modules.ingestion.context_graph import build_context_graph
@@ -83,7 +84,11 @@ class DoclingParser:
             except ImportError as exc:
                 raise DependencyUnavailable("docling is not installed (install [docling])") from exc
 
-            artifacts = os.environ.get("MEMORY_DOCLING_ARTIFACTS") or ""
+            artifacts = (
+                os.environ.get("MEMORY_DOCLING_ARTIFACTS")
+                or local_model_path(DOCLING_ARTIFACTS_DIR)
+                or ""
+            )
             options = PdfPipelineOptions()
             # Layout and table structure are what this service actually consumes: the context
             # graph is built from section paths, page numbers and IN_TABLE edges.

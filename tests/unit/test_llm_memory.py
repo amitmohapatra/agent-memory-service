@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from memory_service.application.container import Container
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import DedupDecision, MemoryType, ObservationKind, Visibility
 from memory_service.domain.ids import content_hash

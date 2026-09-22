@@ -7,8 +7,10 @@ on the golden set at ``final_k`` through the real retrieval engine.
 
 The corpus is indexed once (the embedding does not change between candidates); each
 candidate swaps the engine's reranker and ``rerank_k``. The cross-encoder is loaded from
-``$MEMORY_MODELS_DIR/ms-marco-MiniLM-L6-v2``; a provider that cannot be loaded is recorded as
-``{"skipped": "<ExceptionType>: reason"}`` for every candidate_k.
+``./models/ms-marco-MiniLM-L6-v2``; a provider that cannot be loaded is recorded as
+``{"skipped": "<ExceptionType>: reason"}`` for every candidate_k. The product ships no
+reranker (``constants.FROZEN_MODELS.reranker`` is None, on this benchmark's own evidence);
+the challenger lives here and nowhere in src/.
 
 Verdict rule: the default is the cheapest ``candidate_k`` (then the lowest rerank p95) among the
 candidates whose critical Recall@k / EGR pair equals the best observed.
@@ -21,6 +23,7 @@ import asyncio
 import statistics
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import text
@@ -29,57 +32,71 @@ from benchmark.advanced import _corpus
 from benchmark.common import provenance, write_result
 from benchmark.embedding import (
     bench_settings,
+    candidate_overrides,
     golden_quality,
     models_dir,
     pick_default,
     reset_index,
-    stand_in_base,
-    with_models,
 )
-from benchmark.env import bench_overrides
+from benchmark.env import bench_retrieval
 from benchmark.evaluation.golden import GoldenSet
 from benchmark.retrieval import GOLDEN, TABLES, _pct
 from memory_service.__about__ import __version__
 from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
 from memory_service.application.container import build_container
-from memory_service.config.settings import RerankerSettings
+from memory_service.config.constants import CrossEncoderModel, DenseModel
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo, Reranker, RerankResult
 
 MODEL = "cross-encoder/ms-marco-MiniLM-L6-v2"
 MODEL_DIR = "ms-marco-MiniLM-L6-v2"
-CROSS_ENCODER_PROVIDERS = ("sentence_transformers", "onnx")
+CROSS_ENCODER_PROVIDERS = ("torch", "onnx")
 STAND_IN_PROVIDERS = ("lexical", "disabled")
 PROVIDERS = (*CROSS_ENCODER_PROVIDERS, *STAND_IN_PROVIDERS)
 CANDIDATE_KS = (15, 20, 25)
+
+
+@dataclass(frozen=True)
+class Candidate:
+    provider: str
+    candidate_k: int
+    model: CrossEncoderModel | None
+
+    @property
+    def model_path(self) -> str | None:
+        return self.model.model_path if self.model else None
 
 
 def candidate_name(provider: str, candidate_k: int) -> str:
     return f"{provider}@k{candidate_k}"
 
 
-def candidates(*, stand_in: bool = False) -> dict[str, RerankerSettings]:
-    out: dict[str, RerankerSettings] = {}
+def candidates(*, stand_in: bool = False) -> dict[str, Candidate]:
+    out: dict[str, Candidate] = {}
     for provider in STAND_IN_PROVIDERS if stand_in else PROVIDERS:
         for candidate_k in CANDIDATE_KS:
-            out[candidate_name(provider, candidate_k)] = RerankerSettings(
-                provider=provider,  # type: ignore[arg-type]
-                model=MODEL,
-                model_path=str(models_dir() / MODEL_DIR)
+            model = (
+                CrossEncoderModel(
+                    id=MODEL,
+                    local_dir=MODEL_DIR,
+                    model_path=str(models_dir() / MODEL_DIR),
+                    backend=provider,  # type: ignore[arg-type]
+                )
                 if provider in CROSS_ENCODER_PROVIDERS
-                else None,
-                candidate_k=candidate_k,
+                else None
             )
+            out[candidate_name(provider, candidate_k)] = Candidate(provider, candidate_k, model)
     return out
 
 
-def load_reranker(cfg: RerankerSettings) -> Reranker | None:
+def load_reranker(cfg: Candidate) -> Reranker | None:
     if cfg.provider == "disabled":
         return None
     if cfg.provider == "lexical":
         return LexicalReranker()
-    return CrossEncoderReranker(cfg)
+    assert cfg.model is not None
+    return CrossEncoderReranker(cfg.model)
 
 
 def reranker_cost(row: dict[str, Any]) -> tuple[float, ...]:
@@ -118,9 +135,10 @@ def _timing(ms: list[float]) -> dict[str, Any]:
 
 
 async def run(*, copies: int, stand_in: bool = False) -> dict[str, Any]:
-    settings = stand_in_base(bench_settings()) if stand_in else bench_settings()
-    settings = with_models(settings, reranker=RerankerSettings(provider="disabled"))
-    container = await build_container(settings, __version__, overrides=bench_overrides())
+    settings = bench_settings()
+    # the container is built with no reranker at all; each candidate is swapped in below
+    overrides = candidate_overrides(None if stand_in else DenseModel(), reranker="disabled")
+    container = await build_container(settings, __version__, overrides=overrides)
     engine = container.services["retrieval"]
     original = (engine.reranker, engine.rerank_k)
     try:
@@ -132,7 +150,7 @@ async def run(*, copies: int, stand_in: bool = False) -> dict[str, Any]:
         t0 = time.perf_counter()
         aliases = await _corpus(container, golden, copies, ctx)
         index_seconds = round(time.perf_counter() - t0, 2)
-        final_k = settings.retrieval.final_k
+        final_k = bench_retrieval(overrides).final_k
         embedding_fp = container.embedding.fingerprint()
         emb_representative = not embedding_fp.startswith("hash-")
 
@@ -143,7 +161,7 @@ async def run(*, copies: int, stand_in: bool = False) -> dict[str, Any]:
             head = {
                 "provider": cfg.provider,
                 "candidate_k": cfg.candidate_k,
-                "model": cfg.model if cfg.model_path else None,
+                "model": cfg.model.id if cfg.model else None,
                 "model_path": cfg.model_path,
             }
             if cfg.provider in errors:

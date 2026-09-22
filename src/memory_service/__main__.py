@@ -6,6 +6,7 @@ import asyncio
 
 import uvicorn
 
+from memory_service.config.constants import HOST
 from memory_service.config.settings import get_settings
 
 
@@ -14,7 +15,7 @@ def run_api() -> None:
     uvicorn.run(
         "memory_service.api.app:create_app",
         factory=True,
-        host=settings.service.host,
+        host=HOST,
         port=settings.service.port,
         log_level=settings.service.log_level.lower(),
         access_log=False,

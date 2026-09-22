@@ -14,6 +14,7 @@ from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddle
 from memory_service.api.openapi import custom_openapi
 from memory_service.api.routers import ops
 from memory_service.application.container import Container, Overrides, build_container
+from memory_service.config import constants
 from memory_service.config.settings import Settings, get_settings
 from memory_service.observability.logging import configure_logging, get_logger
 from memory_service.observability.tracing import configure_tracing
@@ -30,7 +31,7 @@ def create_app(
     """``overrides`` swaps backing stores for in-process stand-ins (tests and benchmarks)."""
     settings = settings or get_settings()
     configure_logging(settings.service.log_level, settings.service.log_json)
-    configure_tracing(settings.observability, settings.service.name, __version__)
+    configure_tracing(settings.observability, constants.SERVICE_NAME, __version__)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -57,9 +58,9 @@ def create_app(
     app.add_middleware(
         RateLimitMiddleware,
         per_minute=settings.service.rate_limit_per_minute,
-        burst=settings.service.rate_limit_burst,
+        burst=constants.RATE_LIMIT_BURST,
     )
-    app.add_middleware(CorrelationMiddleware, max_body_bytes=settings.service.max_body_bytes)
+    app.add_middleware(CorrelationMiddleware, max_body_bytes=constants.MAX_BODY_BYTES)
     install_error_handlers(app)
     app.include_router(ops.router)
     _include_v1_routers(app)

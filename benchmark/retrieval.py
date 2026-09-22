@@ -18,10 +18,11 @@ import asyncio
 import os
 import statistics
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_overrides
+from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.evaluation import BUDGETS, CRITICAL_RECALL_K
 from benchmark.evaluation.golden import (
     GoldenSet,
@@ -51,15 +52,7 @@ def _settings() -> Settings:
     defaults = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["bench"]},
-        "authorization": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {
-            "embedding": {"provider": "hash", "dimension": 64},
-            "reranker": {"provider": "lexical"},
-            "llm": {"enabled": False},
-        },
-        "documents": {"parser": "builtin"},
-        "observability": {"otel_enabled": False},
+        "models": {"llm": {"enabled": False}},
         "database": {
             "url": os.environ.get(
                 "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
@@ -85,6 +78,7 @@ def _pct(xs: list[float], p: float) -> float:
 
 async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = None) -> dict:
     settings = _settings()
+    overrides = bench_overrides()
     if ablate:
         # Expansion flags cannot be measured on a flat corpus: SciFact abstracts are one
         # chunk each, so parent/neighbour/definition expansion has no parent, no neighbour
@@ -92,10 +86,10 @@ async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = Non
         # exactly zero difference. This golden set has section hierarchy, tables, footnotes
         # and `required_groups` — the mechanism those flags exist to serve — so it is the
         # instrument that can actually tell whether they earn their cost.
-        settings = settings.model_copy(
-            update={"retrieval": settings.retrieval.model_copy(update=ablate)}
+        overrides = replace(
+            overrides, retrieval=bench_retrieval(overrides).model_copy(update=ablate)
         )
-    container = await build_container(settings, __version__, overrides=bench_overrides())
+    container = await build_container(settings, __version__, overrides=overrides)
     try:
         # both stores, not just SQL: the vector store is a separate server and survives a
         # TRUNCATE, so every previous run's vectors would otherwise compete with this one

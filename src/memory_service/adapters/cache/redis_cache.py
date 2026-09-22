@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 import redis.asyncio as redis_async
 from redis.exceptions import RedisError
 
+from memory_service.config.constants import CACHE
 from memory_service.config.settings import CacheSettings
 from memory_service.observability.metrics import cache_ops_total
 from memory_service.ports.cache import CacheUnavailable
@@ -30,9 +31,9 @@ class RedisCache:
     def __init__(self, settings: CacheSettings) -> None:
         self.settings = settings
         self._client = redis_async.from_url(
-            settings.url,
-            socket_connect_timeout=settings.connect_timeout_seconds,
-            socket_timeout=settings.socket_timeout_seconds,
+            settings.url.get_secret_value(),
+            socket_connect_timeout=CACHE.connect_timeout_seconds,
+            socket_timeout=CACHE.socket_timeout_seconds,
             decode_responses=False,
             health_check_interval=30,
         )

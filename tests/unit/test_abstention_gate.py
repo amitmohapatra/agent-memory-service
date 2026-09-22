@@ -68,7 +68,7 @@ def test_the_query_cap_default_is_generous_enough_for_real_questions() -> None:
     degenerate-input benchmark, 2,000 characters of noise cost 20 seconds against 1 second
     for an ordinary question, because a cross-encoder pair costs what its longest side costs.
     """
-    from memory_service.config.settings import RetrievalSettings
+    from memory_service.config.constants import RetrievalSettings
 
     cfg = RetrievalSettings()
     assert cfg.max_query_chars >= 2048

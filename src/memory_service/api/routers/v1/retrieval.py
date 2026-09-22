@@ -247,6 +247,6 @@ async def context(
     if body.answer:
         cascade = container.services.get("grounding")
         if cascade is None:
-            raise ProviderNotConfigured("models.nli.provider=disabled")
+            raise ProviderNotConfigured("the NLI classifier is disabled in this process")
         bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
     return ContextResponse.model_validate(bundle_to_api(bundle))
