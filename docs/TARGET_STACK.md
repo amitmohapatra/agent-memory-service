@@ -12,8 +12,9 @@ a temporal knowledge graph, short- and long-term memory, retrieval/RAG, groundin
 latency and scale — built only from open-source components, with every model swappable later
 through configuration. This document fixes the defaults we adopt now, states the evidence, and
 lists exactly what has to be modified or added in the repository. It is the input for the
-real-component validation run (`VALIDATION_PROMPT_v3.md`); anything below that loses its
-benchmark there is removed, as that prompt requires.
+real-component validation run (see [ADR 0017](adr/0017-real-component-validation.md),
+which carries the decision rule and what is still to be measured); anything that loses its
+benchmark there is removed, as that decision rule requires.
 
 Rules that do not change: LLM calls go only through Bifrost (an external gateway, not part of
 the service); the hard release gates stay at their current thresholds; nothing is claimed

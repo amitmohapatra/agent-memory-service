@@ -169,9 +169,12 @@ Tool outputs are evidence: a tool invocation summary in a context bundle is an e
 with `source=tool`, its digest and age, so the grounding cascade and `/v1/verify` treat claims
 based on tool output like claims based on documents. Gate (`tests/eval/test_tool_gate.py`,
 `benchmark/results/tool_gate.json`) on a replayed trajectory fixture: correct-tool suggestion
-hit rate, cache precision (no stale or cross-scope hits = 0 violations), procedure correction
-after an injected failure, and isolation (an agent never sees another agent's unshared
-invocations). Thresholds are hard gates like the rest.
+hit rate, procedure correction after an injected failure, and isolation (an agent never sees
+another agent's unshared invocations). Thresholds are hard gates like the rest.
+
+Cache precision was gated here too until 2026-09-22. There is no output cache any more —
+`/v1/tools/lookup` was its read path and commit `0035987` removed it — so the measurement was
+retired; see the amendment in [ADR 0018](adr/0018-tool-memory.md).
 
 ### 30.8 Tools through Bifrost's MCP gateway — design only, not implemented
 

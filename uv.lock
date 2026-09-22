@@ -3826,7 +3826,6 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "openfga-sdk" },
-    { name = "openlineage-python" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-instrumentation-fastapi" },
@@ -3960,7 +3959,6 @@ requires-dist = [
     { name = "nltk", marker = "extra == 'eval'", specifier = ">=3.9" },
     { name = "onnxruntime", marker = "extra == 'models'", specifier = ">=1.30" },
     { name = "openfga-sdk", specifier = ">=0.10,<1" },
-    { name = "openlineage-python", specifier = ">=1.53" },
     { name = "opentelemetry-api", specifier = ">=1.44" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.44" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.65b0" },
@@ -4754,22 +4752,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/94/56/e83a75eae64d75aec96a6cced80bb5bbe4d74837bb6409692debb14b10cb/openfga_sdk-0.10.4.tar.gz", hash = "sha256:f5a681af3adb11249ebe33d5977286bb385a5c448edb47d71583e2a04b546e4c", size = 348682, upload-time = "2026-06-29T10:28:29.154Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/69/a6/a55854a9ee7aadf2b32eaed16211075bf7667309775e53e01756eacf02ca/openfga_sdk-0.10.4-py3-none-any.whl", hash = "sha256:7daa358ff669f47a094045f01235bb2733cbcfef84b9783e2deb6b64f5611176", size = 267237, upload-time = "2026-06-29T10:28:27.467Z" },
-]
-
-[[package]]
-name = "openlineage-python"
-version = "1.53.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "attrs" },
-    { name = "httpx2" },
-    { name = "packaging" },
-    { name = "python-dateutil" },
-    { name = "pyyaml" },
-    { name = "requests" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fa/69/f1c2a443aae12ba2542e9e6f9bb43cb2a37aa043a9eb90f99932a68c69cc/openlineage_python-1.53.0-py3-none-any.whl", hash = "sha256:7a4723b938a24a753308611b0ac4add19cd396448758db903bfe9cc964a75575", size = 125654, upload-time = "2026-09-01T13:32:33.327Z" },
 ]
 
 [[package]]

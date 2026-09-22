@@ -120,7 +120,6 @@ async def version(request: Request) -> VersionResponse:
             "blob": s.blob.provider,
             "tasks": s.tasks.provider,
             "authorization": s.authorization.provider,
-            "policy": s.policy.provider,
             "embedding": _active(c.embedding, f"{s.models.embedding.provider}"),
             "reranker": _active(c.reranker, s.models.reranker.provider),
             "llm": s.models.llm.provider if s.models.llm.enabled else "disabled",

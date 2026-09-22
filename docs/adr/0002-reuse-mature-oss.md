@@ -3,11 +3,20 @@
 **Status:** accepted · **Date:** 2026-09-14
 
 ## Decision
+
+> **Outcome, 2026-09-22.** Every row below was built except **OPA**. There was never a
+> policy adapter in `src/`: `PolicySettings` was declared and read in exactly one place —
+> `/version`, which reported the configured provider — while `container.policy` was never
+> assigned and the `ProviderRegistry("policy")` never had anything registered in it. The
+> compose service mounted `./deploy/opa`, a directory that does not exist, so it would have
+> served no policies had anyone started it. Settings, registry slot, container field,
+> `/version` key and compose service are all removed; this row stays to record that the
+> decision was taken and not carried out.
 | Problem | Chosen OSS | Version validated (PyPI, 2026-09-14) | License |
 |---|---|---|---|
 | Task queue with retries/locks/queues | Procrastinate | 3.9.0 | MIT |
 | Fine-grained authorization | OpenFGA (+ `openfga-sdk`) | server v1.18.1 / sdk 0.10.4 | Apache-2.0 |
-| Policy decisions | OPA (optional) | image `openpolicyagent/opa:1` | Apache-2.0 |
+| Policy decisions | OPA (optional) — ~~chosen~~ **never built, dropped 2026-09-22** | image `openpolicyagent/opa:1` | Apache-2.0 |
 | Vector + BM25 + RRF search | Qdrant (+ `qdrant-client`) | server v1.18.2 / client 1.19.0 | Apache-2.0 |
 | Cache / working memory | Dragonfly (Redis protocol, `redis` client) | v1.40.1 / redis 8.1.0 | BSL-1.1 (approved for this deployment) |
 | Document parsing | Docling | 2.127.0 | MIT |

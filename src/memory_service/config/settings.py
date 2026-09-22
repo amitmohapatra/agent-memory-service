@@ -32,7 +32,6 @@ class ServiceSettings(BaseModel):
     log_json: bool = True
     log_source_text: bool = Field(default=False, description="never log raw source text by default")
     api_version: str = "v1"
-    request_timeout_seconds: float = 30.0
     max_body_bytes: int = 25 * 1024 * 1024
     rate_limit_per_minute: int = Field(
         default=1200,
@@ -71,7 +70,6 @@ class DatabaseSettings(BaseModel):
 class CacheSettings(BaseModel):
     provider: Literal["dragonfly", "valkey", "redis", "memory", "disabled"] = "dragonfly"
     url: str = "redis://localhost:6379/0"
-    default_ttl_seconds: int = 3600
     hot_thread_ttl_seconds: int = 6 * 3600
     hot_thread_max_messages: int = 200
     working_memory_ttl_seconds: int = 1800
@@ -121,19 +119,10 @@ class AuthorizationSettings(BaseModel):
     decision_cache: bool = True
 
 
-class PolicySettings(BaseModel):
-    provider: Literal["disabled", "opa", "static"] = "static"
-    opa_url: str = "http://localhost:8181"
-    static_allow_external_models: bool = False
-    static_default_retention_days: int = 3650
-
-
 class BlobSettings(BaseModel):
     provider: Literal["gcs", "filesystem", "memory"] = "filesystem"
     chat_bucket: str = "memory-chat-archive"
     file_bucket: str = "memory-file-archive"
-    benchmark_bucket: str = "memory-benchmarks"
-    ingest_bucket: str = "memory-ingest-tmp"
     filesystem_root: str = "./.blob"
     gcs_project: str | None = None
     lifecycle_policy: Literal["autoclass", "explicit"] = "autoclass"
@@ -148,8 +137,6 @@ class ArchiveSettings(BaseModel):
         default=4 * 1024 * 1024, description="compressed; benchmark 1-8MB"
     )
     segment_max_messages: int = 5000
-    segment_max_age_seconds: int = 900
-    compression: Literal["zstd"] = "zstd"
     zstd_level: int = 6
     purge_grace_seconds: int = 24 * 3600
     purge_min_payload_bytes: int = Field(
@@ -341,7 +328,6 @@ class ModelSettings(BaseModel):
 
 class MemoryIntelligenceSettings(BaseModel):
     provider: Literal["native", "mem0", "cognee", "langmem"] = "native"
-    challengers: list[Literal["mem0", "cognee", "langmem"]] = Field(default_factory=list)
     dedup_lexical_threshold: float = 0.92
     dedup_dense_threshold: float = 0.90
     dedup_candidate_k: int = 20
@@ -459,22 +445,13 @@ class ContextSettings(BaseModel):
 
 class EvaluationSettings(BaseModel):
     enabled: bool = True
-    run_async: bool = True
-    deepeval_enabled: bool = False
-    ragas_enabled: bool = False
-    judge_model: str | None = None
     critical_recall_k: int = 20
-    sample_rate: float = 0.0
 
 
 class ObservabilitySettings(BaseModel):
     otel_enabled: bool = True
     otel_exporter: Literal["none", "console", "otlp"] = "none"
     otel_endpoint: str | None = None
-    metrics_enabled: bool = True
-    openlineage_enabled: bool = False
-    openlineage_url: str | None = None
-    openlineage_namespace: str = "memory-service"
 
 
 class ProviderPolicySettings(BaseModel):
@@ -490,7 +467,6 @@ class ProviderPolicySettings(BaseModel):
         ]
     )
     allow_remote_models: bool = False
-    allowed_regions: list[str] = Field(default_factory=list)
 
 
 class PerformanceBudgets(BaseModel):
@@ -545,7 +521,6 @@ class Settings(BaseSettings):
     tasks: TaskSettings = TaskSettings()
     authentication: AuthenticationSettings = AuthenticationSettings()
     authorization: AuthorizationSettings = AuthorizationSettings()
-    policy: PolicySettings = PolicySettings()
     blob: BlobSettings = BlobSettings()
     archive: ArchiveSettings = ArchiveSettings()
     search: SearchSettings = SearchSettings()

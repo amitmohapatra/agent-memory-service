@@ -204,53 +204,44 @@ services:
       db-migrate:
         condition: service_completed_successfully
 
-  # ------------------------------------------------------------------ profiles
-  # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`
-  # run on the working tree against the real services above with the weights in ./models.
-  #   docker compose --profile validation up -d memory-validate
-  #   docker compose exec memory-validate make validate
-  # ---------------------------------------------------------------------------
-  # Model tier — CPU inference, deployed and scaled on its own.
-  #
-  # `--profile models` starts these; set MEMORY__MODELS__*__URL on the api and worker to use
-  # them. A URL means "served over HTTP"; no URL means "loaded in-process". The wire dialect
-  # is detected from the server, so that is the only setting. Loading weights inside the API cost ~6 minutes of startup, a second
-  # resident copy in the worker, and no way to scale ingestion apart from query traffic —
-  # indexing a corpus starved the API because both competed for the same cores.
-  #
-  # Sizing: one retrieval request costs 1 query embedding and `reranker.candidate_k` (20)
-  # cross-encoder pairs, so the reranker is ~87% of the model cost and the only one that
-  # needs to track request rate. Measure with `make bench-model-throughput` ON THE TARGET
-  # HARDWARE: transformer inference leans on AVX2/AVX-512/AMX and a machine without them is
-  # roughly an order of magnitude slower.
-  # ---------------------------------------------------------------------------
-  # The model tier, served from *this* image.
-  #
-  # `--profile models` starts these; point the api and worker at them with the URLs in
-  # docker-compose.models.yml. Each is the memory-api image with a different entrypoint, so
-  # Docker shares every layer and the extra containers cost no extra bytes on disk.
-  #
-  # This replaced a 14.3 GB third-party inference server that was serving a 130 MB model.
-  # The capability was already in the image — torch, the weights and FastAPI were all here.
   # ---------------------------------------------------------------- model tier
   #
-  # One container per model, all from this image. `--profile models`.
+  # One container per model, all from this image. `--profile models` starts them.
   #
   # The service does not load weights: it is given a URL per model and speaks HTTP to it.
-  # That is what makes the model tier a deployment decision — scale the reranker without
-  # scaling the API, pin the sparse encoder to different hardware, restart one model without
-  # restarting the service, and keep a native crash inside the process that caused it.
+  # A URL means "served over HTTP"; no URL means "loaded in-process", and the wire dialect
+  # is detected from the server, so the URL is the only setting.
   #
-  # Point the service at them with:
   #   MEMORY__MODELS__EMBEDDING__URL=http://memory-embed:80
   #   MEMORY__MODELS__RERANKER__URL=http://memory-rerank:80
   #   MEMORY__MODELS__NLI__URL=http://memory-nli:80
   #   MEMORY__MODELS__SPARSE_URL=http://memory-sparse:80
   #
+  # Why a tier at all: loading weights inside the API cost ~6 minutes of startup, a second
+  # resident copy in the worker, and no way to scale ingestion apart from query traffic —
+  # indexing a corpus starved the API because both competed for the same cores. Separating
+  # them also means a native crash stays inside the process that caused it.
+  #
+  # Sizing: one retrieval request costs 1 query embedding and `reranker.candidate_k` (20)
+  # cross-encoder pairs, so the reranker is ~87% of the model cost and the only one that
+  # needs to track request rate — `docker compose up -d --scale memory-rerank=N`. Measure
+  # with `make bench-model-throughput` ON THE TARGET HARDWARE: transformer inference leans
+  # on AVX2/AVX-512/AMX and a machine without them is roughly an order of magnitude slower.
+  #
   # These run our own image rather than a third-party inference server. It already carries
-  # torch, FastAPI and the weights, so the extra containers share layers and cost no extra
-  # bytes — and it loads every architecture here, which the obvious off-the-shelf server did
-  # not. `deploy/tei.yml` keeps TEI as a documented alternative for the two models it serves.
+  # torch, FastAPI and the weights, so the extra containers share every layer and cost no
+  # extra bytes on disk — and it loads every architecture here, which the obvious
+  # off-the-shelf server did not: that one was 14.3 GB to serve a 130 MB model.
+  #
+  # To hold no weights in the API or the worker at all, add the overlay that sets those URLs
+  # for you:
+  #
+  #   docker compose --profile models -f docker-compose.yml -f deploy/served-models.yml up -d
+  #
+  # (There was a second overlay, docker-compose.models.yml, removed on 2026-09-22: it did the
+  # same job but had named `tei-rerank` since the service was renamed to `memory-rerank`, so
+  # `docker compose config` refused the project outright. served-models.yml is the one that
+  # works.)
 
   memory-embed:
     profiles: ["models"]
@@ -371,6 +362,10 @@ services:
   # With llm.enabled=false the service runs complete without any gateway at all; generation is
   # an enhancement, never a dependency.
 
+  # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`
+  # run on the working tree against the real services above with the weights in ./models.
+  #   docker compose --profile validation up -d memory-validate
+  #   docker compose exec memory-validate make validate
   memory-validate:
     profiles: ["validation"]
     build:
@@ -414,13 +409,6 @@ services:
     ports: ["7474:7474", "7687:7687"]
     volumes: ["neo4j:/data"]
 
-  opa:
-    profiles: ["policy"]
-    image: openpolicyagent/opa:1
-    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
-    ports: ["8181:8181"]
-    volumes: ["./deploy/opa:/policies:ro"]
-
   otel-collector:
     profiles: ["observability"]
     image: otel/opentelemetry-collector-contrib:latest
@@ -433,11 +421,6 @@ services:
     image: prom/prometheus:v3
     volumes: ["./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
     ports: ["9090:9090"]
-
-  marquez:
-    profiles: ["observability"]
-    image: marquezproject/marquez:latest
-    ports: ["5000:5000", "5001:5001"]
 
 volumes:
   pgdata:

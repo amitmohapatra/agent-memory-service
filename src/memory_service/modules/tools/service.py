@@ -30,9 +30,9 @@ from memory_service.domain.tools import (
     ToolDescriptor,
     ToolInvocation,
     ToolPolicy,
+    stable_hash,
 )
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.tools.cache import ToolOutputCache, args_hash_for
 from memory_service.modules.tools.patterns import best_match, task_pattern
 from memory_service.modules.tools.procedures import (
     Procedure,
@@ -79,7 +79,6 @@ class ToolMemoryService:
         uow_factory: UnitOfWorkFactory,
         authz: AuthorizationService,
         *,
-        cache: ToolOutputCache,
         blob: Any = None,
         blob_bucket: str = "memory-tool-outputs",
         indexer: Any = None,
@@ -87,7 +86,6 @@ class ToolMemoryService:
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
-        self.cache = cache
         self.blob = blob
         self.blob_bucket = blob_bucket
         self.indexer = indexer
@@ -179,7 +177,11 @@ class ToolMemoryService:
                 ToolDescriptor(tenant_id=ctx.tenant_id, name=tool, policy=ToolPolicy()),
                 widen_policy=False,
             )
-        digest = args_hash_for(descriptor, args)
+        # The *full* arguments, redacted ones included. Only the redacted copy is ever
+        # persisted, but the hash has to distinguish calls that differ solely in a redacted
+        # field — two callers with different credentials legitimately get different results.
+        # The hash is one-way, so the secret is not recoverable from it.
+        digest = stable_hash(args)
         fields = flatten(output) if output is not None else {}
         summary, blob_ref, output_digest = await self._store_output(
             ctx, descriptor, output, output_summary
@@ -214,17 +216,6 @@ class ToolMemoryService:
             visibility_keys=self._visibility_keys(ctx, visibility),
         )
         stored = await uow.tools.record(invocation)
-        if stored.invocation_id == invocation.invocation_id and status == "ok":
-            await self.cache.put(
-                descriptor,
-                digest,
-                ctx,
-                output_summary=summary,
-                output_digest=output_digest,
-                output_blob_ref=blob_ref,
-                output_fields=fields,
-                invocation_id=stored.invocation_id,
-            )
         return stored
 
     async def _next_step(self, uow: Any, ctx: MemoryExecutionContext) -> int:

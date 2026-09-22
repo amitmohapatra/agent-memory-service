@@ -475,8 +475,18 @@ MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r2
 MEMORY__MODELS__RERANKER__MODEL_PATH=./models/ms-marco-MiniLM-L6-v2
 
-# Optional LLM — off by default, and only ever through a Bifrost gateway
+# Optional LLM — off by default, and only ever through a Bifrost gateway. Enabling it also
+# needs PROVIDER, MODEL and USES: with USES empty nothing would call the model, and startup
+# refuses that rather than reporting an LLM it never consults.
 MEMORY__MODELS__LLM__ENABLED=false
+```
+
+To serve the models as their own containers instead of loading them in-process — which is
+what you want as soon as reranking capacity has to grow without API capacity — add the
+overlay:
+
+```bash
+docker compose --profile models -f docker-compose.yml -f deploy/served-models.yml up -d
 ```
 
 ### About the LLM

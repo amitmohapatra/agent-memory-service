@@ -18,8 +18,6 @@ from memory_service.ports.intelligence import (
     MemoryCandidate,
     MemoryIntelligenceProvider,
     ParsedDocument,
-    PolicyDecision,
-    PolicyProvider,
     Relation,
 )
 from memory_service.ports.models import (
@@ -80,8 +78,6 @@ __all__ = [
     "NLIProvider",
     "NLIScore",
     "ParsedDocument",
-    "PolicyDecision",
-    "PolicyProvider",
     "ProviderInfo",
     "Queue",
     "Relation",

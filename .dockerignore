@@ -39,10 +39,8 @@ htmlcov/
 .blob/
 .bench_blob/
 benchmark/
-Claude outputs/
 *.bundle
 
 # Documentation and development-only material
 docs/
 examples/
-VALIDATION_PROMPT*.md

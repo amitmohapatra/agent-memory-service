@@ -99,7 +99,19 @@ step exists in the registry and every binding resolves against a real trajectory
   canonical tables; everything derived is rebuilt from them, so only they must be durable.
 - A new hard gate (`benchmark/results/tool_gate.json`, `tests/eval/test_tool_gate.py`) with
   thresholds: suggestion hit rate ≥ 0.95, next-step hit rate ≥ 0.90 on held-out trajectories,
-  plan validity = 1.00, and zero cache, isolation or undeclared-tool violations.
+  plan validity = 1.00, and zero ~~cache,~~ isolation or undeclared-tool violations.
+
+> **Amendment, 2026-09-22 — the cache-violation gate is retired.** Commit `0035987` removed
+> `/v1/tools/lookup`, which *was* the output-cache read path, on the grounds that "an output
+> cache replays stale results". The write path and this gate threshold were left behind, so
+> the producer stopped emitting `cache_violations` while `release_gate.py` kept requiring it:
+> `make gates` had been failing on `tool cache_violations = None (must be 0)` ever since —
+> correctly, because ADR 0015 makes missing evidence a failed gate.
+>
+> ADR 0015 forbids deleting a check to make a build pass, so this is the amendment it asks
+> for instead: there is no output cache to violate, so the measurement is retired rather than
+> downgraded. `ToolOutputCache`, its write call and the gate key are removed together. If
+> tool-output caching ever returns, this threshold comes back with it.
 - Cold start returns empty advice and the agent behaves exactly as it would without memory.
   Nothing is guessed.
 

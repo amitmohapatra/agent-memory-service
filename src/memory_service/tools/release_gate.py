@@ -203,7 +203,11 @@ def evaluate_with_notes(settings: Settings | None = None) -> tuple[bool, list[st
             observed = tool_gate.get(key)
             if observed is None or observed < floor:
                 failures.append(f"tool {key} = {observed} (must be >= {floor})")
-        for key in ("cache_violations", "isolation_violations", "undeclared_tool_suggestions"):
+        # cache_violations retired 2026-09-22: /v1/tools/lookup was the output-cache read
+        # path and commit 0035987 removed it, so there is no cache left to violate. Retired
+        # by amendment to ADR 0018 rather than deleted to go green — ADR 0015 forbids the
+        # latter, and this gate had been correctly failing on the missing evidence since.
+        for key in ("isolation_violations", "undeclared_tool_suggestions"):
             if tool_gate.get(key, 1) != 0:
                 failures.append(f"tool {key} = {tool_gate.get(key)} (must be 0)")
 

@@ -43,7 +43,6 @@ class Container:
     blob: Any = None
     tasks: Any = None
     authorization: Any = None
-    policy: Any = None
     embedding: Any = None
     sparse: Any = None
     reranker: Any = None

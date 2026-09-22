@@ -52,7 +52,6 @@ class Registries:
         self.blob: ProviderRegistry[Any] = ProviderRegistry("blob")
         self.tasks: ProviderRegistry[Any] = ProviderRegistry("tasks")
         self.authorization: ProviderRegistry[Any] = ProviderRegistry("authorization")
-        self.policy: ProviderRegistry[Any] = ProviderRegistry("policy")
         self.embedding: ProviderRegistry[Any] = ProviderRegistry("embedding")
         self.sparse: ProviderRegistry[Any] = ProviderRegistry("sparse")
         self.reranker: ProviderRegistry[Any] = ProviderRegistry("reranker")

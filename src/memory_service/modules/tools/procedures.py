@@ -31,11 +31,6 @@ from memory_service.domain.tools import ToolDescriptor, ToolInvocation
 from memory_service.modules.tools.trajectories import EdgeSupport, Trajectory, accumulate, flatten
 
 # ranking weights (documented in docs/adr/0018-tool-memory.md)
-W_PROCEDURE = 0.5
-W_OUTCOME = 0.3
-W_RECENCY = 0.2
-FAILURE_PENALTY = 0.4
-RECENCY_HALF_LIFE_DAYS = 14.0
 # a chain is only a procedure when this fraction of the successful runs follows it end to end
 MIN_PATH_COVERAGE = 0.5
 
@@ -338,17 +333,6 @@ def _expected_output(samples: list[ToolInvocation]) -> list[str]:
 
 
 # --------------------------------------------------------------------------- ranking
-
-
-def recency_weight(when: datetime | None, *, now: datetime | None = None) -> float:
-    """1.0 for something used right now, halving every ``RECENCY_HALF_LIFE_DAYS``."""
-    if when is None:
-        return 0.0
-    now = now or datetime.now(UTC)
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=UTC)
-    age_days = max(0.0, (now - when).total_seconds() / 86400.0)
-    return 0.5 ** (age_days / RECENCY_HALF_LIFE_DAYS)
 
 
 def decayed(procedure: Procedure, *, idle_days: float = 60.0, now: datetime | None = None) -> bool:

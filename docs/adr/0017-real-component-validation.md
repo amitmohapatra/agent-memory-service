@@ -72,6 +72,36 @@ replaces on Recall@20, evidence-group recall, KG fact recall, per-claim groundin
 false-merge rate, within the p95 budget of its tier, and ties or better on every critical
 gate. Losers are removed from code, configuration, extras, lock file, compose and docs.
 
+## What still has to be measured
+
+Lifted from the `VALIDATION_PROMPT*.md` series when those five files were removed on
+2026-09-22 — 876 lines of which 843 were duplicated text, addressed to an agent rather than
+a reader, and naming an authoritative spec (`MASTER_MEMORY_SERVICE_IMPLEMENTATION_INSTRUCTION.md`)
+that has never existed in this repository. The rules they stated are recorded above and in
+CONTRIBUTING.md; this ordering was the one thing they held that was not written down
+anywhere else.
+
+The tables below stay empty until each step is run with real weights and real services.
+
+1. **Real weights, real gates.** `make gates` and `make validate` with a real embedding
+   model and reranker; compare every number against the sandbox column. Then
+   `make bench-embedding` and `make bench-reranker` to settle the defaults, and the public
+   retrieval benchmarks so the numbers are comparable with the field and not only with
+   ourselves. Docling against real PDFs with tables, footnotes and multi-column layout.
+2. **Real infrastructure.** `pytest -m docker` against a real OpenFGA and Qdrant server,
+   plus the whole `tests/security` isolation suite; `make failure-test` with real
+   Procrastinate workers, Dragonfly and a Qdrant server; `make load-test` against a
+   deployed api and worker, compared with the in-process figures; `make examples`.
+3. **Advanced retrieval.** Measure before deciding — seven flags have already been removed
+   this way (see `docs/CAPABILITY_COVERAGE.md` and ADR 0012).
+4. **Providers, native versus third-party, all through Bifrost.** Memory intelligence
+   (native / Mem0 / LangMem / Cognee), graph enrichment (native / Graphiti / Docling Graph /
+   Cognee), and each `models.llm.uses` flag measured as a lift over the deterministic path
+   it replaces.
+
+The decision rule above then applies: anything that does not beat what it replaces is
+removed from code, configuration, extras, lock file, compose and docs.
+
 ## Gate table (real run)
 
 _Filled by the validation run; see `docs/FINAL_REPORT.md`._

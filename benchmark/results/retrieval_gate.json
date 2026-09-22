@@ -299,8 +299,8 @@
     "cross_document": "COMPLETE"
   },
   "provenance": {
-    "timestamp": "2026-09-21T18:22:16.232534+00:00",
-    "git_commit": "e519cabdc7682bd773b9b8bc6d6b5755e73a4bdc",
+    "timestamp": "2026-09-22T00:08:28.007561+00:00",
+    "git_commit": "ef6325e95d2d214b3b79222a7d5da2d534964228",
     "python": "3.12.14",
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "machine": "x86_64",

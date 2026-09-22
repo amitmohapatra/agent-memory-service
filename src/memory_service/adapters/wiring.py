@@ -526,14 +526,12 @@ def _wire_memory(container: Container) -> None:
 
 def _wire_tools(container: Container) -> None:
     """Tool memory: registry, invocation records, output cache, chains and procedures."""
-    from memory_service.modules.tools.cache import ToolOutputCache
     from memory_service.modules.tools.service import ToolMemoryService
 
     settings = container.settings
     container.services["tool_memory"] = ToolMemoryService(
         container.services["uow_factory"],
         container.services["authz"],
-        cache=ToolOutputCache(container.cache),
         blob=container.blob,
         blob_bucket=settings.blob.file_bucket,
         indexer=container.services.get("indexer"),

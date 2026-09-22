@@ -162,6 +162,3 @@ HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)
 
 def get_authz(container: ContainerDep) -> AuthorizationService:
     return container.services["authz"]
-
-
-AuthzDep = Annotated[AuthorizationService, Depends(get_authz)]

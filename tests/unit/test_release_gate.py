@@ -50,7 +50,6 @@ GOOD = {
         "suggestion_hit_rate": 1.0,
         "next_step_hit_rate": 1.0,
         "plan_validity": 1.0,
-        "cache_violations": 0,
         "isolation_violations": 0,
         "undeclared_tool_suggestions": 0,
     },
@@ -171,7 +170,6 @@ def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
         ("tool_gate.json", {"suggestion_hit_rate": 0.5}, "tool suggestion_hit_rate"),
         ("tool_gate.json", {"next_step_hit_rate": 0.1}, "tool next_step_hit_rate"),
         ("tool_gate.json", {"plan_validity": 0.9}, "tool plan_validity"),
-        ("tool_gate.json", {"cache_violations": 1}, "tool cache_violations"),
         ("tool_gate.json", {"isolation_violations": 2}, "tool isolation_violations"),
         ("performance.json", {"recall_p95_ms": 301}, "recall_p95_ms = 301"),
         ("performance.json", {"file_accept_p95_ms": None}, "file_accept_p95_ms not measured"),
@@ -199,3 +197,28 @@ def test_representative_evidence_has_no_caveat(results: Path) -> None:
         _write(results, name, payload)
     ok, _, notes = release_gate.evaluate_with_notes()
     assert ok and notes == []
+
+
+def test_a_retired_measurement_is_not_silently_ignored() -> None:
+    """`cache_violations` was retired on 2026-09-22 with an amendment to ADR 0018.
+
+    The gate is fail-closed by design — ADR 0015: "Gates are never downgraded to make a
+    build pass. Missing evidence == failed gate" — and it was doing exactly that: the
+    output-cache read path (`/v1/tools/lookup`) was removed in 0035987, the producer stopped
+    emitting the key, and `make gates` went red on `tool cache_violations = None`.
+
+    Deleting the check to go green is the one thing ADR 0015 forbids, so the metric was
+    retired in the ADR first. This test exists so that the *next* retirement has to do the
+    same: if a key comes back into the gate without evidence behind it, the block above
+    catches it; if this one quietly reappears here without an ADR, that is the same mistake
+    in reverse.
+    """
+    gate = Path("src/memory_service/tools/release_gate.py").read_text()
+    adr = Path("docs/adr/0018-tool-memory.md").read_text()
+    assert (
+        "cache_violations"
+        not in gate.split("# cache_violations retired")[-1].split("for key in")[1]
+    )
+    assert "the cache-violation gate is retired" in adr, (
+        "the retirement must stay recorded in ADR 0018, or the gate change has no basis"
+    )

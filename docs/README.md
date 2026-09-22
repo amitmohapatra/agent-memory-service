@@ -30,6 +30,15 @@ document says up front whether it describes something that exists or something p
 - [`FINAL_REPORT.md`](FINAL_REPORT.md) — the per-gate account of what has been measured, in
   what environment, and which numbers are **not** yet representative. Read this before
   quoting any performance or retrieval figure.
+- [`MEASUREMENTS.md`](MEASUREMENTS.md) — the raw measurements behind the decisions, each
+  traceable to a file in `benchmark/results/`.
+- [`CAPABILITY_COVERAGE.md`](CAPABILITY_COVERAGE.md) — which capability provides what, and
+  the argument for the seven retrieval flags that were removed rather than left off.
+  `tests/eval/test_capability_coverage.py` is the executable form of it.
+- [`PRODUCT_DECISIONS.md`](PRODUCT_DECISIONS.md) — product-level choices and the evidence
+  for each.
+- [`DATA_PLACEMENT_REVIEW.md`](DATA_PLACEMENT_REVIEW.md) — which store holds what, and why
+  each piece of data lives where it does.
 
 **History — how the service got here**
 

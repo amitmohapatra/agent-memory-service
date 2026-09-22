@@ -40,35 +40,6 @@ _TOOL_EXAMPLE: dict[str, Any] = {
 }
 
 
-class PolicyBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    deterministic: bool = False
-    side_effects: str = "unknown"
-    cacheable: bool = False
-    cache_ttl_seconds: int = Field(default=300, ge=0, le=86400)
-    cache_scope: str = "run"
-    cost_hint: float | None = Field(default=None, ge=0.0)
-    redact: list[str] = Field(default_factory=list)
-
-
-class RegisterToolRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_TOOL_EXAMPLE]})
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str = ""
-    input_schema: dict[str, Any] | None = None
-    output_schema: dict[str, Any] | None = None
-    tags: list[str] = Field(default_factory=list)
-    source: str = "manual"
-    server: str | None = None
-    policy: PolicyBody | None = Field(
-        default=None,
-        description="Widening a policy requires tenant admin; otherwise the stored policy wins.",
-    )
-
-
 class DeclaredTool(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -79,28 +50,6 @@ class DeclaredTool(BaseModel):
     tags: list[str] = Field(default_factory=list)
     source: str = "manual"
     server: str | None = None
-
-
-class LookupRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "scope": {
-                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                        "agent_run_id": "run_01J8ZK",
-                    },
-                    "tool": "pricing.lookup_price",
-                    "args": {"sku": "SKU-22", "region": "EMEA"},
-                }
-            ]
-        },
-    )
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    tool: str
-    args: dict[str, Any] = Field(default_factory=dict)
 
 
 class RecordRequest(BaseModel):
@@ -145,77 +94,6 @@ class RecordResponse(BaseModel):
     step: int
     args_hash: str
     recorded: bool = Field(description="False when an identical call was already recorded.")
-
-
-class SuggestRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "scope": {
-                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                        "agent_run_id": "run_01J8ZK",
-                    },
-                    "task": "update quote Q-1183 with EMEA price for SKU-22",
-                    "available_tools": [
-                        {"name": "pricing.lookup_price"},
-                        {"name": "crm.update_quote"},
-                    ],
-                }
-            ]
-        },
-    )
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    task: str = Field(..., max_length=4000)
-    available_tools: list[DeclaredTool] = Field(default_factory=list)
-    context: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
-
-
-class TrajectoryStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tool: str
-    args_hash: str | None = None
-    status: str = "ok"
-    output_summary: str | None = None
-    output_fields: dict[str, Any] = Field(default_factory=dict)
-
-
-class NextRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "scope": {
-                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                        "agent_run_id": "run_01J8ZK",
-                    },
-                    "task": "update quote Q-1183 with EMEA price for SKU-22",
-                    "trajectory_so_far": [
-                        {
-                            "tool": "pricing.lookup_price",
-                            "status": "ok",
-                            "output_fields": {"quote_id": "Q-1183"},
-                        }
-                    ],
-                    "available_tools": [
-                        {"name": "pricing.lookup_price"},
-                        {"name": "crm.update_quote"},
-                    ],
-                }
-            ]
-        },
-    )
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    task: str = Field(..., max_length=4000)
-    trajectory_so_far: list[TrajectoryStep] = Field(default_factory=list)
-    available_tools: list[DeclaredTool] = Field(default_factory=list)
-    limit: int = Field(default=3, ge=1, le=10)
 
 
 class PlanRequest(BaseModel):
