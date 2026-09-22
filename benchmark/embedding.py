@@ -246,6 +246,9 @@ async def run_candidate(
     # What the model ran at, not what the environment asked for: the setting is None by
     # default and each adapter falls back to ``DenseModel.threads``.
     model_threads = getattr(model, "threads", None)
+    closer = getattr(model, "close", None)
+    if closer is not None:
+        closer()  # the adapter owns a thread; this loop builds one model per candidate
     del model
 
     container = await build_container(base, __version__, overrides=candidate_overrides(spec))
