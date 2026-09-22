@@ -4,10 +4,8 @@ stream (PostgreSQL + Qdrant local).
 
     uv run python -m benchmark.memory --observations 200
 
-External providers (mem0, langmem, cognee) are benchmarked only when
-``MEMORY__MODELS__LLM__ENABLED=true`` and the SDK is installed; otherwise they are listed as
-``skipped`` with the reason. Results carry provenance and are never presented as
-representative of LLM-based providers unless they actually ran.
+Only the native provider ships; the third-party challengers this once compared against were
+removed from the service. A comparison, if wanted again, is built here and never in src/.
 """
 
 from __future__ import annotations
@@ -77,23 +75,6 @@ async def _provider_quality(settings) -> dict[str, Any]:
     rep = await evaluate_pairs(native, pairs, ctx)
     rep.pop("per_pair", None)
     results["native"] = rep
-    llm_on = settings.models.llm.enabled
-    for name, path, cls in (
-        ("mem0", "memory_service.adapters.intelligence.mem0_provider", "Mem0MemoryIntelligence"),
-        ("langmem", "memory_service.adapters.intelligence.langmem_provider", "LangMemIntelligence"),
-    ):
-        if not llm_on:
-            results[name] = {"skipped": "models.llm.enabled=false (provider requires an LLM)"}
-            continue
-        try:
-            import importlib
-
-            provider = getattr(importlib.import_module(path), cls)(settings)
-            rep = await evaluate_pairs(provider, pairs, ctx)
-            rep.pop("per_pair", None)
-            results[name] = rep
-        except Exception as exc:  # noqa: BLE001 - benchmark must report, not crash
-            results[name] = {"skipped": f"{type(exc).__name__}: {exc}"}
     return results
 
 

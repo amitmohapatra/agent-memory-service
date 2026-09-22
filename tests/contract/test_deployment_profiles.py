@@ -149,26 +149,3 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
         await container.close()
         if server is not None:
             server.__exit__()
-
-
-async def test_a_profile_that_cannot_work_is_refused_at_startup(make_settings, tmp_path) -> None:
-    """Misconfiguration must fail while someone is watching.
-
-    A provider that needs a generative model, in a deployment that has none, is not a runtime
-    surprise to discover on the first request — it is a startup error. This is the property
-    that makes the combination space safe to leave large: the impossible corners refuse
-    themselves.
-    """
-    if not PG_AVAILABLE:
-        pytest.skip("PostgreSQL not reachable")
-    settings = make_settings(
-        database={"url": DB_URL},
-        cache={"provider": "memory"},
-        tasks={"provider": "memory"},
-        search={"provider": "memory"},
-        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
-        graph_enrichment={"provider": "graphiti"},
-        models={"llm": {"enabled": False}},
-    )
-    with pytest.raises(NotImplementedError, match="requires an LLM"):
-        await build_container(settings, __version__)

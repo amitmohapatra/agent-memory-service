@@ -340,7 +340,6 @@ class ModelSettings(BaseModel):
 
 
 class MemoryIntelligenceSettings(BaseModel):
-    provider: Literal["native", "mem0", "cognee", "langmem"] = "native"
     dedup_lexical_threshold: float = 0.92
     dedup_dense_threshold: float = 0.90
     dedup_candidate_k: int = 20
@@ -382,15 +381,7 @@ class MemoryIntelligenceSettings(BaseModel):
 
 
 class GraphEnrichmentSettings(BaseModel):
-    provider: Literal["native", "graphiti", "docling_graph", "cognee", "disabled"] = "native"
-    graphiti_neo4j_url: str | None = None
-    graphiti_neo4j_user: str | None = None
-    graphiti_neo4j_password: SecretStr | None = None
-    graphiti_embedding_model: str = Field(
-        default="openai/text-embedding-3-small",
-        description="embedding model Graphiti requests through the Bifrost gateway",
-    )
-    graphiti_embedding_dim: int = 1536
+    provider: Literal["native", "disabled"] = "native"
 
 
 class DocumentSettings(BaseModel):

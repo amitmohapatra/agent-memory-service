@@ -91,11 +91,12 @@ significantly *worse* on BeIR/SciFact (p = 0.012) at 21x the latency. The flag i
 the finding indicts one out-of-domain cross-encoder rather than reranking as a technique. See
 [MEASUREMENTS.md](MEASUREMENTS.md) §3e.
 
-**Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` are alternatives
-to `native`, which is what runs. Each is an import, a wiring branch, a contract test that
-does not exist, and a licence surface. Keep `native`.
+**Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` were alternatives
+to `native`, which is what runs. Each was an import, a wiring branch, a contract test that
+did not exist, and a licence surface. Removed; `native` is the only provider.
 
-**Four of five graph-enrichment providers.** Same argument. Keep `native` and `disabled`.
+**Four of five graph-enrichment providers.** Same argument. `graphiti`, `docling_graph` and
+`cognee` are removed; `native` and `disabled` remain.
 
 **Twenty-five memory types reduced to the caller-facing set.** `SEMANTIC`, `PREFERENCE`,
 `EPISODIC`, `DECISION`, `PROCEDURAL`, `TOOL`, plus the internal ones the pipeline writes.

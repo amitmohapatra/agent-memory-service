@@ -1,5 +1,5 @@
-"""Unit tests for native memory intelligence: extraction rules, classification defaults,
-consolidation decisions, and the external-provider adapters' decision mapping."""
+"""Unit tests for native memory intelligence: extraction rules, classification defaults and
+consolidation decisions."""
 
 from __future__ import annotations
 
@@ -7,9 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from memory_service.adapters.intelligence.langmem_provider import LangMemIntelligence
-from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence, namespace
-from memory_service.config.settings import MemoryIntelligenceSettings, Settings
+from memory_service.config.settings import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
     DedupDecision,
@@ -250,70 +248,3 @@ async def test_consolidation_ignores_non_current_and_empty(native) -> None:
     cand = (await _extract(native, "My timezone is CET."))[0]
     assert (await native.consolidate(cand, existing, CTX)).decision is DedupDecision.CREATE
     assert (await native.consolidate(cand, [], CTX)).decision is DedupDecision.CREATE
-
-
-# --- external adapters: decision mapping with fake clients -------------------------------
-
-
-class _FakeMem0:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    async def add(self, messages, **kwargs):
-        self.calls.append(kwargs)
-        text = messages[0]["content"]
-        if "PST" in text:
-            return {
-                "results": [
-                    {
-                        "id": "m1",
-                        "memory": "Timezone is PST",
-                        "event": "UPDATE",
-                        "previous_memory": "Timezone is CET",
-                    }
-                ]
-            }
-        return {"results": [{"id": "m1", "memory": "Timezone is CET", "event": "ADD"}]}
-
-    async def search(self, query, **kwargs):
-        return {"results": []}
-
-
-async def test_mem0_adapter_maps_events_and_namespaces_per_tenant() -> None:
-    fake = _FakeMem0()
-    provider = Mem0MemoryIntelligence(Settings(), client=fake)  # type: ignore[arg-type]
-    first = await provider.extract(_obs("My timezone is CET."), CTX)
-    assert fake.calls[0]["user_id"] == namespace(CTX) == "acme/user:u1"
-    assert first[0].content == "Timezone is CET" and first[0].provider == "mem0"
-    assert (await provider.consolidate(first[0], [], CTX)).decision is DedupDecision.CREATE
-    now = datetime.now(UTC)
-    existing = [build_memory(first[0], CTX, now=now)]
-    second = await provider.extract(_obs("My timezone is PST."), CTX)
-    out = await provider.consolidate(second[0], existing, CTX)
-    assert out.decision is DedupDecision.SUPERSEDE and out.target_memory_id == existing[0].memory_id
-    assert provider.info.requires_llm
-
-
-class _Item:
-    def __init__(self, id: str, content: str) -> None:
-        self.id, self.content = id, content
-
-
-class _FakeManager:
-    async def ainvoke(self, state):
-        text = state["messages"][0]["content"]
-        return [_Item("lm1", "User prefers tea" if "tea" in text else "User prefers coffee")]
-
-
-async def test_langmem_adapter_maps_updates() -> None:
-    provider = LangMemIntelligence(Settings(), manager=_FakeManager())
-    first = await provider.extract(_obs("I prefer tea."), CTX)
-    assert first[0].provider_ref == "lm1"
-    now = datetime.now(UTC)
-    existing = [build_memory(first[0], CTX, now=now)]
-    assert existing[0].system_metadata["provider_ref"] == "lm1"
-    second = await provider.extract(_obs("I prefer coffee."), CTX)
-    out = await provider.consolidate(second[0], existing, CTX)
-    assert out.decision is DedupDecision.SUPERSEDE and out.target_memory_id == existing[0].memory_id
-    again = await provider.extract(_obs("I prefer tea."), CTX)
-    assert (await provider.consolidate(again[0], existing, CTX)).decision is DedupDecision.REINFORCE

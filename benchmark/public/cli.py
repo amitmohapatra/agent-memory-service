@@ -3,7 +3,6 @@
     uv run python -m benchmark.public --suite all
     uv run python -m benchmark.public --suite beir --datasets nfcorpus --strategies baseline,splade --max-docs 500 --max-queries 50
     uv run python -m benchmark.public --suite longmemeval --configs native,bifrost --judge-runs 5 --max-questions 100
-    uv run python -m benchmark.public --suite locomo --configs native --memory-provider mem0
 
 Results carry provenance and ``representative`` (real embedding weights AND an LLM behind
 Bifrost); with the hash embedding or ``models.llm.enabled=false`` every number is a
@@ -128,12 +127,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-queries", type=int, default=None)
     parser.add_argument("--batch", type=int, default=200, help="documents per index drain")
     parser.add_argument("--configs", type=_csv, default=list(memory_qa.NATIVE_CONFIGS))
-    parser.add_argument(
-        "--memory-provider",
-        type=_csv,
-        default=[],
-        help="add mem0|langmem|cognee configurations (skipped with a reason when unavailable)",
-    )
     parser.add_argument("--judge-runs", type=int, default=5)
     parser.add_argument("--max-questions", type=int, default=None)
     parser.add_argument("--max-conversations", type=int, default=None)
@@ -153,7 +146,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     unknown = [s for s in args.strategies if s not in beir.STRATEGIES]
     if unknown:
         raise SystemExit(f"unknown strategies {unknown}; choose from {list(beir.STRATEGIES)}")
-    args.configs = [*args.configs, *[p for p in args.memory_provider if p not in args.configs]]
     suites = list(SUITES) if args.suite == "all" else [args.suite]
     for suite in suites:
         if suite == "beir":

@@ -123,7 +123,7 @@ async def version(request: Request) -> VersionResponse:
             "embedding": _active(c.embedding, f"{s.models.embedding.provider}"),
             "reranker": _active(c.reranker, s.models.reranker.provider),
             "llm": "bifrost" if s.models.llm.enabled else "disabled",
-            "memory_intelligence": s.memory_intelligence.provider,
+            "memory_intelligence": "native",
             "graph_enrichment": s.graph_enrichment.provider,
             # what is *running*, not what was asked for: `documents.parser` says "docling"
             # even in an image built without it, where the builtin is doing the work. An

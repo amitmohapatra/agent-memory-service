@@ -469,7 +469,7 @@ def _wire_retrieval(container: Container) -> None:
 
 
 def _wire_memory(container: Container) -> None:
-    """Memory intelligence: provider (native by default) + observation pipeline + service."""
+    """Memory intelligence: the native provider + observation pipeline + service."""
     from memory_service.config.registry import check_provider_policy
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
@@ -478,35 +478,14 @@ def _wire_memory(container: Container) -> None:
 
     settings = container.settings
     cfg = settings.memory_intelligence
-    provider: MemoryIntelligenceProvider
-    if cfg.provider == "native":
-        provider = NativeMemoryIntelligence(
-            cfg, container.embedding, assist=container.services["llm_assist"]
-        )
-    elif cfg.provider == "mem0":
-        from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence
-
-        provider = Mem0MemoryIntelligence(settings)
-    elif cfg.provider == "langmem":
-        from memory_service.adapters.intelligence.langmem_provider import LangMemIntelligence
-
-        provider = LangMemIntelligence(settings)
-    elif cfg.provider == "cognee":
-        from memory_service.adapters.intelligence.cognee_provider import CogneeMemoryIntelligence
-
-        provider = CogneeMemoryIntelligence(settings)
-    else:  # pragma: no cover - settings Literal guards this
-        raise NotImplementedError(cfg.provider)
+    provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
+        cfg, container.embedding, assist=container.services["llm_assist"]
+    )
     check_provider_policy(
         provider.info,
         [*settings.provider_policy.allowed_licenses, "see model card"],
         settings.provider_policy.allow_remote_models,
     )
-    if provider.info.requires_llm and not settings.models.llm.enabled:
-        raise NotImplementedError(
-            f"memory intelligence provider {cfg.provider!r} requires an LLM; "
-            "set MEMORY__MODELS__LLM__ENABLED=true and configure the model"
-        )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
         container.services["uow_factory"],
@@ -544,7 +523,7 @@ def _wire_tools(container: Container) -> None:
 
 
 def _wire_graph(container: Container) -> None:
-    """Knowledge graph: store (postgres | memory), enrichment provider, service, retrieval stage."""
+    """Knowledge graph: store (postgres | memory), native enrichment, service, retrieval stage."""
     from memory_service.config.registry import check_provider_policy
     from memory_service.modules.graph.native import NativeGraphEnrichment
     from memory_service.modules.graph.retrieval import GraphStage
@@ -564,28 +543,12 @@ def _wire_graph(container: Container) -> None:
         container.graph_enrichment = None
         return
     assist = container.services["llm_assist"]
-    if cfg.provider == "native":
-        provider = NativeGraphEnrichment(assist=assist)
-    elif cfg.provider == "graphiti":
-        from memory_service.adapters.graph.graphiti_provider import GraphitiEnrichment
-
-        provider = GraphitiEnrichment(settings)
-    elif cfg.provider == "docling_graph":
-        from memory_service.adapters.graph.docling_graph_provider import DoclingGraphEnrichment
-
-        provider = DoclingGraphEnrichment(settings)
-    else:  # cognee: graph comes from the cognee memory provider; native structure here
-        provider = NativeGraphEnrichment(assist=assist)
+    provider = NativeGraphEnrichment(assist=assist)
     check_provider_policy(
         provider.info,
         [*settings.provider_policy.allowed_licenses, "see model card"],
         settings.provider_policy.allow_remote_models,
     )
-    if provider.info.requires_llm and not settings.models.llm.enabled:
-        raise NotImplementedError(
-            f"graph enrichment provider {cfg.provider!r} requires an LLM; "
-            "set MEMORY__MODELS__LLM__ENABLED=true"
-        )
     container.graph_enrichment = provider
     graph = GraphService(
         container.services["uow_factory"],

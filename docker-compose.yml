@@ -415,15 +415,6 @@ services:
       openfga:
         condition: service_started
 
-  neo4j:
-    profiles: ["graph-store", "graphiti"]
-    image: neo4j:5-community
-    environment:
-      NEO4J_AUTH: neo4j/memorygraph
-      NEO4J_PLUGINS: '["apoc"]'
-    ports: ["7474:7474", "7687:7687"]
-    volumes: ["neo4j:/data"]
-
   otel-collector:
     profiles: ["observability"]
     image: otel/opentelemetry-collector-contrib:latest
@@ -442,4 +433,3 @@ volumes:
   qdrant:
   dragonfly:
   blob:
-  neo4j:

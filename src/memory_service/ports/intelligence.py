@@ -1,8 +1,9 @@
 """Memory-intelligence, graph, document-parser and policy ports.
 
-``MemoryIntelligenceProvider`` is the seam behind which Native / Mem0 / Cognee / LangMem
-sit. None of them is the public contract; they produce candidates that the service turns
-into canonical memories with provenance.
+``MemoryIntelligenceProvider`` is the seam behind which the native implementation sits (the
+third-party challengers that once shared it were removed; a comparison, if ever wanted again,
+lives under benchmark/). It is not the public contract: it produces candidates that the
+service turns into canonical memories with provenance.
 """
 
 from __future__ import annotations
@@ -266,7 +267,7 @@ class GraphStore(Protocol):
 
 @runtime_checkable
 class GraphEnrichmentProvider(Protocol):
-    """Native (LLM-free) | Graphiti | DoclingGraph | Cognee."""
+    """Native (LLM-free) enrichment; ``disabled`` leaves the graph empty."""
 
     info: ProviderInfo
 

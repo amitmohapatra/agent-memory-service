@@ -92,9 +92,10 @@ is the defensible basis, and it reaches a *narrower* conclusion:
 - **Keep `splade`** — the only genuinely uncovered retrieval capability.
 - **Keep all 25 memory types** — reversing the earlier recommendation. They are an import
   surface with correct admission behaviour, not unused enum values.
-- **Alternative providers** (`mem0`, `cognee`, `langmem`, `graphiti`, `docling_graph`) are still
-  unverified either way. They are not capabilities, they are substitutes for `native`; nothing
-  in this review establishes whether they beat it. **No decision until measured.**
+- **Alternative providers** (`mem0`, `cognee`, `langmem`, `graphiti`, `docling_graph`) were
+  removed from the service (Phase 1 of the 2026-09 roadmap): they were substitutes for
+  `native` that no compose target, benchmark or CI lane ran. A comparison, if ever wanted,
+  is built under `benchmark/` and never in `src/`.
 
 ## 5. Still blocking
 
