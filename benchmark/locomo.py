@@ -139,9 +139,9 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
             # subject user:Caroline rather than a shared id that makes Caroline's and
             # Melanie's facts indistinguishable - which is what the graph, the subject
             # check and the answerer all key on. WORKSPACE visibility is anchored on the
-            # workspace, not the user, so the questioner (a third context in the same
-            # workspace) still sees every turn. occurred_at carries the session date into
-            # the memory's temporal fields instead of leaving it as ingest time.
+            # workspace, not the user, so the questioner - a third context, made a member
+            # of the workspace above - sees every turn. occurred_at carries the session
+            # date into the memory's temporal fields instead of leaving it as ingest time.
             async with uow_factory() as uow:
                 await memory.submit_observation(
                     uow,
@@ -476,6 +476,17 @@ async def run(
             ctx = MemoryExecutionContext(
                 tenant_id=TENANT, user_id=f"locomo-{index}", workspace_id="ws"
             )
+            # The turns are written under each speaker's own user id with WORKSPACE
+            # visibility, so the questioner reads them through workspace membership - a
+            # visibility key it only carries once it is a member. Without this grant every
+            # search matched nothing and a whole judged run scored 0.0 on 304 questions
+            # while reporting INSUFFICIENT evidence, which is exactly what an outsider is
+            # supposed to see.
+            async with container.services["uow_factory"]() as uow:
+                await container.services["authz"].grant_membership(
+                    TENANT, ctx.user_id, workspaces=[ctx.workspace_id], revisions=uow.revisions
+                )
+                await uow.commit()
             turns = await _ingest_conversation(container, ctx, conversation["conversation"])
             sessions = _sessions(conversation["conversation"])
             reference_date = (

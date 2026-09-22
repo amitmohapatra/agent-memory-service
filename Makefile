@@ -242,8 +242,8 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge"]' \
 	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
 	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
@@ -275,8 +275,8 @@ bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge"]' \
 	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
 	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
@@ -312,8 +312,8 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
 	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge"]' \
 	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
 	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
 	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
