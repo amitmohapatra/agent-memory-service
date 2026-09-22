@@ -277,6 +277,18 @@ class GraphSettings(BaseModel):
 
     max_visited: int = 200
     default_hops: int = 1
+    #: How long a query may wait for the retrieval-time traversal before answering without
+    #: graph facts.
+    #:
+    #: The traversal is started as soon as the scope is known, so on a slow encoder it costs
+    #: nothing - it finishes underneath. That is exactly why it needs a ceiling: the moment
+    #: the encoder gets faster (int8 ONNX), or the graph gets deep enough for a three-hop
+    #: walk to outrun it, an unbounded traversal becomes the tail of every entity, temporal
+    #: and multi-hop question. 150 ms is the band the roadmap derives for an 8 vCPU VM whose
+    #: encode is ~40 ms and whose p99 target is 300 ms.
+    #:
+    #: Expiry drops facts; it never cancels the traversal. See ``GraphStage.__call__``.
+    prefetch_budget_ms: int = Field(default=150, ge=1)
 
 
 GRAPH = GraphSettings()
