@@ -23,7 +23,12 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.graph.retrieval import GraphStage, graph_budget_expired_total
+from memory_service.modules.graph.retrieval import (
+    GraphStage,
+    graph_budget_expired_total,
+    graph_parked_cancelled_total,
+    graph_parked_traversals,
+)
 from memory_service.modules.graph.service import GraphAnswer
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import QueryRouter
@@ -189,3 +194,102 @@ def test_the_budget_is_frozen_at_150ms() -> None:
     from memory_service.config.constants import GRAPH
 
     assert GRAPH.prefetch_budget_ms == 150
+
+
+# ---------------------------------------------------------------------------
+# the leak is bounded, visible, and drained at shutdown
+# ---------------------------------------------------------------------------
+
+
+async def test_parked_traversals_are_capped() -> None:
+    """The budget bounds the wait, not the concurrency.
+
+    A graph slower than the budget expires *every* query, and each expiry parks a traversal
+    holding a pooled connection. Uncapped, the condition the budget exists for turns a latency
+    problem into exhaustion of the same pool the read path reads through - a worse failure than
+    the tail it cuts. Past the cap the cheaper harm is the aborted statement.
+    """
+    graph = _Graph(delay=5.0)
+    stage = GraphStage(graph, _NoUoW(), budget_seconds=0.001, max_parked=2)  # type: ignore[arg-type]
+    routed = _routed()
+    cancelled_before = graph_parked_cancelled_total._value.get()
+
+    tasks = [stage.prefetch(CTX, routed, VISIBILITY) for _ in range(5)]
+    for task in tasks:
+        await stage(CTX, routed, [], VISIBILITY, {}, prefetched=task)
+
+    assert len(stage._running) == 2, "the parked traversals are not bounded"
+    assert graph_parked_cancelled_total._value.get() == cancelled_before + 3
+    for task in tasks:  # the two still parked would outlive the test otherwise
+        assert task is not None
+        task.cancel()
+    await asyncio.gather(*[t for t in tasks if t is not None], return_exceptions=True)
+    assert stage._running == set()
+    assert graph.finished == 0, "a cancelled traversal does not run to completion"
+
+
+async def test_the_parked_traversals_are_a_gauge() -> None:
+    """``memory_graph_budget_expired_total`` says how often the budget expired; this says how
+    much of the connection pool that is costing right now."""
+    stage, _ = _stage(delay=0.05, budget=0.001)
+    routed = _routed()
+    task = stage.prefetch(CTX, routed, VISIBILITY)
+    await stage(CTX, routed, [], VISIBILITY, {}, prefetched=task)
+
+    assert graph_parked_traversals._value.get() == 1
+    await stage.drain()
+    assert graph_parked_traversals._value.get() == 0
+
+
+async def test_a_cancelled_request_does_not_leave_the_traversal_unowned() -> None:
+    """On a client disconnect the wait raises CancelledError, not TimeoutError. The shield
+    means the traversal survives the request, so it has to be disposed of deliberately:
+    before this it kept running with nothing holding a reference and nothing reading its
+    exception."""
+    stage, graph = _stage(delay=0.05, budget=10.0)
+    routed = _routed()
+    task = stage.prefetch(CTX, routed, VISIBILITY)
+
+    call = asyncio.ensure_future(stage(CTX, routed, [], VISIBILITY, {}, prefetched=task))
+    await asyncio.sleep(0)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert len(stage._running) == 1, "the traversal was left running with nobody holding it"
+    await stage.drain()
+    assert graph.finished == 1 and stage._running == set()
+
+
+def test_the_wiring_drains_the_stage_at_shutdown() -> None:
+    from memory_service.adapters.wiring import _wire_graph, _wire_retrieval
+    from memory_service.application.container import Container, Overrides
+    from memory_service.config.settings import Settings
+    from memory_service.modules.authz.service import AuthorizationService
+    from memory_service.modules.llm.assist import LLMAssist
+
+    from memory_service.adapters.authz.memory_provider import (  # isort: skip
+        MemoryAuthorizationProvider,
+    )
+
+    class _Model:
+        def fingerprint(self) -> str:
+            return "fp"
+
+    container = Container(  # type: ignore[call-arg]
+        settings=Settings(_env_file=None),
+        version="test",
+        overrides=Overrides(graph_store="memory", graph_enrichment="native"),
+    )
+    container.services["uow_factory"] = _NoUoW()
+    container.services["conversation"] = object()
+    container.services["llm_assist"] = LLMAssist.disabled()
+    container.services["authz"] = AuthorizationService(MemoryAuthorizationProvider(), None)
+    container.embedding = _Model()
+    container.sparse = _Model()
+    _wire_retrieval(container)
+    _wire_graph(container)
+
+    stage = container.services["retrieval"].post_stages["graph"]
+    assert container.closers["graph_stage"] == stage.drain
+    assert stage.max_parked == container.tuning.graph.max_parked_traversals

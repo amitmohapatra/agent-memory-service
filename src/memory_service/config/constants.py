@@ -290,6 +290,17 @@ class GraphSettings(BaseModel):
     #:
     #: Expiry drops facts; it never cancels the traversal. See ``GraphStage.__call__``.
     prefetch_budget_ms: int = Field(default=150, ge=1)
+    #: How many expired traversals may be finishing at once before the next one is cancelled
+    #: instead of parked.
+    #:
+    #: The budget bounds the wait, not the concurrency, and the condition that parks a
+    #: traversal - a graph slower than the budget - is exactly the condition that parks the
+    #: next one too. Each parked traversal holds a connection out of a pool of
+    #: ``pool_size + max_overflow`` (10 + 10 per worker) that the read path checks out of, so
+    #: an uncapped leak turns a latency problem into pool exhaustion, which is worse than the
+    #: tail the budget exists to cut. Past this many, the aborted statement is the cheaper
+    #: harm.
+    max_parked_traversals: int = Field(default=8, ge=1)
 
 
 GRAPH = GraphSettings()
