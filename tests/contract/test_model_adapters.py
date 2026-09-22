@@ -116,7 +116,7 @@ async def _embedding_contract(emb, expected_dim: int | None = None) -> None:
     # deterministic across calls and independent of batch composition
     again = await emb.embed_documents([docs[1], docs[0]])
     assert again[1] == pytest.approx(vectors[0], abs=1e-5)
-    assert emb.fingerprint().startswith("st-") and f"-d{emb.dimension}" in emb.fingerprint()
+    assert f"-d{emb.dimension}" in emb.fingerprint(), "the width is part of the space's name"
     assert emb.info.locality == "local"
 
 
@@ -178,17 +178,22 @@ async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
     assert rr.fingerprint() == "ce-tiny-ce"
 
 
-@pytest.mark.models
-async def test_granite_real_weights_contract() -> None:
-    """Runs only when real weights are present (./models or BENCH_MODELS_DIR)."""
+def _weights(name: str = "granite-embedding-small-english-r2") -> Path:
     root = os.environ.get("BENCH_MODELS_DIR") or ("models" if Path("models").is_dir() else "")
     if not root:
         pytest.skip(
             "no ./models — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)"
         )
-    path = Path(root) / "granite-embedding-small-english-r2"
+    path = Path(root) / name
     if not path.exists():
         pytest.skip(f"{path} not present")
+    return path
+
+
+@pytest.mark.models
+async def test_granite_real_weights_contract() -> None:
+    """Runs only when real weights are present (./models or BENCH_MODELS_DIR)."""
+    path = _weights()
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
 
     emb = SentenceTransformersEmbedding(DenseModel(model_path=str(path)))
@@ -202,3 +207,42 @@ async def test_granite_real_weights_contract() -> None:
     )
     sim = lambda x, y: sum(p * q for p, q in zip(x, y, strict=True))  # noqa: E731
     assert sim(a, b) > sim(a, c), "semantic neighbours closer than unrelated text"
+
+
+@pytest.mark.models
+async def test_the_onnx_runner_returns_the_same_vectors_as_the_torch_one() -> None:
+    """The gate on the ONNX encoder: the graph is a re-expression of the checkpoint, not a
+    different model. fp32 must agree with sentence-transformers to within rounding — below
+    0.99 the two runners are different vector spaces and the collection would have to be
+    rebuilt to switch between them, which is the one thing the fingerprint exists to
+    prevent. int8 is a separate, lower bar and is measured, not asserted, here.
+    """
+    path = _weights()
+    if not (path / "onnx" / "model.onnx").is_file():
+        pytest.skip(
+            f"no {path}/onnx/model.onnx — write it with `python -m "
+            f"memory_service.tools.download_models --export-onnx {path}`"
+        )
+    from memory_service.adapters.models.embeddings import (
+        OnnxEmbedding,
+        SentenceTransformersEmbedding,
+    )
+
+    texts = [
+        "Adjusted EBITDA increased to EUR 98 million",
+        "the data centre migration finished on schedule",
+        "What did Caroline say about the painting class?",
+        "",
+    ]
+    onnx = OnnxEmbedding(DenseModel(runtime="onnx", model_path=str(path)))
+    await _embedding_contract(onnx, expected_dim=384)
+    assert onnx.fingerprint().startswith("onnx-")
+    assert "-model-" in onnx.fingerprint(), "the graph file is part of the vector space"
+
+    torch_side = SentenceTransformersEmbedding(DenseModel(model_path=str(path)))
+    ours = await onnx.embed_documents(texts)
+    theirs = await torch_side.embed_documents(texts)
+    cosines = [
+        sum(a * b for a, b in zip(u, v, strict=True)) for u, v in zip(ours, theirs, strict=True)
+    ]
+    assert min(cosines) >= 0.99, f"onnx fp32 disagrees with torch: {cosines}"

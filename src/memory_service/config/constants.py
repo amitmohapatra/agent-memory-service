@@ -43,7 +43,7 @@ def local_model_path(local_dir: str) -> str | None:
 
 
 class DenseModel(BaseModel):
-    """The dense encoder, as loaded by sentence-transformers."""
+    """The dense encoder, as loaded by sentence-transformers or by our own ONNX runner."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -52,11 +52,17 @@ class DenseModel(BaseModel):
     local_dir: str = "granite-embedding-small-english-r2"
     model_path: str | None = None
     revision: str | None = None
-    #: sentence-transformers backend
+    #: Which runner loads it. ``torch``: sentence-transformers. ``onnx``: the tokenizer +
+    #: ``onnxruntime`` session this repository owns (``adapters/models/embeddings.py``),
+    #: because sentence-transformers' own ONNX backend reaches the graph through
+    #: ``optimum.onnxruntime``, and ``optimum-onnx`` pins ``optimum~=2.1``, which cannot be
+    #: installed beside sentence-transformers 6. Switching this is also ``make reindex``.
+    runtime: Literal["torch", "onnx"] = "torch"
+    #: sentence-transformers backend (``runtime="torch"`` only)
     backend: Literal["torch", "onnx", "openvino"] = "torch"
-    #: A specific ONNX graph under ``onnx/`` (``model_quint8_avx2.onnx`` vs ``model.onnx``).
-    #: Part of the fingerprint when set: int8 and fp32 graphs of the same model must never
-    #: silently share a collection.
+    #: A specific ONNX graph under the model directory (``onnx/model_qint8.onnx`` vs
+    #: ``onnx/model.onnx``). Part of the fingerprint: int8 and fp32 graphs of the same model
+    #: must never silently share a collection.
     graph_file: str | None = None
     dimension: int = 384
     max_seq_length: int = 512
@@ -64,7 +70,7 @@ class DenseModel(BaseModel):
     batch_size: int = 32
     device: str = "cpu"
     #: Intra-op threads the model may use: ``torch.set_num_threads`` for the torch runner,
-    #: ORT ``intra_op_num_threads`` for an ONNX one. Two, because the deployment runs three
+    #: ORT ``intra_op_num_threads`` for the ONNX one. Two, because the deployment runs three
     #: uvicorn workers on eight vCPU and one encode fanning over every core is what makes
     #: three concurrent requests slower than three sequential ones.
     threads: int = 2

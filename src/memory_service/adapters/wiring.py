@@ -270,6 +270,7 @@ async def _wire_search(container: Container) -> None:
 def _wire_models(container: Container) -> None:
     from memory_service.adapters.models.embeddings import (
         HashEmbedding,
+        OnnxEmbedding,
         SentenceTransformersEmbedding,
     )
     from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
@@ -282,9 +283,9 @@ def _wire_models(container: Container) -> None:
         dense = stand_in.dense_model or FROZEN_MODELS.dense
         # The thread count is frozen with the model (constants.DenseModel.threads); the
         # environment field is what is left of the served-model tier and is going away.
-        container.embedding = SentenceTransformersEmbedding(
-            dense, threads=container.settings.models.embedding.threads or dense.threads
-        )
+        threads = container.settings.models.embedding.threads or dense.threads
+        runner = OnnxEmbedding if dense.runtime == "onnx" else SentenceTransformersEmbedding
+        container.embedding = runner(dense, threads=threads)
     container.sparse = Bm25SparseEncoder()
 
     reranker: Any = None
