@@ -111,12 +111,6 @@ members = [
   "integrations/langgraph",
   "integrations/mcp",
 ]
-# google-adk pins opentelemetry-api/sdk below the service's floor and crewai pins chromadb<1.2
-# (posthog<6, incompatible with the `eval` extra), so integrations/adk and integrations/crewai
-# are standalone uv projects with their own lock and virtualenv
-# (`uv sync --project integrations/<name>`), tested against a live server.
-exclude = ["integrations/adk", "integrations/crewai"]
-
 [tool.uv.sources]
 # Local while unpublished. The path is inside this repo on purpose: a Docker build
 # cannot reach a sibling directory, so "../bifrost-sdk" makes the image unbuildable.
@@ -144,8 +138,6 @@ src = [
   "src",
   "sdk/python/src",
   "integrations/langgraph/src",
-  "integrations/adk/src",
-  "integrations/crewai/src",
   "integrations/mcp/src",
   "tests",
 ]
@@ -185,21 +177,13 @@ ignore = [
 "sdk/python/tests/**" = ["S", "PLR", "T20"]
 "integrations/langgraph/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
 "integrations/langgraph/src/**" = ["TID251"]  # the one place LangGraph may be imported
-"integrations/adk/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
-"integrations/adk/src/**" = ["TID251"]  # the one place Google ADK may be imported
-"integrations/crewai/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
-"integrations/crewai/src/**" = ["TID251"]  # the one place CrewAI may be imported
-"integrations/mcp/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
 "integrations/mcp/src/**" = ["TID251"]  # the one place the MCP server package may be imported
-"tests/integrations/**" = ["TID251", "E501", "PLC0207", "N818"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
   "memory_service",
   "universal_memory",
   "universal_memory_langgraph",
-  "universal_memory_adk",
-  "universal_memory_crewai",
   "universal_memory_mcp",
 ]
 
@@ -268,7 +252,6 @@ testpaths = [
   "tests",
   "sdk/python/tests",
   "integrations/langgraph/tests",
-  "integrations/mcp/tests",
 ]
 pythonpath = ["."]
 timeout = 120
@@ -292,8 +275,6 @@ source = [
   "memory_service",
   "universal_memory",
   "universal_memory_langgraph",
-  "universal_memory_adk",
-  "universal_memory_crewai",
   "universal_memory_mcp",
 ]
 branch = true

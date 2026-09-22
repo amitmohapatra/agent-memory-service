@@ -22,7 +22,6 @@ COPY pyproject.toml uv.lock README.md ./
 # workspace member metadata (sources are copied later); keeps the dependency layer cacheable
 COPY sdk/python/pyproject.toml sdk/python/README.md sdk/python/
 COPY integrations/langgraph/pyproject.toml integrations/langgraph/README.md integrations/langgraph/
-COPY integrations/crewai/pyproject.toml integrations/crewai/README.md integrations/crewai/
 COPY integrations/mcp/pyproject.toml integrations/mcp/README.md integrations/mcp/
 # The shared gateway client. Not a workspace member but a path dependency, and an editable
 # install needs its sources at sync time — so the whole (tiny) tree comes in here rather than

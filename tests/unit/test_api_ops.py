@@ -1,11 +1,26 @@
 from fastapi.testclient import TestClient
 
+from tests.conftest import PG_AVAILABLE
+
 
 def test_live_ready_version_metrics(client: TestClient) -> None:
     assert client.get("/health/live").json() == {"status": "ok"}
     ready = client.get("/health/ready")
-    assert ready.status_code == 200
-    assert ready.json()["status"] in ("ready", "degraded")
+    # Readiness is the one endpoint whose *correct* answer depends on the machine, so assert
+    # the mapping rather than a fixed status. Asserting 200 unconditionally made this unit
+    # test require a live PostgreSQL without saying so: with the database down it failed
+    # here, 503-with-postgres-not-ok — the endpoint working exactly as designed — while
+    # every genuinely database-backed test skipped cleanly on PG_AVAILABLE.
+    body = ready.json()
+    assert body["dependencies"]["postgres"]["mandatory"] is True
+    if PG_AVAILABLE:
+        assert ready.status_code == 200
+        assert body["status"] in ("ready", "degraded")
+        assert body["dependencies"]["postgres"]["ok"] is True
+    else:
+        assert ready.status_code == 503
+        assert body["status"] == "not_ready"
+        assert body["dependencies"]["postgres"]["ok"] is False
     version = client.get("/version").json()
     assert version["version"] and version["api_version"] == "v1"
     assert version["providers"]["llm"] == "disabled"
