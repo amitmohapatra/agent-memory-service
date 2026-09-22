@@ -1,0 +1,337 @@
+{
+  "wrong_answerable": 39,
+  "by_class": {
+    "evidence missing": 1,
+    "abstained": 13,
+    "partial": 14,
+    "wrong instance": 11
+  },
+  "by_category_class": {
+    "multi_hop/abstained": 5,
+    "multi_hop/partial": 10,
+    "multi_hop/wrong instance": 2,
+    "open_domain/abstained": 1,
+    "open_domain/evidence missing": 1,
+    "open_domain/partial": 1,
+    "single_hop/abstained": 5,
+    "single_hop/partial": 2,
+    "single_hop/wrong instance": 9,
+    "temporal/abstained": 2,
+    "temporal/partial": 1
+  },
+  "rows": [
+    {
+      "class": "partial",
+      "category": "temporal",
+      "question": "When did Melanie run a charity race?",
+      "gold": "The sunday before 25 May 2023",
+      "produced": "She ran it on Saturday 20 May 2023 (mentioned on 25 May 2023 as \"last Saturday\").",
+      "reason": "The gold answer says the charity race was on the Sunday before 25 May 2023, which is Sunday 21 May 2023, while the answer says Saturday 20 May 2023."
+    },
+    {
+      "class": "abstained",
+      "category": "multi_hop",
+      "question": "What is Caroline's relationship status?",
+      "gold": "Single",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer (\"I don't know\") rather than stating the gold fact that Caroline is single, so it abstained and is not correct."
+    },
+    {
+      "class": "abstained",
+      "category": "multi_hop",
+      "question": "Where did Caroline move from 4 years ago?",
+      "gold": "Sweden",
+      "produced": "From her home country (the context doesn't name it).",
+      "reason": "The answer does not identify Sweden and instead states that the context does not name the country, so it fails to provide the gold answer and effectively abstains."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What activities does Melanie partake in?",
+      "gold": "pottery, camping, painting, swimming",
+      "produced": "Melanie partakes in pottery class (signed up 3 July 2023; made pottery by 25 August 2023), nature-inspired painting (including a sunset landscape), hiking in the mountains and exploring forests, famil",
+      "reason": "The answer includes pottery, painting, and camping, but omits swimming, which is listed in the gold answer."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What do Melanie's kids like?",
+      "gold": "dinosaurs, nature",
+      "produced": "Melanie\u2019s kids love nature (the 2 younger kids, 27 June 2023), were excited about summer break (25 May 2023), and loved pottery (15 July 2023), the beach (20 July 2023), camping/hiking (27 June and 13",
+      "reason": "The answer includes nature but omits dinosaurs, so it does not convey the full fact given in the gold answer."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What books has Melanie read?",
+      "gold": "\"Nothing is Impossible\", \"Charlotte's Web\"",
+      "produced": "Melanie loved reading \"Charlotte's Web\" as a kid (and later read a book Caroline recommended and a \"follow your dreams\" book last year, though neither is named).",
+      "reason": "The answer names Charlotte's Web but does not name Nothing is Impossible, so it does not convey the full set of books from the gold answer."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What does Melanie do to destress?",
+      "gold": "Running, pottery",
+      "produced": "She goes running \u2014 she's been running farther to de-stress and clear her mind (and it's been great for her headspace).",
+      "reason": "The gold answer lists two destress activities (running and pottery), but the answer only mentions running and omits pottery, so it does not convey the same fact set."
+    },
+    {
+      "class": "evidence missing",
+      "category": "open_domain",
+      "question": "Would Melanie be considered a member of the LGBTQ community?",
+      "gold": "Likely no, she does not refer to herself as part of it",
+      "produced": "I don't know.",
+      "reason": "The answer abstains by saying it does not know, so it does not convey the gold fact that Melanie likely would not be considered LGBTQ because she does not refer to herself as part of the community."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What activities has Melanie done with her family?",
+      "gold": "Pottery, painting, camping, museum, swimming, hiking",
+      "produced": "Melanie has done with her family: family picnics with games, food and hanging out; hiking/exploring mountains and forests; camping trips with roasted marshmallows, campfires and stories; beach trips w",
+      "reason": "The answer includes pottery, painting, camping, and hiking, but omits museum and swimming from the gold answer, so it does not convey the same full set of activities."
+    },
+    {
+      "class": "abstained",
+      "category": "temporal",
+      "question": "When did Caroline and Melanie go to a pride fesetival together?",
+      "gold": 2022,
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer ('I don't know'), but the gold answer provides a specific year (2022), so it is not correct."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What symbols are important to Caroline?",
+      "gold": "Rainbow flag, transgender symbol",
+      "produced": "Caroline\u2019s important symbols are her grandma\u2019s necklace with a cross and heart (love, faith and strength), the rainbow flag/mural (courage, strength and togetherness), and the eagle (freedom, pride an",
+      "reason": "The answer mentions the rainbow flag but omits the transgender symbol, and includes additional symbols not in the gold answer."
+    },
+    {
+      "class": "abstained",
+      "category": "open_domain",
+      "question": "Would Caroline be considered religious?",
+      "gold": "Somewhat, but not extremely religious",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer (\"I don't know\") and therefore does not convey the gold fact that Caroline is somewhat but not extremely religious."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What musical artists/bands has Melanie seen?",
+      "gold": "Summer Sounds, Matt Patterson",
+      "produced": "Melanie mentioned seeing \"Summer Sounds\" (a band playing an awesome pop song that got everyone dancing and singing), and a concert with a band at her daughter's birthday \u2014 no other named artists/bands",
+      "reason": "The answer only identifies Summer Sounds and explicitly says no other named artists/bands, omitting the gold answer's Matt Patterson."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "What are some changes Caroline has faced during her transition journey?",
+      "gold": "Changes to her body, losing unsupportive friends",
+      "produced": "Her relationships changed: some close friends kept supporting her, but a few weren't able to handle it \u2014 though she's now much happier around those who accept and love her, and her relationships feel ",
+      "reason": "The answer mentions relationship changes and unsupportive friends, but it omits the gold answer's change to her body, so it does not fully convey the same fact."
+    },
+    {
+      "class": "wrong instance",
+      "category": "multi_hop",
+      "question": "What does Melanie do with her family on hikes?",
+      "gold": "Roast marshmallows, tell stories",
+      "produced": "She enjoys hiking in the mountains and exploring forests with them \u2014 a way to connect with nature and each other.",
+      "reason": "The answer describes hiking and connecting with nature/family but does not mention roasting marshmallows or telling stories, which are the specific activities in the gold answer."
+    },
+    {
+      "class": "partial",
+      "category": "open_domain",
+      "question": "What personality traits might Melanie say Caroline has?",
+      "gold": "Thoughtful, authentic, driven",
+      "produced": "Courageous, kind, strong and inspiring \u2014 with passion and hard work for helping others.",
+      "reason": "The answer lists different personality traits (courageous, kind, strong, inspiring, passionate, hard-working) rather than the gold traits (thoughtful, authentic, driven), so it does not convey the sam"
+    },
+    {
+      "class": "abstained",
+      "category": "multi_hop",
+      "question": "What book did Melanie read from Caroline's suggestion?",
+      "gold": "\"Becoming Nicole\"",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer, but the gold answer specifies the book 'Becoming Nicole', so it does not convey the same fact."
+    },
+    {
+      "class": "abstained",
+      "category": "multi_hop",
+      "question": "How many children does Melanie have?",
+      "gold": 3,
+      "produced": "I don't know\u2014the context never states how many children Melanie has (she refers to \"my kids,\" \"my youngest,\" and photos show two or three children).",
+      "reason": "The answer declines to give a number, saying it does not know, so it does not convey the gold fact (3 children)."
+    },
+    {
+      "class": "partial",
+      "category": "single_hop",
+      "question": "How does Melanie prioritize self-care?",
+      "gold": "by carving out some me-time each day for activities like running, reading, or playing the violin",
+      "produced": "Melanie prioritizes self-care as vital\u2014she goes swimming, runs farther to de-stress, uses pottery and painting for self-expression and peace, and refreshes her soul through nature/camping, believing i",
+      "reason": "The gold answer specifies that Melanie prioritizes self-care by carving out daily me-time for activities such as running, reading, or playing the violin. The given answer describes a different set of "
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What are Caroline's plans for the summer?",
+      "gold": "researching adoption agencies",
+      "produced": "She planned a summer trip with Melanie \u2014 a family outing or something special just the two of them, to catch up and explore nature.",
+      "reason": "The answer describes a summer trip with Melanie, not Caroline's plan to research adoption agencies as stated in the gold answer."
+    },
+    {
+      "class": "abstained",
+      "category": "single_hop",
+      "question": "What is Melanie's hand-painted bowl a reminder of?",
+      "gold": "art and self-expression",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer ('I don't know') rather than conveying the gold fact that the bowl is a reminder of art and self-expression."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What did Caroline take away from the book \"Becoming Nicole\"?",
+      "gold": "Lessons on self-acceptance and finding support",
+      "produced": "It made her feel connected and gave her a lot of hope for her own path, reminding her to keep going and never give up.",
+      "reason": "The answer describes feeling connected, hopeful, and encouraged to keep going, but it does not convey the gold answer's specific lessons about self-acceptance and finding support."
+    },
+    {
+      "class": "abstained",
+      "category": "single_hop",
+      "question": "Who performed at the concert at Melanie's daughter's birthday?",
+      "gold": "Matt Patterson",
+      "produced": "I don't know.",
+      "reason": "The answer declines to provide the requested information and does not match the gold answer."
+    },
+    {
+      "class": "abstained",
+      "category": "single_hop",
+      "question": "Why did Melanie choose to use colors and patterns in her pottery project?",
+      "gold": "She wanted to catch the eye and make people smile.",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer ('I don't know') and does not convey the gold fact that she wanted to catch the eye and make people smile."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "How do Melanie and Caroline describe their journey through life together?",
+      "gold": "An ongoing adventure of learning and growing.",
+      "produced": "As a shared journey of motivating and helping each other out through life so they can make a real impact together \u2014 tackling life's challenges together, with Caroline saying Melanie makes life's strug",
+      "reason": "The gold describes their journey as an ongoing adventure of learning and growing, while the answer describes it as a shared journey of motivating and helping each other and making an impact. These are"
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "How did Melanie's son handle the accident?",
+      "gold": "He was scared but reassured by his family",
+      "produced": "He was okay.",
+      "reason": "The answer says he was okay, which does not convey the gold detail that he was scared but reassured by his family."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What did Melanie do after the road trip to relax?",
+      "gold": "Went on a nature walk or hike",
+      "produced": "They went camping with the kids \u2014 the kids loved it, and it was a nice way to relax after the road trip.",
+      "reason": "The answer says they went camping, while the gold answer says Melanie went on a nature walk or hike; these are not the same activity."
+    },
+    {
+      "class": "abstained",
+      "category": "multi_hop",
+      "question": "Which city have both Jean and John visited?",
+      "gold": "Rome",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer ('I don't know') instead of providing the gold city Rome, so it is incorrect but does abstain."
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "How did Gina promote her clothes store?",
+      "gold": "worked with an artist to make unique fashion pieces, made limited-edition sweatshirts, got some new offers and promotions for online store, developed a video presentation showing how to style her pieces",
+      "produced": "Gina promoted it with an ad campaign (launched 29 January 2023), more ads and new offers/promotions, plans to work with fashion bloggers and influencers, and a video presentation teaching how to style",
+      "reason": "The answer includes some overlapping details, such as new offers/promotions and a video presentation, but it omits key gold items like working with an artist to make unique fashion pieces and making l"
+    },
+    {
+      "class": "partial",
+      "category": "multi_hop",
+      "question": "Which events has Jon participated in to promote his business venture?",
+      "gold": "fair, networking events, dance competition",
+      "produced": "Jon showed off his studio at a fair (went the day before 25 April 2023, getting possible leads) and attended networking events \u2014 starting 20 June 2023 and a later one by 21 July 2023 where he met inve",
+      "reason": "The answer mentions the fair and networking events but omits the dance competition listed in the gold answer."
+    },
+    {
+      "class": "wrong instance",
+      "category": "multi_hop",
+      "question": "How long did it take for Jon to open his studio?",
+      "gold": "six months",
+      "produced": "About five months: Jon lost his banker job on 19 January 2023 and the studio's official opening night was 20 June 2023.",
+      "reason": "The answer says about five months, while the gold answer states six months; these are different timeframes."
+    },
+    {
+      "class": "abstained",
+      "category": "temporal",
+      "question": "When did Gina mention Shia Labeouf?",
+      "gold": " 23 July, 2023",
+      "produced": "I don't know.",
+      "reason": "The answer declines to provide the date, so it does not convey the gold fact."
+    },
+    {
+      "class": "abstained",
+      "category": "single_hop",
+      "question": "What do the dancers in the photo represent?",
+      "gold": "They are performing at the festival",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer by saying \"I don't know,\" so it does not convey the gold fact that the dancers are performing at the festival."
+    },
+    {
+      "class": "abstained",
+      "category": "single_hop",
+      "question": "What does Gina say about the dancers in the photo?",
+      "gold": "They look graceful",
+      "produced": "I don't know.",
+      "reason": "The answer declines to answer ('I don't know') rather than conveying the gold fact that the dancers look graceful, so it is incorrect but abstained."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What did Gina find for her clothing store on 1 February, 2023?",
+      "gold": "The perfect spot for her store",
+      "produced": "On 1 February 2023 Gina found that a wholesaler she'd emailed replied and said yes \u2014 letting her expand her clothing store and get closer to her customers (she shared a photo of a shopping mall with a",
+      "reason": "The answer describes a wholesaler replying yes and expansion, not Gina finding the perfect spot for her store as stated in the gold answer."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What did Jon and Gina compare their entrepreneurial journeys to?",
+      "gold": "dancing together and supporting each other",
+      "produced": "A roller coaster (a \"wild ride\") \u2014 Gina described her online clothing store that way.",
+      "reason": "The gold answer says Jon and Gina compared their entrepreneurial journeys to dancing together and supporting each other, while the answer says they compared them to a roller coaster/wild ride. This do"
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "How does Gina describe the feeling that dance brings?",
+      "gold": "magical",
+      "produced": "Gina says dance \"is just me -- I can't picture life without it. It's like air,\" and calls it her stress relief (her \"stress fix,\" where \"all my worries vanish\").",
+      "reason": "The answer describes dance as essential, like air, and stress relief, but does not convey the gold fact that Gina describes the feeling as 'magical'."
+    },
+    {
+      "class": "partial",
+      "category": "single_hop",
+      "question": "What does Jon plan to do at the grand opening of his dance studio?",
+      "gold": "savor all the good vibes",
+      "produced": "Jon only says he plans to make some awesome memories and have fun with Gina at the grand opening; the entries don't record any other specific plan.",
+      "reason": "The answer gives a different plan ('make awesome memories and have fun with Gina') rather than the gold fact ('savor all the good vibes'), so it does not convey the same fact."
+    },
+    {
+      "class": "wrong instance",
+      "category": "single_hop",
+      "question": "What does Gina say to Jon about the grand opening?",
+      "gold": "Let's live it up and make some great memories",
+      "produced": "On 19 June 2023, Gina said she couldn't wait for tomorrow's grand opening and told Jon he must be so excited, that tomorrow was gonna be a blast, and all those long nights were worth it.",
+      "reason": "The answer describes Gina saying she couldn't wait for the grand opening and that it would be a blast, but it does not convey the gold answer's statement: 'Let's live it up and make some great memorie"
+    }
+  ],
+  "lenient_compared": true
+}

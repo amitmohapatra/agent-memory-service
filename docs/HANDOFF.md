@@ -2,8 +2,9 @@
 
 Written 2026-09-23 00:20 IST at commit `cb60bc8`, updated 00:45 at `7836657` so that whoever continues — a person or an
 agent, after a model change or a fresh session — can pick up without the conversation
-history. The plan of record is [ROADMAP-2026-09.md](ROADMAP-2026-09.md); this file is the
-state of execution against it. Update it whenever a phase step lands or a decision changes.
+history. The plan of record is [ROADMAP-2026-09.md](ROADMAP-2026-09.md), the ranked list of
+techniques worth borrowing is [GAPS-2026-09.md](GAPS-2026-09.md), and this file is the
+state of execution against them. Update it whenever a phase step lands or a decision changes.
 
 ## Targets and how they are read
 
@@ -31,7 +32,8 @@ state of execution against it. Update it whenever a phase step lands or a decisi
 
 ## Running or pending when this was written
 
-- Technique-mining workflow (7 lenses × verifier + ranker): produces the gap table and ranked borrow list; write it to `docs/GAPS-2026-09.md` and fold the roadmap edits into Phase 3/4.
+- ~~Technique-mining workflow~~ done: [GAPS-2026-09.md](GAPS-2026-09.md) holds the gap table, the ranked borrow list and the do-not list. Its top four items are in flight in the worktrees below; items 5-12 are Phase 3/4 work.
+- `python -m benchmark.failure_taxonomy <judged>.json` classifies a run's wrong answers into abstained / partial / wrong instance / evidence missing. On v5: 13 / 14 / 11 / 1.
 - Phase 2 workflow (three worktree branches: encoder runtime, wire/process model, data path; each adversarially reviewed) launched 2026-09-23 00:50 IST. If it is gone when you read this: `git branch --list 'worktree-*'` and `git worktree list` show what it left; merge order encoder -> wire -> datapath, regenerate docs/openapi.json, run every suite one at a time, then push.
 - Docker: `bifrost-gateway`, `memory-service-postgres-1`, `memory-service-qdrant-1`.
 
