@@ -164,6 +164,12 @@ HEADERS = Headers()
 class DatabaseTuning:
     pool_timeout_seconds: float = 5.0
     statement_timeout_ms: int = 15_000
+    #: A pooled connection is thrown away and reopened after this long. It replaces the
+    #: pre-ping, which cost a round trip on every checkout - up to three per request against
+    #: a remote database - to catch the case this recycle window makes rare: a connection
+    #: closed by the server, a proxy or an idle timeout while the pool held it. What the
+    #: pre-ping still caught is caught instead by retrying the one operation that fails.
+    pool_recycle_seconds: int = 1800
     #: libpq gives up on opening a connection after this long. Without it libpq waits
     #: indefinitely, and "indefinitely" is reachable: a PostgreSQL container whose port is
     #: still published but whose server has stopped answering completes the TCP handshake
