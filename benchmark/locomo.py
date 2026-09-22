@@ -29,6 +29,7 @@ import random
 import re
 import sys
 import time
+from typing import Any
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -251,6 +252,33 @@ def judged_hit(category: str, judged: dict) -> bool:
 #: judge rejected ("Transgender." for "Transgender woman"). Inference from the context and
 #: keeping the qualifiers are what the categories ask for; abstaining is still the only
 #: correct answer when nothing in the context bears on the question.
+async def _build_timed(builder, ctx, question: str, incidents: list[str]) -> tuple[Any, float]:
+    """One bundle and the wall time of the attempt that produced it.
+
+    A connection refused by the vector store for a single call is not a measurement of the
+    system; it is the benchmark box hiccuping. Three attempts with a short pause, every one
+    of them recorded in ``incidents`` so the result says how often it happened, and the
+    latency of the attempt that succeeded, not of the retries.
+    """
+    delay = 2.0
+    for attempt in range(3):
+        call = time.perf_counter()
+        try:
+            bundle = await builder.build(ctx, question)
+        except Exception as exc:  # noqa: BLE001 - retried and reported, then re-raised
+            if attempt == 2:
+                raise
+            incidents.append(f"{type(exc).__name__}: {str(exc)[:160]}")
+            print(
+                f"[locomo] store failure, retrying in {delay:.0f}s: {exc!s:.120}", file=sys.stderr
+            )
+            await asyncio.sleep(delay)
+            delay *= 2
+            continue
+        return bundle, (time.perf_counter() - call) * 1000
+    raise AssertionError("unreachable")
+
+
 #: Abstention is kept for exactly one case, the premise check. Mem0's answer prompt forbids
 #: it outright ("NEVER say not specified"), which is part of how their headline is scored;
 #: ours had, for one run, also abstained whenever the bundle's evidence status was not
@@ -468,6 +496,8 @@ async def run(
     per_category: dict[int, dict[str, int]] = defaultdict(lambda: {"n": 0, "hit": 0})
     records: list[dict] = []
     latencies: list[float] = []
+    incidents: list[str] = []
+    aborted: str | None = None
     started = time.perf_counter()
     try:
         for index, conversation in enumerate(data):
@@ -516,9 +546,7 @@ async def run(
                 question = item.get("question") or ""
                 if not question:
                     continue
-                call = time.perf_counter()
-                bundle = await builder.build(ctx, question)
-                latency_ms = (time.perf_counter() - call) * 1000
+                bundle, latency_ms = await _build_timed(builder, ctx, question, incidents)
                 latencies.append(latency_ms)
                 if asked % 10 == 0 or asked == total_q:
                     mean = sum(latencies) / len(latencies) / 1000
@@ -654,6 +682,12 @@ async def run(
                         "hit": hit,
                     }
                 )
+    except Exception as exc:  # noqa: BLE001 - keep what was measured
+        # A store that was unreachable for one call once took a 33-minute run with it: the
+        # exception left run(), nothing was written, and 300 judged answers were lost. The
+        # partial result is written with the failure named in it; the exit code says so.
+        aborted = f"{type(exc).__name__}: {str(exc)[:300]}"
+        print(f"[locomo] ABORTED after {len(records)} questions: {aborted}", file=sys.stderr)
     finally:
         await container.close()
 
@@ -674,6 +708,16 @@ async def run(
     # and reporting it as a score would be the third time this harness published its own
     # artifact as a measurement.
     caveats: list[str] = []
+    if aborted:
+        caveats.append(
+            f"run aborted after {len(records)} questions ({aborted}); every score is over the "
+            "questions answered before the failure and the run must be repeated."
+        )
+    if incidents:
+        caveats.append(
+            f"{len(incidents)} transient store failures were retried; per-question latency "
+            "records the successful attempt only."
+        )
     # A judged run only measures abstention if the judge actually answered. The first one did
     # not: every call failed (rate limit, then an open circuit) and every score silently fell
     # back to token overlap — while the result still reported `abstention_measurable: true`
@@ -786,6 +830,8 @@ async def run(
             + " Per-question detail is in `records`; rescore from it rather than re-running.",
         },
         "records": records,
+        "aborted": aborted,
+        "store_incidents": incidents,
         "query_p50_ms": round(latencies[len(latencies) // 2], 1) if latencies else 0.0,
         "query_p95_ms": round(latencies[int(len(latencies) * 0.95)], 1) if latencies else 0.0,
         "query_p99_ms": round(latencies[min(len(latencies) - 1, int(len(latencies) * 0.99))], 1)
@@ -855,11 +901,13 @@ def main() -> int:
         )
     )
     write_result(args.out, result)
+    if result.get("aborted"):
+        sys.stderr.write(f"[locomo] result is PARTIAL: {result['aborted']}\n")
     # `records` is hundreds of rows; it belongs in the file, not on the terminal.
     summary = {k: v for k, v in result.items() if k not in ("provenance", "records")}
     sys.stdout.write(json.dumps(summary, indent=2))
     sys.stdout.write("\n")
-    return 0
+    return 1 if result.get("aborted") else 0
 
 
 if __name__ == "__main__":  # pragma: no cover
