@@ -29,7 +29,8 @@ def _is_dead(dbapi_connection: Any) -> bool:
     is the part of ``pool_pre_ping`` that costs nothing: no round trip, no statement. What it
     cannot see is a connection the server, a proxy or an idle timeout closed while the pool
     held it and nobody has touched since - ``pool_recycle`` is what bounds that, by throwing
-    a connection away before it gets old enough for anyone else to have closed it.
+    a connection away before it gets old enough for anyone else to have closed it, which is
+    why that window is shorter than the idle timeouts of the things that sit in between.
     """
     return bool(getattr(dbapi_connection, "closed", False)) or bool(
         getattr(dbapi_connection, "broken", False)

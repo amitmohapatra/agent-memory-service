@@ -21,10 +21,14 @@ def _database() -> Database:
 
 def test_the_pool_recycles_instead_of_pinging() -> None:
     """A pre-ping is a round trip per checkout, and a request takes two or three against a
-    database on another host."""
+    database on another host. The recycle window is what replaces it, so it has to be
+    shorter than the idle timeouts of whatever sits in front of PostgreSQL - pgbouncer
+    closes an idle server connection at 600 s, managed offerings between 5 and 10 minutes.
+    A window longer than those does not make the dead-while-pooled connection rare."""
     pool = _database().engine.pool
     assert pool._pre_ping is False
-    assert pool._recycle == DATABASE.pool_recycle_seconds == 1800
+    assert pool._recycle == DATABASE.pool_recycle_seconds == 300
+    assert DATABASE.pool_recycle_seconds <= 600, "wider than pgbouncer server_idle_timeout"
 
 
 def test_the_pool_is_sized_per_process() -> None:
