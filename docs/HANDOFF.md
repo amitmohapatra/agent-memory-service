@@ -32,7 +32,7 @@ state of execution against it. Update it whenever a phase step lands or a decisi
 ## Running or pending when this was written
 
 - Technique-mining workflow (7 lenses × verifier + ranker): produces the gap table and ranked borrow list; write it to `docs/GAPS-2026-09.md` and fold the roadmap edits into Phase 3/4.
-- Phase 2 workflow (three worktree branches: encoder runtime, wire/process model, data path; each adversarially reviewed) launched 2026-09-23 00:50 IST. If it is gone when you read this: `git branch --list 'worktree-*'` and `git worktree list` show what it left; merge order encoder -> wire -> datapath, regenerate docs/openapi.json, run every suite one at a time, then push.
+- Phase 2 workflow (three worktree branches: encoder runtime, wire/process model, data path; each adversarially reviewed) launched 2026-09-23 00:50 IST. If it is gone when you read this: `git branch --list 'worktree-*'` and `git worktree list` show what it left; merge order encoder -> wire -> datapath, regenerate docs/openapi.json, run every suite one at a time, then push. Merging the encoder branch alone lowers the throughput ceiling: every model is entered through a one-permit gate, so a single uvicorn process serves one encode at a time - about 12 rps at the measured torch p50 of 80.6 ms, about 37 rps at the ONNX 27.3 ms (docs/MEASUREMENTS.md section 7, on a 4-core box without AVX2). The 20 rps gate therefore depends on the wire branch's WEB_CONCURRENCY=3 landing as well; do not read a throughput number between the two merges as the system's.
 - Docker: `bifrost-gateway`, `memory-service-postgres-1`, `memory-service-qdrant-1`.
 
 ## Next, in order

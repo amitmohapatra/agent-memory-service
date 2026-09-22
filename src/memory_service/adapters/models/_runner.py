@@ -4,7 +4,10 @@
 ``min(32, cpu_count + 4)`` — twelve threads on an eight-core box. Every concurrent request
 therefore puts another encode inside a model that is itself fanning its GEMMs over every
 core, and the box spends its time in the scheduler instead of in the matrix multiply. That
-is the oversubscription this repository has been measuring around for months.
+is the oversubscription this repository has been measuring around for months — measuring
+*around*, because nothing has yet timed two callers at once. The case for this class is the
+arithmetic plus a queue that is visible and bounded; the number that would settle it is a
+concurrent measurement on the 8 vCPU VM, and it does not exist yet.
 
 So each model owns a ``ThreadPoolExecutor(max_workers=1)`` and is entered through a
 semaphore of one. The executor is what makes "two encodes are never inside the model at

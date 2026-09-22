@@ -71,8 +71,10 @@ class DenseModel(BaseModel):
     device: str = "cpu"
     #: Intra-op threads the model may use: ``torch.set_num_threads`` for the torch runner,
     #: ORT ``intra_op_num_threads`` for the ONNX one. Two, because the deployment runs three
-    #: uvicorn workers on eight vCPU and one encode fanning over every core is what makes
-    #: three concurrent requests slower than three sequential ones.
+    #: uvicorn workers on eight vCPU and one encode fanning over every core leaves the other
+    #: two workers nothing. That is arithmetic and a division of cores, not a measurement:
+    #: every timing on this branch is single-query, one runner at a time, so "bounded beats
+    #: the twelve-thread executor" is reasoning until the 8 vCPU VM times two callers.
     threads: int = 2
 
     @property
