@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
+from typing import Any
 
 import httpx
 import pytest
@@ -15,11 +17,14 @@ import respx
 from pydantic import SecretStr
 
 from memory_service.adapters.models.llm import (
-    BifrostLLM,
+    BifrostLLM as _BifrostLLM,
+)
+from memory_service.adapters.models.llm import (
     DisabledLLM,
     LLMCallFailed,
     LLMOutputInvalid,
 )
+from memory_service.config.constants import LLMTransport
 from memory_service.config.settings import LLMSettings, Settings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
@@ -36,6 +41,21 @@ SCHEMA = {
 }
 
 
+#: Retries and the breaker are transport constants now, not settings (config/constants.py):
+#: no backoff so the retry tests run in milliseconds, a breaker that opens after three.
+TRANSPORT = LLMTransport(
+    retry_backoff_seconds=0.0, circuit_failure_threshold=3, circuit_open_seconds=60
+)
+
+
+class BifrostLLM(_BifrostLLM):
+    """The adapter under test with the test transport as its default."""
+
+    def __init__(self, settings: LLMSettings, **kwargs: Any) -> None:
+        kwargs.setdefault("transport", TRANSPORT)
+        super().__init__(settings, **kwargs)
+
+
 def _settings(**overrides: object) -> LLMSettings:
     base: dict[str, object] = {
         "enabled": True,
@@ -44,9 +64,6 @@ def _settings(**overrides: object) -> LLMSettings:
         "model": "openai/gpt-4.1",
         "fast_model": "openai/gpt-4.1-mini",
         "max_retries": 2,
-        "retry_backoff_seconds": 0.0,
-        "circuit_failure_threshold": 3,
-        "circuit_open_seconds": 60,
         "uses": ["ambiguous_worthiness", "summaries"],
     }
     base.update(overrides)
@@ -198,7 +215,9 @@ async def test_retries_are_bounded_and_non_retryable_status_fails_fast() -> None
 @respx.mock
 async def test_timeouts_and_circuit_breaker() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(side_effect=httpx.ReadTimeout("slow"))
-    llm = BifrostLLM(_settings(max_retries=0, circuit_failure_threshold=2))
+    llm = BifrostLLM(
+        _settings(max_retries=0), transport=replace(TRANSPORT, circuit_failure_threshold=2)
+    )
     for _ in range(2):
         with pytest.raises(DependencyUnavailable, match="unreachable"):
             await llm.complete(_messages())

@@ -104,7 +104,9 @@ async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
     settings: Settings = integration_settings(
         make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")}
     )
-    c = await build_container(settings, __version__, overrides=integration_overrides())
+    # blob=None: the filesystem store the settings point at tmp_path, which the archive
+    # tests read from disk and corrupt on purpose; the memory stand-in has no files
+    c = await build_container(settings, __version__, overrides=integration_overrides(blob=None))
     async with c.database.engine.begin() as conn:
         await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
         await conn.execute(

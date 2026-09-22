@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from memory_service.api.app import create_app
-from tests.conftest import PG_AVAILABLE
+from tests.conftest import PG_AVAILABLE, _test_overrides
 from tests.support_real import reset_real_backends
 
 TABLES = [
@@ -45,10 +45,12 @@ def app(make_settings, tmp_path):
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings = make_settings(
-        tasks={"provider": "inline"},
         blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     )
-    return create_app(settings)
+    # The stand-ins are named in code, never in the environment: an in-process queue so
+    # the flows drain inline, the hash encoder and lexical models so no weights are loaded,
+    # and the real filesystem blob store under tmp_path so uploads land on disk.
+    return create_app(settings, overrides=_test_overrides(tasks="inline", blob=None))
 
 
 @pytest.fixture

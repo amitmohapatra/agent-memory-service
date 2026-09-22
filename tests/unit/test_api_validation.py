@@ -112,7 +112,7 @@ def test_file_visibility_form_field_is_an_enum(client: TestClient) -> None:
     assert _locs(r) == {"body.visibility"}
 
 
-def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings) -> None:
+def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings, overrides) -> None:
     """Input is validated at the edge; a ValidationError past it is a bug, not a 422.
 
     Every request field is typed on the route signature, and the two by-hand coercions that
@@ -125,7 +125,7 @@ def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings) ->
     class Inner(BaseModel):
         n: int
 
-    app = create_app(settings)
+    app = create_app(settings, overrides=overrides)
     router = APIRouter()
 
     @router.post("/coerce")

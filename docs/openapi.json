@@ -4252,14 +4252,14 @@
       },
       "BearerAuth": {
         "bearerFormat": "JWT",
-        "description": "jwt / gcp_iam modes",
+        "description": "jwt mode",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "info": {
-    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with one of `trusted_dev` (API key, dev only), `jwt`,\n`gcp_iam` or `mtls`. The end-user identity and scope travel in trusted context headers\n(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`, `X-Memory-Groups`) which are\nonly honored from an authenticated caller. Fine-grained authorization is evaluated by\nOpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
+    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`\n(JWKS). The end-user identity and scope travel in trusted context headers\n(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`, `X-Memory-Groups`) which are\nonly honored from an authenticated caller. Fine-grained authorization is evaluated by\nOpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
     "title": "Memory Service API",
     "version": "0.1.0"
   },

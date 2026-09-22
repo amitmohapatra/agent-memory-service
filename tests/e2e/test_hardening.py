@@ -7,19 +7,24 @@ import pytest
 from fastapi.testclient import TestClient
 
 from memory_service.api.app import create_app
+from memory_service.config import constants
+from tests.conftest import _test_overrides
 
 pytestmark = pytest.mark.e2e
 H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
 
 
 @pytest.fixture
-def limited(make_settings, tmp_path):
+def limited(make_settings, tmp_path, monkeypatch):
+    # The burst allowance and the body cap are constants of the package, not settings
+    # (config/constants.py); the test lowers them the only way an operator cannot.
+    monkeypatch.setattr(constants, "RATE_LIMIT_BURST", 0)
+    monkeypatch.setattr(constants, "MAX_BODY_BYTES", 2048)
     settings = make_settings(
-        service={"rate_limit_per_minute": 5, "rate_limit_burst": 0, "max_body_bytes": 2048},
-        tasks={"provider": "inline"},
+        service={"rate_limit_per_minute": 5},
         blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     )
-    app = create_app(settings)
+    app = create_app(settings, overrides=_test_overrides(tasks="inline", blob=None))
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c, app.state.container
 

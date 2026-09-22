@@ -225,6 +225,7 @@ async def test_the_procedures_route_can_see_an_agents_own_procedures(
     from fastapi.testclient import TestClient
 
     from memory_service.api.app import create_app
+    from tests.integration.conftest import integration_overrides
 
     register = container.services["tool_memory"]
     async with uow_factory() as uow:
@@ -245,7 +246,8 @@ async def test_the_procedures_route_can_see_an_agents_own_procedures(
         await uow.commit()
 
     headers = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
-    with TestClient(create_app(container.settings), raise_server_exceptions=False) as http:
+    app = create_app(container.settings, overrides=integration_overrides(blob=None))
+    with TestClient(app, raise_server_exceptions=False) as http:
         scoped = http.get(
             "/v1/tools/procedures",
             headers=headers,
