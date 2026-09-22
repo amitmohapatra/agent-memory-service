@@ -16,11 +16,13 @@ depth is not something an operator chooses; it is something this repository meas
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Models
@@ -304,6 +306,29 @@ class GraphSettings(BaseModel):
 
     max_visited: int = 200
     default_hops: int = 1
+    #: How long a query may wait for the retrieval-time traversal before answering without
+    #: graph facts.
+    #:
+    #: The traversal is started as soon as the scope is known, so on a slow encoder it costs
+    #: nothing - it finishes underneath. That is exactly why it needs a ceiling: the moment
+    #: the encoder gets faster (int8 ONNX), or the graph gets deep enough for a three-hop
+    #: walk to outrun it, an unbounded traversal becomes the tail of every entity, temporal
+    #: and multi-hop question. 150 ms is the band the roadmap derives for an 8 vCPU VM whose
+    #: encode is ~40 ms and whose p99 target is 300 ms.
+    #:
+    #: Expiry drops facts; it never cancels the traversal. See ``GraphStage.__call__``.
+    prefetch_budget_ms: int = Field(default=150, ge=1)
+    #: How many expired traversals may be finishing at once before the next one is cancelled
+    #: instead of parked.
+    #:
+    #: The budget bounds the wait, not the concurrency, and the condition that parks a
+    #: traversal - a graph slower than the budget - is exactly the condition that parks the
+    #: next one too. Each parked traversal holds a connection out of a pool of
+    #: ``pool_size + max_overflow`` (10 + 10 per worker) that the read path checks out of, so
+    #: an uncapped leak turns a latency problem into pool exhaustion, which is worse than the
+    #: tail the budget exists to cut. Past this many, the aborted statement is the cheaper
+    #: harm.
+    max_parked_traversals: int = Field(default=8, ge=1)
 
 
 GRAPH = GraphSettings()
@@ -391,6 +416,33 @@ class DocumentSettings(BaseModel):
 DOCUMENTS = DocumentSettings()
 
 
+#: Shipped retrieval depth, and the only number that sets it.
+#:
+#: Prefetch and fusion depth exist to give reciprocal rank fusion something to reorder; they
+#: are not a second opinion about how much evidence a caller wants. Written down separately
+#: they drifted - the service shipped 100/100/50 while every judged benchmark ran 200/200/100
+#: - so no artifact could say which ratio had been measured. One knob now, and a ratio.
+FINAL_K = 50
+#: Prefetch/fusion depth as a multiple of ``final_k``.
+#:
+#: 2.0 is not a proposal: it is the ratio every measurement this repository owns was produced
+#: at - the shipped 100/100/50 and the judged 200/200/100 are the same ratio - so writing it
+#: down changes no result on disk and makes the two configurations one derivation.
+#:
+#: The roadmap's Phase 2 step 4 wants it at 1.25 (63/63/50 shipped): RRF only reorders inside
+#: the prefetch union, so a quarter again may well be all the headroom the reorder needs, and
+#: the search and assemble stages scale roughly linearly with it. That is a retrieval-quality
+#: change, not a refactor, and it is gated on a judged run reporting ``evidence_recall >=
+#: 0.987`` plus ``tests/eval/test_retrieval_gate.py``. When the gate passes, this constant is
+#: the only line that moves.
+DEPTH_RATIO = 2.0
+
+
+def derived_k(final_k: int) -> int:
+    """Prefetch and fusion depth for a final depth: ``ceil(DEPTH_RATIO * final_k)``."""
+    return math.ceil(final_k * DEPTH_RATIO)
+
+
 class RetrievalSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -411,8 +463,12 @@ class RetrievalSettings(BaseModel):
     graph: bool = True
     #: Reciprocal rank fusion of the dense and sparse prefetches, natively in Qdrant.
     rrf_k: int = 60
-    prefetch_k: int = Field(default=100, description="per-retriever candidates before fusion")
-    fused_k: int = Field(default=100, description="candidates after fusion")
+    #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
+    #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
+    prefetch_k: int = Field(
+        default=derived_k(FINAL_K), description="per-retriever candidates before fusion"
+    )
+    fused_k: int = Field(default=derived_k(FINAL_K), description="candidates after fusion")
     #: Cross-encoder reranking. **Off on measured evidence.**
     #:
     #: BeIR/SciFact, 1,000 documents, 70 paired queries, clean vector store, real models:
@@ -430,7 +486,8 @@ class RetrievalSettings(BaseModel):
     rerank: bool = False
     #: candidates handed to the reranker when one is wired (benchmark 15-25)
     rerank_k: int = 20
-    final_k: int = 50
+    #: The one depth knob: what a caller receives. ``prefetch_k`` and ``fused_k`` follow it.
+    final_k: int = Field(default=FINAL_K, ge=1)
     parent_expansion: bool = True
     neighbor_expansion: bool = True
     definition_expansion: bool = True
@@ -445,6 +502,29 @@ class RetrievalSettings(BaseModel):
     #: conversation shares terms with any question about either of them. Measured on LoCoMo:
     #: every one of 304 bundles, 71 of them unanswerable by construction, reported COMPLETE.
     subject_evidence_check: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_depth(cls, data: Any) -> Any:
+        """``final_k`` alone decides the depth; an explicit value still wins."""
+        if not isinstance(data, dict) or "final_k" not in data:
+            return data
+        depth = derived_k(int(data["final_k"]))
+        return {"prefetch_k": depth, "fused_k": depth, **data}
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None, deep: bool = False) -> Self:
+        """``model_copy(update={"final_k": n})`` derives the depth above it, like construction.
+
+        Pydantic's ``model_copy`` assigns straight onto the copy and runs no validator, so the
+        one-knob rule would have held at construction and silently not held here - and
+        ``model_copy`` is how every benchmark ablation and every test builds a tuning. A depth
+        passed explicitly alongside ``final_k`` still wins, exactly as it does in the
+        constructor (``benchmark/env.py`` pins the judged 200/200/100 that way).
+        """
+        if update and "final_k" in update:
+            depth = derived_k(int(update["final_k"]))
+            update = {"prefetch_k": depth, "fused_k": depth, **update}
+        return super().model_copy(update=dict(update) if update else None, deep=deep)
 
 
 RETRIEVAL = RetrievalSettings()
@@ -467,6 +547,16 @@ class ContextSettings(BaseModel):
     knowledge_max: int = 12
     graph_facts_max: int = 12
     summaries_max: int = 4
+    #: How long served-memory ids may sit in the builder's buffer before one bulk bump, and
+    #: how many ids force an early flush.
+    #:
+    #: The bump is an UPDATE plus a COMMIT - a WAL flush - on the same pool the reads use. One
+    #: per served bundle is ~20 of them a second at the 20 rps target, each touching up to
+    #: ``memories_max`` rows, for a counter whose only reader is the nightly forgetting pass.
+    #: Buffering trades a 2 s delay in that counter, which nothing reads sooner, for a single
+    #: statement per tenant per window. Ids repeated inside one window count once.
+    access_flush_seconds: float = Field(default=2.0, gt=0.0)
+    access_flush_max_ids: int = Field(default=200, ge=1)
 
 
 CONTEXT = ContextSettings()

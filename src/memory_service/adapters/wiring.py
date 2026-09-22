@@ -388,7 +388,7 @@ def _wire_retrieval(container: Container) -> None:
         container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
     )
     container.services["ephemeral_memory"] = working
-    container.services["context_builder"] = ContextBuilder(
+    builder = ContextBuilder(
         container.services["uow_factory"],
         engine,
         container.services["conversation"],
@@ -399,6 +399,11 @@ def _wire_retrieval(container: Container) -> None:
         working=working,
         assist=container.services["llm_assist"],
     )
+    container.services["context_builder"] = builder
+    # The builder buffers served-memory ids for up to access_flush_seconds and writes bundles
+    # to the cache in the background. Without this, SIGTERM drops a whole window of both, per
+    # worker, on every rolling deploy - for the counter the forgetting policy reads.
+    container.add_closer("context_builder", builder.close)
 
 
 def _wire_memory(container: Container) -> None:
@@ -478,11 +483,17 @@ def _wire_graph(container: Container) -> None:
     container.services["graph"] = graph
     if container.tuning.retrieval.graph:
         engine = container.services["retrieval"]
-        engine.post_stages["graph"] = GraphStage(
+        stage = GraphStage(
             graph,
             container.services["uow_factory"],
             max_facts=container.tuning.context.graph_facts_max,
+            budget_seconds=container.tuning.graph.prefetch_budget_ms / 1000,
+            max_parked=container.tuning.graph.max_parked_traversals,
         )
+        engine.post_stages["graph"] = stage
+        # Traversals that outran their budget are still holding pooled connections; shutdown
+        # waits for them rather than exiting with statements open on the pool.
+        container.add_closer("graph_stage", stage.drain)
 
 
 def _wire_context_preservation(container: Container) -> None:

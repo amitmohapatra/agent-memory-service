@@ -7,16 +7,25 @@ alone would have made the other worse, so both are pinned here.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from memory_service.modules.context.evidence import content_terms, overlaps, unsupported_subject
 
 
 class _C:
-    """Enough of a Candidate for ``overlaps`` and ``unsupported_subject``."""
+    """Enough of a Candidate for ``overlaps`` and ``unsupported_subject``.
+
+    ``record_id`` included: the rules memoise a record's content terms by it, because one
+    bundle is walked several times over and the text does not change between walks.
+    """
+
+    _ids = itertools.count()
 
     def __init__(self, text: str, kind: str = "memory", subject: str | None = None) -> None:
         self.text, self.kind = text, kind
+        self.record_id = f"mem_{next(self._ids)}"
         self.payload = {"subject": subject} if subject else {}
 
 

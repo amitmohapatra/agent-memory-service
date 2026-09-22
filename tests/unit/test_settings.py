@@ -17,7 +17,9 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
 
 
 def test_todays_depth_is_the_frozen_depth() -> None:
-    """Phase 1 freezes the numbers; it does not move them. The 1.25x derivation is Phase 2."""
+    """One knob: ``final_k``, with prefetch and fusion derived from it. The depth itself is
+    unchanged - 100/100/50 is what every shipped-depth artifact on disk was produced at, and
+    moving it is a measured change, not a refactor. See ``test_retrieval_depth.py``."""
     assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (100, 100, 50)
     assert (CONTEXT.memories_max, CONTEXT.token_budget) == (50, 8000)
 

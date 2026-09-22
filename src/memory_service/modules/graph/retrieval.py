@@ -17,6 +17,9 @@ from collections.abc import Awaitable
 from datetime import datetime
 from typing import Any
 
+from prometheus_client import Counter, Gauge
+
+from memory_service.config.constants import GRAPH
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -24,10 +27,33 @@ from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import RoutedQuery
-from memory_service.observability.metrics import stage_seconds
+from memory_service.observability.logging import get_logger
+from memory_service.observability.metrics import REGISTRY, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.intelligence import Entity, Relation
 from memory_service.ports.uow import UnitOfWorkFactory
+
+log = get_logger(__name__)
+
+graph_budget_expired_total = Counter(
+    "memory_graph_budget_expired_total",
+    "Retrieval-time graph traversals that outran their wall budget; the query was answered "
+    "without graph facts and the traversal was left to finish",
+    registry=REGISTRY,
+)
+graph_parked_traversals = Gauge(
+    "memory_graph_parked_traversals",
+    "Expired traversals still finishing on a pooled connection. The counter above says how "
+    "often the budget expired; this says how much of the connection pool that is costing "
+    "right now",
+    registry=REGISTRY,
+)
+graph_parked_cancelled_total = Counter(
+    "memory_graph_parked_cancelled_total",
+    "Expired traversals cancelled because max_parked_traversals were already finishing; each "
+    "one is an aborted pooled connection, accepted to stop the pool being exhausted",
+    registry=REGISTRY,
+)
 
 _MULTI_HOP_TYPES = {QueryType.DOCUMENT_MULTI_HOP, QueryType.ENTITY_RELATION}
 _STRUCTURAL = {"mentioned_in", "co_occurs_with", "discusses", "refers_to", "segment_of"}
@@ -107,6 +133,8 @@ class GraphStage:
         max_facts: int = 12,
         max_expansion_chunks: int = 6,
         max_visited: int = 40,
+        budget_seconds: float = GRAPH.prefetch_budget_ms / 1000,
+        max_parked: int = GRAPH.max_parked_traversals,
     ) -> None:
         self.graph = graph
         self.uow_factory = uow_factory
@@ -116,6 +144,12 @@ class GraphStage:
         # three-hop question below on the golden graph, and the traversal sits on the query
         # path of every temporal and multi-hop question.
         self.max_visited = max_visited
+        self.budget_seconds = budget_seconds
+        self.max_parked = max_parked
+        #: traversals that outran the budget and are finishing on their own; the set is what
+        #: keeps them from being garbage-collected mid-statement, and its size is what bounds
+        #: how much of the connection pool they can hold between them
+        self._running: set[asyncio.Task[Any]] = set()
 
     def prefetch(
         self,
@@ -168,14 +202,34 @@ class GraphStage:
         if not routed.needs_graph:
             return candidates
         with span("retrieval.graph"), stage_seconds.labels("retrieval.graph").time():
-            as_of, answer = await (
-                prefetched if prefetched is not None else self._query(ctx, routed, visibility)
-            )
+            started = self._start(ctx, routed, visibility, prefetched)
+            budget_ms = round(self.budget_seconds * 1000)
+            try:
+                # shield, not a bare wait_for: the timeout must end *this query's* wait, not
+                # the traversal. wait_for cancels what it waits on, and what it would cancel
+                # here is a statement holding a pooled connection - an aborted connection
+                # costs every later request on that pool far more than one slow answer costs
+                # this one. The traversal is released to finish on its own.
+                as_of, answer = await asyncio.wait_for(asyncio.shield(started), self.budget_seconds)
+            except asyncio.CancelledError:
+                # The request itself was cancelled - a client disconnect - and the shield kept
+                # the traversal alive. Nothing holds a reference to it and nobody will read its
+                # exception, so it is disposed of here on the same terms as an expiry rather
+                # than left running unowned. The cancellation is re-raised: it is not ours.
+                self._park(started)
+                raise
+            except TimeoutError:
+                self._park(started)
+                graph_budget_expired_total.inc()
+                log.info("retrieval.graph_budget_expired", budget_ms=budget_ms)
+                diagnostics["graph"] = {"budget_expired": True, "budget_ms": budget_ms}
+                return candidates
             diagnostics["graph"] = {
                 "matched": [e.canonical_name for e in answer.matched],
                 "visited": answer.visited,
                 "relations": len(answer.relations),
                 "as_of": as_of.isoformat() if as_of else None,
+                "budget_expired": False,
             }
             if not answer.relations:
                 return candidates
@@ -221,6 +275,56 @@ class GraphStage:
                 diagnostics["graph"]["expansion_chunks"] = len(added)
         return candidates
 
+    def _start(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        visibility: VisibilitySpecification,
+        prefetched: Awaitable[tuple[datetime | None, GraphAnswer]] | None,
+    ) -> asyncio.Task[tuple[datetime | None, GraphAnswer]]:
+        """The traversal as a task: the prefetched one when the engine started it, otherwise
+        one started now. Either way the wait below is bounded the same."""
+        if isinstance(prefetched, asyncio.Task):
+            return prefetched
+        work = prefetched if prefetched is not None else self._query(ctx, routed, visibility)
+        return asyncio.ensure_future(work)
+
+    def _park(self, task: asyncio.Task[Any]) -> None:
+        """Hold a reference to a traversal that outran its budget until it finishes, and take
+        its result so a failure is not logged as an exception nobody retrieved.
+
+        Bounded, because the wall budget bounds the wait and not the concurrency. The state
+        that parks a traversal - a graph slower than 150 ms - parks the next query's too, and
+        each one holds a Postgres connection out of the same pool the read path checks out of.
+        Past ``max_parked`` the trade the shield is making reverses: one aborted statement is
+        cheaper than exhausting the pool for every request behind it, so the traversal is
+        cancelled and the cancellation is counted.
+        """
+        if len(self._running) >= self.max_parked:
+            task.cancel()
+            task.add_done_callback(_swallow)
+            graph_parked_cancelled_total.inc()
+            log.warning("retrieval.graph_traversal_cancelled", parked=len(self._running))
+            return
+        self._running.add(task)
+        task.add_done_callback(self._unpark)
+        task.add_done_callback(_swallow)
+        graph_parked_traversals.set(len(self._running))
+
+    def _unpark(self, task: asyncio.Future[Any]) -> None:
+        self._running.discard(task)  # type: ignore[arg-type]
+        graph_parked_traversals.set(len(self._running))
+
+    async def drain(self) -> None:
+        """Wait for traversals left running by an expired budget.
+
+        Wired into container shutdown, where it is the difference between a worker exiting
+        while statements are still open on its pool and a worker that let them finish.
+        """
+        while self._running:
+            await asyncio.gather(*list(self._running), return_exceptions=True)
+        graph_parked_traversals.set(0)
+
     async def _expand(
         self,
         ctx: MemoryExecutionContext,
@@ -259,3 +363,8 @@ class GraphStage:
                     )
                 )
         return out
+
+
+def _swallow(task: asyncio.Future[Any]) -> None:
+    if not task.cancelled():
+        task.exception()

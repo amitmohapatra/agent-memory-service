@@ -152,6 +152,10 @@ class Container:
     tuning: Tuning = field(default_factory=lambda: Tuning.resolve(Overrides()))
     registries: Registries = field(default_factory=get_registries)
     dependencies: dict[str, Dependency] = field(default_factory=dict)
+    #: Services with buffered work to finish at shutdown. Not dependencies: they are not
+    #: pinged, they do not decide readiness, and they are closed *before* the dependencies
+    #: because what they are flushing goes through them.
+    closers: dict[str, Callable[[], Awaitable[None]]] = field(default_factory=dict)
 
     # ports (populated by milestones; typed as Any to avoid import cycles in M0)
     cache: Any = None
@@ -174,6 +178,10 @@ class Container:
     def add_dependency(self, dep: Dependency) -> None:
         self.dependencies[dep.name] = dep
 
+    def add_closer(self, name: str, close: Callable[[], Awaitable[None]]) -> None:
+        """Register work a service must finish before the stores it writes through close."""
+        self.closers[name] = close
+
     async def readiness(self) -> dict[str, dict[str, Any]]:
         """Ping every dependency. Optional dependencies never fail readiness when disabled."""
         from memory_service.observability.metrics import dependency_up
@@ -195,6 +203,19 @@ class Container:
         return results
 
     async def close(self) -> None:
+        """Flush what services have buffered, then close the dependencies under them.
+
+        The order is the point. A service that batches writes - the ContextBuilder holds up
+        to ``access_flush_seconds`` of served-memory ids, which is what the forgetting policy
+        reads - has to reach the database on its way out, so its flush runs while the pool is
+        still open. Getting this wrong costs a window of bookkeeping per worker on every
+        rolling deploy, silently.
+        """
+        for name, close_service in reversed(list(self.closers.items())):
+            try:
+                await close_service()
+            except Exception:
+                log.warning("service.close_failed", service=name)
         for name, dep in reversed(list(self.dependencies.items())):
             if dep.close is None:
                 continue
