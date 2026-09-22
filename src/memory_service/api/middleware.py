@@ -12,6 +12,7 @@ the same 429 body and headers, and the same exemptions.
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from fastapi.responses import JSONResponse
@@ -118,10 +119,18 @@ class CorrelationMiddleware:
 
         try:
             await self.app(scope, receive, send_wrapper)
-        except Exception:
+        except BaseException as exc:
             # Nothing answered, so the count is the one the error handler will produce.
+            #
+            # BaseException rather than Exception because CancelledError is not an
+            # Exception: a client that disconnects and a request the server timed out are
+            # both cancellations, and catching only Exception drops them out of
+            # http_requests_total entirely - which is the one population a run at the target
+            # rate is looking for. They are counted as 499 (client closed request) rather
+            # than 500: nothing on this side failed, and a gate that reads failures off this
+            # counter should not be told one did.
             if not recorded:
-                record(500)
+                record(499 if isinstance(exc, asyncio.CancelledError) else 500)
             raise
         finally:
             clear_log_context()

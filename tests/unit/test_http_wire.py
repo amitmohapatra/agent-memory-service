@@ -181,6 +181,35 @@ def test_a_request_is_counted_once_under_its_route(settings, overrides) -> None:
     assert 'route="/version"' in metrics and "/metrics" not in metrics.split("\n")[0]
 
 
+async def test_a_cancelled_request_is_still_counted() -> None:
+    """A client that goes away cancels the task, and CancelledError is not an Exception. The
+    request happened - it occupied a worker for as long as it lasted - and a run at 20 rps
+    cares about exactly this population, so it is counted rather than dropped."""
+    import asyncio
+
+    from memory_service.api.middleware import CorrelationMiddleware
+    from memory_service.observability.metrics import http_requests_total
+
+    async def _cancelled(scope, receive, send) -> None:
+        raise asyncio.CancelledError
+
+    counter = http_requests_total.labels("GET", "unmatched", "499")
+    before = counter._value.get()
+    app = CorrelationMiddleware(_cancelled, max_body_bytes=1024)
+    scope = {"type": "http", "method": "GET", "path": "/v1/context", "headers": []}
+    with pytest.raises(asyncio.CancelledError):
+        await app(scope, _noop_receive, _noop_send)
+    assert counter._value.get() == before + 1
+
+
+async def _noop_receive() -> dict[str, Any]:
+    return {"type": "http.request", "body": b"", "more_body": False}
+
+
+async def _noop_send(message: dict[str, Any]) -> None:
+    return None
+
+
 # --- rate limit -------------------------------------------------------------------------
 
 
