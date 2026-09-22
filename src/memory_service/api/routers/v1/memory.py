@@ -19,7 +19,16 @@ from memory_service.api.deps import (
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import default_idempotency_key, run_idempotent
 from memory_service.api.schemas.conversation import ProcessingHintsIn
-from memory_service.domain.enums import ObservationKind
+from memory_service.api.validation import CustomMetadata
+from memory_service.domain.enums import (
+    Lifetime,
+    MemoryType,
+    ObservationKind,
+    ScopeLevel,
+    TemporalStatus,
+    Visibility,
+)
+from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.memory.service import MemoryService
@@ -46,7 +55,7 @@ class ObservationRequest(BaseModel):
     kind: ObservationKind = Field(default=ObservationKind.EVENT, examples=["EVENT"])
     content: str = Field(..., min_length=1, max_length=100_000)
     hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
-    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    custom_metadata: CustomMetadata = Field(default_factory=dict)
     occurred_at: datetime | None = None
     source_system: str | None = Field(default=None, max_length=100)
     source_id: str | None = Field(default=None, max_length=400)
@@ -63,15 +72,40 @@ class MemoryResponse(BaseModel):
 
     memory_id: str
     content: str
-    memory_type: str
-    lifetime: str
-    visibility: str
-    scope_level: str
+    memory_type: MemoryType = Field(
+        ...,
+        description=(
+            "What kind of intelligence the memory carries. Extracted memories are SEMANTIC "
+            "(a fact about the world), PREFERENCE, EPISODIC, DECISION or PROCEDURAL; the "
+            "pipeline itself writes ENTITY_SUMMARY, OBSERVATION, BELIEF, TOOL, AGENT, TASK "
+            "and USER; the remaining values come from imports that declared their type."
+        ),
+    )
+    lifetime: Lifetime = Field(
+        ...,
+        description="EPHEMERAL (within the turn), SHORT_TERM (the current thread or session), "
+        "LONG_TERM (durable) or ARCHIVAL (kept for audit, out of retrieval).",
+    )
+    visibility: Visibility = Field(
+        ...,
+        description="Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, "
+        "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL.",
+    )
+    scope_level: ScopeLevel = Field(
+        ...,
+        description="Where the memory is anchored (distinct from visibility): AGENT, "
+        "AGENT_GROUP, WORK, THREAD, USER, GROUP, WORKSPACE, TENANT or GLOBAL.",
+    )
     owner_principal: str
     subject: str | None = None
     predicate: str | None = None
     object: str | None = None
-    temporal_status: str
+    temporal_status: TemporalStatus = Field(
+        ...,
+        description="CURRENT is the live value; SUPERSEDED was replaced by a newer memory "
+        "(see superseded_by); CONTRADICTED conflicts with a current one; EXPIRED passed its "
+        "valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept.",
+    )
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime
@@ -94,7 +128,7 @@ class MemoryResponse(BaseModel):
     contradicts: list[str] = Field(
         default_factory=list, description="CURRENT memories this one conflicts with"
     )
-    evidence: list[dict[str, Any]]
+    evidence: list[EvidenceRef]
     category: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -188,7 +222,16 @@ async def list_memories(
     request: Request,
     container: ContainerDep,
     _: ServicePrincipalDep,
-    memory_type: Annotated[list[str] | None, Query()] = None,
+    memory_type: Annotated[
+        list[MemoryType] | None,
+        Query(
+            description=(
+                "Keep only these memory types (repeat the parameter for several). The ones "
+                "a caller usually wants: SEMANTIC, PREFERENCE, EPISODIC, DECISION, "
+                "PROCEDURAL; omit for every type."
+            )
+        ),
+    ] = None,
     include_superseded: bool = False,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     thread_id: str | None = None,
@@ -207,7 +250,11 @@ async def list_memories(
     )
     async with container.services["uow_factory"]() as uow:
         rows = await _service(container).list_memories(
-            uow, ctx, memory_types=memory_type, include_superseded=include_superseded, limit=limit
+            uow,
+            ctx,
+            memory_types=[m.value for m in memory_type] if memory_type else None,
+            include_superseded=include_superseded,
+            limit=limit,
         )
     return MemoryListResponse(memories=[MemoryResponse(**memory_to_api(m)) for m in rows])
 

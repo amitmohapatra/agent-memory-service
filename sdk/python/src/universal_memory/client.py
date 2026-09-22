@@ -32,15 +32,23 @@ from universal_memory.models import (
     GraphAnswer,
     GroundingReport,
     JobHandle,
+    Lifetime,
     MemoryResult,
+    MemoryType,
     MessageAck,
     MessageInfo,
+    MessageKind,
+    MessageRole,
     ObservationAck,
+    ObservationKind,
+    RecallKind,
     Scope,
     ThreadInfo,
     ToolCall,
     ToolPlan,
     ToolResult,
+    ToolStatus,
+    Visibility,
 )
 from universal_memory.transport import Transport
 
@@ -174,7 +182,7 @@ class MemoryContext:
         self,
         content: str,
         *,
-        kind: str = "EVENT",
+        kind: ObservationKind = "EVENT",
         idempotency_key: str | None = None,
         hints: dict[str, Any] | None = None,
         **metadata: Any,
@@ -195,9 +203,9 @@ class MemoryContext:
         self,
         content: str,
         *,
-        memory_type: str = "SEMANTIC",
-        lifetime: str = "LONG_TERM",
-        visibility: str | None = None,
+        memory_type: MemoryType = "SEMANTIC",
+        lifetime: Lifetime = "LONG_TERM",
+        visibility: Visibility | None = None,
         **metadata: Any,
     ) -> ObservationAck:
         hints: dict[str, Any] = {"memory_type": memory_type, "lifetime": lifetime}
@@ -205,9 +213,19 @@ class MemoryContext:
             hints["visibility"] = visibility
         return await self.observe(content, kind="EVENT", hints=hints, **metadata)
 
-    async def recall(self, query: str, *, limit: int = 20, **options: Any) -> list[ContextItem]:
-        """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly."""
+    async def recall(
+        self,
+        query: str,
+        *,
+        limit: int = 20,
+        kinds: Sequence[RecallKind] | None = None,
+        **options: Any,
+    ) -> list[ContextItem]:
+        """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly.
+        ``kinds`` narrows what is searched: chunk (document passages), memory, summary."""
         payload = {"query": query, "scope": self._scope_payload(), "limit": limit, **options}
+        if kinds is not None:
+            payload["kinds"] = list(kinds)
         data = await self._request("POST", "/v1/recall", json=payload)
         return [ContextItem.model_validate(m) for m in data.get("results", [])]
 
@@ -248,7 +266,7 @@ class MemoryContext:
     async def memories(
         self,
         *,
-        memory_types: Sequence[str] | None = None,
+        memory_types: Sequence[MemoryType] | None = None,
         include_superseded: bool = False,
         limit: int = 100,
     ) -> list[MemoryResult]:
@@ -306,7 +324,7 @@ class ChatAPI:
         self,
         content: str,
         *,
-        role: str = "AGENT",
+        role: MessageRole = "AGENT",
         idempotency_key: str | None = None,
         **metadata: Any,
     ) -> MessageAck:
@@ -354,10 +372,10 @@ class ChatAPI:
 
     async def _message(
         self,
-        role: str,
+        role: MessageRole,
         content: str,
         *,
-        kind: str = "VISIBLE",
+        kind: MessageKind = "VISIBLE",
         idempotency_key: str | None = None,
         **metadata: Any,
     ) -> MessageAck:
@@ -385,7 +403,7 @@ class FilesAPI:
         filename: str | None = None,
         media_type: str | None = None,
         title: str | None = None,
-        visibility: str | None = None,
+        visibility: Visibility | None = None,
         idempotency_key: str | None = None,
         **metadata: Any,
     ) -> FileHandle:
@@ -529,14 +547,14 @@ class ToolsAPI:
         *,
         output: Any = None,
         output_summary: str | None = None,
-        status: str = "ok",
+        status: ToolStatus = "ok",
         error_class: str | None = None,
         latency_ms: float | None = None,
         cost: float | None = None,
         task: str = "",
         step: int | None = None,
         sub_calls: list[dict[str, Any]] | None = None,
-        visibility: str = "RUN",
+        visibility: Visibility = "RUN",
     ) -> ToolResult:
         data = await self._ctx._request(
             "POST",
@@ -590,7 +608,7 @@ class ToolsAPI:
         call: ToolCall,
         executor: Callable[[str, dict[str, Any]], Awaitable[Any]],
         *,
-        visibility: str = "RUN",
+        visibility: Visibility = "RUN",
     ) -> ToolResult:
         """Run the caller's executor, then record the invocation idempotently.
 
@@ -604,7 +622,9 @@ class ToolsAPI:
         which is the only place that knows.
         """
         started = time.perf_counter()
-        status, error_class, output = "ok", None, None
+        status: ToolStatus = "ok"
+        error_class: str | None = None
+        output: Any = None
         try:
             output = await executor(call.tool, call.args)
         except Exception as exc:

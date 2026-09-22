@@ -120,13 +120,13 @@
           "visibility": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/Visibility"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Visibility"
+            "description": "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the thread, else the user."
           }
         },
         "required": [
@@ -136,6 +136,7 @@
         "type": "object"
       },
       "ClaimVerdictBody": {
+        "additionalProperties": false,
         "examples": [
           {
             "citations": [
@@ -155,6 +156,7 @@
         ],
         "properties": {
           "citations": {
+            "description": "citation markers in the claim",
             "items": {
               "type": "string"
             },
@@ -166,6 +168,7 @@
             "type": "string"
           },
           "contradicted_by": {
+            "description": "retrieved-but-unused items that contradict the claim",
             "items": {
               "type": "string"
             },
@@ -173,10 +176,15 @@
             "type": "array"
           },
           "contradiction": {
+            "default": 0.0,
+            "description": "best contradiction",
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Contradiction",
             "type": "number"
           },
           "evidence_ids": {
+            "description": "items the verdict rests on",
             "items": {
               "type": "string"
             },
@@ -184,7 +192,13 @@
             "type": "array"
           },
           "method": {
-            "description": "citation | nli | judge",
+            "default": "nli",
+            "description": "The cheapest stage that decided the claim: citation (the cited item settles it), nli (cross-encoder entailment) or judge (LLM, borderline claims only).",
+            "enum": [
+              "citation",
+              "nli",
+              "judge"
+            ],
             "title": "Method",
             "type": "string"
           },
@@ -196,23 +210,169 @@
             "type": "array"
           },
           "support": {
+            "default": 0.0,
+            "description": "best entailment score",
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Support",
             "type": "number"
           },
           "verdict": {
-            "description": "supported | unsupported | contradicted | borderline",
+            "description": "supported: every fact in the claim follows from the evidence; unsupported: the evidence does not say it; contradicted: retrieved evidence says otherwise; borderline: the NLI could not decide and no judge settled it.",
+            "enum": [
+              "supported",
+              "unsupported",
+              "contradicted",
+              "borderline"
+            ],
             "title": "Verdict",
             "type": "string"
           }
         },
         "required": [
           "claim",
-          "verdict",
-          "support",
-          "contradiction",
-          "method"
+          "verdict"
         ],
         "title": "ClaimVerdictBody",
+        "type": "object"
+      },
+      "ContextItemBody": {
+        "additionalProperties": false,
+        "description": "One ranked piece of context.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "structured extras: predicate/subject/object for facts and memories, fact attributes (period, currency, amount...), contradicts/contributors",
+            "title": "Attributes",
+            "type": "object"
+          },
+          "citation": {
+            "description": "stable citation key",
+            "title": "Citation",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "expanded_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "item_id this was expanded from",
+            "title": "Expanded From"
+          },
+          "expansion_edge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PARENT | NEXT | DEFINED_BY | ...",
+            "title": "Expansion Edge"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "relevance": {
+            "default": 0.0,
+            "description": "Comparable across the bundle, 0..1, higher is better.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "representation": {
+            "$ref": "#/components/schemas/Representation",
+            "description": "Which representation of knowledge the item is: CHUNK, TABLE, PARAGRAPH, SECTION, SUBSECTION or CODE_BLOCK for document passages, MEMORY for a canonical memory, RELATION for a graph fact, SUMMARY for a rolled-up summary."
+          },
+          "retrievers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Retrievers",
+            "type": "array"
+          },
+          "score": {
+            "default": 0.0,
+            "description": "The raw number the ranking stage produced; its meaning depends on score_kind, so it is not comparable between items. Use relevance.",
+            "title": "Score",
+            "type": "number"
+          },
+          "score_kind": {
+            "default": "fusion",
+            "description": "Where score came from: a cross-encoder probability (cross_encoder), a fusion rank score (fusion) or an exact identifier hit (exact).",
+            "enum": [
+              "cross_encoder",
+              "fusion",
+              "exact"
+            ],
+            "title": "Score Kind",
+            "type": "string"
+          },
+          "section_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "e.g. 'Financial Results > EBITDA'",
+            "title": "Section Path"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "token_estimate": {
+            "default": 0,
+            "title": "Token Estimate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "representation",
+          "text",
+          "citation"
+        ],
+        "title": "ContextItemBody",
         "type": "object"
       },
       "ContextRequest": {
@@ -232,7 +392,7 @@
           "answer": {
             "anyOf": [
               {
-                "maxLength": 40000,
+                "maxLength": 8000,
                 "type": "string"
               },
               {
@@ -251,6 +411,7 @@
                 "items": {
                   "type": "string"
                 },
+                "maxItems": 100,
                 "type": "array"
               },
               {
@@ -284,7 +445,7 @@
           "token_budget": {
             "anyOf": [
               {
-                "maximum": 200000.0,
+                "maximum": 16000.0,
                 "minimum": 200.0,
                 "type": "integer"
               },
@@ -305,7 +466,7 @@
         "type": "object"
       },
       "ContextResponse": {
-        "additionalProperties": true,
+        "additionalProperties": false,
         "description": "ContextBundle: bounded, ranked, provenance-carrying context. ``rendered`` is prompt-ready.",
         "examples": [
           {
@@ -344,8 +505,14 @@
           }
         ],
         "properties": {
+          "built_at": {
+            "format": "date-time",
+            "title": "Built At",
+            "type": "string"
+          },
           "bundle_id": {
             "default": "",
+            "description": "tenant-bound handle for /v1/verify while the bundle is cached",
             "title": "Bundle Id",
             "type": "string"
           },
@@ -354,35 +521,33 @@
             "type": "boolean"
           },
           "conversation": {
+            "$ref": "#/components/schemas/ConversationWindowBody"
+          },
+          "diagnostics": {
             "additionalProperties": true,
-            "title": "Conversation",
+            "title": "Diagnostics",
             "type": "object"
           },
           "evidence": {
-            "additionalProperties": true,
-            "title": "Evidence",
-            "type": "object"
+            "$ref": "#/components/schemas/EvidenceReportBody"
           },
           "graph_facts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ContextItemBody"
             },
             "title": "Graph Facts",
             "type": "array"
           },
           "knowledge": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ContextItemBody"
             },
             "title": "Knowledge",
             "type": "array"
           },
           "memories": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ContextItemBody"
             },
             "title": "Memories",
             "type": "array"
@@ -392,17 +557,22 @@
             "type": "string"
           },
           "query_type": {
-            "title": "Query Type",
-            "type": "string"
+            "$ref": "#/components/schemas/QueryType",
+            "description": "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage answers it), DOCUMENT_MULTI_HOP (several passages must be combined), ENTITY_RELATION (graph traversal), TEMPORAL, GLOBAL_SUMMARY or GENERAL_SEMANTIC (the default)."
           },
           "rendered": {
             "title": "Rendered",
             "type": "string"
           },
+          "revision_fingerprint": {
+            "default": "",
+            "description": "revisions this bundle was built from",
+            "title": "Revision Fingerprint",
+            "type": "string"
+          },
           "summaries": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ContextItemBody"
             },
             "title": "Summaries",
             "type": "array"
@@ -428,9 +598,57 @@
           "token_budget",
           "token_estimate",
           "cache_hit",
+          "built_at",
           "rendered"
         ],
         "title": "ContextResponse",
+        "type": "object"
+      },
+      "ConversationWindowBody": {
+        "additionalProperties": false,
+        "properties": {
+          "message_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          },
+          "rendered": {
+            "default": "",
+            "title": "Rendered",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "rolling summary of older messages",
+            "title": "Summary"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "token_estimate": {
+            "default": 0,
+            "title": "Token Estimate",
+            "type": "integer"
+          }
+        },
+        "title": "ConversationWindowBody",
         "type": "object"
       },
       "CreateMessageRequest": {
@@ -466,6 +684,7 @@
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
             "examples": [
               {
                 "ui_locale": "en-GB"
@@ -529,6 +748,7 @@
           "source_message_id": {
             "anyOf": [
               {
+                "maxLength": 400,
                 "type": "string"
               },
               {
@@ -543,6 +763,7 @@
           "source_system": {
             "anyOf": [
               {
+                "maxLength": 100,
                 "type": "string"
               },
               {
@@ -576,6 +797,7 @@
         "properties": {
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
             "examples": [
               {
                 "channel": "web"
@@ -674,6 +896,15 @@
           },
           "source": {
             "default": "manual",
+            "description": "Where the tool definition comes from: bifrost-mcp (an MCP server behind the Bifrost gateway), mcp (a directly connected MCP server), langgraph, adk or crewai (a framework tool node), manual (declared by the caller; the default).",
+            "enum": [
+              "bifrost-mcp",
+              "langgraph",
+              "adk",
+              "crewai",
+              "mcp",
+              "manual"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -739,8 +970,8 @@
         ],
         "properties": {
           "archive_status": {
-            "title": "Archive Status",
-            "type": "string"
+            "$ref": "#/components/schemas/ArchiveStatus",
+            "description": "Where the raw bytes live: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob store, verified) or PURGED (removed from the hot database after the grace period)."
           },
           "checksum": {
             "title": "Checksum",
@@ -795,9 +1026,8 @@
             "type": "integer"
           },
           "status": {
-            "description": "STAGED | READY | FAILED",
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/DocumentStatus",
+            "description": "STAGED: accepted, parse job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error."
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -833,6 +1063,16 @@
         ],
         "title": "DocumentResponse",
         "type": "object"
+      },
+      "DocumentStatus": {
+        "description": "Where an ingested file is in its parse-and-index life: the ``status`` a document\nreports until its parse job either indexed it or gave up.",
+        "enum": [
+          "STAGED",
+          "READY",
+          "FAILED"
+        ],
+        "title": "DocumentStatus",
+        "type": "string"
       },
       "EntityOut": {
         "properties": {
@@ -1013,6 +1253,267 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "EvidenceRef": {
+        "additionalProperties": false,
+        "description": "Pointer from a derived object back to the raw evidence that supports it.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "document_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Version Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document Context Graph node.",
+            "title": "Node Id"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "source_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SHA-256 of the source bytes/text.",
+            "title": "Source Hash"
+          },
+          "source_id": {
+            "description": "Primary identifier of the source object.",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "description": "message | file | document_chunk | agent_result | tool_result | import",
+            "title": "Source Type",
+            "type": "string"
+          },
+          "span_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span End"
+          },
+          "span_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Character offset in source text.",
+            "title": "Span Start"
+          },
+          "tool_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Run Id"
+          }
+        },
+        "required": [
+          "source_type",
+          "source_id",
+          "observed_at"
+        ],
+        "title": "EvidenceRef",
+        "type": "object"
+      },
+      "EvidenceReportBody": {
+        "additionalProperties": false,
+        "description": "EvidenceReport: whether the packed evidence can answer the query.",
+        "properties": {
+          "escalations": {
+            "description": "strategies attempted",
+            "items": {
+              "type": "string"
+            },
+            "title": "Escalations",
+            "type": "array"
+          },
+          "grounding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GroundingReportBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "per-claim verdicts when an answer was verified"
+          },
+          "llm_tokens": {
+            "default": 0,
+            "description": "LLM tokens spent building this report",
+            "title": "Llm Tokens",
+            "type": "integer"
+          },
+          "missing_groups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Groups",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "required_groups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Groups",
+            "type": "array"
+          },
+          "satisfied_groups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Satisfied Groups",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EvidenceStatus",
+            "description": "COMPLETE: every required companion passage is present; INCOMPLETE: evidence exists but a required companion is missing or the subject asked about is not established; INSUFFICIENT: nothing usable was retrieved, do not answer from it."
+          },
+          "unused": {
+            "description": "retrieved-but-unused evidence (bounded)",
+            "items": {
+              "$ref": "#/components/schemas/UnusedEvidenceBody"
+            },
+            "title": "Unused",
+            "type": "array"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "EvidenceReportBody",
+        "type": "object"
+      },
+      "EvidenceStatus": {
+        "enum": [
+          "COMPLETE",
+          "INCOMPLETE",
+          "INSUFFICIENT"
+        ],
+        "title": "EvidenceStatus",
+        "type": "string"
+      },
       "FactOut": {
         "properties": {
           "attributes": {
@@ -1038,8 +1539,7 @@
           },
           "evidence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/EvidenceRef"
             },
             "title": "Evidence",
             "type": "array"
@@ -1077,8 +1577,8 @@
             "type": "string"
           },
           "status": {
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/TemporalStatus",
+            "description": "CURRENT unless the query carries as_of, which also returns SUPERSEDED facts that held at that instant; facts that were never right are never returned."
           },
           "subject": {
             "title": "Subject",
@@ -1230,7 +1730,7 @@
           "max_visited": {
             "anyOf": [
               {
-                "maximum": 2000.0,
+                "maximum": 500.0,
                 "minimum": 1.0,
                 "type": "integer"
               },
@@ -1238,6 +1738,7 @@
                 "type": "null"
               }
             ],
+            "description": "Cap on entities the traversal may visit; omit for the server default",
             "title": "Max Visited"
           },
           "query": {
@@ -1297,6 +1798,89 @@
         "title": "GraphQueryResponse",
         "type": "object"
       },
+      "GroundingReportBody": {
+        "additionalProperties": false,
+        "description": "GroundingReport: one verdict per claim and the per-claim hallucination rate.",
+        "properties": {
+          "borderline": {
+            "default": 0,
+            "title": "Borderline",
+            "type": "integer"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimVerdictBody"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "contradicted": {
+            "default": 0,
+            "title": "Contradicted",
+            "type": "integer"
+          },
+          "evidence_count": {
+            "default": 0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "judge_consulted": {
+            "default": 0,
+            "description": "borderline claims sent to the LLM judge",
+            "title": "Judge Consulted",
+            "type": "integer"
+          },
+          "llm_tokens": {
+            "default": 0,
+            "description": "LLM tokens spent on this report",
+            "title": "Llm Tokens",
+            "type": "integer"
+          },
+          "nli_provider": {
+            "default": "",
+            "title": "Nli Provider",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "per_claim_hallucination_rate": {
+            "default": 0.0,
+            "description": "(unsupported + contradicted) / claims",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Per Claim Hallucination Rate",
+            "type": "number"
+          },
+          "representative": {
+            "default": false,
+            "description": "False when the NLI is a deterministic stand-in",
+            "title": "Representative",
+            "type": "boolean"
+          },
+          "supported": {
+            "default": 0,
+            "title": "Supported",
+            "type": "integer"
+          },
+          "unsupported": {
+            "default": 0,
+            "title": "Unsupported",
+            "type": "integer"
+          },
+          "unused_count": {
+            "default": 0,
+            "title": "Unused Count",
+            "type": "integer"
+          }
+        },
+        "title": "GroundingReportBody",
+        "type": "object"
+      },
       "JobResponse": {
         "examples": [
           {
@@ -1333,8 +1917,8 @@
             "type": "string"
           },
           "status": {
-            "title": "Status",
-            "type": "string"
+            "$ref": "#/components/schemas/JobStatus",
+            "description": "PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts exhausted; see last_error), RETRYING (failed, will run again) or CANCELLED."
           },
           "task_name": {
             "title": "Task Name",
@@ -1349,6 +1933,18 @@
         ],
         "title": "JobResponse",
         "type": "object"
+      },
+      "JobStatus": {
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCEEDED",
+          "FAILED",
+          "RETRYING",
+          "CANCELLED"
+        ],
+        "title": "JobStatus",
+        "type": "string"
       },
       "Lifetime": {
         "description": "How long a memory is expected to matter.",
@@ -1444,8 +2040,7 @@
           },
           "evidence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/EvidenceRef"
             },
             "title": "Evidence",
             "type": "array"
@@ -1455,16 +2050,16 @@
             "type": "number"
           },
           "lifetime": {
-            "title": "Lifetime",
-            "type": "string"
+            "$ref": "#/components/schemas/Lifetime",
+            "description": "EPHEMERAL (within the turn), SHORT_TERM (the current thread or session), LONG_TERM (durable) or ARCHIVAL (kept for audit, out of retrieval)."
           },
           "memory_id": {
             "title": "Memory Id",
             "type": "string"
           },
           "memory_type": {
-            "title": "Memory Type",
-            "type": "string"
+            "$ref": "#/components/schemas/MemoryType",
+            "description": "What kind of intelligence the memory carries. Extracted memories are SEMANTIC (a fact about the world), PREFERENCE, EPISODIC, DECISION or PROCEDURAL; the pipeline itself writes ENTITY_SUMMARY, OBSERVATION, BELIEF, TOOL, AGENT, TASK and USER; the remaining values come from imports that declared their type."
           },
           "object": {
             "anyOf": [
@@ -1502,8 +2097,8 @@
             "type": "integer"
           },
           "scope_level": {
-            "title": "Scope Level",
-            "type": "string"
+            "$ref": "#/components/schemas/ScopeLevel",
+            "description": "Where the memory is anchored (distinct from visibility): AGENT, AGENT_GROUP, WORK, THREAD, USER, GROUP, WORKSPACE, TENANT or GLOBAL."
           },
           "subject": {
             "anyOf": [
@@ -1539,8 +2134,8 @@
             "title": "Supersedes"
           },
           "temporal_status": {
-            "title": "Temporal Status",
-            "type": "string"
+            "$ref": "#/components/schemas/TemporalStatus",
+            "description": "CURRENT is the live value; SUPERSEDED was replaced by a newer memory (see superseded_by); CONTRADICTED conflicts with a current one; EXPIRED passed its valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept."
           },
           "updated_at": {
             "format": "date-time",
@@ -1572,8 +2167,8 @@
             "title": "Valid To"
           },
           "visibility": {
-            "title": "Visibility",
-            "type": "string"
+            "$ref": "#/components/schemas/Visibility",
+            "description": "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL."
           }
         },
         "required": [
@@ -1918,6 +2513,7 @@
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
             "title": "Custom Metadata",
             "type": "object"
           },
@@ -2206,6 +2802,7 @@
           "custom_type": {
             "anyOf": [
               {
+                "maxLength": 64,
                 "type": "string"
               },
               {
@@ -2305,6 +2902,23 @@
         "title": "ProcessingHintsIn",
         "type": "object"
       },
+      "QueryType": {
+        "description": "Deterministic QueryRouter categories.",
+        "enum": [
+          "EXACT_IDENTIFIER",
+          "CONVERSATION_HISTORY",
+          "USER_MEMORY",
+          "DECISION",
+          "DOCUMENT_LOCAL",
+          "DOCUMENT_MULTI_HOP",
+          "ENTITY_RELATION",
+          "TEMPORAL",
+          "GLOBAL_SUMMARY",
+          "GENERAL_SEMANTIC"
+        ],
+        "title": "QueryType",
+        "type": "string"
+      },
       "ReadyResponse": {
         "properties": {
           "dependencies": {
@@ -2327,7 +2941,12 @@
             "type": "object"
           },
           "status": {
-            "description": "ready | degraded | not_ready",
+            "description": "ready: every dependency answered; degraded: an optional provider is down (served with 200); not_ready: a mandatory store is down (served with 503).",
+            "enum": [
+              "ready",
+              "degraded",
+              "not_ready"
+            ],
             "examples": [
               "ready"
             ],
@@ -2376,8 +2995,7 @@
           },
           "evidence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/EvidenceRef"
             },
             "title": "Evidence",
             "type": "array"
@@ -2420,8 +3038,8 @@
             "title": "Page"
           },
           "representation": {
-            "title": "Representation",
-            "type": "string"
+            "$ref": "#/components/schemas/Representation",
+            "description": "Which representation of knowledge the item is: CHUNK, TABLE, PARAGRAPH, SECTION, SUBSECTION or CODE_BLOCK for document passages, MEMORY for a canonical memory, RELATION for a graph fact, SUMMARY for a rolled-up summary."
           },
           "retrievers": {
             "items": {
@@ -2481,6 +3099,7 @@
                 "items": {
                   "type": "string"
                 },
+                "maxItems": 100,
                 "type": "array"
               },
               {
@@ -2494,7 +3113,7 @@
             "title": "Document Ids"
           },
           "kinds": {
-            "description": "chunk | memory | fact (graph facts are included only when requested)",
+            "description": "Which record kinds to search and return: chunk (document passages), memory (canonical memories) and summary (rolled-up summaries; also added by the router when the query asks for an overview). Graph facts are not a recall kind: ask /v1/context or /v1/graph/query for them.",
             "examples": [
               [
                 "chunk",
@@ -2502,8 +3121,15 @@
               ]
             ],
             "items": {
+              "enum": [
+                "chunk",
+                "memory",
+                "summary"
+              ],
               "type": "string"
             },
+            "maxItems": 3,
+            "minItems": 1,
             "title": "Kinds",
             "type": "array"
           },
@@ -2564,23 +3190,21 @@
           "evidence": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/EvidenceReportBody"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "EvidenceReport: COMPLETE | INCOMPLETE | INSUFFICIENT",
-            "title": "Evidence"
+            "description": "EvidenceReport (COMPLETE | INCOMPLETE | INSUFFICIENT) when the verification stage ran; absent otherwise."
           },
           "query": {
             "title": "Query",
             "type": "string"
           },
           "query_type": {
-            "title": "Query Type",
-            "type": "string"
+            "$ref": "#/components/schemas/QueryType",
+            "description": "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage answers it), DOCUMENT_MULTI_HOP (several passages must be combined), ENTITY_RELATION (graph traversal), TEMPORAL, GLOBAL_SUMMARY or GENERAL_SEMANTIC (the default)."
           },
           "results": {
             "items": {
@@ -2680,6 +3304,13 @@
           },
           "status": {
             "default": "ok",
+            "description": "How the call ended: ok, error (the tool raised; name it in error_class), timeout, or rejected (the agent or a policy refused to run it).",
+            "enum": [
+              "ok",
+              "error",
+              "timeout",
+              "rejected"
+            ],
             "title": "Status",
             "type": "string"
           },
@@ -2697,9 +3328,9 @@
           },
           "sub_calls": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SubCallIn"
             },
+            "maxItems": 64,
             "title": "Sub Calls",
             "type": "array"
           },
@@ -2713,10 +3344,9 @@
             "type": "string"
           },
           "visibility": {
+            "$ref": "#/components/schemas/Visibility",
             "default": "RUN",
-            "description": "RUN | AGENT_GROUP | USER | THREAD | ...",
-            "title": "Visibility",
-            "type": "string"
+            "description": "Who may see the record, narrowest first: PRIVATE, RUN (this agent run and the runs it spawns; the default), THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL."
           }
         },
         "required": [
@@ -2753,6 +3383,28 @@
         ],
         "title": "RecordResponse",
         "type": "object"
+      },
+      "Representation": {
+        "description": "Which representation of knowledge an object is.",
+        "enum": [
+          "RAW_FILE",
+          "DOCUMENT",
+          "DOCUMENT_VERSION",
+          "SECTION",
+          "SUBSECTION",
+          "PARAGRAPH",
+          "TABLE",
+          "CODE_BLOCK",
+          "CHUNK",
+          "SUMMARY",
+          "ENTITY",
+          "RELATION",
+          "EMBEDDING",
+          "MESSAGE",
+          "MEMORY"
+        ],
+        "title": "Representation",
+        "type": "string"
       },
       "ScopeBody": {
         "additionalProperties": false,
@@ -2807,6 +3459,7 @@
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
             "title": "Custom Metadata",
             "type": "object"
           },
@@ -2955,6 +3608,69 @@
         "title": "ScopeBody",
         "type": "object"
       },
+      "ScopeLevel": {
+        "description": "Where a memory is anchored. Distinct from visibility.",
+        "enum": [
+          "AGENT",
+          "AGENT_GROUP",
+          "WORK",
+          "THREAD",
+          "USER",
+          "GROUP",
+          "WORKSPACE",
+          "TENANT",
+          "GLOBAL"
+        ],
+        "title": "ScopeLevel",
+        "type": "string"
+      },
+      "SubCallIn": {
+        "additionalProperties": false,
+        "description": "One ``server.tool(...)`` call parsed out of a code-mode script, in script order.",
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "bindings": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "argument path -> expression it was bound from (e.g. 'id': 'step0.result.id')",
+            "title": "Bindings",
+            "type": "object"
+          },
+          "ordinal": {
+            "minimum": 0.0,
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "tool"
+        ],
+        "title": "SubCallIn",
+        "type": "object"
+      },
+      "TemporalStatus": {
+        "description": "Validity state of a fact/memory in time.",
+        "enum": [
+          "CURRENT",
+          "SUPERSEDED",
+          "EXPIRED",
+          "CONTRADICTED",
+          "RETRACTED",
+          "ARCHIVED"
+        ],
+        "title": "TemporalStatus",
+        "type": "string"
+      },
       "ThreadResponse": {
         "examples": [
           {
@@ -3041,6 +3757,48 @@
         "title": "ThreadResponse",
         "type": "object"
       },
+      "UnusedEvidenceBody": {
+        "additionalProperties": false,
+        "description": "Retrieved but not packed (reranked out or over budget); the grounding cascade scans\nthese for contradictions with the answer.",
+        "properties": {
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Record kind of the unused item: chunk, memory, summary or fact.",
+            "enum": [
+              "CHUNK",
+              "TABLE",
+              "PARAGRAPH",
+              "SECTION",
+              "SUBSECTION",
+              "CODE_BLOCK",
+              "chunk",
+              "SUMMARY",
+              "summary",
+              "ENTITY",
+              "RELATION",
+              "MEMORY",
+              "memory",
+              "fact"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "kind",
+          "text"
+        ],
+        "title": "UnusedEvidenceBody",
+        "type": "object"
+      },
       "VerifyItem": {
         "additionalProperties": false,
         "examples": [
@@ -3076,6 +3834,23 @@
           },
           "kind": {
             "default": "chunk",
+            "description": "What the item is, which decides how good a thing it is to cite: a verifiable passage (chunk, CHUNK, TABLE, PARAGRAPH, SECTION, SUBSECTION, CODE_BLOCK) beats a summary (summary, SUMMARY), which beats a derived fact (memory, ENTITY, RELATION). Send the representation from a bundle's item, or the record kind (chunk, memory, summary, fact) from its unused list.",
+            "enum": [
+              "CHUNK",
+              "TABLE",
+              "PARAGRAPH",
+              "SECTION",
+              "SUBSECTION",
+              "CODE_BLOCK",
+              "chunk",
+              "SUMMARY",
+              "summary",
+              "ENTITY",
+              "RELATION",
+              "MEMORY",
+              "memory",
+              "fact"
+            ],
             "examples": [
               "chunk"
             ],
@@ -3086,7 +3861,7 @@
             "examples": [
               "Adjusted EBITDA increased to EUR 98 million (FY25: EUR 90 million)."
             ],
-            "maxLength": 20000,
+            "maxLength": 4000,
             "minLength": 1,
             "title": "Text",
             "type": "string"
@@ -3125,7 +3900,7 @@
             "examples": [
               "Adjusted EBITDA increased to EUR 98 million [1]. Revenue fell to EUR 400 million because of lower volumes."
             ],
-            "maxLength": 40000,
+            "maxLength": 8000,
             "minLength": 1,
             "title": "Answer",
             "type": "string"
@@ -3151,6 +3926,7 @@
                 "items": {
                   "type": "string"
                 },
+                "maxItems": 100,
                 "type": "array"
               },
               {
@@ -3168,7 +3944,7 @@
                 "items": {
                   "$ref": "#/components/schemas/VerifyItem"
                 },
-                "maxItems": 200,
+                "maxItems": 50,
                 "type": "array"
               },
               {
@@ -3219,7 +3995,7 @@
                 "items": {
                   "$ref": "#/components/schemas/VerifyItem"
                 },
-                "maxItems": 50,
+                "maxItems": 20,
                 "type": "array"
               },
               {
@@ -3240,6 +4016,7 @@
         "type": "object"
       },
       "VerifyResponse": {
+        "additionalProperties": false,
         "description": "GroundingReport: one verdict per claim and the per-claim hallucination rate.",
         "examples": [
           {
@@ -3290,6 +4067,7 @@
         ],
         "properties": {
           "borderline": {
+            "default": 0,
             "title": "Borderline",
             "type": "integer"
           },
@@ -3301,22 +4079,29 @@
             "type": "array"
           },
           "contradicted": {
+            "default": 0,
             "title": "Contradicted",
             "type": "integer"
           },
           "evidence_count": {
+            "default": 0,
             "title": "Evidence Count",
             "type": "integer"
           },
           "judge_consulted": {
+            "default": 0,
+            "description": "borderline claims sent to the LLM judge",
             "title": "Judge Consulted",
             "type": "integer"
           },
           "llm_tokens": {
+            "default": 0,
+            "description": "LLM tokens spent on this report",
             "title": "Llm Tokens",
             "type": "integer"
           },
           "nli_provider": {
+            "default": "",
             "title": "Nli Provider",
             "type": "string"
           },
@@ -3328,45 +4113,47 @@
             "type": "array"
           },
           "per_claim_hallucination_rate": {
+            "default": 0.0,
+            "description": "(unsupported + contradicted) / claims",
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Per Claim Hallucination Rate",
             "type": "number"
           },
           "representative": {
+            "default": false,
+            "description": "False when the NLI is a deterministic stand-in",
             "title": "Representative",
             "type": "boolean"
           },
           "source": {
-            "description": "bundle | items | query",
+            "description": "Where the evidence came from: bundle (a cached /v1/context bundle), items (evidence the caller sent) or query (retrieval re-run under the caller's scope).",
+            "enum": [
+              "bundle",
+              "items",
+              "query"
+            ],
             "title": "Source",
             "type": "string"
           },
           "supported": {
+            "default": 0,
             "title": "Supported",
             "type": "integer"
           },
           "unsupported": {
+            "default": 0,
             "title": "Unsupported",
             "type": "integer"
           },
           "unused_count": {
+            "default": 0,
             "title": "Unused Count",
             "type": "integer"
           }
         },
         "required": [
-          "source",
-          "claims",
-          "supported",
-          "unsupported",
-          "contradicted",
-          "borderline",
-          "per_claim_hallucination_rate",
-          "nli_provider",
-          "representative",
-          "judge_consulted",
-          "llm_tokens",
-          "evidence_count",
-          "unused_count"
+          "source"
         ],
         "title": "VerifyResponse",
         "type": "object"
@@ -4590,6 +5377,7 @@
         "operationId": "list_memories_v1_memories_get",
         "parameters": [
           {
+            "description": "Keep only these memory types (repeat the parameter for several). The ones a caller usually wants: SEMANTIC, PREFERENCE, EPISODIC, DECISION, PROCEDURAL; omit for every type.",
             "in": "query",
             "name": "memory_type",
             "required": false,
@@ -4597,7 +5385,7 @@
               "anyOf": [
                 {
                   "items": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/MemoryType"
                   },
                   "type": "array"
                 },
@@ -4605,6 +5393,7 @@
                   "type": "null"
                 }
               ],
+              "description": "Keep only these memory types (repeat the parameter for several). The ones a caller usually wants: SEMANTIC, PREFERENCE, EPISODIC, DECISION, PROCEDURAL; omit for every type.",
               "title": "Memory Type"
             }
           },

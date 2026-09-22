@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from memory_service.domain.enums import ErrorCode
@@ -126,6 +126,24 @@ def install_error_handlers(app: FastAPI) -> None:
         errors = [
             {"loc": [str(p) for p in e.get("loc", [])], "msg": e.get("msg"), "type": e.get("type")}
             for e in exc.errors()
+        ]
+        return _envelope(
+            request,
+            code=ErrorCode.VALIDATION,
+            message="Request validation failed",
+            retryable=False,
+            status=422,
+            details={"errors": errors},
+        )
+
+    @app.exception_handler(ValidationError)
+    async def _model_validation_error(request: Request, exc: ValidationError) -> JSONResponse:
+        # A pydantic model validated inside a handler (a form field parsed by hand, a value
+        # coerced into a domain model) is still the caller's input; it used to fall through
+        # to the generic handler and come back as a 500 with no detail.
+        errors = [
+            {"loc": [str(p) for p in e.get("loc", [])], "msg": e.get("msg"), "type": e.get("type")}
+            for e in exc.errors(include_url=False, include_input=False)
         ]
         return _envelope(
             request,

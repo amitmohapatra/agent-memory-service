@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -19,7 +19,8 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
-from memory_service.domain.enums import Visibility
+from memory_service.api.validation import CustomMetadata
+from memory_service.domain.enums import ArchiveStatus, DocumentStatus, Visibility
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.ids import content_hash
 from memory_service.modules.ingestion.service import IngestionService
@@ -28,6 +29,7 @@ router = APIRouter()
 
 _WRITE_ERRORS = error_responses(401, 403, 409, 422, 503)
 _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
+_METADATA: TypeAdapter[dict[str, Any]] = TypeAdapter(CustomMetadata)
 
 
 class FileAckResponse(BaseModel):
@@ -88,8 +90,17 @@ class DocumentResponse(BaseModel):
     media_type: str
     size_bytes: int
     checksum: str
-    status: str = Field(..., description="STAGED | READY | FAILED")
-    archive_status: str
+    status: DocumentStatus = Field(
+        ...,
+        description="STAGED: accepted, parse job queued or running; READY: parsed and "
+        "indexed, retrievable; FAILED: the parse job gave up, see last_error.",
+    )
+    archive_status: ArchiveStatus = Field(
+        ...,
+        description="Where the raw bytes live: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED "
+        "(blob store, verified) or PURGED (removed from the hot database after the grace "
+        "period).",
+    )
     current_version_id: str | None = None
     thread_id: str | None = None
     created_at: datetime
@@ -156,16 +167,24 @@ async def upload_file(
     scope: Annotated[str | None, Form()] = None,
     message_id: Annotated[str | None, Form()] = None,
     title: Annotated[str | None, Form()] = None,
-    visibility: Annotated[str | None, Form()] = None,
+    visibility: Annotated[
+        Visibility | None,
+        Form(
+            description=(
+                "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, WORK, "
+                "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the thread, "
+                "else the user."
+            )
+        ),
+    ] = None,
     custom_metadata: Annotated[str | None, Form()] = None,
 ) -> JSONResponse:
     try:
         scope_body = ScopeBody.model_validate(json.loads(scope)) if scope else ScopeBody()
-        metadata = json.loads(custom_metadata) if custom_metadata else {}
-        vis = Visibility(visibility) if visibility else None
+        metadata = _METADATA.validate_python(json.loads(custom_metadata)) if custom_metadata else {}
     except (ValueError, ValidationError) as exc:
         raise ValidationFailed(
-            "invalid scope/visibility/custom_metadata", details={"error": str(exc)[:300]}
+            "invalid scope/custom_metadata", details={"error": str(exc)[:300]}
         ) from exc
     ctx = build_context(request, container, scope_body)
     data = await file.read()
@@ -188,7 +207,7 @@ async def upload_file(
             data=data,
             message_id=message_id,
             title=title,
-            visibility=vis,
+            visibility=visibility,
             custom_metadata=metadata,
         )
         return 202, FileAckResponse(**ack.__dict__).model_dump(mode="json"), None
@@ -229,8 +248,8 @@ async def get_document(
         media_type=d.media_type,
         size_bytes=d.size_bytes,
         checksum=d.checksum,
-        status=str(d.system_metadata.get("status", "STAGED")),
-        archive_status=d.archive_status.value,
+        status=DocumentStatus(str(d.system_metadata.get("status", "STAGED"))),
+        archive_status=d.archive_status,
         current_version_id=d.current_version_id,
         thread_id=d.thread_id,
         created_at=d.created_at,

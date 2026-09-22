@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ValidationFailed
@@ -41,7 +42,7 @@ class ScopeBody(BaseModel):
     parent_agent_run_id: str | None = None
     trace_id: str | None = None
     correlation_id: str | None = None
-    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    custom_metadata: CustomMetadata = Field(default_factory=dict)
 
 
 def get_container(request: Request) -> Container:

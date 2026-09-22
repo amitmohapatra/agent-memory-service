@@ -2,19 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.api.schemas.context import (
+    REPRESENTATION_DESCRIPTION,
+    ContextItemBody,
+    ConversationWindowBody,
+    EvidenceReportBody,
+)
+from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import ProviderNotConfigured
+from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.grounding.cascade import attach
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
+
+RecallKind = Literal["chunk", "memory", "summary"]
+
+_QUERY_TYPE_DESCRIPTION = (
+    "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was "
+    "looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage "
+    "answers it), DOCUMENT_MULTI_HOP (several passages must be combined), ENTITY_RELATION "
+    "(graph traversal), TEMPORAL, GLOBAL_SUMMARY or GENERAL_SEMANTIC (the default)."
+)
 
 _SCOPE: dict[str, Any] = {
     "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
@@ -46,13 +64,23 @@ class RecallRequest(BaseModel):
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
     )
     limit: int = Field(default=20, ge=1, le=100, examples=[20])
-    kinds: list[str] = Field(
+    kinds: list[RecallKind] = Field(
         default_factory=lambda: ["chunk", "memory"],
-        description="chunk | memory | fact (graph facts are included only when requested)",
+        min_length=1,
+        max_length=3,
+        description=(
+            "Which record kinds to search and return: chunk (document passages), memory "
+            "(canonical memories) and summary (rolled-up summaries; also added by the router "
+            "when the query asks for an overview). Graph facts are not a recall kind: ask "
+            "/v1/context or /v1/graph/query for them."
+        ),
         examples=[["chunk", "memory"]],
     )
     document_ids: list[str] | None = Field(
-        default=None, description="Restrict knowledge retrieval to these documents", examples=[None]
+        default=None,
+        max_length=100,
+        description="Restrict knowledge retrieval to these documents",
+        examples=[None],
     )
 
 
@@ -77,7 +105,7 @@ class RecallItem(BaseModel):
     )
 
     item_id: str
-    representation: str
+    representation: Representation = Field(..., description=REPRESENTATION_DESCRIPTION)
     text: str
     score: float
     retrievers: list[str]
@@ -87,7 +115,7 @@ class RecallItem(BaseModel):
     section_path: str | None = None
     expanded_from: str | None = None
     expansion_edge: str | None = None
-    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
 class RecallResponse(BaseModel):
@@ -105,11 +133,13 @@ class RecallResponse(BaseModel):
     )
 
     query: str
-    query_type: str
+    query_type: QueryType = Field(..., description=_QUERY_TYPE_DESCRIPTION)
     results: list[RecallItem]
     diagnostics: dict[str, Any] = Field(default_factory=dict)
-    evidence: dict[str, Any] | None = Field(
-        default=None, description="EvidenceReport: COMPLETE | INCOMPLETE | INSUFFICIENT"
+    evidence: EvidenceReportBody | None = Field(
+        default=None,
+        description="EvidenceReport (COMPLETE | INCOMPLETE | INSUFFICIENT) when the "
+        "verification stage ran; absent otherwise.",
     )
 
 
@@ -123,11 +153,11 @@ class ContextRequest(BaseModel):
         max_length=4000,
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
     )
-    token_budget: int | None = Field(default=None, ge=200, le=200_000, examples=[6000])
-    document_ids: list[str] | None = Field(default=None, examples=[None])
+    token_budget: int | None = Field(default=None, ge=200, le=16_000, examples=[6000])
+    document_ids: list[str] | None = Field(default=None, max_length=100, examples=[None])
     answer: str | None = Field(
         default=None,
-        max_length=40_000,
+        max_length=8_000,
         description="When given, the grounding cascade verifies this answer against the "
         "bundle and the report is attached as evidence.grounding",
         examples=[None],
@@ -138,7 +168,7 @@ class ContextResponse(BaseModel):
     """ContextBundle: bounded, ranked, provenance-carrying context. ``rendered`` is prompt-ready."""
 
     model_config = ConfigDict(
-        extra="allow",
+        extra="forbid",
         json_schema_extra={
             "examples": [
                 {
@@ -180,17 +210,24 @@ class ContextResponse(BaseModel):
     )
 
     query: str
-    query_type: str
-    bundle_id: str = ""
-    conversation: dict[str, Any]
-    memories: list[dict[str, Any]]
-    knowledge: list[dict[str, Any]]
-    graph_facts: list[dict[str, Any]]
-    summaries: list[dict[str, Any]]
-    evidence: dict[str, Any]
+    query_type: QueryType = Field(..., description=_QUERY_TYPE_DESCRIPTION)
+    bundle_id: str = Field(
+        default="", description="tenant-bound handle for /v1/verify while the bundle is cached"
+    )
+    conversation: ConversationWindowBody
+    memories: list[ContextItemBody]
+    knowledge: list[ContextItemBody]
+    graph_facts: list[ContextItemBody]
+    summaries: list[ContextItemBody]
+    evidence: EvidenceReportBody
     token_budget: int
     token_estimate: int
     cache_hit: bool
+    revision_fingerprint: str = Field(
+        default="", description="revisions this bundle was built from"
+    )
+    built_at: datetime
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
     rendered: str
 
 
@@ -215,17 +252,15 @@ async def recall(
     )
     wanted = set(body.kinds)
     items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
+    evidence = result.diagnostics.get("evidence")
     return RecallResponse(
         query=body.query,
-        query_type=result.routed.query_type.value,
-        results=[
-            RecallItem(**{**i.model_dump(mode="json"), "representation": i.representation.value})
-            for i in items
-        ],
+        query_type=result.routed.query_type,
+        results=[RecallItem.model_validate(i.model_dump(mode="json")) for i in items],
         diagnostics={
             k: v for k, v in result.diagnostics.items() if k not in ("evidence", "evidence_targets")
         },
-        evidence=result.diagnostics.get("evidence"),
+        evidence=EvidenceReportBody.model_validate(evidence) if evidence is not None else None,
     )
 
 

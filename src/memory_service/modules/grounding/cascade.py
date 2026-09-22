@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from memory_service.config.settings import NLISettings
 from memory_service.domain.context_bundle import ContextBundle
@@ -97,8 +97,28 @@ def _strip_citations(sentence: str) -> tuple[str, list[str]]:
 
 
 # ``kind`` is a Representation value for packed evidence (CHUNK, TABLE, RELATION, SUMMARY...)
-# and a record kind for unused evidence. Higher is a better thing to cite.
-_SOURCE_RANK = {
+# and a record kind for unused evidence. Higher is a better thing to cite. This is the closed
+# set /v1/verify accepts: every kind the service itself emits in a bundle is here, so a
+# bundle's evidence_items() and unused list always round-trip. MEMORY (the packed
+# representation of a memory) and fact (the record kind of an unused graph fact) were never
+# ranked, which the 0 keeps; they are listed so the contract names them.
+EvidenceKind = Literal[
+    "CHUNK",
+    "TABLE",
+    "PARAGRAPH",
+    "SECTION",
+    "SUBSECTION",
+    "CODE_BLOCK",
+    "chunk",
+    "SUMMARY",
+    "summary",
+    "ENTITY",
+    "RELATION",
+    "MEMORY",
+    "memory",
+    "fact",
+]
+_SOURCE_RANK: dict[str, int] = {
     "CHUNK": 3,
     "TABLE": 3,
     "PARAGRAPH": 3,
@@ -111,6 +131,8 @@ _SOURCE_RANK = {
     "ENTITY": 1,
     "RELATION": 1,
     "memory": 1,
+    "MEMORY": 0,
+    "fact": 0,
 }
 
 

@@ -8,8 +8,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ScopeBody
+from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
     ArchiveStatus,
+    JobStatus,
     Lifetime,
     MemoryType,
     MessageKind,
@@ -66,6 +68,7 @@ class ProcessingHintsIn(BaseModel):
     )
     custom_type: str | None = Field(
         default=None,
+        max_length=64,
         examples=["release_note"],
         description=(
             "Required when memory_type=CUSTOM, and meaningless otherwise: the caller's own "
@@ -144,7 +147,7 @@ class CreateThreadRequest(BaseModel):
         examples=["thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"],
     )
     title: str | None = Field(default=None, examples=["Q3 planning"])
-    custom_metadata: dict[str, Any] = Field(default_factory=dict, examples=[{"channel": "web"}])
+    custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"channel": "web"}])
 
 
 class ThreadResponse(BaseModel):
@@ -213,10 +216,12 @@ class CreateMessageRequest(BaseModel):
     )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
-    custom_metadata: dict[str, Any] = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
+    custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
     occurred_at: datetime | None = Field(default=None, description="Original timestamp for imports")
-    source_system: str | None = Field(default=None, examples=["slack"])
-    source_message_id: str | None = Field(default=None, examples=["1726300000.000100"])
+    source_system: str | None = Field(default=None, max_length=100, examples=["slack"])
+    source_message_id: str | None = Field(
+        default=None, max_length=400, examples=["1726300000.000100"]
+    )
     parent_message_id: str | None = None
 
 
@@ -330,6 +335,10 @@ class JobResponse(BaseModel):
     job_id: str
     task_name: str
     queue: str
-    status: str
+    status: JobStatus = Field(
+        ...,
+        description="PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts "
+        "exhausted; see last_error), RETRYING (failed, will run again) or CANCELLED.",
+    )
     attempts: int = 0
     last_error: str | None = None
