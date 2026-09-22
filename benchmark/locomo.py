@@ -556,6 +556,9 @@ async def run(
                         judged = {
                             "produced": produced[:400],
                             "correct": bool(verdict.get("correct")),
+                            # the schema asks for it; keeping it makes a disputed verdict
+                            # auditable without re-running the judge
+                            "reason": (verdict.get("reason") or "")[:300] or None,
                             # the judge is asked directly; the regex is only a fallback for a
                             # judge that answered the first question but not the second
                             "abstained": bool(

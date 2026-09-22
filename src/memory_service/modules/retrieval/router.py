@@ -50,7 +50,9 @@ _MULTI_HOP = re.compile(
 #: sessions; "What items does Adjusted Operating Margin exclude?" is an entity question
 #: about a document term and must not route here (the retrieval gate caught the bare form).
 _MULTI_HOP_NAMED = re.compile(
-    r"\b(?:what|which|where|how many)\b[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+\b"
+    # A person is one capitalised token followed by a lowercase word ("does Melanie partake");
+    # a document term is Title Case all the way ("does Adjusted Operating Margin exclude").
+    r"\b(?:[Ww]hat|[Ww]hich|[Ww]here|[Hh]ow many)\b[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+(?:'s)?\s+(?=[a-z])"
 )
 _ENTITY = re.compile(
     r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"

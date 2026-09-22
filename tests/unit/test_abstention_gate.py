@@ -126,6 +126,9 @@ def test_document_bundles_are_not_subject_checked() -> None:
 def test_a_question_word_is_never_a_name_even_when_the_evidence_capitalises_it() -> None:
     """Verbatim turns put a capitalised "What" into the evidence; that must not make "What
     was grandma's gift?" a question about someone called What."""
-    evidence = [*CONVERSATION, _C("[2023-05-23] Melanie: What a week! Camping was great.", subject="user:melanie")]
+    evidence = [
+        *CONVERSATION,
+        _C("[2023-05-23] Melanie: What a week! Camping was great.", subject="user:melanie"),
+    ]
     assert unsupported_subject("What was the camping trip like?", evidence) is None
     assert unsupported_subject("When did Melanie go camping?", evidence) is None
