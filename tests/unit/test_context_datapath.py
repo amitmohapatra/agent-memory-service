@@ -416,3 +416,71 @@ async def test_content_terms_are_computed_once_per_record(monkeypatch: pytest.Mo
 
     repeated = {m.record_id: seen.count(m.text) for m in memories if seen.count(m.text) != 1}
     assert not repeated, f"tokenised more than once: {repeated}"
+
+
+# ---------------------------------------------------------------------------
+# 5. the route sends those bytes
+# ---------------------------------------------------------------------------
+
+
+async def test_the_bytes_still_satisfy_the_documented_response_contract() -> None:
+    """``/v1/context`` returns the builder's bytes, so FastAPI no longer validates them.
+
+    ``ContextResponse`` and the bodies under it forbid extra fields, and that validation was
+    the only thing keeping the domain models from silently growing a field into the public
+    contract. The check moves here: what the route sends must still be exactly a
+    ContextResponse.
+    """
+    from memory_service.api.routers.v1.retrieval import ContextResponse
+
+    builder = _builder(MemoryCache())
+    payload = orjson.loads(await builder.build_api(CTX, QUERY))
+    ContextResponse.model_validate(payload)
+
+
+def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any) -> None:
+    """The route is the consumer this change exists for.
+
+    It used to parse the cached bundle, dump it, validate the dump into ContextResponse and
+    serialise that - four passes over 30-80 KB for content the cache already held in exactly
+    the form the caller wanted. The route now sends ``build_api``'s bytes; this asserts they
+    reach the client unchanged, ``cache_hit`` and all.
+    """
+    from fastapi.testclient import TestClient
+
+    from memory_service.api.app import create_app
+    from memory_service.api.deps import get_container
+    from memory_service.modules.auth.authentication import ServicePrincipal
+
+    builder = _builder(MemoryCache())
+    sent: list[bytes] = []
+
+    class _Authenticator:
+        async def authenticate(self, headers: dict[str, str]) -> ServicePrincipal:
+            return ServicePrincipal(service_id="svc", mode="trusted_dev", claims={})
+
+    class _Builder:
+        async def build_api(self, ctx: Any, query: str, **kwargs: Any) -> bytes:
+            payload = await builder.build_api(ctx, query, **kwargs)
+            sent.append(payload)
+            return payload
+
+        async def build(self, *args: Any, **kwargs: Any) -> ContextBundle:
+            raise AssertionError("the unverified arm must not build a ContextBundle")
+
+    class _Container:
+        services = {"authenticator": _Authenticator(), "context_builder": _Builder()}
+
+    app = create_app(settings, overrides=overrides)
+    app.dependency_overrides[get_container] = _Container
+    with TestClient(app, raise_server_exceptions=False) as c:
+        response = c.post(
+            "/v1/context",
+            headers={"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"},
+            json={"scope": {"thread_id": "thr_1"}, "query": QUERY},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.content == sent[0], "the route re-serialised what the builder had built"
+    assert response.json()["cache_hit"] is False

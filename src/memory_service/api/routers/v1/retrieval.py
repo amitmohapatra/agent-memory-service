@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
@@ -266,22 +266,34 @@ async def recall(
 
 @router.post(
     "/context",
-    response_model=ContextResponse,
+    # The unverified answer is sent as the bytes the builder already produced, so the route
+    # returns a Response and FastAPI validates nothing. ContextResponse stays the documented
+    # 200 below, and tests/unit/test_context_datapath.py asserts those bytes still validate
+    # against it - the contract is checked where it can be checked once, not per request.
+    response_model=None,
     tags=["retrieval"],
     summary="Build a ContextBundle for the current turn",
-    responses=_ERRORS,
+    responses={200: {"model": ContextResponse, "description": "Successful Response"}, **_ERRORS},
 )
 async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> ContextResponse:
+) -> Response | ContextResponse:
     ctx = build_context(request, container, body.scope)
     builder = container.services["context_builder"]
+    if not body.answer:
+        # One serialisation for the whole request: a cache hit is the stored bytes, a miss is
+        # one dump. Parsing the cached bundle only to dump it, validate it and dump it again
+        # was most of what a 30-80 KB hit cost.
+        payload = await builder.build_api(
+            ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
+        )
+        return Response(content=payload, media_type="application/json")
+    # Grounding needs the bundle itself, so this arm keeps the model round trip.
+    cascade = container.services.get("grounding")
+    if cascade is None:
+        raise ProviderNotConfigured("the NLI classifier is disabled in this process")
     bundle = await builder.build(
         ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
     )
-    if body.answer:
-        cascade = container.services.get("grounding")
-        if cascade is None:
-            raise ProviderNotConfigured("the NLI classifier is disabled in this process")
-        bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
+    bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
     return ContextResponse.model_validate(bundle_to_api(bundle))
