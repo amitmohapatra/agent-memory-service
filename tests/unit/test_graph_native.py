@@ -18,6 +18,7 @@ from memory_service.domain.observation import Observation
 from memory_service.modules.graph.native import NativeGraphEnrichment, entity_id_for
 from memory_service.modules.graph.retrieval import fact_candidate
 from memory_service.modules.graph.service import query_terms
+from memory_service.modules.ingestion.context_graph import canonical_entity
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 from memory_service.modules.memory.pipeline import build_memory, keys_for, scope_for
 from memory_service.ports.intelligence import Entity, Relation
@@ -25,6 +26,9 @@ from memory_service.ports.intelligence import Entity, Relation
 pytestmark = pytest.mark.unit
 
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1", thread_id="thr_1")
+#: Outside a thread, where the turn is also kept verbatim (inside one the archive already
+#: holds every message, so _verbatim declines).
+CTX_LOOSE = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
 NOW = datetime(2026, 9, 15, tzinfo=UTC)
 
 
@@ -40,6 +44,7 @@ async def _memory(text: str, ctx=CTX):
         workspace_id=ctx.workspace_id,
         principal_id=ctx.principal_id,
         message_id="msg_1",
+        occurred_at=NOW,
     )
     cand = await native.classify((await native.extract(obs, ctx))[0], ctx)
     mem = build_memory(cand, ctx, now=NOW)
@@ -56,7 +61,10 @@ async def test_memory_enrichment_yields_typed_fact_and_mentions() -> None:
     fact = next(r for r in relations if r.predicate == "works_at")
     assert fact.subject_id == names["user:u1"].entity_id
     assert fact.object_id == names["acme corp"].entity_id
-    assert fact.memory_id == mem.memory_id and fact.fact_text == mem.content
+    assert fact.memory_id == mem.memory_id
+    # the triple and its date, not the turn: the memories section of a bundle already
+    # carries that turn verbatim, and a fact that repeats it spends ~60 tokens saying so
+    assert fact.fact_text == "2026-09-15 u1 works at acme corp"
     assert fact.visibility_keys == mem.system_metadata["visibility_keys"]
     assert fact.evidence[0].message_id == "msg_1"
     # deterministic ids: re-enrichment produces the same ids (upsert, not duplicate)
@@ -64,6 +72,33 @@ async def test_memory_enrichment_yields_typed_fact_and_mentions() -> None:
     assert {e.entity_id for e in again_entities} == {e.entity_id for e in entities}
     assert {r.relation_id for r in again_relations} == {r.relation_id for r in relations}
     assert names["acme corp"].entity_id == entity_id_for("acme", mem.scope.key(), "acme corp")
+
+
+async def test_principal_entities_answer_to_their_bare_name() -> None:
+    mem = await _memory("I work at ACME Corp.")
+    entities, _ = await NativeGraphEnrichment().enrich_memory(mem, CTX)
+    principal = next(e for e in entities if e.canonical_name == "user:u1")
+    # a question says "u1", never "user:u1", and find_entities matches canonical forms
+    # against canonical_name and aliases; without this the node every fact about the
+    # principal hangs off is unreachable from any query
+    assert principal.aliases == ["u1"]
+    assert all(a == canonical_entity(a) for e in entities for a in e.aliases)
+
+
+async def test_a_forwarded_transcript_header_mints_no_entities() -> None:
+    mem = await _memory(
+        "[1:56 pm on 8 May, 2023] Melanie: We went camping near Whistler.", CTX_LOOSE
+    )
+    # the header is stored with the turn - it is what was submitted - but it is not content
+    assert mem.content.startswith("[1:56 pm on 8 May, 2023] Melanie:")
+    entities, relations = await NativeGraphEnrichment().enrich_memory(mem, CTX_LOOSE)
+    names = {e.canonical_name for e in entities}
+    assert "whistler" in names
+    # "Melanie" is the speaker, not a thing the turn talks about. As a THING entity she
+    # resolved from a question naming her, in preference to her own principal node.
+    assert "melanie" not in names and not any("2023" in n for n in names)
+    mentions = next(r for r in relations if r.predicate == "mentions")
+    assert mentions.fact_text == "2026-09-15 u1 mentions Whistler"
 
 
 def _doc_fixture():

@@ -149,7 +149,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "confidence",
                 "status",
                 # when it was observed, so a renderer can order memories in time and show
-                # the date beside the fact - the model reads "[2023-05-08] Caroline: ..."
+                # the date beside the fact - the memories section prints the date, the
+                # weekday and the speaker once per line from this field and the subject,
                 # instead of a rank-ordered list with no time in it
                 "observed_at",
             )

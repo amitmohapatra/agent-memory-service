@@ -92,16 +92,57 @@ class EvidenceReport(BaseModel):
     llm_tokens: int = Field(default=0, description="LLM tokens spent building this report")
 
 
-def _memory_line(m: Any) -> str:
-    when = str(m.attributes.get("observed_at") or "")[:10]
+#: How many of the highest-ranked memories are repeated above the chronological timeline.
+#:
+#: Attention over a long context is measurably U-shaped: with the gold document first,
+#: in the middle, or last, accuracy is 75.8 / 53.8 / 63.2 per cent (arXiv 2307.03172).
+#: A strictly chronological list of a hundred memories drops the best-ranked evidence
+#: wherever its date happens to fall, which for most questions is the trough. Ten is the
+#: largest block that stays inside the first screen of the prompt, and the timeline keeps
+#: its full shape because the ten are replaced there by a one-line pointer rather than
+#: deleted: the ranking is added at the cost of ten short lines, not of a second copy.
+MOST_RELEVANT_MAX = 10
+
+#: What stands in the timeline for a memory printed in full under "Most relevant". Keeps
+#: the date, the weekday and the speaker in their chronological place - which is what the
+#: timeline is for - without paying for the body twice.
+SHOWN_ABOVE = "(see Most relevant)"
+
+
+def _observed(m: Any) -> tuple[str, str]:
+    """``("2023-05-08", "Mon")`` from the memory's observed_at; empty when it has none.
+
+    The weekday is what the model is worst at deriving and what LoCoMo's temporal questions
+    ask for ("the Sunday before 25 May 2023"), and it costs one token.
+    """
+    raw = str(m.attributes.get("observed_at") or "")
+    try:
+        when = datetime.fromisoformat(raw)
+    except ValueError:
+        return raw[:10], ""
+    return when.date().isoformat(), when.strftime("%a")
+
+
+def _memory_line(m: Any, *, body: str | None = None) -> str:
+    """One memory as one line: citation, date, weekday, speaker, text - each exactly once.
+
+    The speaker is the subject's user id (``user:caroline`` -> ``caroline``). Its original
+    casing is *not* recoverable here: the subject is written from the execution context's
+    user id, which is an identifier, and nothing carries the display name the speaker was
+    ingested under. Title-casing it would invent one and would mangle opaque ids, so the id
+    is printed as it is stored.
+    """
+    day, weekday = _observed(m)
     subject = str(m.attributes.get("subject") or "")
-    who = subject.split(":", 1)[-1] if subject.startswith("user:") else ""
-    lead = " ".join(x for x in (f"[{when}]" if when else "", f"{who}:" if who else "") if x)
-    return (
-        f"- [{m.citation}] {lead} {m.text}".replace("  ", " ")
-        if lead
-        else f"- [{m.citation}] {m.text}"
+    who = subject.split(":", 1)[1] if subject.startswith("user:") else ""
+    parts = (
+        f"- [{m.citation}]",
+        day,
+        weekday,
+        f"{who}:" if who else "",
+        m.text if body is None else body,
     )
+    return " ".join(p for p in parts if p)
 
 
 class ContextBundle(BaseModel):
@@ -137,11 +178,28 @@ class ContextBundle(BaseModel):
         if self.conversation.rendered:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         if self.memories:
+            # ``self.memories`` is the retrieval ranking, best first; the timeline below is a
+            # sorted copy, so both orders are available and neither is thrown away.
+            #
             # Oldest first, each with its date and who it is about. Every system that scores
             # well on conversational memory renders this way; a rank-ordered list with no
-            # time in it made the model anchor on position and fail date arithmetic.
+            # time in it made the model anchor on position and fail date arithmetic. But
+            # chronological alone discards the ranking entirely, and the position a memory
+            # then lands in decides how well it is read, so the best-ranked few are repeated
+            # above the timeline (see MOST_RELEVANT_MAX).
+            ranked = self.memories[:MOST_RELEVANT_MAX]
+            shown: set[str] = set()
+            if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
+                shown = {m.item_id for m in ranked}
+                parts.append("## Most relevant\n" + "\n".join(_memory_line(m) for m in ranked))
             ordered = sorted(self.memories, key=lambda m: str(m.attributes.get("observed_at", "")))
-            parts.append("## Memories\n" + "\n".join(_memory_line(m) for m in ordered))
+            parts.append(
+                "## Memories\n"
+                + "\n".join(
+                    _memory_line(m, body=SHOWN_ABOVE if m.item_id in shown else None)
+                    for m in ordered
+                )
+            )
         if self.graph_facts:
             parts.append(
                 "## Facts\n" + "\n".join(f"- [{f.citation}] {f.text}" for f in self.graph_facts)

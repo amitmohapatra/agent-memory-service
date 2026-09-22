@@ -161,7 +161,11 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory) -> No
     graph = container.services["graph"]
     first = await graph.query(ctx, entities=["ACME Corp"])
     fact = next(r for r in first.relations if r.predicate == "works_at")
-    assert fact.memory_id and fact.status == "CURRENT" and fact.fact_text == "I work at ACME Corp."
+    assert fact.memory_id and fact.status == "CURRENT"
+    # the fact reads as its own triple and date, not as the turn it came from: the bundle's
+    # memories section already carries that turn verbatim
+    day, _, triple = fact.fact_text.partition(" ")
+    assert triple == "u1 works at acme corp" and day == fact.observed_at.date().isoformat()
     # supersession: the new employer is current; the old fact is closed, visible as-of the past
     await _observe(container, uow_factory, ctx, "I work at Globex now.")
     now = await graph.query(ctx, entities=["Globex", "ACME Corp"])

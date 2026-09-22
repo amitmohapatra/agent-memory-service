@@ -121,9 +121,42 @@ def parse_date(text: str) -> datetime | None:
     return None
 
 
+#: A transcript line's own header: ``[1:56 pm on 8 May, 2023] Caroline: I moved to Paris.``
+#: Clients that forward a chat log write one, and it defeats every rule anchored at the
+#: start of a sentence - the fact pattern's subject group, the "please always/never"
+#: preference, the decision prefix, the chit-chat filter - because sentences split on .!?
+#: alone, so the header stays glued to the first sentence of the turn and that sentence is
+#: unparseable by construction.
+#:
+#: Both halves are deliberately narrow, because this runs on every observation of every
+#: tenant and a false positive silently deletes the start of the text extraction sees.
+#:
+#: The bracket must look like a timestamp, not merely hold a digit: it has to carry a clock
+#: time or a four-digit year, and it may not contain a colon followed by whitespace. That
+#: second condition is what saves an appended image caption, which is bracketed the same way
+#: and may itself carry a number - "[Shared an image: 2 dogs]", "[Shared an image of a 2018
+#: car: a red mustang]" - and which holds the only answer some questions have.
+#:
+#: The speaker is a name, at most three words long, not "anything up to a colon". Unbounded,
+#: it ate ordinary prose after a real header: "[8 May, 2023] I moved to Paris: it was great."
+#: left only "it was great.", losing the subject, the place and the fact. A bare
+#: "Decision: ship it" is a prefix this module understands, which is why the timestamp is
+#: required rather than the speaker alone.
+_TURN_PREFIX = re.compile(
+    r"^\s*\[(?=[^\]\n]{0,60}\])(?![^\]\n]*:\s)"
+    r"(?=[^\]\n]*(?:\d{1,2}:\d{2}|(?:19|20)\d{2}))[^\]\n]*\]"
+    r"[ \t]*(?:[^\W\d_][\w.'\-]*(?:[ \t][^\W\d_][\w.'\-]*){0,2}:[ \t]+)?"
+)
+
+
+def strip_turn_prefix(text: str) -> str:
+    """``text`` without its transcript header; unchanged when there is none."""
+    return _TURN_PREFIX.sub("", text, count=1)
+
+
 def split_sentences(text: str, *, max_sentences: int = 40) -> list[str]:
     out = []
-    for raw in _SENTENCE_SPLIT.split(text):
+    for raw in _SENTENCE_SPLIT.split(strip_turn_prefix(text)):
         s = raw.strip().strip("-•*# ").strip()
         if len(s) >= 8 and len(_WORD.findall(s.lower())) >= 3:
             out.append(s)
