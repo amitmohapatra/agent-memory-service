@@ -29,7 +29,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-# numpy arrives with qdrant-client, a core dependency, and again with onnxruntime.
 import numpy as np
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs

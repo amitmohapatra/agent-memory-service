@@ -24,6 +24,9 @@ dependencies = [
   "alembic>=1.20,<2",
   "procrastinate[psycopg]>=3.9,<4",
   "qdrant-client>=1.19,<2",
+  # The encoder's tensor path is numpy on the hot path; it has always arrived with
+  # qdrant-client, but a transitive dependency is not a contract.
+  "numpy>=1.26",
   "redis>=8.1,<9",
   "openfga-sdk>=0.10,<1",
   "zstandard>=0.25",
