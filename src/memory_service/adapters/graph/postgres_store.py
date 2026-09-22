@@ -10,11 +10,11 @@ idempotent, so a partial write is repaired by the next run.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Text, delete, func, or_, select, text, update
+from sqlalchemy import Select, Text, case, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -101,6 +101,70 @@ def _time_conditions(as_of: datetime | None, valid_at: datetime | None) -> list[
             )
         )
     return conds
+
+
+def neighborhood_query(
+    tenant_id: str,
+    frontier: Sequence[str],
+    *,
+    scope_keys: Sequence[str],
+    layers: Sequence[GraphLayer] | None,
+    as_of: datetime | None,
+    valid_at: datetime | None,
+    limit: int,
+) -> Select[tuple[GraphRelationRow]]:
+    """One hop of the traversal: the best edges out of ``frontier``, in a total order.
+
+    ORDER BY confidence alone is not an order here. Every MENTIONS edge is written at the
+    same capped confidence, so over a busy entity the LIMIT returned whichever of the tied
+    rows the scan reached first and the same question could be answered from a different
+    sample between runs. The neighbour's mention_count breaks the tie towards the entity
+    the corpus actually talks about, recency breaks what that leaves, and the relation id
+    makes the order total and reproducible.
+    """
+    ends = list(frontier)
+    neighbour = case(
+        (GraphRelationRow.subject_id.in_(ends), GraphRelationRow.object_id),
+        else_=GraphRelationRow.subject_id,
+    )
+    conds = [
+        GraphRelationRow.tenant_id == tenant_id,
+        or_(GraphRelationRow.subject_id.in_(ends), GraphRelationRow.object_id.in_(ends)),
+        _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+        *_time_conditions(as_of, valid_at),
+    ]
+    if layers:
+        conds.append(GraphRelationRow.layer.in_(list(layers)))
+    return (
+        select(GraphRelationRow)
+        .outerjoin(GraphEntityRow, GraphEntityRow.entity_id == neighbour)
+        .where(*conds)
+        .order_by(
+            GraphRelationRow.confidence.desc(),
+            func.coalesce(GraphEntityRow.mention_count, 0).desc(),
+            GraphRelationRow.observed_at.desc(),
+            GraphRelationRow.relation_id,
+        )
+        .limit(limit)
+    )
+
+
+def first_of_each_triple(
+    rows: Iterable[GraphRelationRow], seen: set[tuple[str, str, str]]
+) -> Iterator[GraphRelationRow]:
+    """The rows whose (subject, predicate, object) has not been seen yet.
+
+    A triple is written once per memory that states it, so an entity named in twenty turns
+    spends twenty of the neighbourhood's slots - and twelve of the bundle's fact lines -
+    saying one thing. ``seen`` carries across hops, and the row kept is the first in the
+    query's order, which is the most confident and most recent of them.
+    """
+    for r in rows:
+        triple = (r.subject_id, r.predicate, r.object_id)
+        if triple in seen:
+            continue
+        seen.add(triple)
+        yield r
 
 
 class PostgresGraphStore:
@@ -350,32 +414,27 @@ class PostgresGraphStore:
         visited: dict[str, None] = dict.fromkeys(entity_ids)
         frontier = list(entity_ids)
         relations: dict[str, GraphRelationRow] = {}  # rows; converted after the scope filter
+        triples: set[tuple[str, str, str]] = set()
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
             async with self.session() as s:
                 for _ in range(max(0, hops)):
                     if not frontier or len(visited) >= max_visited:
                         break
-                    conds = [
-                        GraphRelationRow.tenant_id == tenant_id,
-                        or_(
-                            GraphRelationRow.subject_id.in_(frontier),
-                            GraphRelationRow.object_id.in_(frontier),
-                        ),
-                        _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
-                        *_time_conditions(as_of, valid_at),
-                    ]
-                    if layers:
-                        conds.append(GraphRelationRow.layer.in_(list(layers)))
                     rows = (
                         await s.scalars(
-                            select(GraphRelationRow)
-                            .where(*conds)
-                            .order_by(GraphRelationRow.confidence.desc())
-                            .limit(max_visited * 3)
+                            neighborhood_query(
+                                tenant_id,
+                                frontier,
+                                scope_keys=scope_keys,
+                                layers=layers,
+                                as_of=as_of,
+                                valid_at=valid_at,
+                                limit=max_visited * 3,
+                            )
                         )
                     ).all()
                     next_frontier: list[str] = []
-                    for r in rows:
+                    for r in first_of_each_triple(rows, triples):
                         relations.setdefault(r.relation_id, r)
                         for eid in (r.subject_id, r.object_id):
                             if eid not in visited and len(visited) < max_visited:
