@@ -78,7 +78,7 @@ Lifted from the `VALIDATION_PROMPT*.md` series when those five files were remove
 2026-09-22 — 876 lines of which 843 were duplicated text, addressed to an agent rather than
 a reader, and naming an authoritative spec (`MASTER_MEMORY_SERVICE_IMPLEMENTATION_INSTRUCTION.md`)
 that has never existed in this repository. The rules they stated are recorded above and in
-CONTRIBUTING.md; this ordering was the one thing they held that was not written down
+../CONTRIBUTING.md; this ordering was the one thing they held that was not written down
 anywhere else.
 
 The tables below stay empty until each step is run with real weights and real services.

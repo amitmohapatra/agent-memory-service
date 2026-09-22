@@ -13,9 +13,9 @@ document says up front whether it describes something that exists or something p
 |---|---|
 | **use the service** | [README](../README.md) — the only document you need |
 | **call the HTTP API directly** | [openapi.json](openapi.json), or `/docs` on a running service |
-| **understand how it is built** | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| **understand how it is built** | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | **know why something is built that way** | [adr/](adr/) — one decision per file, with its trade-offs |
-| **contribute** | [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| **contribute** | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | **judge whether to trust a benchmark number** | [FINAL_REPORT.md](FINAL_REPORT.md) |
 
 ## What each document is

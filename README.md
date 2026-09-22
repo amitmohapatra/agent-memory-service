@@ -563,7 +563,7 @@ mid-job is detected and its work requeued; replay is safe because every write is
 dense retrieval fused with RRF → bounded cross-encoder rerank → context expansion over the
 document graph → evidence verification → abstain if still insufficient.
 
-More: [ARCHITECTURE.md](ARCHITECTURE.md) · design decisions in [docs/adr/](docs/adr/).
+More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · design decisions in [docs/adr/](docs/adr/).
 
 ---
 
@@ -613,4 +613,4 @@ make validate              # everything, then the release-gate evaluator
 `make validate` fails the build if any hard gate lacks evidence, and flags evidence produced
 with stand-in providers as non-representative. Gates are never relaxed to make a build pass.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and conventions.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for the workflow and conventions.
