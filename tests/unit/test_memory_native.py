@@ -113,13 +113,33 @@ def test_a_transcript_header_is_not_part_of_the_first_sentence() -> None:
     assert split_sentences(
         "[1:56 pm on 8 May, 2023] Caroline: Thanks for that. I moved to Paris."
     ) == ["Thanks for that.", "I moved to Paris."]
+    assert strip_turn_prefix("[1:56 pm on 8 May, 2023] Mary Jane Smith: hello there") == (
+        "hello there"
+    )
     # a prefix this module understands is not a header and must survive
     assert strip_turn_prefix("Decision: ship it on Friday") == "Decision: ship it on Friday"
-    # nor is an appended image caption, which is bracketed but carries no timestamp
-    assert strip_turn_prefix("[Shared an image of a dog: a labrador on a beach]") == (
-        "[Shared an image of a dog: a labrador on a beach]"
-    )
     assert strip_turn_prefix("no header at all") == "no header at all"
+
+
+def test_a_header_eats_neither_a_caption_nor_the_first_clause_of_prose() -> None:
+    # An image caption is bracketed like a header and, for ten answerable LoCoMo questions,
+    # holds the only copy of the answer. A digit in the bracket is not enough to tell the
+    # two apart: a caption counts things and names model years.
+    for caption in (
+        "[Shared an image of a dog: a labrador on a beach]",
+        "[Shared an image: 2 dogs]",
+        "[Shared an image of 2 women: two women smiling]",
+        "[Shared an image of a 2018 car: a red mustang]",
+    ):
+        assert strip_turn_prefix(caption) == caption
+    # After a real header the speaker is a name, so ordinary prose that happens to contain a
+    # colon keeps its first clause - the subject, the place and the fact all live there.
+    assert strip_turn_prefix("[8 May, 2023] I moved to Paris: it was great.") == (
+        "I moved to Paris: it was great."
+    )
+    assert strip_turn_prefix("[2023-05-08] Caroline: I moved to Paris: it was great.") == (
+        "I moved to Paris: it was great."
+    )
 
 
 # --- extraction ---------------------------------------------------------------------------
