@@ -17,7 +17,8 @@ from memory_service.adapters.models.embeddings import HashEmbedding
 from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
-from memory_service.config.settings import RetrievalSettings, SearchSettings
+from memory_service.config.constants import RetrievalSettings
+from memory_service.config.settings import SearchSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
 from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
@@ -96,7 +97,7 @@ class _NoUoW:
 
 @pytest.fixture(scope="module")
 async def engine_and_ids() -> tuple[RetrievalEngine, dict[str, dict[str, Any]]]:
-    store = QdrantSearchStore(SearchSettings(provider="memory", qdrant_local_path=":memory:"))
+    store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = HashEmbedding(dimension=32)
     sparse = Bm25SparseEncoder()
     indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]

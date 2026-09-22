@@ -1,56 +1,100 @@
 import pytest
 from pydantic import ValidationError
 
+from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.config.settings import Settings
 
 
 def test_defaults_are_cpu_first_and_llm_disabled() -> None:
     s = Settings(_env_file=None)
     assert s.models.llm.enabled is False
-    assert s.models.embedding.model == "ibm-granite/granite-embedding-small-english-r2"
-    assert s.retrieval.bm25 and s.retrieval.dense and s.retrieval.fusion == "rrf"
-    # `splade` is the one remaining benchmark-gated retrieval experiment. The other seven
-    # (colbert, pageindex, raptor, graph_ppr, late_chunking, minicoil, graphrag_global) were
-    # removed rather than left off: each named a capability something already-on provides,
-    # so keeping them meant carrying code and configuration that could only ever be verified
-    # to do nothing new.
-    assert s.retrieval.splade is False, "splade must be benchmark-gated (off by default)"
+    assert FROZEN_MODELS.dense.id == "ibm-granite/granite-embedding-small-english-r2"
+    assert FROZEN_MODELS.dense.dimension == 384 and FROZEN_MODELS.dense.backend == "torch"
+    assert FROZEN_MODELS.reranker is None, "no reranker ships (SciFact -5.2 nDCG, p=0.012)"
+    assert RETRIEVAL.bm25 and RETRIEVAL.dense and RETRIEVAL.exact and RETRIEVAL.graph
     # `rerank` is off on measured evidence, not on caution — see RetrievalSettings.rerank.
-    assert s.retrieval.rerank is False
+    assert RETRIEVAL.rerank is False
+
+
+def test_todays_depth_is_the_frozen_depth() -> None:
+    """Phase 1 freezes the numbers; it does not move them. The 1.25x derivation is Phase 2."""
+    assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (100, 100, 50)
+    assert (CONTEXT.memories_max, CONTEXT.token_budget) == (50, 8000)
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MEMORY__CACHE__PROVIDER", "valkey")
-    monkeypatch.setenv("MEMORY__RETRIEVAL__RRF_K", "42")
+    monkeypatch.setenv("MEMORY__DATABASE__POOL_SIZE", "3")
+    monkeypatch.setenv("MEMORY__SERVICE__LOG_LEVEL", "WARNING")
     s = Settings(_env_file=None)
-    assert s.cache.provider == "valkey"
-    assert s.retrieval.rrf_k == 42
+    assert s.database.pool_size == 3
+    assert s.service.log_level == "WARNING"
 
 
-def test_yaml_file_source(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # _env_file=None isolates the test from a developer's .env, which legitimately outranks
-    # the YAML source and would otherwise decide the assertions below.
-    cfg = tmp_path / "memory.yaml"
-    cfg.write_text("search:\n  provider: memory\nmodels:\n  llm:\n    enabled: false\n")
-    monkeypatch.setenv("MEMORY_CONFIG_FILE", str(cfg))
-    monkeypatch.delenv("MEMORY__SEARCH__PROVIDER", raising=False)
-    s = Settings(_env_file=None)
-    assert s.search.provider == "memory"
-    # env still wins over yaml
-    monkeypatch.setenv("MEMORY__SEARCH__PROVIDER", "qdrant")
-    assert Settings(_env_file=None).search.provider == "qdrant"
+def test_env_beats_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real environment variable outranks ``.env``: compose sets the topology through
+    ``environment:`` and an operator's copied-in line must not be able to shadow it."""
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("MEMORY__DATABASE__POOL_SIZE=7\nMEMORY__SERVICE__PORT=9999\n")
+    monkeypatch.delenv("MEMORY__DATABASE__POOL_SIZE", raising=False)
+    monkeypatch.setenv("MEMORY__SERVICE__PORT", "8181")
+    s = Settings(_env_file=str(dotenv))
+    assert s.database.pool_size == 7, ".env is still read"
+    assert s.service.port == 8181, "the environment wins over .env"
+
+
+def test_the_test_stand_ins_are_not_settings() -> None:
+    """A deployment cannot be pointed at an in-memory queue, a dict cache or a hash embedding
+    by an env file.
+
+    ``cache.provider=memory``, ``search.provider=memory``, ``tasks.provider=inline`` and
+    ``models.embedding.provider=hash`` were settings, so the suite's stand-ins were part of
+    the operator surface. They are ``build_container(overrides=...)`` now, reachable from
+    code only.
+    """
+    from memory_service.config.settings import (
+        AuthorizationSettings,
+        CacheSettings,
+        EmbeddingSettings,
+        SearchSettings,
+        TaskSettings,
+    )
+
+    for section in (CacheSettings, SearchSettings, TaskSettings, AuthorizationSettings):
+        assert "provider" not in section.model_fields, section.__name__
+    assert "qdrant_local_path" not in SearchSettings.model_fields
+    assert set(EmbeddingSettings.model_fields) == {"threads"}
+
+
+def _leaves(model: type, prefix: str = "") -> list[str]:
+    import typing
+
+    from pydantic import BaseModel
+
+    out: list[str] = []
+    for name, field in model.model_fields.items():
+        ann = field.annotation
+        args = [a for a in typing.get_args(ann) if a is not type(None)]
+        base = args[0] if args and typing.get_origin(ann) is typing.Union else ann
+        if isinstance(base, type) and issubclass(base, BaseModel):
+            out += _leaves(base, f"{prefix}{name}.")
+        else:
+            out.append(f"{prefix}{name}")
+    return out
+
+
+def test_the_environment_surface_is_topology_and_credentials_only() -> None:
+    """206 leaf fields became ~40: every model, depth, budget, timeout and threshold is a
+    constant now (config/constants.py). Growing this number needs a reason that is about a
+    deployment, not about tuning."""
+    leaves = _leaves(Settings)
+    assert len(leaves) <= 40, f"{len(leaves)} env fields: {leaves}"
+    for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
+        assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 
 
 def test_prod_guards_reject_dev_only_providers() -> None:
     with pytest.raises(ValueError, match="trusted_dev"):
         Settings(_env_file=None, service={"environment": "prod"})
-    with pytest.raises(ValueError, match="authorization.provider=memory"):
-        Settings(
-            _env_file=None,
-            service={"environment": "prod"},
-            authentication={"mode": "jwt"},
-            authorization={"provider": "memory"},
-        )
     with pytest.raises(ValueError, match="blob.provider"):
         Settings(
             _env_file=None,
@@ -71,11 +115,34 @@ def test_llm_enabled_requires_a_model() -> None:
     assert Settings(_env_file=None, models={"llm": {"enabled": False}}).models.llm.enabled is False
 
 
-def test_redacted_hides_secrets() -> None:
-    s = Settings(_env_file=None, authorization={"openfga_api_token": "supersecret"})
-    dumped = s.redacted()
-    assert "supersecret" not in str(dumped)
-    assert "trusted_dev_api_keys" not in dumped["authentication"]
+def test_secrets_are_masked() -> None:
+    """Every credential is a SecretStr and ``redacted()`` shows none of them. database.url
+    was a plain str that redacted() did not mask: a /version response carried the password."""
+    scheme = "postgresql+psycopg://"
+    s = Settings(
+        _env_file=None,
+        database={"url": scheme + "memory:hunter2@db:5432/memory"},
+        cache={"url": "redis://:cachepass@cache:6379/0"},
+        search={"qdrant_api_key": "qdrantsecret"},
+        authorization={"openfga_api_token": "supersecret"},
+        authentication={"trusted_dev_api_keys": ["devsecret"]},
+        models={"llm": {"api_key": "virtualkey"}},
+    )
+    dumped = str(s.redacted())
+    for secret in (
+        "hunter2",
+        "cachepass",
+        "qdrantsecret",
+        "supersecret",
+        "devsecret",
+        "virtualkey",
+    ):
+        assert secret not in dumped, secret
+    # the adapters still get the real value, in both spellings
+    assert "hunter2" in s.database.dsn and s.database.dsn.startswith(scheme)
+    assert (
+        "hunter2" in s.database.procrastinate_dsn and "+psycopg" not in s.database.procrastinate_dsn
+    )
 
 
 # --------------------------------------------------- an LLM that would call nothing
@@ -86,7 +153,7 @@ def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
 
     ``uses`` defaults to empty and ``wants()`` requires membership, so
     ``enabled=true`` on its own started cleanly, reported ``"llm": "bifrost"`` on
-    /version, and sent the gateway nothing at all. All eleven paths quietly took their
+    /version, and sent the gateway nothing at all. All ten paths quietly took their
     native fallback, and the only way to notice was that the token metrics never moved.
     """
     with pytest.raises(ValidationError, match="nothing would call the model"):

@@ -13,14 +13,14 @@ answer is not a working profile.
 
 from __future__ import annotations
 
-import json
 import uuid
+from dataclasses import replace
 
 import pytest
 from sqlalchemy import text
 
 from memory_service import __version__
-from memory_service.application.container import build_container
+from memory_service.application.container import Overrides, build_container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
@@ -29,91 +29,65 @@ from tests.integration.conftest import PG_AVAILABLE, TABLES
 
 pytestmark = [pytest.mark.contract, pytest.mark.usefixtures()]
 
-#: name -> settings overrides. Everything not named here stays at the suite's hermetic default.
-PROFILES: dict[str, dict] = {
+#: name -> (settings sections, stand-ins). Everything not named stays at the suite's default.
+#: The stand-ins are ``build_container`` overrides, not settings: a deployment cannot reach
+#: the in-memory queue or the dict cache through an env file, only a test can.
+PROFILES: dict[str, tuple[dict, Overrides]] = {
     # what CI and a laptop run: nothing outside the process
-    "all-in-process": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-    },
+    "all-in-process": (
+        {},
+        Overrides(cache="memory", tasks="memory", search="memory", blob="memory"),
+    ),
     # the dev stack shape: real cache and real vector store
-    "server-backed": {
-        "cache": {"provider": "dragonfly"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "qdrant"},
-        "blob": {"provider": "memory"},
-    },
+    "server-backed": ({}, Overrides(tasks="memory", blob="memory")),
     # a cache outage must degrade, not fail: the canonical store still answers
-    "no-cache": {
-        "cache": {"provider": "disabled"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-    },
+    "no-cache": ({}, Overrides(cache="disabled", tasks="memory", search="memory", blob="memory")),
     # graph enrichment is optional; memories must still land without it
-    "no-graph": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "graph_enrichment": {"provider": "disabled"},
-    },
-    # the model tier deployed separately: nothing loads weights in this process
-    "remote-models": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {
-            "embedding": {"dimension": 3},
-            "reranker": {},
-            "nli": {},
-        },
-    },
-    # no generative model at all — the rule-based path has to carry the service
-    "no-llm": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {"llm": {"enabled": False}},
-    },
+    "no-graph": (
+        {},
+        Overrides(
+            cache="memory",
+            tasks="memory",
+            search="memory",
+            blob="memory",
+            graph_enrichment="disabled",
+        ),
+    ),
+    # no generative model at all - the rule-based path has to carry the service
+    "no-llm": (
+        {"models": {"llm": {"enabled": False}}},
+        Overrides(cache="memory", tasks="memory", search="memory", blob="memory"),
+    ),
 }
 
 
 @pytest.fixture(params=sorted(PROFILES), ids=lambda n: n)
-def profile(request: pytest.FixtureRequest) -> tuple[str, dict]:
-    return request.param, PROFILES[request.param]
+def profile(request: pytest.FixtureRequest) -> tuple[str, dict, Overrides]:
+    return (request.param, *PROFILES[request.param])
 
 
 async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path) -> None:
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
-    name, overrides = profile
-    server = None
-    if name == "remote-models":
-        # a real inference server on a real socket: the point of this profile is that the
-        # process loads no weights at all, so a stand-in adapter would prove nothing
-        from tests.contract.test_remote_models import FakeTEI
-
-        server = FakeTEI()
-        server.__enter__()
-        overrides = json.loads(json.dumps(overrides))
-        for section in overrides["models"].values():
-            section["url"] = server.url
+    name, profile_sections, stand_ins = profile
     sections: dict = {
         "database": {"url": DB_URL},
         "blob": {"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     }
-    for key, value in overrides.items():  # the profile wins over the defaults above
+    for key, value in profile_sections.items():  # the profile wins over the defaults above
         sections[key] = {**sections.get(key, {}), **value} if isinstance(value, dict) else value
-    if sections["blob"].get("provider") == "memory":
-        sections["blob"] = {"provider": "memory"}
     settings = make_settings(**sections)
+    # the suite's model stand-ins apply to every profile; the profile decides the stores
+    stand_ins = replace(
+        stand_ins,
+        authorization="memory",
+        embedding="hash",
+        reranker="lexical",
+        nli="lexical",
+        document_parser="builtin",
+    )
 
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=stand_ins)
     try:
         async with container.database.engine.begin() as conn:
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
@@ -147,28 +121,3 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
         )
     finally:
         await container.close()
-        if server is not None:
-            server.__exit__()
-
-
-async def test_a_profile_that_cannot_work_is_refused_at_startup(make_settings, tmp_path) -> None:
-    """Misconfiguration must fail while someone is watching.
-
-    A provider that needs a generative model, in a deployment that has none, is not a runtime
-    surprise to discover on the first request — it is a startup error. This is the property
-    that makes the combination space safe to leave large: the impossible corners refuse
-    themselves.
-    """
-    if not PG_AVAILABLE:
-        pytest.skip("PostgreSQL not reachable")
-    settings = make_settings(
-        database={"url": DB_URL},
-        cache={"provider": "memory"},
-        tasks={"provider": "memory"},
-        search={"provider": "memory"},
-        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
-        graph_enrichment={"provider": "graphiti"},
-        models={"llm": {"enabled": False}},
-    )
-    with pytest.raises(NotImplementedError, match="requires an LLM"):
-        await build_container(settings, __version__)

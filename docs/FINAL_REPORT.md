@@ -55,7 +55,7 @@ their adapters refuse to run without local weights rather than degrade silently.
 
 ## Verified end to end over HTTP (`examples/`)
 
-`examples/run_server.sh` starts a real server (PostgreSQL, Redis, inline jobs);
+`examples/serve.py` starts a real server (PostgreSQL, Redis, inline jobs);
 `examples/sdk_tour.py` runs 14 checks covering every SDK method and every API route
 (threads, messages, history, files, documents, jobs, recall, context with evidence gating,
 observe/remember/list/get/forget, consolidation with temporal history, agent-run lineage
@@ -115,7 +115,7 @@ PostgreSQL, a per-tenant rate limit with a shared counter that fails open, and t
 ```bash
 make validate            # lint, types, every suite, all gate artifacts, then the evaluator
 make gates               # only the artifacts under benchmark/results/
-uv run python -m memory_service.tools.release_gate
+uv run python -m benchmark.release_gate
 ```
 
 With real weights in `models/` and the compose stack up (`make dev-up`), set the

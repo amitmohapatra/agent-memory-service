@@ -1,6 +1,6 @@
 """One contract, every SearchStore adapter.
 
-``search.provider`` chooses between an embedded Qdrant (``:memory:``) and a Qdrant server.
+the ``local_path`` override chooses between an embedded Qdrant (``:memory:``) and a server.
 They are the same adapter against different backends, and retrieval correctness depends on
 both behaving identically: tenant isolation is enforced by the filter, deletes really remove,
 and hybrid fusion returns something ranked rather than one retriever's list.
@@ -30,10 +30,9 @@ ADAPTERS = ("embedded", "server")
 def _build(name: str):
     from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 
-    settings = SearchSettings()
-    if name == "embedded":
-        settings = settings.model_copy(update={"qdrant_local_path": ":memory:"})
-    return QdrantSearchStore(settings)
+    return QdrantSearchStore(
+        SearchSettings(), local_path=":memory:" if name == "embedded" else None
+    )
 
 
 @pytest_asyncio.fixture(params=ADAPTERS, loop_scope="function")

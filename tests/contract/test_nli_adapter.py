@@ -1,12 +1,12 @@
 """NLI provider contract: index-aligned scores that sum to one, deterministic, and the
-DeBERTa adapter against real weights when ``MEMORY_MODELS_DIR`` holds them."""
+DeBERTa adapter against real weights when ``BENCH_MODELS_DIR`` holds them."""
 
 from __future__ import annotations
 
 import pytest
 
 from memory_service.adapters.models.nli import LexicalNLI
-from memory_service.config.settings import NLISettings
+from memory_service.config.constants import NLIModel
 from memory_service.ports.models import NLIProvider
 
 pytestmark = pytest.mark.contract
@@ -45,14 +45,14 @@ async def test_lexical_nli_contract() -> None:
 
 @pytest.mark.models
 async def test_deberta_real_weights_contract() -> None:
-    """Runs only when the DeBERTa weights are present (MEMORY_MODELS_DIR)."""
+    """Runs only when the DeBERTa weights are present (BENCH_MODELS_DIR)."""
     from tests.support_models import requires_torch, requires_weights
 
     requires_torch()
     path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
     from memory_service.adapters.models.nli import TransformersNLI
 
-    nli = TransformersNLI(NLISettings(model_path=str(path), batch_size=2))
+    nli = TransformersNLI(NLIModel(model_path=str(path), batch_size=2))
     await _contract(nli)
     assert nli.representative is True
     assert nli.fingerprint() == "nli-deberta-v3-base-mnli-fever-anli"

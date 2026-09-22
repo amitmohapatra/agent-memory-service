@@ -29,7 +29,6 @@ dependencies = [
   "zstandard>=0.25",
   "orjson>=3.12",
   "structlog>=25.2",
-  "pyyaml>=6",
   "httpx>=0.28",
   # The gateway client, shared with the agent harness so its retry and rate-limit
   # handling has one implementation rather than two that drift.
@@ -53,20 +52,13 @@ gcp = ["google-cloud-storage>=3.14", "google-auth>=2"]
 docling = ["docling>=2.127", "docling-graph>=1.9"]
 # Local CPU embedding / reranking runtimes
 models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "fastembed>=0.8", "onnxruntime>=1.30", "optimum>=2.3"]
-# Memory-intelligence challengers (benchmark only; never the public contract)
-memory-providers = ["mem0ai>=2.0", "langmem>=0.0.30"]
-cognee = ["cognee>=1.5"]
-# Temporal knowledge-graph enrichment
-graphiti = ["graphiti-core>=0.30"]
 # Evaluation frameworks
 eval = ["deepeval>=4.2", "ragas>=0.4", "datasets>=3", "nltk>=3.9"]
-# Vectorless tree retrieval (benchmark-gated)
-pageindex = ["pageindex>=0.2"]
 # Load testing
 load = ["locust>=2.46"]
 # Everything except dev tooling
 all = [
-  "memory-service[gcp,docling,models,memory-providers,cognee,graphiti,eval,pageindex,load]",
+  "memory-service[gcp,docling,models,eval,load]",
 ]
 
 [dependency-groups]
@@ -91,7 +83,6 @@ dev = [
 [project.scripts]
 memory-api = "memory_service.__main__:run_api"
 memory-worker = "memory_service.__main__:run_worker"
-memory-model = "memory_service.tools.model_server:run"
 
 [build-system]
 requires = ["hatchling>=1.27"]

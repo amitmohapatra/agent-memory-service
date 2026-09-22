@@ -11,7 +11,8 @@ from memory_service.adapters.models.embeddings import HashEmbedding
 from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
-from memory_service.config.settings import RetrievalSettings, SearchSettings
+from memory_service.config.constants import RetrievalSettings
+from memory_service.config.settings import SearchSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -59,7 +60,7 @@ class _NoUoW:
 
 @pytest.fixture
 async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchStore]:
-    store = QdrantSearchStore(SearchSettings(provider="memory", qdrant_local_path=":memory:"))
+    store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = _SpyEmbedding()
     sparse = Bm25SparseEncoder()
     indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]

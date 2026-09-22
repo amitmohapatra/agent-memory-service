@@ -99,7 +99,7 @@ async def test_a_single_enormous_line_is_split_rather_than_stored_whole(
         ctx, "quick brown fox", kinds=("chunk",)
     )
     assert result.candidates, "nothing was indexed"
-    budget = container.settings.documents.max_chunk_tokens
+    budget = container.tuning.documents.max_chunk_tokens
     for candidate in result.candidates:
         # ~4 characters per token; a chunk must not exceed the budget by more than the
         # overlap allowance, or it will be truncated by the encoder without anyone noticing

@@ -131,6 +131,25 @@ def test_resolve_cmd_falls_back_to_the_interpreter_entrypoint(monkeypatch) -> No
     assert deployed.resolve_cmd("memory-worker", python=sys.executable) == ["memory-worker"]
 
 
+def test_api_argv_binds_the_spawned_api_to_loopback(monkeypatch) -> None:
+    """``memory-api`` binds ``constants.HOST`` (every interface, for the container); the
+    API this tool spawns next to itself is told the host and port on the command line."""
+    argv = deployed.api_argv("memory-api", 8123, python="py")
+    assert argv == [
+        "py",
+        "-m",
+        "uvicorn",
+        deployed.API_FACTORY,
+        "--factory",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8123",
+    ]
+    monkeypatch.setattr(deployed.shutil, "which", lambda _name: "/bin/uv")
+    assert deployed.api_argv("uv run memory-api", 8123) == ["uv", "run", "memory-api"]
+
+
 def test_network_providers_representativeness() -> None:
     version = {"providers": {"embedding": "hash:hash", "search": "qdrant", "cache": "dragonfly"}}
     out = deployed.network_providers(version)

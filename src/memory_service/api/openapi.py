@@ -25,8 +25,8 @@ tenant / workspace / user / group / thread / agent *before* any model sees data.
 rather than pretending retrieval succeeded.
 
 ### Authentication
-The calling *service* authenticates with one of `trusted_dev` (API key, dev only), `jwt`,
-`gcp_iam` or `mtls`. The end-user identity and scope travel in trusted context headers
+The calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`
+(JWKS). The end-user identity and scope travel in trusted context headers
 (`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`, `X-Memory-Groups`) which are
 only honored from an authenticated caller. Fine-grained authorization is evaluated by
 OpenFGA on every request.
@@ -103,7 +103,7 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "jwt / gcp_iam modes",
+            "description": "jwt mode",
         },
     }
     schema["security"] = [{"ApiKeyAuth": []}, {"BearerAuth": []}]

@@ -7,8 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-
-from memory_service.tools import release_gate
+from benchmark import release_gate
 
 pytestmark = pytest.mark.unit
 
@@ -213,7 +212,7 @@ def test_a_retired_measurement_is_not_silently_ignored() -> None:
     catches it; if this one quietly reappears here without an ADR, that is the same mistake
     in reverse.
     """
-    gate = Path("src/memory_service/tools/release_gate.py").read_text()
+    gate = Path("benchmark/release_gate.py").read_text()
     adr = Path("docs/adr/0018-tool-memory.md").read_text()
     assert (
         "cache_violations"

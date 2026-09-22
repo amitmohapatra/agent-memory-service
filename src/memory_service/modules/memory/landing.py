@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import DERIVED_MEMORY_TYPES, CanonicalMemory

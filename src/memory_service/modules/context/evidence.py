@@ -20,7 +20,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from memory_service.config.settings import RetrievalSettings
+from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ContextGraphEdge, EvidenceStatus, QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification

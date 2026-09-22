@@ -38,7 +38,7 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 | Layer | Contains | Depends on |
 |---|---|---|
 | `domain` | `MemoryExecutionContext`, `CanonicalMemory`, `Scope`, `Visibility`, `TemporalState`, `EvidenceRef`, conversation and document models, `ContextBundle`, errors | nothing |
-| `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `PolicyProvider`, `EmbeddingProvider`, `SparseEncoder`, `Reranker`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
+| `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `Reranker`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
 | `application` | composition root (`Container`), use-case orchestration | domain, ports |
 | `modules/*` | feature slices: conversation, working_memory, ingestion, classification, extraction, dedup, consolidation, temporal, metadata, rag, document_context, graph, retrieval, context, summarization, reflection, lifecycle, archive, evaluation, imports | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
@@ -51,7 +51,7 @@ HOT      Dragonfly      recent thread, working memory, caches (never source of t
 WARM     PostgreSQL     threads/sessions/turns/messages, observations, canonical memories,
                         evidence refs, documents/nodes/chunks metadata, jobs, revisions,
                         archive manifests, eval metadata
-SEARCH   Qdrant         BM25 sparse + dense (+ optional SPLADE/ColBERT) — rebuildable
+SEARCH   Qdrant         BM25 sparse + dense — rebuildable
 ARCHIVE  GCS            raw chat segments (JSONL+zstd), raw files, imports, old versions
 ```
 

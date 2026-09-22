@@ -93,7 +93,7 @@ async def corpus(container, uow_factory):
     # capability surviving without it. The flags are gone, so there is nothing left to assert
     # off — but the proofs must keep running, or the removal stops being justified by anything
     # and becomes a claim in a document.
-    cfg = container.settings.retrieval
+    cfg = container.tuning.retrieval
     removed = {
         "raptor",
         "graphrag_global",
@@ -213,7 +213,7 @@ async def test_precision_over_a_distractor_without_colbert(container, corpus) ->
 async def test_definitions_and_footnotes_still_expand(container, corpus) -> None:
     """The expansion kinds that are always on, and that answer-time referent resolution
     depends on — the other half of what late chunking is credited with."""
-    cfg = container.settings.retrieval
+    cfg = container.tuning.retrieval
     assert cfg.definition_expansion and cfg.parent_expansion and cfg.neighbor_expansion
     ctx, _ = corpus
     result = await container.services["retrieval"].retrieve(

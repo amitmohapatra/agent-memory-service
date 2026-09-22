@@ -61,13 +61,13 @@ def test_body_limit_returns_envelope(client: TestClient) -> None:
     assert r.json()["error"]["code"] == "VALIDATION"
 
 
-def test_domain_error_maps_to_envelope(settings) -> None:
+def test_domain_error_maps_to_envelope(settings, overrides) -> None:
     from fastapi import APIRouter
 
     from memory_service.api.app import create_app
     from memory_service.domain.errors import DependencyUnavailable, ScopeDenied
 
-    app = create_app(settings)
+    app = create_app(settings, overrides=overrides)
     router = APIRouter()
 
     @router.get("/boom-scope")

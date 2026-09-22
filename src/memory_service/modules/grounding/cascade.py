@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from memory_service.config.settings import NLISettings
+from memory_service.config.constants import NLISettings
 from memory_service.domain.context_bundle import ContextBundle
 from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
 from memory_service.modules.grounding.lexical import content_tokens, coverage, words

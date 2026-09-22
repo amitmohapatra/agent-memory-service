@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from memory_service.adapters.graph.memory_store import MemoryGraphStore
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.enums import ObservationKind, Representation

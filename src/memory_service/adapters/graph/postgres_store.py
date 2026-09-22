@@ -18,13 +18,13 @@ from sqlalchemy import Text, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from memory_service.adapters.db.orm import GraphEntityAliasRow, GraphEntityRow, GraphRelationRow
+from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
 from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.intelligence import Entity, EntityAlias, GraphNeighborhood, Relation
+from memory_service.ports.intelligence import Entity, GraphNeighborhood, Relation
 
 
 def _keys_clause(column: Any, keys: Sequence[str]) -> Any:
@@ -76,16 +76,6 @@ def _relation(r: GraphRelationRow) -> Relation:
 
 def _ev(evidence: Sequence[EvidenceRef]) -> list[dict[str, Any]]:
     return [json.loads(e.model_dump_json(exclude_none=True)) for e in evidence]
-
-
-def _alias(r: GraphEntityAliasRow) -> EntityAlias:
-    return EntityAlias(
-        tenant_id=r.tenant_id,
-        alias=r.alias,
-        entity_id=r.entity_id,
-        confidence=r.confidence,
-        source=r.source,
-    )
 
 
 def _time_conditions(as_of: datetime | None, valid_at: datetime | None) -> list[Any]:

@@ -11,8 +11,20 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
+from memory_service.config import constants
+from memory_service.config.constants import (
+    ArchiveSettings,
+    ContextSettings,
+    CrossEncoderModel,
+    DenseModel,
+    DocumentSettings,
+    GraphSettings,
+    MemoryIntelligenceSettings,
+    NLISettings,
+    RetrievalSettings,
+)
 from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
 from memory_service.observability.logging import get_logger
@@ -30,10 +42,114 @@ class Dependency:
     close: Callable[[], Awaitable[None]] | None = None
 
 
+@dataclass(frozen=True)
+class Overrides:
+    """In-process stand-ins for the backing stores and models, and replacements for the
+    frozen tuning, for tests and benchmarks.
+
+    None of these is reachable from the environment. They used to be provider values in
+    ``Settings`` (``cache.provider=memory``, ``models.embedding.provider=hash``,
+    ``tasks.provider=inline``), which made the test suite's stand-ins part of the operator's
+    configuration surface: a deployment could be pointed at an in-memory queue by a typo in
+    an env file. The shipped service has exactly one implementation per port; a test that
+    needs something else says so here, in code, when it builds its container.
+
+    ``None`` means "the real adapter, from ``Settings``" or "the constant from
+    ``config/constants.py``".
+    """
+
+    #: ``memory``: a dict-backed cache. ``disabled``: no cache at all, which the service
+    #: must degrade under (every read falls through to the canonical store).
+    cache: Literal["memory", "disabled"] | None = None
+    #: ``memory``: qdrant-client local mode (``:memory:``) in this process. Exact brute-force
+    #: scan, no HNSW: fine for a fixture-sized corpus, quietly O(n) beyond that.
+    search: Literal["memory"] | None = None
+    #: A directory for qdrant-client local mode when the vectors must outlive the process.
+    search_local_path: str | None = None
+    #: ``inline``: run each job as soon as the outbox relay dispatches it. ``memory``: record
+    #: jobs and run them on ``drain()``.
+    tasks: Literal["inline", "memory"] | None = None
+    #: an in-process authorization model instead of OpenFGA
+    authorization: Literal["memory"] | None = None
+    #: a dict-backed blob store instead of the filesystem / GCS
+    blob: Literal["memory"] | None = None
+    #: the in-memory knowledge-graph store instead of PostgreSQL
+    graph_store: Literal["memory"] | None = None
+    #: ``hash``: a deterministic feature-hashed embedding - a labelled *non-representative*
+    #: stand-in that loads no weights
+    embedding: Literal["hash"] | None = None
+    embedding_dimension: int = 64
+    #: a specific dense encoder in place of the frozen one (benchmark challengers only)
+    dense_model: DenseModel | None = None
+    #: ``lexical``: BM25-style overlap; ``cross_encoder``: the given model, loaded whatever
+    #: ``retrieval.rerank`` says (the benchmark that measures it); ``disabled``: none
+    reranker: Literal["lexical", "cross_encoder", "disabled"] | None = None
+    reranker_model: CrossEncoderModel | None = None
+    #: ``lexical``: token coverage mapped onto NLI scores (never representative)
+    nli: Literal["lexical", "disabled"] | None = None
+    #: the text parser instead of docling
+    document_parser: Literal["builtin"] | None = None
+    #: no graph enrichment at all (memories must still land without it)
+    graph_enrichment: Literal["disabled"] | None = None
+    # ---- frozen tuning replaced for one container --------------------------------------
+    retrieval: RetrievalSettings | None = None
+    context: ContextSettings | None = None
+    memory_intelligence: MemoryIntelligenceSettings | None = None
+    documents: DocumentSettings | None = None
+    graph: GraphSettings | None = None
+    archive: ArchiveSettings | None = None
+    nli_settings: NLISettings | None = None
+
+    def summary(self) -> dict[str, str]:
+        """The stand-ins in force, for the startup log and /version."""
+        pairs = (
+            ("cache", self.cache),
+            ("search", self.search or self.search_local_path),
+            ("tasks", self.tasks),
+            ("authorization", self.authorization),
+            ("blob", self.blob),
+            ("graph_store", self.graph_store),
+            ("embedding", self.embedding or (self.dense_model and self.dense_model.id)),
+            ("reranker", self.reranker),
+            ("nli", self.nli),
+            ("document_parser", self.document_parser),
+            ("graph_enrichment", self.graph_enrichment),
+        )
+        return {name: str(value) for name, value in pairs if value}
+
+
+@dataclass(frozen=True)
+class Tuning:
+    """The stage tuning a container runs with: the constants, unless an override replaced
+    one. Read this, never ``constants`` directly, wherever a test may want a different value."""
+
+    retrieval: RetrievalSettings
+    context: ContextSettings
+    memory_intelligence: MemoryIntelligenceSettings
+    documents: DocumentSettings
+    graph: GraphSettings
+    archive: ArchiveSettings
+    nli: NLISettings
+
+    @classmethod
+    def resolve(cls, overrides: Overrides) -> Tuning:
+        return cls(
+            retrieval=overrides.retrieval or constants.RETRIEVAL,
+            context=overrides.context or constants.CONTEXT,
+            memory_intelligence=overrides.memory_intelligence or constants.MEMORY_INTELLIGENCE,
+            documents=overrides.documents or constants.DOCUMENTS,
+            graph=overrides.graph or constants.GRAPH,
+            archive=overrides.archive or constants.ARCHIVE,
+            nli=overrides.nli_settings or constants.NLI,
+        )
+
+
 @dataclass
 class Container:
     settings: Settings
     version: str
+    overrides: Overrides = field(default_factory=Overrides)
+    tuning: Tuning = field(default_factory=lambda: Tuning.resolve(Overrides()))
     registries: Registries = field(default_factory=get_registries)
     dependencies: dict[str, Dependency] = field(default_factory=dict)
 
@@ -88,10 +204,22 @@ class Container:
                 log.warning("dependency.close_failed", dependency=name)
 
 
-async def build_container(settings: Settings, version: str) -> Container:
-    """Wire providers for the configured environment. Extended in later milestones."""
+async def build_container(
+    settings: Settings, version: str, *, overrides: Overrides | None = None
+) -> Container:
+    """Wire providers for the configured environment.
+
+    ``overrides`` swaps backing stores and models for in-process stand-ins and replaces frozen
+    tuning; production never passes it.
+    """
     from memory_service.adapters import wire_adapters
 
-    container = Container(settings=settings, version=version)
+    overrides = overrides or Overrides()
+    container = Container(
+        settings=settings,
+        version=version,
+        overrides=overrides,
+        tuning=Tuning.resolve(overrides),
+    )
     await wire_adapters(container)
     return container

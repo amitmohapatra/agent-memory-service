@@ -23,8 +23,10 @@ MAX_COMPLEXITY = 109
 MAX_FUNCTION_LINES = 383
 #: how many functions may exceed a complexity of 15
 MAX_OVER_15 = 43
-#: the mean must not drift upwards
-MAX_MEAN_COMPLEXITY = 4.2
+#: the mean must not drift upwards. 4.2 -> 4.25 on 2026-09-22: the Phase-1 deletions removed
+#: ~140 trivial functions (observer, served-model adapters, model server), which lifts the
+#: mean of what remains without any function getting more complex.
+MAX_MEAN_COMPLEXITY = 4.25
 
 _BRANCHING = (
     ast.If,

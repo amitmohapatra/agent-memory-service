@@ -2,7 +2,6 @@
 
 Adapters register factories under (port, provider_name). Configuration selects one.
 Adding a provider means registering a factory, never editing a switch statement.
-The registry also enforces the provider license/origin policy.
 """
 
 from __future__ import annotations
@@ -64,20 +63,6 @@ class Registries:
 
     def all(self) -> dict[str, ProviderRegistry[Any]]:
         return {k: v for k, v in vars(self).items() if isinstance(v, ProviderRegistry)}
-
-
-def check_provider_policy(
-    info: ProviderInfo, allowed_licenses: list[str], allow_remote: bool
-) -> None:
-    """Raise if a provider violates the configured license/locality policy."""
-    if info.license not in allowed_licenses:
-        raise ProviderNotConfigured(
-            f"provider {info.name} has license {info.license} not in allowed_licenses"
-        )
-    if info.locality == "remote" and not allow_remote:
-        raise ProviderNotConfigured(
-            f"provider {info.name} is remote but provider_policy.allow_remote_models=false"
-        )
 
 
 _registries: Registries | None = None

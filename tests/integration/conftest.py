@@ -9,9 +9,12 @@ import pytest
 from sqlalchemy import text
 
 from memory_service.__about__ import __version__
-from memory_service.application.container import Container, build_container
+from memory_service.application.container import Container, Overrides, build_container
 from memory_service.config.settings import Settings
-from tests.conftest import DB_URL  # noqa: E402  (one definition, see tests/conftest.py)
+from tests.conftest import (  # noqa: E402  (one definition, see tests/conftest.py)
+    DB_URL,
+    _test_overrides,
+)
 
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
@@ -79,17 +82,19 @@ requires_redis = pytest.mark.skipif(
 
 
 def integration_settings(make_settings, **overrides):
-    base = {
-        "database": {"url": DB_URL},
-        "tasks": {"provider": "memory"},
-        "cache": {"provider": "memory"},
-    }
+    base = {"database": {"url": DB_URL}}
     for k, v in overrides.items():
         if isinstance(v, dict) and isinstance(base.get(k), dict):
             base[k] = {**base[k], **v}
         else:
             base[k] = v
     return make_settings(**base)
+
+
+def integration_overrides(**changes) -> Overrides:
+    """The hermetic stand-ins with the *recording* queue: integration tests drain jobs
+    themselves, and the cache stays in-process even under ``MEMORY_TEST_PROVIDERS=env``."""
+    return _test_overrides(**{"tasks": "memory", "cache": "memory", **changes})
 
 
 @pytest.fixture
@@ -99,7 +104,7 @@ async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
     settings: Settings = integration_settings(
         make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")}
     )
-    c = await build_container(settings, __version__)
+    c = await build_container(settings, __version__, overrides=integration_overrides())
     async with c.database.engine.begin() as conn:
         await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
         await conn.execute(

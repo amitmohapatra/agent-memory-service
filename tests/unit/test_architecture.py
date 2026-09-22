@@ -220,46 +220,33 @@ def test_the_suite_never_reads_the_services_own_database_variable() -> None:
     )
 
 
-def test_every_declared_provider_value_has_a_wiring_branch() -> None:
-    """The configuration surface may not advertise a provider that cannot be built.
+def test_every_declared_stand_in_has_a_wiring_branch() -> None:
+    """A stand-in the seam advertises must be one wiring can build.
 
-    ``models.embedding.provider`` accepted "vertex", "openai" and "disabled". All three
-    passed validation and then killed startup with ``NotImplementedError`` from
-    ``wire_models`` — a setting the schema says is legal and the process cannot honour. With
-    2,073,600 provider combinations declared, "it is in the Literal" has to mean "it works".
+    ``models.embedding.provider`` once accepted "vertex", "openai" and "disabled" - all three
+    passed validation and then killed startup with ``NotImplementedError``. The provider
+    Literals are gone from ``Settings``; what remains is ``Overrides``, whose Literal values
+    are the test suite's stand-ins, and every one of them must appear as a branch in
+    wiring.py or a test can ask for something that does not exist.
     """
     import typing
 
-    from pydantic import BaseModel
-
-    from memory_service.config.settings import Settings
+    from memory_service.application.container import Overrides
 
     declared: dict[str, list[str]] = {}
-
-    def walk(model: type[BaseModel], prefix: str = "") -> None:
-        for name, field in model.model_fields.items():
-            annotation = field.annotation
-            path = f"{prefix}{name}"
-            args = [a for a in typing.get_args(annotation) if a is not type(None)]
-            base = args[0] if args and typing.get_origin(annotation) is typing.Union else annotation
-            if isinstance(base, type) and issubclass(base, BaseModel):
-                walk(base, f"{path}.")
-                continue
-            for candidate in [annotation, *args]:
-                if typing.get_origin(candidate) is typing.Literal:
-                    declared[path] = list(typing.get_args(candidate))
-                    break
-
-    walk(Settings)
+    for name in Overrides.__dataclass_fields__:
+        hints = typing.get_type_hints(Overrides)[name]
+        for candidate in [hints, *typing.get_args(hints)]:
+            if typing.get_origin(candidate) is typing.Literal:
+                declared[name] = list(typing.get_args(candidate))
+                break
 
     wiring = ast.parse((SRC / "adapters" / "wiring.py").read_text())
     handled: set[str] = set()
     fallthrough = False
     for node in ast.walk(wiring):
-        # `cfg.provider == "x"` and `cfg.provider in ("x", "y")`
-        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Attribute):
-            if node.left.attr != "provider":
-                continue
+        # `stand_in == "x"`, `stand_in.reranker == "x"` and `... in ("x", "y")`
+        if isinstance(node, ast.Compare):
             for comparator in node.comparators:
                 if isinstance(comparator, ast.Constant):
                     handled.add(str(comparator.value))
@@ -267,22 +254,15 @@ def test_every_declared_provider_value_has_a_wiring_branch() -> None:
                     handled.update(
                         str(e.value) for e in comparator.elts if isinstance(e, ast.Constant)
                     )
-        # an `else` that raises is not a branch; an `else` that builds something is
         if isinstance(node, ast.If) and node.orelse:
             fallthrough = True
     assert fallthrough, "sanity: wiring is expected to use else-branches"
-
-    # A value is fine if wiring names it OR the section's else-branch builds a real provider.
-    # Only the sections whose else-branch *raises* are strict, so list them explicitly.
-    strict = {"models.embedding.provider"}
-    offenders: list[str] = []
-    for path, values in declared.items():
-        if path not in strict:
-            continue
-        offenders += [f"{path}={v!r}" for v in values if v not in handled]
-    assert not offenders, (
-        "declared in config but not buildable by wiring (its else-branch raises):\n  "
-        + "\n  ".join(offenders)
+    assert declared, "Overrides declares no Literal stand-ins?"
+    offenders = [
+        f"{name}={v!r}" for name, values in declared.items() for v in values if v not in handled
+    ]
+    assert not offenders, "declared on Overrides but not buildable by wiring:\n  " + "\n  ".join(
+        offenders
     )
 
 
@@ -342,12 +322,9 @@ def test_hosts_and_urls_are_configuration_not_literals() -> None:
     """
     import re
 
-    # settings.py holds the defaults an operator overrides. A server entrypoint is the other
-    # legitimate case: binding 0.0.0.0 is how a process listens, not a peer address compiled
-    # into behaviour — and it is overridable (MEMORY_MODEL_HOST) besides. Its docstring also
-    # carries the client-side URLs, which is documentation of the wire contract rather than a
-    # hostname in logic.
-    allowed = {SRC / "config" / "settings.py", SRC / "tools" / "model_server.py"}
+    # settings.py holds the defaults an operator overrides; constants.py holds the listen
+    # address (how a process listens, not a peer compiled into behaviour).
+    allowed = {SRC / "config" / "settings.py", SRC / "config" / "constants.py"}
     network = re.compile(r"https?://[A-Za-z0-9.:_-]+|\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b")
     offenders: list[str] = []
     for path in sorted(SRC.rglob("*.py")):
@@ -378,7 +355,7 @@ def test_the_parser_enum_and_the_parser_registry_agree() -> None:
     import typing
 
     from memory_service.adapters.parsers import PARSERS
-    from memory_service.config.settings import DocumentSettings
+    from memory_service.config.constants import DocumentSettings
 
     declared = set(typing.get_args(DocumentSettings.model_fields["parser"].annotation))
     assert declared == set(PARSERS), (
@@ -437,7 +414,7 @@ def test_the_default_image_can_honour_the_default_configuration() -> None:
     """
     import re
 
-    from memory_service.config.settings import DocumentSettings
+    from memory_service.config.constants import DocumentSettings
 
     dockerfile = (SRC.parents[1] / "deploy" / "Dockerfile").read_text()
     match = re.search(r'^ARG EXTRAS="([^"]*)"', dockerfile, re.MULTILINE)

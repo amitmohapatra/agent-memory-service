@@ -20,9 +20,9 @@ verifies every acknowledgement over the API:
 ``MEMORY__DATABASE__URL`` is required (state reset before each phase, observation and job
 status reads). The worker processes are started from this process's environment, which
 must point at the same PostgreSQL, Qdrant, cache and blob root as the API. A job orphaned
-by a kill is re-queued by the reconcile after ``MEMORY__TASKS__STALLED_AFTER_SECONDS``
-(the worker heartbeat is 10 s) at the next ``MEMORY__TASKS__PERIODIC_RECONCILE_SECONDS``
-tick, so those two settings bound the recovery time.
+by a kill is re-queued by the reconcile after ``constants.TASKS.stalled_after_seconds``
+(the worker heartbeat is 10 s) at the next ``constants.TASKS.periodic_reconcile_seconds``
+tick, so those two constants bound the recovery time.
 """
 
 from __future__ import annotations
@@ -48,6 +48,8 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from benchmark.common import provenance, write_result
+from benchmark.env import BENCH, bench_overrides
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.harness import (
     FIXTURE_REPORT,
     Acked,
@@ -67,7 +69,6 @@ from benchmark.retrieval import GOLDEN, TABLES
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.settings import Settings
-from memory_service.modules.evaluation.golden import GoldenSet
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 
 ENTRYPOINTS = {"memory-worker": "run_worker", "memory-api": "run_api"}
@@ -92,6 +93,34 @@ def resolve_cmd(cmd: str, python: str = sys.executable) -> list[str]:
         code = f"from memory_service.__main__ import {entry}; {entry}()"
         return [python, "-c", code, *argv[1:]]
     return argv
+
+
+API_FACTORY = "memory_service.api.app:create_app"
+LOOPBACK = "127.0.0.1"
+
+
+def api_argv(cmd: str, port: int, python: str = sys.executable) -> list[str]:
+    """The command that starts the API the tool owns, bound to loopback on ``port``.
+
+    A bare ``memory-api`` is the console script that binds ``constants.HOST`` - every
+    interface, which is right for the container and wrong for a harness that spawns a
+    server next to itself - so it runs through uvicorn with the host and port given
+    explicitly. Any other command is the operator's and is run as written (with
+    ``MEMORY__SERVICE__PORT`` in its environment)."""
+    argv = shlex.split(cmd)
+    if argv == ["memory-api"]:
+        return [
+            python,
+            "-m",
+            "uvicorn",
+            API_FACTORY,
+            "--factory",
+            "--host",
+            LOOPBACK,
+            "--port",
+            str(port),
+        ]
+    return resolve_cmd(cmd, python=python)
 
 
 def network_providers(version: dict[str, Any]) -> dict[str, Any]:
@@ -301,19 +330,18 @@ class Db:
 async def reset_backends(settings: Settings) -> dict[str, Any]:
     """Drop the search collections and flush the cache the way the real-component test
     fixtures do; PostgreSQL is truncated separately."""
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     dropped: list[str] = []
     flushed = 0
     try:
-        search = settings.search
-        if search.provider == "qdrant" and search.qdrant_local_path is None:
+        if BENCH.search == "qdrant":
             indexer = container.services["indexer"]
             for base in (KNOWLEDGE, MEMORIES):
                 name = indexer.collection(base)
                 if await container.search.drop_collection(name):
                     dropped.append(name)
             await indexer.ensure_collections()
-        if container.cache is not None and settings.cache.provider != "memory":
+        if container.cache is not None and bench_overrides().cache is None:
             keys = [key async for key in container.cache.scan("*")]
             if keys:
                 flushed = int(await container.cache.delete(*keys))
@@ -568,11 +596,11 @@ async def run(args: argparse.Namespace) -> int:
     api: Managed | None = None
     if args.api_cmd:
         port = args.api_port or free_port()
-        base_url = f"http://127.0.0.1:{port}"
-        api_env = {**env, "MEMORY__SERVICE__HOST": "127.0.0.1", "MEMORY__SERVICE__PORT": str(port)}
-        api = Managed("api", resolve_cmd(args.api_cmd), api_env, log_dir)
+        base_url = f"http://{LOOPBACK}:{port}"
+        api_env = {**env, "MEMORY__SERVICE__PORT": str(port)}
+        api = Managed("api", api_argv(args.api_cmd, port), api_env, log_dir)
     pool = WorkerPool(resolve_cmd(args.worker_cmd), env, args.workers, log_dir)
-    db = Db(settings.database.url)
+    db = Db(settings.database.dsn)
     code = 1
     try:
         reset: dict[str, Any] = {}

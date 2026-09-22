@@ -9,13 +9,13 @@ from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 
 
 async def reset_real_backends(container: Container) -> None:
-    search_cfg = container.settings.search
-    if search_cfg.provider == "qdrant" and search_cfg.qdrant_local_path is None:
+    stand_ins = container.overrides
+    if stand_ins.search is None and stand_ins.search_local_path is None:
         indexer = container.services["indexer"]
         for base in (KNOWLEDGE, MEMORIES):
             await container.search.drop_collection(indexer.collection(base))
         await indexer.ensure_collections()
-    if container.cache is not None and container.settings.cache.provider != "memory":
+    if container.cache is not None and stand_ins.cache is None:
         keys = [key async for key in container.cache.scan("*")]
         if keys:
             await container.cache.delete(*keys)

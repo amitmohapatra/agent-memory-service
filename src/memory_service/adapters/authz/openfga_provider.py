@@ -26,6 +26,7 @@ from openfga_sdk.sync import (
     OpenFgaClient as SyncOpenFgaClient,  # noqa: F401 - documents sync availability
 )
 
+from memory_service.config.constants import AUTHORIZATION
 from memory_service.config.settings import AuthorizationSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.observability.logging import get_logger
@@ -53,7 +54,7 @@ class OpenFGAAuthorizationProvider:
         self.settings = settings
         self._client: OpenFgaClient | None = None
         self._model_json = model_json
-        self.max_listed_objects = settings.max_listed_objects
+        self.max_listed_objects = AUTHORIZATION.max_listed_objects
 
     async def _get_client(self) -> OpenFgaClient:
         if self._client is not None:

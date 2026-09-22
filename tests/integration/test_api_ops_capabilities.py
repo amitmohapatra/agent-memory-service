@@ -12,11 +12,14 @@ pytestmark = pytest.mark.integration
 HEADERS = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme"}
 
 
-def test_version_reports_the_parser_that_is_actually_running(make_settings) -> None:
-    """``documents.parser`` defaults to docling, which is absent in an image built without
-    the extra — the builtin does the work and the endpoint used to report "docling" anyway."""
-    settings = make_settings(documents={"parser": "docling", "fallback_parser": "builtin"})
-    with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+def test_version_reports_the_parser_that_is_actually_running(make_settings, make_overrides) -> None:
+    """The parser is docling, which is absent in an image built without the extra — the
+    builtin does the work and the endpoint used to report "docling" anyway."""
+    settings = make_settings()
+    overrides = make_overrides(document_parser=None)
+    with TestClient(
+        create_app(settings, overrides=overrides), raise_server_exceptions=False
+    ) as client:
         body = client.get("/version", headers=HEADERS).json()
 
     running = body["providers"]["document_parser"]
@@ -27,19 +30,25 @@ def test_version_reports_the_parser_that_is_actually_running(make_settings) -> N
 
 
 def test_a_service_that_is_what_it_was_asked_to_be_reports_nothing_degraded(
-    make_settings,
+    make_settings, make_overrides
 ) -> None:
-    settings = make_settings(documents={"parser": "builtin"})
-    with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+    settings = make_settings()
+    overrides = make_overrides(document_parser="builtin")
+    with TestClient(
+        create_app(settings, overrides=overrides), raise_server_exceptions=False
+    ) as client:
         body = client.get("/version", headers=HEADERS).json()
     assert body["providers"]["document_parser"] == "builtin"
     assert not [n for n in body["degraded"] if "document_parser" in n]
 
 
-def test_a_stand_in_classifier_is_declared_degraded(make_settings) -> None:
+def test_a_stand_in_classifier_is_declared_degraded(make_settings, make_overrides) -> None:
     """The lexical NLI stand-in keeps grounding running, with verdicts that mean much less.
     Nothing else in the system says so."""
-    settings = make_settings(models={"nli": {"provider": "lexical"}})
-    with TestClient(create_app(settings), raise_server_exceptions=False) as client:
+    settings = make_settings()
+    overrides = make_overrides(nli="lexical")
+    with TestClient(
+        create_app(settings, overrides=overrides), raise_server_exceptions=False
+    ) as client:
         body = client.get("/version", headers=HEADERS).json()
     assert any("nli" in note for note in body["degraded"]), body["degraded"]

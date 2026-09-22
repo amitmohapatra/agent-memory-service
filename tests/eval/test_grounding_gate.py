@@ -18,7 +18,7 @@ import pytest
 from benchmark.common import RESULTS, provenance
 
 from memory_service.adapters.models.nli import LexicalNLI
-from memory_service.config.settings import NLISettings
+from memory_service.config.constants import NLIModel, NLISettings
 from memory_service.modules.grounding.cascade import Evidence, GroundingCascade
 from memory_service.ports.models import NLIProvider
 
@@ -42,7 +42,7 @@ def _evidence(golden: dict[str, Any], keys: list[str]) -> list[Evidence]:
 
 async def run_gate(nli: NLIProvider) -> dict[str, Any]:
     golden = _load()
-    cascade = GroundingCascade(nli, settings=NLISettings(provider="lexical"))
+    cascade = GroundingCascade(nli, settings=NLISettings())
     rows: list[dict[str, Any]] = []
     for case in golden["cases"]:
         report = await cascade.verify(
@@ -149,7 +149,7 @@ async def test_grounding_gate_with_deberta() -> None:
     path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
     from memory_service.adapters.models.nli import TransformersNLI
 
-    report = await run_gate(TransformersNLI(NLISettings(model_path=str(path))))
+    report = await run_gate(TransformersNLI(NLIModel(model_path=str(path))))
     _write(report, None)
     assert report["representative"] is True
     bad = [

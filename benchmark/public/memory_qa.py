@@ -7,9 +7,8 @@ after each session. Each question is answered from the in-process ``/v1/context`
 the strong model behind Bifrost and scored with the benchmark's own grader: LongMemEval's
 GPT-judge prompt repeated ``judge_runs`` times (mean ± sd), LoCoMo's F1/BLEU-1 rules.
 
-Configurations: ``native`` (no LLM uses inside the pipeline), ``bifrost`` (every LLM use
-enabled) and the third-party memory providers (``mem0``, ``langmem``, ``cognee``), each
-skipped with a reason when it cannot run here.
+Configurations: ``native`` (no LLM uses inside the pipeline) and ``bifrost`` (every LLM use
+enabled).
 """
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ from typing import Any, get_args
 
 from sqlalchemy import text
 
+from benchmark.env import bench_overrides
 from benchmark.public.data import Conversation, MemoryDataset, Question
 from benchmark.public.judge import anscheck_prompt, generate_answer, judge_once
 from benchmark.public.metrics import grouped_judge_summary, locomo_score, stemmer_name
@@ -38,7 +38,6 @@ from memory_service.modules.llm.cost import LLMTokens, start_llm_accounting
 
 TENANT = "public"
 NATIVE_CONFIGS = ("native", "bifrost")
-PROVIDER_CONFIGS = ("mem0", "langmem", "cognee")
 LLM_DISABLED = (
     "models.llm.enabled=false: answers are generated and judged through the Bifrost gateway "
     "(set MEMORY__MODELS__LLM__ENABLED=true, MEMORY__MODELS__LLM__BASE_URL and "
@@ -53,9 +52,6 @@ def config_settings(base: Settings, config: str) -> Settings:
         llm["uses"] = []
     elif config == "bifrost":
         llm["uses"] = list(get_args(LLMUse))
-    elif config in PROVIDER_CONFIGS:
-        llm["uses"] = []
-        data["memory_intelligence"] = {**data["memory_intelligence"], "provider": config}
     else:
         raise ValueError(f"unknown configuration {config!r}")
     data["models"] = {**data["models"], "llm": llm}
@@ -181,7 +177,7 @@ async def run_config(
     if not settings.models.llm.enabled:
         return {"skipped": LLM_DISABLED, "config": config}
     try:
-        container = await build_container(settings, __version__)
+        container = await build_container(settings, __version__, overrides=bench_overrides())
     except (DependencyUnavailable, NotImplementedError, ProviderNotConfigured, ImportError) as exc:
         return {"skipped": f"{type(exc).__name__}: {exc}", "config": config}
     costs: dict[str, Any] = {}
@@ -227,7 +223,7 @@ async def run_config(
         row: dict[str, Any] = {
             "config": config,
             "llm_uses": list(settings.models.llm.uses),
-            "memory_provider": settings.memory_intelligence.provider,
+            "memory_provider": "native",
             "ingest": {**ingest, "seconds": ingest_seconds, "memories": memories},
             "questions": len(items),
             "scores": scores,

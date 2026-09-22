@@ -4,10 +4,8 @@ stream (PostgreSQL + Qdrant local).
 
     uv run python -m benchmark.memory --observations 200
 
-External providers (mem0, langmem, cognee) are benchmarked only when
-``MEMORY__MODELS__LLM__ENABLED=true`` and the SDK is installed; otherwise they are listed as
-``skipped`` with the reason. Results carry provenance and are never presented as
-representative of LLM-based providers unless they actually ran.
+Only the native provider ships; the third-party challengers this once compared against were
+removed from the service. A comparison, if wanted again, is built here and never in src/.
 """
 
 from __future__ import annotations
@@ -24,12 +22,15 @@ from typing import Any
 from sqlalchemy import text
 
 from benchmark.common import provenance, reset_store, write_result
+from benchmark.env import bench_overrides
+from benchmark.evaluation import BUDGETS
+from benchmark.evaluation.memory_pairs import evaluate_pairs, load_pairs
 from benchmark.retrieval import _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
+from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
-from memory_service.modules.evaluation.memory_pairs import evaluate_pairs, load_pairs
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 
@@ -73,34 +74,17 @@ async def _provider_quality(settings) -> dict[str, Any]:
     ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1", thread_id="t1")
     pairs = load_pairs(PAIRS)
     results: dict[str, Any] = {}
-    native = NativeMemoryIntelligence(settings.memory_intelligence)
+    native = NativeMemoryIntelligence(MEMORY_INTELLIGENCE)
     rep = await evaluate_pairs(native, pairs, ctx)
     rep.pop("per_pair", None)
     results["native"] = rep
-    llm_on = settings.models.llm.enabled
-    for name, path, cls in (
-        ("mem0", "memory_service.adapters.intelligence.mem0_provider", "Mem0MemoryIntelligence"),
-        ("langmem", "memory_service.adapters.intelligence.langmem_provider", "LangMemIntelligence"),
-    ):
-        if not llm_on:
-            results[name] = {"skipped": "models.llm.enabled=false (provider requires an LLM)"}
-            continue
-        try:
-            import importlib
-
-            provider = getattr(importlib.import_module(path), cls)(settings)
-            rep = await evaluate_pairs(provider, pairs, ctx)
-            rep.pop("per_pair", None)
-            results[name] = rep
-        except Exception as exc:  # noqa: BLE001 - benchmark must report, not crash
-            results[name] = {"skipped": f"{type(exc).__name__}: {exc}"}
     return results
 
 
 async def run(n_observations: int) -> dict[str, Any]:
     settings = _settings()
     quality = await _provider_quality(settings)
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=bench_overrides())
     try:
         # both stores: the vector store is a separate server and a SQL TRUNCATE
         # leaves its vectors behind for the next run to retrieve
@@ -153,8 +137,8 @@ async def run(n_observations: int) -> dict[str, Any]:
                 "memories_rows": rows,
                 "memories_current": current,
             },
-            "budgets_ms": {"chat_accept_p95": settings.budgets.chat_accept_p95_ms},
-            "provider": settings.memory_intelligence.provider,
+            "budgets_ms": {"chat_accept_p95": BUDGETS.chat_accept_p95_ms},
+            "provider": "native",
             "llm_enabled": settings.models.llm.enabled,
             "provenance": provenance(),
         }

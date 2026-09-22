@@ -19,7 +19,7 @@ checked against the source, and the verdict says which mechanism provides it.
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
 | Rank fusion across retrievers | native Qdrant RRF (`FusionQuery`), `rrf_k=60` | on | — |
 | Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so `rerank` is now off by default too |
-| Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2, plus it is incompatible with a served model tier |
+| Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |
 | Referent resolution at answer time | `PARENT`, `PREVIOUS`, `NEXT` expansion | on | — |
 | Term definitions | `DEFINED_BY` expansion | on | — |
 | Qualifying footnotes, cross-references | `FOOTNOTE`, `CROSS_REFERENCE` always in the expansion kinds | on | — |
@@ -56,8 +56,7 @@ Coverage of that case today:
 do not propagate down the tree.
 
 **But `late_chunking` cannot fix it here.** It requires token-level embeddings over a whole
-document; a served embed endpoint returns one pooled vector per input, so it is mutually
-exclusive with the separate model tier (wiring now refuses the combination at startup).
+document, which the pooled sentence-transformers encoder does not expose.
 
 **The fix that fits the architecture: propagate ancestor entities into the contextual header.**
 Deterministic, no model call, works with a remote embedder, and it also helps BM25 because
@@ -89,12 +88,15 @@ The earlier document argued for cuts from surface area. This one argues from cov
 is the defensible basis, and it reaches a *narrower* conclusion:
 
 - **Cut the seven flags** — each names a capability demonstrably provided by something on.
-- **Keep `splade`** — the only genuinely uncovered retrieval capability.
+- **`splade`** — was kept as the only genuinely uncovered retrieval capability; removed with
+  the Phase-1 freeze (2026-09): a BERT-sized pass per document at ingest for an English-only
+  vocabulary, against a BM25 leg with server-side IDF that is the correct sparse retriever.
 - **Keep all 25 memory types** — reversing the earlier recommendation. They are an import
   surface with correct admission behaviour, not unused enum values.
-- **Alternative providers** (`mem0`, `cognee`, `langmem`, `graphiti`, `docling_graph`) are still
-  unverified either way. They are not capabilities, they are substitutes for `native`; nothing
-  in this review establishes whether they beat it. **No decision until measured.**
+- **Alternative providers** (`mem0`, `cognee`, `langmem`, `graphiti`, `docling_graph`) were
+  removed from the service (Phase 1 of the 2026-09 roadmap): they were substitutes for
+  `native` that no compose target, benchmark or CI lane ran. A comparison, if ever wanted,
+  is built under `benchmark/` and never in `src/`.
 
 ## 5. Still blocking
 

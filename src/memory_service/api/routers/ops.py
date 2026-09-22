@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from memory_service.api.errors import error_responses
 from memory_service.application.container import Container
+from memory_service.config import constants
 from memory_service.observability.metrics import render_metrics
 
 router = APIRouter(tags=["operations"])
@@ -110,27 +111,31 @@ async def version(request: Request) -> VersionResponse:
     c = _container(request)
     s = c.settings
     return VersionResponse(
-        service=s.service.name,
+        service=constants.SERVICE_NAME,
         version=c.version,
-        api_version=s.service.api_version,
+        api_version=constants.API_VERSION,
         environment=s.service.environment,
         providers={
-            "cache": s.cache.provider,
-            "search": s.search.provider,
-            "blob": s.blob.provider,
-            "tasks": s.tasks.provider,
-            "authorization": s.authorization.provider,
-            "embedding": _active(c.embedding, f"{s.models.embedding.provider}"),
-            "reranker": _active(c.reranker, s.models.reranker.provider),
+            # what is *running*: the stand-ins a test or benchmark asked for through
+            # build_container(overrides=...) are not settings, so they can only be read here
+            "cache": _active(c.cache, "redis-protocol"),
+            "search": "qdrant-local"
+            if c.overrides.search or c.overrides.search_local_path
+            else "qdrant",
+            "blob": _active(c.blob, s.blob.provider),
+            "tasks": _active(c.tasks, "procrastinate"),
+            "authorization": _active(c.authorization, "openfga"),
+            "embedding": _active(c.embedding, constants.FROZEN_MODELS.dense.id),
+            "reranker": _active(c.reranker, "none"),
             "llm": "bifrost" if s.models.llm.enabled else "disabled",
-            "memory_intelligence": s.memory_intelligence.provider,
-            "graph_enrichment": s.graph_enrichment.provider,
-            # what is *running*, not what was asked for: `documents.parser` says "docling"
-            # even in an image built without it, where the builtin is doing the work. An
-            # endpoint that reports the request rather than the reality is worse than silent.
-            "document_parser": _active(c.document_parser, s.documents.parser),
+            "memory_intelligence": "native",
+            "graph_enrichment": _active(c.graph_enrichment, "native"),
+            # what is *running*, not what was asked for: the parser is "docling" even in an
+            # image built without it, where the builtin is doing the work. An endpoint that
+            # reports the request rather than the reality is worse than silent.
+            "document_parser": _active(c.document_parser, c.tuning.documents.parser),
         },
-        degraded=_degraded(c, s),
+        degraded=_degraded(c),
     )
 
 
@@ -147,8 +152,8 @@ def _active(provider: Any, configured: str) -> str:
     return getattr(info, "name", None) or configured
 
 
-def _degraded(c: Any, s: Any) -> list[str]:
-    """Where the running service is not what the configuration asked for.
+def _degraded(c: Any) -> list[str]:
+    """Where the running service is not what it was asked to be.
 
     Each of these is a capability that falls back rather than failing, so nothing else in the
     system reports it: the document parser downgrades to the builtin when docling is absent,
@@ -156,19 +161,12 @@ def _degraded(c: Any, s: Any) -> list[str]:
     output — which is exactly the kind of thing that should be visible without reading logs.
     """
     notes: list[str] = []
-    active_parser = _active(c.document_parser, s.documents.parser)
-    if s.documents.parser != active_parser:
-        notes.append(
-            f"document_parser: configured {s.documents.parser!r}, running {active_parser!r}"
-        )
-    if s.models.nli.provider != "disabled" and getattr(c.nli, "representative", True) is False:
+    wanted_parser = c.overrides.document_parser or c.tuning.documents.parser
+    active_parser = _active(c.document_parser, wanted_parser)
+    if wanted_parser != active_parser:
+        notes.append(f"document_parser: configured {wanted_parser!r}, running {active_parser!r}")
+    if c.nli is not None and getattr(c.nli, "representative", True) is False:
         notes.append("nli: running a non-representative stand-in; grounding verdicts are weak")
-    if (
-        s.retrieval.splade
-        and c.sparse is not None
-        and "splade" not in _active(c.sparse, "").casefold()
-    ):
-        notes.append(f"sparse: splade requested, running {_active(c.sparse, 'bm25')!r}")
-    if s.retrieval.rerank and c.reranker is None:
+    if c.tuning.retrieval.rerank and c.reranker is None:
         notes.append("rerank: requested, but no reranker was built; results are unreranked")
     return notes

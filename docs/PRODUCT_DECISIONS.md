@@ -78,8 +78,9 @@ outgrew the verification budget.
 **Seven of the eight off-by-default retrieval flags — done, 2026-09-20.** `minicoil`,
 `colbert`, `pageindex`, `raptor`, `graph_ppr`, `graphrag_global` and `late_chunking` are
 removed: flags, wiring, adapters, the `strategies` module, the late-interaction vector
-support in the search layer, and 854 MB of ColBERT weights. `splade` remains as the single
-experiment slot, and now runs on its own tier.
+support in the search layer, and 854 MB of ColBERT weights. `splade` remained as the single
+experiment slot until the Phase-1 freeze (2026-09) removed it too: the sparse leg is BM25 with
+server-side IDF, and a learned sparse encoder is a benchmark challenger, never a product flag.
 
 The argument was redundancy, not quality — each named a capability something already-on
 provides — and `tests/eval/test_capability_coverage.py` demonstrates each capability
@@ -91,11 +92,12 @@ significantly *worse* on BeIR/SciFact (p = 0.012) at 21x the latency. The flag i
 the finding indicts one out-of-domain cross-encoder rather than reranking as a technique. See
 [MEASUREMENTS.md](MEASUREMENTS.md) §3e.
 
-**Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` are alternatives
-to `native`, which is what runs. Each is an import, a wiring branch, a contract test that
-does not exist, and a licence surface. Keep `native`.
+**Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` were alternatives
+to `native`, which is what runs. Each was an import, a wiring branch, a contract test that
+did not exist, and a licence surface. Removed; `native` is the only provider.
 
-**Four of five graph-enrichment providers.** Same argument. Keep `native` and `disabled`.
+**Four of five graph-enrichment providers.** Same argument. `graphiti`, `docling_graph` and
+`cognee` are removed; `native` and `disabled` remain.
 
 **Twenty-five memory types reduced to the caller-facing set.** `SEMANTIC`, `PREFERENCE`,
 `EPISODIC`, `DECISION`, `PROCEDURAL`, `TOOL`, plus the internal ones the pipeline writes.
@@ -134,8 +136,8 @@ cannot be tuned, and "100% accurate" cannot be claimed or disproven.
 1. **`reranker.candidate_k` (20)** — one request costs 1 embedding and 20 cross-encoder pairs.
    The reranker is ~87% of per-request model cost. This is the tuning dial; it needs §4's
    baseline to tune against.
-2. **A separate model tier** — done. Embedding and reranker scale independently of the API;
-   ingestion no longer starves query traffic.
+2. **A separate model tier** — built, then removed (ADR 0019 is superseded): on a single
+   8 vCPU VM it only added an HTTP hop to every query.
 3. **`on_disk_payload`** — vectors in RAM, payload on disk. The difference between a small and
    a large Qdrant node above ~10M chunks.
 4. **Reclaim superseded collections** — 20 exist where 2 are used, each a full vector set.
@@ -146,8 +148,8 @@ cannot be tuned, and "100% accurate" cannot be claimed or disproven.
 
 A system that answers with a citation to a page and a section, refuses when the evidence does
 not support an answer, notices when a fact has been superseded or contradicted, enforces
-tenant isolation, and remembers which tool sequences have actually worked — on CPU, with a
-model tier that scales on its own.
+tenant isolation, and remembers which tool sequences have actually worked — on CPU, in one
+process.
 
 That is a narrower product than the current configuration surface implies, and a much more
 defensible one.

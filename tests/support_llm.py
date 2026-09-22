@@ -26,10 +26,13 @@ import respx
 from pydantic import SecretStr
 
 from memory_service.adapters.models.llm import BifrostLLM
+from memory_service.config.constants import LLMTransport
 from memory_service.config.settings import LLMSettings, LLMUse
 from memory_service.modules.llm.assist import LLMAssist
 
 BASE = "http://bifrost.test/v1"
+#: retries without sleeping: these tests count calls, not seconds
+NO_BACKOFF = LLMTransport(retry_backoff_seconds=0.0)
 
 
 def llm_settings(uses: Sequence[LLMUse] = (), **overrides: Any) -> LLMSettings:
@@ -40,7 +43,6 @@ def llm_settings(uses: Sequence[LLMUse] = (), **overrides: Any) -> LLMSettings:
         "model": "test/strong",
         "fast_model": "test/fast",
         "max_retries": 0,
-        "retry_backoff_seconds": 0.0,
         "timeout_seconds": 5.0,
         "uses": list(uses),
     }
@@ -62,7 +64,7 @@ class Gateway:
 
     def assist(self, uses: Sequence[LLMUse], **overrides: Any) -> LLMAssist:
         settings = llm_settings(uses, **overrides)
-        return LLMAssist(BifrostLLM(settings), settings)
+        return LLMAssist(BifrostLLM(settings, transport=NO_BACKOFF), settings)
 
     def prompts(self) -> list[dict[str, Any]]:
         """Request bodies sent to the gateway, in order."""

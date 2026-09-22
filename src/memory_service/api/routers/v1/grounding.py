@@ -178,7 +178,7 @@ async def verify(
     ctx = build_context(request, container, body.scope)
     cascade = container.services.get("grounding")
     if cascade is None:
-        raise ProviderNotConfigured("models.nli.provider=disabled")
+        raise ProviderNotConfigured("the NLI classifier is disabled in this process")
     builder = container.services["context_builder"]
     if body.items:
         source = "items"

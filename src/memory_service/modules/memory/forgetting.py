@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind

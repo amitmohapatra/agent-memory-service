@@ -97,7 +97,7 @@ async def test_entity_resolution_on_postgres(container) -> None:
             store,
             None,
             container.services["authz"],
-            settings=container.settings.graph,
+            settings=container.tuning.graph,
             assist=assist,
         )
 

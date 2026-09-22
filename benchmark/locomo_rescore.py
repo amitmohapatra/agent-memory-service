@@ -18,6 +18,7 @@ import json
 import sys
 from pathlib import Path
 
+from benchmark.env import bench_overrides
 from benchmark.locomo import JUDGE_RULERS, _judge, _Pacer, judged_hit
 from benchmark.retrieval import _settings
 from memory_service.application.container import build_container
@@ -25,7 +26,7 @@ from memory_service.application.container import build_container
 
 async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
     """The same records, graded again under ``ruler``. Pure over its input; I/O is the caller's."""
-    container = await build_container(_settings(), "bench")
+    container = await build_container(_settings(), "bench", overrides=bench_overrides())
     llm = container.llm
     if not getattr(llm, "enabled", False):
         raise SystemExit("rescoring needs a generative model: set models.llm.enabled=true")

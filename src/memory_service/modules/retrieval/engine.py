@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from memory_service.config.settings import RetrievalSettings
+from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.ids import content_hash
@@ -504,28 +504,14 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         dense, sparse = encoded if encoded is not None else await self._encode(query)
-        if self.cfg.fusion == "rrf":
-            return await self.store.search_hybrid(
-                collection,
-                dense=dense,
-                sparse=sparse,
-                flt=flt,
-                limit=self.cfg.fused_k,
-                prefetch_limit=self.cfg.prefetch_k,
-            )
-        lists = []
-        if dense is not None:
-            lists.append(
-                await self.store.search_dense(collection, dense, flt, limit=self.cfg.prefetch_k)
-            )
-        if sparse is not None:
-            lists.append(
-                await self.store.search_sparse(collection, sparse, flt, limit=self.cfg.prefetch_k)
-            )
-        return [
-            SearchHit(record_id=rid, score=s, retriever="fusion", payload=p)
-            for rid, s, _, p in rrf_fuse(lists, k=self.cfg.rrf_k)
-        ][: self.cfg.fused_k]
+        return await self.store.search_hybrid(
+            collection,
+            dense=dense,
+            sparse=sparse,
+            flt=flt,
+            limit=self.cfg.fused_k,
+            prefetch_limit=self.cfg.prefetch_k,
+        )
 
     async def _rerank(
         self, query: str, candidates: list[Candidate], *, limit: int

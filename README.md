@@ -99,7 +99,7 @@ make migrate        # the same schemas
 
 The service reads its weights from local directories and never downloads at run time, so a
 missing model is a startup error rather than a silent fall back to something weaker. (The test
-suite and `examples/run_server.sh` do have a deterministic stand-in, which is why they run
+suite and `examples/serve.py` do have a deterministic stand-in, which is why they run
 without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
@@ -111,18 +111,21 @@ pip install -e sdk/python        # the universal-memory SDK
 
 ### What actually runs
 
-`make models` fetches three defaults into `models/`, each in a directory named after the model
-so the configuration and the weights cannot drift apart:
+`make models` fetches the frozen set into `models/`, each in a directory named after the
+model. The set is `FROZEN_MODELS` in `src/memory_service/config/constants.py`, and the
+download catalogue is derived from it, so the code and the weights cannot drift apart:
 
-| Role | Default | Size | Why |
+| Role | Frozen | Size | Why |
 |---|---|---|---|
 | Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
-| Reranker | `cross-encoder/ms-marco-MiniLM-L6-v2` | 566 MB | 26x cheaper than the next option and the only one close to a CPU budget |
+| Sparse | BM25 (client term frequencies, Qdrant server-side IDF) | — | no weights |
+| Reranker | none | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
-`make models-all` additionally fetches the benchmark challengers (BGE small/base/M3, Granite
-R2 base, GTE, Qwen3-Embedding, bge-reranker-v2-m3, SPLADE, ColBERT, GLiNER2) — only needed
-to re-run `make bench-embedding` / `make bench-reranker`.
+The benchmark challengers (BGE small/base/M3, Granite R2 base, GTE, Qwen3-Embedding,
+bge-reranker-v2-m3, SPLADE, GLiNER2, the former reranker) are listed in
+`benchmark/challengers.txt`; `make models-all` fetches them, and only `make bench-embedding`
+/ `make bench-reranker` ever load one.
 
 **These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
 candidate through the real pipeline and the golden set; the numbers below are from
@@ -153,21 +156,16 @@ Three things that table is actually telling you:
   deterministic stand-in and need re-justifying against a deployed instance — see
   [Status](#status-read-this-before-you-trust-a-number).
 
-Swap any of them with configuration; nothing in the code names a model:
+The model set is frozen in `src/memory_service/config/constants.py` (`FROZEN_MODELS`): a swap
+is a code change, reviewed like one, never an env edit. Changing the embedding changes the
+vector space, so **re-index after a swap** (`make reindex`); the model, backend, ONNX graph and
+dimension are part of the collection name, so old and new vectors can never silently mix.
 
-```bash
-MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/bge-small-en-v1.5
-MEMORY__MODELS__EMBEDDING__DIMENSION=384
-```
-
-Changing the embedding changes the vector space, so **re-index after a swap**
-(`make reindex`); the dimension and the model fingerprint are part of the collection name, so
-old and new vectors can never silently mix.
-
-**Where the stand-in applies.** The test suite and `examples/run_server.sh` fall back to a
-deterministic hash embedding when `models/` is absent, so they exercise the plumbing without a
-download. `run_server.sh` prints which mode it is in, and any benchmark produced that way is
-labelled `representative: false`. Never read a retrieval number that carries that flag.
+**Where the stand-in applies.** The test suite, `examples/serve.py` and a host-side `make gates`
+fall back to a deterministic hash embedding when `models/` is absent, so they exercise the
+plumbing without a download. The stand-in is an `Overrides` field on the container, never a
+setting; `serve.py` prints which mode it is in, and any benchmark produced that way is labelled
+`representative: false`. Never read a retrieval number that carries that flag.
 
 ---
 
@@ -447,7 +445,7 @@ convenience, not a requirement.
 
 ## Configuration
 
-Everything is environment variables (or `config/memory.yaml`); copy `.env.example` to `.env`.
+Everything is environment variables; copy `.env.example` to `.env`.
 The ones that actually matter:
 
 ```bash
@@ -457,22 +455,13 @@ MEMORY__SEARCH__QDRANT_URL=http://localhost:6333
 MEMORY__CACHE__URL=redis://localhost:6379/0
 MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 
-# Local CPU models (weights live in ./models, git-ignored)
-MEMORY__MODELS__EMBEDDING__MODEL_PATH=./models/granite-embedding-small-english-r2
-MEMORY__MODELS__RERANKER__MODEL_PATH=./models/ms-marco-MiniLM-L6-v2
+# The models are not settings: `make models` puts the frozen set in ./models (git-ignored)
+# and the service finds it there, or under /models in the image.
 
 # Optional LLM — off by default, and only ever through a Bifrost gateway. Enabling it also
 # needs MODEL and USES: with USES empty nothing would call the model, and startup refuses
 # that rather than reporting an LLM it never consults.
 MEMORY__MODELS__LLM__ENABLED=false
-```
-
-To serve the models as their own containers instead of loading them in-process — which is
-what you want as soon as reranking capacity has to grow without API capacity — add the
-overlay:
-
-```bash
-docker compose --profile models -f docker-compose.yml -f deploy/served-models.yml up -d
 ```
 
 ### About the LLM
@@ -522,7 +511,7 @@ same client the agent harness uses, so neither service can learn a lesson the ot
 
 Available uses: `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,
-`chunk_context`, `tool_reflection`, `grounding_judge`.
+`chunk_context`, `grounding_judge`.
 
 Each one is consulted **only** when the deterministic path signals genuine ambiguity, and any
 failure — gateway down, bad output, timeout — falls back to the deterministic result. Turning

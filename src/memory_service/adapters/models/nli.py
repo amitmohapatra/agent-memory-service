@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
-from memory_service.config.settings import NLISettings
+from memory_service.config.constants import NLIModel
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.grounding.lexical import conflicts, content_tokens, coverage
 from memory_service.ports.models import NLIScore, ProviderInfo
@@ -59,7 +59,7 @@ class TransformersNLI:
     info: ProviderInfo
     representative = True
 
-    def __init__(self, settings: NLISettings) -> None:
+    def __init__(self, spec: NLIModel) -> None:
         try:
             import torch
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -67,8 +67,8 @@ class TransformersNLI:
             raise DependencyUnavailable(
                 "transformers and torch are required for the NLI (install [models])"
             ) from exc
-        source = settings.model_path or settings.model
-        kwargs: dict[str, Any] = {"local_files_only": True} if settings.model_path else {}
+        source = spec.source
+        kwargs: dict[str, Any] = {"local_files_only": True} if source != spec.id else {}
         try:
             self._tokenizer = AutoTokenizer.from_pretrained(source, **kwargs)
             self._model = AutoModelForSequenceClassification.from_pretrained(
@@ -79,26 +79,26 @@ class TransformersNLI:
         except Exception as exc:
             raise DependencyUnavailable(
                 f"nli model {source!r} could not be loaded ({type(exc).__name__}); "
-                "set MEMORY__MODELS__NLI__MODEL_PATH"
+                "run `make models` or bake the weights under /models"
             ) from exc
         self._model.eval()
         self._torch = torch
-        self.settings = settings
+        self.spec = spec
         labels = {int(k): str(v).lower() for k, v in self._model.config.id2label.items()}
         self._order = [
             next(i for i, name in labels.items() if name.startswith(prefix))
             for prefix in ("entail", "neutral", "contra")
         ]
         self.info = ProviderInfo(
-            name=settings.model,
+            name=spec.id,
             license="MIT",
-            origin="huggingface/" + settings.model,
+            origin="huggingface/" + spec.id,
             locality="local",
         )
 
     def _score(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
         out: list[NLIScore] = []
-        size = max(1, self.settings.batch_size)
+        size = max(1, self.spec.batch_size)
         with self._torch.no_grad():
             for start in range(0, len(premises), size):
                 batch = list(premises[start : start + size])
@@ -106,7 +106,7 @@ class TransformersNLI:
                     batch,
                     [hypothesis] * len(batch),
                     truncation=True,
-                    max_length=self.settings.max_length,
+                    max_length=self.spec.max_length,
                     padding=True,
                     return_tensors="pt",
                 )
@@ -122,5 +122,6 @@ class TransformersNLI:
         return await asyncio.to_thread(self._score, premises, hypothesis)
 
     def fingerprint(self) -> str:
-        source = self.settings.model_path or self.settings.model
-        return f"nli-{source.rstrip('/').split('/')[-1]}"
+        source = self.spec.model_path or self.spec.id
+        graph = f"-{self.spec.graph_file.removesuffix('.onnx')}" if self.spec.graph_file else ""
+        return f"nli-{source.rstrip('/').split('/')[-1]}{graph}"

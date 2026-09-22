@@ -1,6 +1,6 @@
 """A guided tour of every SDK method and every API route, run against a live server.
 
-    ./examples/run_server.sh &          # http://localhost:8080, API key "dev-key"
+    uv run python examples/serve.py &   # http://localhost:8080, API key "dev-key"
     uv run python examples/sdk_tour.py  # MEMORY_URL / MEMORY_API_KEY override the defaults
 
 Each step is a check with an assertion; the script prints a checklist and exits non-zero if

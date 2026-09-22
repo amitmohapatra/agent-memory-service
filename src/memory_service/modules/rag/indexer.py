@@ -69,7 +69,6 @@ class Indexer:
         self.batch_size = batch_size
         self.embedding_cache_ttl = embedding_cache_ttl
         self.assist = assist or LLMAssist.disabled()
-        # M10 (benchmark-gated): ColBERT multivectors are added to chunk records when set
 
     @property
     def fingerprint(self) -> str:
@@ -224,7 +223,6 @@ class Indexer:
         texts = [summaries[i] for i in ids]
         dense = await self.embed_cached(texts, [content_hash(t) + ":sum" for t in texts])
         sparse = self.sparse.encode_documents(texts)
-        # every point in a multivector collection needs the vector (local mode requires it)
         records = [
             SearchRecord(
                 record_id=f"sum_{nid}",

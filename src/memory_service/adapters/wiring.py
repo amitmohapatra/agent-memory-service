@@ -1,10 +1,17 @@
-"""Provider wiring. Grows milestone by milestone."""
+"""Provider wiring: one implementation per port, from ``Settings`` and ``constants``.
+
+Every ``if`` here that is not about ``Settings`` is about ``container.overrides``: the
+in-process stand-ins a test or benchmark asked for. Production builds a container with no
+overrides and takes the first branch of nothing.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from memory_service.application.container import Dependency
+from memory_service.config import constants
+from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.observability.logging import get_logger
 
@@ -19,12 +26,9 @@ async def wire_all(container: Container) -> None:
     log.info(
         "wiring.start",
         environment=settings.service.environment,
-        cache=settings.cache.provider,
-        search=settings.search.provider,
         blob=settings.blob.provider,
-        tasks=settings.tasks.provider,
-        authorization=settings.authorization.provider,
         llm_enabled=settings.models.llm.enabled,
+        stand_ins=container.overrides.summary(),
     )
     await _wire_cache(container)
     await _wire_database(container)
@@ -35,7 +39,6 @@ async def wire_all(container: Container) -> None:
     _wire_llm(container)
     _wire_conversation(container)
     await _wire_blob(container)
-    await _verify_served_models(container)
     _wire_archive(container)
     _wire_ingestion(container)
     await _wire_search(container)
@@ -59,45 +62,23 @@ async def wire_all(container: Container) -> None:
 
 
 # ---------------------------------------------------------------------------
-# M1 wiring
+# Stores
 # ---------------------------------------------------------------------------
 
 
-async def _verify_served_models(container: Container) -> None:
-    """Handshake with every model that is served over HTTP, before serving traffic.
-
-    A URL says where to send text, not which model answers. Without this, a URL pointing at
-    the wrong encoder is discovered as bad retrieval weeks later rather than as a startup
-    error — the fingerprint that names the vector collection would have been built from the
-    declared name, so foreign vectors land in the right-looking collection.
-    """
-    for name, provider in (
-        ("embedding", container.embedding),
-        ("reranker", container.reranker),
-        ("nli", container.nli),
-    ):
-        verify = getattr(provider, "verify", None)
-        identify = getattr(provider, "identify", None)
-        if verify is not None:
-            await verify()
-        elif identify is not None:
-            dialect, served = await identify()
-            log.info("model.verified", role=name, dialect=dialect, served=served)
-
-
 async def _wire_cache(container: Container) -> None:
-    cfg = container.settings.cache
-    if cfg.provider == "disabled":
+    stand_in = container.overrides.cache
+    if stand_in == "disabled":
         container.cache = None
         return
-    if cfg.provider == "memory":
+    if stand_in == "memory":
         from memory_service.adapters.cache.memory_cache import MemoryCache
 
         container.cache = MemoryCache()
     else:
         from memory_service.adapters.cache.redis_cache import RedisCache
 
-        container.cache = RedisCache(cfg)
+        container.cache = RedisCache(container.settings.cache)
     cache = container.cache
     container.add_dependency(
         Dependency(name="cache", mandatory=False, ping=cache.ping, close=cache.close)
@@ -115,27 +96,27 @@ async def _wire_database(container: Container) -> None:
 
 
 async def _wire_tasks(container: Container) -> None:
-    cfg = container.settings.tasks
-    if cfg.provider == "procrastinate":
+    stand_in = container.overrides.tasks
+    if stand_in == "inline":
+        from memory_service.adapters.tasks.inline_queue import InlineTaskQueue
+
+        container.tasks = InlineTaskQueue()
+    elif stand_in == "memory":
+        from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
+
+        container.tasks = RecordingTaskQueue()
+    else:
         from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
 
         queue = ProcrastinateTaskQueue(
             container.settings.database.procrastinate_dsn,
-            default_retries=cfg.default_retries,
-            job_timeout_seconds=cfg.job_timeout_seconds,
+            default_retries=constants.TASKS.default_retries,
+            job_timeout_seconds=constants.TASKS.job_timeout_seconds,
         )
         container.tasks = queue
         container.add_dependency(
             Dependency(name="task_queue", mandatory=True, ping=queue.ping, close=queue.close)
         )
-    elif cfg.provider == "inline":
-        from memory_service.adapters.tasks.inline_queue import InlineTaskQueue
-
-        container.tasks = InlineTaskQueue()
-    else:
-        from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
-
-        container.tasks = RecordingTaskQueue()
 
 
 def _wire_uow(container: Container) -> None:
@@ -149,18 +130,19 @@ def _wire_uow(container: Container) -> None:
 
 
 async def _wire_authorization(container: Container) -> None:
-    cfg = container.settings.authorization
-    if cfg.provider == "openfga":
+    if container.overrides.authorization == "memory":
+        from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
+
+        provider = MemoryAuthorizationProvider(
+            max_listed_objects=constants.AUTHORIZATION.max_listed_objects
+        )
+    else:
         from memory_service.adapters.authz.openfga_provider import OpenFGAAuthorizationProvider
 
-        provider = OpenFGAAuthorizationProvider(cfg)
+        provider = OpenFGAAuthorizationProvider(container.settings.authorization)
         container.add_dependency(
             Dependency(name="openfga", mandatory=True, ping=provider.ping, close=provider.close)
         )
-    else:
-        from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
-
-        provider = MemoryAuthorizationProvider(max_listed_objects=cfg.max_listed_objects)
     container.authorization = provider
 
 
@@ -171,17 +153,13 @@ def _wire_services(container: Container) -> None:
 
     settings = container.settings
     container.services["idempotency"] = IdempotencyService(container.cache)
-    from memory_service.adapters.auth.gcp_id_token import verify_google_id_token
-
-    container.services["authenticator"] = ServiceAuthenticator(
-        settings.authentication, gcp_verifier=verify_google_id_token
-    )
+    container.services["authenticator"] = ServiceAuthenticator(settings.authentication)
     container.services["authz"] = AuthorizationService(
         container.authorization,
         container.cache,
-        max_listed_objects=settings.authorization.max_listed_objects,
-        cache_ttl_seconds=settings.cache.authz_ttl_seconds,
-        decision_cache=settings.authorization.decision_cache,
+        max_listed_objects=constants.AUTHORIZATION.max_listed_objects,
+        cache_ttl_seconds=constants.CACHE.authz_ttl_seconds,
+        decision_cache=constants.AUTHORIZATION.decision_cache,
     )
 
 
@@ -189,18 +167,17 @@ def _wire_conversation(container: Container) -> None:
     from memory_service.modules.conversation.service import ConversationService
     from memory_service.modules.working_memory.hot_thread import HotThreadCache, WorkingMemory
 
-    cache_cfg = container.settings.cache
     hot = HotThreadCache(
         container.cache,
-        max_messages=cache_cfg.hot_thread_max_messages,
-        ttl_seconds=cache_cfg.hot_thread_ttl_seconds,
+        max_messages=constants.CACHE.hot_thread_max_messages,
+        ttl_seconds=constants.CACHE.hot_thread_ttl_seconds,
     )
     container.services["hot_thread"] = hot
     container.services["working_memory"] = WorkingMemory(
-        container.cache, ttl_seconds=cache_cfg.working_memory_ttl_seconds
+        container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
     )
     container.services["conversation"] = ConversationService(
-        container.services["authz"], hot, archive_enabled=container.settings.archive.enabled
+        container.services["authz"], hot, archive_enabled=container.tuning.archive.enabled
     )
 
 
@@ -212,15 +189,15 @@ def _register_jobs(container: Container) -> None:
 
 async def _wire_blob(container: Container) -> None:
     cfg = container.settings.blob
-    if cfg.provider == "gcs":
+    if container.overrides.blob == "memory":
+        from memory_service.adapters.blob.memory import MemoryBlobStore
+
+        store = MemoryBlobStore()
+    elif cfg.provider == "gcs":
         from memory_service.adapters.blob.gcs import GCSBlobStore
 
         store = GCSBlobStore(cfg)
         container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
-    elif cfg.provider == "memory":
-        from memory_service.adapters.blob.memory import MemoryBlobStore
-
-        store = MemoryBlobStore()
     else:
         from memory_service.adapters.blob.filesystem import FilesystemBlobStore
 
@@ -235,33 +212,29 @@ def _wire_archive(container: Container) -> None:
     container.services["archive_service"] = ArchiveService(
         container.services["uow_factory"],
         container.blob,
-        archive=container.settings.archive,
+        archive=container.tuning.archive,
         blob_settings=container.settings.blob,
     )
 
 
 def _wire_ingestion(container: Container) -> None:
-
     from memory_service.adapters.parsers import register_parsers
     from memory_service.adapters.parsers.builtin import BuiltinParser
     from memory_service.modules.ingestion.service import IngestionService
 
-    cfg = container.settings.documents
+    cfg = container.tuning.documents
     # The registry is the extension point: a new parser is one entry in adapters/parsers,
     # not a branch here. This used to be a switch statement, which is precisely what
     # config/registry.py says a provider must never require.
     register_parsers(container.registries.document_parser)
     builtin = BuiltinParser()
-    parser = container.registries.document_parser.create(cfg.parser)
+    wanted = "builtin" if container.overrides.document_parser == "builtin" else cfg.parser
+    parser = container.registries.document_parser.create(wanted)
     if parser is None:
-        # The chosen parser cannot run here. Falling back is a configured behaviour, not an
-        # accident, and /version reports the difference either way.
-        if not cfg.fallback_parser:
-            raise ProviderNotConfigured(
-                f"documents.parser={cfg.parser!r} cannot be constructed in this image and "
-                "documents.fallback_parser is unset"
-            )
-        parser = container.registries.document_parser.create(cfg.fallback_parser)
+        # The chosen parser cannot run here (an image built without the docling extra).
+        # Falling back to the builtin is the designed behaviour, not an accident, and
+        # /version reports the difference.
+        parser = builtin
     container.document_parser = parser
     container.services["ingestion"] = IngestionService(
         container.services["uow_factory"],
@@ -270,7 +243,7 @@ def _wire_ingestion(container: Container) -> None:
         container.blob,
         settings=cfg,
         file_bucket=container.settings.blob.file_bucket,
-        tenant_shards=container.settings.archive.tenant_shards,
+        tenant_shards=container.tuning.archive.tenant_shards,
         fallback_parser=builtin,
         assist=container.services["llm_assist"],
     )
@@ -279,107 +252,74 @@ def _wire_ingestion(container: Container) -> None:
 async def _wire_search(container: Container) -> None:
     from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 
-    cfg = container.settings.search
-    if cfg.provider == "memory":
-        cfg = cfg.model_copy(update={"qdrant_local_path": ":memory:"})
-    store = QdrantSearchStore(cfg)
+    stand_in = container.overrides
+    local = ":memory:" if stand_in.search == "memory" else stand_in.search_local_path
+    store = QdrantSearchStore(container.settings.search, local_path=local)
     container.search = store
-    if cfg.qdrant_local_path is None:
+    if local is None:
         container.add_dependency(
             Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
         )
 
 
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+
 def _wire_models(container: Container) -> None:
     from memory_service.adapters.models.embeddings import (
-        FastEmbedEmbedding,
         HashEmbedding,
         SentenceTransformersEmbedding,
     )
     from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
     from memory_service.adapters.models.sparse import Bm25SparseEncoder
-    from memory_service.config.registry import check_provider_policy
 
-    settings = container.settings
-    emb_cfg = settings.models.embedding
-    if emb_cfg.url:
-        from memory_service.adapters.models.remote import RemoteEmbedding
-
-        embedding = RemoteEmbedding(emb_cfg)
-    elif emb_cfg.provider == "hash":
-        embedding = HashEmbedding(emb_cfg.dimension)
-    elif emb_cfg.provider == "fastembed":
-        embedding = FastEmbedEmbedding(emb_cfg)
-    elif emb_cfg.provider in ("sentence_transformers", "onnx", "openvino"):
-        embedding = SentenceTransformersEmbedding(emb_cfg)
+    stand_in = container.overrides
+    if stand_in.embedding == "hash":
+        container.embedding = HashEmbedding(stand_in.embedding_dimension)
     else:
-        raise NotImplementedError(f"embedding provider {emb_cfg.provider} not implemented yet")
-    check_provider_policy(
-        embedding.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
-    container.embedding = embedding
-    if settings.retrieval.splade:
-        from memory_service.adapters.models.advanced import FastEmbedSparseEncoder
-
-        sparse_model = settings.models.sparse_model
-        if settings.models.sparse_url:
-            from memory_service.adapters.models.remote import RemoteSparse
-
-            sparse_encoder: Any = RemoteSparse(settings.models.sparse_url, sparse_model)
-        else:
-            sparse_encoder = FastEmbedSparseEncoder(
-                sparse_model, model_path=settings.models.sparse_model_path
-            )
-        check_provider_policy(
-            sparse_encoder.info,
-            [*settings.provider_policy.allowed_licenses, "see model card"],
-            settings.provider_policy.allow_remote_models,
+        container.embedding = SentenceTransformersEmbedding(
+            stand_in.dense_model or FROZEN_MODELS.dense,
+            threads=container.settings.models.embedding.threads,
         )
-        container.sparse = sparse_encoder
-    else:
-        container.sparse = Bm25SparseEncoder()
-    rr_cfg = settings.models.reranker
-    if rr_cfg.provider == "disabled":
-        container.reranker = None
-    elif rr_cfg.provider == "lexical":
+    container.sparse = Bm25SparseEncoder()
+
+    reranker: Any = None
+    if stand_in.reranker == "lexical":
         # Free to construct, so it is not behind the flag below: a test that turns
         # `retrieval.rerank` on after wiring still has a reranker to exercise.
-        container.reranker = LexicalReranker()
-    elif not settings.retrieval.rerank:
-        # Guarded by its own flag, the way `splade` above already is. Without this the
-        # cross-encoder was constructed whatever `retrieval.rerank` said — 566 MB of weights
-        # loaded into both the API and the worker at startup, reported on /version as an
-        # active provider, and never called, because engine.py guards the only call site on
-        # `cfg.rerank`. Reranking is off by default on measured evidence: on document RAG it
-        # was *worse* and twelve times slower (nDCG 80.54% -> 76.64%, p50 895 ms -> 10,868 ms,
-        # docs/MEASUREMENTS.md §3b). Turning the flag on loads the model again.
-        container.reranker = None
-    elif rr_cfg.url:
-        from memory_service.adapters.models.remote import RemoteReranker
-
-        container.reranker = RemoteReranker(rr_cfg)
+        reranker = LexicalReranker()
+    elif stand_in.reranker == "cross_encoder":
+        model = stand_in.reranker_model or FROZEN_MODELS.reranker
+        if model is None:
+            raise ProviderNotConfigured("reranker=cross_encoder needs a reranker_model")
+        reranker = CrossEncoderReranker(model)
+    elif stand_in.reranker == "disabled" or not container.tuning.retrieval.rerank:
+        # Guarded by its own flag. Without this the cross-encoder was constructed whatever
+        # `retrieval.rerank` said — 566 MB of weights loaded into both the API and the
+        # worker at startup, reported on /version as an active provider, and never called,
+        # because engine.py guards the only call site on `cfg.rerank`. Reranking is off on
+        # measured evidence (constants.RetrievalSettings.rerank).
+        reranker = None
+    elif FROZEN_MODELS.reranker is None:
+        log.warning("reranker.no_model", note="retrieval.rerank is on but no reranker is frozen")
     else:
-        container.reranker = CrossEncoderReranker(rr_cfg)
+        reranker = CrossEncoderReranker(FROZEN_MODELS.reranker)
+    container.reranker = reranker
 
 
 def _wire_llm(container: Container) -> None:
     """The generative model is optional and reachable only through the Bifrost gateway."""
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
-    from memory_service.config.registry import check_provider_policy
     from memory_service.modules.llm.assist import LLMAssist
 
-    settings = container.settings
-    cfg = settings.models.llm
+    cfg = container.settings.models.llm
     if not cfg.enabled:
         container.llm = DisabledLLM()
         container.services["llm_assist"] = LLMAssist.disabled()
         return
-    llm = BifrostLLM(cfg, log_source_text=settings.service.log_source_text)
-    check_provider_policy(
-        llm.info, [*settings.provider_policy.allowed_licenses, "see model card"], allow_remote=True
-    )
+    llm = BifrostLLM(cfg, log_source_text=constants.LOG_SOURCE_TEXT)
     container.llm = llm
     container.services["llm_assist"] = LLMAssist(llm, cfg)
     container.add_dependency(
@@ -388,38 +328,32 @@ def _wire_llm(container: Container) -> None:
 
 
 def _wire_nli(container: Container) -> None:
-    """Claim-support classifier + grounding cascade. Like the parser, the model tier degrades
-    to the deterministic stand-in with a warning when its weights cannot be loaded; reports
+    """Claim-support classifier + grounding cascade. Like the parser, the model degrades to
+    the deterministic stand-in with a warning when its weights cannot be loaded; reports
     then say ``representative: false``."""
     from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
-    from memory_service.config.registry import check_provider_policy
     from memory_service.domain.errors import DependencyUnavailable
     from memory_service.modules.grounding.cascade import GroundingCascade
 
-    settings = container.settings
-    cfg = settings.models.nli
-    if cfg.provider == "disabled":
+    stand_in = container.overrides.nli
+    if stand_in == "disabled":
         container.nli = None
         return
     nli: Any = LexicalNLI()
-    if cfg.url:
-        from memory_service.adapters.models.remote import RemoteNLI
-
-        nli = RemoteNLI(cfg)
-    elif cfg.provider == "transformers":
+    if stand_in != "lexical":
         try:
-            nli = TransformersNLI(cfg)
+            nli = TransformersNLI(FROZEN_MODELS.nli)
         except DependencyUnavailable as exc:
             log.warning("nli.unavailable", error=exc.message, fallback="lexical")
-    check_provider_policy(
-        nli.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
     container.nli = nli
     container.services["grounding"] = GroundingCascade(
-        nli, settings=cfg, assist=container.services["llm_assist"]
+        nli, settings=container.tuning.nli, assist=container.services["llm_assist"]
     )
+
+
+# ---------------------------------------------------------------------------
+# Stages
+# ---------------------------------------------------------------------------
 
 
 def _wire_retrieval(container: Container) -> None:
@@ -428,15 +362,16 @@ def _wire_retrieval(container: Container) -> None:
     from memory_service.modules.rag.indexer import Indexer
     from memory_service.modules.retrieval.engine import RetrievalEngine
 
-    settings = container.settings
+    tuning = container.tuning
+    dense = container.overrides.dense_model or FROZEN_MODELS.dense
     indexer = Indexer(
         container.services["uow_factory"],
         container.search,
         container.embedding,
         container.sparse,
         container.cache,
-        batch_size=settings.models.embedding.batch_size,
-        embedding_cache_ttl=settings.cache.embedding_ttl_seconds,
+        batch_size=dense.batch_size,
+        embedding_cache_ttl=constants.CACHE.embedding_ttl_seconds,
         assist=container.services["llm_assist"],
     )
     container.services["indexer"] = indexer
@@ -446,13 +381,13 @@ def _wire_retrieval(container: Container) -> None:
         container.search,
         indexer,
         container.reranker,
-        settings=settings.retrieval,
-        rerank_k=settings.models.reranker.candidate_k,
+        settings=tuning.retrieval,
+        rerank_k=tuning.retrieval.rerank_k,
         assist=container.services["llm_assist"],
     )
     container.services["retrieval"] = engine
     working = EphemeralMemory(
-        container.cache, ttl_seconds=settings.cache.working_memory_ttl_seconds
+        container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
     )
     container.services["ephemeral_memory"] = working
     container.services["context_builder"] = ContextBuilder(
@@ -460,53 +395,27 @@ def _wire_retrieval(container: Container) -> None:
         engine,
         container.services["conversation"],
         container.cache,
-        settings=settings.context,
-        retrieval=settings.retrieval,
-        cache_ttl_seconds=settings.cache.context_bundle_ttl_seconds,
+        settings=tuning.context,
+        retrieval=tuning.retrieval,
+        cache_ttl_seconds=constants.CACHE.context_bundle_ttl_seconds,
         working=working,
         assist=container.services["llm_assist"],
     )
 
 
 def _wire_memory(container: Container) -> None:
-    """Memory intelligence: provider (native by default) + observation pipeline + service."""
-    from memory_service.config.registry import check_provider_policy
+    """Memory intelligence: the native provider + observation pipeline + service."""
+    from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
+    from memory_service.modules.memory.reflection import ReflectionService
     from memory_service.modules.memory.service import MemoryService
     from memory_service.ports.intelligence import MemoryIntelligenceProvider
 
-    settings = container.settings
-    cfg = settings.memory_intelligence
-    provider: MemoryIntelligenceProvider
-    if cfg.provider == "native":
-        provider = NativeMemoryIntelligence(
-            cfg, container.embedding, assist=container.services["llm_assist"]
-        )
-    elif cfg.provider == "mem0":
-        from memory_service.adapters.intelligence.mem0_provider import Mem0MemoryIntelligence
-
-        provider = Mem0MemoryIntelligence(settings)
-    elif cfg.provider == "langmem":
-        from memory_service.adapters.intelligence.langmem_provider import LangMemIntelligence
-
-        provider = LangMemIntelligence(settings)
-    elif cfg.provider == "cognee":
-        from memory_service.adapters.intelligence.cognee_provider import CogneeMemoryIntelligence
-
-        provider = CogneeMemoryIntelligence(settings)
-    else:  # pragma: no cover - settings Literal guards this
-        raise NotImplementedError(cfg.provider)
-    check_provider_policy(
-        provider.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
+    cfg = container.tuning.memory_intelligence
+    provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
+        cfg, container.embedding, assist=container.services["llm_assist"]
     )
-    if provider.info.requires_llm and not settings.models.llm.enabled:
-        raise NotImplementedError(
-            f"memory intelligence provider {cfg.provider!r} requires an LLM; "
-            "set MEMORY__MODELS__LLM__ENABLED=true and configure the model"
-        )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
         container.services["uow_factory"],
@@ -515,99 +424,66 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
     )
     container.services["memory"] = MemoryService(container.services["authz"])
-    from memory_service.modules.memory.forgetting import ForgettingService
-    from memory_service.modules.memory.reflection import ReflectionService
-
     container.services["forgetting"] = ForgettingService(
         container.services["uow_factory"],
         settings=cfg,
         cache=container.cache,
-        working_ttl_seconds=settings.cache.working_memory_ttl_seconds,
+        working_ttl_seconds=constants.CACHE.working_memory_ttl_seconds,
     )
     container.services["reflection"] = ReflectionService(
         container.services["uow_factory"], assist=container.services["llm_assist"]
     )
-    # NOT wired, deliberately: "thread_observer" would make modules/memory/observer.py live.
-    # It is a complete implementation that nothing constructs and no test covers, and turning
-    # it on changes behaviour elsewhere — a thread that already carries an observation stops
-    # needing the context builder to call the model for a conversation summary, which
-    # test_indexer_and_builder_use_the_model asserts it does. See the memory.observe handler
-    # in modules/jobs/registry.py for the whole story and the decision it is waiting on.
 
 
 def _wire_tools(container: Container) -> None:
     """Tool memory: registry, invocation records, output cache, chains and procedures."""
     from memory_service.modules.tools.service import ToolMemoryService
 
-    settings = container.settings
     container.services["tool_memory"] = ToolMemoryService(
         container.services["uow_factory"],
         container.services["authz"],
         blob=container.blob,
-        blob_bucket=settings.blob.file_bucket,
+        blob_bucket=container.settings.blob.file_bucket,
         indexer=container.services.get("indexer"),
     )
 
 
 def _wire_graph(container: Container) -> None:
-    """Knowledge graph: store (postgres | memory), enrichment provider, service, retrieval stage."""
-    from memory_service.config.registry import check_provider_policy
+    """Knowledge graph: store (postgres | memory), native enrichment, service, retrieval stage."""
     from memory_service.modules.graph.native import NativeGraphEnrichment
     from memory_service.modules.graph.retrieval import GraphStage
     from memory_service.modules.graph.service import GraphService
 
-    settings = container.settings
-    if settings.graph.store == "postgres":
-        from memory_service.adapters.graph.postgres_store import PostgresGraphStore
-
-        container.graph_store = PostgresGraphStore(container.database.engine)
-    else:
+    stand_in = container.overrides
+    if stand_in.graph_store == "memory":
         from memory_service.adapters.graph.memory_store import MemoryGraphStore
 
         container.graph_store = MemoryGraphStore()
-    cfg = settings.graph_enrichment
-    if cfg.provider == "disabled":
+    else:
+        from memory_service.adapters.graph.postgres_store import PostgresGraphStore
+
+        container.graph_store = PostgresGraphStore(container.database.engine)
+    if stand_in.graph_enrichment == "disabled":
         container.graph_enrichment = None
         return
     assist = container.services["llm_assist"]
-    if cfg.provider == "native":
-        provider = NativeGraphEnrichment(assist=assist)
-    elif cfg.provider == "graphiti":
-        from memory_service.adapters.graph.graphiti_provider import GraphitiEnrichment
-
-        provider = GraphitiEnrichment(settings)
-    elif cfg.provider == "docling_graph":
-        from memory_service.adapters.graph.docling_graph_provider import DoclingGraphEnrichment
-
-        provider = DoclingGraphEnrichment(settings)
-    else:  # cognee: graph comes from the cognee memory provider; native structure here
-        provider = NativeGraphEnrichment(assist=assist)
-    check_provider_policy(
-        provider.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
-    if provider.info.requires_llm and not settings.models.llm.enabled:
-        raise NotImplementedError(
-            f"graph enrichment provider {cfg.provider!r} requires an LLM; "
-            "set MEMORY__MODELS__LLM__ENABLED=true"
-        )
+    provider = NativeGraphEnrichment(assist=assist)
     container.graph_enrichment = provider
     graph = GraphService(
         container.services["uow_factory"],
         container.graph_store,
         provider,
         container.services["authz"],
-        settings=settings.graph,
+        settings=container.tuning.graph,
         assist=assist,
     )
     container.services["graph"] = graph
-    if settings.retrieval.graph:
+    if container.tuning.retrieval.graph:
         engine = container.services["retrieval"]
         engine.post_stages["graph"] = GraphStage(
             graph,
             container.services["uow_factory"],
-            max_facts=settings.context.graph_facts_max,
+            max_facts=container.tuning.context.graph_facts_max,
         )
 
 
@@ -616,7 +492,7 @@ def _wire_context_preservation(container: Container) -> None:
     from memory_service.modules.context.evidence import VerificationStage
     from memory_service.modules.context.expansion import ExpansionStage
 
-    settings = container.settings.retrieval
+    settings = container.tuning.retrieval
     engine = container.services["retrieval"]
     expansion = ExpansionStage(container.services["uow_factory"], settings=settings)
     if settings.parent_expansion or settings.neighbor_expansion or settings.definition_expansion:

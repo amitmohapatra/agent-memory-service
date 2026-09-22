@@ -101,6 +101,6 @@ FROM base AS validation
 RUN apt-get update && apt-get install -y --no-install-recommends make git procps && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --all-extras --dev --no-install-workspace
-ENV PATH="/opt/venv/bin:$PATH" HF_HOME=/models/hf-cache MEMORY_MODELS_DIR=/models
+ENV PATH="/opt/venv/bin:$PATH"
 # the repository is mounted at /app at run time; workspace members are installed then
 CMD ["sleep", "infinity"]

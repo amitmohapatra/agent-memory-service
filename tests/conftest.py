@@ -25,6 +25,7 @@ if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
         del os.environ[_leaked]
 
 from memory_service.api.app import create_app  # noqa: E402 - after the environment is cleaned
+from memory_service.application.container import Overrides  # noqa: E402
 from memory_service.config.settings import Settings, reset_settings_cache  # noqa: E402
 
 #: The suite gets a database of its own.
@@ -48,19 +49,7 @@ def _test_settings(**overrides: object) -> Settings:
     base = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["test-key"]},
-        "authorization": {"provider": "memory"},
-        "cache": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "tasks": {"provider": "inline"},
-        "models": {
-            "embedding": {"provider": "hash", "dimension": 64},
-            "reranker": {"provider": "lexical"},
-            "nli": {"provider": "lexical"},
-            "llm": {"enabled": False},
-        },
-        "documents": {"parser": "builtin"},
-        "observability": {"otel_enabled": False},
+        "models": {"llm": {"enabled": False}},
         "database": {"url": DB_URL},
     }
     for key, value in overrides.items():
@@ -69,17 +58,56 @@ def _test_settings(**overrides: object) -> Settings:
         else:
             base[key] = value
     if os.environ.get("MEMORY_TEST_PROVIDERS") == "env":
-        # Real-component runs: the environment's providers (weights, Qdrant server, cache,
-        # OpenFGA, parser, LLM gateway) replace the hermetic stand-ins for these sections
-        # only; tasks/blob stay test-local so drain() and tmp_path semantics hold.
+        # Real-component runs: the environment's stores and gateway (Qdrant server, cache,
+        # OpenFGA, LLM) replace the hermetic stand-ins for these sections only; tasks/blob
+        # stay test-local so drain() and tmp_path semantics hold.
         env_only = Settings().model_dump(exclude_unset=True)
-        for section in ("models", "search", "cache", "authorization", "documents", "retrieval"):
+        for section in ("models", "search", "authorization", "cache"):
             if isinstance(env_only.get(section), dict):
                 base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
     # ``_env_file=None`` disables the dotenv source. Stripping MEMORY__* from os.environ is
     # not enough on its own: pydantic-settings also reads ./.env directly, so a suite run from
     # the repo root still inherited it. Both doors have to be shut for a run to be hermetic.
     return Settings(_env_file=None, **base)  # type: ignore[arg-type]
+
+
+#: The in-process stand-ins the hermetic suite runs on. They are not settings: a deployment
+#: cannot be pointed at a dict-backed cache, a hash embedding or an in-memory queue by an env
+#: file, so the suite names them in code when it builds a container
+#: (``build_container(overrides=...)``).
+HERMETIC = Overrides(
+    cache="memory",
+    search="memory",
+    tasks="inline",
+    authorization="memory",
+    blob="memory",
+    embedding="hash",
+    embedding_dimension=64,
+    reranker="lexical",
+    nli="lexical",
+    document_parser="builtin",
+)
+
+
+def _test_overrides(**changes: object) -> Overrides:
+    """``HERMETIC`` with fields replaced; under ``MEMORY_TEST_PROVIDERS=env`` the real stores,
+    weights and parser take over while the queue and blob store stay in-process so ``drain()``
+    and tmp_path semantics hold."""
+    from dataclasses import replace
+
+    base = HERMETIC
+    if os.environ.get("MEMORY_TEST_PROVIDERS") == "env":
+        base = replace(
+            base,
+            cache=None,
+            search=None,
+            authorization=None,
+            embedding=None,
+            reranker=None,
+            nli=None,
+            document_parser=None,
+        )
+    return replace(base, **changes) if changes else base  # type: ignore[arg-type]
 
 
 def _deep_merge(base: dict, extra: dict) -> dict:
@@ -233,17 +261,27 @@ def make_settings():
 
 
 @pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
-    app = create_app(settings)
+def overrides() -> Overrides:
+    return _test_overrides()
+
+
+@pytest.fixture
+def make_overrides():
+    return _test_overrides
+
+
+@pytest.fixture
+def client(settings: Settings, overrides: Overrides) -> Iterator[TestClient]:
+    app = create_app(settings, overrides=overrides)
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
 
 
 @pytest.fixture
-async def aclient(settings: Settings) -> AsyncIterator[object]:
+async def aclient(settings: Settings, overrides: Overrides) -> AsyncIterator[object]:
     import httpx
 
-    app = create_app(settings)
+    app = create_app(settings, overrides=overrides)
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:

@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 
-from memory_service.config.settings import MemoryIntelligenceSettings
+from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import AdmissionVerdict, DedupDecision, Lifetime, MemoryType
 from memory_service.domain.memory import AdmissionDecision
 from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate

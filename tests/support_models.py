@@ -7,8 +7,8 @@ Two different reasons a model test cannot run, which were previously reported as
   macOS x86_64 wheels, so on an Intel Mac the ``[models]`` extra is unavailable at any
   version. Those tests run in the Linux runtime image instead: ``make model-test``.
 
-fastembed-based adapters (SPLADE, ColBERT) need only onnxruntime and do run natively, so
-they should not be swept into the same skip.
+The sparse encoder is client-side BM25 and needs neither weights nor that runtime, so it is
+never behind these skips; the dense encoder, the NLI head and the benchmark rerankers are.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ _REPO = Path(__file__).resolve().parents[1]
 
 
 def models_dir() -> Path | None:
-    """The weights directory: ``MEMORY_MODELS_DIR`` if set, else ``./models`` if present."""
-    if env := os.environ.get("MEMORY_MODELS_DIR"):
+    """The weights directory: ``BENCH_MODELS_DIR`` if set, else ``./models`` if present."""
+    if env := os.environ.get("BENCH_MODELS_DIR"):
         return Path(env)
     default = _REPO / "models"
     return default if default.is_dir() else None
@@ -31,7 +31,7 @@ def models_dir() -> Path | None:
 
 MODELS_DIR = models_dir()
 
-NO_WEIGHTS = "no model weights — run `make models` or set MEMORY_MODELS_DIR"
+NO_WEIGHTS = "no model weights — run `make models` or set BENCH_MODELS_DIR"
 NO_RUNTIME = (
     "the 'models' extra is not installed (torch/onnxruntime publish no macOS x86_64 wheels) "
     "— run `make model-test` to run this in the Linux runtime image"

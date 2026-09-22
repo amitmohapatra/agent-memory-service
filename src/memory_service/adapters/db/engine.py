@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from memory_service.config.constants import DATABASE
 from memory_service.config.settings import DatabaseSettings
 from memory_service.observability.logging import get_logger
 
@@ -24,15 +25,14 @@ class Database:
     def __init__(self, settings: DatabaseSettings) -> None:
         self.settings = settings
         self.engine: AsyncEngine = create_async_engine(
-            settings.url,
+            settings.dsn,
             pool_size=settings.pool_size,
             max_overflow=settings.max_overflow,
-            pool_timeout=settings.pool_timeout_seconds,
+            pool_timeout=DATABASE.pool_timeout_seconds,
             pool_pre_ping=True,
-            echo=settings.echo,
             connect_args={
-                "options": f"-c statement_timeout={settings.statement_timeout_ms}",
-                "connect_timeout": settings.connect_timeout_seconds,
+                "options": f"-c statement_timeout={DATABASE.statement_timeout_ms}",
+                "connect_timeout": DATABASE.connect_timeout_seconds,
             },
         )
         self.session_factory = async_sessionmaker(
@@ -57,7 +57,7 @@ class Database:
         including a connection handed back from the pool that turns out to be dead and a
         server that accepts the query and never answers.
         """
-        budget = self.settings.connect_timeout_seconds + self.settings.pool_timeout_seconds
+        budget = DATABASE.connect_timeout_seconds + DATABASE.pool_timeout_seconds
         try:
             async with asyncio.timeout(budget):
                 async with self.engine.connect() as conn:

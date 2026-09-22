@@ -20,13 +20,9 @@ log = get_logger(__name__)
 
 async def _apply() -> None:
     settings = get_settings()
-    if settings.tasks.provider != "procrastinate":
-        log.info("queue_schema.skipped", provider=settings.tasks.provider)
-        return
     from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
 
-    dsn = str(settings.database.url).replace("postgresql+psycopg://", "postgresql://")
-    queue = ProcrastinateTaskQueue(dsn)
+    queue = ProcrastinateTaskQueue(settings.database.procrastinate_dsn)
     try:
         await queue.ensure_schema()
         log.info("queue_schema.ready")

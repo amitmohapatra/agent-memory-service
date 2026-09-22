@@ -16,6 +16,10 @@ RESULTS = Path(__file__).resolve().parent / "results"
 
 
 def _git_commit() -> str:
+    """The commit a result was produced from. Inside the benchmark image the checkout is a
+    bind mount with no usable .git, so the Makefile passes GIT_COMMIT; a host run asks git."""
+    if commit := os.environ.get("GIT_COMMIT", "").strip():
+        return commit
     try:
         return subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except Exception:  # noqa: BLE001
@@ -31,8 +35,8 @@ def _pkg(name: str) -> str:
 
 def _model_manifest() -> dict[str, Any]:
     """Model name + revision hash per weight directory (written when the weights are
-    downloaded into ``MEMORY_MODELS_DIR`` / ``./models``)."""
-    root = Path(os.environ.get("MEMORY_MODELS_DIR", "models"))
+    downloaded into ``./models``, or ``BENCH_MODELS_DIR``)."""
+    root = Path(os.environ.get("BENCH_MODELS_DIR", "models"))
     path = root / "MANIFEST.json"
     if not path.is_file():
         return {}

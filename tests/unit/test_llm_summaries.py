@@ -249,7 +249,7 @@ async def test_indexer_and_builder_use_the_model(container, uow_factory) -> None
             )
         await uow.commit()
     builder = container.services["context_builder"]
-    builder.cfg = container.settings.context.model_copy(update={"conversation_token_budget": 200})
+    builder.cfg = container.tuning.context.model_copy(update={"conversation_token_budget": 200})
     with mocked_gateway(['{"summary": "Eight turns of detail about the review."}']) as gw:
         builder.assist = gw.assist(uses=["summaries"])
         bundle = await builder.build(tctx, "what did I say earlier in this thread?")

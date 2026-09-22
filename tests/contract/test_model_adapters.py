@@ -4,7 +4,7 @@ offline (no downloads). They prove the adapter code paths — local loading with
 provider-policy check, and the CrossEncoder scoring/ordering contract — not model quality.
 
 The ``models``-marked test at the bottom runs the same contract against real weights when
-``MEMORY_MODELS_DIR`` points at a directory containing ``granite-embedding-small-english-r2``
+``BENCH_MODELS_DIR`` (or ``./models``) points at a directory containing ``granite-embedding-small-english-r2``
 (and optionally ``ms-marco-MiniLM-L6-v2``).
 """
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from memory_service.config.settings import EmbeddingSettings, RerankerSettings
+from memory_service.config.constants import CrossEncoderModel, DenseModel
 from memory_service.domain.errors import DependencyUnavailable
 
 pytestmark = pytest.mark.contract
@@ -122,42 +122,45 @@ async def _embedding_contract(emb, expected_dim: int | None = None) -> None:
 
 async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> None:
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
-    from memory_service.config.registry import check_provider_policy
 
-    settings = EmbeddingSettings(
-        provider="sentence_transformers",
-        model="tiny/tiny-embed",
-        model_path=str(tiny_st_model),
-        dimension=32,
-        batch_size=2,
-        threads=1,
+    spec = DenseModel(
+        id="tiny/tiny-embed", model_path=str(tiny_st_model), dimension=32, batch_size=2
     )
-    emb = SentenceTransformersEmbedding(settings)
+    emb = SentenceTransformersEmbedding(spec, threads=1)
     await _embedding_contract(emb, expected_dim=32)
     assert emb.fingerprint() == "st-tiny-embed-torch-d32"
-    check_provider_policy(emb.info, ["Apache-2.0", "MIT", "see model card"], allow_remote=False)
+    assert emb.info.locality == "local"
 
 
 def test_missing_local_model_is_a_dependency_error(tmp_path: Path) -> None:
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
 
-    settings = EmbeddingSettings(
-        provider="sentence_transformers", model="nope/none", model_path=str(tmp_path / "missing")
-    )
+    spec = DenseModel(id="nope/none", model_path=str(tmp_path / "missing"))
     with pytest.raises(DependencyUnavailable, match="could not be loaded"):
-        SentenceTransformersEmbedding(settings)
+        SentenceTransformersEmbedding(spec)
+
+
+def test_the_fingerprint_names_the_onnx_graph_when_one_is_frozen() -> None:
+    """int8 and fp32 graphs of one model must never share a collection; without a graph the
+    name is what it always was, so today's collections keep their names."""
+    from memory_service.adapters.models.embeddings import dense_fingerprint
+
+    base = DenseModel()
+    assert dense_fingerprint(base) == "st-granite-embedding-small-english-r2-torch-d384"
+    int8 = base.model_copy(update={"backend": "onnx", "graph_file": "onnx/model_quint8_avx2.onnx"})
+    fp32 = base.model_copy(update={"backend": "onnx", "graph_file": "onnx/model.onnx"})
+    assert dense_fingerprint(int8) != dense_fingerprint(fp32)
+    assert (
+        dense_fingerprint(int8)
+        == "st-granite-embedding-small-english-r2-onnx-model_quint8_avx2-d384"
+    )
 
 
 async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
     from memory_service.adapters.models.rerankers import CrossEncoderReranker
 
     rr = CrossEncoderReranker(
-        RerankerSettings(
-            provider="sentence_transformers",
-            model="tiny/tiny-ce",
-            model_path=str(tiny_cross_encoder),
-            candidate_k=3,
-        )
+        CrossEncoderModel(id="tiny/tiny-ce", model_path=str(tiny_cross_encoder))
     )
     docs = ["adjusted ebitda increased", "restructuring savings", "litigation settlement", "page"]
     out = await rr.rerank("why did adjusted ebitda increase", docs, top_k=3)
@@ -176,24 +179,18 @@ async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
 
 @pytest.mark.models
 async def test_granite_real_weights_contract() -> None:
-    """Runs only when real weights are present (MEMORY_MODELS_DIR)."""
-    root = os.environ.get("MEMORY_MODELS_DIR")
+    """Runs only when real weights are present (./models or BENCH_MODELS_DIR)."""
+    root = os.environ.get("BENCH_MODELS_DIR") or ("models" if Path("models").is_dir() else "")
     if not root:
         pytest.skip(
-            "MEMORY_MODELS_DIR not set — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)"
+            "no ./models — run `make model-test`, which mounts ./models into the runtime image (torch and onnxruntime ship no macOS x86_64 wheels, so these cannot run natively on an Intel Mac)"
         )
     path = Path(root) / "granite-embedding-small-english-r2"
     if not path.exists():
         pytest.skip(f"{path} not present")
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
 
-    emb = SentenceTransformersEmbedding(
-        EmbeddingSettings(
-            provider="sentence_transformers",
-            model="ibm-granite/granite-embedding-small-english-r2",
-            model_path=str(path),
-        )
-    )
+    emb = SentenceTransformersEmbedding(DenseModel(model_path=str(path)))
     await _embedding_contract(emb, expected_dim=384)
     a, b, c = await emb.embed_documents(
         [

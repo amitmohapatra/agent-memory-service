@@ -16,7 +16,7 @@ from collections.abc import Coroutine, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from memory_service.config.settings import ContextSettings, RetrievalSettings
+from memory_service.config.constants import ContextSettings, RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextBundle,

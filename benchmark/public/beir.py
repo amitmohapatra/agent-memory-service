@@ -10,23 +10,23 @@ with index time and query latency p50/p95.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy import text
 
+from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.public.data import BeirDataset
 from benchmark.public.metrics import doc_ranking, evaluate_run
 from benchmark.retrieval import TABLES, _pct, _settings
 from memory_service.__about__ import __version__
-from memory_service.application.container import build_container
-from memory_service.config.settings import Settings
+from memory_service.application.container import Overrides, build_container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.jobs.registry import register_handlers
 
 STRATEGIES: dict[str, dict[str, Any]] = {
     "baseline": {},
-    "splade": {"splade": True},
     "minicoil": {"minicoil": True},
     "colbert": {"colbert": True},
     "pageindex": {"pageindex": True},
@@ -39,15 +39,21 @@ RECALL_KS = (20, 100)
 MAX_K = max(*NDCG_KS, *RECALL_KS)
 
 
-def strategy_settings(base: Settings, flags: dict[str, Any]) -> Settings:
+def strategy_overrides(flags: dict[str, Any]) -> Overrides:
     """Apply one strategy's flags and widen the candidate pool to the deepest cutoff so
     Recall@100 measures ranking, not the production ``fused_k`` prune."""
-    data = base.model_dump()
-    retrieval = {**data["retrieval"], **flags}
-    retrieval["prefetch_k"] = max(int(retrieval["prefetch_k"]), MAX_K)
-    retrieval["fused_k"] = max(int(retrieval["fused_k"]), MAX_K)
-    data["retrieval"] = retrieval
-    return Settings(**data)
+    base = bench_overrides()
+    retrieval = bench_retrieval(base)
+    return replace(
+        base,
+        retrieval=retrieval.model_copy(
+            update={
+                **flags,
+                "prefetch_k": max(retrieval.prefetch_k, MAX_K),
+                "fused_k": max(retrieval.fused_k, MAX_K),
+            }
+        ),
+    )
 
 
 async def _ingest(
@@ -80,9 +86,10 @@ async def _ingest(
 async def run_strategy(
     dataset: BeirDataset, name: str, flags: dict[str, Any], *, batch: int = 200
 ) -> dict[str, Any]:
-    settings = strategy_settings(_settings(), flags)
+    settings = _settings()
+    overrides = strategy_overrides(flags)
     try:
-        container = await build_container(settings, __version__)
+        container = await build_container(settings, __version__, overrides=overrides)
     except (DependencyUnavailable, NotImplementedError) as exc:
         return {"skipped": f"{type(exc).__name__}: {exc}", "flags": flags}
     try:
@@ -118,9 +125,9 @@ async def run_strategy(
                 "samples": len(latencies),
             },
             "retrieval": {
-                "prefetch_k": settings.retrieval.prefetch_k,
-                "fused_k": settings.retrieval.fused_k,
-                "rerank": settings.retrieval.rerank,
+                "prefetch_k": container.tuning.retrieval.prefetch_k,
+                "fused_k": container.tuning.retrieval.fused_k,
+                "rerank": container.tuning.retrieval.rerank,
             },
             "providers": {
                 "embedding": embedding_fp,

@@ -16,10 +16,11 @@ from typing import Any
 
 import httpx
 
+from benchmark.evaluation import BUDGETS
+from benchmark.evaluation.golden import GoldenSet
 from benchmark.retrieval import FIXTURES, _pct
 from memory_service.config.settings import Settings
 from memory_service.domain.ids import new_id
-from memory_service.modules.evaluation.golden import GoldenSet
 
 H = {"X-API-Key": "bench", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
 FACTS = [
@@ -55,8 +56,8 @@ def new_scope() -> dict[str, str]:
     }
 
 
-def budgets_ms(settings: Settings) -> dict[str, float]:
-    return {key: getattr(settings.budgets, key) for key in BUDGET_KEYS}
+def budgets_ms(settings: Settings | None = None) -> dict[str, float]:
+    return {key: getattr(BUDGETS, key) for key in BUDGET_KEYS}
 
 
 def stats(xs: list[float]) -> dict[str, Any]:

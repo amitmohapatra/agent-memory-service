@@ -8,10 +8,10 @@ from fastapi import Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.application.container import Container
+from memory_service.config.constants import HEADERS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ValidationFailed
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
-from memory_service.modules.authz.service import AuthorizationService
 from memory_service.observability.logging import bind_log_context
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -65,13 +65,12 @@ ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)
 
 
 def _header_scope(request: Request, container: Container) -> dict[str, Any]:
-    cfg = container.settings.authentication
     h = request.headers
-    groups_raw = h.get(cfg.header_groups, "")
+    groups_raw = h.get(HEADERS.groups, "")
     return {
-        "tenant_id": h.get(cfg.header_tenant),
-        "workspace_id": h.get(cfg.header_workspace),
-        "user_id": h.get(cfg.header_user),
+        "tenant_id": h.get(HEADERS.tenant),
+        "workspace_id": h.get(HEADERS.workspace),
+        "user_id": h.get(HEADERS.user),
         "group_ids": [g.strip() for g in groups_raw.split(",") if g.strip()],
     }
 
@@ -158,7 +157,3 @@ async def get_header_context(
 
 
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
-
-
-def get_authz(container: ContainerDep) -> AuthorizationService:
-    return container.services["authz"]

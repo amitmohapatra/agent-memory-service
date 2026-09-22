@@ -1,4 +1,5 @@
-"""Redis-protocol CacheProvider: Dragonfly (production), Valkey, Redis.
+"""Redis-protocol CacheProvider. The dev stack runs Dragonfly; any server speaking the
+protocol works, and the adapter does not need to be told which one.
 
 Every call is guarded: a backend failure raises ``CacheUnavailable`` quickly (short socket
 timeouts) so callers degrade to the canonical store instead of hanging.
@@ -11,28 +12,28 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 import redis.asyncio as redis_async
 from redis.exceptions import RedisError
 
+from memory_service.config.constants import CACHE
 from memory_service.config.settings import CacheSettings
 from memory_service.observability.metrics import cache_ops_total
 from memory_service.ports.cache import CacheUnavailable
 from memory_service.ports.models import ProviderInfo
 
-_LICENSES = {"dragonfly": "BSL-1.1", "valkey": "BSD-3-Clause", "redis": "RSALv2/SSPL"}
-
 
 class RedisCache:
+    info = ProviderInfo(
+        name="redis-protocol",
+        license="see server (Dragonfly BSL-1.1 in the dev stack)",
+        origin="redis-protocol server",
+        locality="local",
+        data_residency="deployment",
+    )
+
     def __init__(self, settings: CacheSettings) -> None:
         self.settings = settings
-        self.info = ProviderInfo(
-            name=settings.provider,
-            license=_LICENSES.get(settings.provider, "unknown"),
-            origin="redis-protocol server",
-            locality="local",
-            data_residency="deployment",
-        )
         self._client = redis_async.from_url(
-            settings.url,
-            socket_connect_timeout=settings.connect_timeout_seconds,
-            socket_timeout=settings.socket_timeout_seconds,
+            settings.url.get_secret_value(),
+            socket_connect_timeout=CACHE.connect_timeout_seconds,
+            socket_timeout=CACHE.socket_timeout_seconds,
             decode_responses=False,
             health_check_interval=30,
         )

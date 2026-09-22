@@ -24,8 +24,6 @@ jobs:
     env:
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@localhost:5432/memory
       MEMORY__CACHE__URL: redis://localhost:6379/0
-      MEMORY__SEARCH__QDRANT_LOCAL_PATH: ":memory:"
-      MEMORY__AUTHORIZATION__PROVIDER: memory
       MEMORY__BLOB__PROVIDER: filesystem
     steps:
       - uses: actions/checkout@v4

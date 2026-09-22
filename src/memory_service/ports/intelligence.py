@@ -1,8 +1,9 @@
 """Memory-intelligence, graph, document-parser and policy ports.
 
-``MemoryIntelligenceProvider`` is the seam behind which Native / Mem0 / Cognee / LangMem
-sit. None of them is the public contract; they produce candidates that the service turns
-into canonical memories with provenance.
+``MemoryIntelligenceProvider`` is the seam behind which the native implementation sits (the
+third-party challengers that once shared it were removed; a comparison, if ever wanted again,
+lives under benchmark/). It is not the public contract: it produces candidates that the
+service turns into canonical memories with provenance.
 """
 
 from __future__ import annotations
@@ -266,7 +267,7 @@ class GraphStore(Protocol):
 
 @runtime_checkable
 class GraphEnrichmentProvider(Protocol):
-    """Native (LLM-free) | Graphiti | DoclingGraph | Cognee."""
+    """Native (LLM-free) enrichment; ``disabled`` leaves the graph empty."""
 
     info: ProviderInfo
 
@@ -314,23 +315,3 @@ class DocumentParser(Protocol):
         media_type: str,
         data: bytes,
     ) -> ParsedDocument: ...
-
-
-# --------------------------------------------------------------------------
-# Policy
-# --------------------------------------------------------------------------
-
-
-class PolicyDecision(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    allowed: bool
-    reason: str = ""
-    obligations: dict[str, Any] = Field(default_factory=dict)
-
-
-@runtime_checkable
-class PolicyProvider(Protocol):
-    """OPA optional. Answers 'is this operation permitted under policy?'."""
-
-    async def evaluate(self, policy: str, input_data: dict[str, Any]) -> PolicyDecision: ...

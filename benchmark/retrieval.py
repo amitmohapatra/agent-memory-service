@@ -4,11 +4,12 @@ providers the environment configures.
 
     uv run python -m benchmark.retrieval --copies 40 --queries 30
 
-Provider selection comes from the normal settings (env ``MEMORY__MODELS__EMBEDDING__PROVIDER``
-etc.), so the same script benchmarks the hash stand-in, Granite via sentence-transformers,
-or fastembed/ONNX. The result records the provider fingerprints and whether they are
-representative. PostgreSQL must be reachable; Qdrant runs in local mode unless
-``MEMORY__SEARCH__PROVIDER=qdrant`` and a URL are set.
+The encoder is ``BENCH_EMBEDDING`` (``benchmark/env.py``): ``frozen`` for the shipped
+Granite weights, ``hash`` for the deterministic stand-in, defaulting to whichever the model
+roots can satisfy. The result records the provider fingerprints and whether they are
+representative.
+PostgreSQL must be reachable; Qdrant runs in local mode unless ``BENCH_SEARCH=qdrant`` and
+``MEMORY__SEARCH__QDRANT_URL`` are set (see ``benchmark/env.py``).
 """
 
 from __future__ import annotations
@@ -18,20 +19,23 @@ import asyncio
 import os
 import statistics
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
-from memory_service.__about__ import __version__
-from memory_service.application.container import build_container
-from memory_service.config.settings import Settings
-from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.ids import new_id
-from memory_service.modules.evaluation.golden import (
+from benchmark.env import bench_llm_settings, bench_overrides, bench_retrieval
+from benchmark.evaluation import BUDGETS, CRITICAL_RECALL_K
+from benchmark.evaluation.golden import (
     GoldenSet,
     RetrievedChunk,
     evaluate_question,
     summarize,
 )
+from memory_service.__about__ import __version__
+from memory_service.application.container import build_container
+from memory_service.config.settings import Settings
+from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,18 +53,7 @@ def _settings() -> Settings:
     defaults = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["bench"]},
-        "authorization": {"provider": "memory"},
-        "cache": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "models": {
-            "embedding": {"provider": "hash", "dimension": 64},
-            "reranker": {"provider": "lexical"},
-            "llm": {"enabled": False},
-        },
-        "documents": {"parser": "builtin"},
-        "observability": {"otel_enabled": False},
+        "models": {"llm": {"enabled": False, **bench_llm_settings()}},
         "database": {
             "url": os.environ.get(
                 "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
@@ -86,6 +79,7 @@ def _pct(xs: list[float], p: float) -> float:
 
 async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = None) -> dict:
     settings = _settings()
+    overrides = bench_overrides()
     if ablate:
         # Expansion flags cannot be measured on a flat corpus: SciFact abstracts are one
         # chunk each, so parent/neighbour/definition expansion has no parent, no neighbour
@@ -93,10 +87,10 @@ async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = Non
         # exactly zero difference. This golden set has section hierarchy, tables, footnotes
         # and `required_groups` — the mechanism those flags exist to serve — so it is the
         # instrument that can actually tell whether they earn their cost.
-        settings = settings.model_copy(
-            update={"retrieval": settings.retrieval.model_copy(update=ablate)}
+        overrides = replace(
+            overrides, retrieval=bench_retrieval(overrides).model_copy(update=ablate)
         )
-    container = await build_container(settings, __version__)
+    container = await build_container(settings, __version__, overrides=overrides)
     try:
         # both stores, not just SQL: the vector store is a separate server and survives a
         # TRUNCATE, so every previous run's vectors would otherwise compete with this one
@@ -139,7 +133,7 @@ async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = Non
         )
 
         # --- quality on the golden set (duplicates count as distinct distractors) -----------
-        k = settings.evaluation.critical_recall_k
+        k = CRITICAL_RECALL_K
         results = []
         for q in golden.questions:
             res = await engine.retrieve(ctx, q.query, limit=k)
@@ -212,9 +206,9 @@ async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = Non
                 "mean_recall": round(statistics.fmean(recall_ms), 2) if recall_ms else 0.0,
             },
             "budgets_ms": {
-                "recall_p95": settings.budgets.recall_p95_ms,
-                "context_bundle_p95": settings.budgets.context_bundle_p95_ms,
-                "cached_context_p95": settings.budgets.cached_context_p95_ms,
+                "recall_p95": BUDGETS.recall_p95_ms,
+                "context_bundle_p95": BUDGETS.context_bundle_p95_ms,
+                "cached_context_p95": BUDGETS.cached_context_p95_ms,
             },
             "provenance": provenance(),
         }
