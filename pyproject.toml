@@ -51,7 +51,7 @@ gcp = ["google-cloud-storage>=3.14", "google-auth>=2"]
 # Document parsing + document KG extraction
 docling = ["docling>=2.127", "docling-graph>=1.9"]
 # Local CPU embedding / reranking runtimes
-models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "fastembed>=0.8", "onnxruntime>=1.30", "optimum>=2.3"]
+models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "fastembed>=0.8", "onnx>=1.17", "onnxruntime>=1.30", "optimum>=2.3"]
 # Evaluation frameworks
 eval = ["deepeval>=4.2", "ragas>=0.4", "datasets>=3", "nltk>=3.9"]
 # Load testing
