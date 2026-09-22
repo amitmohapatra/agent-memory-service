@@ -279,9 +279,11 @@ def _wire_models(container: Container) -> None:
     if stand_in.embedding == "hash":
         container.embedding = HashEmbedding(stand_in.embedding_dimension)
     else:
+        dense = stand_in.dense_model or FROZEN_MODELS.dense
+        # The thread count is frozen with the model (constants.DenseModel.threads); the
+        # environment field is what is left of the served-model tier and is going away.
         container.embedding = SentenceTransformersEmbedding(
-            stand_in.dense_model or FROZEN_MODELS.dense,
-            threads=container.settings.models.embedding.threads,
+            dense, threads=container.settings.models.embedding.threads or dense.threads
         )
     container.sparse = Bm25SparseEncoder()
 

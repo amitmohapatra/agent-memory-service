@@ -129,6 +129,7 @@ async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> 
     emb = SentenceTransformersEmbedding(spec, threads=1)
     await _embedding_contract(emb, expected_dim=32)
     assert emb.fingerprint() == "st-tiny-embed-torch-d32"
+    assert emb.threads == 1
     assert emb.info.locality == "local"
 
 

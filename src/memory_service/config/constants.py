@@ -63,6 +63,11 @@ class DenseModel(BaseModel):
     normalize: bool = True
     batch_size: int = 32
     device: str = "cpu"
+    #: Intra-op threads the model may use: ``torch.set_num_threads`` for the torch runner,
+    #: ORT ``intra_op_num_threads`` for an ONNX one. Two, because the deployment runs three
+    #: uvicorn workers on eight vCPU and one encode fanning over every core is what makes
+    #: three concurrent requests slower than three sequential ones.
+    threads: int = 2
 
     @property
     def source(self) -> str:
@@ -90,6 +95,9 @@ class NLIModel(BaseModel):
     graph_file: str | None = None
     batch_size: int = 16
     max_length: int = 512
+    #: as ``DenseModel.threads``; both runners call ``torch.set_num_threads``, which is
+    #: process-wide, so the two counts are deliberately the same number
+    threads: int = 2
 
     @property
     def source(self) -> str:

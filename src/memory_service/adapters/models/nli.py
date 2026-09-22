@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Sequence
 from typing import Any
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
+from memory_service.adapters.models._runner import SerialRunner
 from memory_service.config.constants import NLIModel
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.grounding.lexical import conflicts, content_tokens, coverage
@@ -54,12 +54,13 @@ class LexicalNLI:
 
 class TransformersNLI:
     """``AutoModelForSequenceClassification`` cross-encoder (DeBERTa-v3 MNLI/FEVER/ANLI) on
-    CPU, batched, off the event loop. Label order is read from the model config."""
+    CPU, batched, and entered one caller at a time on its own thread. Label order is read
+    from the model config."""
 
     info: ProviderInfo
     representative = True
 
-    def __init__(self, spec: NLIModel) -> None:
+    def __init__(self, spec: NLIModel, *, threads: int | None = None) -> None:
         try:
             import torch
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -83,6 +84,11 @@ class TransformersNLI:
             ) from exc
         self._model.eval()
         self._torch = torch
+        # Process-wide, and the same number the encoder sets: two models that each fan over
+        # every core are worse than two that each take two.
+        self.threads = threads or spec.threads
+        torch.set_num_threads(self.threads)
+        self._runner = SerialRunner("nli")
         self.spec = spec
         labels = {int(k): str(v).lower() for k, v in self._model.config.id2label.items()}
         self._order = [
@@ -119,7 +125,10 @@ class TransformersNLI:
     async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
         if not premises:
             return []
-        return await asyncio.to_thread(self._score, premises, hypothesis)
+        return await self._runner.run(self._score, list(premises), hypothesis)
+
+    def close(self) -> None:
+        self._runner.close()
 
     def fingerprint(self) -> str:
         source = self.spec.model_path or self.spec.id

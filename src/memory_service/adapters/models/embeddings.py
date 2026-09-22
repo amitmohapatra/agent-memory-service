@@ -9,11 +9,13 @@
 
 Both expose ``fingerprint()`` (model + backend + graph file + dimension) which is baked into
 collection names and cache keys so a model swap can never mix vector spaces.
+
+The real encoder is entered through a ``SerialRunner``: one thread, one caller at a time,
+with the intra-op thread count pinned to ``DenseModel.threads``.
 """
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import itertools
 import math
@@ -22,6 +24,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
+from memory_service.adapters.models._runner import SerialRunner
 from memory_service.config.constants import DenseModel
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.models import ProviderInfo
@@ -93,12 +96,13 @@ class SentenceTransformersEmbedding:
                 f"embedding model {source!r} could not be loaded ({type(exc).__name__}); "
                 "run `make models` or bake the weights under /models"
             ) from exc
-        if threads:
-            import torch
+        self.threads = threads or spec.threads
+        import torch
 
-            torch.set_num_threads(threads)
+        # Process-wide, and deliberately so: the NLI head sets the same number.
+        torch.set_num_threads(self.threads)
         self.spec = spec
-        self.threads = threads
+        self._runner = SerialRunner("encoder")
         self.dimension = int(self._model.get_embedding_dimension() or spec.dimension)
         # The checkpoint's own limit governs truncation, as it always has (granite-small
         # declares 8192). ``spec.max_seq_length`` is the value the ONNX export will be pinned
@@ -126,13 +130,16 @@ class SentenceTransformersEmbedding:
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        return await asyncio.to_thread(self._encode, texts)
+        return await self._runner.run(self._encode, list(texts))
 
     async def embed_query(self, text: str) -> list[float]:
-        return (await asyncio.to_thread(self._encode, [text]))[0]
+        return (await self._runner.run(self._encode, [text]))[0]
 
     def fingerprint(self) -> str:
         return dense_fingerprint(self.spec, self.dimension)
+
+    def close(self) -> None:
+        self._runner.close()
 
 
 def dense_fingerprint(spec: DenseModel, dimension: int | None = None) -> str:
