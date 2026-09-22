@@ -80,7 +80,7 @@
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "df92f4a121ff02b3ebcf4f141050110b32559f52",
+    "git_commit": "81ee60eff2ccfc24de604e375baf709a4d2ee409",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -160,7 +160,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-22T13:55:56.268075+00:00"
+    "timestamp": "2026-09-22T17:43:46.487667+00:00"
   },
   "representative": false,
   "rows": [
