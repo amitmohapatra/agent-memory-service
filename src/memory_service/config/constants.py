@@ -16,11 +16,12 @@ depth is not something an operator chooses; it is something this repository meas
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Models
@@ -363,6 +364,23 @@ class DocumentSettings(BaseModel):
 DOCUMENTS = DocumentSettings()
 
 
+#: Shipped retrieval depth, and the only number that sets it.
+#:
+#: Prefetch and fusion depth exist to give reciprocal rank fusion something to reorder; they
+#: are not a second opinion about how much evidence a caller wants. Written down separately
+#: they drifted - the service shipped 100/100/50 while every judged benchmark ran 200/200/100
+#: - so no artifact could say which ratio had been measured. One knob now, and a ratio.
+FINAL_K = 50
+#: Prefetch/fusion depth as a multiple of ``final_k``. RRF only reorders inside the prefetch
+#: union, so a quarter again is headroom for the reorder and nothing beyond it.
+DEPTH_RATIO = 1.25
+
+
+def derived_k(final_k: int) -> int:
+    """Prefetch and fusion depth for a final depth: ``ceil(DEPTH_RATIO * final_k)``."""
+    return math.ceil(final_k * DEPTH_RATIO)
+
+
 class RetrievalSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -383,8 +401,12 @@ class RetrievalSettings(BaseModel):
     graph: bool = True
     #: Reciprocal rank fusion of the dense and sparse prefetches, natively in Qdrant.
     rrf_k: int = 60
-    prefetch_k: int = Field(default=100, description="per-retriever candidates before fusion")
-    fused_k: int = Field(default=100, description="candidates after fusion")
+    #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
+    #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
+    prefetch_k: int = Field(
+        default=derived_k(FINAL_K), description="per-retriever candidates before fusion"
+    )
+    fused_k: int = Field(default=derived_k(FINAL_K), description="candidates after fusion")
     #: Cross-encoder reranking. **Off on measured evidence.**
     #:
     #: BeIR/SciFact, 1,000 documents, 70 paired queries, clean vector store, real models:
@@ -402,7 +424,8 @@ class RetrievalSettings(BaseModel):
     rerank: bool = False
     #: candidates handed to the reranker when one is wired (benchmark 15-25)
     rerank_k: int = 20
-    final_k: int = 50
+    #: The one depth knob: what a caller receives. ``prefetch_k`` and ``fused_k`` follow it.
+    final_k: int = Field(default=FINAL_K, ge=1)
     parent_expansion: bool = True
     neighbor_expansion: bool = True
     definition_expansion: bool = True
@@ -417,6 +440,15 @@ class RetrievalSettings(BaseModel):
     #: conversation shares terms with any question about either of them. Measured on LoCoMo:
     #: every one of 304 bundles, 71 of them unanswerable by construction, reported COMPLETE.
     subject_evidence_check: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_depth(cls, data: Any) -> Any:
+        """``final_k`` alone decides the depth; an explicit value still wins."""
+        if not isinstance(data, dict) or "final_k" not in data:
+            return data
+        depth = derived_k(int(data["final_k"]))
+        return {"prefetch_k": depth, "fused_k": depth, **data}
 
 
 RETRIEVAL = RetrievalSettings()

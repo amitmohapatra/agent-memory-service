@@ -17,8 +17,10 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
 
 
 def test_todays_depth_is_the_frozen_depth() -> None:
-    """Phase 1 freezes the numbers; it does not move them. The 1.25x derivation is Phase 2."""
-    assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (100, 100, 50)
+    """One knob: ``final_k``, with prefetch and fusion derived from it (Phase 2 moved the
+    shipped default from 100/100/50 to 63/63/50). The derivation itself is asserted in
+    ``test_context_datapath.py``."""
+    assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (63, 63, 50)
     assert (CONTEXT.memories_max, CONTEXT.token_budget) == (50, 8000)
 
 
