@@ -58,3 +58,30 @@ def test_ordering_is_preserved_within_each_kind() -> None:
     assert judged == sorted(judged, reverse=True)
     assert tail == sorted(tail, reverse=True)
     assert min(judged) > max(tail)
+
+
+def test_a_bundle_item_carries_the_relevance_it_computed() -> None:
+    """`_relevance` was correct and called by nothing but this file.
+
+    `candidate_to_item` set `score` and left `relevance` and `score_kind` at their defaults,
+    so every item on the wire reported `relevance: 0.0` and `score_kind: "fusion"` whatever
+    produced it — including exact identifier hits, which are the one case the caller can
+    trust absolutely. A client that sorted or thresholded on the field got nothing.
+    """
+    from memory_service.modules.context.builder import candidate_to_item
+
+    exact = candidate_to_item(_candidate(1.0, retrievers=("exact",)))
+    assert exact.score_kind == "exact"
+    assert exact.relevance == 1.0, "an exact identifier hit is as certain as it gets"
+
+    judged = candidate_to_item(_candidate(0.016, rerank=0.968))
+    assert judged.score_kind == "cross_encoder"
+    assert judged.relevance == pytest.approx(0.968)
+    assert judged.score == pytest.approx(0.968), "score carries the raw ranking number"
+
+    unjudged = candidate_to_item(_candidate(0.25))
+    assert unjudged.score_kind == "fusion"
+    assert 0.0 < unjudged.relevance <= 0.05, (
+        "an item the reranker never judged ranks below everything it did"
+    )
+    assert unjudged.relevance < judged.relevance

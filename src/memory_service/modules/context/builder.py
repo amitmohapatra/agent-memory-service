@@ -106,11 +106,17 @@ def candidate_to_item(c: Candidate) -> ContextItem:
             observed_at=datetime.now(UTC),
         )
     ]
+    # _relevance existed, was correct, and was called by nothing but its own test, so every
+    # item on the wire carried relevance=0.0 and score_kind="fusion" regardless of what
+    # produced it — the incomparable-scale problem its docstring describes was still live.
+    raw, kind, relevance = _relevance(c)
     return ContextItem(
         item_id=c.record_id,
         representation=c.representation,
         text=c.text,
-        score=c.rerank_score if c.rerank_score is not None else c.score,
+        score=raw,
+        score_kind=kind,
+        relevance=relevance,
         retrievers=c.retrievers,
         evidence=evidence,
         citation=citation,

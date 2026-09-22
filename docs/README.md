@@ -1,64 +1,86 @@
-# Documentation map
+# Documentation
 
-Start with the [README](../README.md) — it covers installing, using the service from one
-agent, multi-agent visibility, tool memory and configuration, and every example in it is
-executed by a test.
+Three ways in. Pick the one that matches why you are here.
 
-This folder is mostly for people working **on** the service rather than with it. Each
-document says up front whether it describes something that exists or something planned.
+### I want to use it
 
-## If you want to…
+Start with the [README](../README.md) — install, a working agent in twenty lines, and what
+the service needs to run. Then [the guide](#the-guide), in order.
 
-| … then read |  |
-|---|---|
-| **use the service** | [README](../README.md) — the only document you need |
-| **call the HTTP API directly** | [openapi.json](openapi.json), or `/docs` on a running service |
-| **understand how it is built** | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| **know why something is built that way** | [adr/](adr/) — one decision per file, with its trade-offs |
-| **contribute** | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| **judge whether to trust a benchmark number** | [FINAL_REPORT.md](FINAL_REPORT.md) |
+### I want to understand it
 
-## What each document is
+[The guide](#the-guide) is written to be read front to back. Chapter 1 assumes you have
+never seen a memory service; chapter 12 assumes you are about to operate one. Every chapter
+stands alone if you already know the rest.
 
-**Reference — describes what exists**
+### I want to check a claim
 
-- [`openapi.json`](openapi.json) — the generated HTTP contract. Every route, schema and error,
-  with examples. Regenerate with `make openapi`.
-- [`adr/`](adr/) — architecture decision records, numbered in the order they were taken. Each
-  states the context, the decision and the consequences. `0017` and `0018` are the most recent
-  (real-component validation, and tool memory).
-- [`FINAL_REPORT.md`](FINAL_REPORT.md) — the per-gate account of what has been measured, in
-  what environment, and which numbers are **not** yet representative. Read this before
-  quoting any performance or retrieval figure.
-- [`MEASUREMENTS.md`](MEASUREMENTS.md) — the raw measurements behind the decisions, each
+[Reference](#reference) — the measurements, the decision records, the generated API
+contract. Nothing in the guide claims a number that is not in one of those files.
+
+---
+
+## The guide
+
+| # | Chapter | What you get |
+|---|---|---|
+| 1 | [Why a memory service](guide/01-why-a-memory-service.md) | the problem, and why a vector database is not the answer |
+| 2 | [Concepts](guide/02-concepts.md) | memories, observations, scopes, principals — the vocabulary |
+| 3 | [Time](guide/03-time.md) | how a fact stops being true without being deleted |
+| 4 | [Retrieval](guide/04-retrieval.md) | four retrievers, one ranking, and why reranking is off |
+| 5 | [The knowledge graph](guide/05-knowledge-graph.md) | the questions vector search cannot answer |
+| 6 | [Trust](guide/06-trust.md) | grounding, contradiction, and memory poisoning |
+| 7 | [Authorization](guide/07-authorization.md) | ten visibility levels, and who an agent really is |
+| 8 | [Models](guide/08-models.md) | which models, where, why — and running without an LLM |
+| 9 | [API and SDK](guide/09-api-and-sdk.md) | every endpoint and its SDK call, side by side |
+| 10 | [Architecture](guide/10-architecture.md) | ports, adapters, and the path a write takes |
+| 11 | [Operations](guide/11-operations.md) | deploying, configuring, and what hardware it needs |
+| 12 | [Testing and gates](guide/12-testing-and-gates.md) | how the claims in this documentation are kept true |
+
+## Reference
+
+**Describes what exists**
+
+- [`openapi.json`](openapi.json) — the generated HTTP contract: every route, schema and
+  error, with examples. Regenerate with `make openapi`.
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — the one-page structural summary. Chapter 10 is the
+  explained version.
+- [`adr/`](adr/) — architecture decision records, numbered in the order taken. Each states
+  the context, the decision, and what it cost. When a decision is later reversed or never
+  carried out, the ADR is amended rather than rewritten, so the record stays honest.
+- [`MEASUREMENTS.md`](MEASUREMENTS.md) — the raw measurements behind the defaults, each
   traceable to a file in `benchmark/results/`.
 - [`CAPABILITY_COVERAGE.md`](CAPABILITY_COVERAGE.md) — which capability provides what, and
   the argument for the seven retrieval flags that were removed rather than left off.
   `tests/eval/test_capability_coverage.py` is the executable form of it.
-- [`PRODUCT_DECISIONS.md`](PRODUCT_DECISIONS.md) — product-level choices and the evidence
-  for each.
-- [`DATA_PLACEMENT_REVIEW.md`](DATA_PLACEMENT_REVIEW.md) — which store holds what, and why
-  each piece of data lives where it does.
+- [`FINAL_REPORT.md`](FINAL_REPORT.md) — the per-gate account of what has been measured, in
+  what environment, and which numbers are **not** yet representative. Read this before
+  quoting any performance figure.
+- [`TOOL_MEMORY.md`](TOOL_MEMORY.md) — the tool-memory design.
+- [`DATA_PLACEMENT_REVIEW.md`](DATA_PLACEMENT_REVIEW.md) — which store holds what, and why.
+- [`PRODUCT_DECISIONS.md`](PRODUCT_DECISIONS.md) — product-level choices and their evidence.
 
-**History — how the service got here**
+**History**
 
-- [`MILESTONES.md`](MILESTONES.md) — the build log, milestone by milestone (M0–M13). Useful
-  for archaeology; not a description of the current API.
+- [`MILESTONES.md`](MILESTONES.md) — the build log, M0 to M13. Archaeology, not a
+  description of the current API.
 
-**Design — describes what is planned or partly built**
+**Planned or partly built** — specifications written before the work. Where they disagree
+with the code, the code is right; each carries a status line saying how much is built.
 
-These are specifications written before the work. Where they disagree with the code, the code
-is right. Each has a status line at the top saying how much of it is built.
+- [`TARGET_STACK.md`](TARGET_STACK.md) — the chosen models and components, the evidence for
+  each, and the changes still to make.
+- [`INTEGRATIONS_PLAN.md`](INTEGRATIONS_PLAN.md) — framework adapters: LangGraph is built;
+  Google ADK, CrewAI and the MCP server are not.
 
-- [`TARGET_STACK.md`](TARGET_STACK.md) — the chosen models and components, the evidence behind
-  each choice, and 25 numbered changes to make. Partly implemented.
-- [`INTEGRATIONS_PLAN.md`](INTEGRATIONS_PLAN.md) — framework adapters: LangGraph (built),
-  Google ADK, CrewAI and an MCP server (not yet).
-- [`TOOL_MEMORY.md`](TOOL_MEMORY.md) — the tool-memory design. The service, API, SDK and gate
-  are built; the framework adapters described in §30.5 and §30.8 are not.
+**Contributing**
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to work on this, and the rules that do not bend.
+
+---
 
 ## The rule these documents follow
 
-Nothing here claims a measurement that does not exist in `benchmark/results/`, and any number
-produced with a stand-in provider is labelled as such. If a document and a gate artifact
-disagree, the artifact wins.
+Nothing here claims a measurement that does not exist in `benchmark/results/`, and any
+number produced with a stand-in provider is labelled as such. If a document and a gate
+artifact disagree, the artifact wins.
