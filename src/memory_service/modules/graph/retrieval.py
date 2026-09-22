@@ -12,12 +12,15 @@ expansion chunks are visibility-checked against the same specification the store
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable
+from datetime import datetime
 from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.graph.service import GraphService
+from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import RoutedQuery
@@ -103,13 +106,54 @@ class GraphStage:
         *,
         max_facts: int = 12,
         max_expansion_chunks: int = 6,
-        max_visited: int = 80,
+        max_visited: int = 40,
     ) -> None:
         self.graph = graph
         self.uow_factory = uow_factory
         self.max_facts = max_facts
         self.max_expansion_chunks = max_expansion_chunks
-        self.max_visited = max_visited  # retrieval-time traversal is tighter than /v1/graph
+        # Retrieval-time traversal is tighter than /v1/graph: 40 nodes is enough for the
+        # three-hop question below on the golden graph, and the traversal sits on the query
+        # path of every temporal and multi-hop question.
+        self.max_visited = max_visited
+
+    def prefetch(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        visibility: VisibilitySpecification,
+    ) -> asyncio.Task[tuple[datetime | None, GraphAnswer]] | None:
+        """Start the traversal as soon as the scope is known. It needs nothing from the
+        ranked candidates and used to run after them anyway, sequential to a search whose
+        result it never read - on a third of LoCoMo questions, the whole graph cost sat on
+        top of the search cost instead of under it. ``None`` when the route has no graph."""
+        if not routed.needs_graph:
+            return None
+        return asyncio.ensure_future(self._query(ctx, routed, visibility))
+
+    async def _query(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        visibility: VisibilitySpecification,
+    ) -> tuple[datetime | None, GraphAnswer]:
+        as_of = parse_date(routed.query) if routed.query_type is QueryType.TEMPORAL else None
+        answer = await self.graph.query(
+            ctx,
+            query=routed.query,
+            # Three, not two, for a *two*-hop question. Entities are linked through
+            # the document that mentions them ("mentioned_in"), so two entities in
+            # different chunks of one document are already two graph hops apart before
+            # the question's own hop is spent: Acme -> acme-report -> Westfalen ->
+            # Bergmann answers "who leads the freight operator used by Acme?" and needs
+            # three. At two the traversal stopped on Westfalen and the answer was never
+            # retrieved. ``max_visited`` is what bounds the cost.
+            hops=3 if routed.query_type in _MULTI_HOP_TYPES else 1,
+            as_of=as_of,
+            visibility=visibility,
+            max_visited=self.max_visited,
+        )
+        return as_of, answer
 
     async def __call__(
         self,
@@ -118,25 +162,14 @@ class GraphStage:
         candidates: list[Candidate],
         visibility: VisibilitySpecification,
         diagnostics: dict[str, Any],
+        *,
+        prefetched: Awaitable[tuple[datetime | None, GraphAnswer]] | None = None,
     ) -> list[Candidate]:
         if not routed.needs_graph:
             return candidates
         with span("retrieval.graph"), stage_seconds.labels("retrieval.graph").time():
-            as_of = parse_date(routed.query) if routed.query_type is QueryType.TEMPORAL else None
-            answer = await self.graph.query(
-                ctx,
-                query=routed.query,
-                # Three, not two, for a *two*-hop question. Entities are linked through
-                # the document that mentions them ("mentioned_in"), so two entities in
-                # different chunks of one document are already two graph hops apart before
-                # the question's own hop is spent: Acme -> acme-report -> Westfalen ->
-                # Bergmann answers "who leads the freight operator used by Acme?" and needs
-                # three. At two the traversal stopped on Westfalen and the answer was never
-                # retrieved. ``max_visited`` (80 at retrieval time) is what bounds the cost.
-                hops=3 if routed.query_type in _MULTI_HOP_TYPES else 1,
-                as_of=as_of,
-                visibility=visibility,
-                max_visited=self.max_visited,
+            as_of, answer = await (
+                prefetched if prefetched is not None else self._query(ctx, routed, visibility)
             )
             diagnostics["graph"] = {
                 "matched": [e.canonical_name for e in answer.matched],

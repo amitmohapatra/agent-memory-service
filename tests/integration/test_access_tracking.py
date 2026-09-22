@@ -60,6 +60,8 @@ async def test_serving_a_memory_counts_as_using_it(container, uow_factory) -> No
     builder = container.services["context_builder"]
     bundle = await builder.build(CTX, "who owns the rollback plan?")
     assert bundle.memories, "no memory reached the caller; access cannot be attributed"
+    # the bump is off the request path (a read must not wait for its own bookkeeping)
+    await builder.drain()
 
     after = await _counts(uow_factory)
     assert sum(after) > sum(before), (
@@ -74,6 +76,7 @@ async def test_a_memory_that_was_not_served_is_not_counted(container, uow_factor
     await _remember(container, uow_factory, "The Berlin office moved to a four-day week in May.")
     builder = container.services["context_builder"]
     bundle = await builder.build(CTX, "who owns the rollback plan?")
+    await builder.drain()
     served = {item.item_id for item in bundle.memories}
 
     for m in await _all(uow_factory):

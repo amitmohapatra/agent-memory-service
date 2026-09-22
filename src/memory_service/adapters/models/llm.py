@@ -213,13 +213,20 @@ class BifrostLLM:
             # This model already refused the envelope once; do not pay the 400 again.
             turns = [*turns, _json_only_instruction(schema)]
         last_error: Exception | None = None
-        # one bounded repair round: feed the validation error back once
-        for attempt in range(2):
+        # One bounded repair round: feed the validation error back once. A refused envelope
+        # is not an attempt: the fallback asks the same question again with the schema in
+        # the prompt and keeps its repair round. It used to consume it, so an invalid first
+        # JSON after the fallback raised where the same output from a constrained model
+        # would have been repaired.
+        repairs_left = 1
+        for _ in range(4):  # refusal + answer + repair, with margin; never unbounded
             try:
                 # Omit the key entirely on the fallback attempt. Passing
                 # ``response_format=None`` still puts ``"response_format": null`` on the
                 # wire, which the provider that refused the envelope refuses again.
-                envelope = {"response_format": response_format} if response_format else {}
+                envelope: dict[str, Any] = (
+                    {"response_format": response_format} if response_format else {}
+                )
                 completion = await self._chat(
                     turns,
                     use=use,
@@ -249,18 +256,20 @@ class BifrostLLM:
                 return parsed
             except LLMOutputInvalid as exc:
                 last_error = exc
-                if attempt == 0:
-                    turns = [
-                        *turns,
-                        {"role": "assistant", "content": text[:4000]},
-                        {
-                            "role": "user",
-                            "content": (
-                                "That output was invalid: "
-                                f"{exc.message}. Return only JSON matching the schema."
-                            ),
-                        },
-                    ]
+                if repairs_left == 0:
+                    break
+                repairs_left -= 1
+                turns = [
+                    *turns,
+                    {"role": "assistant", "content": text[:4000]},
+                    {
+                        "role": "user",
+                        "content": (
+                            "That output was invalid: "
+                            f"{exc.message}. Return only JSON matching the schema."
+                        ),
+                    },
+                ]
         llm_requests_total.labels(use, "invalid_output").inc()
         raise last_error or LLMOutputInvalid("structured output invalid")
 

@@ -18,7 +18,7 @@ import json
 import sys
 from pathlib import Path
 
-from benchmark.locomo import ADVERSARIAL, JUDGE_RULERS, _judge, _Pacer
+from benchmark.locomo import JUDGE_RULERS, _judge, _Pacer, judged_hit
 from benchmark.retrieval import _settings
 from memory_service.application.container import build_container
 
@@ -48,7 +48,7 @@ async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
                 rec["judged"] = {**judged, "error": f"{type(exc).__name__}: {exc}"[:300]}
                 continue
             rec["judged"] = {**judged, **verdict}
-            hit = verdict["abstained"] if rec["category"] == ADVERSARIAL else verdict["correct"]
+            hit = judged_hit(rec["category"], rec["judged"])
             rec["hit"] = hit
             by_cat.setdefault(rec["category"], []).append(bool(hit))
             if (i + 1) % 25 == 0:

@@ -8,10 +8,11 @@ scope fingerprint + revision fingerprint + query hash + retrieval config fingerp
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,6 +30,7 @@ from memory_service.domain.enums import EvidenceStatus, MessageKind
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.summaries import (
     SOURCE_CHARS,
     SUMMARY_SCHEMA,
@@ -46,6 +48,7 @@ from memory_service.modules.retrieval.engine import (
 )
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
+from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.uow import UnitOfWorkFactory
@@ -175,6 +178,8 @@ class ContextBuilder:
         self.retrieval_cfg = retrieval
         self.cache_ttl = cache_ttl_seconds
         self.assist = assist or LLMAssist.disabled()
+        #: usage accounting still in flight (see _record_access); awaited by drain()
+        self._pending: set[asyncio.Task[None]] = set()
 
     def _config_fingerprint(self) -> str:
         parts = [
@@ -188,7 +193,13 @@ class ContextBuilder:
             parts.append("llm:" + ",".join(llm_uses))
         return stable_key(*parts)
 
-    async def _revision_fingerprint(self, ctx: MemoryExecutionContext) -> str:
+    async def _scope(self, ctx: MemoryExecutionContext) -> tuple[str, VisibilitySpecification]:
+        """The revision fingerprint and the caller's visibility, from one unit of work.
+
+        They were two: the fingerprint here, the visibility inside the engine, each opening
+        its own session and each on the query path. The access bump was a third. One
+        round trip carries both.
+        """
         async with self.uow_factory() as uow:
             # Every revision a bundle's content depends on. AGENT and GRAPH were missing, so
             # an agent-scoped memory or a graph enrichment bumped a counter nobody read and
@@ -201,7 +212,8 @@ class ContextBuilder:
                 (RevisionKind.GRAPH, ""),
             ]
             values = await uow.revisions.get_many(ctx.tenant_id, keys)
-        return stable_key(*(f"{k}={v}" for k, v in sorted(values.items())))
+            visibility = await self.engine.authz.visibility(ctx, revisions=uow.revisions)
+        return stable_key(*(f"{k}={v}" for k, v in sorted(values.items()))), visibility
 
     async def build(
         self,
@@ -216,7 +228,9 @@ class ContextBuilder:
             span("context.build", tenant_id=ctx.tenant_id),
             stage_seconds.labels("context.build").time(),
         ):
-            revision_fp = await self._revision_fingerprint(ctx)
+            timings = Timings()
+            with timings.stage("scope"):
+                revision_fp, visibility = await self._scope(ctx)
             bundle_id = stable_key(
                 ctx.tenant_id,
                 ctx.scope_fingerprint(),
@@ -236,8 +250,14 @@ class ContextBuilder:
                     bundle = ContextBundle.model_validate_json(raw)
                     return bundle.model_copy(update={"cache_hit": True})
             tokens_before = self.assist.tokens_used()
-            result = await self.engine.retrieve(ctx, query, document_ids=document_ids)
-            window = await self._conversation_window(ctx, result)
+            with timings.stage("retrieve"):
+                result = await self.engine.retrieve(
+                    ctx, query, document_ids=document_ids, visibility=visibility
+                )
+            with timings.stage("window"):
+                window = await self._conversation_window(ctx, result)
+            # the engine's own stage split, plus what happened around it
+            result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
             if self.working is not None and result.routed.needs_memories:
                 for i, item in enumerate(await self.working.recall(ctx)):
                     result.candidates.insert(
@@ -265,11 +285,27 @@ class ContextBuilder:
                         cache_key, bundle.model_dump_json().encode(), ttl_seconds=self.cache_ttl
                     )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        await self._record_access(ctx, bundle)
+        self._track(self._record_access(ctx, bundle))
         return bundle
+
+    def _track(self, work: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(work)
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def drain(self) -> None:
+        """Wait for the usage accounting started by earlier builds (tests, shutdown)."""
+        while self._pending:
+            await asyncio.gather(*list(self._pending), return_exceptions=True)
 
     async def _record_access(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
         """Count a memory as used when it actually reaches the caller.
+
+        Off the request path. It UPDATEs every served row and COMMITs - a WAL flush - and it
+        ran inside ``/v1/context`` before the bundle was returned, so every query paid for
+        its own bookkeeping (5-20 ms typical, more at the tail on a virtualised disk). The
+        bump changes no revision, so no cached bundle depends on it having happened, and
+        the caller has nothing to wait for. ``drain()`` is for the code that does.
 
         The forgetting policy scores
         ``importance * 0.5**(idle/half_life) * (1 - 0.5**(accesses + reinforcements))`` and

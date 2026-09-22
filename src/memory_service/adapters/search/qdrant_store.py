@@ -33,6 +33,15 @@ from memory_service.ports.search import (
 DENSE = "dense"
 SPARSE = "bm25"
 
+#: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
+_PAYLOAD_INDEXES = {
+    "tenant_id": models.PayloadSchemaType.KEYWORD,
+    "visibility_keys": models.PayloadSchemaType.KEYWORD,
+    "kind": models.PayloadSchemaType.KEYWORD,
+    "document_id": models.PayloadSchemaType.KEYWORD,
+    "current": models.PayloadSchemaType.BOOL,
+}
+
 
 def point_id(record_id: str) -> str:
     """Qdrant ids must be ints or UUIDs; derive a stable UUID5 from our ULID-based ids."""
@@ -116,16 +125,24 @@ class QdrantSearchStore:
                     sparse_vectors_config=sparse,
                     on_disk_payload=self.settings.on_disk_payload and not self._local,
                 )
-                if not self._local:  # local mode has no payload indexes
-                    for field in ("tenant_id", "visibility_keys", "kind", "document_id"):
-                        await self._client.create_payload_index(
-                            name, field_name=field, field_schema=models.PayloadSchemaType.KEYWORD
-                        )
+            if not self._local:  # local mode has no payload indexes
+                await self._ensure_payload_indexes(name)
         except Exception as exc:
             raise DependencyUnavailable(
                 f"qdrant ensure_collection failed: {type(exc).__name__}: {exc}"
             ) from exc
         self._known.add(name)
+
+    async def _ensure_payload_indexes(self, name: str) -> None:
+        """Every field a filter touches, indexed - on a collection just created and on one
+        that already existed. ``current`` was never indexed although every memories query
+        filters on it, so Qdrant read payloads to apply it; and a field added here after a
+        collection was created was never indexed on that collection at all."""
+        info = await self._client.get_collection(name)
+        have = set((info.payload_schema or {}).keys())
+        for field, schema in _PAYLOAD_INDEXES.items():
+            if field not in have:
+                await self._client.create_payload_index(name, field_name=field, field_schema=schema)
 
     async def upsert(self, records: Sequence[SearchRecord]) -> None:
         if not records:

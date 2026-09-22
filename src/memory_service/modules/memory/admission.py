@@ -86,7 +86,14 @@ def worthiness_of(candidate: MemoryCandidate, *, hinted: bool = False) -> tuple[
         reasons.append("explicit hint")
     text = candidate.content
     dated = candidate.valid_from is not None or candidate.valid_to is not None
-    if _TRANSIENT.search(text) and not dated and candidate.category != "decision":
+    # A verbatim turn is kept *because* it is the raw wording; "I'm off to lunch, but the
+    # Berlin office moved in May" is a memory because of the second clause, and halving it
+    # for the first dropped the only record of the turn.
+    if (
+        _TRANSIENT.search(text)
+        and not dated
+        and candidate.category not in ("decision", "verbatim_turn")
+    ):
         value *= 0.4
         reasons.append("transient phrasing")
     if _GENERIC.match(text.strip()) and not candidate.subject:

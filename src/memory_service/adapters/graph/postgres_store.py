@@ -359,7 +359,7 @@ class PostgresGraphStore:
             return GraphNeighborhood(entities=[], relations=[], visited=0)
         visited: dict[str, None] = dict.fromkeys(entity_ids)
         frontier = list(entity_ids)
-        relations: dict[str, Relation] = {}
+        relations: dict[str, GraphRelationRow] = {}  # rows; converted after the scope filter
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
             async with self.session() as s:
                 for _ in range(max(0, hops)):
@@ -386,7 +386,7 @@ class PostgresGraphStore:
                     ).all()
                     next_frontier: list[str] = []
                     for r in rows:
-                        relations.setdefault(r.relation_id, _relation(r))
+                        relations.setdefault(r.relation_id, r)
                         for eid in (r.subject_id, r.object_id):
                             if eid not in visited and len(visited) < max_visited:
                                 visited[eid] = None
@@ -402,7 +402,12 @@ class PostgresGraphStore:
                     )
                 ).all()
         allowed = {e.entity_id for e in ents}
-        rels = [r for r in relations.values() if r.subject_id in allowed and r.object_id in allowed]
+        # converted only now: rows outside the scope were built into models and thrown away
+        rels = [
+            _relation(r)
+            for r in relations.values()
+            if r.subject_id in allowed and r.object_id in allowed
+        ]
         return GraphNeighborhood(
             entities=[_entity(e) for e in ents], relations=rels, visited=len(visited)
         )

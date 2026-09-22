@@ -506,6 +506,34 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
 
 
 @respx.mock
+async def test_the_repair_round_survives_the_envelope_fallback() -> None:
+    """The refusal is not an attempt. Before, it consumed the first of two, so an invalid
+    first answer after the fallback raised with no repair - the one path that needs it most,
+    since a model that cannot be constrained is the model most likely to stray."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        if "response_format" in body:
+            return httpx.Response(
+                400, json={"error": {"message": "This response_format type is unavailable now"}}
+            )
+        if len(seen) == 2:
+            return httpx.Response(200, json=_chat("Sure! Here you go: worthy = yes"))
+        return httpx.Response(200, json=_chat('{"worthy": true, "reason": "repaired"}'))
+
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
+    llm = BifrostLLM(_settings())
+    out = await llm.structured(
+        [LLMMessage(role="user", content="grade this")], schema=SCHEMA, use="ambiguous_worthiness"
+    )
+    assert out == {"worthy": True, "reason": "repaired"}
+    assert len(seen) == 3, "refusal, invalid answer, one repair - and no more"
+    assert "invalid" in seen[2]["messages"][-1]["content"], "the repair names the defect"
+
+
+@respx.mock
 async def test_a_bad_request_that_is_not_about_the_envelope_still_raises() -> None:
     """The fallback is narrow: an unrelated 400 is a real bug and must not be retried."""
     respx.post(f"{BASE}/chat/completions").mock(

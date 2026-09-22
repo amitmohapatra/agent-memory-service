@@ -7,6 +7,7 @@ engine never sees another principal's data, so there is nothing to "filter in me
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
+from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.models import Reranker
 from memory_service.ports.search import SearchHit, SearchStore
@@ -190,118 +192,177 @@ class RetrievalEngine:
             span("retrieval", tenant_id=ctx.tenant_id, query_type=routed.query_type.value),
             stage_seconds.labels("retrieval").time(),
         ):
-            if visibility is None:
-                async with self.uow_factory() as uow:
-                    visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
-            if self.indexer.fingerprint not in self._ensured:
-                # a fresh deployment answers "nothing yet" before anything was indexed,
-                # instead of failing on a missing collection
-                await self.indexer.ensure_collections()
-                self._ensured.add(self.indexer.fingerprint)
-            candidates: list[Candidate] = []
-            # 1. exact identifiers (O(1)/O(log n) lookups, no ranking)
-            if routed.identifiers and self.cfg.exact:
-                candidates.extend(await self._exact(ctx, routed.identifiers, visibility))
-                diagnostics["exact_hits"] = len(candidates)
-                if not candidates:
-                    diagnostics["exact_fallback"] = True
-            # 2. hybrid lexical + dense with native RRF inside the store
-            #
-            # An identifier lookup that found nothing has to fall back to ranked search, and
-            # that fallback has to include memories. The router sets needs_memories=False for
-            # EXACT_IDENTIFIER — reasonable when the lookup succeeds, since an exact hit beats
-            # anything ranking could offer — but it was applied to the fallback as well. So
-            # "what about SKU-88?" searched everything except memories and returned nothing,
-            # while the vaguer "which products are discontinued" found the very same memory.
-            # Asking about a specific thing is the most natural question there is; it must not
-            # be the one that fails.
-            exact_lookup_found_nothing = (
-                routed.query_type is QueryType.EXACT_IDENTIFIER and not candidates
-            )
-            if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
-                wanted = list(kinds)
-                if routed.needs_summaries and "summary" not in wanted:
-                    wanted.append("summary")
-                per_kind: list[list[Candidate]] = []
-                encoded = await self._encode(search_text)
-                for kind in wanted:
-                    if kind == "chunk" and not routed.needs_knowledge:
-                        continue
-                    if kind == "memory" and not (
-                        routed.needs_memories or exact_lookup_found_nothing
-                    ):
-                        continue
-                    hits = await self._hybrid(
-                        search_text,
-                        visibility,
-                        kind=kind,
-                        document_ids=document_ids,
-                        encoded=encoded,
-                    )
-                    retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
-                    if kind == "chunk" and self.retrievers:
-                        lists: list[Sequence[SearchHit]] = [hits]
-                        for name, extra in self.retrievers.items():
-                            extra_hits = await extra(ctx, routed, visibility, document_ids)
-                            diagnostics.setdefault("strategies", {})[name] = len(extra_hits)
-                            lists.append(extra_hits)
-                        fused = rrf_fuse(lists, k=self.cfg.rrf_k)[: self.cfg.fused_k]
-                        hits = [
-                            SearchHit(record_id=rid, score=s, retriever="fusion", payload=p)
-                            for rid, s, _, p in fused
-                        ]
-                        retrievers_of = {rid: names for rid, _, names, _ in fused}
-                    per_kind.append(
-                        [
-                            Candidate(
-                                record_id=h.record_id,
-                                kind=str(h.payload.get("kind") or kind),
-                                text=str(h.payload.get("text", "")),
-                                score=h.score,
-                                retrievers=retrievers_of.get(h.record_id, [h.retriever]),
-                                payload=h.payload,
+            timings = Timings()
+            diagnostics["timings_ms"] = timings.ms
+            # The encoder is the floor of every query (178 ms mean on this box). Started
+            # here, the visibility lookup, the collection check, the exact lookups and the
+            # graph traversal all run under it instead of after it; what is awaited later
+            # is only whatever is left of it.
+            encode_task = asyncio.ensure_future(self._encode(search_text))
+            prefetched: dict[str, asyncio.Future[Any]] = {}
+            try:
+                if visibility is None:
+                    with timings.stage("visibility"):
+                        async with self.uow_factory() as uow:
+                            visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
+                if self.indexer.fingerprint not in self._ensured:
+                    # a fresh deployment answers "nothing yet" before anything was indexed,
+                    # instead of failing on a missing collection
+                    await self.indexer.ensure_collections()
+                    self._ensured.add(self.indexer.fingerprint)
+                # a post-stage that depends only on the route and the scope (the graph
+                # traversal) starts now and is awaited when its turn comes
+                for name, stage in self.post_stages.items():
+                    starter = getattr(stage, "prefetch", None)
+                    if starter is not None and (task := starter(ctx, routed, visibility)):
+                        prefetched[name] = task
+                candidates: list[Candidate] = []
+                # 1. exact identifiers (O(1)/O(log n) lookups, no ranking)
+                if routed.identifiers and self.cfg.exact:
+                    with timings.stage("exact"):
+                        candidates.extend(await self._exact(ctx, routed.identifiers, visibility))
+                    diagnostics["exact_hits"] = len(candidates)
+                    if not candidates:
+                        diagnostics["exact_fallback"] = True
+                # 2. hybrid lexical + dense with native RRF inside the store
+                #
+                # An identifier lookup that found nothing has to fall back to ranked search,
+                # and that fallback has to include memories. The router sets
+                # needs_memories=False for EXACT_IDENTIFIER — reasonable when the lookup
+                # succeeds, since an exact hit beats anything ranking could offer — but it
+                # was applied to the fallback as well. So "what about SKU-88?" searched
+                # everything except memories and returned nothing, while the vaguer "which
+                # products are discontinued" found the very same memory. Asking about a
+                # specific thing is the most natural question there is; it must not be the
+                # one that fails.
+                exact_lookup_found_nothing = (
+                    routed.query_type is QueryType.EXACT_IDENTIFIER and not candidates
+                )
+                if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
+                    wanted = list(kinds)
+                    if routed.needs_summaries and "summary" not in wanted:
+                        wanted.append("summary")
+                    wanted = [
+                        kind
+                        for kind in wanted
+                        if (kind != "chunk" or routed.needs_knowledge)
+                        and (
+                            kind != "memory" or routed.needs_memories or exact_lookup_found_nothing
+                        )
+                    ]
+                    with timings.stage("encode"):
+                        encoded = await encode_task
+                    # one store round trip per kind, concurrently; `wanted` order is kept so
+                    # the interleave below is what it was when they ran one after another
+                    with timings.stage("search"):
+                        per_kind = await asyncio.gather(
+                            *(
+                                self._search_kind(
+                                    ctx,
+                                    routed,
+                                    search_text,
+                                    visibility,
+                                    kind=kind,
+                                    document_ids=document_ids,
+                                    encoded=encoded,
+                                    diagnostics=diagnostics,
+                                )
+                                for kind in wanted
                             )
-                            for h in hits
-                        ]
-                    )
-                # interleave the per-kind lists by rank so a long document result list can
-                # never crowd out the memories (or summaries) before the reranker sees them
-                for group in itertools.zip_longest(*per_kind):
-                    candidates.extend(c for c in group if c is not None)
-                diagnostics["fused_candidates"] = len(candidates)
-            # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate texts
-            #    (copies of the same document) so they cannot crowd out other evidence
-            before = len(candidates)
-            candidates = _dedup(candidates)[: max(self.cfg.fused_k, limit)]
-            if before != len(candidates):
-                diagnostics["duplicates_collapsed"] = before - len(candidates)
-            # 4. bounded CPU rerank
-            pool = candidates
-            # Always stated, so a caller can tell "reranking is off" from "the key is
-            # missing" - a test that toggled the flag after wiring read the absence as a
-            # KeyError rather than as the answer it was.
-            diagnostics["reranked"] = False
-            if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
-                candidates = await self._rerank(routed.query, candidates, limit=limit)
-                diagnostics["reranked"] = True
-            else:
-                candidates = candidates[:limit]
-            kept = {c.record_id for c in candidates}
-            unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
-            if unused:
-                # retrieved but ranked out: the grounding cascade scans these for contradictions
-                diagnostics["unused"] = [
-                    {"record_id": c.record_id, "kind": c.kind, "text": c.text} for c in unused
-                ]
-            # 5. strategy hooks (graph M8, expansion/verification M9)
-            for name, stage in self.post_stages.items():
-                candidates = await stage(ctx, routed, candidates, visibility, diagnostics)
-                diagnostics.setdefault("stages", []).append(name)
-            if self.post_stages:
-                candidates = _cap_evidence(candidates, limit)
+                        )
+                    # interleave the per-kind lists by rank so a long document result list
+                    # can never crowd out the memories (or summaries) before the reranker
+                    # sees them
+                    for group in itertools.zip_longest(*per_kind):
+                        candidates.extend(c for c in group if c is not None)
+                    diagnostics["fused_candidates"] = len(candidates)
+                # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate
+                #    texts (copies of the same document) so they cannot crowd out other
+                #    evidence
+                before = len(candidates)
+                candidates = _dedup(candidates)[: max(self.cfg.fused_k, limit)]
+                if before != len(candidates):
+                    diagnostics["duplicates_collapsed"] = before - len(candidates)
+                # 4. bounded CPU rerank
+                pool = candidates
+                # Always stated, so a caller can tell "reranking is off" from "the key is
+                # missing" - a test that toggled the flag after wiring read the absence as a
+                # KeyError rather than as the answer it was.
+                diagnostics["reranked"] = False
+                if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
+                    with timings.stage("rerank"):
+                        candidates = await self._rerank(routed.query, candidates, limit=limit)
+                    diagnostics["reranked"] = True
+                else:
+                    candidates = candidates[:limit]
+                kept = {c.record_id for c in candidates}
+                unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
+                if unused:
+                    # retrieved but ranked out: the grounding cascade scans these for
+                    # contradictions
+                    diagnostics["unused"] = [
+                        {"record_id": c.record_id, "kind": c.kind, "text": c.text} for c in unused
+                    ]
+                # 5. strategy hooks (graph M8, expansion/verification M9)
+                for name, stage in self.post_stages.items():
+                    extra = {"prefetched": prefetched.pop(name)} if name in prefetched else {}
+                    with timings.stage(name):
+                        candidates = await stage(
+                            ctx, routed, candidates, visibility, diagnostics, **extra
+                        )
+                    diagnostics.setdefault("stages", []).append(name)
+                if self.post_stages:
+                    candidates = _cap_evidence(candidates, limit)
+            finally:
+                # an exact hit never needs the encoding; a stage that raised never consumed
+                # its prefetch - neither may outlive the request or log as never retrieved
+                for task in (encode_task, *prefetched.values()):
+                    _discard(task)
         return RetrievalResult(
             routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
         )
+
+    async def _search_kind(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        search_text: str,
+        visibility: VisibilitySpecification,
+        *,
+        kind: str,
+        document_ids: Sequence[str] | None,
+        encoded: tuple[list[float] | None, Any],
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """Ranked candidates of one kind: the store's hybrid search, fused with any extra
+        chunk retrievers. One of these runs per wanted kind, concurrently."""
+        hits = await self._hybrid(
+            search_text, visibility, kind=kind, document_ids=document_ids, encoded=encoded
+        )
+        retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
+        if kind == "chunk" and self.retrievers:
+            lists: list[Sequence[SearchHit]] = [hits]
+            for name, extra in self.retrievers.items():
+                extra_hits = await extra(ctx, routed, visibility, document_ids)
+                diagnostics.setdefault("strategies", {})[name] = len(extra_hits)
+                lists.append(extra_hits)
+            fused = rrf_fuse(lists, k=self.cfg.rrf_k)[: self.cfg.fused_k]
+            hits = [
+                SearchHit(record_id=rid, score=s, retriever="fusion", payload=p)
+                for rid, s, _, p in fused
+            ]
+            retrievers_of = {rid: names for rid, _, names, _ in fused}
+        return [
+            Candidate(
+                record_id=h.record_id,
+                kind=str(h.payload.get("kind") or kind),
+                text=str(h.payload.get("text", "")),
+                score=h.score,
+                retrievers=retrievers_of.get(h.record_id, [h.retriever]),
+                payload=h.payload,
+            )
+            for h in hits
+        ]
 
     async def _expand_query(self, query: str) -> QueryExpansion | None:
         """Model-assisted routing + lexical expansion when no rule fired. The original query
@@ -494,6 +555,15 @@ def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
             evidence += 1
         out.append(c)
     return out
+
+
+def _discard(task: asyncio.Future[Any]) -> None:
+    """Drop a task the request no longer needs: cancel it if it is still running, and if it
+    already failed, take the exception so asyncio does not log it as never retrieved."""
+    if not task.done():
+        task.cancel()
+    elif not task.cancelled():
+        task.exception()
 
 
 def _dedup(candidates: list[Candidate]) -> list[Candidate]:

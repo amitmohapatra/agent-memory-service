@@ -139,6 +139,10 @@ async def test_gateway_failure_keeps_native_routing(parts) -> None:
     assert res.candidates
 
 
+def _without_timings(diagnostics: dict) -> dict:
+    return {k: v for k, v in diagnostics.items() if k != "timings_ms"}
+
+
 async def test_flag_off_or_rule_fired_never_calls_the_model(parts) -> None:
     _, embedding, _, _ = parts
     with mocked_gateway(['{"query_type": "DECISION", "terms": ["x"], "identifiers": []}']) as gw:
@@ -153,7 +157,8 @@ async def test_flag_off_or_rule_fired_never_calls_the_model(parts) -> None:
         assert gw.route.call_count == 0
     native = _engine(parts)
     plain = await native.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
-    assert plain.diagnostics == res.diagnostics
+    # the stage timings are the one per-request value; everything else must be identical
+    assert _without_timings(plain.diagnostics) == _without_timings(res.diagnostics)
     assert "query_expansion" not in plain.diagnostics
     assert plain.diagnostics["query_type"] == "GENERAL_SEMANTIC"
     assert plain.diagnostics["signals"] == dict.fromkeys(plain.routed.signals, False)

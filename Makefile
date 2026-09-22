@@ -155,6 +155,9 @@ BENCH_TENANT ?= bench_docs
 #: torch intra-op threads for the concurrency benchmark; empty means torch's own default.
 BENCH_THREADS ?=
 BENCH_SEARCH ?= qdrant
+#: The query encoder is the floor of every retrieval (178 ms mean on torch, no AVX2 here);
+#: one variable so an A/B of runtimes is a flag on the same targets.
+BENCH_EMBEDDING_PROVIDER ?= sentence_transformers
 BENCH_QDRANT_URL ?= http://host.docker.internal:6333
 #: The gateway, reached from inside the benchmark container. It holds the provider key;
 #: the service is only ever told a URL and a model name.
@@ -197,7 +200,7 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -229,7 +232,7 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -262,7 +265,7 @@ bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -299,7 +302,7 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -336,7 +339,7 @@ bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sectio
 	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -358,7 +361,7 @@ bench-concurrency: ## How much parallelism the model tier wants, and what it cos
 	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
 	  -e MEMORY__SEARCH__PROVIDER=memory -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -380,7 +383,7 @@ bench-degenerate: bench-db ## Behaviour on empty/garbage/hostile input, real mod
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
@@ -402,7 +405,7 @@ bench-external: bench-db ## Retrieval quality on an external corpus, with the re
 	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
 	  -e MEMORY__BLOB__PROVIDER=memory \
 	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
-	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=$(BENCH_EMBEDDING_PROVIDER) \
 	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
 	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
 	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \

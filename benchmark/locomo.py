@@ -216,11 +216,21 @@ _EVIDENCE_IDS = re.compile(r"[A-Za-z]+\d+:\d+")
 
 
 def _evidence_ids(item: dict) -> list[str]:
-    """LoCoMo stores evidence as the *string* ``"['D1:3', 'D1:5']"``, not as a list."""
+    """LoCoMo stores evidence as the *string* ``"['D1:3', 'D1:5']"``, not as a list - and one
+    list item can itself hold two ids joined by a semicolon (``"D8:6; D9:17"``)."""
     raw = item.get("evidence")
-    if isinstance(raw, list):
-        return [str(x) for x in raw]
-    return _EVIDENCE_IDS.findall(str(raw or ""))
+    text = " ".join(str(x) for x in raw) if isinstance(raw, list) else str(raw or "")
+    return _EVIDENCE_IDS.findall(text)
+
+
+def judged_hit(category: str, judged: dict) -> bool:
+    """One rule for the run and for a rescore: an adversarial question is answered correctly
+    by abstaining; every other category by matching the gold answer. The rescorer once
+    compared the category *name* with the numeric constant, so adversarial rows were graded
+    on ``correct`` there and on ``abstained`` here, and the two files disagreed by design."""
+    if category == CATEGORY_NAMES[ADVERSARIAL]:
+        return bool(judged["abstained"])
+    return bool(judged["correct"])
 
 
 #: Generation + judging, the way LoCoMo itself is scored.
@@ -241,6 +251,13 @@ def _evidence_ids(item: dict) -> list[str]:
 #: judge rejected ("Transgender." for "Transgender woman"). Inference from the context and
 #: keeping the qualifiers are what the categories ask for; abstaining is still the only
 #: correct answer when nothing in the context bears on the question.
+#: Abstention is kept for exactly one case, the premise check. Mem0's answer prompt forbids
+#: it outright ("NEVER say not specified"), which is part of how their headline is scored;
+#: ours had, for one run, also abstained whenever the bundle's evidence status was not
+#: COMPLETE - simulated over the first two conversations, that status fired on 63 of 233
+#: answerable questions (half of the temporal ones), so the rule turned a retrieval
+#: diagnostic into a quarter of the answers being "I don't know". The status is now a cue
+#: to re-check, never a reason to refuse.
 ANSWER_SYSTEM = (
     "You answer questions about a person's life using only the CONTEXT: dated memories "
     "from their conversations. Read EVERY entry from first to last before answering - do "
@@ -253,10 +270,9 @@ ANSWER_SYSTEM = (
     "asked what someone would likely do, feel or choose, infer it from what the context "
     "shows about them. Check the question's premise against the context: if it attributes "
     "something to the wrong person, or asks about an event the context never records, reply "
-    "with exactly: I don't know. If the context ends with an Evidence status other than "
-    "COMPLETE, answer only when the context explicitly states the fact for the person asked "
-    "about; otherwise reply with exactly: I don't know. Never use outside knowledge. One "
-    "short phrase or sentence."
+    "with exactly: I don't know. If the context ends with an Evidence status of INCOMPLETE, "
+    "re-check that premise against the named person, then still answer whenever the entries "
+    "support an answer. Never use outside knowledge. One short phrase or sentence."
 )
 
 #: Two rulers, reported separately and never mixed.
@@ -491,7 +507,8 @@ async def run(
                     continue
                 call = time.perf_counter()
                 bundle = await builder.build(ctx, question)
-                latencies.append((time.perf_counter() - call) * 1000)
+                latency_ms = (time.perf_counter() - call) * 1000
+                latencies.append(latency_ms)
                 if asked % 10 == 0 or asked == total_q:
                     mean = sum(latencies) / len(latencies) / 1000
                     left = (total_q - asked) * mean
@@ -517,13 +534,14 @@ async def run(
                 # The supporting turns LoCoMo annotates, scored the same way. This is the
                 # phrasing-independent question - "did the right source surface?" - and it is
                 # the one that does not move when the pipeline rewrites what it stored.
-                evidence_overlap = max(
-                    (
-                        _overlap(_content_tokens(turns.get(e, "")), found)
-                        for e in _evidence_ids(item)
-                    ),
-                    default=0.0,
-                )
+                overlaps = [
+                    _overlap(_content_tokens(turns.get(e, "")), found) for e in _evidence_ids(item)
+                ]
+                evidence_overlap = max(overlaps, default=0.0)
+                # The max says "at least one source surfaced". A multi-hop question needs
+                # every one of them (40 of 43 in the first two conversations cite two or
+                # more turns), so the minimum is the recall that actually bounds it.
+                evidence_min_overlap = min(overlaps, default=0.0)
                 strict = _answer_present(rendered, answer)
                 abstained = "INSUFFICIENT" in status
 
@@ -570,7 +588,7 @@ async def run(
                 if judged and "error" not in judged:
                     # A judged run scores what the caller would actually receive, which is the
                     # only place the adversarial category means anything.
-                    hit = judged["abstained"] if category == ADVERSARIAL else judged["correct"]
+                    hit = judged_hit(CATEGORY_NAMES.get(category, str(category)), judged)
                 elif judge:
                     # A judged run whose judge failed on this row scores the row WRONG. It used
                     # to fall through to the token-overlap heuristic, so a run with a broken
@@ -599,6 +617,13 @@ async def run(
                         "answer_overlap": answer_overlap,
                         "evidence_overlap": evidence_overlap,
                         "evidence_hit": evidence_overlap >= EVIDENCE_OVERLAP_HIT,
+                        "evidence_min_overlap": evidence_min_overlap,
+                        "evidence_all_hit": bool(overlaps)
+                        and evidence_min_overlap >= EVIDENCE_OVERLAP_HIT,
+                        # per question, so p99 and a stage split can be derived from the
+                        # file instead of from a summary computed once and never checkable
+                        "latency_ms": round(latency_ms, 1),
+                        "timings_ms": bundle.diagnostics.get("timings_ms"),
                         "strict_substring": strict,
                         "status": status,
                         "abstained": abstained,
@@ -674,7 +699,15 @@ async def run(
             "conversations": len(data),
             "questions": sum(v["n"] for v in per_category.values()),
         },
-        "k": k,
+        # the depth that was actually used; `--k` only names the file, retrieval reads
+        # settings, and a run that said "depth 50" once carried 40 memories in every bundle
+        "k": settings.retrieval.final_k,
+        "k_requested": k,
+        "settings": {
+            "retrieval": settings.retrieval.model_dump(mode="json"),
+            "context": settings.context.model_dump(mode="json"),
+            "llm_model": settings.models.llm.model,
+        },
         "answer_recall_at_k": round(total_hit / total_n, 4) if total_n else 0.0,
         "caveats": caveats,
         "abstention_measurable": llm_on,
@@ -701,6 +734,15 @@ async def run(
         "evidence_recall": (
             round(
                 sum(1 for r in records if r["category"] != "adversarial" and r["evidence_hit"])
+                / total_n,
+                4,
+            )
+            if total_n
+            else 0.0
+        ),
+        "evidence_all_recall": (
+            round(
+                sum(1 for r in records if r["category"] != "adversarial" and r["evidence_all_hit"])
                 / total_n,
                 4,
             )

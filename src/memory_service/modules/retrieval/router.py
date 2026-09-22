@@ -47,12 +47,16 @@ _MULTI_HOP = re.compile(
 )
 #: Enumeration questions about a *person*, case-sensitive on purpose: "What activities does
 #: Melanie do?" and "Where has Caroline travelled?" need every mention gathered across
-#: sessions; "What items does Adjusted Operating Margin exclude?" is an entity question
-#: about a document term and must not route here (the retrieval gate caught the bare form).
+#: sessions. Two things are required, and the first attempt had only the second: an
+#: enumeration cue (a plural noun, "what kind of", "where has", "how many") and a person - one
+#: capitalised token followed by a lowercase word ("does Melanie partake"). Without the cue
+#: the form matched 113 of 304 LoCoMo questions and "Which team does Acme use?", and every
+#: extra route is a graph traversal on the query path; a document term is Title Case all the
+#: way ("does Adjusted Operating Margin exclude") and never matches the person shape.
 _MULTI_HOP_NAMED = re.compile(
-    # A person is one capitalised token followed by a lowercase word ("does Melanie partake");
-    # a document term is Title Case all the way ("does Adjusted Operating Margin exclude").
-    r"\b(?:[Ww]hat|[Ww]hich|[Ww]here|[Hh]ow many)\b[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+(?:'s)?\s+(?=[a-z])"
+    r"\b(?:(?:[Ww]hat|[Ww]hich)\s+(?:(?:kinds?|types?|sorts?)\s+of\s+\w+"
+    r"|(?!(?:is|was|has|does|this|his|its|as|us|was)\b)[a-z]+s)|[Ww]here\s+(?:has|have)|[Hh]ow\s+many)\b"
+    r"[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+(?:'s)?\s+(?=[a-z])"
 )
 _ENTITY = re.compile(
     r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"
