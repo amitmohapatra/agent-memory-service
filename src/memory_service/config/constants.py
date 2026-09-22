@@ -483,6 +483,16 @@ class ContextSettings(BaseModel):
     knowledge_max: int = 12
     graph_facts_max: int = 12
     summaries_max: int = 4
+    #: How long served-memory ids may sit in the builder's buffer before one bulk bump, and
+    #: how many ids force an early flush.
+    #:
+    #: The bump is an UPDATE plus a COMMIT - a WAL flush - on the same pool the reads use. One
+    #: per served bundle is ~20 of them a second at the 20 rps target, each touching up to
+    #: ``memories_max`` rows, for a counter whose only reader is the nightly forgetting pass.
+    #: Buffering trades a 2 s delay in that counter, which nothing reads sooner, for a single
+    #: statement per tenant per window. Ids repeated inside one window count once.
+    access_flush_seconds: float = Field(default=2.0, gt=0.0)
+    access_flush_max_ids: int = Field(default=200, ge=1)
 
 
 CONTEXT = ContextSettings()

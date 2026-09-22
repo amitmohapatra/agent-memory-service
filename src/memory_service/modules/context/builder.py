@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import re
 from collections.abc import Coroutine, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+import orjson
 
 from memory_service.config.constants import ContextSettings, RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
@@ -31,7 +33,7 @@ from memory_service.domain.enums import EvidenceStatus, MessageKind
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
 from memory_service.domain.revisions import RevisionKind
-from memory_service.modules.authz.visibility import VisibilitySpecification
+from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.context.summaries import (
     SOURCE_CHARS,
     SUMMARY_SCHEMA,
@@ -156,6 +158,21 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     )
 
 
+@dataclass(frozen=True)
+class _Lookup:
+    """What one database read and one cache read say about a query, before any work."""
+
+    bundle_id: str
+    cache_key: str
+    revision_fp: str
+    #: the revisions an authorization scope depends on, in that cache's key format
+    authz_fp: str
+    #: the cached AuthorizedScope bytes, or None when that key missed
+    scope: bytes | None
+    #: the cached bundle bytes: present means the answer is already made
+    bundle: bytes | None
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -179,8 +196,19 @@ class ContextBuilder:
         self.retrieval_cfg = retrieval
         self.cache_ttl = cache_ttl_seconds
         self.assist = assist or LLMAssist.disabled()
-        #: usage accounting still in flight (see _record_access); awaited by drain()
+        #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
+        #: tenant -> served memory id -> times served since the last flush (see _flush_access)
+        self._access: dict[str, dict[str, int]] = {}
+        self._buffered = 0
+        self._flusher: asyncio.Task[None] | None = None
+        self._flush_now = asyncio.Event()
+        self._flush_lock = asyncio.Lock()
+        # Nothing in it changes for the life of the process - the tuning is frozen, the
+        # embedding fingerprint is fixed at construction, the LLM uses are wired once - and
+        # it was recomputed per request: two model_dump_json() calls and a hash, before the
+        # cache key it feeds could even be formed.
+        self._fingerprint = self._config_fingerprint()
 
     def _config_fingerprint(self) -> str:
         parts = [
@@ -194,12 +222,27 @@ class ContextBuilder:
             parts.append("llm:" + ",".join(llm_uses))
         return stable_key(*parts)
 
-    async def _scope(self, ctx: MemoryExecutionContext) -> tuple[str, VisibilitySpecification]:
-        """The revision fingerprint and the caller's visibility, from one unit of work.
+    async def _lookup(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        budget: int,
+        document_ids: Sequence[str] | None,
+    ) -> _Lookup:
+        """Everything the cache decision needs: one database round trip, one cache read.
 
-        They were two: the fingerprint here, the visibility inside the engine, each opening
-        its own session and each on the query path. The access bump was a third. One
-        round trip carries both.
+        It was four. The revision fingerprint came from one unit of work, the caller's
+        visibility from a second read inside the engine that opened its own session and asked
+        the same table again, and then two sequential cache GETs - the authorization scope,
+        then the bundle - each a full round trip to Dragonfly before the next could start.
+        None of them depends on the others: the bundle key is a function of the revisions,
+        the scope key is a function of a subset of the same revisions, and both keys exist
+        before either value is needed. So: read the revisions once, derive both keys, and ask
+        for both values in one MGET.
+
+        Resolving the scope is left to the miss path. On a hit the caller is served from the
+        bundle and the authorization scope is never needed, so the listing the resolver does
+        when the scope cache is cold was work for an answer nobody read.
         """
         async with self.uow_factory() as uow:
             # Every revision a bundle's content depends on. AGENT and GRAPH were missing, so
@@ -212,9 +255,33 @@ class ContextBuilder:
                 (RevisionKind.AGENT, ctx.agent_id or ""),
                 (RevisionKind.GRAPH, ""),
             ]
-            values = await uow.revisions.get_many(ctx.tenant_id, keys)
-            visibility = await self.engine.authz.visibility(ctx, revisions=uow.revisions)
-        return stable_key(*(f"{k}={v}" for k, v in sorted(values.items()))), visibility
+            revisions = await uow.revisions.get_many(ctx.tenant_id, keys)
+        revision_fp = stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
+        authz_fp = AuthorizationService.revision_fingerprint(ctx, revisions)
+        bundle_id = stable_key(
+            ctx.tenant_id,
+            ctx.scope_fingerprint(),
+            revision_fp,
+            self._fingerprint,
+            query,
+            str(budget),
+            ",".join(document_ids or []),
+        )
+        cache_key = self._cache_key(ctx.tenant_id, bundle_id)
+        scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
+        scope_raw: bytes | None = None
+        bundle_raw: bytes | None = None
+        if self.cache is not None:
+            with contextlib.suppress(CacheUnavailable):
+                scope_raw, bundle_raw = await self.cache.mget([scope_key, cache_key])
+        return _Lookup(
+            bundle_id=bundle_id,
+            cache_key=cache_key,
+            revision_fp=revision_fp,
+            authz_fp=authz_fp,
+            scope=scope_raw,
+            bundle=bundle_raw,
+        )
 
     async def build(
         self,
@@ -231,63 +298,127 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                revision_fp, visibility = await self._scope(ctx)
-            bundle_id = stable_key(
-                ctx.tenant_id,
-                ctx.scope_fingerprint(),
-                revision_fp,
-                self._config_fingerprint(),
-                query,
-                str(budget),
-                ",".join(document_ids or []),
-            )
-            cache_key = self._cache_key(ctx.tenant_id, bundle_id)
-            if self.cache is not None:
-                try:
-                    raw = await self.cache.get(cache_key)
-                except CacheUnavailable:
-                    raw = None
-                if raw is not None:
-                    bundle = ContextBundle.model_validate_json(raw)
-                    return bundle.model_copy(update={"cache_hit": True})
-            tokens_before = self.assist.tokens_used()
-            with timings.stage("retrieve"):
-                result = await self.engine.retrieve(
-                    ctx, query, document_ids=document_ids, visibility=visibility
-                )
-            with timings.stage("window"):
-                window = await self._conversation_window(ctx, result)
-            # the engine's own stage split, plus what happened around it
-            result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
-            if self.working is not None and result.routed.needs_memories:
-                for i, item in enumerate(await self.working.recall(ctx)):
-                    result.candidates.insert(
-                        i,
-                        Candidate(
-                            record_id=f"wm_{i}",
-                            kind="memory",
-                            text=str(item.get("content", "")),
-                            score=1.0,
-                            retrievers=["working"],
-                            payload={"memory_type": item.get("memory_type", "WORKING")},
-                        ),
-                    )
-            bundle = self._assemble(query, result, window, budget, revision_fp)
-            spent = self.assist.tokens_used() - tokens_before
-            bundle = bundle.model_copy(
-                update={
-                    "bundle_id": bundle_id,
-                    "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
-                }
-            )
-            if self.cache is not None:
-                with contextlib.suppress(CacheUnavailable):
-                    await self.cache.set(
-                        cache_key, bundle.model_dump_json().encode(), ttl_seconds=self.cache_ttl
-                    )
+                found = await self._lookup(ctx, query, budget, document_ids)
+            if found.bundle is not None:
+                bundle = ContextBundle.model_validate_json(found.bundle)
+                return bundle.model_copy(update={"cache_hit": True})
+            bundle = await self._fresh(ctx, query, budget, document_ids, found, timings)
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        self._track(self._record_access(ctx, bundle))
+        self._after_build(ctx, bundle, found.cache_key, api=None)
         return bundle
+
+    async def build_api(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        *,
+        token_budget: int | None = None,
+        document_ids: Sequence[str] | None = None,
+    ) -> bytes:
+        """The bundle as the API sends it, serialised exactly once.
+
+        ``/v1/context`` used to pay for the same content four times over: the cached bytes
+        were parsed into a ContextBundle, the bundle was dumped back to JSON and parsed again
+        by ``bundle_to_api``, the dict was validated into a response model, and the response
+        model was serialised onto the wire. For a 30-80 KB bundle that is most of what a
+        cache hit costs. The cache stores the API dict, so a hit is the stored bytes and
+        nothing else; a miss serialises once and hands the same object to the background
+        write. Callers that need the ContextBundle itself - grounding, the benchmarks - use
+        ``build``.
+        """
+        budget = token_budget or self.cfg.token_budget
+        with (
+            span("context.build", tenant_id=ctx.tenant_id),
+            stage_seconds.labels("context.build").time(),
+        ):
+            timings = Timings()
+            with timings.stage("scope"):
+                found = await self._lookup(ctx, query, budget, document_ids)
+            if found.bundle is not None:
+                return found.bundle
+            bundle = await self._fresh(ctx, query, budget, document_ids, found, timings)
+        evidence_status_total.labels(bundle.evidence.status.value).inc()
+        api = bundle_to_api(bundle)
+        self._after_build(ctx, bundle, found.cache_key, api=api)
+        return orjson.dumps(api)
+
+    async def _fresh(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        budget: int,
+        document_ids: Sequence[str] | None,
+        found: _Lookup,
+        timings: Timings,
+    ) -> ContextBundle:
+        """Retrieve, window and assemble - the cache-miss half of a build."""
+        with timings.stage("visibility"):
+            visibility = await self.engine.authz.visibility(
+                ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
+            )
+        tokens_before = self.assist.tokens_used()
+        with timings.stage("retrieve"):
+            result = await self.engine.retrieve(
+                ctx, query, document_ids=document_ids, visibility=visibility
+            )
+        with timings.stage("window"):
+            window = await self._conversation_window(ctx, result)
+        # the engine's own stage split, plus what happened around it
+        result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
+        if self.working is not None and result.routed.needs_memories:
+            for i, item in enumerate(await self.working.recall(ctx)):
+                result.candidates.insert(
+                    i,
+                    Candidate(
+                        record_id=f"wm_{i}",
+                        kind="memory",
+                        text=str(item.get("content", "")),
+                        score=1.0,
+                        retrievers=["working"],
+                        payload={"memory_type": item.get("memory_type", "WORKING")},
+                    ),
+                )
+        bundle = self._assemble(query, result, window, budget, found.revision_fp)
+        spent = self.assist.tokens_used() - tokens_before
+        return bundle.model_copy(
+            update={
+                "bundle_id": found.bundle_id,
+                "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
+            }
+        )
+
+    def _after_build(
+        self,
+        ctx: MemoryExecutionContext,
+        bundle: ContextBundle,
+        cache_key: str,
+        *,
+        api: dict[str, Any] | None,
+    ) -> None:
+        """The bookkeeping a built bundle leaves behind, none of it on the request path."""
+        self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
+        if self.cache is not None:
+            self._track(self._store(self.cache, cache_key, bundle, api))
+
+    async def _store(
+        self,
+        cache: CacheProvider,
+        cache_key: str,
+        bundle: ContextBundle,
+        api: dict[str, Any] | None,
+    ) -> None:
+        """Write the bundle to the cache after the caller has been answered.
+
+        A bundle is 30-80 KB. Serialising it and pushing it to Dragonfly took that long off
+        the front of every cache-miss response for the benefit of the *next* caller, who is
+        not waiting on anything. ``cache_hit`` is stored true because a value read back from
+        here is, by construction, a hit - that is what lets ``build_api`` return the stored
+        bytes untouched.
+        """
+        data = api if api is not None else bundle_to_api(bundle)
+        payload = orjson.dumps({**data, "cache_hit": True})
+        with contextlib.suppress(CacheUnavailable):
+            await cache.set(cache_key, payload, ttl_seconds=self.cache_ttl)
 
     def _track(self, work: Coroutine[Any, Any, None]) -> None:
         task = asyncio.create_task(work)
@@ -295,18 +426,35 @@ class ContextBuilder:
         task.add_done_callback(self._pending.discard)
 
     async def drain(self) -> None:
-        """Wait for the usage accounting started by earlier builds (tests, shutdown)."""
+        """Flush the buffered access counts and wait for the writes started by earlier builds.
+
+        Called by tests and at shutdown. It wakes the flush timer rather than cancelling it:
+        a timer caught mid-flush holds a pooled connection, and aborting that connection
+        costs the pool more than waiting out one statement.
+        """
+        self._flush_now.set()
+        flusher = self._flusher
+        if flusher is not None:
+            await asyncio.gather(flusher, return_exceptions=True)
+        await self._flush_access()
         while self._pending:
             await asyncio.gather(*list(self._pending), return_exceptions=True)
 
-    async def _record_access(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
+    async def close(self) -> None:
+        await self.drain()
+
+    def _buffer_access(self, tenant_id: str, ids: Sequence[str]) -> None:
         """Count a memory as used when it actually reaches the caller.
 
-        Off the request path. It UPDATEs every served row and COMMITs - a WAL flush - and it
-        ran inside ``/v1/context`` before the bundle was returned, so every query paid for
-        its own bookkeeping (5-20 ms typical, more at the tail on a virtualised disk). The
-        bump changes no revision, so no cached bundle depends on it having happened, and
-        the caller has nothing to wait for. ``drain()`` is for the code that does.
+        Off the request path, and now coalesced. Each bump is an UPDATE over up to
+        ``memories_max`` rows followed by a COMMIT - a WAL flush - on the same connection
+        pool the reads check out of; one per served bundle is ~20 of those a second at the
+        20 rps target, for a counter read once a night by the forgetting pass. Ids are
+        buffered per tenant and flushed every ``access_flush_seconds`` or at
+        ``access_flush_max_ids``, whichever comes first, so a window costs one statement per
+        tenant. A memory served twice inside one window counts once: the forgetting score's
+        access term is ``1 - 0.5**accesses``, which saturates, so the distinction is below
+        anything the policy can act on.
 
         The forgetting policy scores
         ``importance * 0.5**(idle/half_life) * (1 - 0.5**(accesses + reinforcements))`` and
@@ -315,21 +463,47 @@ class ContextBuilder:
         port and had no call site anywhere, so ``access_count`` stayed 0 for every memory and
         the access term collapsed to the constant 0.5. Decay was running on importance and
         recency alone, and the "frequently used memories survive" half of the policy silently
-        did nothing — while looking, in the code and in the migration, entirely present.
+        did nothing - while looking, in the code and in the migration, entirely present.
 
         Served, not merely retrieved: candidates that were ranked but dropped by the token
         budget never reached anyone and must not count as use, or every query would reinforce
         memories nobody read.
         """
-        ids = [item.item_id for item in bundle.memories if item.item_id]
         if not ids:
             return
-        try:
-            async with self.uow_factory() as uow:
-                await uow.memories.bump_access(ctx.tenant_id, ids, at=datetime.now(UTC))
-                await uow.commit()
-        except Exception as exc:  # usage accounting must never fail a read
-            log.warning("memory.access_bump_failed", error_message=str(exc), count=len(ids))
+        counts = self._access.setdefault(tenant_id, {})
+        for memory_id in ids:
+            counts[memory_id] = counts.get(memory_id, 0) + 1
+        self._buffered += len(ids)
+        if self._buffered >= self.cfg.access_flush_max_ids:
+            self._track(self._flush_access())
+            return
+        if self._flusher is None or self._flusher.done():
+            self._flush_now.clear()
+            self._flusher = asyncio.ensure_future(self._flush_after())
+
+    async def _flush_after(self) -> None:
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._flush_now.wait(), self.cfg.access_flush_seconds)
+        await self._flush_access()
+
+    async def _flush_access(self) -> None:
+        """One bulk bump per tenant for everything buffered since the last flush."""
+        async with self._flush_lock:
+            pending, self._access, self._buffered = self._access, {}, 0
+            for tenant_id, counts in pending.items():
+                try:
+                    async with self.uow_factory() as uow:
+                        await uow.memories.bump_access(
+                            tenant_id, list(counts), at=datetime.now(UTC)
+                        )
+                        await uow.commit()
+                except Exception as exc:  # usage accounting must never fail a read
+                    log.warning(
+                        "memory.access_bump_failed",
+                        error_message=str(exc),
+                        count=len(counts),
+                    )
 
     async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:
         """A bundle built earlier under the caller's tenant, while it is still cached."""
@@ -622,6 +796,6 @@ def render_window(
 
 
 def bundle_to_api(bundle: ContextBundle) -> dict[str, Any]:
-    data = json.loads(bundle.model_dump_json())
+    data: dict[str, Any] = orjson.loads(bundle.model_dump_json())
     data["rendered"] = bundle.render()
     return data

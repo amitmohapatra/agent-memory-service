@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied
@@ -55,27 +55,58 @@ class AuthorizationService:
 
     # -- scope -----------------------------------------------------------------
     @staticmethod
-    def _scope_cache_key(ctx: MemoryExecutionContext, revision_fingerprint: str) -> str:
+    def scope_cache_key(ctx: MemoryExecutionContext, revision_fingerprint: str) -> str:
         return f"authz:scope:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{revision_fingerprint}"
 
+    @staticmethod
+    def revision_fingerprint(ctx: MemoryExecutionContext, revisions: Mapping[str, int]) -> str:
+        """The fingerprint ``scope`` would compute, from revisions the caller already read.
+
+        The revisions a cached scope depends on are a subset of the ones a cached context
+        bundle depends on, and the ContextBuilder reads the wider set anyway. Deriving the
+        narrower fingerprint here instead of re-reading keeps the key format in the one place
+        that owns it, so the scope cache is not silently invalidated by a thread or graph
+        revision it does not depend on.
+        """
+        keys = [f"{RevisionKind.TENANT.value}:", f"{RevisionKind.USER.value}:{ctx.user_id or ''}"]
+        if ctx.agent_id:
+            keys.append(f"{RevisionKind.AGENT.value}:{ctx.agent_id}")
+        return ",".join(f"{k}={revisions.get(k, 0)}" for k in sorted(keys))
+
     async def scope(
-        self, ctx: MemoryExecutionContext, *, revisions: RevisionRepository | None = None
+        self,
+        ctx: MemoryExecutionContext,
+        *,
+        revisions: RevisionRepository | None = None,
+        revision_fingerprint: str | None = None,
+        cached_scope: bytes | None = None,
     ) -> AuthorizedScope:
-        fingerprint = "0"
-        if revisions is not None:
-            keys = [(RevisionKind.TENANT, ""), (RevisionKind.USER, ctx.user_id or "")]
-            if ctx.agent_id:
-                keys.append((RevisionKind.AGENT, ctx.agent_id))
-            values = await revisions.get_many(ctx.tenant_id, keys)
-            fingerprint = ",".join(f"{k}={v}" for k, v in sorted(values.items()))
-        key = self._scope_cache_key(ctx, fingerprint)
-        if self.cache is not None:
-            try:
-                raw = await self.cache.get(key)
-            except CacheUnavailable:
-                raw = None
-            if raw is not None:
-                return AuthorizedScope.model_validate_json(raw)
+        """The caller's authorized scope.
+
+        ``revisions`` reads the fingerprint here, one round trip on the query path.
+        ``revision_fingerprint`` is for a caller that has already read those revisions: pass
+        it *together with* ``cached_scope``, the bytes that caller's own read of
+        ``scope_cache_key`` returned (``None`` when it missed). Passing the fingerprint alone
+        means this call does no cache read at all, which is a resolve on every query.
+        """
+        fingerprint = revision_fingerprint
+        raw = cached_scope
+        if fingerprint is None:
+            fingerprint = "0"
+            if revisions is not None:
+                keys = [(RevisionKind.TENANT, ""), (RevisionKind.USER, ctx.user_id or "")]
+                if ctx.agent_id:
+                    keys.append((RevisionKind.AGENT, ctx.agent_id))
+                values = await revisions.get_many(ctx.tenant_id, keys)
+                fingerprint = ",".join(f"{k}={v}" for k, v in sorted(values.items()))
+            if self.cache is not None:
+                try:
+                    raw = await self.cache.get(self.scope_cache_key(ctx, fingerprint))
+                except CacheUnavailable:
+                    raw = None
+        key = self.scope_cache_key(ctx, fingerprint)
+        if raw is not None:
+            return AuthorizedScope.model_validate_json(raw)
         with (
             span("authz.scope", tenant_id=ctx.tenant_id),
             stage_seconds.labels("authz.scope").time(),
@@ -89,9 +120,21 @@ class AuthorizationService:
         return scope
 
     async def visibility(
-        self, ctx: MemoryExecutionContext, *, revisions: RevisionRepository | None = None
+        self,
+        ctx: MemoryExecutionContext,
+        *,
+        revisions: RevisionRepository | None = None,
+        revision_fingerprint: str | None = None,
+        cached_scope: bytes | None = None,
     ) -> VisibilitySpecification:
-        return VisibilitySpecification.from_scope(await self.scope(ctx, revisions=revisions))
+        return VisibilitySpecification.from_scope(
+            await self.scope(
+                ctx,
+                revisions=revisions,
+                revision_fingerprint=revision_fingerprint,
+                cached_scope=cached_scope,
+            )
+        )
 
     # -- decisions --------------------------------------------------------------
     async def allowed(
