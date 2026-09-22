@@ -1,6 +1,15 @@
 # ADR 0014: The LangGraph adapter wraps nodes; it does not become a checkpointer or store
 
-**Status:** accepted · **Date:** 2026-09-15
+**Status:** superseded by ADR 0020 (layering), 2026-09-22 · **Date:** 2026-09-15
+
+> **Superseded — the decision below was right, the location was not.** Wrapping nodes rather
+> than implementing `BaseCheckpointSaver` / `BaseStore` still holds, and the lineage mapping
+> it describes is still how a LangGraph execution becomes agent runs. What changed is where
+> the adapter lives: `integrations/langgraph` has been removed from this repository, because
+> a memory service that ships a LangGraph package depends on its own consumer. Framework
+> adapters live in `agent-harness`, which already carries `universal-agent-harness-langgraph`
+> with the same `checkpoint_ns` lineage parser. Kept as the record of *why* the wrapper shape
+> was chosen, for whoever maintains that adapter.
 
 ## Context
 LangGraph applications need the Memory Service at three points: before a node runs (what

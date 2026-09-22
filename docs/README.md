@@ -25,17 +25,20 @@ contract. Nothing in the guide claims a number that is not in one of those files
 | # | Chapter | What you get |
 |---|---|---|
 | 1 | [Why a memory service](guide/01-why-a-memory-service.md) | the problem, and why a vector database is not the answer |
-| 2 | [Concepts](guide/02-concepts.md) | memories, observations, scopes, principals — the vocabulary |
-| 3 | [Time](guide/03-time.md) | how a fact stops being true without being deleted |
-| 4 | [Retrieval](guide/04-retrieval.md) | four retrievers, one ranking, and why reranking is off |
-| 5 | [The knowledge graph](guide/05-knowledge-graph.md) | the questions vector search cannot answer |
-| 6 | [Trust](guide/06-trust.md) | grounding, contradiction, and memory poisoning |
-| 7 | [Authorization](guide/07-authorization.md) | ten visibility levels, and who an agent really is |
-| 8 | [Models](guide/08-models.md) | which models, where, why — and running without an LLM |
-| 9 | [API and SDK](guide/09-api-and-sdk.md) | every endpoint and its SDK call, side by side |
-| 10 | [Architecture](guide/10-architecture.md) | ports, adapters, and the path a write takes |
-| 11 | [Operations](guide/11-operations.md) | deploying, configuring, and what hardware it needs |
-| 12 | [Testing and gates](guide/12-testing-and-gates.md) | how the claims in this documentation are kept true |
+| 2 | Concepts *(not written yet)* | memories, observations, scopes, principals — the vocabulary |
+| 3 | Time *(not written yet)* | how a fact stops being true without being deleted |
+| 4 | Retrieval *(not written yet)* | four retrievers, one ranking, and why reranking is off |
+| 5 | The knowledge graph *(not written yet)* | the questions vector search cannot answer |
+| 6 | Trust *(not written yet)* | grounding, contradiction, and memory poisoning |
+| 7 | Authorization *(not written yet)* | ten visibility levels, and who an agent really is |
+| 8 | Models *(not written yet)* | which models, where, why — and running without an LLM |
+| 9 | API and SDK *(not written yet)* | every endpoint and its SDK call, side by side |
+| 10 | Architecture *(not written yet)* | ports, adapters, and the path a write takes |
+| 11 | Operations *(not written yet)* | deploying, configuring, and what hardware it needs |
+| 12 | Testing and gates *(not written yet)* | how the claims in this documentation are kept true |
+
+Only chapter 1 is written. The rest is the planned outline, listed so you can see where
+the guide is going — the chapters are unlinked rather than linked-and-missing on purpose.
 
 ## Reference
 
@@ -70,8 +73,6 @@ with the code, the code is right; each carries a status line saying how much is 
 
 - [`TARGET_STACK.md`](TARGET_STACK.md) — the chosen models and components, the evidence for
   each, and the changes still to make.
-- [`INTEGRATIONS_PLAN.md`](INTEGRATIONS_PLAN.md) — framework adapters: LangGraph is built;
-  Google ADK, CrewAI and the MCP server are not.
 
 **Contributing**
 

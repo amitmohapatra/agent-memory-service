@@ -86,8 +86,6 @@ dev = [
   "openapi-spec-validator>=0.7",
   "schemathesis>=4",
   "universal-memory",
-  "universal-memory-langgraph",
-  "universal-memory-mcp",
 ]
 
 [project.scripts]
@@ -106,19 +104,13 @@ packages = ["src/memory_service"]
 default-groups = ["dev"]
 
 [tool.uv.workspace]
-members = [
-  "sdk/python",
-  "integrations/langgraph",
-  "integrations/mcp",
-]
+members = ["sdk/python"]
 [tool.uv.sources]
 # Local while unpublished. The path is inside this repo on purpose: a Docker build
 # cannot reach a sibling directory, so "../bifrost-sdk" makes the image unbuildable.
 # `make vendor` regenerates it from the real checkout; see the Makefile.
 bifrost-sdk = { path = "vendor/bifrost-sdk", editable = true }
 universal-memory = { workspace = true }
-universal-memory-langgraph = { workspace = true }
-universal-memory-mcp = { workspace = true }
 # CPU-only PyTorch on Linux (the service is CPU-first; the CUDA wheels add ~4 GB for nothing)
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
@@ -137,8 +129,6 @@ line-length = 100
 src = [
   "src",
   "sdk/python/src",
-  "integrations/langgraph/src",
-  "integrations/mcp/src",
   "tests",
 ]
 extend-exclude = ["migrations/versions", "benchmark/results"]
@@ -175,16 +165,11 @@ ignore = [
 "benchmark/**" = ["T20", "S", "PLR", "TID251", "E501", "SIM905", "RUF100"]
 "examples/**" = ["T20", "S", "PLR", "TID251", "E501", "RUF100", "ASYNC"]
 "sdk/python/tests/**" = ["S", "PLR", "T20"]
-"integrations/langgraph/tests/**" = ["S", "PLR", "T20", "TID251", "E501", "N818", "RUF043", "PLC0207"]
-"integrations/langgraph/src/**" = ["TID251"]  # the one place LangGraph may be imported
-"integrations/mcp/src/**" = ["TID251"]  # the one place the MCP server package may be imported
 
 [tool.ruff.lint.isort]
 known-first-party = [
   "memory_service",
   "universal_memory",
-  "universal_memory_langgraph",
-  "universal_memory_mcp",
 ]
 
 # Hexagonal boundary: the domain package may not import adapters or third-party SDKs.
@@ -199,7 +184,7 @@ ban-relative-imports = "parents"
 "graphiti_core".msg = "Third-party SDKs belong in memory_service.adapters."
 "openfga_sdk".msg = "Third-party SDKs belong in memory_service.adapters."
 "procrastinate".msg = "Third-party SDKs belong in memory_service.adapters."
-"langgraph".msg = "LangGraph is never a core dependency; see integrations/langgraph."
+"langgraph".msg = "LangGraph is never a dependency of the memory service; framework adapters live in agent-harness."
 # Every LLM call goes through the Bifrost gateway adapter (adapters/models/llm.py); provider
 # SDKs are banned everywhere under src/ (tests/unit/test_architecture.py covers adapters too).
 "openai".msg = "LLM calls go through Bifrost only (memory_service.adapters.models.llm)."
@@ -223,8 +208,6 @@ pythonVersion = "3.12"
 include = [
   "src",
   "sdk/python/src",
-  "integrations/langgraph/src",
-  "integrations/mcp/src",
 ]
 exclude = ["**/__pycache__", ".venv"]
 typeCheckingMode = "standard"
@@ -251,7 +234,6 @@ asyncio_default_fixture_loop_scope = "session"
 testpaths = [
   "tests",
   "sdk/python/tests",
-  "integrations/langgraph/tests",
 ]
 pythonpath = ["."]
 timeout = 120
@@ -274,7 +256,5 @@ filterwarnings = ["error::RuntimeWarning:memory_service"]
 source = [
   "memory_service",
   "universal_memory",
-  "universal_memory_langgraph",
-  "universal_memory_mcp",
 ]
 branch = true

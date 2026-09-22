@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -29,7 +30,10 @@ class Database:
             pool_timeout=settings.pool_timeout_seconds,
             pool_pre_ping=True,
             echo=settings.echo,
-            connect_args={"options": f"-c statement_timeout={settings.statement_timeout_ms}"},
+            connect_args={
+                "options": f"-c statement_timeout={settings.statement_timeout_ms}",
+                "connect_timeout": settings.connect_timeout_seconds,
+            },
         )
         self.session_factory = async_sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
@@ -47,11 +51,19 @@ class Database:
             yield session
 
     async def ping(self) -> bool:
+        """Whether the database answers, within a bounded time.
+
+        ``connect_timeout`` bounds opening a socket; this bounds the whole round trip,
+        including a connection handed back from the pool that turns out to be dead and a
+        server that accepts the query and never answers.
+        """
+        budget = self.settings.connect_timeout_seconds + self.settings.pool_timeout_seconds
         try:
-            async with self.engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
+            async with asyncio.timeout(budget):
+                async with self.engine.connect() as conn:
+                    await conn.execute(text("SELECT 1"))
             return True
-        except Exception:
+        except Exception:  # TimeoutError included; a probe never raises
             return False
 
     async def close(self) -> None:

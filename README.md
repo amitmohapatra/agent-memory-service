@@ -424,33 +424,19 @@ contradictions.
 
 ---
 
-## Framework integrations
+## Using it from a framework
 
-### LangGraph (available today)
+The SDK is framework-neutral, and deliberately so: bind a scope, call `context()` before
+your agent thinks and `chat.assistant()` after, and everything in this README works from
+LangGraph, CrewAI, Google ADK, an MCP server or plain code.
 
-```python
-from universal_memory_langgraph import LangGraphMemory
-
-memory = LangGraphMemory(client, tenant_id="acme", user_id="u1", agent_group_id="crew")
-
-graph.add_node("research", memory.wrap(research_node, agent="researcher", recall="question"))
-graph.add_node("answer", memory.wrap(answer_node, recall="question"))
-```
-
-`recall` names the state key to build the context bundle from (or a callable returning the
-query). LangGraph's `thread_id` becomes the memory thread.
-
-Wrapping a node gives it an evidence-gated context bundle in `state["memory"]` before it
-runs, records its messages and observations after, and makes subgraphs into agent runs with
-proper lineage — so the hand-off rules above hold automatically. Recording is idempotent
-across checkpoint retries.
-
-### Any other framework
-
-The SDK is framework-neutral: bind a scope, call `context()` before your agent thinks and
-`chat.assistant()` after, and everything in this README works. Adapters for Google ADK and
-CrewAI, and an MCP server exposing memory as tools, are **in progress** — see
-[Status](#status-read-this-before-you-trust-a-number).
+There is no LangGraph adapter in this repository, and that is the design. A memory service
+that ships adapters knows the names of its consumers — the dependency points the wrong way,
+and the service image ends up carrying framework packages it never imports. Framework
+adapters belong in the layer that drives the framework: in this platform that is
+[`agent-harness`](https://github.com/amitmohapatra/agent-harness), whose
+`universal-agent-harness-langgraph` package already wraps LangGraph nodes and threads a
+`MemoryClient` through them.
 
 ### Plain HTTP
 
@@ -590,9 +576,9 @@ Making them real means running `make validate` with the real weights in `models/
 servers, and a network hop — everything needed is in the repository and that work is in
 progress. Until then, treat retrieval quality and latency as **unmeasured**.
 
-**Also in progress:** Google ADK and CrewAI adapters, the MCP server, and the framework-side
-tool hooks (the tool-memory service, API, SDK and gate are done; the LangGraph tool wrapper
-and ADK/CrewAI callbacks are not). The grounding cascade runs with a deterministic lexical
+**Also in progress:** the framework-side tool hooks — the tool-memory service, API, SDK and
+gate are done; the adapter-side wrappers that call them live in the consuming framework and
+are not. The grounding cascade runs with a deterministic lexical
 stand-in for the NLI model on this machine, so its verdicts are labelled
 `representative: false` until the DeBERTa weights are loaded.
 [docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) is the honest per-gate account.

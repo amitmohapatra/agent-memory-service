@@ -28,7 +28,8 @@ and worker processes sharing PostgreSQL.
 Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 
 - `domain/`, `application/`, `modules/`, `ports/` and `api/` never import provider SDKs.
-- LangGraph types never appear in the core; `integrations/langgraph` is a separate package.
+- LangGraph types never appear anywhere in this repository. Framework adapters are not a
+  memory-service concern at all (ADR 0020); they live in `agent-harness`.
 - No module reads another module's tables directly; it goes through that module's service.
 - Every persistent write is idempotent; every derived memory keeps `EvidenceRef` provenance.
 

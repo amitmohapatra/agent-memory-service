@@ -147,13 +147,26 @@ def manifest_path(root: Path) -> Path:
 
 
 def load_manifest(root: Path) -> dict[str, Any]:
+    """The existing manifest, minus entries for weights this catalogue no longer knows.
+
+    Each run merges into the file rather than rewriting it, so that fetching one model does
+    not erase the provenance of the others. Without pruning, that merge is append-only: a
+    model removed from ``MODELS`` keeps its entry forever, and ``benchmark/common.py`` stamps
+    it into every result as if those weights were the ones in use. A ``late-interaction``
+    entry outlived the strategy that used it by a fortnight this way, naming a directory that
+    is not on disk. The catalogue is the only authority on what a directory name may mean.
+    """
     path = manifest_path(root)
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text())
+        stored = json.loads(path.read_text())
     except ValueError:
         return {}
+    if not isinstance(stored, dict):
+        return {}
+    known = {m.directory for m in MODELS} | {DOCLING_DIRECTORY}
+    return {k: v for k, v in stored.items() if k in known}
 
 
 def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:

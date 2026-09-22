@@ -75,7 +75,7 @@ typecheck: ## Pyright
 	$(PY) pyright
 
 unit: vendor ## Unit tests (no external services)
-	$(PY) pytest tests/unit sdk/python/tests integrations/langgraph/tests -m "not docker and not models" -q
+	$(PY) pytest tests/unit sdk/python/tests -m "not docker and not models" -q
 
 integration: vendor ## Integration tests (needs Postgres/Redis; uses embedded fallbacks where possible)
 	$(PY) pytest tests/integration -m "not docker and not models" -q
@@ -370,7 +370,7 @@ failure-test: ## Failure-injection scenarios (worker kill, cache flush, blob out
 	$(PY) pytest tests/failure -m failure -q
 
 gates: ## Produce every release-gate artifact under benchmark/results/
-	$(PY) pytest tests sdk/python/tests integrations/langgraph/tests -m "not docker and not models" -q -p benchmark.pytest_results
+	$(PY) pytest tests sdk/python/tests -m "not docker and not models" -q -p benchmark.pytest_results
 	$(PY) python -m benchmark.security
 	$(PY) python -m benchmark.failure_injection
 	$(PY) python -m benchmark.durability
@@ -378,9 +378,8 @@ gates: ## Produce every release-gate artifact under benchmark/results/
 	$(PY) python -m benchmark.retrieval
 	$(PY) python -m benchmark.memory
 
-examples: ## Run the SDK tour and the LangGraph crew against a running server (./examples/run_server.sh)
+examples: ## Run the SDK tour against a running server (./examples/run_server.sh)
 	$(PY) python examples/sdk_tour.py
-	$(PY) python examples/langgraph_crew/app.py
 
 reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebuild)
 	$(PY) python -m memory_service.tools.reindex

@@ -48,6 +48,15 @@ class DatabaseSettings(BaseModel):
     max_overflow: int = 10
     pool_timeout_seconds: float = 5.0
     statement_timeout_ms: int = 15_000
+    #: libpq gives up on opening a connection after this long.
+    #:
+    #: Without it libpq waits indefinitely, and "indefinitely" is reachable: a PostgreSQL
+    #: container whose port is still published but whose server has stopped answering
+    #: completes the TCP handshake and then never replies to the startup packet. The
+    #: readiness ping then hangs instead of reporting not-ready — the one failure a
+    #: readiness probe exists to report is the one it cannot survive. Bounded here so
+    #: /health/ready always answers.
+    connect_timeout_seconds: int = 5
     echo: bool = False
 
     @property

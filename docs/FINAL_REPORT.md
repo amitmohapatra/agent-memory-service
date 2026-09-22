@@ -59,8 +59,7 @@ their adapters refuse to run without local weights rather than degrade silently.
 `examples/sdk_tour.py` runs 14 checks covering every SDK method and every API route
 (threads, messages, history, files, documents, jobs, recall, context with evidence gating,
 observe/remember/list/get/forget, consolidation with temporal history, agent-run lineage
-and sharing, graph queries with aliases and `as_of`), and `examples/langgraph_crew/app.py`
-runs a three-level LangGraph crew through the adapter. Both pass: 14/14 and all checks.
+and sharing, graph queries with aliases and `as_of`). It passes 14/14.
 The tour found and fixed four defects on the way: hints did not override the classifier's
 lifetime (EPHEMERAL persisted), `forget` was not idempotent, document results crowded
 memories out before reranking, and a superseding memory had no `valid_from` (a temporal

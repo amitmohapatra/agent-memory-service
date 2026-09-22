@@ -3,12 +3,13 @@
 > **Status: the service is built; the framework adapters are not.** Sections 30.0-30.4,
 > 30.6, 30.7 and 30.9 are implemented and covered by a hard gate — the registry, invocation
 > records, the replay cache, chain mining, procedures, `/v1/tools`, the SDK and
-> `benchmark/results/tool_gate.json`. Sections 30.5 and 30.8 (the LangGraph tool wrapper,
-> ADK callbacks, the CrewAI wrapper, MCP verbs and the Bifrost agent-mode plugin) are not
-> built yet. See [adr/0018-tool-memory.md](adr/0018-tool-memory.md) for what was decided and
-> the README for how to use what exists.
+> `benchmark/results/tool_gate.json`. Sections 30.5 and 30.8 — the adapter-side wrappers
+> (LangGraph tool wrapper, ADK callbacks, CrewAI wrapper, MCP verbs, the Bifrost agent-mode
+> plugin) — are not built, and will not be built here: they belong in the framework layer,
+> not in the memory service. See [adr/0018-tool-memory.md](adr/0018-tool-memory.md) for what
+> was decided and the README for how to use what exists.
 
-Companion to `TARGET_STACK.md` and `INTEGRATIONS_PLAN.md`.
+Companion to `TARGET_STACK.md`.
 
 
 > **Status note (September 2026).** The surface described below was reduced to what is
@@ -185,8 +186,8 @@ explicit (`POST /v1/mcp/tool/execute`, the default) or autonomous ("agent mode",
 `tools_to_auto_execute` and a max-iteration cap). Teams may therefore keep tools out of the
 agent framework entirely. The memory service supports both paths:
 
-- **Memory as an MCP server in Bifrost.** The `universal-memory-mcp` server (INTEGRATIONS_PLAN
-  §28) is registered in Bifrost, so every model call routed through the gateway can see
+- **Memory as an MCP server in Bifrost.** An MCP server over the SDK, registered in Bifrost,
+  would let every model call routed through the gateway see
   `memory.recall / context / remember / tools.suggest / tools.next` without any adapter; the
   virtual key decides which agents may use which memory tools.
 - **Explicit execution path (recommended).** The app calls the model through Bifrost, gets the
