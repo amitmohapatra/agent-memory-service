@@ -4329,6 +4329,7 @@
     },
     "/metrics": {
       "get": {
+        "description": "The registry of the worker that answered this scrape, saying so.\n\nThe worker count is passed in because the registry has no way of knowing it: this is one\nof ``service.workers`` processes behind one socket, and what it holds is its own share.",
         "operationId": "metrics_metrics_get",
         "responses": {
           "200": {

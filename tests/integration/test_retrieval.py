@@ -15,7 +15,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType, Visibility
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.rag.indexer import KNOWLEDGE
-from memory_service.ports.search import SearchFilter
+from memory_service.ports.search import PAYLOAD_FIELDS, SearchFilter
 
 pytestmark = pytest.mark.integration
 
@@ -89,9 +89,13 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
     assert {h.retriever for h in hybrid} == {"fusion"}
     assert any("increased to EUR 98" in h.payload["text"] for h in sparse)
     assert any("increased to EUR 98" in h.payload["text"] for h in hybrid)
-    # payload carries only what retrieval needs: security keys + display fields
+    # The payload carries what a reader uses and nothing more: the scope keys are what the
+    # filter matches on inside the store, so they are never sent back (see PAYLOAD_FIELDS)
+    # - the projection is checked against every payload read in src by a unit test, and the
+    # filtering it enables is asserted below.
     p = hybrid[0].payload
-    assert set(p) >= {"tenant_id", "visibility_keys", "document_id", "page", "section_path", "text"}
+    assert set(p) >= {"tenant_id", "document_id", "page", "section_path", "text"}
+    assert "visibility_keys" not in p and set(p) <= set(PAYLOAD_FIELDS)
     assert len(p["text"]) <= 2000
     # re-index is idempotent (upsert by deterministic point id)
     assert await indexer.rebuild_document("acme", doc_id) == len(chunks)
