@@ -1,12 +1,19 @@
 """Re-grade an existing LoCoMo result under a different ruler, without re-running it.
 
-    python -m benchmark.locomo_rescore benchmark/results/locomo_judged_v2.json --judge-ruler lenient
+    python -m benchmark.locomo_rescore benchmark/results/locomo_judged_v5.json --judge-ruler lenient
+    python -m benchmark.locomo_rescore ... --judge-ruler lenient --judge-model openai/gpt-4.1-mini
 
 Every judged result carries, per question, the answer the model produced and the gold. Grading
 is the only thing a ruler changes, so a second ruler is a second pass over those records - a
 few hundred judge calls and no retrieval - rather than a second twenty-minute run. The output
-is a sibling file, ``<name>_<ruler>.json``, with the same shape and the ruler named in it, so
-the two numbers can sit side by side and never be confused for each other.
+is a sibling file, ``<name>_<ruler>[_<judge>].json``, with the same shape and both the ruler
+and the judge model named in it, so two numbers can sit side by side and never be confused.
+
+The judge is half of a ruler. Every published LoCoMo number was produced by a GPT-class judge,
+and a judge of a different family is reported to score systematically lower on the same
+answers - which is exactly the kind of claim that must be measured rather than repeated. With
+``--judge-model`` the same produced answers are re-graded by another model through the
+gateway, so the judge's contribution to a score becomes a number instead of an argument.
 """
 
 from __future__ import annotations
@@ -24,9 +31,26 @@ from benchmark.retrieval import _settings
 from memory_service.application.container import build_container
 
 
-async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
+async def rescore(
+    result: dict, ruler: str, calls_per_minute: float, judge_model: str | None = None
+) -> dict:
     """The same records, graded again under ``ruler``. Pure over its input; I/O is the caller's."""
-    container = await build_container(_settings(), "bench", overrides=bench_overrides())
+    settings = _settings()
+    if judge_model:
+        # The judge use is routed to the fast model (see BifrostLLM.model_for), so naming a
+        # judge means naming both: the grading call must not fall back to the answerer's model.
+        settings = settings.model_copy(
+            update={
+                "models": settings.models.model_copy(
+                    update={
+                        "llm": settings.models.llm.model_copy(
+                            update={"model": judge_model, "fast_model": judge_model}
+                        )
+                    }
+                )
+            }
+        )
+    container = await build_container(settings, "bench", overrides=bench_overrides())
     llm = container.llm
     if not getattr(llm, "enabled", False):
         raise SystemExit("rescoring needs a generative model: set models.llm.enabled=true")
@@ -48,7 +72,12 @@ async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
                 failures += 1
                 rec["judged"] = {**judged, "error": f"{type(exc).__name__}: {exc}"[:300]}
                 continue
+            # The record says which ruler and which judge produced its verdict: a rescored
+            # file used to carry the new verdicts under the old file's labels, so a row could
+            # not be told apart from the run it came from.
             rec["judged"] = {**judged, **verdict}
+            rec["judge_ruler"] = ruler
+            rec["judge_model"] = llm.model_for("grounding_judge")
             hit = judged_hit(rec["category"], rec["judged"])
             rec["hit"] = hit
             by_cat.setdefault(rec["category"], []).append(bool(hit))
@@ -65,6 +94,7 @@ async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
     }
     out["judge_failures"] = failures
     out["judge_ruler"] = ruler
+    out["judge_model"] = llm.model_for("grounding_judge")
     return out
 
 
@@ -73,15 +103,24 @@ def main() -> None:
     parser.add_argument("result", type=Path)
     parser.add_argument("--judge-ruler", choices=sorted(JUDGE_RULERS), required=True)
     parser.add_argument("--calls-per-minute", type=float, default=120.0)
+    parser.add_argument(
+        "--judge-model",
+        default=None,
+        help="grade with this model instead of the configured one (the gateway must serve it); "
+        "the output file is named after it so the two gradings cannot be confused",
+    )
     args = parser.parse_args()
     result = json.loads(args.result.read_text())
     if not result.get("judged"):
         raise SystemExit(f"{args.result} was not judged; there are no produced answers to re-grade")
-    out = asyncio.run(rescore(result, args.judge_ruler, args.calls_per_minute))
+    out = asyncio.run(rescore(result, args.judge_ruler, args.calls_per_minute, args.judge_model))
     out["rescored_from"] = args.result.name
-    target = args.result.with_name(f"{args.result.stem}_{args.judge_ruler}.json")
+    suffix = args.judge_ruler
+    if args.judge_model:
+        suffix += "_" + args.judge_model.replace("/", "-").replace(".", "_")
+    target = args.result.with_name(f"{args.result.stem}_{suffix}.json")
     target.write_text(json.dumps(out, indent=2) + "\n")
-    keys = ("answer_recall_at_k", "by_category", "judge_failures", "judge_ruler")
+    keys = ("answer_recall_at_k", "by_category", "judge_failures", "judge_ruler", "judge_model")
     print(json.dumps({k: out[k] for k in keys}, indent=2))
 
 

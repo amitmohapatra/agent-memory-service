@@ -245,8 +245,9 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	@# holds the provider key; this container is given a URL and a model name, never a secret.
 	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
 
-bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler (no retrieval)
-	@# RESCORE_ARGS='benchmark/results/locomo_judged_v2.json --judge-ruler lenient'
+bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler or judge (no retrieval)
+	@# RESCORE_ARGS='benchmark/results/locomo_judged_v5.json --judge-ruler lenient'
+	@# add --judge-model openai/gpt-4.1-mini to measure the judge's own contribution to a score
 	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.locomo_rescore $(RESCORE_ARGS))
 
 RESCORE_ARGS ?=

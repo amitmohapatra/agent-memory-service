@@ -17,7 +17,8 @@ different defects hide behind one number, and they are fixed in four different p
 
 The split is computed from the artefacts a run already writes: the judged file for the strict
 verdicts and its ``_lenient`` sibling (``make bench-locomo-rescore``) for the ruler gap. No
-re-run, no model calls.
+re-run, no model calls. Pass ``--lenient`` explicitly when the sibling was graded by a named
+judge (``..._lenient_openai-gpt-4_1-mini.json``).
 """
 
 from __future__ import annotations
