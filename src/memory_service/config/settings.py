@@ -193,18 +193,6 @@ class EmbeddingSettings(BaseModel):
     normalize: bool = True
     device: str = "cpu"
     threads: int | None = None
-    #: Set this and the model is served over HTTP instead of loaded into this process; leave
-    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
-    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
-    #: is the only fact an operator should have to supply.
-    url: str | None = Field(
-        default=None, description="inference server URL; unset means load the model in-process"
-    )
-    api_key: SecretStr | None = Field(
-        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
-    )
-    timeout_seconds: float = 30.0
-    max_retries: int = 2
 
 
 class RerankerSettings(BaseModel):
@@ -217,18 +205,6 @@ class RerankerSettings(BaseModel):
     #: target RPS x candidate_k is the throughput the reranker tier has to sustain.
     candidate_k: int = Field(default=20, description="bounded rerank K; benchmark 15-25")
     batch_size: int = 16
-    #: Set this and the model is served over HTTP instead of loaded into this process; leave
-    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
-    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
-    #: is the only fact an operator should have to supply.
-    url: str | None = Field(
-        default=None, description="inference server URL; unset means load the model in-process"
-    )
-    api_key: SecretStr | None = Field(
-        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
-    )
-    timeout_seconds: float = 30.0
-    max_retries: int = 2
 
 
 class NLISettings(BaseModel):
@@ -239,18 +215,6 @@ class NLISettings(BaseModel):
     model: str = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
     model_path: str | None = Field(default=None, description="local directory with model files")
     batch_size: int = 16
-    #: Set this and the model is served over HTTP instead of loaded into this process; leave
-    #: it unset and ``provider`` above chooses the in-process runtime. The wire dialect (TEI
-    #: or OpenAI-compatible) is detected from the server rather than declared here — the URL
-    #: is the only fact an operator should have to supply.
-    url: str | None = Field(
-        default=None, description="inference server URL; unset means load the model in-process"
-    )
-    api_key: SecretStr | None = Field(
-        default=None, description="bearer token, for a gateway that fronts a hosted vendor"
-    )
-    timeout_seconds: float = 30.0
-    max_retries: int = 2
     max_length: int = 512
     supported_threshold: float = Field(
         default=0.5, ge=0.0, le=1.0, description="entailment (or contradiction) score to decide"
@@ -329,10 +293,6 @@ class ModelSettings(BaseModel):
 
     sparse_model: str = "prithivida/Splade_PP_en_v1"
     sparse_model_path: str | None = None
-    #: Inference server for the sparse model. Set it and SPLADE runs on its own tier instead
-    #: of inside the worker — which matters more here than for the other models, because it
-    #: is BERT-sized and runs on every chunk at ingest. Unset means load it in-process.
-    sparse_url: str | None = None
     embedding: EmbeddingSettings = EmbeddingSettings()
     reranker: RerankerSettings = RerankerSettings()
     nli: NLISettings = NLISettings()
@@ -487,21 +447,6 @@ class ObservabilitySettings(BaseModel):
     otel_endpoint: str | None = None
 
 
-class ProviderPolicySettings(BaseModel):
-    allowed_licenses: list[str] = Field(
-        default_factory=lambda: [
-            "Apache-2.0",
-            "MIT",
-            "BSD-3-Clause",
-            "BSD-2-Clause",
-            "BSL-1.1",
-            "LGPL-3.0-only",
-            "MPL-2.0",
-        ]
-    )
-    allow_remote_models: bool = False
-
-
 class PerformanceBudgets(BaseModel):
     """Benchmark targets in milliseconds (p95). Targets, not promises."""
 
@@ -568,7 +513,6 @@ class Settings(BaseSettings):
     context: ContextSettings = ContextSettings()
     evaluation: EvaluationSettings = EvaluationSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
-    provider_policy: ProviderPolicySettings = ProviderPolicySettings()
     budgets: PerformanceBudgets = PerformanceBudgets()
 
     @classmethod

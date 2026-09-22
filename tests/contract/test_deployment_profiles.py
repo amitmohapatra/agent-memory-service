@@ -13,7 +13,6 @@ answer is not a working profile.
 
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
@@ -60,18 +59,6 @@ PROFILES: dict[str, dict] = {
         "blob": {"provider": "memory"},
         "graph_enrichment": {"provider": "disabled"},
     },
-    # the model tier deployed separately: nothing loads weights in this process
-    "remote-models": {
-        "cache": {"provider": "memory"},
-        "tasks": {"provider": "memory"},
-        "search": {"provider": "memory"},
-        "blob": {"provider": "memory"},
-        "models": {
-            "embedding": {"dimension": 3},
-            "reranker": {},
-            "nli": {},
-        },
-    },
     # no generative model at all — the rule-based path has to carry the service
     "no-llm": {
         "cache": {"provider": "memory"},
@@ -92,17 +79,6 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     name, overrides = profile
-    server = None
-    if name == "remote-models":
-        # a real inference server on a real socket: the point of this profile is that the
-        # process loads no weights at all, so a stand-in adapter would prove nothing
-        from tests.contract.test_remote_models import FakeTEI
-
-        server = FakeTEI()
-        server.__enter__()
-        overrides = json.loads(json.dumps(overrides))
-        for section in overrides["models"].values():
-            section["url"] = server.url
     sections: dict = {
         "database": {"url": DB_URL},
         "blob": {"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
@@ -147,5 +123,3 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
         )
     finally:
         await container.close()
-        if server is not None:
-            server.__exit__()

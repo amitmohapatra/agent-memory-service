@@ -2,7 +2,16 @@
 
 ## Status
 
-Accepted. Adapters and compose services exist; in-process remains the default.
+Superseded (2026-09, Phase 1 of `docs/ROADMAP-2026-09.md`). The served tier was removed:
+the `Remote*` adapters, `tools/model_server.py`, the `memory-embed`/`memory-rerank`/
+`memory-nli`/`memory-sparse` compose services, the litellm `model-gateway`, the `url`/
+`api_key`/`timeout_seconds`/`max_retries` settings on every model section, `sparse_url`
+and `provider_policy`. The target is a single 8 vCPU VM with external stores: the reranker
+that made the tier worth having is off on measured evidence (SciFact nDCG -5.2, p=0.012,
+21x latency), the model server had no batching and the same to_thread executor problem as
+in-process loading, so it only added an HTTP hop to every query, and licence/locality is a
+build-time fact once the model set is frozen into the image. Scale-out, if ever needed
+again, is a new decision; the text below is kept as the record of this one.
 
 ## Context
 

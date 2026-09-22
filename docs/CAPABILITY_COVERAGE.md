@@ -19,7 +19,7 @@ checked against the source, and the verdict says which mechanism provides it.
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
 | Rank fusion across retrievers | native Qdrant RRF (`FusionQuery`), `rrf_k=60` | on | — |
 | Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so `rerank` is now off by default too |
-| Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2, plus it is incompatible with a served model tier |
+| Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |
 | Referent resolution at answer time | `PARENT`, `PREVIOUS`, `NEXT` expansion | on | — |
 | Term definitions | `DEFINED_BY` expansion | on | — |
 | Qualifying footnotes, cross-references | `FOOTNOTE`, `CROSS_REFERENCE` always in the expansion kinds | on | — |
@@ -56,8 +56,7 @@ Coverage of that case today:
 do not propagate down the tree.
 
 **But `late_chunking` cannot fix it here.** It requires token-level embeddings over a whole
-document; a served embed endpoint returns one pooled vector per input, so it is mutually
-exclusive with the separate model tier (wiring now refuses the combination at startup).
+document, which the pooled sentence-transformers encoder does not expose.
 
 **The fix that fits the architecture: propagate ancestor entities into the contextual header.**
 Deterministic, no model call, works with a remote embedder, and it also helps BM25 because

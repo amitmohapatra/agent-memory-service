@@ -135,8 +135,8 @@ cannot be tuned, and "100% accurate" cannot be claimed or disproven.
 1. **`reranker.candidate_k` (20)** — one request costs 1 embedding and 20 cross-encoder pairs.
    The reranker is ~87% of per-request model cost. This is the tuning dial; it needs §4's
    baseline to tune against.
-2. **A separate model tier** — done. Embedding and reranker scale independently of the API;
-   ingestion no longer starves query traffic.
+2. **A separate model tier** — built, then removed (ADR 0019 is superseded): on a single
+   8 vCPU VM it only added an HTTP hop to every query.
 3. **`on_disk_payload`** — vectors in RAM, payload on disk. The difference between a small and
    a large Qdrant node above ~10M chunks.
 4. **Reclaim superseded collections** — 20 exist where 2 are used, each a full vector set.
@@ -147,8 +147,8 @@ cannot be tuned, and "100% accurate" cannot be claimed or disproven.
 
 A system that answers with a citation to a page and a section, refuses when the evidence does
 not support an answer, notices when a fact has been superseded or contradicted, enforces
-tenant isolation, and remembers which tool sequences have actually worked — on CPU, with a
-model tier that scales on its own.
+tenant isolation, and remembers which tool sequences have actually worked — on CPU, in one
+process.
 
 That is a narrower product than the current configuration surface implies, and a much more
 defensible one.

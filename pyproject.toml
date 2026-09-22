@@ -84,7 +84,6 @@ dev = [
 [project.scripts]
 memory-api = "memory_service.__main__:run_api"
 memory-worker = "memory_service.__main__:run_worker"
-memory-model = "memory_service.tools.model_server:run"
 
 [build-system]
 requires = ["hatchling>=1.27"]

@@ -342,12 +342,8 @@ def test_hosts_and_urls_are_configuration_not_literals() -> None:
     """
     import re
 
-    # settings.py holds the defaults an operator overrides. A server entrypoint is the other
-    # legitimate case: binding 0.0.0.0 is how a process listens, not a peer address compiled
-    # into behaviour — and it is overridable (MEMORY_MODEL_HOST) besides. Its docstring also
-    # carries the client-side URLs, which is documentation of the wire contract rather than a
-    # hostname in logic.
-    allowed = {SRC / "config" / "settings.py", SRC / "tools" / "model_server.py"}
+    # settings.py holds the defaults an operator overrides.
+    allowed = {SRC / "config" / "settings.py"}
     network = re.compile(r"https?://[A-Za-z0-9.:_-]+|\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b")
     offenders: list[str] = []
     for path in sorted(SRC.rglob("*.py")):

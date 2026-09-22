@@ -467,14 +467,6 @@ MEMORY__MODELS__RERANKER__MODEL_PATH=./models/ms-marco-MiniLM-L6-v2
 MEMORY__MODELS__LLM__ENABLED=false
 ```
 
-To serve the models as their own containers instead of loading them in-process — which is
-what you want as soon as reranking capacity has to grow without API capacity — add the
-overlay:
-
-```bash
-docker compose --profile models -f docker-compose.yml -f deploy/served-models.yml up -d
-```
-
 ### About the LLM
 
 The service runs fully without one. When you enable it, **every call goes through

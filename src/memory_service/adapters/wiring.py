@@ -35,7 +35,6 @@ async def wire_all(container: Container) -> None:
     _wire_llm(container)
     _wire_conversation(container)
     await _wire_blob(container)
-    await _verify_served_models(container)
     _wire_archive(container)
     _wire_ingestion(container)
     await _wire_search(container)
@@ -61,28 +60,6 @@ async def wire_all(container: Container) -> None:
 # ---------------------------------------------------------------------------
 # M1 wiring
 # ---------------------------------------------------------------------------
-
-
-async def _verify_served_models(container: Container) -> None:
-    """Handshake with every model that is served over HTTP, before serving traffic.
-
-    A URL says where to send text, not which model answers. Without this, a URL pointing at
-    the wrong encoder is discovered as bad retrieval weeks later rather than as a startup
-    error — the fingerprint that names the vector collection would have been built from the
-    declared name, so foreign vectors land in the right-looking collection.
-    """
-    for name, provider in (
-        ("embedding", container.embedding),
-        ("reranker", container.reranker),
-        ("nli", container.nli),
-    ):
-        verify = getattr(provider, "verify", None)
-        identify = getattr(provider, "identify", None)
-        if verify is not None:
-            await verify()
-        elif identify is not None:
-            dialect, served = await identify()
-            log.info("model.verified", role=name, dialect=dialect, served=served)
 
 
 async def _wire_cache(container: Container) -> None:
@@ -298,15 +275,10 @@ def _wire_models(container: Container) -> None:
     )
     from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
     from memory_service.adapters.models.sparse import Bm25SparseEncoder
-    from memory_service.config.registry import check_provider_policy
 
     settings = container.settings
     emb_cfg = settings.models.embedding
-    if emb_cfg.url:
-        from memory_service.adapters.models.remote import RemoteEmbedding
-
-        embedding = RemoteEmbedding(emb_cfg)
-    elif emb_cfg.provider == "hash":
+    if emb_cfg.provider == "hash":
         embedding = HashEmbedding(emb_cfg.dimension)
     elif emb_cfg.provider == "fastembed":
         embedding = FastEmbedEmbedding(emb_cfg)
@@ -314,30 +286,13 @@ def _wire_models(container: Container) -> None:
         embedding = SentenceTransformersEmbedding(emb_cfg)
     else:
         raise NotImplementedError(f"embedding provider {emb_cfg.provider} not implemented yet")
-    check_provider_policy(
-        embedding.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
     container.embedding = embedding
     if settings.retrieval.splade:
         from memory_service.adapters.models.advanced import FastEmbedSparseEncoder
 
-        sparse_model = settings.models.sparse_model
-        if settings.models.sparse_url:
-            from memory_service.adapters.models.remote import RemoteSparse
-
-            sparse_encoder: Any = RemoteSparse(settings.models.sparse_url, sparse_model)
-        else:
-            sparse_encoder = FastEmbedSparseEncoder(
-                sparse_model, model_path=settings.models.sparse_model_path
-            )
-        check_provider_policy(
-            sparse_encoder.info,
-            [*settings.provider_policy.allowed_licenses, "see model card"],
-            settings.provider_policy.allow_remote_models,
+        container.sparse = FastEmbedSparseEncoder(
+            settings.models.sparse_model, model_path=settings.models.sparse_model_path
         )
-        container.sparse = sparse_encoder
     else:
         container.sparse = Bm25SparseEncoder()
     rr_cfg = settings.models.reranker
@@ -356,10 +311,6 @@ def _wire_models(container: Container) -> None:
         # was *worse* and twelve times slower (nDCG 80.54% -> 76.64%, p50 895 ms -> 10,868 ms,
         # docs/MEASUREMENTS.md §3b). Turning the flag on loads the model again.
         container.reranker = None
-    elif rr_cfg.url:
-        from memory_service.adapters.models.remote import RemoteReranker
-
-        container.reranker = RemoteReranker(rr_cfg)
     else:
         container.reranker = CrossEncoderReranker(rr_cfg)
 
@@ -367,7 +318,6 @@ def _wire_models(container: Container) -> None:
 def _wire_llm(container: Container) -> None:
     """The generative model is optional and reachable only through the Bifrost gateway."""
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
-    from memory_service.config.registry import check_provider_policy
     from memory_service.modules.llm.assist import LLMAssist
 
     settings = container.settings
@@ -377,9 +327,6 @@ def _wire_llm(container: Container) -> None:
         container.services["llm_assist"] = LLMAssist.disabled()
         return
     llm = BifrostLLM(cfg, log_source_text=settings.service.log_source_text)
-    check_provider_policy(
-        llm.info, [*settings.provider_policy.allowed_licenses, "see model card"], allow_remote=True
-    )
     container.llm = llm
     container.services["llm_assist"] = LLMAssist(llm, cfg)
     container.add_dependency(
@@ -392,7 +339,6 @@ def _wire_nli(container: Container) -> None:
     to the deterministic stand-in with a warning when its weights cannot be loaded; reports
     then say ``representative: false``."""
     from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
-    from memory_service.config.registry import check_provider_policy
     from memory_service.domain.errors import DependencyUnavailable
     from memory_service.modules.grounding.cascade import GroundingCascade
 
@@ -402,20 +348,11 @@ def _wire_nli(container: Container) -> None:
         container.nli = None
         return
     nli: Any = LexicalNLI()
-    if cfg.url:
-        from memory_service.adapters.models.remote import RemoteNLI
-
-        nli = RemoteNLI(cfg)
-    elif cfg.provider == "transformers":
+    if cfg.provider == "transformers":
         try:
             nli = TransformersNLI(cfg)
         except DependencyUnavailable as exc:
             log.warning("nli.unavailable", error=exc.message, fallback="lexical")
-    check_provider_policy(
-        nli.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
     container.nli = nli
     container.services["grounding"] = GroundingCascade(
         nli, settings=cfg, assist=container.services["llm_assist"]
@@ -470,7 +407,6 @@ def _wire_retrieval(container: Container) -> None:
 
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
-    from memory_service.config.registry import check_provider_policy
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.service import MemoryService
@@ -480,11 +416,6 @@ def _wire_memory(container: Container) -> None:
     cfg = settings.memory_intelligence
     provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
         cfg, container.embedding, assist=container.services["llm_assist"]
-    )
-    check_provider_policy(
-        provider.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
@@ -524,7 +455,6 @@ def _wire_tools(container: Container) -> None:
 
 def _wire_graph(container: Container) -> None:
     """Knowledge graph: store (postgres | memory), native enrichment, service, retrieval stage."""
-    from memory_service.config.registry import check_provider_policy
     from memory_service.modules.graph.native import NativeGraphEnrichment
     from memory_service.modules.graph.retrieval import GraphStage
     from memory_service.modules.graph.service import GraphService
@@ -544,11 +474,6 @@ def _wire_graph(container: Container) -> None:
         return
     assist = container.services["llm_assist"]
     provider = NativeGraphEnrichment(assist=assist)
-    check_provider_policy(
-        provider.info,
-        [*settings.provider_policy.allowed_licenses, "see model card"],
-        settings.provider_policy.allow_remote_models,
-    )
     container.graph_enrichment = provider
     graph = GraphService(
         container.services["uow_factory"],

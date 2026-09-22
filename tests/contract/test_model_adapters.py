@@ -122,7 +122,6 @@ async def _embedding_contract(emb, expected_dim: int | None = None) -> None:
 
 async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> None:
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
-    from memory_service.config.registry import check_provider_policy
 
     settings = EmbeddingSettings(
         provider="sentence_transformers",
@@ -135,7 +134,7 @@ async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> 
     emb = SentenceTransformersEmbedding(settings)
     await _embedding_contract(emb, expected_dim=32)
     assert emb.fingerprint() == "st-tiny-embed-torch-d32"
-    check_provider_policy(emb.info, ["Apache-2.0", "MIT", "see model card"], allow_remote=False)
+    assert emb.info.locality == "local"
 
 
 def test_missing_local_model_is_a_dependency_error(tmp_path: Path) -> None:
