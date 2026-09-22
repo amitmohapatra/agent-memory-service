@@ -157,6 +157,10 @@ class BifrostLLM:
         #: was the last thing duplicated — the same thirty lines lived in the agent harness,
         #: with different defaults for the same gateway — so the thresholds are passed and
         #: the mechanism is not re-implemented.
+        #: Models that answered 400 to the JSON-schema envelope, so later structured calls
+        #: put the schema in the prompt from the first attempt instead of paying a wasted
+        #: round trip each time (DeepSeek did, on every one of ~600 calls in one run).
+        self._schema_in_prompt: set[str] = set()
         self._gateway = Bifrost(
             settings.base_url,
             api_key=settings.api_key.get_secret_value() if settings.api_key else None,
@@ -198,10 +202,16 @@ class BifrostLLM:
         use: str = "generic",
     ) -> dict[str, Any]:
         turns = [m.model_dump() for m in messages]
-        response_format: dict[str, Any] | None = {
-            "type": "json_schema",
-            "json_schema": {"name": "result", "schema": schema, "strict": True},
-        }
+        model = self.model_for(use)
+        response_format: dict[str, Any] | None = None
+        if model not in self._schema_in_prompt:
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {"name": "result", "schema": schema, "strict": True},
+            }
+        else:
+            # This model already refused the envelope once; do not pay the 400 again.
+            turns = [*turns, _json_only_instruction(schema)]
         last_error: Exception | None = None
         # one bounded repair round: feed the validation error back once
         for attempt in range(2):
@@ -228,6 +238,7 @@ class BifrostLLM:
                 if response_format is None or not _unsupported_response_format(exc):
                     raise
                 log.info("llm.structured_fallback", use=use, reason="response_format_unsupported")
+                self._schema_in_prompt.add(model)
                 response_format = None
                 turns = [*turns, _json_only_instruction(schema)]
                 continue

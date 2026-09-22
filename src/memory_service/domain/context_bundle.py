@@ -89,6 +89,18 @@ class EvidenceReport(BaseModel):
     llm_tokens: int = Field(default=0, description="LLM tokens spent building this report")
 
 
+def _memory_line(m: Any) -> str:
+    when = str(m.attributes.get("observed_at") or "")[:10]
+    subject = str(m.attributes.get("subject") or "")
+    who = subject.split(":", 1)[-1] if subject.startswith("user:") else ""
+    lead = " ".join(x for x in (f"[{when}]" if when else "", f"{who}:" if who else "") if x)
+    return (
+        f"- [{m.citation}] {lead} {m.text}".replace("  ", " ")
+        if lead
+        else f"- [{m.citation}] {m.text}"
+    )
+
+
 class ContextBundle(BaseModel):
     """Bounded, ranked context for one query in one execution context."""
 
@@ -122,9 +134,11 @@ class ContextBundle(BaseModel):
         if self.conversation.rendered:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         if self.memories:
-            parts.append(
-                "## Memories\n" + "\n".join(f"- [{m.citation}] {m.text}" for m in self.memories)
-            )
+            # Oldest first, each with its date and who it is about. Every system that scores
+            # well on conversational memory renders this way; a rank-ordered list with no
+            # time in it made the model anchor on position and fail date arithmetic.
+            ordered = sorted(self.memories, key=lambda m: str(m.attributes.get("observed_at", "")))
+            parts.append("## Memories\n" + "\n".join(_memory_line(m) for m in ordered))
         if self.graph_facts:
             parts.append(
                 "## Facts\n" + "\n".join(f"- [{f.citation}] {f.text}" for f in self.graph_facts)

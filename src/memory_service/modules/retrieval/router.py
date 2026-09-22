@@ -45,6 +45,13 @@ _MULTI_HOP = re.compile(
     r"\b(why did .* (?:despite|although|even though|while)|despite|even though|although|compare|comparison|difference between|how does .* (?:affect|impact|relate to)|relationship between|reconcile|explain (?:how|why) .* and\b|both .* and|how many times|what (?:kind|kinds|sort|sorts|type|types) of \w+ (?:does|do|did|has|have)|which \w+ (?:does|do|did|has|have) \w+ (?:like|enjoy|play|do|visit|own|prefer)|where (?:has|have|did) \w+ (?:been|gone|travell?ed|lived|worked|camped|visited)|list (?:all|every|the))\b",
     re.IGNORECASE,
 )
+#: Enumeration questions about a *person*, case-sensitive on purpose: "What activities does
+#: Melanie do?" and "Where has Caroline travelled?" need every mention gathered across
+#: sessions; "What items does Adjusted Operating Margin exclude?" is an entity question
+#: about a document term and must not route here (the retrieval gate caught the bare form).
+_MULTI_HOP_NAMED = re.compile(
+    r"\b(?:what|which|where|how many)\b[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+\b"
+)
 _ENTITY = re.compile(
     r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"
     # relation cues the knowledge graph answers directly (typed facts + their evidence)
@@ -82,7 +89,7 @@ class QueryRouter:
             "decision": bool(_DECISION.search(q)),
             "temporal": bool(_TEMPORAL.search(q)),
             "global": bool(_GLOBAL.search(q)),
-            "multi_hop": bool(_MULTI_HOP.search(q)),
+            "multi_hop": bool(_MULTI_HOP.search(q) or _MULTI_HOP_NAMED.search(q)),
             "entity": bool(_ENTITY.search(q)),
             "doc_local": bool(_DOC_LOCAL.search(q)),
         }

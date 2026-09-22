@@ -495,6 +495,12 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
     assert "response_format" in seen[0], "the first attempt should still ask for the envelope"
     assert "response_format" not in seen[1], "the retry must drop it"
     assert "JSON Schema" in seen[1]["messages"][-1]["content"], "schema moves into the prompt"
+    # ...and the refusal is remembered: the next call to the same model skips the envelope
+    out2 = await llm.structured(
+        [LLMMessage(role="user", content="grade this too")], schema=SCHEMA, use="ambiguous_worthiness"
+    )
+    assert out2 == {"worthy": True, "reason": "fact"}
+    assert len(seen) == 3 and "response_format" not in seen[2], "no second 400 for a known model"
 
 
 @respx.mock

@@ -277,6 +277,19 @@ JUDGE_RULERS = {
         "does not know. An empty GOLD means the question is unanswerable: then "
         "`correct` is true only if the answer abstained."
     ),
+    # LoCoMo-Refined (mem-eval-suite/LoCoMo_refined src/llm_judge.py): the strictest public
+    # ruler, under which the best published system scores 82.65 and Mem0's platform 48.91.
+    "refined": (
+        "You grade one answer against a GOLD answer. Mark `correct` true only if the ANSWER "
+        "clearly includes the GOLD's key content and does not contradict it. Time granularity "
+        "must match exactly (hour with hour, day with day, month with month, year with year); "
+        "do not treat a relative and an absolute time expression as equivalent; harmless "
+        "modifiers like last/previous are fine. When GOLD lists several distinct facts, ALL "
+        "must be covered, and extra non-contradictory items generally make it wrong. For a "
+        "preference question, any one reason from GOLD's list suffices. `abstained` is true "
+        "when the ANSWER declines to answer or says it does not know. An empty GOLD means the "
+        "question is unanswerable: then `correct` is true only if the answer abstained."
+    ),
     "lenient": (
         "You grade one answer against a GOLD answer. Mark `correct` true if the ANSWER "
         "includes AT LEAST ONE correct item from the GOLD answer (when GOLD lists several "
@@ -355,14 +368,19 @@ class _Pacer:
         self._next = time.monotonic() + self.interval
 
 
-async def _answer(llm, bundle_text: str, question: str) -> str:
-    """One answer, grounded only in the bundle."""
+async def _answer(llm, bundle_text: str, question: str, *, reference_date: str = "") -> str:
+    """One answer, grounded only in the bundle. ``reference_date`` is the last session's
+    date, so "last week" and "two years ago" resolve against the conversation, not today."""
     from memory_service.ports.models import LLMMessage
 
+    user = f"CONTEXT:\n{bundle_text}\n\n"
+    if reference_date:
+        user += f"REFERENCE DATE (the conversation's last session): {reference_date}\n\n"
+    user += f"QUESTION: {question}"
     completion = await llm.complete(
         [
             LLMMessage(role="system", content=ANSWER_SYSTEM),
-            LLMMessage(role="user", content=f"CONTEXT:\n{bundle_text}\n\nQUESTION: {question}"),
+            LLMMessage(role="user", content=user),
         ],
         # Generous on purpose: a model that reasons before it answers spends the output
         # budget on thinking first and returns an empty string when it runs out. Measured
@@ -443,6 +461,12 @@ async def run(
                 tenant_id=TENANT, user_id=f"locomo-{index}", workspace_id="ws"
             )
             turns = await _ingest_conversation(container, ctx, conversation["conversation"])
+            sessions = _sessions(conversation["conversation"])
+            reference_date = (
+                conversation["conversation"].get(f"{sessions[-1][0]}_date_time", "")
+                if sessions
+                else ""
+            )
 
             questions = conversation.get("qa", [])
             if limit_questions:
@@ -507,7 +531,9 @@ async def run(
                 if llm is not None:
                     try:
                         await pacer.wait()
-                        produced = await _answer(llm, rendered, question)
+                        produced = await _answer(
+                            llm, rendered, question, reference_date=reference_date
+                        )
                         await pacer.wait()
                         verdict = await _judge(llm, question, answer, produced, ruler=ruler)
                     except Exception as exc:  # noqa: BLE001 - a judged run must say it failed
@@ -542,6 +568,12 @@ async def run(
                     # A judged run scores what the caller would actually receive, which is the
                     # only place the adversarial category means anything.
                     hit = judged["abstained"] if category == ADVERSARIAL else judged["correct"]
+                elif judge:
+                    # A judged run whose judge failed on this row scores the row WRONG. It used
+                    # to fall through to the token-overlap heuristic, so a run with a broken
+                    # judge could still post hits - which is exactly how 79/79 failures once
+                    # read as 0.197. Failures stay counted in n and in judge_failures.
+                    hit = False
                 else:
                     hit = (
                         abstained
@@ -700,6 +732,9 @@ async def run(
         "records": records,
         "query_p50_ms": round(latencies[len(latencies) // 2], 1) if latencies else 0.0,
         "query_p95_ms": round(latencies[int(len(latencies) * 0.95)], 1) if latencies else 0.0,
+        "query_p99_ms": round(latencies[min(len(latencies) - 1, int(len(latencies) * 0.99))], 1)
+        if latencies
+        else 0.0,
         "total_seconds": round(time.perf_counter() - started, 1),
         "ablation": ablate or {},
         "embedding_provider": embedding,

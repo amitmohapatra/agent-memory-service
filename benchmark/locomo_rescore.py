@@ -55,8 +55,10 @@ async def rescore(result: dict, ruler: str, calls_per_minute: float) -> dict:
                 print(f"[rescore:{ruler}] {i + 1}/{len(out['records'])}", file=sys.stderr)
     finally:
         await container.close()
-    scored = [h for hs in by_cat.values() for h in hs]
-    out["answer_recall_at_k"] = round(sum(scored) / len(scored), 4) if scored else 0.0
+    answerable = [h for c, hs in by_cat.items() if c != "adversarial" for h in hs]
+    out["answer_recall_at_k"] = round(sum(answerable) / len(answerable), 4) if answerable else 0.0
+    adv = by_cat.get("adversarial") or []
+    out["abstention_rate_on_adversarial"] = round(sum(adv) / len(adv), 4) if adv else None
     out["by_category"] = {
         c: {"n": len(hs), "score": round(sum(hs) / len(hs), 4)} for c, hs in by_cat.items()
     }

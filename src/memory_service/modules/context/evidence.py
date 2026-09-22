@@ -133,9 +133,15 @@ def _question_names(query: str, evidence_text: str) -> list[str]:
     opens a question about Melanie)."""
     names: list[str] = []
     for i, name in enumerate(_CAPITALISED.findall(query)):
+        # A question word is never a name, whatever the evidence contains. With verbatim
+        # turns in the store the evidence nearly always holds a capitalised "What", so the
+        # sentence-initial heuristic below promoted "What was..." to a person and flagged
+        # ~28% of answerable questions INCOMPLETE - which the answerer read as "I don't know".
+        if name.lower() in _FUNCTION_WORDS or name.lower() in STOP_WORDS:
+            continue
         if i == 0 and query.startswith(name) and name not in evidence_text:
             continue
-        if name.lower() not in STOP_WORDS and name not in names:
+        if name not in names:
             names.append(name)
     return names
 

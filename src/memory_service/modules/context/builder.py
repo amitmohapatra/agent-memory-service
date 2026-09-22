@@ -142,6 +142,10 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "owner_principal",
                 "confidence",
                 "status",
+                # when it was observed, so a renderer can order memories in time and show
+                # the date beside the fact - the model reads "[2023-05-08] Caroline: ..."
+                # instead of a rank-ordered list with no time in it
+                "observed_at",
             )
             and v not in (None, [], {})
         },
