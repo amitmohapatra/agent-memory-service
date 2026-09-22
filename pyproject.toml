@@ -131,7 +131,14 @@ src = [
   "sdk/python/src",
   "tests",
 ]
-extend-exclude = ["migrations/versions", "benchmark/results"]
+extend-exclude = [
+  "migrations/versions",
+  "benchmark/results",
+  # Where CI checks out bifrost-sdk to generate vendor/ from. It is another
+  # repository with its own rules; linting it here would fail this build for a
+  # style choice made elsewhere. vendor/ itself is gitignored, which ruff honours.
+  ".bifrost-sdk",
+]
 
 [tool.ruff.lint]
 select = [

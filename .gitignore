@@ -19,6 +19,7 @@ benchmark/results/*.tmp
 dump.rdb
 secrets.env
 vendor/
+.bifrost-sdk/
 .bifrost/
 .deploy_key
 deploy_key.pub

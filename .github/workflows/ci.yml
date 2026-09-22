@@ -29,6 +29,16 @@ jobs:
       MEMORY__BLOB__PROVIDER: filesystem
     steps:
       - uses: actions/checkout@v4
+      # The gateway client is a path dependency on vendor/bifrost-sdk, and vendor/ is
+      # generated (gitignored) because a Docker build cannot reach a sibling directory.
+      # A fresh checkout therefore does not have it, and `uv sync` below died on
+      # "Distribution not found at: .../vendor/bifrost-sdk" as the first real step of the
+      # job — which is why nothing downstream of it had ever run.
+      - uses: actions/checkout@v4
+        with:
+          repository: amitmohapatra/bifrost-sdk
+          path: .bifrost-sdk
+      - run: make vendor BIFROST_SDK=.bifrost-sdk
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
