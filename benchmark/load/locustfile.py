@@ -114,6 +114,27 @@ class MemoryUser(HttpUser):
         )
 
     @task(1)
+    def context_with_verification(self) -> None:
+        """The same bundle, plus the grounding cascade over a short answer.
+
+        This is the only task that touches the NLI model, and it is weighted like the
+        upload on purpose: verification is opt-in per request, so a capacity number that
+        assumed every request paid for it would size the box for traffic nobody sends -
+        and one that never exercised it would miss the most expensive thing the service
+        can be asked to do.
+        """
+        self.client.post(
+            "/v1/context",
+            headers=self.headers,
+            json={
+                "scope": self.scope,
+                "query": _query(),
+                "answer": "Revenue was EUR 412 million in FY26 and Adjusted EBITDA rose 8%.",
+            },
+            name="POST /v1/context (verified)",
+        )
+
+    @task(1)
     def upload(self) -> None:
         salt = f"\n<!-- {uuid.uuid4().hex} -->\n".encode()
         self.client.post(
