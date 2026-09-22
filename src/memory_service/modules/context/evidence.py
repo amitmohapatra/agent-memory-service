@@ -62,8 +62,33 @@ def content_terms(text: str) -> set[str]:
     return terms
 
 
-def overlaps(query: str, candidates: Sequence[Candidate]) -> bool:
+class TermCache:
+    """``content_terms`` per record id, for the life of one request.
+
+    The rules below walk the same candidates several times over - ``overlaps`` once,
+    ``unsupported_subject`` once per question name and again for the other-terms check - and
+    each walk re-tokenised the full text of every item. On a bundle of 50 memories with a
+    two-name question that is a few hundred regex passes over text that has not changed since
+    the first one. The id is the key: two candidates with the same record id are the same
+    record, and a candidate's text does not change within a request.
+    """
+
+    def __init__(self) -> None:
+        self._terms: dict[str, set[str]] = {}
+
+    def of(self, candidate: Candidate) -> set[str]:
+        terms = self._terms.get(candidate.record_id)
+        if terms is None:
+            terms = content_terms(candidate.text)
+            self._terms[candidate.record_id] = terms
+        return terms
+
+
+def overlaps(
+    query: str, candidates: Sequence[Candidate], *, terms: TermCache | None = None
+) -> bool:
     """Abstention rule: at least one evidence item shares a content term with the query."""
+    cache = terms or TermCache()
     q = content_terms(query)
     if not q:
         # Nothing to ground: an empty query, bare punctuation, emoji, or nothing but
@@ -72,10 +97,7 @@ def overlaps(query: str, candidates: Sequence[Candidate]) -> bool:
         # question that asks nothing cannot be supported by evidence, and saying COMPLETE
         # about it is exactly the dishonesty the evidence report exists to prevent.
         return False
-    for c in candidates:
-        if c.kind in ("chunk", "memory", "summary") and content_terms(c.text) & q:
-            return True
-    return False
+    return any(c.kind in ("chunk", "memory", "summary") and cache.of(c) & q for c in candidates)
 
 
 def _conflicting_memories(candidates: Sequence[Candidate]) -> list[tuple[str, str]]:
@@ -146,13 +168,15 @@ def _question_names(query: str, evidence_text: str) -> list[str]:
     return names
 
 
-def _is_about(candidate: Candidate, name: str) -> bool:
+def _is_about(candidate: Candidate, name: str, cache: TermCache) -> bool:
     key = name.lower()
     subject = str(candidate.payload.get("subject") or "").lower()
-    return key in content_terms(candidate.text) or key in subject
+    return key in cache.of(candidate) or key in subject
 
 
-def unsupported_subject(query: str, candidates: Sequence[Candidate]) -> str | None:
+def unsupported_subject(
+    query: str, candidates: Sequence[Candidate], *, terms: TermCache | None = None
+) -> str | None:
     """A note when the question is about a named person the evidence does not support.
 
     ``overlaps`` asks whether *any* evidence shares a term with the question. On a memory of
@@ -167,6 +191,7 @@ def unsupported_subject(query: str, candidates: Sequence[Candidate]) -> str | No
     other content terms? When none does, the bundle does not establish what was asked, and
     says so. Returns the note, or None when the question is supported or names nobody.
     """
+    cache = terms or TermCache()
     memories = [c for c in candidates if c.kind == "memory"]
     if not memories:
         return None
@@ -175,10 +200,10 @@ def unsupported_subject(query: str, candidates: Sequence[Candidate]) -> str | No
         return None
     others = content_terms(query) - {n.lower() for n in names} - _FUNCTION_WORDS
     for name in names:
-        about = [c for c in memories if _is_about(c, name)]
+        about = [c for c in memories if _is_about(c, name, cache)]
         if not about:
             return f"no retrieved memory is about {name}"
-        if others and not any(content_terms(c.text) & others for c in about):
+        if others and not any(cache.of(c) & others for c in about):
             return f"no retrieved memory about {name} mentions {', '.join(sorted(others)[:4])}"
     return None
 
@@ -256,6 +281,7 @@ class VerificationStage:
         diagnostics: dict[str, Any],
     ) -> list[Candidate]:
         with span("retrieval.verify"), stage_seconds.labels("retrieval.verify").time():
+            terms = TermCache()
             evidence = [c for c in candidates if c.kind in ("chunk", "memory", "summary")]
             report: dict[str, Any] = {
                 "status": EvidenceStatus.COMPLETE.value,
@@ -273,7 +299,9 @@ class VerificationStage:
             if routed.query_type is QueryType.EXACT_IDENTIFIER:
                 diagnostics["evidence"] = report
                 return candidates
-            if self.cfg.abstain_when_insufficient and not overlaps(routed.query, evidence):
+            if self.cfg.abstain_when_insufficient and not overlaps(
+                routed.query, evidence, terms=terms
+            ):
                 report["status"] = EvidenceStatus.INSUFFICIENT.value
                 report["notes"].append("no retrieved evidence shares a content term with the query")
                 diagnostics["evidence"] = report
@@ -285,7 +313,7 @@ class VerificationStage:
                 # Conversational bundle: no document seeds to derive companions from, so the
                 # subject rule is the only structural check available. INCOMPLETE, not
                 # INSUFFICIENT - evidence exists; it just does not establish what was asked.
-                unsupported = unsupported_subject(routed.query, candidates)
+                unsupported = unsupported_subject(routed.query, candidates, terms=terms)
                 if unsupported:
                     report["status"] = EvidenceStatus.INCOMPLETE.value
                     report["notes"].append(unsupported)
