@@ -29,10 +29,10 @@ import random
 import re
 import sys
 import time
-from typing import Any
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from benchmark.common import provenance, reset_store, write_result
 from benchmark.retrieval import _settings
