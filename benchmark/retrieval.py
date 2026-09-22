@@ -22,7 +22,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_overrides, bench_retrieval
+from benchmark.env import bench_llm_settings, bench_overrides, bench_retrieval
 from benchmark.evaluation import BUDGETS, CRITICAL_RECALL_K
 from benchmark.evaluation.golden import (
     GoldenSet,
@@ -52,7 +52,7 @@ def _settings() -> Settings:
     defaults = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["bench"]},
-        "models": {"llm": {"enabled": False}},
+        "models": {"llm": {"enabled": False, **bench_llm_settings()}},
         "database": {
             "url": os.environ.get(
                 "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"

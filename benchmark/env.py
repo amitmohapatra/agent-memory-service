@@ -109,6 +109,16 @@ def bench_overrides(**changes: Any) -> Overrides:
     return BENCH.overrides(**changes)
 
 
+def bench_llm_settings() -> dict[str, Any]:
+    """LLM fields the judged configuration pins: the output ceiling a reasoning model needs,
+    the patience a judged question needs, and retries off (the pacer's rate is then the
+    actual request rate). Applied by ``benchmark.retrieval._settings`` under
+    ``BENCH_DEPTH=judged``; the shipped values apply otherwise."""
+    if BENCH.depth != "judged":
+        return {}
+    return {"max_tokens": MAX_TOKENS, "timeout_seconds": TIMEOUT, "max_retries": 0}
+
+
 def bench_retrieval(overrides: Overrides) -> Any:
     """The retrieval tuning a container built with ``overrides`` runs with."""
     return overrides.retrieval or RETRIEVAL

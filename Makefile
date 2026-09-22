@@ -127,7 +127,6 @@ bench-memory: ## Memory intelligence benchmark
 #: also make an index reusable across the arms of an ablation, which is the difference between
 #: a second arm costing one minute and costing forty.
 BENCH_DB_HOST ?= postgresql+psycopg://memory:memory@host.docker.internal:5432
-BENCH_DB ?= $(BENCH_DB_HOST)/memory_bench
 BENCH_DB_DOCS ?= $(BENCH_DB_HOST)/memory_bench_docs
 BENCH_DB_CONV ?= $(BENCH_DB_HOST)/memory_bench_conv
 BENCH_DB_DEGEN ?= $(BENCH_DB_HOST)/memory_bench_degen
@@ -166,8 +165,43 @@ BIFROST_URL ?= http://host.docker.internal:8091/v1
 # ($0.15/$0.60 off-peak) against deepseek-v4-pro at $0.435/$0.87. It also limits by
 # concurrency rather than a daily quota, which is what broke the last judged run:
 # 17 HTTP 429s from a free Gemini key, then 62 calls the circuit breaker refused.
+# The answerer and the judge are the same model here; separating them is Phase 4.
 BENCH_LLM_MODEL ?= deepseek/deepseek-flash
 BENCH_LIMIT ?=
+
+#: Every containerised benchmark runs through this one block. It passes exactly what the
+#: harness reads and nothing else: the database this benchmark owns, the Qdrant server, the
+#: BENCH_* switches that benchmark/env.py (BenchEnv) turns into build_container overrides,
+#: and the commit for provenance. Retrieval depth, models and stand-ins are NOT here - the
+#: seven copies of this block that used to carry ~25 -e lines each are where the shipped
+#: service and the benchmarked service drifted apart (three tunings of one retriever).
+#:   $(1) database URL   $(2) extra -e flags   $(3) the command inside the image
+define bench-run
+	docker run --rm --user root \
+	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
+	  --add-host host.docker.internal:host-gateway \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  -e PYTHONFAULTHANDLER=1 \
+	  -e GIT_COMMIT=$(shell git rev-parse HEAD) \
+	  -e MEMORY__DATABASE__URL="$(1)" \
+	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  $(2) \
+	  --entrypoint sh memory-service-memory-api -c '$(3)'
+endef
+
+#: The judged configuration: the gateway answers and grades, at the judged depth
+#: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,
+#: TIMEOUT, retries off - a provider counts *wire* requests, so max_retries=2 sends three per
+#: logical call and a run paced at half the documented limit still exceeds it). The only
+#: LLM use is the judge: ambiguous_worthiness / ambiguous_extraction at ingest were measured
+#: harmful (v2 -> v3: 0.674 -> 0.661, p50 281 -> 572 ms) and are off.
+BENCH_LLM_ENV = -e BENCH_DEPTH=judged \
+  -e MEMORY__MODELS__LLM__ENABLED=true \
+  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
+  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
+  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
+  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
+  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge"]'
 
 bench-db: ## Create and migrate the benchmark databases (idempotent, safe to re-run)
 	@# Benchmarks used to assume `memory_bench` already existed, so on any machine that had
@@ -189,15 +223,7 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	@# The benchmark that matches what this service is: multi-session conversations, answers
 	@# spread across sessions, annotated evidence turns, and 446 adversarial questions whose
 	@# correct answer is to abstain.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.locomo $(LOCOMO_ARGS)'
+	$(call bench-run,$(BENCH_DB_CONV),,/opt/venv/bin/python -m benchmark.locomo $(LOCOMO_ARGS))
 
 LOCOMO_ARGS ?=
 
@@ -212,45 +238,11 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	@# actual request rate, and --calls-per-minute means what it says.
 	@# The only configuration in which the adversarial category means anything. The gateway
 	@# holds the provider key; this container is given a URL and a model name, never a secret.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__MODELS__LLM__ENABLED=true \
-	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
-	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
-	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS)'
+	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
 
 bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler (no retrieval)
 	@# RESCORE_ARGS='benchmark/results/locomo_judged_v2.json --judge-ruler lenient'
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__MODELS__LLM__ENABLED=true \
-	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
-	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
-	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.locomo_rescore $(RESCORE_ARGS)'
+	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.locomo_rescore $(RESCORE_ARGS))
 
 RESCORE_ARGS ?=
 
@@ -258,24 +250,7 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	@# The other public conversational-memory benchmark the field quotes (Mem0 94.4,
 	@# Zep 90.2). Same environment as bench-locomo-judged so the two are comparable
 	@# with each other; the harness fetches the dataset from the HF hub on first use.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e MEMORY__MODELS__LLM__ENABLED=true \
-	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
-	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e BENCH_DEPTH=judged -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
-	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
-	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.public --suite longmemeval --configs native $(LME_ARGS)'
+	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.public --suite longmemeval --configs native $(LME_ARGS))
 
 LME_ARGS ?=
 
@@ -284,72 +259,30 @@ bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sectio
 	@# abstracts are one chunk each, so parent/neighbour/definition expansion never fires and
 	@# every ablation reads exactly zero. This golden set has section hierarchy and
 	@# `required_groups`, which is the mechanism those flags serve.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_GOLDEN)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e BENCH_GRAPH_ENRICHMENT=disabled \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.retrieval $(GOLDEN_ARGS)'
+	$(call bench-run,$(BENCH_DB_GOLDEN),-e BENCH_GRAPH_ENRICHMENT=disabled,/opt/venv/bin/python -m benchmark.retrieval $(GOLDEN_ARGS))
 
 bench-concurrency: ## How much parallelism the model tier wants, and what it costs in RSS
 	@# `service.worker_concurrency=4` and `models.threads=None` are unmeasured defaults: four
 	@# jobs enter the same torch module while torch fans each op across every core. This
 	@# measures throughput, peak RSS and — the part that matters — whether concurrent results
 	@# still agree with sequential ones on a shared, unlocked module.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
-	  -e BENCH_SEARCH=memory \
-	  -e BENCH_GRAPH_ENRICHMENT=disabled \
-	  -e MEMORY__MODELS__EMBEDDING__THREADS="$(BENCH_THREADS)" \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS)'
+	$(call bench-run,$(BENCH_DB_DOCS),-e BENCH_SEARCH=memory -e BENCH_GRAPH_ENRICHMENT=disabled -e MEMORY__MODELS__EMBEDDING__THREADS="$(BENCH_THREADS)",/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS))
 
 bench-degenerate: bench-db ## Behaviour on empty/garbage/hostile input, real models (inside the runtime image)
 	@# The input the service actually receives, as opposed to the input it was designed for.
 	@# Scores nothing; records what happened so a change in behaviour is visible.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DEGEN)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e BENCH_GRAPH_ENRICHMENT=disabled \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.degenerate $(DEGENERATE_ARGS)'
+	$(call bench-run,$(BENCH_DB_DEGEN),-e BENCH_GRAPH_ENRICHMENT=disabled,/opt/venv/bin/python -m benchmark.degenerate $(DEGENERATE_ARGS))
 
 bench-external: bench-db ## Retrieval quality on an external corpus, with the real models (inside the runtime image)
 	@# torch has no macOS x86_64 wheels, so the only place the real embedding model runs is the
 	@# Linux image — the same reason `model-test` exists. Postgres is reached on the host.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  --add-host host.docker.internal:host-gateway \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  -e PYTHONFAULTHANDLER=1 \
-	  -e MEMORY__DATABASE__URL="$(BENCH_DB_DOCS)" \
-	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
-	  -e BENCH_GRAPH_ENRICHMENT=disabled \
-	  -e BENCH_TENANT="$(BENCH_TENANT)" \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.external_retrieval $(BENCH_LIMIT)'
+	$(call bench-run,$(BENCH_DB_DOCS),-e BENCH_GRAPH_ENRICHMENT=disabled -e BENCH_TENANT="$(BENCH_TENANT)",/opt/venv/bin/python -m benchmark.external_retrieval $(BENCH_LIMIT))
 
 bench-model-throughput: ## Per-model items/sec for capacity planning (run this ON the target VM)
 	@# Sizing cannot be extrapolated from a developer laptop: transformer inference leans on
 	@# AVX2/AVX-512/AMX, and a CPU without them is an order of magnitude slower. Run on the
 	@# hardware you intend to deploy, then divide the target RPS by the measured rate.
-	docker run --rm --user root \
-	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
-	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
-	  --entrypoint sh memory-service-memory-api -c \
-	  '/opt/venv/bin/python -m benchmark.model_throughput --threads $(THREADS)'
+	$(call bench-run,$(BENCH_DB_DOCS),,/opt/venv/bin/python -m benchmark.model_throughput --threads $(THREADS))
 
 THREADS ?= 1 2 4 8
 
