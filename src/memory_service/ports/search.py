@@ -70,6 +70,45 @@ class CollectionSpec(BaseModel):
     sparse: bool = True
     sparse_idf: bool = Field(default=True, description="server-side IDF modifier (BM25)")
     on_disk: bool = False
+    on_disk_payload: bool = Field(
+        default=True,
+        description="keep payloads on disk; False for a collection small enough to hold in RAM",
+    )
+
+
+#: The payload keys a reader is allowed to rely on, and therefore the only ones a store has
+#: to return. Every key here is read somewhere in the retrieval path (the retrieval engine,
+#: the context builder, evidence, expansion, the graph stage) or by the store itself; a
+#: unit test re-derives the set from those files and fails when the two drift apart.
+#:
+#: What is *not* here matters as much: a hit used to arrive with its whole payload, so the
+#: security metadata a filter had already applied inside the store (tenant_id aside) and the
+#: indexing bookkeeping travelled back over the wire and were parsed under the GIL for every
+#: candidate of every query.
+PAYLOAD_FIELDS: tuple[str, ...] = (
+    "attributes",
+    "chunk_id",
+    "confidence",
+    "contradicts",
+    "contributors",
+    "document_id",
+    "kind",
+    "memory_type",
+    "node_id",
+    "object",
+    "observed_at",
+    "owner_principal",
+    "page",
+    "predicate",
+    "record_id",
+    "section_path",
+    "status",
+    "subject",
+    "tenant_id",
+    "text",
+    "text_hash",
+    "visibility",
+)
 
 
 @runtime_checkable

@@ -105,6 +105,9 @@ class SearchSettings(BaseModel):
     """A Qdrant server. qdrant-client local mode is a test seam on ``Overrides``."""
 
     qdrant_url: str = "http://localhost:6333"
+    #: Qdrant's second port. The client talks gRPC to it for every query; the URL above stays
+    #: the REST endpoint, which is what the dashboard and the snapshot API speak.
+    qdrant_grpc_port: int = 6334
     qdrant_api_key: SecretStr | None = None
 
 

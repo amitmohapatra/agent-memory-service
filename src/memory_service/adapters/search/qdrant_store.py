@@ -5,25 +5,33 @@ Qdrant's server-side IDF modifier, so BM25 scoring happens in the store. Hybrid 
 ``query_points`` with two prefetches fused by native RRF. Every query carries a tenant
 filter and a ``visibility_keys`` MatchAny filter that Qdrant applies before ranking.
 
+A server is addressed over gRPC (``prefer_grpc``): the query path sends vectors and receives
+payloads on every request, and protobuf costs the event loop far less than REST JSON does.
 ``local_path`` (e.g. ``:memory:``) runs the same client API in-process for tests; it is a
 ``build_container`` override, never a setting.
 """
 
 from __future__ import annotations
 
+import asyncio
+import random
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
+import httpx
+from prometheus_client import Counter
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 from memory_service.config.constants import SEARCH
 from memory_service.config.settings import SearchSettings
 from memory_service.domain.errors import DependencyUnavailable
-from memory_service.observability.metrics import stage_seconds
+from memory_service.observability.metrics import REGISTRY, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.search import (
+    PAYLOAD_FIELDS,
     CollectionSpec,
     Retriever,
     SearchFilter,
@@ -34,6 +42,58 @@ from memory_service.ports.search import (
 
 DENSE = "dense"
 SPARSE = "bm25"
+
+#: Only the fields a reader actually uses come back from a query (see ``PAYLOAD_FIELDS``).
+_PAYLOAD = models.PayloadSelectorInclude(include=list(PAYLOAD_FIELDS))
+
+search_read_retries_total = Counter(
+    "memory_search_read_retries_total",
+    "Idempotent search reads retried after a connection-level failure",
+    ["operation"],
+    registry=REGISTRY,
+)
+
+#: A connection that died between two requests is not a failure of the query: the same read,
+#: issued again on a fresh connection, answers. A judged run hit "Server disconnected without
+#: sending a response" four times in 304 queries through Docker's host gateway, each one
+#: costing a whole question. One retry, only for reads (they are idempotent; an upsert or a
+#: delete is not), after a short pause so a restarting server is not hammered.
+_RETRY_PAUSE_SECONDS = (0.05, 0.10)
+_CONNECTION_ERRORS = (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError)
+
+
+def _is_connection_error(exc: BaseException) -> bool:
+    """A broken connection, however this client happens to be wrapping it.
+
+    The REST transport raises httpx errors, usually wrapped in ``ResponseHandlingException``;
+    the gRPC transport raises ``AioRpcError`` with status UNAVAILABLE. The gRPC case is read
+    through ``.code()`` rather than by importing ``grpc`` for one enum, which also keeps the
+    unit test's fake client honest: anything that answers ``code().name == "UNAVAILABLE"``
+    is treated the way the real one is.
+    """
+    if isinstance(exc, ResponseHandlingException):
+        return _is_connection_error(exc.source)
+    if isinstance(exc, _CONNECTION_ERRORS):
+        return True
+    code = getattr(exc, "code", None)
+    if callable(code):
+        try:
+            return getattr(code(), "name", "") == "UNAVAILABLE"
+        except Exception:
+            return False
+    return False
+
+
+async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
+    try:
+        return await call()
+    except Exception as exc:
+        if not _is_connection_error(exc):
+            raise
+        search_read_retries_total.labels(operation).inc()
+        await asyncio.sleep(random.uniform(*_RETRY_PAUSE_SECONDS))  # noqa: S311 - jitter
+        return await call()
+
 
 #: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
 _PAYLOAD_INDEXES = {
@@ -92,6 +152,10 @@ class QdrantSearchStore:
                 if settings.qdrant_api_key
                 else None,
                 timeout=int(SEARCH.timeout_seconds),
+                # The REST API stays reachable on 6333 (collection management, the dashboard);
+                # every call this client makes goes over gRPC on 6334.
+                prefer_grpc=True,
+                grpc_port=settings.qdrant_grpc_port,
             )
             self._local = False
         self._known: set[str] = set()
@@ -125,7 +189,9 @@ class QdrantSearchStore:
                     collection_name=name,
                     vectors_config=vectors,
                     sparse_vectors_config=sparse,
-                    on_disk_payload=SEARCH.on_disk_payload and not self._local,
+                    on_disk_payload=spec.on_disk_payload
+                    and SEARCH.on_disk_payload
+                    and not self._local,
                 )
             if not self._local:  # local mode has no payload indexes
                 await self._ensure_payload_indexes(name)
@@ -193,13 +259,16 @@ class QdrantSearchStore:
     async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
         name, out, offset = self._name(collection), [], None
         while True:
-            points, offset = await self._client.scroll(
-                collection_name=name,
-                scroll_filter=_filter(flt),
-                limit=512,
-                offset=offset,
-                with_payload=["record_id"],
-                with_vectors=False,
+            points, offset = await _read(
+                "scroll",
+                lambda offset=offset: self._client.scroll(
+                    collection_name=name,
+                    scroll_filter=_filter(flt),
+                    limit=512,
+                    offset=offset,
+                    with_payload=["record_id"],
+                    with_vectors=False,
+                ),
             )
             out.extend(str((p.payload or {}).get("record_id", p.id)) for p in points)
             if offset is None:
@@ -218,13 +287,16 @@ class QdrantSearchStore:
         self, collection: str, vector: Sequence[float], flt: SearchFilter, *, limit: int
     ) -> list[SearchHit]:
         with span("search.dense"), stage_seconds.labels("retrieval.dense").time():
-            res = await self._client.query_points(
-                collection_name=self._name(collection),
-                query=list(vector),
-                using=DENSE,
-                query_filter=_filter(flt),
-                limit=limit,
-                with_payload=True,
+            res = await _read(
+                "dense",
+                lambda: self._client.query_points(
+                    collection_name=self._name(collection),
+                    query=list(vector),
+                    using=DENSE,
+                    query_filter=_filter(flt),
+                    limit=limit,
+                    with_payload=_PAYLOAD,
+                ),
             )
         return [self._hit(p, "dense") for p in res.points]
 
@@ -234,13 +306,16 @@ class QdrantSearchStore:
         if not vector.indices:
             return []
         with span("search.sparse"), stage_seconds.labels("retrieval.bm25").time():
-            res = await self._client.query_points(
-                collection_name=self._name(collection),
-                query=models.SparseVector(indices=vector.indices, values=vector.values),
-                using=SPARSE,
-                query_filter=_filter(flt),
-                limit=limit,
-                with_payload=True,
+            res = await _read(
+                "sparse",
+                lambda: self._client.query_points(
+                    collection_name=self._name(collection),
+                    query=models.SparseVector(indices=vector.indices, values=vector.values),
+                    using=SPARSE,
+                    query_filter=_filter(flt),
+                    limit=limit,
+                    with_payload=_PAYLOAD,
+                ),
             )
         return [self._hit(p, "bm25") for p in res.points]
 
@@ -273,25 +348,31 @@ class QdrantSearchStore:
             return []
         if len(prefetch) == 1:
             single = prefetch[0]
-            res = await self._client.query_points(
-                collection_name=self._name(collection),
-                query=single.query,
-                using=single.using,
-                query_filter=qf,
-                limit=limit,
-                with_payload=True,
+            res = await _read(
+                "hybrid",
+                lambda: self._client.query_points(
+                    collection_name=self._name(collection),
+                    query=single.query,
+                    using=single.using,
+                    query_filter=qf,
+                    limit=limit,
+                    with_payload=_PAYLOAD,
+                ),
             )
             retriever: Retriever = "dense" if single.using == DENSE else "bm25"
             return [self._hit(p, retriever) for p in res.points]
         with span("search.hybrid"), stage_seconds.labels("retrieval.hybrid").time():
             try:
-                res = await self._client.query_points(
-                    collection_name=self._name(collection),
-                    prefetch=prefetch,
-                    query=models.FusionQuery(fusion=models.Fusion.RRF),
-                    query_filter=qf,
-                    limit=limit,
-                    with_payload=True,
+                res = await _read(
+                    "hybrid",
+                    lambda: self._client.query_points(
+                        collection_name=self._name(collection),
+                        prefetch=prefetch,
+                        query=models.FusionQuery(fusion=models.Fusion.RRF),
+                        query_filter=qf,
+                        limit=limit,
+                        with_payload=_PAYLOAD,
+                    ),
                 )
             except Exception as exc:
                 raise DependencyUnavailable(
@@ -302,11 +383,14 @@ class QdrantSearchStore:
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
         if not record_ids:
             return []
-        points = await self._client.retrieve(
-            collection_name=self._name(collection),
-            ids=[point_id(r) for r in record_ids],
-            with_payload=True,
-            with_vectors=False,
+        points = await _read(
+            "retrieve",
+            lambda: self._client.retrieve(
+                collection_name=self._name(collection),
+                ids=[point_id(r) for r in record_ids],
+                with_payload=_PAYLOAD,
+                with_vectors=False,
+            ),
         )
         return [
             SearchRecord(
@@ -320,8 +404,11 @@ class QdrantSearchStore:
         ]
 
     async def count(self, collection: str, flt: SearchFilter) -> int:
-        res = await self._client.count(
-            collection_name=self._name(collection), count_filter=_filter(flt), exact=True
+        res = await _read(
+            "count",
+            lambda: self._client.count(
+                collection_name=self._name(collection), count_filter=_filter(flt), exact=True
+            ),
         )
         return int(res.count)
 
