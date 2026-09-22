@@ -69,6 +69,12 @@ class MemoryCache:
         self._data[key] = (str(current).encode(), expires)
         return current
 
+    async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
+        self._check()
+        current = int((self._live(key) or b"0").decode()) + 1
+        self._data[key] = (str(current).encode(), time.monotonic() + ttl_seconds)
+        return current
+
     async def mget(self, keys: Sequence[str]) -> list[bytes | None]:
         self._check()
         return [self._live(k) for k in keys]

@@ -68,6 +68,13 @@ class RedisCache:
     async def incr(self, key: str, *, amount: int = 1) -> int:
         return int(await self._guard("incr", self._client.incrby(key, amount)))
 
+    async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
+        pipe = self._client.pipeline(transaction=False)
+        pipe.incrby(key, 1)
+        pipe.expire(key, ttl_seconds)
+        results = await self._guard("incr_window", pipe.execute())
+        return int(results[0])
+
     async def mget(self, keys: Sequence[str]) -> list[bytes | None]:
         if not keys:
             return []

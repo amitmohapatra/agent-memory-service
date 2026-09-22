@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 
 from memory_service.__about__ import __version__
 from memory_service.api.errors import install_error_handlers
@@ -52,9 +53,17 @@ def create_app(
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        # No default_response_class: naming one (ORJSONResponse, say) turns *off* FastAPI's
+        # own fast path, which serialises a response model straight to JSON bytes through
+        # pydantic's Rust core and never builds the intermediate dict. Both fastapi 0.141's
+        # deprecation of ORJSONResponse and routing.py:719-740 say so; measured on a
+        # context-bundle-shaped response, orjson-through-a-dict is the slower of the two.
     )
     app.state.settings = settings
-    # outermost first: correlation ids wrap everything, the rate limit sits inside them
+    # Added innermost first, so the order a request meets them is the reverse: correlation
+    # ids wrap everything, the rate limit sits inside them, and compression sits closest to
+    # the route - it acts on what the route produced, not on a 413 or a 429 envelope.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     app.add_middleware(
         RateLimitMiddleware,
         per_minute=settings.service.rate_limit_per_minute,
