@@ -308,6 +308,13 @@ def _percentiles(values: list[float]) -> dict[str, float]:
 
 
 def _export_once(source: str, target: Path, *, attention: str, dynamo: bool) -> None:
+    """Trace the checkpoint to *target*, or leave whatever was there untouched.
+
+    The trace is written to a sibling and moved into place on success, because an attempt
+    that dies part-way through writing 191 MB otherwise leaves a truncated graph behind —
+    one that ``export_onnx`` has already reported as failed and that the ONNX runner would
+    then load, or refuse to, at the next start.
+    """
     import torch
     from transformers import AutoModel
 
@@ -322,20 +329,26 @@ def _export_once(source: str, target: Path, *, attention: str, dynamo: bool) -> 
     mask = torch.ones_like(ids)
     mask[1, 16:] = 0
     target.parent.mkdir(parents=True, exist_ok=True)
-    torch.onnx.export(
-        model,
-        (ids, mask),
-        str(target),
-        input_names=["input_ids", "attention_mask"],
-        output_names=["last_hidden_state"],
-        dynamic_axes={
-            "input_ids": {0: "batch", 1: "sequence"},
-            "attention_mask": {0: "batch", 1: "sequence"},
-            "last_hidden_state": {0: "batch", 1: "sequence"},
-        },
-        opset_version=OPSET,
-        dynamo=dynamo,
-    )
+    partial = target.with_name(target.name + ".partial")
+    try:
+        torch.onnx.export(
+            model,
+            (ids, mask),
+            str(partial),
+            input_names=["input_ids", "attention_mask"],
+            output_names=["last_hidden_state"],
+            dynamic_axes={
+                "input_ids": {0: "batch", 1: "sequence"},
+                "attention_mask": {0: "batch", 1: "sequence"},
+                "last_hidden_state": {0: "batch", 1: "sequence"},
+            },
+            opset_version=OPSET,
+            dynamo=dynamo,
+        )
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
+    os.replace(partial, target)
 
 
 def export_onnx(directory: Path) -> int:
