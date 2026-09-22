@@ -164,7 +164,7 @@
     {
       "id": "distractor_acquisition",
       "query": "When did the Initech acquisition close and for how much?",
-      "query_type": "GENERAL_SEMANTIC",
+      "query_type": "TEMPORAL",
       "critical": true,
       "required_groups": {
         "section9": [

@@ -341,7 +341,9 @@ class Indexer:
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
                             "thread_id": m.scope.thread_id,
-                            "text": m.content[:2000],
+                            # what was indexed is what the answerer sees: date and speaker
+                            # travel with the fact, not only with the vector
+                            "text": memory_index_text(m)[:2000],
                             # so identical memories group in the store's payload rather than
                             # being rehashed on every retrieval (see engine._dedup)
                             "text_hash": content_hash(m.content),

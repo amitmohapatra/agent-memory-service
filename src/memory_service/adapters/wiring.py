@@ -341,7 +341,13 @@ def _wire_models(container: Container) -> None:
     else:
         container.sparse = Bm25SparseEncoder()
     rr_cfg = settings.models.reranker
-    if not settings.retrieval.rerank:
+    if rr_cfg.provider == "disabled":
+        container.reranker = None
+    elif rr_cfg.provider == "lexical":
+        # Free to construct, so it is not behind the flag below: a test that turns
+        # `retrieval.rerank` on after wiring still has a reranker to exercise.
+        container.reranker = LexicalReranker()
+    elif not settings.retrieval.rerank:
         # Guarded by its own flag, the way `splade` above already is. Without this the
         # cross-encoder was constructed whatever `retrieval.rerank` said — 566 MB of weights
         # loaded into both the API and the worker at startup, reported on /version as an
@@ -354,10 +360,6 @@ def _wire_models(container: Container) -> None:
         from memory_service.adapters.models.remote import RemoteReranker
 
         container.reranker = RemoteReranker(rr_cfg)
-    elif rr_cfg.provider == "disabled":
-        container.reranker = None
-    elif rr_cfg.provider == "lexical":
-        container.reranker = LexicalReranker()
     else:
         container.reranker = CrossEncoderReranker(rr_cfg)
 

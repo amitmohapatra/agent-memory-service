@@ -151,8 +151,12 @@ _ATTRIBUTE = re.compile(
     r"\s+(?:is|are|=|:)\s+(.+)",
     re.IGNORECASE,
 )
+#: The article is mandatory. With it optional, "I'm going to the beach" parsed as the USER
+#: role "going to the beach" and every later sentence of that shape SUPERSEDED the one
+#: before: 103 false supersedes over two LoCoMo conversations, each one a true fact
+#: closed as outdated. "I'm a staff engineer" still matches.
 _IDENTITY = re.compile(
-    r"\bi(?:'m| am)\s+(?:a|an|the)?\s*"
+    r"\bi(?:'m| am)\s+(?:a|an|the)\s+"
     r"([a-z][a-z\- ]{2,40}?)(?:\s+(?:at|for|in|with)\s+([A-Z][\w&.\- ]{1,40}))?[.!]?$",
     re.IGNORECASE,
 )
@@ -495,6 +499,14 @@ class NativeMemoryIntelligence:
         """
         if not self.cfg.keep_verbatim_turns or kind is not ObservationKind.MESSAGE:
             return None
+        # Only where nothing else will keep the turn. Inside a thread, ThreadObserver
+        # already compresses turns into observational memory with the thread's own scoping;
+        # a second verbatim copy would double-store every message. And an agent's messages
+        # are its working chatter: classify() gives a generic OBSERVATION thread/workspace
+        # visibility, which leaked "Thinking: ..." into the user's memory the first time
+        # this ran without the guard (tests/integration/test_multi_agent.py caught it).
+        if ctx.is_agent or ctx.thread_id:
+            return None
         body = text.strip()
         if not body:
             return None
@@ -503,7 +515,12 @@ class NativeMemoryIntelligence:
         # storing it verbatim only dilutes retrieval — which is the one risk this whole
         # change runs. Anything that is neither is kept, including the third-person
         # narrative that no extraction rule can parse.
-        if _QUESTION.search(body) or _CHITCHAT.match(body):
+        # Per sentence, not per turn: "Did you hear? I moved from Sweden four years ago."
+        # ends in a question mark only in its first sentence. Judged whole, 199 of 788
+        # LoCoMo turns were dropped and 21 of 79 wrong answers had their gold in that set.
+        if not any(
+            not _QUESTION.search(s) and not _CHITCHAT.match(s) for s in split_sentences(body)
+        ):
             return None
         return MemoryCandidate(
             content=body[: self.cfg.verbatim_max_chars],
@@ -805,7 +822,15 @@ class NativeMemoryIntelligence:
             )
         if m := _FACT.match(s):
             subject = m.group("subject").strip()
-            if len(s) <= 300 and (subject[0].isupper() or bool(numbers(s))):
+            # First person is the speaker; any other pronoun has no referent here and is
+            # left to the verbatim copy of the turn rather than stored as a fact about "it".
+            if subject.lower() in ("i", "we", "my", "our"):
+                subject = _user_subject(ctx)
+            elif subject.lower() in ("it", "this", "that", "there", "they", "you", "he", "she"):
+                return None
+            if len(s) <= 300 and (
+                subject[0].isupper() or bool(numbers(s)) or subject.startswith("user:")
+            ):
                 return MemoryCandidate(
                     content=s,
                     memory_type=MemoryType.SEMANTIC,

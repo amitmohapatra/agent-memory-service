@@ -86,7 +86,11 @@ def worthiness_of(candidate: MemoryCandidate, *, hinted: bool = False) -> tuple[
         reasons.append("explicit hint")
     text = candidate.content
     dated = candidate.valid_from is not None or candidate.valid_to is not None
-    if _TRANSIENT.search(text) and not dated and candidate.category != "decision":
+    if (
+        _TRANSIENT.search(text)
+        and not dated
+        and candidate.category not in ("decision", "verbatim_turn")
+    ):
         value *= 0.4
         reasons.append("transient phrasing")
     if _GENERIC.match(text.strip()) and not candidate.subject:

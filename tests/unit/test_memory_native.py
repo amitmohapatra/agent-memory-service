@@ -163,9 +163,15 @@ async def test_extraction_kinds_and_temporal(native) -> None:
     assert event[0].memory_type is MemoryType.EPISODIC
     multi = await _extract(native, "My name is Amit and my timezone is CET. I prefer tea.")
     assert [c.predicate for c in _extracted(multi)] == ["name", "timezone", "prefers"]
-    # ...and the turn itself is kept alongside them, last, so ranking prefers the parsed
-    # fact over the transcript it came from.
-    assert [c.predicate for c in multi][-1] == "said"
+    # Inside a thread (CTX has thr_1) ThreadObserver keeps the turn, so no verbatim copy;
+    # outside one the turn itself is kept alongside the facts, last, so ranking prefers the
+    # parsed fact over the transcript it came from.
+    assert [c.predicate for c in multi][-1] == "prefers"
+    threadless = CTX.model_copy(update={"thread_id": None})
+    loose = await _extract(
+        native, "My name is Amit and my timezone is CET. I prefer tea.", ctx=threadless
+    )
+    assert [c.predicate for c in loose][-1] == "said"
     proc = await _extract(
         native, "To deploy the API, run make release and then check the dashboard."
     )

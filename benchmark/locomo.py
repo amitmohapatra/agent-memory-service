@@ -30,6 +30,7 @@ import re
 import sys
 import time
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from benchmark.common import provenance, reset_store, write_result
@@ -37,7 +38,8 @@ from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import ObservationKind
+from memory_service.domain.enums import ObservationKind, Visibility
+from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,6 +95,22 @@ def _sessions(conversation: dict) -> list[tuple[str, list[dict]]]:
     return [(k, conversation[k]) for k in keys if isinstance(conversation[k], list)]
 
 
+_SESSION_TIME = "%I:%M %p on %d %B, %Y"  # LoCoMo: "1:56 pm on 8 May, 2023"
+
+
+def _session_time(when: str) -> datetime | None:
+    """The session's own timestamp, as a datetime, or None when the dataset gives none."""
+    try:
+        return datetime.strptime(when.strip(), _SESSION_TIME).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _speaker_ctx(ctx: MemoryExecutionContext, speaker: str) -> MemoryExecutionContext:
+    """The ingest context for one speaker: same tenant and workspace, their own user id."""
+    return ctx.model_copy(update={"user_id": speaker.strip().lower() or ctx.user_id})
+
+
 async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, str]:
     """Every turn becomes an observation. Returns dia_id -> the text that was submitted."""
     uow_factory = container.services["uow_factory"]
@@ -100,17 +118,38 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
     turns: dict[str, str] = {}
     for session_key, session in _sessions(conversation):
         when = conversation.get(f"{session_key}_date_time", "")
+        occurred_at = _session_time(when)
         for turn in session:
             dia_id, speaker = turn.get("dia_id"), turn.get("speaker", "")
             body = turn.get("text") or turn.get("clean_text") or ""
+            # Shared images are turns too. 95 of 233 answerable questions in the first two
+            # conversations touch one, and for ten the answer exists only in the caption;
+            # Mem0's harness appends it the same way (memory-benchmarks locomo/run.py).
+            if caption := (turn.get("blip_caption") or "").strip():
+                query = (turn.get("query") or "").strip()
+                body = (
+                    f"{body} [Shared an image{f' of {query}' if query else ''}: {caption}]".strip()
+                )
             if not dia_id or not body:
                 continue
             # the date is part of the record: LoCoMo's temporal questions depend on it
             content = f"[{when}] {speaker}: {body}"
             turns[dia_id] = content
+            # Each speaker is their own user, so the fact "I moved from Sweden" gets the
+            # subject user:Caroline rather than a shared id that makes Caroline's and
+            # Melanie's facts indistinguishable - which is what the graph, the subject
+            # check and the answerer all key on. WORKSPACE visibility is anchored on the
+            # workspace, not the user, so the questioner (a third context in the same
+            # workspace) still sees every turn. occurred_at carries the session date into
+            # the memory's temporal fields instead of leaving it as ingest time.
             async with uow_factory() as uow:
                 await memory.submit_observation(
-                    uow, ctx, kind=ObservationKind.MESSAGE, content=content
+                    uow,
+                    _speaker_ctx(ctx, speaker),
+                    kind=ObservationKind.MESSAGE,
+                    content=content,
+                    hints=ProcessingHints(visibility=Visibility.WORKSPACE),
+                    occurred_at=occurred_at,
                 )
                 await uow.commit()
     await container.tasks.drain()
@@ -204,8 +243,11 @@ def _evidence_ids(item: dict) -> list[str]:
 #: correct answer when nothing in the context bears on the question.
 ANSWER_SYSTEM = (
     "You answer questions about a person's life using only the CONTEXT: dated memories "
-    "from their conversations. Read all of it; the answer is often spread across several "
-    "entries or has to be reasoned from them. Answer directly and specifically, keeping "
+    "from their conversations. Read EVERY entry from first to last before answering - do "
+    "not stop at the first relevant one; the answer is often spread across several entries "
+    "or has to be reasoned from them. For counting or listing questions, enumerate each "
+    "distinct instance the context supports; do not estimate. Answer directly and "
+    "specifically, keeping "
     "the names, dates, places and qualifiers the context gives - do not shorten them. "
     "When asked when, work out the actual date from the dated entries and state it. When "
     "asked what someone would likely do, feel or choose, infer it from what the context "
@@ -216,6 +258,35 @@ ANSWER_SYSTEM = (
     "about; otherwise reply with exactly: I don't know. Never use outside knowledge. One "
     "short phrase or sentence."
 )
+
+#: Two rulers, reported separately and never mixed.
+#:
+#: STRICT is ours: the answer must convey the gold fact. LENIENT reproduces the rules in
+#: mem0ai/memory-benchmarks (benchmarks/locomo/prompts.py), the judge behind Mem0's
+#: published 92.5: at least one correct item from a list answer is CORRECT, paraphrases
+#: count, extra detail is fine, dates within 14 days are CORRECT, and WRONG only when zero
+#: correct content appears. "Transgender." for "Transgender woman" is WRONG under the first
+#: and CORRECT under the second. Their answer prompt also forbids abstaining ("NEVER say
+#: 'not specified'"), which is why the adversarial category is absent from their headline;
+#: ours keeps abstention, and reports it as its own number under either ruler.
+JUDGE_RULERS = {
+    "strict": (
+        "You grade one answer. `correct` is true when the ANSWER conveys the same "
+        "fact as the GOLD answer, allowing different wording, formatting or extra "
+        "detail. `abstained` is true when the ANSWER declines to answer or says it "
+        "does not know. An empty GOLD means the question is unanswerable: then "
+        "`correct` is true only if the answer abstained."
+    ),
+    "lenient": (
+        "You grade one answer against a GOLD answer. Mark `correct` true if the ANSWER "
+        "includes AT LEAST ONE correct item from the GOLD answer (when GOLD lists several "
+        "things, one is enough). Paraphrases count. Extra detail is fine. Dates within 14 "
+        "days of each other are correct. Mark `correct` false ONLY if zero correct items "
+        "appear or the ANSWER addresses a completely different topic. `abstained` is true "
+        "when the ANSWER declines to answer or says it does not know. An empty GOLD means "
+        "the question is unanswerable: then `correct` is true only if the answer abstained."
+    ),
+}
 
 JUDGE_SCHEMA = {
     "type": "object",
@@ -296,39 +367,31 @@ async def _answer(llm, bundle_text: str, question: str) -> str:
         # Generous on purpose: a model that reasons before it answers spends the output
         # budget on thinking first and returns an empty string when it runs out. Measured
         # here: 16 of 304 answers came back empty at 1024 against deepseek-flash.
-        max_tokens=4096,
+        max_tokens=16384,
         use="grounding_judge",
     )
     return (completion.text or "").strip()
 
 
-async def _judge(llm, question: str, gold: str, got: str) -> dict:
+async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "strict") -> dict:
     """Whether the produced answer matches the gold one, and whether it abstained.
 
     ``abstained`` is asked of the judge rather than pattern-matched because a model has many
     ways to decline. The regex below is only a fallback for when the judge itself fails.
+    ``ruler`` picks the grading rules; see JUDGE_RULERS.
     """
     from memory_service.ports.models import LLMMessage
 
     return await llm.structured(
         [
-            LLMMessage(
-                role="system",
-                content=(
-                    "You grade one answer. `correct` is true when the ANSWER conveys the same "
-                    "fact as the GOLD answer, allowing different wording, formatting or extra "
-                    "detail. `abstained` is true when the ANSWER declines to answer or says it "
-                    "does not know. An empty GOLD means the question is unanswerable: then "
-                    "`correct` is true only if the answer abstained."
-                ),
-            ),
+            LLMMessage(role="system", content=JUDGE_RULERS[ruler]),
             LLMMessage(
                 role="user",
                 content=f"QUESTION: {question}\nGOLD: {gold or '(unanswerable)'}\nANSWER: {got}",
             ),
         ],
         schema=JUDGE_SCHEMA,
-        max_tokens=4096,
+        max_tokens=16384,
         use="grounding_judge",
     )
 
@@ -342,6 +405,7 @@ async def run(
     ablate: dict[str, bool] | None = None,
     judge: bool = False,
     calls_per_minute: float = 10.0,
+    ruler: str = "strict",
 ) -> dict:
     if not DATASET.is_file():
         raise SystemExit(f"{DATASET} is missing — run `make bench-locomo-prepare`")
@@ -445,7 +509,7 @@ async def run(
                         await pacer.wait()
                         produced = await _answer(llm, rendered, question)
                         await pacer.wait()
-                        verdict = await _judge(llm, question, answer, produced)
+                        verdict = await _judge(llm, question, answer, produced, ruler=ruler)
                     except Exception as exc:  # noqa: BLE001 - a judged run must say it failed
                         # the gateway's own message lives in `details`; without it every
                         # failure reads "returned 400" and says nothing about why
@@ -515,6 +579,7 @@ async def run(
                         },
                         "rendered_chars": len(rendered),
                         "judged": judged,
+                        "judge_ruler": ruler if judged else None,
                         "hit": hit,
                     }
                 )
@@ -677,6 +742,12 @@ def main() -> int:
             "turns a multi-hour judged run into a bounded one."
         ),
     )
+    parser.add_argument(
+        "--judge-ruler",
+        choices=sorted(JUDGE_RULERS),
+        default="strict",
+        help="grading rules for --judge: strict (ours) or lenient (Mem0's published ruler)",
+    )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()
     ablate = dict.fromkeys(args.off, False)
@@ -689,6 +760,7 @@ def main() -> int:
             ablate=ablate,
             judge=args.judge,
             calls_per_minute=args.calls_per_minute,
+            ruler=args.judge_ruler,
         )
     )
     write_result(args.out, result)

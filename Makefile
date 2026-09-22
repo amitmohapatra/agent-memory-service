@@ -241,11 +241,49 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
 	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=4096 \
+	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
+	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
+	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
+	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \
 	  '/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS)'
+
+bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler (no retrieval)
+	@# RESCORE_ARGS='benchmark/results/locomo_judged_v2.json --judge-ruler lenient'
+	docker run --rm --user root \
+	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
+	  --add-host host.docker.internal:host-gateway \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  -e PYTHONFAULTHANDLER=1 \
+	  -e MEMORY__DATABASE__URL="$(BENCH_DB_CONV)" \
+	  -e MEMORY__TASKS__PROVIDER=memory -e MEMORY__CACHE__PROVIDER=memory \
+	  -e MEMORY__SEARCH__PROVIDER=$(BENCH_SEARCH) -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e MEMORY__BLOB__PROVIDER=memory \
+	  -e MEMORY__AUTHORIZATION__PROVIDER=memory \
+	  -e MEMORY__MODELS__EMBEDDING__PROVIDER=sentence_transformers \
+	  -e MEMORY__MODELS__EMBEDDING__MODEL_PATH=/models/granite-embedding-small-english-r2 \
+	  -e MEMORY__MODELS__EMBEDDING__DIMENSION=384 \
+	  -e MEMORY__MODELS__RERANKER__MODEL_PATH=/models/ms-marco-MiniLM-L6-v2 \
+	  -e MEMORY__MODELS__NLI__PROVIDER=lexical \
+	  -e MEMORY__GRAPH_ENRICHMENT__PROVIDER=native \
+	  -e MEMORY__MODELS__LLM__ENABLED=true \
+	  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
+	  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
+	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
+	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
+	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
+	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
+	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
+	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
+	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
+	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
+	  --entrypoint sh memory-service-memory-api -c \
+	  '/opt/venv/bin/python -m benchmark.locomo_rescore $(RESCORE_ARGS)'
+
+RESCORE_ARGS ?=
 
 bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (inside the runtime image)
 	@# The other public conversational-memory benchmark the field quotes (Mem0 94.4,
@@ -273,7 +311,10 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
 	  -e MEMORY__MODELS__LLM__USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
 	  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge","ambiguous_worthiness","ambiguous_extraction"]' \
-	  -e MEMORY__MODELS__LLM__MAX_TOKENS=4096 \
+	  -e MEMORY__MODELS__LLM__MAX_TOKENS=16384 \
+	  -e MEMORY__RETRIEVAL__PREFETCH_K=200 -e MEMORY__RETRIEVAL__FUSED_K=200 \
+	  -e MEMORY__RETRIEVAL__FINAL_K=100 -e MEMORY__CONTEXT__MEMORIES_MAX=100 \
+	  -e MEMORY__CONTEXT__TOKEN_BUDGET=12000 \
 	  -e MEMORY__MODELS__LLM__TIMEOUT_SECONDS=120 \
 	  -e MEMORY__MODELS__LLM__MAX_RETRIES=0 \
 	  --entrypoint sh memory-service-memory-api -c \

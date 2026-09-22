@@ -142,12 +142,10 @@ def _extracted(cands):
 
 
 async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
-    # No rule matches this sentence, so the only thing the native path produces is the
-    # verbatim turn (keep_verbatim_turns) — there is no *extracted* candidate to find.
-    # That is the gap ambiguous_worthiness exists to close, and the assist is additive:
-    # its candidate is appended before the verbatim copy, which stays at the end.
-    baseline = await _native().extract(_obs(UNMATCHED), CTX)
-    assert [c.category for c in baseline] == ["verbatim_turn"]
+    # No rule matches this sentence, and CTX is inside a thread - where ThreadObserver, not
+    # the verbatim copy, is the mechanism - so the native path produces nothing at all.
+    # That is the gap ambiguous_worthiness exists to close.
+    assert await _native().extract(_obs(UNMATCHED), CTX) == []
     reply = {"worthy": True, "memory_type": "SEMANTIC", "content": "Standup is in the afternoon"}
     with mocked_gateway([reply]) as gw:
         cands = await _native(gw.assist(uses=["ambiguous_worthiness"])).extract(
@@ -155,7 +153,7 @@ async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
         )
     assert gw.route.call_count == 1
     assert gw.prompts()[0]["model"] == "test/fast"
-    assert [c.category for c in cands] == ["assisted", "verbatim_turn"]
+    assert [c.category for c in cands] == ["assisted"]
     cand = cands[0]
     assert cand.content == "Standup is in the afternoon"
     assert cand.memory_type is MemoryType.SEMANTIC and cand.confidence == 0.6

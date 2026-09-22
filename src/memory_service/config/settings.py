@@ -365,7 +365,9 @@ class MemoryIntelligenceSettings(BaseModel):
     #: The verbatim copy is an OBSERVATION, which is in DERIVED_MEMORY_TYPES, so it is
     #: excluded from supersession and reflection (landing.py:63, :77) and cannot disturb the
     #: fact machinery or the false-merge gate. It augments the rule output; it never
-    #: replaces it.
+    #: replaces it. Applies to user-authored messages outside a thread only: inside a
+    #: thread ThreadObserver is the mechanism, and an agent's messages are working chatter
+    #: that must not inherit a shared visibility.
     keep_verbatim_turns: bool = True
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)

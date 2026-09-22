@@ -92,9 +92,13 @@ class LandingReflection:
                 r.confidence = min(1.0, r.confidence + _STRENGTHEN)
                 r.reinforcement_count += 1
                 report["strengthened"].append(r.memory_id)
-            elif m_obj != r_obj and (
-                numbers(r.content) != numbers(memory.content)
-                or has_negation(r.content) != has_negation(memory.content)
+            elif (
+                is_single_valued(memory.predicate)
+                and m_obj != r_obj
+                and (
+                    numbers(r.content) != numbers(memory.content)
+                    or has_negation(r.content) != has_negation(memory.content)
+                )
             ):
                 r.confidence = max(_CONFIDENCE_FLOOR, r.confidence - _WEAKEN)
                 if memory.memory_id not in r.temporal.contradicts:

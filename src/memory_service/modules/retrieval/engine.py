@@ -277,6 +277,10 @@ class RetrievalEngine:
                 diagnostics["duplicates_collapsed"] = before - len(candidates)
             # 4. bounded CPU rerank
             pool = candidates
+            # Always stated, so a caller can tell "reranking is off" from "the key is
+            # missing" - a test that toggled the flag after wiring read the absence as a
+            # KeyError rather than as the answer it was.
+            diagnostics["reranked"] = False
             if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
                 candidates = await self._rerank(routed.query, candidates, limit=limit)
                 diagnostics["reranked"] = True

@@ -142,8 +142,8 @@
         "section9": 1
       },
       "query_type": {
-        "expected": "GENERAL_SEMANTIC",
-        "observed": "GENERAL_SEMANTIC"
+        "expected": "TEMPORAL",
+        "observed": "TEMPORAL"
       }
     },
     {
@@ -299,8 +299,8 @@
     "cross_document": "COMPLETE"
   },
   "provenance": {
-    "timestamp": "2026-09-22T00:08:28.007561+00:00",
-    "git_commit": "ef6325e95d2d214b3b79222a7d5da2d534964228",
+    "timestamp": "2026-09-22T13:00:27.494472+00:00",
+    "git_commit": "ca698de896cb12f8b0f41d8bf89fbc689e8d09ad",
     "python": "3.12.14",
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "machine": "x86_64",

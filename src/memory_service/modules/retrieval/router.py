@@ -35,11 +35,14 @@ _GLOBAL = re.compile(
     re.IGNORECASE,
 )
 #: Contrastive connectives only ("despite", "compare", "difference between") miss the other
-#: shape of a multi-fact question: enumeration. "What activities does X do?" and "Where has X
-#: travelled?" need every mention across sessions gathered, which is the same traversal.
-#: Measured on LoCoMo, 1 of 16 multi_hop questions routed DOCUMENT_MULTI_HOP.
+#: shape of a multi-fact question: enumeration. "What kind of music does X like?" and "Where
+#: has X travelled?" need every mention across sessions gathered, which is the same
+#: traversal. Measured on LoCoMo, 1 of 16 multi_hop questions routed DOCUMENT_MULTI_HOP.
+#: The forms are kept person-shaped on purpose: a bare "what X does Y" also matched "What
+#: items does Adjusted Operating Margin exclude?", which is an entity question about a
+#: document term, and the retrieval gate caught it.
 _MULTI_HOP = re.compile(
-    r"\b(why did .* (?:despite|although|even though|while)|despite|even though|although|compare|comparison|difference between|how does .* (?:affect|impact|relate to)|relationship between|reconcile|explain (?:how|why) .* and\b|both .* and|how many times|what (?:kind of |sort of |type of )?\w+ (?:does|do|did|has|have) \w+|where (?:has|have|did) \w+|list (?:all|every|the))\b",
+    r"\b(why did .* (?:despite|although|even though|while)|despite|even though|although|compare|comparison|difference between|how does .* (?:affect|impact|relate to)|relationship between|reconcile|explain (?:how|why) .* and\b|both .* and|how many times|what (?:kind|kinds|sort|sorts|type|types) of \w+ (?:does|do|did|has|have)|which \w+ (?:does|do|did|has|have) \w+ (?:like|enjoy|play|do|visit|own|prefer)|where (?:has|have|did) \w+ (?:been|gone|travell?ed|lived|worked|camped|visited)|list (?:all|every|the))\b",
     re.IGNORECASE,
 )
 _ENTITY = re.compile(
