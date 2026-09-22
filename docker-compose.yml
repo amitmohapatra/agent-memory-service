@@ -199,6 +199,16 @@ services:
         required: false
     environment:
       <<: *common-env
+      # Ingestion must not bid for the cores the query path is measured on. One math thread,
+      # and a hard cap of two CPUs: a consolidation burst then costs the API queue nothing,
+      # which is the regression that showed up as v2 -> v3 latency while ingest was draining
+      # on the same box.
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
     volumes:
       - blob:/data/blob
       - ./models:/models:ro

@@ -34,15 +34,24 @@ class ServiceSettings(BaseModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = True
     rate_limit_per_minute: int = Field(
-        default=1200,
+        default=6000,
         description="Requests per tenant per minute (0 disables); counted in the cache",
+    )
+    workers: int = Field(
+        default=3,
+        ge=1,
+        le=8,
+        description="uvicorn worker processes; one container, one model set and one pool each",
     )
 
 
 class DatabaseSettings(BaseModel):
+    #: Per *process*, not per service: with three API workers and a worker container the
+    #: pools add up, so 8+8 each keeps the total inside a default max_connections while
+    #: leaving every request the two or three checkouts it takes.
     url: SecretStr = SecretStr("postgresql+psycopg://memory:memory@localhost:5432/memory")
-    pool_size: int = 10
-    max_overflow: int = 10
+    pool_size: int = 8
+    max_overflow: int = 8
 
     @property
     def dsn(self) -> str:

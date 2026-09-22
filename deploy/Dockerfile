@@ -93,6 +93,19 @@ ENV PATH="/opt/venv/bin:$PATH"
 # retried until each job went dead, with nothing wrong in the code at all.
 RUN mkdir -p /data/blob && chown -R nobody:nogroup /data
 
+# How the image spends the CPUs it is given.
+#
+# Three API workers (MEMORY__SERVICE__WORKERS is what `memory-api` reads; WEB_CONCURRENCY is
+# the same number under the name the rest of the ecosystem uses, and the two are kept in
+# agreement here) with two math threads each. Left unpinned, every BLAS call in every worker
+# fans out over every core, so N concurrent encodes each try to own the machine and the
+# result is thrash rather than throughput. 3 x 2 fits the 8 vCPU target with room for the
+# event loops.
+ENV WEB_CONCURRENCY=3 \
+    MEMORY__SERVICE__WORKERS=3 \
+    OMP_NUM_THREADS=2 \
+    MKL_NUM_THREADS=2
+
 EXPOSE 8080
 USER nobody
 CMD ["memory-api"]
