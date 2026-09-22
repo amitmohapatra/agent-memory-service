@@ -1,7 +1,16 @@
 name: memory-service
 
+# Everything here is a fact about *this compose topology* that a .env file cannot know:
+# service DNS names, container filesystem paths, and the provider that matches the container
+# actually running beside you. compose `environment:` overrides `env_file:`, which is exactly
+# right for these — an operator must not be able to point the service at a database that is
+# not the one compose started.
+#
+# Everything an operator *chooses* lives in .env instead (see .env.example): log level,
+# environment name, the LLM block, observability, authentication, tuning. Those reach the
+# containers through `env_file:` below. Nothing belongs in both files — compose wins, so a
+# duplicated line in .env is a value that looks set and is not.
 x-common-env: &common-env
-  MEMORY__SERVICE__ENVIRONMENT: dev
   MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
   MEMORY__CACHE__PROVIDER: dragonfly
   MEMORY__CACHE__URL: redis://dragonfly:6379/0
@@ -12,7 +21,6 @@ x-common-env: &common-env
   MEMORY__BLOB__PROVIDER: filesystem
   MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
   MEMORY__TASKS__PROVIDER: procrastinate
-  MEMORY__MODELS__LLM__ENABLED: "false"
   MEMORY__MODELS__EMBEDDING__MODEL: ibm-granite/granite-embedding-small-english-r2
   MEMORY__MODELS__EMBEDDING__MODEL_PATH: /models/granite-embedding-small-english-r2
   MEMORY__MODELS__EMBEDDING__DIMENSION: "384"
@@ -26,7 +34,6 @@ x-common-env: &common-env
   # directory needs somewhere writable or it dies with PermissionError on first use.
   HF_HOME: /tmp/hf
   XDG_CACHE_HOME: /tmp/cache
-  MEMORY__OBSERVABILITY__OTEL_EXPORTER: none
 
 services:
   postgres:
@@ -150,6 +157,11 @@ services:
       dockerfile: deploy/Dockerfile
       target: runtime
     command: ["memory-api"]
+    env_file:
+      # Operator settings. Optional: every value has a working default, and anything compose
+      # sets above wins over it.
+      - path: .env
+        required: false
     environment:
       <<: *common-env
     ports: ["8080:8080"]
@@ -187,6 +199,11 @@ services:
       dockerfile: deploy/Dockerfile
       target: runtime
     command: ["memory-worker"]
+    env_file:
+      # Operator settings. Optional: every value has a working default, and anything compose
+      # sets above wins over it.
+      - path: .env
+        required: false
     environment:
       <<: *common-env
     volumes:

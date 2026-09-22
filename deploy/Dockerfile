@@ -6,7 +6,14 @@
 #               the release gates run against the working tree with real weights and services
 FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    # uv's default is 60s *per file*, which is generous on an idle machine and not enough on
+    # a busy one: this build failed three times on a loaded 4-core laptop, each time on a
+    # different large third-party module (transformers, antlr4, markdown_it). The timeout is
+    # there to catch a hung interpreter, not to bound a slow one, so raise it rather than
+    # turning off the precompilation — PYTHONDONTWRITEBYTECODE=1 means nothing recompiles at
+    # runtime, so a missing .pyc would be paid for on every cold start instead.
+    UV_COMPILE_BYTECODE_TIMEOUT=600
 RUN apt-get update && apt-get install -y --no-install-recommends libpq5 curl && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /bin/
 
