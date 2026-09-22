@@ -199,8 +199,9 @@ class ContextBuilder:
         self.assist = assist or LLMAssist.disabled()
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
-        #: tenant -> served memory id -> times served since the last flush (see _flush_access)
-        self._access: dict[str, dict[str, int]] = {}
+        #: tenant -> the memory ids served since the last flush. A set, because a memory
+        #: served twice inside one window is bumped once (see _buffer_access).
+        self._access: dict[str, set[str]] = {}
         self._buffered = 0
         self._flusher: asyncio.Task[None] | None = None
         self._flush_now = asyncio.Event()
@@ -416,10 +417,14 @@ class ContextBuilder:
         here is, by construction, a hit - that is what lets ``build_api`` return the stored
         bytes untouched.
         """
-        data = api if api is not None else bundle_to_api(bundle)
-        payload = orjson.dumps({**data, "cache_hit": True})
-        with contextlib.suppress(CacheUnavailable):
+        try:
+            data = api if api is not None else bundle_to_api(bundle)
+            payload = orjson.dumps({**data, "cache_hit": True})
             await cache.set(cache_key, payload, ttl_seconds=self.cache_ttl)
+        except CacheUnavailable:
+            return
+        except Exception as exc:  # nothing awaits this task; a failure here is silent
+            log.warning("context.bundle_cache_write_failed", error_message=str(exc))
 
     def _track(self, work: Coroutine[Any, Any, None]) -> None:
         task = asyncio.create_task(work)
@@ -472,11 +477,12 @@ class ContextBuilder:
         """
         if not ids:
             return
-        counts = self._access.setdefault(tenant_id, {})
-        for memory_id in ids:
-            counts[memory_id] = counts.get(memory_id, 0) + 1
+        self._access.setdefault(tenant_id, set()).update(ids)
         self._buffered += len(ids)
         if self._buffered >= self.cfg.access_flush_max_ids:
+            # reset before the task is spawned, not inside it: every build between the spawn
+            # and the flush would otherwise see a full buffer and spawn another one
+            self._buffered = 0
             self._track(self._flush_access())
             return
         if self._flusher is None or self._flusher.done():
@@ -492,18 +498,18 @@ class ContextBuilder:
         """One bulk bump per tenant for everything buffered since the last flush."""
         async with self._flush_lock:
             pending, self._access, self._buffered = self._access, {}, 0
-            for tenant_id, counts in pending.items():
+            for tenant_id, served in pending.items():
                 try:
                     async with self.uow_factory() as uow:
                         await uow.memories.bump_access(
-                            tenant_id, list(counts), at=datetime.now(UTC)
+                            tenant_id, sorted(served), at=datetime.now(UTC)
                         )
                         await uow.commit()
                 except Exception as exc:  # usage accounting must never fail a read
                     log.warning(
                         "memory.access_bump_failed",
                         error_message=str(exc),
-                        count=len(counts),
+                        count=len(served),
                     )
 
     async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:

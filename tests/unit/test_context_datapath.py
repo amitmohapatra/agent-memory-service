@@ -31,6 +31,7 @@ from memory_service.modules.context.builder import ContextBuilder, bundle_to_api
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.retrieval.engine import Candidate, RetrievalResult
 from memory_service.modules.retrieval.router import QueryRouter
+from memory_service.ports.authorization import AuthorizedScope
 
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1")
 VISIBILITY = VisibilitySpecification(tenant_id="acme", keys=frozenset({"tenant:acme"}))
@@ -308,6 +309,29 @@ async def test_a_failing_bump_never_reaches_the_caller() -> None:
     factory.memories.bump_access = boom  # type: ignore[method-assign]
     await builder.build(CTX, QUERY)
     await builder.drain()  # must not raise
+
+
+async def test_the_decision_cache_switch_still_disables_the_scope_cache() -> None:
+    """``decision_cache=False`` is the switch reached for during a stale-permission incident.
+
+    The builder reads ``authz:scope:*`` from its own cache handle and hands the bytes to
+    ``scope()``, which used to trust them before it ever looked at ``self.cache`` - so on the
+    context path, the one path where the scope cache matters, turning the decision cache off
+    would have changed nothing.
+    """
+    stale = AuthorizedScope(tenant_id="acme", principal="u1", thread_ids=["thr_stale"])
+    provider = MemoryAuthorizationProvider()
+    off = AuthorizationService(provider, MemoryCache(), decision_cache=False)
+    resolved = await off.scope(
+        CTX, revision_fingerprint="fp", cached_scope=stale.model_dump_json().encode()
+    )
+    assert resolved.thread_ids != ["thr_stale"], "the cached scope was used with the cache off"
+
+    on = AuthorizationService(provider, MemoryCache(), decision_cache=True)
+    trusted = await on.scope(
+        CTX, revision_fingerprint="fp", cached_scope=stale.model_dump_json().encode()
+    )
+    assert trusted.thread_ids == ["thr_stale"]
 
 
 async def test_container_shutdown_flushes_what_is_buffered() -> None:
