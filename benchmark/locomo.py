@@ -136,22 +136,34 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
                 )
             if not dia_id or not body:
                 continue
-            # the date is part of the record: LoCoMo's temporal questions depend on it
-            content = f"[{when}] {speaker}: {body}"
-            turns[dia_id] = content
-            # Each speaker is their own user, so the fact "I moved from Sweden" gets the
-            # subject user:Caroline rather than a shared id that makes Caroline's and
-            # Melanie's facts indistinguishable - which is what the graph, the subject
-            # check and the answerer all key on. WORKSPACE visibility is anchored on the
-            # workspace, not the user, so the questioner - a third context, made a member
-            # of the workspace above - sees every turn. occurred_at carries the session
-            # date into the memory's temporal fields instead of leaving it as ingest time.
+            turns[dia_id] = body
+            # The turn is submitted verbatim. It used to be submitted as
+            # "[1:56 pm on 8 May, 2023] Caroline: <body>", and that 35-character stamp cost
+            # on three fronts. The renderer prints the date and the speaker itself, from
+            # observed_at and from the subject, so every bundle line carried both twice, in
+            # two formats and two casings. Ingest splits sentences on .!? only
+            # (native._SENTENCE_SPLIT), so the stamp stayed glued to the first sentence of
+            # every turn and each start-anchored rule - _FACT's ^(?P<subject>...),
+            # _PREF_PLEASE, _DECISION_PREFIX - and the _CHITCHAT.match noise filter could
+            # never fire on it: the first sentence of a turn was unparseable by
+            # construction and a greeting-only turn was stored verbatim as noise. And the
+            # dense vector of a short turn was dominated by a prefix shared with every
+            # other turn in the corpus.
+            #
+            # Nothing is lost. occurred_at carries the session date into the memory's
+            # temporal fields, which is where the renderer and the temporal questions read
+            # it from, and each speaker is their own user, so the fact "I moved from
+            # Sweden" gets the subject user:caroline rather than a shared id that makes
+            # Caroline's and Melanie's facts indistinguishable - which is what the graph,
+            # the subject check and the answerer all key on. WORKSPACE visibility is
+            # anchored on the workspace, not the user, so the questioner - a third context,
+            # made a member of the workspace above - still sees every turn.
             async with uow_factory() as uow:
                 await memory.submit_observation(
                     uow,
                     _speaker_ctx(ctx, speaker),
                     kind=ObservationKind.MESSAGE,
-                    content=content,
+                    content=body,
                     hints=ProcessingHints(visibility=Visibility.WORKSPACE),
                     occurred_at=occurred_at,
                 )
