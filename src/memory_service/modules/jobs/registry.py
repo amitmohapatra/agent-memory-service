@@ -27,7 +27,7 @@ TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
 TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
-#: Transitional. Nothing enqueues this any more: the ThreadObserver it fed was deleted
+#: Transitional. Nothing enqueues this any more: the thread observer it fed was deleted
 #: (it was a complete implementation nothing constructed, and its enqueue cost one
 #: list_thread SELECT per ingested message). The name stays registered for one release so
 #: outbox rows written before the upgrade dispatch to a no-op instead of failing with

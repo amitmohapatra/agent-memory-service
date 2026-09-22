@@ -120,7 +120,7 @@ async def version(request: Request) -> VersionResponse:
             # build_container(overrides=...) are not settings, so they can only be read here
             "cache": _active(c.cache, "redis-protocol"),
             "search": "qdrant-local"
-            if c.overrides.search or c.overrides.qdrant_local_path
+            if c.overrides.search or c.overrides.search_local_path
             else "qdrant",
             "blob": _active(c.blob, s.blob.provider),
             "tasks": _active(c.tasks, "procrastinate"),

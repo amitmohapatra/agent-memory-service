@@ -253,7 +253,7 @@ async def _wire_search(container: Container) -> None:
     from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 
     stand_in = container.overrides
-    local = ":memory:" if stand_in.search == "memory" else stand_in.qdrant_local_path
+    local = ":memory:" if stand_in.search == "memory" else stand_in.search_local_path
     store = QdrantSearchStore(container.settings.search, local_path=local)
     container.search = store
     if local is None:

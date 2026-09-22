@@ -65,7 +65,7 @@ class Overrides:
     #: scan, no HNSW: fine for a fixture-sized corpus, quietly O(n) beyond that.
     search: Literal["memory"] | None = None
     #: A directory for qdrant-client local mode when the vectors must outlive the process.
-    qdrant_local_path: str | None = None
+    search_local_path: str | None = None
     #: ``inline``: run each job as soon as the outbox relay dispatches it. ``memory``: record
     #: jobs and run them on ``drain()``.
     tasks: Literal["inline", "memory"] | None = None
@@ -104,7 +104,7 @@ class Overrides:
         """The stand-ins in force, for the startup log and /version."""
         pairs = (
             ("cache", self.cache),
-            ("search", self.search or self.qdrant_local_path),
+            ("search", self.search or self.search_local_path),
             ("tasks", self.tasks),
             ("authorization", self.authorization),
             ("blob", self.blob),

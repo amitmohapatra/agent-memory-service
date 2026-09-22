@@ -10,7 +10,7 @@ from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 
 async def reset_real_backends(container: Container) -> None:
     stand_ins = container.overrides
-    if stand_ins.search is None and stand_ins.qdrant_local_path is None:
+    if stand_ins.search is None and stand_ins.search_local_path is None:
         indexer = container.services["indexer"]
         for base in (KNOWLEDGE, MEMORIES):
             await container.search.drop_collection(indexer.collection(base))

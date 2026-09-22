@@ -104,7 +104,7 @@ def bench_settings() -> Settings:
 async def reset_index(container: Any) -> None:
     """Server-side Qdrant collections and a shared cache outlive the PostgreSQL truncate."""
     stand_ins = container.overrides
-    if stand_ins.search is None and stand_ins.qdrant_local_path is None:
+    if stand_ins.search is None and stand_ins.search_local_path is None:
         indexer = container.services["indexer"]
         for base in (KNOWLEDGE, MEMORIES):
             await container.search.drop_collection(indexer.collection(base))
