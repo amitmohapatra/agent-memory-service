@@ -24,6 +24,7 @@ from memory_service.modules.memory.native import (
     parse_date,
     split_clauses,
     split_sentences,
+    strip_turn_prefix,
     tokens,
 )
 from memory_service.modules.memory.pipeline import build_memory, keys_for, scope_for
@@ -99,6 +100,26 @@ def test_text_utils() -> None:
     assert parse_date("since September 2026") == datetime(2026, 9, 1, tzinfo=UTC)
     assert parse_date("in Q3 2026") == datetime(2026, 7, 1, tzinfo=UTC)
     assert parse_date("no date here") is None
+
+
+def test_a_transcript_header_is_not_part_of_the_first_sentence() -> None:
+    # Sentences split on .!? alone, so a forwarded chat line's header stays glued to the
+    # first sentence of the turn and every rule anchored at ^ - the fact pattern's subject,
+    # "please always/never", "decision:", the chit-chat filter - misses it.
+    assert strip_turn_prefix("[1:56 pm on 8 May, 2023] Caroline: I moved to Paris.") == (
+        "I moved to Paris."
+    )
+    assert strip_turn_prefix("[2023-05-08] we shipped it") == "we shipped it"
+    assert split_sentences(
+        "[1:56 pm on 8 May, 2023] Caroline: Thanks for that. I moved to Paris."
+    ) == ["Thanks for that.", "I moved to Paris."]
+    # a prefix this module understands is not a header and must survive
+    assert strip_turn_prefix("Decision: ship it on Friday") == "Decision: ship it on Friday"
+    # nor is an appended image caption, which is bracketed but carries no timestamp
+    assert strip_turn_prefix("[Shared an image of a dog: a labrador on a beach]") == (
+        "[Shared an image of a dog: a labrador on a beach]"
+    )
+    assert strip_turn_prefix("no header at all") == "no header at all"
 
 
 # --- extraction ---------------------------------------------------------------------------

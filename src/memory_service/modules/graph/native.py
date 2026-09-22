@@ -29,6 +29,7 @@ from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.graph.document_facts import DocumentIE, Fact, LexEntity, sentences
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.native import strip_turn_prefix
 from memory_service.ports.intelligence import Entity, Relation
 from memory_service.ports.models import ProviderInfo
 
@@ -171,6 +172,47 @@ def _entity_type(name: str, canonical: str) -> str:
     return "THING"
 
 
+def display_name(name: str) -> str:
+    """``user:melanie`` -> ``melanie``: what a rendered fact should call a principal."""
+    prefix, sep, bare = name.partition(":")
+    return bare if sep and prefix in _PRINCIPAL_TYPES and bare else name
+
+
+def aliases_for(name: str, canon: str) -> list[str]:
+    """The extra forms a query may name this entity by.
+
+    ``find_entities`` matches canonical (lower-cased) strings against ``canonical_name``
+    and against this list, so every entry here is canonicalised - the raw display name was
+    stored before, which no canonicalised query name could ever equal.
+
+    A principal is canonicalised as ``user:melanie`` and every question that names her says
+    "Melanie", so without her bare name the node all of her facts hang off is unreachable
+    from the query - while the capitalised "Melanie" in the text of a turn mints an
+    ordinary THING node that does resolve, and answers with a mention edge instead of the
+    person.
+    """
+    forms = {canonical_entity(name)}
+    prefix, sep, bare = canon.partition(":")
+    if sep and prefix in _PRINCIPAL_TYPES and bare:
+        forms.add(canonical_entity(bare))
+    forms.discard(canon)
+    return sorted(f for f in forms if f)
+
+
+def fact_text_for(subject: str, predicate: str, obj: str, when: datetime | None) -> str:
+    """What a rendered graph fact says: its own triple and date.
+
+    This used to be the whole memory content, so each of the twelve facts a bundle carries
+    repeated a verbatim turn the memories section already holds - about sixty tokens each,
+    in 108 of 304 measured bundles. The triple is what the retrieval side already falls
+    back to when a relation has no text of its own; the date is added because nothing else
+    in the facts section carries one.
+    """
+    triple = f"{display_name(subject)} {predicate.replace('_', ' ')} {display_name(obj)}"
+    day = when.date().isoformat() if when else ""
+    return f"{day} {triple}".strip()
+
+
 def make_entity(
     tenant_id: str,
     scope_key: str,
@@ -187,7 +229,7 @@ def make_entity(
         name=name.strip(),
         canonical_name=canon,
         entity_type=_entity_type(name, canon),
-        aliases=[name.strip()] if name.strip().casefold() != canon else [],
+        aliases=aliases_for(name, canon),
         scope_key=scope_key,
         visibility_keys=list(visibility_keys),
         evidence=list(evidence)[:5],
@@ -258,14 +300,19 @@ class NativeGraphEnrichment:
                     confidence=memory.confidence,
                     evidence=evidence,
                     memory_id=memory.memory_id,
-                    fact_text=memory.content,
+                    fact_text=fact_text_for(
+                        subject.name, memory.predicate, obj.name, memory.temporal.observed_at
+                    ),
                     attributes={
                         "memory_type": memory.memory_type.value,
                         "category": memory.system_metadata.get("category"),
                     },
                 )
             )
-        for name in extract_entities(memory.content, max_entities=8):
+        # The transcript header of a forwarded chat line ("[8 May, 2023] Melanie: ...") is
+        # not content: left in, its capitalised speaker mints a THING entity that a question
+        # naming Melanie resolves to in preference to her own principal node.
+        for name in extract_entities(strip_turn_prefix(memory.content), max_entities=8):
             if not _usable_entity(name):
                 continue
             e = ent(name)
@@ -289,7 +336,9 @@ class NativeGraphEnrichment:
                     confidence=min(memory.confidence, 0.6),
                     evidence=evidence,
                     memory_id=memory.memory_id,
-                    fact_text=memory.content,
+                    fact_text=fact_text_for(
+                        subject.name, "mentions", e.name, memory.temporal.observed_at
+                    ),
                     attributes={"memory_type": memory.memory_type.value},
                 )
             )
@@ -349,7 +398,7 @@ class NativeGraphEnrichment:
                 confidence=min(confidence, memory.confidence),
                 evidence=list(memory.evidence),
                 memory_id=memory.memory_id,
-                fact_text=memory.content,
+                fact_text=fact_text_for(subject.name, pred, obj.name, memory.temporal.observed_at),
                 attributes={"memory_type": memory.memory_type.value, "extraction": "llm"},
             )
             for subject, pred, obj, confidence in accepted
