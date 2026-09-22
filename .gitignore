@@ -30,3 +30,6 @@ deploy/bifrost/*.db
 
 # stray sqlite session file from a test run
 :memory:*
+
+# agent worktrees created next to the checkout
+.claude/worktrees/
