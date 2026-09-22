@@ -33,3 +33,4 @@ deploy/bifrost/*.db
 
 # agent worktrees created next to the checkout
 .claude/worktrees/
+.claude/wf/
