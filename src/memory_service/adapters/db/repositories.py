@@ -129,24 +129,6 @@ class SqlThreadRepository:
         value = result.scalar_one_or_none()
         return int(value) if value is not None else 0
 
-    async def list_for_user(
-        self, tenant_id: str, user_id: str, *, limit: int = 50, before: datetime | None = None
-    ) -> list[Thread]:
-        stmt = (
-            select(ThreadRow)
-            .where(
-                ThreadRow.tenant_id == tenant_id,
-                ThreadRow.owner_user_id == user_id,
-                ThreadRow.deleted_at.is_(None),
-            )
-            .order_by(ThreadRow.updated_at.desc())
-            .limit(limit)
-        )
-        if before is not None:
-            stmt = stmt.where(ThreadRow.updated_at < before)
-        rows = (await self.s.execute(stmt)).scalars().all()
-        return [_row_to_thread(r) for r in rows]
-
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool:
         result = await self.s.execute(
             update(ThreadRow)

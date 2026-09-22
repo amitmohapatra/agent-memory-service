@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -49,28 +48,6 @@ log = get_logger(__name__)
 INLINE_OUTPUT_LIMIT = 4096
 SUMMARY_CHARS = 600
 MAX_TRAJECTORY_RUNS = 60
-
-
-@dataclass
-class ToolSuggestion:
-    tool: str
-    confidence: float
-    argument_template: dict[str, Any] = field(default_factory=dict)
-    supporting_procedures: list[str] = field(default_factory=list)
-    supporting_invocations: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-    evidence_status: str = "NONE"
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "tool": self.tool,
-            "confidence": round(self.confidence, 4),
-            "argument_template": self.argument_template,
-            "supporting_procedures": self.supporting_procedures,
-            "supporting_invocations": self.supporting_invocations[:10],
-            "warnings": self.warnings,
-            "evidence_status": self.evidence_status,
-        }
 
 
 class ToolMemoryService:

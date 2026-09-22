@@ -700,33 +700,6 @@ class GraphRelationRow(Base):
     )
 
 
-class GraphEntityAliasRow(Base):
-    """Tenant-wide alias table for cross-document entity resolution (no audience: an alias
-    only names an entity id; the entity itself stays audience-filtered)."""
-
-    __tablename__ = "graph_entity_aliases"
-
-    alias_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
-    alias: Mapped[str] = mapped_column(String(300), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(200), nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
-    source: Mapped[str] = mapped_column(String(40), default="canonical", server_default="canonical")
-    created_at: Mapped[datetime] = mapped_column(server_default=_now())
-    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
-
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "alias", "entity_id", name="uq_graph_entity_alias"),
-        Index("ix_graph_entity_aliases_alias", "tenant_id", "alias"),
-        Index("ix_graph_entity_aliases_entity", "tenant_id", "entity_id"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Tool memory (TOOL_MEMORY.md §30.0-§30.1)
-# ---------------------------------------------------------------------------
-
-
 class ToolRow(Base):
     __tablename__ = "tools"
 

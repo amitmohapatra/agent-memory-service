@@ -62,9 +62,6 @@ class ThreadRepository(Protocol):
         """Bump the thread revision/updated_at; returns new revision."""
         ...
 
-    async def list_for_user(
-        self, tenant_id: str, user_id: str, *, limit: int = 50, before: datetime | None = None
-    ) -> list[Thread]: ...
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool: ...
 
 
