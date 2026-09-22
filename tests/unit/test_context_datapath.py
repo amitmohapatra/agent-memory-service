@@ -28,6 +28,7 @@ from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.builder import ContextBuilder, bundle_to_api
+from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.retrieval.engine import Candidate, RetrievalResult
 from memory_service.modules.retrieval.router import QueryRouter
 
@@ -307,6 +308,72 @@ async def test_a_failing_bump_never_reaches_the_caller() -> None:
     factory.memories.bump_access = boom  # type: ignore[method-assign]
     await builder.build(CTX, QUERY)
     await builder.drain()  # must not raise
+
+
+async def test_container_shutdown_flushes_what_is_buffered() -> None:
+    """``close()`` existed and nothing called it.
+
+    ``Container.close()`` walks the dependencies, and the builder is a service, so at SIGTERM
+    every worker silently dropped up to ``access_flush_seconds`` of served-memory ids - the
+    counter the forgetting policy reads - plus whatever bundle write was in flight. A window
+    per worker on every rolling deploy.
+    """
+    from memory_service.application.container import Container
+    from memory_service.config.settings import Settings
+
+    builder = _builder(MemoryCache())
+    factory, _ = _parts(builder)
+    container = Container(settings=Settings(_env_file=None), version="test")  # type: ignore[call-arg]
+    container.services["context_builder"] = builder
+    container.add_closer("context_builder", builder.close)
+
+    await builder.build(CTX, QUERY)
+    assert factory.memories.bumps == [], "the bump was on the request path"
+    await container.close()
+    assert factory.memories.bumps, "shutdown dropped the buffered access ids"
+
+
+async def test_a_service_that_fails_to_close_does_not_stop_the_shutdown() -> None:
+    from memory_service.application.container import Container
+    from memory_service.config.settings import Settings
+
+    closed: list[str] = []
+
+    async def boom() -> None:
+        raise RuntimeError("flush failed")
+
+    async def fine() -> None:
+        closed.append("second")
+
+    container = Container(settings=Settings(_env_file=None), version="test")  # type: ignore[call-arg]
+    container.add_closer("second", fine)
+    container.add_closer("first", boom)
+    await container.close()
+    assert closed == ["second"]
+
+
+def test_the_wiring_registers_the_builder_for_shutdown() -> None:
+    """The test above proves the flush happens when something calls it; this proves the
+    composition root is what calls it."""
+    from memory_service.adapters.wiring import _wire_retrieval
+    from memory_service.application.container import Container
+    from memory_service.config.settings import Settings
+
+    container = Container(settings=Settings(_env_file=None), version="test")  # type: ignore[call-arg]
+    container.services["uow_factory"] = _Factory()
+    container.services["conversation"] = _Conversation()
+    container.services["llm_assist"] = LLMAssist.disabled()
+    container.services["authz"] = AuthorizationService(MemoryAuthorizationProvider(), None)
+
+    class _Model:
+        def fingerprint(self) -> str:
+            return "fp"
+
+    container.embedding = _Model()
+    container.sparse = _Model()
+    _wire_retrieval(container)
+
+    assert container.closers["context_builder"] == container.services["context_builder"].close
 
 
 async def test_close_flushes_what_is_buffered() -> None:

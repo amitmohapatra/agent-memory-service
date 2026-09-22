@@ -390,7 +390,7 @@ def _wire_retrieval(container: Container) -> None:
         container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
     )
     container.services["ephemeral_memory"] = working
-    container.services["context_builder"] = ContextBuilder(
+    builder = ContextBuilder(
         container.services["uow_factory"],
         engine,
         container.services["conversation"],
@@ -401,6 +401,11 @@ def _wire_retrieval(container: Container) -> None:
         working=working,
         assist=container.services["llm_assist"],
     )
+    container.services["context_builder"] = builder
+    # The builder buffers served-memory ids for up to access_flush_seconds and writes bundles
+    # to the cache in the background. Without this, SIGTERM drops a whole window of both, per
+    # worker, on every rolling deploy - for the counter the forgetting policy reads.
+    container.add_closer("context_builder", builder.close)
 
 
 def _wire_memory(container: Container) -> None:
