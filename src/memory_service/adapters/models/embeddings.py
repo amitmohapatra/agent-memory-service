@@ -367,8 +367,10 @@ def _pad_token_id(directory: Path, tokenizer: Any) -> int:
 
 def onnx_fingerprint(spec: DenseModel, dimension: int | None = None) -> str:
     """The name of the vector space under the ONNX runner. The graph file is in it because
-    an int8 graph and its fp32 parent do not produce the same vectors (measured: cosine
-    0.995), and two collections that disagree by that much must not share a name."""
+    an int8 graph and its fp32 parent do not produce the same vectors: over the fifty texts
+    of ``docs/MEASUREMENTS.md`` section 7 the int8 graph sits at min cosine 0.9667 from the
+    torch runner where the fp32 graph sits at 1.000000, and two collections that disagree by
+    that much must not share a name."""
     name = (spec.model_path or spec.id).rstrip("/").split("/")[-1]
     graph = (spec.graph_file or DEFAULT_GRAPH_FILE).rsplit("/", 1)[-1].removesuffix(".onnx")
     return f"onnx-{name}-{graph}-d{dimension or spec.dimension}"
