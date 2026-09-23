@@ -35,23 +35,49 @@ def _app(settings, overrides):
 
 
 def test_headers_and_body_merge(settings, overrides) -> None:
+    """Lineage comes from the body; the groups stay exactly what the header said."""
     with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post(
             "/echo-context",
             headers=HEADERS,
-            json={
-                "thread_id": "thr_1",
-                "session_id": "ses_1",
-                "turn_id": "trn_1",
-                "group_ids": ["ops"],
-            },
+            json={"thread_id": "thr_1", "session_id": "ses_1", "turn_id": "trn_1"},
         )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["tenant_id"] == "acme" and body["user_id"] == "u1"
-        assert body["group_ids"] == ["finance", "legal", "ops"]
+        assert body["group_ids"] == ["finance", "legal"]
         assert body["thread_id"] == "thr_1" and body["turn_id"] == "trn_1"
         assert body["request_id"] == r.headers["X-Request-ID"]
+
+
+def test_a_body_cannot_add_a_group_it_was_not_given(settings, overrides) -> None:
+    """The defect this replaces: the body's groups used to be unioned with the header's.
+
+    A group id is not a hint. ScopeResolver folds it into the AuthorizedScope and
+    VisibilitySpecification turns it into a ``group:acme/ops`` read key, so a body that could
+    add one read every GROUP-visibility row for it without any membership being checked. The
+    list is uncapped, so ids could be enumerated in bulk in a single request. This test used
+    to assert the union - it asserted the bug.
+    """
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
+        r = c.post("/echo-context", headers=HEADERS, json={"group_ids": ["ops"]})
+        assert r.status_code == 422, r.text
+        assert "group_ids" in r.text
+
+
+def test_a_body_may_repeat_the_groups_the_header_already_carried(settings, overrides) -> None:
+    """An SDK that round-trips the whole scope object is not attacking anything."""
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
+        r = c.post("/echo-context", headers=HEADERS, json={"group_ids": ["finance", "legal"]})
+        assert r.status_code == 200, r.text
+        assert r.json()["group_ids"] == ["finance", "legal"]
+
+
+def test_the_order_a_body_repeats_groups_in_does_not_matter(settings, overrides) -> None:
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
+        r = c.post("/echo-context", headers=HEADERS, json={"group_ids": ["legal", "finance"]})
+        assert r.status_code == 200, r.text
+        assert r.json()["group_ids"] == ["finance", "legal"]
 
 
 def test_body_cannot_override_trusted_headers(settings, overrides) -> None:

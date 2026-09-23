@@ -272,6 +272,17 @@ class OutboxRepository(Protocol):
         self, *, limit: int = 200, older_than_seconds: int = 0
     ) -> list[OutboxEntry]: ...
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...
+
+    async def dispatcher_of(self, job_id: str) -> tuple[bool, str | None]:
+        """``(dispatched_from_here, tenant_id)`` for a task-queue job id.
+
+        A task-queue id carries no tenant: the queue's ids are sequential integers and the
+        ``TaskQueue`` port has never modelled one, so a job's owner is only knowable from the
+        outbox row that dispatched it. ``(False, None)`` means no row dispatched this id, and
+        ``(True, None)`` means one did and it belongs to no tenant - the service's own
+        periodic work, which is the same case the ``obx_`` read already lets through.
+        """
+        ...
     async def mark_failed(self, outbox_id: int, *, error: str, dead: bool) -> None: ...
     async def purge_dispatched(self, *, older_than_seconds: int) -> int:
         """Delete rows whose job was handed to the queue. Returns how many went.

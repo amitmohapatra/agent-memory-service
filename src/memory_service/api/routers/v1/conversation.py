@@ -297,6 +297,20 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
             attempts=info.attempts,
             last_error=info.last_error,
         )
+    # A task-queue id carries no tenant of its own. Procrastinate ids are sequential
+    # integers and the TaskQueue port never modelled a tenant, so this branch used to hand
+    # back any tenant's task_name, queue, status, attempts and schedule to whoever named an
+    # id - and sequential ids do not have to be guessed. Every other read in the service is
+    # scoped by visibility keys; this one had nothing to scope by.
+    #
+    # The outbox is what knows who dispatched a job, so a job this tenant's outbox never
+    # dispatched is not found. The null-tenant case is allowed through exactly as the
+    # ``obx_`` branch above allows it: those rows are the service's own periodic work and
+    # belong to no tenant.
+    async with container.services["uow_factory"]() as uow:
+        dispatched, owner = await uow.outbox.dispatcher_of(job_id)
+    if not dispatched or (owner and owner != ctx.tenant_id):
+        raise NotFound("Job not found")
     info = await container.tasks.get(job_id) if container.tasks is not None else None
     if info is None:
         raise NotFound("Job not found")

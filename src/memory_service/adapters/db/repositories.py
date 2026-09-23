@@ -760,6 +760,13 @@ class SqlOutboxRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
 
+    async def dispatcher_of(self, job_id: str) -> tuple[bool, str | None]:
+        """Which tenant, if any, dispatched this task-queue job. See the port."""
+        row = (
+            await self.s.execute(select(OutboxRow.tenant_id).where(OutboxRow.job_id == job_id))
+        ).first()
+        return (False, None) if row is None else (True, row[0])
+
     async def add(self, spec: JobSpec) -> int | None:
         stmt = pg_insert(OutboxRow).values(
             tenant_id=spec.tenant_id,

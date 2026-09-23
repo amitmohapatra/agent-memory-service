@@ -92,11 +92,22 @@ def build_context(
     tenant_id = headers["tenant_id"] or body.tenant_id
     if not tenant_id:
         raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
-    group_ids = (
-        sorted(set(headers["group_ids"]) | set(body.group_ids))
-        if headers["group_ids"] or body.group_ids
-        else []
-    )
+    # Groups are a security field, and they were the one that was merged instead of checked.
+    # A group id is not a hint: ScopeResolver folds it straight into the AuthorizedScope and
+    # VisibilitySpecification turns it into a ``group:{tenant}/{g}`` read key, so a body that
+    # could add one could read every GROUP-visibility row for it without any membership ever
+    # being checked - and the list is uncapped, so ids could be enumerated in bulk in a single
+    # request. The tenant prefix held, so nothing crossed a tenant; everything inside one was
+    # reachable. ADR 0005 and this class's own docstring already say body security fields must
+    # match the headers exactly, so this restores the documented contract rather than
+    # inventing a rule: the header is authoritative, and a body that disagrees is refused
+    # rather than quietly widened.
+    header_groups = sorted(set(headers["group_ids"]))
+    if body.group_ids and sorted(set(body.group_ids)) != header_groups:
+        raise ValidationFailed(
+            "group_ids in body does not match trusted header", details={"field": "group_ids"}
+        )
+    group_ids = header_groups
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
