@@ -329,6 +329,33 @@ That number is real but it is a *saturated* number: it is CPU-seconds divided by
 requests that escaped, so it prices the queue, not the work. It should not be quoted as the
 cost of a request, and the capacity question has to be re-asked below saturation.
 
+### Correction: the gate is not what blocks 20 rps
+
+Layer 2 said a one-permit gate at 111 ms caps the service near 9 encodes a second and that
+20 rps is therefore arithmetically unreachable. That is the ceiling of **one process**, and
+the deployment runs **three** worker processes, each with its own `SerialRunner`. Corrected,
+with two threads costing roughly 1.7x rather than 2x:
+
+| encoder | 1-thread ms | core-ms of work | core-s/s at 20 rps | share of 4 cores | gate ceiling, 3 workers |
+|---|---|---|---|---|---|
+| torch fp32 | 111.4 | 111 | 2.07 | **52%** | 46/s |
+| onnx fp32 | 39.8 | 40 | 0.74 | **18%** | 128/s |
+
+Twenty rps needs 18.6 encodes a second (13 of the 14 task weights reach the encoder). Both
+ceilings clear that. **So the gate was never the binding constraint at this scale - CPU is.**
+
+That changes what the encoder flip buys. It is not the difference between impossible and
+possible; it is the difference between spending **52%** of a four-core box on encoding and
+spending **18%** - on a box that is also running Postgres, Qdrant and the gateway, and that
+was measured pinned at 382% of 400%. The flip is still the largest single lever, for a
+different reason than the one first written here.
+
+It also redistributes the blame for 0.66 rps. On that run the verified-context task was 7%
+of weights, and each such request entered DeBERTa up to `max_claims` (40) times
+sequentially - plausibly a larger CPU consumer than the encoder at that offered rate. Today's
+cross-claim batching addresses exactly that, and was worth doing on its own evidence rather
+than as a consequence of the gate argument.
+
 ### What this means for 20 rps
 
 With the ONNX encoder at ~35-40 ms the gate's ceiling moves to ~25-28/s. Twenty rps then
