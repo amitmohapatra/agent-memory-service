@@ -8,7 +8,17 @@ from memory_service.ports.authorization import RelationTuple as R
 pytestmark = pytest.mark.integration
 
 
-async def test_scope_cache_invalidated_by_revision(container, uow_factory) -> None:
+async def test_a_grant_invalidates_the_scope_and_a_memory_write_does_not(
+    container, uow_factory
+) -> None:
+    """The two halves of the same defect, against the real provider and cache.
+
+    A grant used to bump nothing, so a caller who had just been given a thread waited out
+    the sixty-second TTL to see it. Meanwhile the scope was keyed on the TENANT and USER
+    revisions, which every memory write bumps - 730 times over 369 ingested turns on the
+    benchmark tenant - so content churn threw the cache away constantly and each miss cost
+    five sequential ListObjects calls. Under load that returned 503s.
+    """
     svc: AuthorizationService = container.services["authz"]
     provider = container.authorization
     ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
@@ -19,12 +29,20 @@ async def test_scope_cache_invalidated_by_revision(container, uow_factory) -> No
         ]
     )
     async with uow_factory() as uow:
-        scope = await svc.scope(ctx, revisions=uow.revisions)
-        assert scope.thread_ids == ["thr1"]
-        # new grant without a revision bump is served from cache (stale by design within TTL)
-        await svc.grant_thread(ctx, "thr2")
         assert (await svc.scope(ctx, revisions=uow.revisions)).thread_ids == ["thr1"]
+
+        # a grant that is told about the unit of work is visible on the next read
+        await svc.grant_thread(ctx, "thr2", revisions=uow.revisions)
+        assert (await svc.scope(ctx, revisions=uow.revisions)).thread_ids == ["thr1", "thr2"]
+
+        # ...and a grant made without one is still stale within the TTL, which is the
+        # documented escape hatch for callers that hold no transaction
+        await svc.grant_thread(ctx, "thr3")
+        assert (await svc.scope(ctx, revisions=uow.revisions)).thread_ids == ["thr1", "thr2"]
+
+        # a memory write bumps the content revisions and must change nothing here
         await uow.revisions.bump("acme", RevisionKind.USER, "u1")
+        await uow.revisions.bump("acme", RevisionKind.TENANT, "")
         assert (await svc.scope(ctx, revisions=uow.revisions)).thread_ids == ["thr1", "thr2"]
         await uow.commit()
 

@@ -170,7 +170,11 @@ class IngestionService:
                 ctx.tenant_id, document.document_id, data, checksum=checksum
             )
             await self.authz.grant_document(
-                ctx, document.document_id, thread_id=ctx.thread_id, workspace_id=ctx.workspace_id
+                ctx,
+                document.document_id,
+                thread_id=ctx.thread_id,
+                workspace_id=ctx.workspace_id,
+                revisions=uow.revisions,
             )
             observation = Observation(
                 tenant_id=ctx.tenant_id,

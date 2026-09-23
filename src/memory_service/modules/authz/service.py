@@ -62,15 +62,21 @@ class AuthorizationService:
     def revision_fingerprint(ctx: MemoryExecutionContext, revisions: Mapping[str, int]) -> str:
         """The fingerprint ``scope`` would compute, from revisions the caller already read.
 
-        The revisions a cached scope depends on are a subset of the ones a cached context
-        bundle depends on, and the ContextBuilder reads the wider set anyway. Deriving the
-        narrower fingerprint here instead of re-reading keeps the key format in the one place
-        that owns it, so the scope cache is not silently invalidated by a thread or graph
-        revision it does not depend on.
+        A scope is a function of the GRANTS, so it is keyed on MEMBERSHIP revisions and on
+        nothing else. It used to key on TENANT and USER, which every memory write bumps -
+        measured at 730 bumps over 369 ingested turns - so ordinary content churn threw the
+        scope away constantly, and each miss costs five sequential ListObjects calls against
+        the authorization service. Under load that collapsed: a ten-request-per-second run
+        returned 503 DEPENDENCY_UNAVAILABLE from list_objects timeouts. Meanwhile the events
+        that genuinely change a scope - granting a thread, a document, or a membership -
+        bumped nothing at all, so a real grant waited for the TTL.
         """
-        keys = [f"{RevisionKind.TENANT.value}:", f"{RevisionKind.USER.value}:{ctx.user_id or ''}"]
+        keys = [
+            f"{RevisionKind.MEMBERSHIP.value}:",
+            f"{RevisionKind.MEMBERSHIP.value}:{ctx.user_id or ''}",
+        ]
         if ctx.agent_id:
-            keys.append(f"{RevisionKind.AGENT.value}:{ctx.agent_id}")
+            keys.append(f"{RevisionKind.MEMBERSHIP.value}:{ctx.agent_id}")
         return ",".join(f"{k}={revisions.get(k, 0)}" for k in sorted(keys))
 
     async def scope(
@@ -97,9 +103,13 @@ class AuthorizationService:
         if fingerprint is None:
             fingerprint = "0"
             if revisions is not None:
-                keys = [(RevisionKind.TENANT, ""), (RevisionKind.USER, ctx.user_id or "")]
+                # the same keys revision_fingerprint() derives: grants, never content
+                keys = [
+                    (RevisionKind.MEMBERSHIP, ""),
+                    (RevisionKind.MEMBERSHIP, ctx.user_id or ""),
+                ]
                 if ctx.agent_id:
-                    keys.append((RevisionKind.AGENT, ctx.agent_id))
+                    keys.append((RevisionKind.MEMBERSHIP, ctx.agent_id))
                 values = await revisions.get_many(ctx.tenant_id, keys)
                 fingerprint = ",".join(f"{k}={v}" for k, v in sorted(values.items()))
             if self.cache is not None:
@@ -173,8 +183,28 @@ class AuthorizationService:
             )
 
     # -- grants -----------------------------------------------------------------
+    async def _bump_membership(
+        self, tenant_id: str, revisions: RevisionRepository | None, *object_ids: str
+    ) -> None:
+        """Invalidate the cached scopes a grant just changed.
+
+        A grant is the only thing that can change what a caller may see, so it is the only
+        thing that may invalidate a scope. These bumps used to be missing entirely - a new
+        thread or document was visible only once the sixty-second TTL expired - while the
+        cache was being thrown away constantly by memory writes it did not depend on.
+        """
+        if revisions is None:
+            return
+        for object_id_ in dict.fromkeys(("", *object_ids)):
+            await revisions.bump(tenant_id, RevisionKind.MEMBERSHIP, object_id_)
+
     async def grant_thread(
-        self, ctx: MemoryExecutionContext, thread_id: str, *, workspace_id: str | None = None
+        self,
+        ctx: MemoryExecutionContext,
+        thread_id: str,
+        *,
+        workspace_id: str | None = None,
+        revisions: RevisionRepository | None = None,
     ) -> None:
         obj = f"thread:{object_id(ctx.tenant_id, thread_id)}"
         tuples = [RelationTuple(user=f"tenant:{ctx.tenant_id}", relation="tenant", object=obj)]
@@ -191,6 +221,7 @@ class AuthorizationService:
         if ctx.is_agent:
             tuples.append(RelationTuple(user=ctx.principal_id, relation="participant", object=obj))
         await self.provider.write(tuples)
+        await self._bump_membership(ctx.tenant_id, revisions, ctx.user_id or "", ctx.agent_id or "")
 
     async def grant_document(
         self,
@@ -199,6 +230,7 @@ class AuthorizationService:
         *,
         thread_id: str | None = None,
         workspace_id: str | None = None,
+        revisions: RevisionRepository | None = None,
     ) -> None:
         obj = f"document:{object_id(ctx.tenant_id, document_id)}"
         tuples = [RelationTuple(user=f"tenant:{ctx.tenant_id}", relation="tenant", object=obj)]
@@ -221,9 +253,15 @@ class AuthorizationService:
                 )
             )
         await self.provider.write(tuples)
+        await self._bump_membership(ctx.tenant_id, revisions, ctx.user_id or "", ctx.agent_id or "")
 
     async def grant_memory(
-        self, ctx: MemoryExecutionContext, memory_id: str, *, owner: str | None = None
+        self,
+        ctx: MemoryExecutionContext,
+        memory_id: str,
+        *,
+        owner: str | None = None,
+        revisions: RevisionRepository | None = None,
     ) -> None:
         obj = f"memory:{object_id(ctx.tenant_id, memory_id)}"
         await self.provider.write(
@@ -232,6 +270,7 @@ class AuthorizationService:
                 RelationTuple(user=owner or ctx.principal_id, relation="owner", object=obj),
             ]
         )
+        await self._bump_membership(ctx.tenant_id, revisions, ctx.user_id or "", ctx.agent_id or "")
 
     async def grant_membership(
         self,
@@ -273,7 +312,7 @@ class AuthorizationService:
             )
         await self.provider.write(tuples)
         if revisions is not None:
-            await revisions.bump(tenant_id, RevisionKind.USER, user_id)
+            await self._bump_membership(tenant_id, revisions, user_id)
 
     def describe(self) -> str:
         return json.dumps(

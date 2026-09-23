@@ -97,7 +97,9 @@ class ConversationService:
             custom_metadata=custom_metadata or {},
         )
         await uow.threads.add(thread)
-        await self.authz.grant_thread(ctx, thread_id, workspace_id=ctx.workspace_id)
+        await self.authz.grant_thread(
+            ctx, thread_id, workspace_id=ctx.workspace_id, revisions=uow.revisions
+        )
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
         if ctx.user_id:
             await uow.revisions.bump(ctx.tenant_id, RevisionKind.USER, ctx.user_id)

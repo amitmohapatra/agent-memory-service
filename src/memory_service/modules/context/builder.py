@@ -256,6 +256,11 @@ class ContextBuilder:
                 (RevisionKind.THREAD, ctx.thread_id or ""),
                 (RevisionKind.AGENT, ctx.agent_id or ""),
                 (RevisionKind.GRAPH, ""),
+                # the authorization scope's own keys, read in the same round trip: it
+                # depends on grants, not on any of the content revisions above
+                (RevisionKind.MEMBERSHIP, ""),
+                (RevisionKind.MEMBERSHIP, ctx.user_id or ""),
+                (RevisionKind.MEMBERSHIP, ctx.agent_id or ""),
             ]
             revisions = await uow.revisions.get_many(ctx.tenant_id, keys)
         revision_fp = stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
