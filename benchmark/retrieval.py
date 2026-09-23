@@ -21,6 +21,7 @@ import statistics
 import time
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from benchmark.common import provenance, reset_store, write_result
 from benchmark.env import bench_llm_settings, bench_overrides, bench_retrieval
@@ -60,13 +61,59 @@ def _settings() -> Settings:
             )
         },
     }
-    env_only = Settings().model_dump(exclude_unset=True)
-    for key, value in env_only.items():
-        if isinstance(value, dict) and isinstance(defaults.get(key), dict):
-            defaults[key] = {**defaults[key], **value}
-        else:
-            defaults[key] = value
+    for path in _env_paths():
+        _overlay(defaults, Settings().model_dump(), path)
     return Settings(**defaults)
+
+
+ENV_PREFIX = "MEMORY__"
+
+
+def _env_paths() -> set[tuple[str, ...]]:
+    """The settings paths a ``MEMORY__*`` variable actually names, e.g. ``models.llm.model``.
+
+    This replaces ``Settings().model_dump(exclude_unset=True)``, which does not do what its
+    name suggests on a pydantic-settings object: every field counts as "set" because a
+    settings *source* provided it, so the dump came back complete - every section, every
+    default inlined - and overlaying it onto the benchmark's defaults overwrote them all.
+
+    Measured on a judged LoCoMo run, which intends ``max_tokens=16384, timeout_seconds=120,
+    max_retries=0`` and was getting ``1024, 30.0, 2``; ``service.environment`` and
+    ``log_level`` were lost the same way. Each is its own defect. A reasoning model given
+    1024 tokens spends them thinking and returns an empty string - the "output budget was
+    exhausted" failure that lost 19 of v6's 233 answerable rows. Thirty seconds cuts off a
+    judge call 120 would have allowed. And retries at 2 means one logical call can send three
+    wire requests, so the Makefile's claim that "with retries off, the pacer's rate is the
+    actual request rate, and --calls-per-minute means what it says" was false for every
+    judged run ever taken.
+
+    Reading the variable names instead is exact: a value is taken from the environment when,
+    and only when, someone set a variable for it.
+    """
+    return {
+        tuple(name[len(ENV_PREFIX) :].lower().split("__"))
+        for name in os.environ
+        if name.startswith(ENV_PREFIX) and name != ENV_PREFIX
+    }
+
+
+def _overlay(target: dict[str, Any], source: dict[str, Any], path: tuple[str, ...]) -> None:
+    """Copy one leaf from ``source`` into ``target``, creating the branches it needs.
+
+    A path the settings model does not have is ignored rather than invented: an unknown
+    ``MEMORY__*`` variable is a typo, and inventing a key for it would turn a typo into a
+    validation error somewhere unrelated.
+    """
+    for key in path[:-1]:
+        if not isinstance(source, dict) or key not in source:
+            return
+        source = source[key]
+        target = target.setdefault(key, {})
+        if not isinstance(target, dict):
+            return
+    leaf = path[-1]
+    if isinstance(source, dict) and leaf in source:
+        target[leaf] = source[leaf]
 
 
 def _pct(xs: list[float], p: float) -> float:
