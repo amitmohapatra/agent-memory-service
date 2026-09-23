@@ -98,12 +98,40 @@ class OpenFGAAuthorizationProvider:
         return client
 
     async def _ensure_store(self, client: OpenFgaClient) -> str:
+        """The store named ``STORE_NAME``, created if this is the first process to look.
+
+        OpenFGA does not make store names unique, and this runs from ``ping()`` - the first
+        readiness probe of every process. On a fresh stack that is three uvicorn workers and
+        the job worker arriving together, each finding no store and each creating one.
+        Tuples written through one store are invisible to a check served through another, so
+        the same request is allowed or denied depending on which process answers it: an
+        authorization split with no error anywhere to say it happened.
+
+        The race cannot be prevented from here, so it is made to converge instead. Every
+        process re-reads after creating and picks the same store - the lowest id among those
+        carrying the name - so a duplicate created by a colliding process is left unused
+        rather than serving half the traffic. Pinning ``authorization.openfga_store_id``
+        avoids the question entirely, and is what a deployment that cares should do.
+        """
+        chosen = await self._named_store(client)
+        if chosen is not None:
+            return chosen
+        await client.create_store(CreateStoreRequest(name=STORE_NAME))
+        chosen = await self._named_store(client)
+        if chosen is None:  # pragma: no cover - the store was created, so it is listed
+            raise DependencyUnavailable("OpenFGA store could not be created")
+        return chosen
+
+    @staticmethod
+    async def _named_store(client: OpenFgaClient) -> str | None:
+        """The agreed store: lowest id of those named ``STORE_NAME``, or None if there is none.
+
+        Lowest rather than first, because ``list_stores`` gives no ordering guarantee and two
+        processes disagreeing about which duplicate to use is the whole defect.
+        """
         stores = await client.list_stores()
-        for store in stores.stores or []:
-            if store.name == STORE_NAME:
-                return store.id
-        created = await client.create_store(CreateStoreRequest(name=STORE_NAME))
-        return created.id
+        ids = sorted(s.id for s in (stores.stores or []) if s.name == STORE_NAME)
+        return ids[0] if ids else None
 
     async def _ensure_model(self, client: OpenFgaClient) -> str:
         models = await client.read_authorization_models()
