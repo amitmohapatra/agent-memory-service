@@ -954,7 +954,13 @@ class NativeMemoryIntelligence:
         c_obj = _clean_object(candidate.object or "")
         best: ConsolidationOutcome | None = None
         grey: tuple[CanonicalMemory, float] | None = None
-        dense: list[float] | None = None
+        #: Memories whose lexical similarity puts them in the band where a dense comparison
+        #: decides. They are collected rather than embedded here: each one used to cost its
+        #: own single-text round trip through the encoder's one-caller gate - up to
+        #: ``dedup_candidate_k`` (20) per candidate, and the pipeline walks candidates
+        #: sequentially too - so the most expensive component in the service was being driven
+        #: at batch size one. The port has exposed ``embed_documents`` all along.
+        dense_band: list[CanonicalMemory] = []
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
@@ -1065,9 +1071,17 @@ class NativeMemoryIntelligence:
                 and not self.embedding.fingerprint().startswith("hash-")
                 and sim >= 0.5
             ):
-                if dense is None:
-                    dense = await self.embedding.embed_query(candidate.content)
-                other = await self.embedding.embed_query(mem.content)
+                dense_band.append(mem)
+        # 3. dense similarity, in one pass (only with a real embedding provider; the hash
+        #    stand-in is excluded because it would merge unrelated sentences sharing a few
+        #    tokens). Deferred to here so an early return above - a single-valued slot being
+        #    superseded - never pays for an embedding, and so the whole band is one batch.
+        if dense_band and self.embedding is not None:
+            vectors = await self.embedding.embed_documents(
+                [candidate.content, *(mem.content for mem in dense_band)]
+            )
+            dense, others = vectors[0], vectors[1:]
+            for mem, other in zip(dense_band, others, strict=True):
                 cos = sum(a * b for a, b in zip(dense, other, strict=True))
                 if cos >= self.cfg.dedup_dense_threshold and (
                     numbers(mem.content) == c_numbers and has_negation(mem.content) == c_neg

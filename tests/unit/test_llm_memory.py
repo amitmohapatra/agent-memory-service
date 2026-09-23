@@ -488,3 +488,51 @@ def test_reflect_job_is_registered_only_with_the_flag(make_settings) -> None:
     assert "memory.reflect" not in without_use.handlers
     on = handlers(**enabled, uses=["reflection"])
     assert "memory.reflect" in on.handlers and "periodic.memory_reflect" in on.periodic
+
+
+# --- dedup batching -----------------------------------------------------------------------
+
+
+class _CountingEmbedding:
+    """A real-looking encoder that counts how it is entered, not what it returns."""
+
+    representative = True
+    dimension = 4
+
+    def __init__(self) -> None:
+        self.queries = 0
+        self.batches = 0
+        self.texts = 0
+
+    def fingerprint(self) -> str:
+        # not "hash-", so the dense branch is live
+        return "st-counting-d4"
+
+    async def embed_query(self, text: str) -> list[float]:
+        self.queries += 1
+        return [1.0, 0.0, 0.0, 0.0]
+
+    async def embed_documents(self, texts) -> list[list[float]]:
+        self.batches += 1
+        self.texts += len(texts)
+        return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+
+async def test_the_dense_band_is_embedded_in_one_batch() -> None:
+    """Every memory in the band used to cost its own single-text round trip.
+
+    Up to ``dedup_candidate_k`` (20) of them per candidate, through the encoder's one-caller
+    gate, with the pipeline walking candidates sequentially as well - the most expensive
+    component in the service driven at batch size one. The port has exposed
+    ``embed_documents`` the whole time.
+    """
+    cand, existing = await _pair(EXISTING, NEAR)
+    band = existing * 3
+    embedding = _CountingEmbedding()
+    provider = NativeMemoryIntelligence(MemoryIntelligenceSettings(), embedding=embedding)
+
+    await provider.consolidate(cand, band, CTX)
+
+    assert embedding.queries == 0, "a per-memory embed_query is the defect this replaces"
+    assert embedding.batches == 1, f"entered the encoder {embedding.batches} times, expected 1"
+    assert embedding.texts == 1 + len(band), "the candidate and the whole band go in together"
