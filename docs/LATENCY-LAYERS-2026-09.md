@@ -331,8 +331,32 @@ Beyond that the options are a second runner, an ONNX export of the NLI head (the
 that verification is opt-in and separately rate-limited. Nothing here has measured which, and
 the cross-claim batching should be done first because it is free of that choice.
 
-Deferred like the other `src/` changes: `modules/grounding` is on the ingest and query path
-the 1,986-question run is executing.
+`max_claims` defaults to **40**, so this is not a small multiple: one verified request can
+make up to forty sequential `entail` calls, each acquiring the gate and tokenising
+separately, plus whatever `_scan_unused` adds. Forty small GEMMs where one would do is a
+much better explanation of 42 s than anything measured so far.
+
+**The seam, so this can be executed against a measurement rather than rediscovered.**
+Everything in `_verify_claim` before `scores = await self.nli.entail(...)` is pure - citation
+resolution, `_closest`, the coverage check - and may return an early `ClaimReport` without
+touching a model. Everything after it needs only `scores`, `premises`, `cited` and `notes`,
+and may await the borderline LLM judge. So the split is:
+
+1. `_prepare(claim, evidence)` -> an early `ClaimReport`, or `(premises, cited, notes)`;
+2. one batched call over every surviving claim's pairs;
+3. `_decide(...)` per claim, which alone may await the judge.
+
+The blocker is the port, not the cascade: `entail(premises, hypothesis)` is fixed to a single
+hypothesis, so batching across claims needs a pair-taking method on `NLIProvider`, which
+means changing the contract, the DeBERTa adapter and the `LexicalNLI` stand-in together.
+
+**Not attempted yet, deliberately.** This is hallucination detection, its benefit is
+throughput, and throughput cannot be measured until the load test can run - which needs the
+encoder flip, which needs the run to finish. Doing it blind would mean changing a correctness
+surface with no number to show for it. The safety net is already in place for when it is
+done: `tests/eval/test_grounding_gate.py` pins verdicts against
+`golden/grounding_claims.json` with a lexical stand-in and runs without weights (11 tests
+green as of this writing), so a refactor that moves any verdict fails immediately.
 
 ### The two targets are not measured on the same workload
 
