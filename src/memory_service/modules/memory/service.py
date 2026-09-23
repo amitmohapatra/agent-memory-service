@@ -83,25 +83,12 @@ class MemoryService:
         # been sanitising since an uploaded file did the same thing; this one never was.
         content = sanitise(content)
         observation = Observation(
-            tenant_id=ctx.tenant_id,
+            **ctx.provenance(),
             kind=kind,
             content=content,
             # hashed *after* sanitising, so the same text submitted twice — once with a stray
             # control character, once without — is recognised as the duplicate it is
             content_hash=content_hash(content),
-            workspace_id=ctx.workspace_id,
-            user_id=ctx.user_id,
-            thread_id=ctx.thread_id,
-            session_id=ctx.session_id,
-            turn_id=ctx.turn_id,
-            work_id=ctx.work_id,
-            task_id=ctx.task_id,
-            agent_id=ctx.agent_id,
-            agent_group_id=ctx.agent_group_id,
-            agent_run_id=ctx.agent_run_id,
-            parent_agent_run_id=ctx.parent_agent_run_id,
-            principal_id=ctx.principal_id,
-            trace_id=ctx.trace_id,
             tool_run_id=tool_run_id,
             source_system=source_system,
             source_id=source_id,

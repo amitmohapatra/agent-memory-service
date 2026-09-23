@@ -12,7 +12,7 @@ custom metadata keys that collide with reserved names.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, Self
+from typing import Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -167,6 +167,36 @@ class MemoryExecutionContext(BaseModel):
     @property
     def is_agent(self) -> bool:
         return self.agent_id is not None
+
+    #: Every lineage field a stored row carries. ``principal_id`` is computed rather than
+    #: stored, so this is read with ``getattr`` and not from ``model_fields``.
+    PROVENANCE_FIELDS: ClassVar[tuple[str, ...]] = (
+        "tenant_id",
+        "workspace_id",
+        "user_id",
+        "thread_id",
+        "session_id",
+        "turn_id",
+        "work_id",
+        "task_id",
+        "agent_id",
+        "agent_group_id",
+        "agent_run_id",
+        "parent_agent_run_id",
+        "principal_id",
+        "trace_id",
+    )
+
+    def provenance(self) -> dict[str, Any]:
+        """The lineage a stored row copies off the request, in one place.
+
+        These fourteen were copied out verbatim at three call sites - the conversation,
+        ingestion and memory services - so adding a field to this class meant finding all
+        three. Missing one would have dropped provenance on exactly one ingest path, with no
+        test failing, because each site was individually correct and only their disagreement
+        was the defect. Spread as ``Observation(**ctx.provenance(), ...)``.
+        """
+        return {name: getattr(self, name) for name in self.PROVENANCE_FIELDS}
 
     def child_agent(
         self,
