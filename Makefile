@@ -341,7 +341,28 @@ examples: ## Run the SDK tour against a running server (uv run python examples/s
 	$(PY) python examples/sdk_tour.py
 
 reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebuild)
-	$(PY) python -m memory_service.tools.reindex
+	@# Needs the encoder, so it needs torch or onnxruntime in the *host* environment. Neither
+	@# publishes a macOS x86_64 wheel, so on an Intel Mac this target cannot run and
+	@# `reindex-image` is the one to use. It is left as the default because on Linux, where
+	@# the wheels exist, running it in-process is faster and needs no image.
+	$(PY) python -m memory_service.tools.reindex $(REINDEX_ARGS)
+
+REINDEX_ARGS ?=
+REINDEX_DB ?= $(BENCH_DB_HOST)/memory
+REINDEX_QDRANT ?= $(BENCH_QDRANT_URL)
+
+reindex-image: ## reindex inside the runtime image (the only way on a host without torch wheels)
+	@# The same tool, given the models and a database, in the image that already carries the
+	@# encoder. REINDEX_DB and REINDEX_QDRANT point it at a store; they default to the dev
+	@# stack, and a benchmark database is named the same way the BENCH_DB_* variables are.
+	docker run --rm --user root \
+	  -v "$(CURDIR)":/app -v "$(CURDIR)/models":/models:ro \
+	  --add-host host.docker.internal:host-gateway \
+	  -e PYTHONPATH=/app/src:/app -e VIRTUAL_ENV=/opt/venv \
+	  -e MEMORY__DATABASE__URL="$(REINDEX_DB)" \
+	  -e MEMORY__SEARCH__QDRANT_URL="$(REINDEX_QDRANT)" \
+	  --entrypoint sh memory-service-memory-api \
+	  -c '/opt/venv/bin/python -m memory_service.tools.reindex $(REINDEX_ARGS)'
 
 verify: ## The gate to pass before saying "it works": lint, fresh artifacts, live stack, smoke, both suites
 	./scripts/verify.sh
