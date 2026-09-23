@@ -267,6 +267,16 @@ async def _wire_search(container: Container) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _model_threads(container: Container, dense: Any = None) -> int:
+    """Intra-op threads every in-process model shares.
+
+    ``torch.set_num_threads`` is process-wide, so the last model to load decides it for all of
+    them. One resolved number, given to each, is the only way the setting means anything.
+    """
+    spec = dense or FROZEN_MODELS.dense
+    return container.settings.models.embedding.threads or spec.threads
+
+
 def _wire_models(container: Container) -> None:
     from memory_service.adapters.models.embeddings import HashEmbedding, load_dense
     from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
@@ -279,8 +289,7 @@ def _wire_models(container: Container) -> None:
         dense = stand_in.dense_model or FROZEN_MODELS.dense
         # The thread count is frozen with the model (constants.DenseModel.threads); the
         # environment field is what is left of the served-model tier and is going away.
-        threads = container.settings.models.embedding.threads or dense.threads
-        container.embedding = load_dense(dense, threads=threads)
+        container.embedding = load_dense(dense, threads=_model_threads(container, dense))
     container.sparse = Bm25SparseEncoder()
 
     reranker: Any = None
@@ -340,7 +349,14 @@ def _wire_nli(container: Container) -> None:
     nli: Any = LexicalNLI()
     if stand_in != "lexical":
         try:
-            nli = TransformersNLI(FROZEN_MODELS.nli)
+            # torch.set_num_threads is process-wide and the NLI head loads *after* the
+            # encoder, so whatever it sets is what the encoder ends up running with. Left to
+            # its own frozen default it silently reset the count the encoder had just chosen,
+            # which made MEMORY__MODELS__EMBEDDING__THREADS inert in every process that loads
+            # both - that is, every API and worker process - over the component that is 61%
+            # of query p99. Both models are given the same number on purpose: two models that
+            # each fan over every core are worse than two that each take a share.
+            nli = TransformersNLI(FROZEN_MODELS.nli, threads=_model_threads(container))
         except DependencyUnavailable as exc:
             log.warning("nli.unavailable", error=exc.message, fallback="lexical")
     container.nli = nli

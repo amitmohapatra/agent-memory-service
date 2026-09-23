@@ -157,7 +157,14 @@ class SearchSettings(BaseModel):
 
 class EmbeddingSettings(BaseModel):
     """The encoder itself is ``constants.FROZEN_MODELS.dense``; the only thing a deployment
-    says about it is how many torch threads it may use (unset: torch's own default)."""
+    says about it is how many intra-op threads the in-process models may use.
+
+    Unset means the count frozen with the encoder, not torch's own default - both this
+    docstring and ``.env.example`` used to say otherwise. ``torch.set_num_threads`` is
+    process-wide, so the encoder and the NLI head share whatever this resolves to; giving
+    them separate numbers only meant the one that loaded last won, which is how this field
+    came to have no effect at all on the encoder it names.
+    """
 
     threads: int | None = Field(default=None, ge=1)
 
