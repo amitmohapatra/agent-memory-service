@@ -246,8 +246,11 @@ reading. So:
 2. flip `DenseModel.runtime` to `onnx` - **one line**, because `DEFAULT_GRAPH_FILE` is
    already `onnx/model.onnx`, so no `graph_file` is needed and the collection fingerprint
    becomes `onnx-granite-embedding-small-english-r2-model-d384`;
-3. update `tests/unit/test_settings.py`, which pins the frozen dense model's shape - it is
-   the only test coupled to the default (the fingerprint tests all build their own specs);
+3. no test change is needed. `tests/unit/test_settings.py` pins `backend == "torch"`, which
+   is the *sentence-transformers* backend and is untouched by `runtime`; the fingerprint
+   tests all construct their own specs. Nothing in the suite pins `runtime`, so the flip is
+   one line and zero test edits. (`backend` becomes vestigial once `runtime` is `onnx` - the
+   ONNX runner never reads it - which the constant's own comment already says.)
 4. `make reindex` - vectors are identical, so results must not move; that is the regression test;
 5. re-run LoCoMo for the latency column, and the HTTP load test for rps;
 6. only then consider a runner pool, and only if 20 rps is still short.
