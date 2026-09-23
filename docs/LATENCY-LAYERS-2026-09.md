@@ -84,6 +84,37 @@ of k runners with `intra_op_num_threads = cores/k`, which multiplies throughput 
 preserving the invariant the class exists for (total model threads never exceeds cores). That
 is a measurement to take after the flip, not before.
 
+## Layer 2c - the CPU budget is sized for a box this is not running on
+
+`deploy/Dockerfile` pins `WEB_CONCURRENCY=3` with `OMP_NUM_THREADS=2` and
+`MKL_NUM_THREADS=2`, and says why: three API workers with two math threads each is 6 of 8
+vCPU, leaving two for the event loops. That is correct arithmetic for the target VM.
+
+It is not the box any measurement has been taken on. Docker here has **4 CPUs**, so the same
+image asks for 6 math threads on 4 cores - 150% subscribed before counting three event
+loops, and before Postgres, Qdrant and the gateway, which on this laptop share those same
+four cores.
+
+The subtlety worth writing down: **`SerialRunner` bounds one caller per *process*, not per
+box.** With three workers there are three independent gates, so three encodes can be inside
+three copies of the model at once, each with two threads. The invariant the class enforces -
+"two encodes are never inside the model at once" - is true per worker and false for the
+machine. On 8 vCPU that is the intended design. On 4 it is the thrash the class exists to
+prevent, arrived at from the other direction.
+
+This is very likely a real part of why the load run collapsed to 0.66 rps with CPU pinned at
+382% of 400%, independently of the encoder's own ceiling: a saturated box with more runnable
+threads than cores spends its time in the scheduler.
+
+**Not changed here, deliberately.** The fix is a coupled choice - workers x threads has to
+fit the cores actually present - and it spans the image's `ENV`, `_workers_default`, and
+`DenseModel.threads`, which is a frozen constant precisely so deployments cannot drift. Two
+of the three are read before Python starts, so it wants a small entrypoint that derives both
+from `nproc` and still obeys an explicit `WEB_CONCURRENCY`. That is a deployment change whose
+benefit is a throughput number, and no throughput number can be taken until the encoder flip
+lands - so it would be built blind and unverified. It is the next thing to decide after the
+flip, and on a 4-core box the candidate is 2 workers x 2 threads, or 4 x 1.
+
 ## Layer 3 - network. Already optimal; no action.
 
 - Qdrant is addressed over **gRPC** (`prefer_grpc=True`), not HTTP+JSON, so vectors go over
