@@ -75,7 +75,12 @@ async def rescore(
             # The record says which ruler and which judge produced its verdict: a rescored
             # file used to carry the new verdicts under the old file's labels, so a row could
             # not be told apart from the run it came from.
-            rec["judged"] = {**judged, **verdict}
+            #
+            # A row whose original judge failed keeps its produced answer precisely so it can
+            # be repaired here, so the failure that row is carrying is now stale: leaving it
+            # in place would mark a row that has a real verdict as a judge failure.
+            repaired = {k: v for k, v in judged.items() if k not in ("error", "detail")}
+            rec["judged"] = {**repaired, **verdict}
             rec["judge_ruler"] = ruler
             rec["judge_model"] = llm.model_for("grounding_judge")
             hit = judged_hit(rec["category"], rec["judged"])

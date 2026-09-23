@@ -459,18 +459,31 @@ async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "stric
     """
     from memory_service.ports.models import LLMMessage
 
-    return await llm.structured(
-        [
-            LLMMessage(role="system", content=JUDGE_RULERS[ruler]),
-            LLMMessage(
-                role="user",
-                content=f"QUESTION: {question}\nGOLD: {gold or '(unanswerable)'}\nANSWER: {got}",
-            ),
-        ],
-        schema=JUDGE_SCHEMA,
-        max_tokens=16384,
-        use="grounding_judge",
-    )
+    messages = [
+        LLMMessage(role="system", content=JUDGE_RULERS[ruler]),
+        LLMMessage(
+            role="user",
+            content=f"QUESTION: {question}\nGOLD: {gold or '(unanswerable)'}\nANSWER: {got}",
+        ),
+    ]
+    # A reasoning model sometimes spends the whole budget thinking and emits nothing, even on
+    # a prompt this small: 19 of 233 answerable rows in v6, every one of them a row whose
+    # answer had already been retrieved and generated, and every one scored wrong for it. The
+    # loop is stochastic, so asking again clears it. The retry belongs here because a judged
+    # run sets max_retries=0 on the gateway, and because only an empty completion is worth
+    # repeating - a 429 is the pacer's to handle, and anything else is a real failure.
+    last: Exception | None = None
+    for attempt in range(3):
+        try:
+            return await llm.structured(
+                messages, schema=JUDGE_SCHEMA, max_tokens=16384, use="grounding_judge"
+            )
+        except Exception as exc:  # noqa: BLE001 - re-raised below unless it is the empty one
+            if "no content" not in str(exc):
+                raise
+            last = exc
+            await asyncio.sleep(0.5 * (attempt + 1))
+    raise last if last else RuntimeError("unreachable")
 
 
 async def run(
@@ -577,10 +590,8 @@ async def run(
                 bucket["n"] += 1
                 # `evidence.status` lives on the bundle, not on a raw retrieval result —
                 # reading it off the wrong object scored abstention 0.0 by construction.
-                status = str(getattr(getattr(bundle, "evidence", None), "status", "") or "")
-                if hasattr(status, "value"):  # pragma: no cover - enum or str
-                    status = status.value
-                status = str(status).upper()
+                # `str(...)` above already resolved the enum, so the value is a string here
+                status = str(getattr(getattr(bundle, "evidence", None), "status", "") or "").upper()
 
                 rendered = bundle.render() or ""
                 found = _content_tokens(rendered)
@@ -602,6 +613,7 @@ async def run(
 
                 judged: dict | None = None
                 if llm is not None:
+                    produced: str | None = None
                     try:
                         await pacer.wait()
                         produced = await _answer(
@@ -617,6 +629,13 @@ async def run(
                             "error": f"{type(exc).__name__}: {str(exc)[:160]}",
                             "detail": detail,
                         }
+                        # The row still scores WRONG - a judged run may not fall back to the
+                        # heuristic - but the answer cost a retrieval and a generation, and
+                        # throwing it away made the failure permanent: locomo_rescore rebuilds
+                        # a verdict from `produced`, so without it the only repair is re-running
+                        # the whole question. Keeping it turns a lost row into one judge call.
+                        if produced is not None:
+                            judged["produced"] = produced[:400]
                         if "429" in detail or "429" in str(exc):
                             print(
                                 f"[locomo] rate limited; slowing to "
