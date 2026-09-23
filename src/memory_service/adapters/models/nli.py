@@ -35,6 +35,12 @@ class LexicalNLI:
     async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
         return [self.score(p, hypothesis) for p in premises]
 
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        """Nothing to batch: this is arithmetic on token sets, with no model to enter."""
+        return [[self.score(p, h) for p in premises] for premises, h in groups]
+
     @staticmethod
     def score(premise: str, hypothesis: str) -> NLIScore:
         if not content_tokens(hypothesis):
@@ -103,14 +109,23 @@ class TransformersNLI:
         )
 
     def _score(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
+        return self._score_pairs([(p, hypothesis) for p in premises])
+
+    def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
+        """Every (premise, hypothesis) pair, batched by the spec's batch size.
+
+        The pairs need not share a hypothesis. Padding is per batch, so mixing claims costs
+        only what the longest row in each batch costs, and one answer's premises are of
+        similar length.
+        """
         out: list[NLIScore] = []
         size = max(1, self.spec.batch_size)
         with self._torch.no_grad():
-            for start in range(0, len(premises), size):
-                batch = list(premises[start : start + size])
+            for start in range(0, len(pairs), size):
+                batch = list(pairs[start : start + size])
                 encoded = self._tokenizer(
-                    batch,
-                    [hypothesis] * len(batch),
+                    [premise for premise, _ in batch],
+                    [hypothesis for _, hypothesis in batch],
                     truncation=True,
                     max_length=self.spec.max_length,
                     padding=True,
@@ -126,6 +141,21 @@ class TransformersNLI:
         if not premises:
             return []
         return await self._runner.run(self._score, list(premises), hypothesis)
+
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        """One gate acquisition and one batched pass for every claim, then regrouped."""
+        pairs = [(premise, hypothesis) for premises, hypothesis in groups for premise in premises]
+        if not pairs:
+            return [[] for _ in groups]
+        flat = await self._runner.run(self._score_pairs, pairs)
+        scores: list[list[NLIScore]] = []
+        cut = 0
+        for premises, _ in groups:
+            scores.append(flat[cut : cut + len(premises)])
+            cut += len(premises)
+        return scores
 
     def close(self) -> None:
         self._runner.close()

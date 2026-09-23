@@ -99,6 +99,19 @@ class NLIProvider(Protocol):
 
     async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]: ...
 
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        """Several claims at once: one result list per group, index-aligned with ``groups``.
+
+        ``entail`` takes a single hypothesis, so a caller with N claims paid N entries into
+        the model - N acquisitions of the one-caller gate, N tokenizer calls and N forward
+        passes of a handful of rows each - where the same work is one pass over all of them.
+        With ``max_claims`` defaulting to 40 that is not a small multiple, and the verified
+        context endpoint is the slowest thing the service can be asked to do.
+        """
+        ...
+
     def fingerprint(self) -> str: ...
 
 

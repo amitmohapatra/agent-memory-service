@@ -265,13 +265,40 @@ class GroundingCascade:
             span("grounding.verify", claims=len(claims), evidence=len(evidence)),
             stage_seconds.labels("grounding.verify").time(),
         ):
+            # Everything before the model is pure, so it is done for every claim first and
+            # the claims that still need scoring enter the model together. That is one
+            # acquisition of the one-caller gate and one batched pass instead of up to
+            # ``max_claims`` (40) of each, which is what made the verified endpoint the
+            # slowest thing the service can be asked to do.
+            prepared = [self._premises_for(claim, evidence) for claim in claims]
+            pending = [
+                (index, decided)
+                for index, decided in enumerate(prepared)
+                if not isinstance(decided, ClaimReport)
+            ]
+            scored = (
+                await self.nli.entail_groups(
+                    [
+                        ([e.text for e in premises], claims[i].text)
+                        for i, (premises, _, _) in pending
+                    ]
+                )
+                if pending
+                else []
+            )
+            settled: list[ClaimReport | None] = [
+                decided if isinstance(decided, ClaimReport) else None for decided in prepared
+            ]
+            for (index, (premises, cited, notes)), scores in zip(pending, scored, strict=True):
+                settled[index] = await self._decide(claims[index], premises, cited, notes, scores)
+
             reports: list[ClaimReport] = []
             judged = 0
-            for claim in claims:
-                report = await self._verify_claim(claim, evidence)
-                if report.method == "judge":
+            for claim, decided in zip(claims, settled, strict=True):
+                assert decided is not None  # every claim is settled above
+                if decided.method == "judge":
                     judged += 1
-                report = await self._scan_unused(claim, report, unused)
+                report = await self._scan_unused(claim, decided, unused)
                 grounding_claims_total.labels(report.verdict).inc()
                 reports.append(report)
         counts = {v: sum(1 for r in reports if r.verdict == v) for v in _VERDICTS}
@@ -300,7 +327,16 @@ class GroundingCascade:
         )
 
     # ---------------------------------------------------------------- per claim
-    async def _verify_claim(self, claim: Claim, evidence: Sequence[Evidence]) -> ClaimReport:
+    def _premises_for(
+        self, claim: Claim, evidence: Sequence[Evidence]
+    ) -> ClaimReport | tuple[list[Evidence], bool, list[str]]:
+        """Everything decided before a model is consulted, for one claim.
+
+        Pure: citation resolution, the coverage check and ``_closest`` read only what was
+        passed in. That is what lets every claim be prepared first and the survivors scored
+        together. Returns a finished report when the claim never needs the model, or the
+        premises to score with the flags the verdict will need.
+        """
         notes: list[str] = []
         premises: list[Evidence] = []
         for cite in claim.citations:
@@ -339,7 +375,17 @@ class GroundingCascade:
                 citations=list(claim.citations),
                 notes=[*notes, "no evidence shares a content term with the claim"],
             )
-        scores = await self.nli.entail([e.text for e in premises], claim.text)
+        return premises, cited, notes
+
+    async def _decide(
+        self,
+        claim: Claim,
+        premises: list[Evidence],
+        cited: bool,
+        notes: list[str],
+        scores: list[NLIScore],
+    ) -> ClaimReport:
+        """The verdict for one claim, given its scores. The only await is the judge."""
         # On equal support, cite the primary source. A graph fact derived from a chunk renders
         # as the same sentence and ties with it, but only the chunk carries a document, page and
         # offsets the reader can check, so it is the more useful citation.
