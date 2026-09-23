@@ -8,12 +8,12 @@ work offline.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from memory_service.adapters.models._runner import SerialRunner
 from memory_service.adapters.parsers.builtin import BuiltinParser
 from memory_service.config.constants import DOCLING_ARTIFACTS_DIR, local_model_path
 from memory_service.domain.documents import DocumentVersion
@@ -63,6 +63,14 @@ class DoclingParser:
     def __init__(self) -> None:
         self._builtin = BuiltinParser()
         self._converter = None
+        #: Docling's layout and table models are the heaviest thing the service loads, and
+        #: they fan their work over every core. ``asyncio.to_thread`` hands them to the event
+        #: loop's default executor - ``min(32, cpu_count + 4)``, eight threads on a four-core
+        #: box - so eight documents could be inside those models at once, each competing with
+        #: the others and with the encoder for the same cores. That is the oversubscription
+        #: ``SerialRunner`` exists to prevent; it was applied to the encoder and the NLI head
+        #: and never here, on the most expensive model of the three.
+        self._runner = SerialRunner("docling")
 
     def _get_converter(self):  # type: ignore[no-untyped-def]
         """Build the converter against *local* weights.
@@ -125,7 +133,7 @@ class DoclingParser:
                 media_type=media_type,
                 data=data,
             )
-        blocks, title, page_count = await asyncio.to_thread(
+        blocks, title, page_count = await self._runner.run(
             self._convert, filename, media_type, data
         )
         version = DocumentVersion(

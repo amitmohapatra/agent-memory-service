@@ -40,7 +40,9 @@
         "serves",
         "would_have_value"
       ],
-      "query_failures": [],
+      "query_failures": [
+        "What was ACME's total revenue in FY26?"
+      ],
       "relations": 127
     },
     "globex": {
@@ -93,14 +95,16 @@
   },
   "expected_facts": 49,
   "fact_recall": 1.0,
-  "failures": [],
+  "failures": [
+    "acme: What was ACME's total revenue in FY26?"
+  ],
   "false_facts": 0,
   "gate": "knowledge_graph",
   "golden_set": "kg_facts_fy26",
   "noise_entities": 0,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "81ee60eff2ccfc24de604e375baf709a4d2ee409",
+    "git_commit": "a8e3789f217fd0a8518d5e72a94b0bb4c4cb0c3f",
     "llm": {
       "enabled": false,
       "provider": "disabled"
@@ -180,8 +184,8 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-22T17:43:51.056413+00:00"
+    "timestamp": "2026-09-23T06:57:39.231209+00:00"
   },
   "provider": "native",
-  "query_hit_rate": 1.0
+  "query_hit_rate": 0.875
 }
