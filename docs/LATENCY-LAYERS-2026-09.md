@@ -203,11 +203,23 @@ it was never going to beat.
 The flip needs a reindex, and a reindex rewrites the collections the 1,986-question run is
 reading. So:
 
+0. **Fix the bootstrap first - the flip breaks `docker compose up` without it.** The hub
+   publishes no ONNX graph for `granite-embedding-small-english-r2`, so the graph has to be
+   exported from the checkpoint. But in `tools/download_models.py` the `--dir` branch that
+   compose runs and the `--export-onnx` branch are mutually exclusive: the bootstrap
+   downloads the weights and never exports the graph. Flip `runtime` today and a fresh
+   deployment raises `DependencyUnavailable: the ONNX encoder needs .../onnx/model.onnx`.
+   The bootstrap must export the dense model's graph when the frozen runtime is `onnx`.
+   This is the difference between "one package started by plain docker compose" and not.
 1. let the full run finish (it is the accuracy baseline, on today's encoder);
-2. flip `DenseModel.runtime` to `onnx`, `graph_file` to `onnx/model.onnx`;
-3. `make reindex` - vectors are identical, so results must not move; that is the regression test;
-4. re-run LoCoMo for the latency column, and the HTTP load test for rps;
-5. only then consider a runner pool, and only if 20 rps is still short.
+2. flip `DenseModel.runtime` to `onnx` - **one line**, because `DEFAULT_GRAPH_FILE` is
+   already `onnx/model.onnx`, so no `graph_file` is needed and the collection fingerprint
+   becomes `onnx-granite-embedding-small-english-r2-model-d384`;
+3. update `tests/unit/test_settings.py`, which pins the frozen dense model's shape - it is
+   the only test coupled to the default (the fingerprint tests all build their own specs);
+4. `make reindex` - vectors are identical, so results must not move; that is the regression test;
+5. re-run LoCoMo for the latency column, and the HTTP load test for rps;
+6. only then consider a runner pool, and only if 20 rps is still short.
 
 ## Layer 7 - code shape. One real duplication; the hot path is clean.
 
