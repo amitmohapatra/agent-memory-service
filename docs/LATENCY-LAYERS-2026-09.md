@@ -159,6 +159,34 @@ hosting Postgres, Qdrant and the gateway, and the records still above 300 ms in 
 projection have an encode p50 of 286 ms - four to seven times the model's own cost, which a
 fixed-size matrix multiply cannot produce on its own.
 
+## The depth caveat, which cuts both ways
+
+Every latency figure above was taken at `BENCH_DEPTH=judged`, which is **twice the shipping
+depth**:
+
+| knob | shipped (`constants`) | benchmark (`benchmark/env.py`) |
+|---|---|---|
+| `final_k` | 50 | 100 |
+| `prefetch_k` / `fused_k` | 100 | 200 |
+| `memories_max` | 50 | 100 |
+| `token_budget` | 8000 | 12000 |
+
+A deployment on the shipped defaults therefore fetches half the candidates, fuses half as
+many, and renders half the memories. Some of the measured p99 is depth a deployment would
+not buy.
+
+The trap is to report that as free speed. **The accuracy numbers come from the same runs, at
+the same doubled depth** - the depth is doubled precisely because it scores better. So the
+honest statement is that latency and accuracy are two readings of one dial, and a target on
+one is meaningless without naming the depth it was measured at.
+
+Which means the gate has to be: pick the depth that is going to ship, then measure *both*
+p99 and LoCoMo at that depth. Quoting a p99 from shipped depth beside an accuracy from
+judged depth would be the most flattering pair of numbers available and would describe no
+system that exists. Nothing here has yet measured accuracy at shipped depth; until it has,
+the 300 ms target should be read against the judged-depth figures, which are the pessimistic
+ones.
+
 ## The caveat that governs all of this
 
 **The LoCoMo harness is strictly sequential.** There is no `gather`, no `TaskGroup`, no
