@@ -23,6 +23,30 @@ from memory_service.observability.tracing import configure_tracing
 log = get_logger(__name__)
 
 
+async def _warm_encoders(container: Container) -> None:
+    """Pay the first inference at startup rather than inside someone's request.
+
+    The first encode through an ONNX session or a torch module is not like the ones after
+    it: the runtime allocates its arenas and selects kernels on that call. On the
+    development box the encoder's slowest single encode is 481 ms against a 98 ms median,
+    and a load generator ramps the moment the port opens - so without this the cost lands
+    inside the p99 the load test exists to measure, and is read as service latency.
+
+    Failure here is logged and ignored on purpose. A model that cannot warm is a model that
+    cannot serve, and refusing to start would replace a degraded service that readiness can
+    report on with no service at all.
+    """
+    indexer = container.services.get("indexer")
+    for attribute in ("embedding", "sparse"):
+        encoder = getattr(indexer, attribute, None)
+        if encoder is None or not hasattr(encoder, "embed_query"):
+            continue
+        try:
+            await encoder.embed_query("warm")
+        except Exception as exc:  # startup must survive a cold model
+            log.warning("app.warmup_failed", encoder=attribute, error=str(exc))
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -39,6 +63,7 @@ def create_app(
         app.state.container = container or await build_container(
             settings, __version__, overrides=overrides
         )
+        await _warm_encoders(app.state.container)
         log.info("app.started", version=__version__, environment=settings.service.environment)
         try:
             yield

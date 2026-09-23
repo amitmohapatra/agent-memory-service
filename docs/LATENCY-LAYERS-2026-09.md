@@ -104,6 +104,31 @@ exceeds 300 ms in this stage. The fix is a warm-up query at startup, not an inde
 and `docs/STORAGE-AUDIT-2026-09.md` already established HNSW is inactive at this corpus size
 (`index.type: plain`), so there is no graph to warm, only page cache.
 
+## Layer 4b - the cold start, now paid at startup
+
+Nothing warmed the models. The first encode through an ONNX session or a torch module
+allocates the runtime's arenas and picks its kernels, so it costs several times what the
+ones after it cost - the encoder's slowest single encode is 481 ms against a 98 ms median -
+and a load generator ramps the instant the port opens. Without a warm-up that difference
+lands inside the p99 the load test exists to measure and is read as service latency.
+
+`api/app.py` now warms both encoders in the lifespan, before the port accepts anything, and
+logs-and-continues if a model will not load: readiness is what reports a model that cannot
+serve, and refusing to boot would replace a degraded service with no service at all.
+
+Qdrant's cold page cache - the single 2320 ms outlier in layer 4 - is *not* warmed, because
+a warm-up query needs a tenant and a scope that do not exist at startup. Left alone
+deliberately rather than overlooked.
+
+## Layer 4c - the query embedding is not cached (open, unquantified)
+
+`Indexer` keeps an embedding cache keyed by content hash, but `engine.py:485` calls
+`embedding.embed_query` directly and bypasses it, so an identical query re-encodes every
+time. Whether that is worth fixing depends entirely on the repeat rate of real traffic,
+which nothing here has measured: LoCoMo asks each question once, so the benchmark would show
+no benefit, and a cache would make an unsalted load test report a speed the service does not
+have. Recorded as an option with its precondition, not proposed.
+
 ## Layer 5 - authz. Fixed this session; confirmed by measurement.
 
 `scope` p50 fell from 36.0 ms (v5) to 8.6 ms (v6) after the MEMBERSHIP revision fix. The
