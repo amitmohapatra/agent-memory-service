@@ -108,9 +108,41 @@ async def rebuild_search_index(
     return report
 
 
+async def prune_retired_collections(container: Container, *, dry_run: bool = True) -> list[str]:
+    """Collections whose fingerprint no longer matches the models this build loads.
+
+    A collection's name carries the embedding and sparse fingerprints (indexer.collection),
+    so changing a model does not migrate anything: it creates a new collection beside the
+    old one, and the old one keeps its points for a vector space nothing will ever query
+    again. Nothing removed them - eighteen had accumulated on the development store.
+
+    Defaults to reporting. Dropping vectors is not something a tool should do because it
+    was run.
+    """
+    indexer = container.services["indexer"]
+    live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES)}
+    retired = sorted(set(await container.search.list_collections()) - live)
+    if not dry_run:
+        for name in retired:
+            await container.search.drop_collection(name)
+    log.info(
+        "reindex.retired_collections",
+        retired=retired,
+        live=sorted(live),
+        dropped=not dry_run,
+    )
+    return retired
+
+
 async def _main(args: argparse.Namespace) -> int:
     container = await build_container(Settings(), __version__)
     try:
+        if args.prune or args.prune_dry_run:
+            retired = await prune_retired_collections(container, dry_run=args.prune_dry_run)
+            verb = "would drop" if args.prune_dry_run else "dropped"
+            sys.stdout.write(f"{verb} {len(retired)} retired collection(s): {retired}\n")
+            if args.prune_dry_run:
+                return 0
         report = await rebuild_search_index(container, tenant_id=args.tenant, drop=args.drop)
     finally:
         await container.close()
@@ -122,6 +154,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Rebuild the search index from PostgreSQL")
     parser.add_argument("--tenant", default=None)
     parser.add_argument("--drop", action="store_true", help="delete collections first")
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="drop collections whose fingerprint no longer matches the models this build loads",
+    )
+    parser.add_argument(
+        "--prune-dry-run",
+        action="store_true",
+        help="report those collections and exit, changing nothing",
+    )
     return asyncio.run(_main(parser.parse_args()))
 
 

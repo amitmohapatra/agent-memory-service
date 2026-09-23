@@ -161,6 +161,17 @@ class SearchStore(Protocol):
 
     async def count(self, collection: str, flt: SearchFilter) -> int: ...
 
+    async def list_collections(self) -> list[str]:
+        """Every collection this deployment owns, unprefixed.
+
+        A collection's name carries the embedding and sparse fingerprints, so changing a
+        model does not migrate the old one - it creates a new one beside it and leaves the
+        previous generation holding points nothing will ever read. Measured on the dev
+        store: eighteen such collections. Something has to be able to see them to remove
+        them.
+        """
+        ...
+
     async def drop_collection(self, collection: str) -> bool:
         """Delete a whole collection (index loss / rebuild). Returns True if it existed."""
         ...

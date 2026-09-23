@@ -464,6 +464,16 @@ class QdrantSearchStore:
         await self._client.delete_collection(name)
         return True
 
+    async def list_collections(self) -> list[str]:
+        prefix = f"{SEARCH.collection_prefix}_"
+        try:
+            listing = await self._client.get_collections()
+        except Exception as exc:
+            raise DependencyUnavailable(
+                f"qdrant get_collections failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        return [c.name[len(prefix) :] for c in listing.collections if c.name.startswith(prefix)]
+
     async def ping(self) -> bool:
         try:
             await self._client.get_collections()
