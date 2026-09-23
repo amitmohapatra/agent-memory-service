@@ -146,3 +146,46 @@ reading. So:
 3. `make reindex` - vectors are identical, so results must not move; that is the regression test;
 4. re-run LoCoMo for the latency column, and the HTTP load test for rps;
 5. only then consider a runner pool, and only if 20 rps is still short.
+
+## Layer 7 - code shape. One real duplication; the hot path is clean.
+
+Checked rather than assumed, because "no duplicate code" and "right data structure" are easy
+to assert and easy to get wrong in both directions.
+
+**Complexity on the query path is already right.** `rrf_fuse` is three dicts and one sort -
+O(N log N), which is the floor for a ranked fusion. The membership tests inside loops across
+`modules/` resolve to dicts or sets in every case that runs per query (`existing_ids` is a
+set, `by_id` is a dict); the one genuine O(n*m) substring scan, `graph/service.py:199`, is
+gated behind `assist.wants("entity_resolution")` and bounded by `LLM_MAX_QUERY_NAMES`. The
+measured graph stage is 0.0 ms at p50 and 1.5 ms at p99, which agrees. Nothing to change.
+
+**A 7-line-window duplicate scan over 168 files** returns 94 cross-file repeats, and almost
+all of them are adapters restating a port's signature - `blob/{filesystem,gcs,memory}.py`
+against `ports/blob.py`, the two graph stores against `ports/intelligence.py`. That is the
+hexagonal shape working, not duplication, and collapsing it would be the bug.
+
+One is real. The same **fourteen** execution-context fields are copied verbatim onto an
+`Observation` at three sites:
+
+| site | fields copied |
+|---|---|
+| `modules/conversation/service.py` | 14/14 |
+| `modules/ingestion/service.py` | 14/14 |
+| `modules/memory/service.py` | 14/14 |
+
+(`conversation/service.py` does it twice; the second is an `AgentRun` with a different
+subset, so it is a near-miss rather than the same block.)
+
+The cost is not the fifty-odd lines. It is that adding a field to `MemoryExecutionContext`
+and to the observation row now requires finding three call sites, and missing one drops
+provenance silently on exactly one ingest path - with no test that would fail, because each
+site is individually correct. The fix is for the domain object to own the stamping, e.g.
+`Observation.for_context(ctx, kind=..., content=..., ...)` reading the provenance from one
+place, which is also the Single Responsibility reading: three services should not each know
+the shape of an observation's provenance.
+
+**Deferred on purpose.** These three modules are the ingest path the 1,986-question run is
+executing right now. A running interpreter holds its imported modules, so editing them on
+disk cannot affect it - but a module it has not yet imported would be read in its new form
+mid-run, and a three-hour accuracy baseline is not worth that. Applied after the run, with
+the existing ingest tests as the check.
