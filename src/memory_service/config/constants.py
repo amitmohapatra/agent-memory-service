@@ -59,7 +59,7 @@ class DenseModel(BaseModel):
     #: because sentence-transformers' own ONNX backend reaches the graph through
     #: ``optimum.onnxruntime``, and ``optimum-onnx`` pins ``optimum~=2.1``, which cannot be
     #: installed beside sentence-transformers 6. Switching this is also ``make reindex``.
-    runtime: Literal["torch", "onnx"] = "torch"
+    runtime: Literal["torch", "onnx"] = "onnx"
     #: sentence-transformers backend (``runtime="torch"`` only)
     backend: Literal["torch", "onnx", "openvino"] = "torch"
     #: A specific ONNX graph under the model directory (``onnx/model_qint8.onnx`` vs

@@ -1,5 +1,15 @@
 # The accuracy that is left is not in retrieval
 
+> **Confirmed at 1,986 questions (2026-09-23).** The analysis below was written from v6's 304.
+> The full run reproduces it at 6.5x the scale: of 277 misses that had **all** the
+> evidence retrieved, 115 abstained anyway, 94 have a multi-item gold answer, and
+> 68 are wrong instances. Evidence recall over the whole set is **0.989**. The share of
+> misses holding their own evidence is **277/304 = 91%**.
+>
+> Abstention on *answerable* questions has also drifted upward run over run - 6.01% (v5),
+> 7.01% (v6), 9.70% (full) - which is the dial described below moving without anyone naming
+> it. At full scale that is 115 rows abstaining with the evidence in hand.
+
 From `benchmark/results/locomo_judged_v6.json`, over the 214 answerable rows the judge
 actually graded (the other 19 are the judge-failure defect fixed in 42c7f2d).
 
