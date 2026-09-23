@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -268,13 +268,25 @@ class Settings(BaseSettings):
     models: ModelSettings = ModelSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 
+    #: Environments that are *deployed*, and so may not run the laptop defaults. ``test`` is
+    #: absent on purpose: the suite and the benchmarks run under it with ``trusted_dev`` and a
+    #: filesystem blob store, which is what they are for. ``staging`` used not to be here, so a
+    #: deployment set to it started with header-trust authentication and the single API key
+    #: whose value is the default in this file and is printed in ``.env.example`` - anyone who
+    #: could reach the port and had read the repository could authenticate as any tenant by
+    #: setting three headers. ``.env.example`` told the operator that staging refused exactly
+    #: that, so the misconfiguration was invisible: the service started clean and readiness
+    #: went green.
+    DEPLOYED_ENVIRONMENTS: ClassVar[frozenset[str]] = frozenset({"staging", "prod"})
+
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:
-        if self.service.environment == "prod":
+        if self.service.environment in self.DEPLOYED_ENVIRONMENTS:
+            where = self.service.environment
             if self.authentication.mode == "trusted_dev":
-                raise ValueError("authentication.mode=trusted_dev is not allowed in prod")
+                raise ValueError(f"authentication.mode=trusted_dev is not allowed in {where}")
             if self.blob.provider == "filesystem":
-                raise ValueError("blob.provider must be gcs in prod")
+                raise ValueError(f"blob.provider must be gcs in {where}")
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")
         if self.models.llm.enabled and not self.models.llm.uses:
