@@ -217,6 +217,7 @@ def run_locust(
     api_key: str,
     csv_prefix: Path,
     arm: str = "cold",
+    docs: str = "text",
 ) -> int:
     argv = [
         sys.executable,
@@ -237,7 +238,12 @@ def run_locust(
         str(csv_prefix),
         "--only-summary",
     ]
-    env = {**os.environ, "MEMORY_API_KEY": api_key, "MEMORY_LOAD_ARM": arm}
+    env = {
+        **os.environ,
+        "MEMORY_API_KEY": api_key,
+        "MEMORY_LOAD_ARM": arm,
+        "MEMORY_LOAD_DOCS": docs,
+    }
     return subprocess.call(argv, env=env)  # noqa: S603 - fixed argv
 
 
@@ -253,6 +259,18 @@ def main() -> int:
         choices=("cold", "warm"),
         default="cold",
         help="cold salts every query so the bundle cache misses; warm repeats a small set",
+    )
+    parser.add_argument(
+        "--docs",
+        choices=("text", "pdf"),
+        default="text",
+        help=(
+            "what the upload task sends. text is markdown, handled by the builtin parser; "
+            "pdf is a real 39 KB release and is the only way to reach docling, the most "
+            "expensive model the service loads. Defaults to text, which is what every "
+            "capacity number before this one measured - so those numbers describe traffic "
+            "with no documents in it"
+        ),
     )
     parser.add_argument(
         "--sample",
@@ -274,6 +292,7 @@ def main() -> int:
                 args.api_key,
                 prefix,
                 args.arm,
+                args.docs,
             )
         elapsed = time.perf_counter() - started
         stats_path = prefix.with_name("load_stats.csv")
@@ -290,6 +309,7 @@ def main() -> int:
         exit_status=status,
     )
     payload["arm"] = args.arm
+    payload["docs"] = args.docs
     payload["target_rps"] = args.users
     payload["resources"] = sampler.report(
         requests=payload["total_requests"],

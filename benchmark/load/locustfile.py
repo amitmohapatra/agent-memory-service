@@ -30,6 +30,7 @@ import json
 import os
 import random
 import uuid
+from pathlib import Path
 
 from locust import HttpUser, constant_throughput, task
 
@@ -51,6 +52,17 @@ FACTS = [
     "Revenue was EUR 412 million in FY26.",
 ]
 DOC = b"# Load test note\n\nRevenue was EUR 412 million in FY26. Adjusted EBITDA rose 8%.\n"
+
+#: Which document the upload task sends. ``text`` is markdown, which the builtin parser
+#: handles; ``pdf`` is a real 39 KB Federal Reserve release, which is the only way to reach
+#: docling's layout and table models - the most expensive thing the service loads.
+#:
+#: It defaults to ``text`` so this run stays comparable with every capacity number taken
+#: before it. That default is also why those numbers describe traffic without documents in
+#: it: markdown never enters docling, so no measurement so far has priced the heavy path.
+DOCS = os.environ.get("MEMORY_LOAD_DOCS", "text").strip().lower()
+PDF_PATH = Path(__file__).resolve().parents[2] / "tests/fixtures/fed_beige_book_2024_01.pdf"
+PDF = PDF_PATH.read_bytes() if DOCS == "pdf" and PDF_PATH.is_file() else b""
 
 
 def _query() -> str:
@@ -136,13 +148,25 @@ class MemoryUser(HttpUser):
 
     @task(1)
     def upload(self) -> None:
-        salt = f"\n<!-- {uuid.uuid4().hex} -->\n".encode()
+        """One document per call, salted so content-hash dedup cannot skip the parse.
+
+        A repeated upload is recognised as the duplicate it is and never reaches the parser,
+        which would make this task measure the idempotency check rather than ingestion. The
+        markdown salt is an HTML comment; the PDF salt is a ``%`` comment line after the
+        trailer, which readers ignore.
+        """
+        if PDF:
+            body = PDF + b"\n%" + uuid.uuid4().hex.encode() + b"\n"
+            payload = ("note.pdf", body, "application/pdf")
+        else:
+            body = DOC + f"\n<!-- {uuid.uuid4().hex} -->\n".encode()
+            payload = ("note.md", body, "text/markdown")
         self.client.post(
             "/v1/files",
             headers=self.headers,
-            files={"file": ("note.md", DOC + salt, "text/markdown")},
+            files={"file": payload},
             data={"scope": json.dumps(self.scope), "title": "load note"},
-            name="POST /v1/files",
+            name=f"POST /v1/files ({'pdf' if PDF else 'text'})",
         )
 
     @task(1)
