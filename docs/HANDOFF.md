@@ -1,5 +1,39 @@
 # Handoff: where the memory-service programme stands
 
+> **Updated 2026-09-23 afternoon at `c866390`.** What changed since the morning entry below,
+> in the order it matters:
+>
+> - **The judged benchmark never had the settings it documents.** `_settings` used
+>   `model_dump(exclude_unset=True)` to find env-set values; on a pydantic-settings object
+>   that returns *everything*, so the benchmark's own config was overwritten wholesale.
+>   Measured: `max_tokens` 16384 -> **1024**, `timeout` 120 -> 30, `max_retries` 0 -> **2**,
+>   plus `environment` and `log_level`. The 1024 is the root cause of v6's 19 "output budget
+>   exhausted" judge failures - the 16384 the code passes never arrived. Fixed; every judged
+>   result before this carries the wrong ceiling and three wire requests per logical call.
+> - **The encoder is 61% of query p99** and ONNX fp32 is 2.5-2.8x faster with **bit-identical
+>   vectors** (cosine 1.00000, two independent runs). int8 is *slower* here and the only
+>   variant whose vectors move - no AVX-512 VNNI on this CPU. See
+>   [LATENCY-LAYERS-2026-09.md](LATENCY-LAYERS-2026-09.md).
+> - **The gate arithmetic in that doc was corrected**: three worker processes are three
+>   `SerialRunner`s, so the aggregate ceiling is ~46/s on torch, not 9/s. The gate was never
+>   what blocked 20 rps; CPU is. The flip is still the largest lever, for a different reason.
+> - **An audit found 50 confirmed findings** (13 high), each verified by an agent told to
+>   refute it: [AUDIT-2026-09-23.md](AUDIT-2026-09-23.md). Six are fixed - two authorization
+>   holes (body-supplied `group_ids` became read keys; `GET /v1/jobs/{id}` leaked across
+>   tenants), the dedup encoder batch, the encoder thread setting that had no effect, the
+>   OpenFGA store race, and the staging guard. One is **disputed and must not be "fixed" the
+>   obvious way** - see the note on the internal-message finding.
+> - **The load test never reached docling**, so every capacity number so far describes traffic
+>   with no documents in it. `--docs pdf` now exercises it.
+> - **`make reindex` cannot run on this host** (no macOS x86_64 torch wheels); `reindex-image`
+>   is the one to use. And the encoder flip needs **no reindex and no test edits** - the
+>   LoCoMo harness resets and re-ingests on every run.
+>
+> Targets remain **unmet and unmeasured on the target hardware**: the only real throughput
+> number is still 0.66 rps on a 4-core box, and p99 is 668 ms measured / 381 ms projected
+> under ONNX. Nothing here changes the table below until the VM run exists.
+
+
 Written 2026-09-23 00:20 IST at commit `cb60bc8`, updated 00:45 at `7836657` so that whoever continues — a person or an
 agent, after a model change or a fresh session — can pick up without the conversation
 history. The plan of record is [ROADMAP-2026-09.md](ROADMAP-2026-09.md), the ranked list of
