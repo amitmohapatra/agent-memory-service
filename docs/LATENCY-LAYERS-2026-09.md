@@ -263,3 +263,60 @@ executing right now. A running interpreter holds its imported modules, so editin
 disk cannot affect it - but a module it has not yet imported would be read in its new form
 mid-run, and a three-hour accuracy baseline is not worth that. Applied after the run, with
 the existing ingest tests as the check.
+
+## Layer 2b - what concurrency actually did, measured
+
+Layer 2 argued from arithmetic that a one-permit gate at 111 ms caps the service near 9
+encodes a second. `benchmark/results/load_4core_10rps_cold.json` is that argument happening.
+Ten users, 10 rps offered, 4 cores, 180 seconds:
+
+| endpoint | p50 under load | the same work, sequential (v6) |
+|---|---|---|
+| `POST /v1/context` | **17,000 ms** | 172 ms |
+| `POST /v1/recall` | 14,000 ms | - |
+| `POST /v1/context` (verified) | **42,000 ms**, max 96,410 | - |
+| `POST /v1/messages` (ingest) | 1,700 ms | - |
+| `POST /v1/files` (docling) | 3,500 ms | - |
+
+Achieved 0.66 rps against 10 offered, 12% failures, CPU 382% of 400%.
+
+Three things in that table are worth more than the headline.
+
+**Retrieval is the thing that collapses, not ingest.** The intuition that writes are expensive
+and reads are cheap is exactly backwards under concurrency: ingest is the *fastest* endpoint
+here at 1.7 s, while the read path is 10x slower. Ingest does its expensive work once per
+message; the read path queues behind a gate that every read must pass.
+
+**A hundredfold degradation is queueing, not cost.** 172 ms to 17,000 ms is not the service
+doing more work per request - it is each request waiting for the ones in front. Thirteen of
+the fourteen task weights need an encode, so 10 rps offered demands ~9.3 encodes a second
+against a ~9-10/s ceiling. That is utilisation ~0.95, and every queue goes to infinity as
+utilisation approaches one. The measurement and the arithmetic agree.
+
+**`core_seconds_per_request` is 5.88.** Taken at face value, 20 rps would need ~118 cores.
+That number is real but it is a *saturated* number: it is CPU-seconds divided by the few
+requests that escaped, so it prices the queue, not the work. It should not be quoted as the
+cost of a request, and the capacity question has to be re-asked below saturation.
+
+### What this means for 20 rps
+
+With the ONNX encoder at ~35-40 ms the gate's ceiling moves to ~25-28/s. Twenty rps then
+demands ~19 encodes/s against that, utilisation ~0.7, where a queue is finite and small
+(order tens of milliseconds rather than tens of seconds). So the encoder flip is not an
+optimisation for throughput, it is the precondition for it.
+
+**But verification is a second, independent bottleneck.** `POST /v1/context (verified)` sits
+at 42 s p50 and 96 s max. It is the only task that enters the NLI model - DeBERTa-v3-base,
+its own `SerialRunner`, a far larger model than the encoder - and at weight 1 of 14 it is 7%
+of traffic, which at 20 rps is ~1.4 verifications a second against a gate that can serve
+roughly one. Fixing the encoder alone leaves this saturated. It needs its own decision:
+a second runner, an ONNX export of the NLI head, a smaller model, or an explicit statement
+that verification is opt-in and separately rate-limited. Nothing here has measured which.
+
+### The two targets are not measured on the same workload
+
+Worth stating plainly, because it is easy to quote them together and be wrong: p99 < 300 ms
+is measured on LoCoMo, which is **retrieval only and strictly sequential**. 20 rps is measured
+on a load mix that is 36% ingest, 7% file upload through docling, and 7% NLI verification.
+They are different systems under different conditions. A capacity statement has to name its
+mix, and a latency statement has to name its concurrency, or neither means anything.
