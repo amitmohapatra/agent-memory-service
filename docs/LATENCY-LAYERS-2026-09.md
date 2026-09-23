@@ -1,8 +1,8 @@
 # Where the latency and the throughput actually go
 
 Measured, not argued. Every number below came from `benchmark/results/locomo_judged_v6.json`
-(304 questions, per-stage timings) or from an interleaved A/B of the three encoder runtimes
-run inside the runtime image on one pinned CPU. Where a number is a projection it says so.
+(304 questions, per-stage timings) or from `--measure-onnx`, run inside the runtime image on
+one pinned CPU. Where a number is a projection it says so.
 
 The two targets are p99 < 300 ms and 20 rps on the laptop.
 
@@ -29,8 +29,10 @@ short query through `granite-embedding-small-english-r2` on two torch threads. T
 defect, it is arithmetic: ~28.3M non-embedding parameters x ~12 tokens x 2 FLOPs is ~0.7
 GFLOP, which is tens of milliseconds of fp32 CPU.
 
-The three runtimes, same queries, rotated one-at-a-time so contention is shared equally,
-one pinned CPU, one thread each:
+The three runtimes, one pinned CPU, one thread each. **MEASUREMENTS section 7 established
+this first**, on the same day and with the same conclusion; this is an independent
+reproduction on a differently-loaded box, which is the only thing a second run of a
+contention-sensitive measurement is good for:
 
 | runtime | p50 | p90 | p99 | speedup | cosine vs torch |
 |---|---|---|---|---|---|
@@ -41,7 +43,8 @@ one pinned CPU, one thread each:
 Two things fall out of this table.
 
 **ONNX fp32 is free.** The vectors are bit-identical to torch - cosine 1.00000 at both mean
-and minimum, across 40 real LoCoMo questions - for 2.8x the speed. The reindex the runtime
+and minimum, across 40 real LoCoMo questions, matching section 7's 1.000000 over its own
+fifty fixed texts - for 2.8x the speed. The reindex the runtime
 flip forces (the fingerprint is in the collection name, by design) cannot change a single
 retrieval result, because it cannot change a single vector. This is the rare optimisation
 with no accuracy risk to trade off.
@@ -50,8 +53,14 @@ with no accuracy risk to trade off.
 here, not faster, and it is the only variant that moves the vectors. The cause is the
 hardware: this CPU has no AVX-512 VNNI, so the int8 GEMM is emulated and the dequantise
 overhead is not repaid. `docs/FREEZE-multilingual.md` already chose fp32 as the shipping
-default on an argument; this is the measurement that backs it. Revisit only on a VM whose
-CPU reports VNNI.
+default on an argument, and section 7 measured 0.966638 worst-case cosine for int8 over its
+fifty texts against my 0.98842 over forty queries - the same verdict from two different
+corpora. Revisit only on a VM whose CPU reports VNNI.
+
+The measuring tool is `python -m memory_service.tools.download_models --measure-onnx DIR`.
+It now rotates the runners one query at a time instead of timing each to completion, because
+timing them in sequence compares three different machines on a shared box - the discarded
+1.7x-slow reading in section 7 is exactly that failure.
 
 ## Layer 2 - concurrency. Why 20 rps is impossible today.
 

@@ -464,19 +464,32 @@ def measure_onnx(directory: Path, out: Path, *, threads: int, warmups: int = 5) 
             threads=threads,
         )
 
-    async def time_one(runner: Any) -> list[float]:
-        for query in QUERIES[:warmups]:
-            await runner.embed_query(query)
-        timings: list[float] = []
+    async def time_all() -> dict[str, list[float]]:
+        """Rotate the runners one query at a time, rather than timing each to completion.
+
+        Timing them in sequence compares three different machines whenever anything else is
+        on the box, because each runner meets whatever else was happening during its own
+        stretch. That is not hypothetical here: the first reading of this command was taken
+        while the unit suite held the same cores and came back 1.7x slower, which is recorded
+        in MEASUREMENTS section 7 as a discarded run. Rotating cannot remove contention, but
+        it spreads it evenly across the runners, so the ratios - the only figures that travel
+        off this box - survive a noisy one.
+        """
+        for runner in runners.values():
+            for query in QUERIES[:warmups]:
+                await runner.embed_query(query)
+        timings: dict[str, list[float]] = {label: [] for label in runners}
         for query in QUERIES:
-            start = time.perf_counter()
-            await runner.embed_query(query)
-            timings.append((time.perf_counter() - start) * 1000.0)
+            for label, runner in runners.items():
+                start = time.perf_counter()
+                await runner.embed_query(query)
+                timings[label].append((time.perf_counter() - start) * 1000.0)
         return timings
 
+    measured = asyncio.run(time_all())
     results: dict[str, Any] = {}
     for label, runner in runners.items():
-        timings = asyncio.run(time_one(runner))
+        timings = measured[label]
         results[label] = {
             **_percentiles(timings),
             "encodes": len(timings),
