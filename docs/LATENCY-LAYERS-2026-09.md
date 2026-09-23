@@ -309,9 +309,30 @@ optimisation for throughput, it is the precondition for it.
 at 42 s p50 and 96 s max. It is the only task that enters the NLI model - DeBERTa-v3-base,
 its own `SerialRunner`, a far larger model than the encoder - and at weight 1 of 14 it is 7%
 of traffic, which at 20 rps is ~1.4 verifications a second against a gate that can serve
-roughly one. Fixing the encoder alone leaves this saturated. It needs its own decision:
-a second runner, an ONNX export of the NLI head, a smaller model, or an explicit statement
-that verification is opt-in and separately rate-limited. Nothing here has measured which.
+roughly one. Fixing the encoder alone leaves this saturated.
+
+There is one concrete inefficiency inside it, found by reading rather than measuring.
+`modules/grounding/cascade.py:270` verifies claims strictly sequentially -
+`for claim in claims: await self._verify_claim(claim, evidence)` - and each claim makes its
+own `nli.entail(premises, claim)` call. `entail` takes a single hypothesis, so it batches the
+five premises *for that claim* and no further. An answer of N claims therefore pays N
+acquisitions of the NLI gate and N forward passes of five pairs, where the same work is one
+forward pass of 5N pairs: the adapter already pads and batches (`nli.py:_score`), so the
+shape it needs is already there, and the padding waste is small because premises for one
+answer are of similar length. `_scan_unused` can add a second `entail` per claim on top.
+
+Batching across claims cuts the gate acquisitions to one and lets a single GEMM do the work
+of N, which matters more under load than it does sequentially - it is service time, and
+service time is what sets the queue. It does not on its own explain 42 s; that is saturation.
+It reduces the service time that caused the saturation.
+
+Beyond that the options are a second runner, an ONNX export of the NLI head (the encoder's
+2.8x says the runtime is worth something here too), a smaller model, or an explicit statement
+that verification is opt-in and separately rate-limited. Nothing here has measured which, and
+the cross-claim batching should be done first because it is free of that choice.
+
+Deferred like the other `src/` changes: `modules/grounding` is on the ingest and query path
+the 1,986-question run is executing.
 
 ### The two targets are not measured on the same workload
 
