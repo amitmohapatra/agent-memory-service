@@ -273,6 +273,16 @@ class OutboxRepository(Protocol):
     ) -> list[OutboxEntry]: ...
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...
     async def mark_failed(self, outbox_id: int, *, error: str, dead: bool) -> None: ...
+    async def purge_dispatched(self, *, older_than_seconds: int) -> int:
+        """Delete rows whose job was handed to the queue. Returns how many went.
+
+        A dispatched row is a receipt, not state: the job is the queue's problem from that
+        moment on. Nothing deleted them, so the table grew with every write forever - 734
+        rows for 788 ingested turns on the benchmark tenant, beside a queue that had
+        accumulated 20,800 succeeded jobs of its own. Rows that failed and were marked dead
+        are kept: those are the ones somebody has to look at.
+        """
+        ...
 
 
 @runtime_checkable

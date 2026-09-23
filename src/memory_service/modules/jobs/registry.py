@@ -170,6 +170,20 @@ def register_handlers(container: Container) -> None:
         if n:
             log.info("idempotency.purged", count=n)
 
+    async def outbox_purge(payload: dict[str, Any]) -> None:
+        """Delete outbox rows whose job the queue already owns.
+
+        The outbox exists so that a business write and the job it schedules commit or fail
+        together. Once the relay has handed the job over, the row is a receipt - and
+        nothing deleted them, so the table grew with every write forever. Rows marked dead
+        are kept: those are the ones somebody has to look at.
+        """
+        async with uow_factory() as uow:
+            n = await uow.outbox.purge_dispatched(older_than_seconds=TASKS.outbox_retention_seconds)
+            await uow.commit()
+        if n:
+            log.info("outbox.purged", count=n)
+
     async def reconcile(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -207,6 +221,9 @@ def register_handlers(container: Container) -> None:
     )
     queue.register_periodic(
         "periodic.idempotency_purge", Queue.RECONCILE, idempotency_purge, cron="43 * * * *"
+    )
+    queue.register_periodic(
+        "periodic.outbox_purge", Queue.RECONCILE, outbox_purge, cron="53 * * * *"
     )
     queue.register_periodic(
         "periodic.memory_expire", Queue.RECONCILE, memory_expire, cron="29 * * * *"

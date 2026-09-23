@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import (
@@ -817,6 +818,17 @@ class SqlOutboxRepository:
             .where(OutboxRow.outbox_id == outbox_id)
             .values(dispatched_at=func.now(), job_id=job_id, attempts=OutboxRow.attempts + 1)
         )
+
+    async def purge_dispatched(self, *, older_than_seconds: int) -> int:
+        cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
+        result = await self.s.execute(
+            delete(OutboxRow).where(
+                OutboxRow.dispatched_at.is_not(None),
+                OutboxRow.dispatched_at < cutoff,
+                OutboxRow.dead.is_(False),
+            )
+        )
+        return int(cast("CursorResult[Any]", result).rowcount or 0)
 
     async def mark_failed(self, outbox_id: int, *, error: str, dead: bool) -> None:
         await self.s.execute(

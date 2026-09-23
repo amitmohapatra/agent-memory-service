@@ -251,6 +251,11 @@ class TaskTuning:
     periodic_reconcile_seconds: int = 300
     #: a job whose worker stopped heartbeating for this long is re-queued
     stalled_after_seconds: float = 120
+    #: How long a dispatched outbox row is kept. It is a receipt once the queue owns the
+    #: job, but keeping it briefly makes a relay crash debuggable; rows marked dead are
+    #: never purged. Measured before this existed: 734 rows for 788 ingested turns, growing
+    #: with every write forever.
+    outbox_retention_seconds: int = 24 * 3600
 
 
 TASKS = TaskTuning()

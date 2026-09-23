@@ -47,14 +47,33 @@ def _sql() -> str:
     return str(stmt.compile(dialect=postgresql.dialect()))
 
 
-def test_the_hop_orders_by_more_than_confidence() -> None:
-    # Every MENTIONS edge is written at the same capped confidence, so ORDER BY confidence
-    # alone left the LIMIT to return whichever tied rows the scan reached first.
-    order = _sql().split("ORDER BY", 1)[1]
+def test_the_hop_deduplicates_triples_before_the_limit_not_after() -> None:
+    """The limit must land on distinct triples, or the busiest entity spends it all.
+
+    A triple is written once per memory that states it, and every MENTIONS edge carries
+    the same capped confidence, so the tie-break falls to the neighbour's mention count
+    and one talkative entity's duplicates fill the limit. Measured on the benchmark
+    corpus: 600 rows collapsed to 72 distinct triples against 125 reachable, with one
+    triple holding 178 of the 600 slots. Deduplicating in Python afterwards cannot get
+    those slots back.
+    """
+    sql = _sql()
+    inner, outer = sql.split("ORDER BY")[1], sql.rsplit("ORDER BY", 1)[1]
+    assert "DISTINCT ON" in sql
+    # PostgreSQL requires the DISTINCT ON columns to lead the ordering that picks the
+    # surviving row, and the rest of that ordering is what makes the choice deterministic
+    assert inner.index("graph_relations.subject_id") < inner.index("graph_relations.confidence")
+    assert "neighbour_mentions" in inner
+    # ...and the limit applies to the outer ordering, which is the ranking the caller wants
+    assert outer.index("confidence DESC") < outer.index("neighbour_mentions DESC")
+    assert outer.index("observed_at DESC") < outer.index("relation_id")
+    assert "LIMIT" in outer and "DISTINCT ON" not in outer
+
+
+def test_the_surviving_row_of_a_triple_is_the_most_confident_one() -> None:
+    order = _sql().split("DISTINCT ON")[1].split("ORDER BY", 1)[1]
     assert "graph_relations.confidence DESC" in order
-    assert "mention_count" in order and "graph_relations.observed_at DESC" in order
-    assert order.index("graph_relations.relation_id") > order.index("mention_count")
-    assert "LIMIT" in order
+    assert "neighbour_mentions" in order and "graph_relations.observed_at DESC" in order
 
 
 def test_the_hop_reads_the_neighbour_end_for_its_mention_count() -> None:

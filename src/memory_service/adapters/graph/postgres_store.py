@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import Select, Text, case, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import aliased
 
 from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
 from memory_service.domain.evidence import EvidenceRef
@@ -135,15 +136,48 @@ def neighborhood_query(
     ]
     if layers:
         conds.append(GraphRelationRow.layer.in_(list(layers)))
-    return (
-        select(GraphRelationRow)
+    # Deduplicate in SQL, before the limit - not in Python after it. A triple is written
+    # once per memory that states it, and every 'mentions' edge carries the same capped
+    # confidence, so the tie-break falls to the neighbour's mention_count and the busiest
+    # entity's duplicates fill the limit: measured on the benchmark corpus, 600 rows
+    # collapsed to 72 distinct triples against 125 reachable, one triple alone holding 178
+    # of the 600 slots. The limit was truncating exactly the diverse tail it protects.
+    #
+    # Two orderings, and they are different on purpose. The inner one picks WHICH row
+    # survives for each triple (the most confident, then the most-mentioned neighbour, then
+    # the most recent) and must start with the DISTINCT ON columns because PostgreSQL
+    # requires it. The outer one decides WHICH TRIPLES the limit keeps, by the same ranking
+    # the caller expects - so the limit takes the best triples rather than the
+    # alphabetically first ones.
+    ranked = func.coalesce(GraphEntityRow.mention_count, 0).label("neighbour_mentions")
+    inner = (
+        select(GraphRelationRow, ranked)
         .outerjoin(GraphEntityRow, GraphEntityRow.entity_id == neighbour)
         .where(*conds)
+        .distinct(
+            GraphRelationRow.subject_id,
+            GraphRelationRow.predicate,
+            GraphRelationRow.object_id,
+        )
         .order_by(
+            GraphRelationRow.subject_id,
+            GraphRelationRow.predicate,
+            GraphRelationRow.object_id,
             GraphRelationRow.confidence.desc(),
-            func.coalesce(GraphEntityRow.mention_count, 0).desc(),
+            ranked.desc(),
             GraphRelationRow.observed_at.desc(),
             GraphRelationRow.relation_id,
+        )
+        .subquery()
+    )
+    distinct_row = aliased(GraphRelationRow, inner)
+    return (
+        select(distinct_row)
+        .order_by(
+            inner.c.confidence.desc(),
+            inner.c.neighbour_mentions.desc(),
+            inner.c.observed_at.desc(),
+            inner.c.relation_id,
         )
         .limit(limit)
     )
@@ -152,12 +186,13 @@ def neighborhood_query(
 def first_of_each_triple(
     rows: Iterable[GraphRelationRow], seen: set[tuple[str, str, str]]
 ) -> Iterator[GraphRelationRow]:
-    """The rows whose (subject, predicate, object) has not been seen yet.
+    """The rows whose (subject, predicate, object) has not been seen yet, ACROSS hops.
 
-    A triple is written once per memory that states it, so an entity named in twenty turns
-    spends twenty of the neighbourhood's slots - and twelve of the bundle's fact lines -
-    saying one thing. ``seen`` carries across hops, and the row kept is the first in the
-    query's order, which is the most confident and most recent of them.
+    Each hop's query now deduplicates its own triples in SQL, before its limit, so this is
+    no longer what stops one talkative entity filling a page of results. What it still does
+    is carry ``seen`` between hops: hop two can legitimately reach a triple hop one already
+    returned, and a limit applied per hop cannot know that. The row kept is the first in
+    the query's order, which is the most confident and most recent of them.
     """
     for r in rows:
         triple = (r.subject_id, r.predicate, r.object_id)

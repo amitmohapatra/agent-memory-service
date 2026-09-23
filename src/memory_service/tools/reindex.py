@@ -59,9 +59,21 @@ async def rebuild_search_index(
     indexer = container.services["indexer"]
     report = ReindexReport()
     if drop:
+        # A collection is shared by every tenant, and the rebuild below is filtered by
+        # tenant - so dropping the collection while rebuilding one tenant destroys every
+        # other tenant's vectors and then declares success. The two flags together were a
+        # documented instruction; now a tenant-scoped drop removes only that tenant's
+        # points, and only a whole-store rebuild may drop a collection.
+        from memory_service.ports.search import SearchFilter
+
         for base in (KNOWLEDGE, MEMORIES):
             name = indexer.collection(base)
-            if await container.search.drop_collection(name):
+            if tenant_id:
+                removed = await container.search.delete_by_filter(
+                    name, SearchFilter(tenant_id=tenant_id)
+                )
+                report.dropped.append(f"{name} (tenant {tenant_id}: {removed} points)")
+            elif await container.search.drop_collection(name):
                 report.dropped.append(name)
     await indexer.ensure_collections()
     async with container.database.session_factory() as session:

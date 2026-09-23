@@ -27,6 +27,7 @@ from qdrant_client.http.exceptions import ResponseHandlingException
 from memory_service.config.constants import SEARCH
 from memory_service.config.settings import SearchSettings
 from memory_service.domain.errors import DependencyUnavailable
+from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import REGISTRY, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
@@ -39,6 +40,8 @@ from memory_service.ports.search import (
     SearchRecord,
     SparseVector,
 )
+
+log = get_logger(__name__)
 
 DENSE = "dense"
 SPARSE = "bm25"
@@ -203,13 +206,41 @@ class QdrantSearchStore:
                     # that left it absent is a failure.
                     if not await self._client.collection_exists(name):
                         raise
-            if not self._local:  # local mode has no payload indexes
+            if not self._local:  # local mode has neither payload indexes nor this setting
                 await self._ensure_payload_indexes(name)
+                await self._reconcile_payload_storage(name, spec)
         except Exception as exc:
             raise DependencyUnavailable(
                 f"qdrant ensure_collection failed: {type(exc).__name__}: {exc}"
             ) from exc
         self._known.add(name)
+
+    async def _reconcile_payload_storage(self, name: str, spec: CollectionSpec) -> None:
+        """Keep an existing collection's payload storage in agreement with the spec.
+
+        ``on_disk_payload`` was only ever passed to ``create_collection``, so a collection
+        that already existed kept whatever it was born with: the memories collection was
+        running with its payload on disk while the code had been asking for it in memory,
+        which is a page-cache read per returned hit at depth 100 - precisely the case a
+        remote Qdrant under memory pressure makes expensive. Changing it does not need a
+        reindex; the collection is updated in place.
+        """
+        wanted = spec.on_disk_payload and SEARCH.on_disk_payload
+        try:
+            info = await self._client.get_collection(name)
+            if bool(info.config.params.on_disk_payload) == wanted:
+                return
+            await self._client.update_collection(
+                collection_name=name,
+                collection_params=models.CollectionParamsDiff(on_disk_payload=wanted),
+            )
+        except Exception as exc:  # a collection that works is worth more than this setting
+            log.warning(
+                "qdrant.payload_storage_not_reconciled",
+                collection=name,
+                wanted_on_disk=wanted,
+                error_message=f"{type(exc).__name__}: {exc}",
+            )
 
     async def _ensure_payload_indexes(self, name: str) -> None:
         """Every field a filter touches, indexed - on a collection just created and on one

@@ -331,8 +331,12 @@ class Indexer:
                             "kind": "memory",
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
                             "memory_type": m.memory_type.value,
-                            "lifetime": m.lifetime.value,
-                            "temporal_status": m.temporal.status.value,
+                            # lifetime, temporal_status, representation and thread_id are
+                            # not written: no reader reads them and the payload projection
+                            # (ports.search.PAYLOAD_FIELDS) would not return them if one
+                            # did. They were roughly a tenth of every point's payload,
+                            # which is resident memory as soon as the memories collection
+                            # keeps its payload in RAM. `current` stays: it is a filter.
                             "current": True,
                             "subject": m.subject,
                             "predicate": m.predicate,
@@ -340,15 +344,12 @@ class Indexer:
                             "owner_principal": m.owner_principal,
                             "contributors": list(m.system_metadata.get("contributors", [])),
                             "contradicts": list(m.temporal.contradicts),
-                            "importance": m.importance,
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
-                            "thread_id": m.scope.thread_id,
                             "text": m.content[:2000],
                             # so identical memories group in the store's payload rather than
                             # being rehashed on every retrieval (see engine._dedup)
                             "text_hash": content_hash(m.content),
-                            "representation": "MEMORY",
                         },
                     )
                     for i, m in enumerate(live)
