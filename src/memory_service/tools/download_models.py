@@ -434,6 +434,36 @@ def _agreement(directory: Path, graphs: tuple[str, ...]) -> dict[str, float]:
     return out
 
 
+def ensure_dense_graph(root: Path, dense: Any = None) -> int:
+    """Export the dense encoder's ONNX graph when the frozen runtime is the one that needs it.
+
+    The hub publishes no ONNX graph for granite-embedding-small-english-r2, so the graph the
+    ONNX runner loads is exported from the checkpoint by ``--export-onnx``. That used to be a
+    separate command nothing called: the ``--dir`` bootstrap that docker-compose runs
+    downloaded the weights and returned, so flipping ``DenseModel.runtime`` to ``onnx`` would
+    have left a fresh ``docker compose up`` raising ``DependencyUnavailable`` on a file
+    nothing ever wrote. That is the difference between one package that starts by plain
+    docker compose and one that does not.
+
+    A graph that is already there is left alone, so the bootstrap stays idempotent and a
+    cached deployment does not pay the export twice. Nothing happens at all while the frozen
+    runtime is ``torch``, which is what makes this safe to land before the flip.
+    """
+    from memory_service.adapters.models.embeddings import DEFAULT_GRAPH_FILE
+    from memory_service.config.constants import FROZEN_MODELS
+
+    spec = dense if dense is not None else FROZEN_MODELS.dense
+    if spec.runtime != "onnx":
+        return 0
+    directory = root / spec.local_dir
+    graph = directory / (spec.graph_file or DEFAULT_GRAPH_FILE)
+    if graph.is_file():
+        sys.stdout.write(f"onnx graph: {graph} present\n")
+        return 0
+    sys.stdout.write(f"onnx graph: exporting {graph}\n")
+    return export_onnx(directory)
+
+
 def measure_onnx(directory: Path, out: Path, *, threads: int, warmups: int = 5) -> int:
     """Time one query at a time on each runner and write the artifact.
 
@@ -673,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
         manifest_path(root).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
     sys.stdout.write(f"\nmanifest: {manifest_path(root)}\n")
+    if not failures and (rc := ensure_dense_graph(root)):
+        return rc
     if failures:
         sys.stdout.write(
             "could not fetch: "
