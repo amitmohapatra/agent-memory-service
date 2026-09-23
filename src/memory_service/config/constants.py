@@ -329,10 +329,14 @@ class GraphSettings(BaseModel):
     #: The budget bounds the wait, not the concurrency, and the condition that parks a
     #: traversal - a graph slower than the budget - is exactly the condition that parks the
     #: next one too. Each parked traversal holds a connection out of a pool of
-    #: ``pool_size + max_overflow`` (10 + 10 per worker) that the read path checks out of, so
-    #: an uncapped leak turns a latency problem into pool exhaustion, which is worse than the
-    #: tail the budget exists to cut. Past this many, the aborted statement is the cheaper
-    #: harm.
+    #: ``pool_size + max_overflow`` (8 + 8 per process, see ``DatabaseSettings``) that the
+    #: read path checks out of, so an uncapped leak turns a latency problem into pool
+    #: exhaustion, which is worse than the tail the budget exists to cut. Past this many,
+    #: the aborted statement is the cheaper harm.
+    #:
+    #: This default is therefore **half the pool**, not the two fifths the figure here used
+    #: to imply - it read 10 + 10, which the settings have never been. The two numbers are
+    #: only safe as a pair, so moving either one means re-reading this.
     max_parked_traversals: int = Field(default=8, ge=1)
 
 
