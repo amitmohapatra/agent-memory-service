@@ -93,3 +93,46 @@ def test_a_branch_the_defaults_lack_is_created() -> None:
     target: dict = {}
     _overlay(target, {"models": {"llm": {"model": "env"}}}, ("models", "llm", "model"))
     assert target == {"models": {"llm": {"model": "env"}}}
+
+
+@pytest.fixture
+def shipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same judged run, at shipping retrieval depth.
+
+    ``BENCH_DEPTH`` chooses how deep retrieval goes. It used to choose the JUDGE's output
+    ceiling too, which made the ruler a function of what it was measuring.
+    """
+    for name in [n for n in list(os.environ) if n.startswith("MEMORY__")]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("BENCH_DEPTH", "shipped")
+    for name, value in JUDGED_ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(bench_env, "BENCH", bench_env.BenchEnv.from_environ())
+
+
+def test_the_judge_keeps_its_budget_at_shipping_depth(shipped: None) -> None:
+    """The instrument is not the system under test.
+
+    At ``BENCH_DEPTH=shipped`` the judge fell back to the shipped ceiling of 1024 tokens and
+    a reasoning model spent all of them reasoning, emitting no text: 28 of 304 rows returned
+    ``finish_reason='length'`` with ``reasoning_tokens=1024`` and zero content. Those rows
+    score wrong by construction, so the run read 0.7467 where the same code at judged depth
+    read 0.7993 - and 25 of the 28 had every gold evidence item already in the bundle. A
+    shallower retrieval is a legitimate thing to measure; a blinded judge is not.
+    """
+    llm = _settings().models.llm
+    assert llm.max_tokens == 16384, "the judge's ceiling does not depend on retrieval depth"
+    assert llm.timeout_seconds == 120
+    assert llm.max_retries == 0
+
+
+def test_shipping_depth_still_retrieves_shallower(shipped: None) -> None:
+    """The other half: decoupling the judge must not have flattened the depth itself.
+
+    ``BENCH_DEPTH`` keeps exactly the job it should have had all along - how deep retrieval
+    goes, and nothing about how the answer is graded.
+    """
+    assert bench_env.BENCH.depth == "shipped"
+    retrieval = bench_env.bench_retrieval(bench_env.bench_overrides())
+    assert retrieval.prefetch_k < bench_env.PREFETCH_K
+    assert retrieval.final_k < bench_env.FINAL_K

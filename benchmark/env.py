@@ -153,12 +153,21 @@ def bench_overrides(**changes: Any) -> Overrides:
 
 
 def bench_llm_settings() -> dict[str, Any]:
-    """LLM fields the judged configuration pins: the output ceiling a reasoning model needs,
-    the patience a judged question needs, and retries off (the pacer's rate is then the
-    actual request rate). Applied by ``benchmark.retrieval._settings`` under
-    ``BENCH_DEPTH=judged``; the shipped values apply otherwise."""
-    if BENCH.depth != "judged":
-        return {}
+    """LLM fields every judged run pins: the output ceiling a reasoning model needs, the
+    patience a judged question needs, and retries off (the pacer's rate is then the actual
+    request rate).
+
+    These belong to the JUDGE, which is the instrument, not to the system under test: the
+    only thing that enables an LLM in a benchmark process is ``BENCH_LLM_ENV``, and it pins
+    ``uses=["grounding_judge"]``. Gating them on ``BENCH_DEPTH=judged`` coupled the ruler to
+    what it was measuring. A shipped-depth run fell back to the shipped ceiling of 1024
+    tokens, and a reasoning model spent all 1024 of them reasoning and emitted no text at all
+    (``finish_reason='length'``, ``reasoning_tokens=1024``, zero content). Those rows score
+    WRONG by construction, so the same code read 0.7467 at shipped depth against 0.7993 at
+    judged depth - 28 of 304 rows failed the judge, and 25 of those 28 had every gold
+    evidence item already in the bundle. The depth being measured must not change what the
+    ruler is able to say about it.
+    """
     return {"max_tokens": MAX_TOKENS, "timeout_seconds": TIMEOUT, "max_retries": 0}
 
 
