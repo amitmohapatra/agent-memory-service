@@ -107,6 +107,14 @@ MOST_RELEVANT_MAX = 10
 #: Share of the bundle promoted out of the timeline, and whether the block is repeated at the
 #: end as well as the head.
 #:
+#: BOTH OFF. A share of 0.0 leaves the floor above as the whole rule, which is the ten this
+#: renderer always used. 0.35 was shipped on the paper's argument and then measured: it
+#: costs about 10 per cent more rendered characters - every promoted memory leaves a
+#: pointer line behind, which I had wrongly called token-neutral - and it cannot be shown
+#: to help, because the only instrument available without an answerer is evidence recall,
+#: and that is saturated at 0.9785 across every cell of the ablation. A knob that has a
+#: measured cost and an unmeasurable benefit does not belong on by default.
+#:
 #: Ten was chosen to stay inside the first screen, against a bundle that is a hundred memories
 #: at judged depth - so ninety per cent of the ranked set existed only inside a ~21,000
 #: character chronological list, which is the trough the paper above measures at 53.8 per cent.
@@ -120,7 +128,7 @@ MOST_RELEVANT_MAX = 10
 #: repeated immediately before the end of the prompt, because the paper's own numbers put the
 #: tail at 63.2 per cent against the middle's 53.8 - the best evidence now sits at both peaks
 #: of the U rather than only the first.
-MOST_RELEVANT_SHARE = 0.35
+MOST_RELEVANT_SHARE = 0.0
 #: OFF by default, and an ablation knob rather than a decision.
 #:
 #: Repeating the top few at the tail would put the best evidence at both peaks of the U, and
