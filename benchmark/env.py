@@ -72,6 +72,24 @@ class BenchEnv:
     #: produced that way is labelled ``representative: false``. The default follows the
     #: weights (``default_embedding``): frozen when they are present, the stand-in when not.
     embedding: Literal["frozen", "hash"] = field(default_factory=default_embedding)
+    #: ``openfga``: the real ReBAC service at ``MEMORY__AUTHORIZATION__*``. ``memory``: the
+    #: in-process model.
+    #:
+    #: The in-process model is not a small simplification. Every judged score in this
+    #: repository was produced without OpenFGA in the path, which is why the scope-cache
+    #: invalidation defect - content writes throwing the authorized scope away 730 times over
+    #: 369 ingested turns, and each miss costing five sequential ListObjects - survived every
+    #: benchmark and only appeared in the first HTTP load test, as 503s.
+    authorization: Literal["openfga", "memory"] = "memory"
+    #: ``dragonfly``: the real cache at ``MEMORY__CACHE__URL``. ``memory``: a dict.
+    #:
+    #: A dict never evicts, never fails and never races, so bundle-cache correctness under a
+    #: real cache has never been measured by a harness either.
+    cache: Literal["dragonfly", "memory"] = "memory"
+    #: ``deberta``: the frozen NLI head. ``lexical``: the deterministic stand-in whose reports
+    #: are labelled ``representative: false``. The head costs ~700 MB per process, which is
+    #: why it is not the default here.
+    nli: Literal["deberta", "lexical"] = "lexical"
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -80,12 +98,18 @@ class BenchEnv:
             "graph_enrichment": _flag("BENCH_GRAPH_ENRICHMENT", cls.graph_enrichment),
             "depth": _flag("BENCH_DEPTH", cls.depth),
             "embedding": _flag("BENCH_EMBEDDING", default_embedding()),
+            "authorization": _flag("BENCH_AUTHZ", cls.authorization),
+            "cache": _flag("BENCH_CACHE", cls.cache),
+            "nli": _flag("BENCH_NLI", cls.nli),
         }
         allowed = {
             "search": ("qdrant", "memory"),
             "graph_enrichment": ("native", "disabled"),
             "depth": ("shipped", "judged"),
             "embedding": ("frozen", "hash"),
+            "authorization": ("openfga", "memory"),
+            "cache": ("dragonfly", "memory"),
+            "nli": ("deberta", "lexical"),
         }
         for name, value in values.items():
             if value not in allowed[name]:
@@ -106,11 +130,11 @@ class BenchEnv:
         are already non-representative.
         """
         base = Overrides(
-            cache="memory",
+            cache="memory" if self.cache == "memory" else None,
             tasks="memory",
-            authorization="memory",
+            authorization="memory" if self.authorization == "memory" else None,
             blob="memory",
-            nli="lexical",
+            nli="lexical" if self.nli == "lexical" else None,
             search="memory" if self.search == "memory" else None,
             graph_enrichment="disabled" if self.graph_enrichment == "disabled" else None,
             embedding="hash" if self.embedding == "hash" else None,
