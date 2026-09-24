@@ -344,10 +344,14 @@ ANSWER_SYSTEM = (
     # Abstention, narrowed. 115 of 304 graded misses declined with the evidence present.
     # The instruction to check the premise was being read as licence to decline whenever
     # the context was not a verbatim match.
-    "Reply with exactly 'I don't know' ONLY when the context truly does not record the "
-    "thing asked about, or attributes it to a different person. Being partial, indirect or "
-    "worded differently is NOT a reason to decline: if the entries support an answer, give "
-    "it. If the context ends with an Evidence status of INCOMPLETE, "
+    "Check the question's premise first, and answer the premise before the detail. If the "
+    "context NEVER MENTIONS the person, thing or event the question is about - not merely "
+    "in less detail, but not at all - or attributes it to someone else, reply with exactly: "
+    "I don't know. Many questions are about things that never happened, and saying so is the "
+    "correct answer to them, not a failure to find one. "
+    "That test is about ABSENCE, never about detail: once the context does record the thing, "
+    "partial, indirect or differently worded entries are NOT a reason to decline - answer "
+    "from what is there. If the context ends with an Evidence status of INCOMPLETE, "
     "re-check that premise against the named person, then still answer whenever the entries "
     "support an answer. Never use outside knowledge. "
     # Brevity last and explicitly subordinate. It used to be the final instruction and read
