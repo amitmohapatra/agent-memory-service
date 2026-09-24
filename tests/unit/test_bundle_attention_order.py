@@ -38,9 +38,9 @@ def test_the_block_can_be_a_share_of_the_bundle(monkeypatch: pytest.MonkeyPatch)
     """The mechanism, when a share is set: at judged depth ten was a tenth of the bundle."""
     import memory_service.domain.context_bundle as cb
 
-    monkeypatch.setattr(cb, "MOST_RELEVANT_SHARE", 0.35)
+    monkeypatch.setattr(cb, "MOST_RELEVANT_SHARE", 0.5)
     assert cb._most_relevant_count(100) > MOST_RELEVANT_MAX
-    assert cb._most_relevant_count(100) / 100 >= 0.3
+    assert cb._most_relevant_count(100) / 100 >= 0.5
 
 
 def test_a_small_bundle_keeps_the_behaviour_it_had() -> None:
@@ -52,7 +52,8 @@ def test_the_share_scales_with_depth(monkeypatch: pytest.MonkeyPatch) -> None:
     """Halving the depth must not leave the block at the same absolute size."""
     import memory_service.domain.context_bundle as cb
 
-    monkeypatch.setattr(cb, "MOST_RELEVANT_SHARE", 0.35)
+    monkeypatch.setattr(cb, "MOST_RELEVANT_SHARE", 0.8)
+    # the share only bites above the floor, and the floor is 30 now
     assert cb._most_relevant_count(50) < cb._most_relevant_count(100)
 
 

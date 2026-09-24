@@ -257,6 +257,44 @@ def _evidence_ranks(memories: Sequence[Any], evidence: Sequence[str]) -> list[in
     return out
 
 
+def _evidence_reconstructed(memories: Sequence[Any], evidence: Sequence[str]) -> float | None:
+    """Coverage when a gold turn is matched against the GROUP of memories it produced.
+
+    ``_evidence_ranks`` asks whether any ONE memory carries a gold turn. On the full set that
+    is true for 69.6% of gold items while ``evidence_all_hit`` - the same test over the whole
+    flattened bundle - is 93.3%. The 23.7-point difference is a gold turn whose content is
+    spread across several memories, none of which carries enough of it alone:
+
+        turn: "Amit joined in May 2025 as Principal Engineer and managed teams in
+               India, the Netherlands and Budapest."
+        ->  M1 joined in May 2025 | M2 was Principal Engineer | M3 managed India | ...
+
+    That is proposition-sized extraction working as intended, not extraction losing
+    information - and no amount of reordering can fix it, because the unit being ranked is
+    smaller than the unit being asked for. The fix is to reconstruct the parent.
+
+    Every memory carries ``EvidenceRef.source_id`` back to the turn it came from, so the
+    group is already expressible: match the gold turn against the union of the memories that
+    share its source. This measures the ceiling that reconstruction would reach.
+    """
+    groups: dict[str, set[str]] = {}
+    for m in memories:
+        for ref in getattr(m, "evidence", None) or []:
+            sid = getattr(ref, "source_id", None)
+            if sid:
+                groups.setdefault(sid, set()).update(_content_tokens(_memory_line(m)))
+    if not evidence:
+        return None
+    hits = 0
+    for text in evidence:
+        needle = _content_tokens(text)
+        if not needle:
+            continue
+        best = max((_overlap(needle, g) for g in groups.values()), default=0.0)
+        hits += best >= EVIDENCE_OVERLAP_HIT
+    return round(hits / len(evidence), 4)
+
+
 def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | None]:
     """Mean reciprocal rank, and whether the evidence reached the block the model reads first.
 
@@ -290,10 +328,12 @@ def _rank_summary(records: Sequence[dict[str, Any]]) -> dict[str, float | None]:
         if r["category"] != "adversarial" and r.get("evidence_mrr") is not None
     ]
     if not scored:
-        return {"evidence_mrr": None, "evidence_in_head": None}
+        return {"evidence_mrr": None, "evidence_in_head": None, "evidence_reconstructed": None}
+    rec = [r["evidence_reconstructed"] for r in scored if r.get("evidence_reconstructed") is not None]
     return {
         "evidence_mrr": round(sum(r["evidence_mrr"] for r in scored) / len(scored), 4),
         "evidence_in_head": round(sum(r["evidence_in_head"] for r in scored) / len(scored), 4),
+        "evidence_reconstructed": round(sum(rec) / len(rec), 4) if rec else None,
     }
 
 
@@ -727,6 +767,9 @@ async def run(
                 )
                 rank_metrics = _rank_metrics(
                     evidence_ranks, _most_relevant_count(len(bundle.memories))
+                )
+                rank_metrics["evidence_reconstructed"] = _evidence_reconstructed(
+                    bundle.memories, [turns.get(e, "") for e in _evidence_ids(item)]
                 )
                 strict = _answer_present(rendered, answer)
                 abstained = "INSUFFICIENT" in status

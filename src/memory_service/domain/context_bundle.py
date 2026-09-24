@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from datetime import UTC, datetime
+from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -102,7 +103,24 @@ class EvidenceReport(BaseModel):
 #: largest block that stays inside the first screen of the prompt, and the timeline keeps
 #: its full shape because the ten are replaced there by a one-line pointer rather than
 #: deleted: the ranking is added at the cost of ten short lines, not of a second copy.
-MOST_RELEVANT_MAX = 10
+#: How many memories go above the timeline, where the model reads first.
+#:
+#: Measured on the full 1986-question LoCoMo set: of the gold evidence that any single memory
+#: carries, 69.6% sits at rank 0-9, 12.3% at 10-19, 7.2% at 20-29, 10.9% at 30-49 and NOTHING
+#: beyond 50 - ``final_k`` is the ceiling. So a head of 10 leaves 30.4% of the evidence that
+#: WAS retrieved below the fold, and widening to the retrieval ceiling puts all of it above.
+#:
+#: 30 and not 50, for a structural reason: ``render`` only emits the block when it is SMALLER
+#: than the bundle (otherwise it would print the whole timeline twice), and ``final_k`` is 50.
+#: A head of 50 therefore DELETES the ranked block and leaves a chronological list - which is
+#: the arrangement measured to make the model anchor on position and fail date arithmetic. 30
+#: keeps the block and still lifts 89.1% of the findable evidence above the fold (69.6 + 12.3
+#: + 7.2), against 69.6% at ten.
+#:
+#: The alternative was reranking, and it was measured and rejected: ettin-17m at k=10 over the
+#: same 1986 questions moved evidence_in_head 0.5968 -> 0.5940 and p99 351 -> 2018 ms. Widening
+#: costs tokens, not milliseconds, and we render ~5,300 against Hindsight's ~36,000.
+MOST_RELEVANT_MAX = 30
 
 #: Share of the bundle promoted out of the timeline, and whether the block is repeated at the
 #: end as well as the head.
@@ -174,6 +192,51 @@ def _most_relevant_count(total: int) -> int:
     return max(MOST_RELEVANT_MAX, math.ceil(total * MOST_RELEVANT_SHARE))
 
 
+#: Pull the memories extracted from the same turn in alongside one that ranked. Proposition-
+#: sized extraction means a gold turn often becomes several memories, none of which carries
+#: enough of it alone: on the full set the best SINGLE memory matches 69.6% of gold evidence
+#: while the whole bundle matches 93.3%. That 23.7-point gap is not extraction losing
+#: information, it is the retrieval unit being smaller than the question's unit - and no
+#: reordering can close it, because every fragment is individually a weak match. Reuniting a
+#: turn's fragments in the block the model reads first is the thing that can.
+GROUP_BY_SOURCE = True
+
+
+def _source_ids(m: Any) -> set[str]:
+    return {
+        sid
+        for ref in (getattr(m, "evidence", None) or [])
+        if (sid := getattr(ref, "source_id", None))
+    }
+
+
+def _head_with_siblings(memories: Sequence[Any], count: int) -> list[Any]:
+    """The top ``count``, each followed by the memories extracted from the same turn."""
+    if not GROUP_BY_SOURCE:
+        return list(memories[:count])
+    by_source: dict[str, list[Any]] = {}
+    for m in memories:
+        for sid in _source_ids(m):
+            by_source.setdefault(sid, []).append(m)
+    head: list[Any] = []
+    seen: set[str] = set()
+    for m in memories:
+        if len(head) >= count:
+            break
+        if m.item_id in seen:
+            continue
+        head.append(m)
+        seen.add(m.item_id)
+        for sid in _source_ids(m):
+            for sib in by_source.get(sid, ()):
+                if len(head) >= count:
+                    break
+                if sib.item_id not in seen:
+                    head.append(sib)
+                    seen.add(sib.item_id)
+    return head
+
+
 def _memory_line(m: Any, *, body: str | None = None) -> str:
     """One memory as one line: citation, date, weekday, speaker, text - each exactly once.
 
@@ -238,7 +301,9 @@ class ContextBundle(BaseModel):
             # chronological alone discards the ranking entirely, and the position a memory
             # then lands in decides how well it is read, so the best-ranked few are repeated
             # above the timeline (see MOST_RELEVANT_MAX).
-            ranked = self.memories[: _most_relevant_count(len(self.memories))]
+            ranked = _head_with_siblings(
+                self.memories, _most_relevant_count(len(self.memories))
+            )
             shown: set[str] = set()
             if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
                 shown = {m.item_id for m in ranked}

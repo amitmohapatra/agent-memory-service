@@ -32,9 +32,13 @@ def _c(rid: str, text: str, score: float) -> Candidate:
     )
 
 
-def test_off_by_default_nothing_is_collapsed() -> None:
+def test_on_by_default_a_subsumed_candidate_is_collapsed() -> None:
+    """On by default now. Multi-hop needs evidence from two or more DIFFERENT turns, and a
+    relevance-only head can be several phrasings of one of them: measured on the full set,
+    only 51.2% of multi_hop gold evidence reaches the head against 71.4% for temporal.
+    Dropping a candidate another already contains frees that slot for the missing hop."""
     out = _dedup([_c("a", TURN, 0.9), _c("b", FACT, 0.8)])
-    assert {c.record_id for c in out} == {"a", "b"}
+    assert {c.record_id for c in out} == {"a"}, "the turn already carries the fact"
 
 
 def test_a_fact_already_carried_by_a_kept_turn_is_collapsed(

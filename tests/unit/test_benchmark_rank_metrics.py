@@ -86,7 +86,11 @@ def test_the_summary_excludes_adversarial_rows() -> None:
         {"category": "single_hop", "evidence_mrr": 1.0, "evidence_in_head": 1.0},
         {"category": "adversarial", "evidence_mrr": None, "evidence_in_head": None},
     ]
-    assert _rank_summary(records) == {"evidence_mrr": 1.0, "evidence_in_head": 1.0}
+    assert _rank_summary(records) == {
+        "evidence_mrr": 1.0,
+        "evidence_in_head": 1.0,
+        "evidence_reconstructed": None,
+    }
 
 
 def test_a_run_with_nothing_scorable_reports_none_rather_than_zero() -> None:
@@ -94,4 +98,5 @@ def test_a_run_with_nothing_scorable_reports_none_rather_than_zero() -> None:
     assert _rank_summary([{"category": "adversarial", "evidence_mrr": None}]) == {
         "evidence_mrr": None,
         "evidence_in_head": None,
+        "evidence_reconstructed": None,
     }

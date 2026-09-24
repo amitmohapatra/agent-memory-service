@@ -606,7 +606,11 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
 #: That is not what the lost-in-the-middle work models - it assumes N distinct documents with
 #: one gold among them - so the remedy is not a better position, it is fewer copies of the
 #: same evidence competing for the positions there are.
-COLLAPSE_SUBSUMED = False
+#: Collapse a candidate that another already contains. Multi-hop needs evidence from two or
+#: more DIFFERENT turns, and a relevance-only top-10 can be ten phrasings of one of them - on
+#: the full set only 51.2% of multi_hop gold evidence reaches the head against 71.4% for
+#: temporal. Dropping a subsumed candidate frees a slot for the hop that is missing.
+COLLAPSE_SUBSUMED = True
 
 #: Below this, containment is coincidence rather than subsumption ("tea" inside anything).
 SUBSUMPTION_MIN_CHARS = 25
