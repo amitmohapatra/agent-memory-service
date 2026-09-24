@@ -787,10 +787,43 @@ class SqlOutboxRepository:
         value = result.scalar_one_or_none()
         return int(value) if value is not None else None
 
+    @staticmethod
+    def _undispatched() -> Any:
+        return select(OutboxRow).where(
+            OutboxRow.dispatched_at.is_(None), OutboxRow.dead.is_(False)
+        )
+
+    async def by_ids(self, outbox_ids: Sequence[int]) -> list[OutboxEntry]:
+        """The undispatched rows among ``outbox_ids``, locked. For the post-commit fast path.
+
+        That path used to ask for a *window* - ``pending(limit=len(ids) + 50)``, which is the
+        OLDEST rows by outbox_id - and then filter it down to the ids it owned. Two ways to
+        lose a row, both silent:
+
+        - contention: a concurrent dispatcher holds the window, so SKIP LOCKED hides this
+          caller's own rows from it, while the other caller filters them out as not its own.
+          Neither dispatches. The API dispatcher and the worker dispatcher both run this, so
+          the two are not even the same process.
+        - backlog: the window is the oldest N. Once more than N rows are undispatched, a row
+          committed a moment ago is never IN the window, so the fast path stops firing at all
+          and every write falls through to the periodic sweep. 441 such rows had accumulated.
+
+        Either way the row waits for ``periodic.outbox_sweep``: at least 30 seconds of age
+        plus up to 60 to the next tick, per hop, and an observation takes two hops. Asking
+        for the rows by id cannot miss them.
+        """
+        if not outbox_ids:
+            return []
+        stmt = (
+            self._undispatched()
+            .where(OutboxRow.outbox_id.in_(list(outbox_ids)))
+            .with_for_update(skip_locked=True)
+        )
+        return self._entries((await self.s.execute(stmt)).scalars().all())
+
     async def pending(self, *, limit: int = 200, older_than_seconds: int = 0) -> list[OutboxEntry]:
         stmt = (
-            select(OutboxRow)
-            .where(OutboxRow.dispatched_at.is_(None), OutboxRow.dead.is_(False))
+            self._undispatched()
             .order_by(OutboxRow.outbox_id)
             .limit(limit)
             .with_for_update(skip_locked=True)
@@ -798,7 +831,10 @@ class SqlOutboxRepository:
         if older_than_seconds > 0:
             cutoff = datetime.now(UTC) - timedelta(seconds=older_than_seconds)
             stmt = stmt.where(OutboxRow.created_at <= cutoff)
-        rows = (await self.s.execute(stmt)).scalars().all()
+        return self._entries((await self.s.execute(stmt)).scalars().all())
+
+    @staticmethod
+    def _entries(rows: Sequence[Any]) -> list[OutboxEntry]:
         return [
             OutboxEntry(
                 outbox_id=r.outbox_id,

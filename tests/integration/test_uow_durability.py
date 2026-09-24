@@ -248,3 +248,83 @@ async def test_statement_timeout_is_applied(container) -> None:
     async with container.database.engine.connect() as conn:
         value = (await conn.execute(text("SHOW statement_timeout"))).scalar_one()
     assert value == "15s"
+
+
+async def test_a_backlog_does_not_stop_a_fresh_commit_from_dispatching(
+    container, uow_factory
+) -> None:
+    """The post-commit fast path must dispatch the rows it wrote, whatever else is owed.
+
+    It used to ask for a WINDOW - ``pending(limit=len(ids) + 50)``, the oldest rows by
+    outbox_id - and filter that down to the ids it owned. So once more than ~50 rows were
+    undispatched, a row committed a moment ago was never in the window, the fast path
+    silently stopped firing, and every write fell through to ``periodic.outbox_sweep``: at
+    least 30 seconds of age plus up to 60 to the next tick, per hop, and an observation
+    takes two hops. 441 undispatched rows had accumulated on the development store, which is
+    the shape of a fast path that has not run in a long time.
+
+    The same window is why two dispatchers could lose a row between them - SKIP LOCKED hides
+    it from the one that owns it while the other filters it out as not its own - but that
+    race is not what this test pins, because a deterministic one is worth more.
+    """
+    container.tasks.register("noop", Queue.CHAT_FAST, _noop)
+    thread = _thread()
+    async with uow_factory() as uow:
+        await _seed_thread(uow, thread)
+        await uow.commit()
+
+    # a backlog deeper than the old window, left undispatched
+    container.tasks.fail_enqueue = True
+    for i in range(60):
+        async with uow_factory() as uow:
+            await uow.enqueue(
+                JobSpec(
+                    task_name="noop", queue=Queue.CHAT_FAST, payload={"old": i}, tenant_id=TENANT
+                )
+            )
+            await uow.commit()
+    container.tasks.fail_enqueue = False
+    async with uow_factory() as uow:
+        assert len(await uow.outbox.pending(limit=500)) == 60
+
+    # the row this commit owns goes out now, not in a minute and a half
+    async with uow_factory() as uow:
+        await uow.enqueue(
+            JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={"fresh": 1}, tenant_id=TENANT)
+        )
+        await uow.commit()
+        assert uow.dispatched_job_ids, "the fresh row was buried behind the backlog"
+
+    async with uow_factory() as uow:
+        still = await uow.outbox.pending(limit=500)
+        assert len(still) == 60, "only the backlog is left; the fresh row dispatched"
+        assert all((e.spec.payload or {}).get("fresh") is None for e in still)
+
+
+async def test_by_ids_returns_only_undispatched_rows_that_were_asked_for(
+    container, uow_factory
+) -> None:
+    """The narrow contract: not a window, not everything, and never an already-sent row."""
+    container.tasks.register("noop", Queue.CHAT_FAST, _noop)
+    container.tasks.fail_enqueue = True
+    ids: list[int] = []
+    for i in range(3):
+        async with uow_factory() as uow:
+            ids.append(
+                await uow.enqueue(
+                    JobSpec(
+                        task_name="noop", queue=Queue.CHAT_FAST, payload={"i": i}, tenant_id=TENANT
+                    )
+                )
+            )
+            await uow.commit()
+    container.tasks.fail_enqueue = False
+
+    async with uow_factory() as uow:
+        assert [e.outbox_id for e in await uow.outbox.by_ids([ids[1]])] == [ids[1]]
+        assert await uow.outbox.by_ids([]) == []
+        assert await uow.outbox.by_ids([ids[0], 10**9]) == [
+            e for e in await uow.outbox.by_ids([ids[0]])
+        ]
+        await uow.outbox.mark_dispatched(ids[0], job_id="job-1")
+        assert await uow.outbox.by_ids([ids[0]]) == [], "a dispatched row is not pending"

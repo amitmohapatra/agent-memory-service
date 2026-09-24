@@ -271,6 +271,17 @@ class OutboxRepository(Protocol):
     async def pending(
         self, *, limit: int = 200, older_than_seconds: int = 0
     ) -> list[OutboxEntry]: ...
+
+    async def by_ids(self, outbox_ids: Sequence[int]) -> list[OutboxEntry]:
+        """The undispatched rows among ``outbox_ids``.
+
+        Distinct from ``pending`` on purpose. ``pending`` answers "what is owed?" - the
+        oldest rows, for the periodic repair. ``by_ids`` answers "did MY rows go out?" - the
+        post-commit fast path, which knows exactly which rows it wrote and must not be given
+        a window that a backlog or a concurrent dispatcher can push them out of.
+        """
+        ...
+
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...
 
     async def dispatcher_of(self, job_id: str) -> tuple[bool, str | None]:

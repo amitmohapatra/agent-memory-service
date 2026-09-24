@@ -48,12 +48,11 @@ class OutboxRelay:
         job_ids: list[str] = []
         async with self.session_factory() as session, session.begin():
             repo = SqlOutboxRepository(session)
-            entries = [
-                e
-                for e in await repo.pending(limit=len(outbox_ids) + 50)
-                if e.outbox_id in set(outbox_ids)
-            ]
-            for entry in entries:
+            # by_ids, not pending(): asking for a window of the OLDEST rows and filtering it
+            # down to the ones we own loses them two ways - a concurrent dispatcher holds the
+            # window and SKIP LOCKED hides our rows from us, or a backlog longer than the
+            # window means our just-committed row is never in it. See by_ids for the detail.
+            for entry in await repo.by_ids(outbox_ids):
                 job_id = await self._dispatch(repo, entry)
                 if job_id:
                     job_ids.append(job_id)
