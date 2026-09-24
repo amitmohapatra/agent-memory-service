@@ -813,8 +813,18 @@ class NativeMemoryIntelligence:
         if m := _PREF_PLEASE.match(s):
             return MemoryCandidate(
                 content=s,
+                # An imperative is not a fact about the person who said it. "Do not invent a
+                # sales number" is scoped to the work in front of them; "always answer in
+                # metric units" is not, and no pattern can tell the two apart from one
+                # sentence. So durability decides it instead of classification: both start
+                # SHORT_TERM, and the one that keeps being restated keeps renewing (see the
+                # REINFORCE branch in pipeline.py) while the task-scoped one lapses.
+                #
+                # They were LONG_TERM and USER-scoped, so a single "do not invent versions"
+                # followed its author into every later conversation at full ranking weight.
+                # An integrator reported exactly that.
                 memory_type=MemoryType.PREFERENCE,
-                lifetime=Lifetime.LONG_TERM,
+                lifetime=Lifetime.SHORT_TERM,
                 subject=user,
                 predicate="instruction",
                 object=_clean_object(f"{m.group(1)} {m.group(2)}")[:300],
@@ -914,6 +924,14 @@ class NativeMemoryIntelligence:
     ) -> MemoryCandidate:
         mt = candidate.memory_type
         lifetime = _LIFETIME_BY_TYPE.get(mt, candidate.lifetime)
+        if candidate.predicate == "instruction":
+            # An imperative is a PREFERENCE by shape, and PREFERENCE is durable by type, so
+            # the table above would hand "do not invent a sales number" the same permanence
+            # as "I prefer metric units". It is the one case where the sentence knows better
+            # than the type: see the _PREF_PLEASE branch for why durability rather than
+            # classification is the lever, and the REINFORCE branch in pipeline.py for how a
+            # genuinely standing instruction earns its keep by being restated.
+            lifetime = Lifetime.SHORT_TERM
         importance = _IMPORTANCE_BY_TYPE.get(mt, candidate.importance)
         if mt in (MemoryType.USER, MemoryType.PREFERENCE):
             visibility = Visibility.USER if ctx.user_id else Visibility.PRIVATE

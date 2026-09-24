@@ -297,3 +297,28 @@ async def test_consolidation_ignores_non_current_and_empty(native) -> None:
     cand = (await _extract(native, "My timezone is CET."))[0]
     assert (await native.consolidate(cand, existing, CTX)).decision is DedupDecision.CREATE
     assert (await native.consolidate(cand, [], CTX)).decision is DedupDecision.CREATE
+
+
+async def test_an_imperative_is_short_lived_and_a_restated_one_is_not(native) -> None:
+    """Instructions stop being durable user facts, without a new memory type.
+
+    An integrator reported that "Do not invent a sales number" and "Do not invent versions"
+    were stored as PREFERENCE / visibility=USER / predicate=instruction, and so followed
+    their author into every later thread at full ranking weight. They are right that those
+    are turn instructions, not facts about a person.
+
+    But "always answer in metric units" matches the same pattern and IS durable, and no
+    regex separates them from one sentence. So the lever is durability, not classification:
+    every imperative starts SHORT_TERM - a seven-day clock and 0.65 ranking weight instead
+    of LONG_TERM's 1.0 - and restating one renews it. What gets repeated survives; what was
+    scoped to one task lapses on its own.
+    """
+    for text in ("Do not invent a sales number.", "Always answer in metric units."):
+        cand = (await _extract(native, text))[0]
+        assert cand.predicate == "instruction", text
+        assert cand.lifetime is Lifetime.SHORT_TERM, f"{text} must not be durable on sight"
+
+    # a real preference is untouched: it states something about the person, not the task
+    pref = (await _extract(native, "I prefer concise answers."))[0]
+    assert pref.memory_type is MemoryType.PREFERENCE
+    assert pref.lifetime is Lifetime.LONG_TERM, "stating a preference is not an imperative"

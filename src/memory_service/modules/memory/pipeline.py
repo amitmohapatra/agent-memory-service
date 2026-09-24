@@ -392,6 +392,12 @@ class ObservationPipeline:
                 return {memory.memory_id}
             case DedupDecision.REINFORCE | DedupDecision.MERGE if target is not None:
                 target.reinforcement_count += 1
+                if target.lifetime is Lifetime.SHORT_TERM:
+                    # Something being said again is the clearest evidence it still matters,
+                    # so the clock restarts here. It used to run from the FIRST mention, so a
+                    # standing instruction repeated every day still died seven days in, and
+                    # the only memories that survived were the ones nobody brought up.
+                    target.system_metadata["expires_at"] = (now + SHORT_TERM_TTL).isoformat()
                 contributors = list(target.system_metadata.get("contributors", []))
                 if _is_echo(cand):
                     # The agent restating something it was given is not evidence about the
