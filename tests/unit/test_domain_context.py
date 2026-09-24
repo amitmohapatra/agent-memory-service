@@ -45,7 +45,6 @@ def test_child_agent_inherits_lineage_and_adds_agent_fields() -> None:
         tenant_id="acme",
         workspace_id="ws",
         user_id="u1",
-        group_ids=["g2", "g1"],
         thread_id="thr_1",
         session_id="ses_1",
         turn_id="trn_1",
@@ -67,14 +66,6 @@ def test_child_agent_inherits_lineage_and_adds_agent_fields() -> None:
     grandchild = child.child_agent(agent_id="writer")
     assert grandchild.parent_agent_run_id == child.agent_run_id
 
-
-def test_group_ids_are_sorted_and_deduplicated_for_stable_fingerprints() -> None:
-    a = MemoryExecutionContext(tenant_id="t", user_id="u", group_ids=["b", "a", "b"])
-    b = MemoryExecutionContext(tenant_id="t", user_id="u", group_ids=["a", "b"])
-    assert a.group_ids == ["a", "b"]
-    assert a.scope_fingerprint() == b.scope_fingerprint()
-    c = MemoryExecutionContext(tenant_id="t", user_id="u2", group_ids=["a", "b"])
-    assert a.scope_fingerprint() != c.scope_fingerprint()
 
 
 def test_log_fields_include_tenant_and_trace_only_when_present() -> None:

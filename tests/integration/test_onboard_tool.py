@@ -1,14 +1,12 @@
-"""Onboarding grants the membership that makes team-visible memory readable.
+"""Onboarding grants tenant membership and tenant admin, and nothing wider.
 
-A tenant needs no registration - the first write creates it - but a WORKSPACE-visible
-memory resolves the reader's workspaces from the authorization store, so until somebody is
-granted the workspace it is readable only by whoever wrote it. Measured against the running
-service before this tool existed: alice writes a WORKSPACE decision in ws_eng, bob asserts
-the same workspace header, and reads nothing.
+A tenant needs no registration - identifiers are tenant-prefixed everywhere, so the first
+write creates it and nothing is required to read your own memories back. What the tool exists
+for is the authority that cannot be asserted in a header: tenant admin, which gates forgetting
+another principal's memory and widening a tool policy.
 
-``grant_membership`` always wrote the right tuples and never had a caller - no endpoint, no
-command. These tests pin both halves: before the grant the teammate is excluded, after it
-they are not.
+``grant_membership`` had no caller anywhere before this - no endpoint, no command - so admin
+could never be granted and both branches reading it were unreachable in a running service.
 """
 
 from __future__ import annotations
@@ -21,35 +19,9 @@ from memory_service.modules.authz.service import AuthorizationService
 pytestmark = pytest.mark.integration
 
 
-def _ctx(user: str, workspace: str | None = None) -> MemoryExecutionContext:
-    return MemoryExecutionContext(tenant_id="arhaus", user_id=user, workspace_id=workspace)
-
-
-async def test_a_teammate_reads_the_workspace_only_after_being_granted_it(
-    container, uow_factory
-) -> None:
-    authz: AuthorizationService = container.services["authz"]
-    bob = _ctx("bob", "ws_eng")
-
-    async with uow_factory() as uow:
-        before = await authz.scope(bob, revisions=uow.revisions)
-        assert before.workspace_ids == [], "asserting the header is not being in the team"
-
-        await authz.grant_membership(
-            "arhaus", "bob", workspaces=["ws_eng"], revisions=uow.revisions
-        )
-        after = await authz.scope(bob, revisions=uow.revisions)
-        assert after.workspace_ids == ["ws_eng"]
-        await uow.commit()
-
-
 async def test_admin_is_grantable_at_all(container, uow_factory) -> None:
-    """``is_tenant_admin`` gates forgetting anyone's memory and widening tool policy.
-
-    Nothing could grant it before, so both branches were unreachable in a running service.
-    """
     authz: AuthorizationService = container.services["authz"]
-    root = _ctx("root")
+    root = MemoryExecutionContext(tenant_id="arhaus", user_id="root")
     assert not await authz.is_tenant_admin(root)
 
     async with uow_factory() as uow:
@@ -58,15 +30,24 @@ async def test_admin_is_grantable_at_all(container, uow_factory) -> None:
     assert await authz.is_tenant_admin(root)
 
 
-async def test_a_grant_does_not_leak_across_tenants(container, uow_factory) -> None:
-    """Membership objects are tenant-prefixed, so the same workspace name is a different team."""
+async def test_admin_in_one_tenant_is_not_admin_in_another(container, uow_factory) -> None:
+    """Membership objects are tenant-prefixed, so the same user id is a different principal."""
     authz: AuthorizationService = container.services["authz"]
     async with uow_factory() as uow:
-        await authz.grant_membership(
-            "arhaus", "carol", workspaces=["ws_eng"], revisions=uow.revisions
-        )
+        await authz.grant_membership("arhaus", "carol", admin=True, revisions=uow.revisions)
         await uow.commit()
 
-    other = MemoryExecutionContext(tenant_id="globex", user_id="carol", workspace_id="ws_eng")
+    assert await authz.is_tenant_admin(MemoryExecutionContext(tenant_id="arhaus", user_id="carol"))
+    assert not await authz.is_tenant_admin(
+        MemoryExecutionContext(tenant_id="globex", user_id="carol")
+    )
+
+
+async def test_plain_membership_confers_no_admin(container, uow_factory) -> None:
+    authz: AuthorizationService = container.services["authz"]
     async with uow_factory() as uow:
-        assert (await authz.scope(other, revisions=uow.revisions)).workspace_ids == []
+        await authz.grant_membership("arhaus", "dave", revisions=uow.revisions)
+        await uow.commit()
+    assert not await authz.is_tenant_admin(
+        MemoryExecutionContext(tenant_id="arhaus", user_id="dave")
+    )

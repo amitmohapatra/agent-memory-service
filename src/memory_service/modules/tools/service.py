@@ -142,7 +142,7 @@ class ToolMemoryService:
         task: str = "",
         step: int | None = None,
         sub_calls: Sequence[dict[str, Any]] | None = None,
-        visibility: Visibility = Visibility.RUN,
+        visibility: Visibility = Visibility.PRIVATE,
     ) -> ToolInvocation:
         """Persist one call. Idempotent on (run, step, tool, args_hash): a replayed graph step
         re-reads its row instead of inflating the statistics."""
@@ -228,7 +228,13 @@ class ToolMemoryService:
     def _visibility_keys(self, ctx: MemoryExecutionContext, visibility: Visibility) -> list[str]:
         """Tool records are audienced exactly like memories: the same anchor rules and the same
         audience keys, so an agent's tool chatter reaches a user or a group only when it was
-        explicitly shared, and a hand-off is visible to the child run and no further."""
+        explicitly shared, and a hand-off is visible to the child run and no further.
+
+        The default is PRIVATE rather than RUN, because a procedure is mined from trajectories
+        across MANY runs - and RUN is now a run-tree audience, so a record written in one run
+        is invisible to the next. It used to work only because RUN carried the author's
+        principal key, which made it an identity audience wearing a run's name. PRIVATE is
+        that audience, honestly: the agent's own durable store, readable by no one else."""
         from memory_service.domain.enums import Lifetime, MemoryType
         from memory_service.modules.memory.pipeline import keys_for, scope_for
         from memory_service.ports.intelligence import MemoryCandidate

@@ -51,16 +51,12 @@ class MemoryType(StrEnum):
 class Visibility(StrEnum):
     """Who may see a memory. Owner and visibility are separate concepts."""
 
-    PRIVATE = "PRIVATE"  # only the owning principal (user or agent)
-    USER = "USER"  # the owning user across threads
-    GROUP = "GROUP"  # a user group
-    AGENT_GROUP = "AGENT_GROUP"  # a group of cooperating agents
-    RUN = "RUN"  # this agent run and the runs it spawns (hand-off context flows down)
+    PRIVATE = "PRIVATE"  # only the owning principal - an agent's scratch, a job's own state
+    USER = "USER"  # the owning user across threads, and every agent acting for them
+    AGENT_GROUP = "AGENT_GROUP"  # cooperating agents, at any depth, sharing a group id
+    RUN = "RUN"  # this agent run and the run that spawned it: hand-off inside one execution
     THREAD = "THREAD"  # everyone participating in the thread
-    WORK = "WORK"  # everyone participating in a unit of work
-    WORKSPACE = "WORKSPACE"
-    TENANT = "TENANT"
-    GLOBAL = "GLOBAL"
+    TENANT = "TENANT"  # everyone in the tenant
 
 
 class ScopeLevel(StrEnum):
@@ -68,13 +64,9 @@ class ScopeLevel(StrEnum):
 
     AGENT = "AGENT"
     AGENT_GROUP = "AGENT_GROUP"
-    WORK = "WORK"
     THREAD = "THREAD"
     USER = "USER"
-    GROUP = "GROUP"
-    WORKSPACE = "WORKSPACE"
     TENANT = "TENANT"
-    GLOBAL = "GLOBAL"
 
 
 class Representation(StrEnum):

@@ -43,15 +43,12 @@ class AuthorizationService:
         *,
         max_listed_objects: int = 2000,
         cache_ttl_seconds: int = 60,
-        trust_header_groups: bool = True,
         decision_cache: bool = True,
     ) -> None:
         self.provider = provider
         self.cache = cache if decision_cache else None
         self.cache_ttl = cache_ttl_seconds
-        self.resolver = ScopeResolver(
-            provider, max_listed_objects=max_listed_objects, trust_header_groups=trust_header_groups
-        )
+        self.resolver = ScopeResolver(provider, max_listed_objects=max_listed_objects)
 
     # -- scope -----------------------------------------------------------------
     @staticmethod
@@ -142,6 +139,7 @@ class AuthorizationService:
     ) -> VisibilitySpecification:
         return VisibilitySpecification.from_scope(
             current_thread_id=ctx.thread_id,
+            current_agent_run_id=ctx.agent_run_id,
             scope=await self.scope(
                 ctx,
                 revisions=revisions,
@@ -278,12 +276,10 @@ class AuthorizationService:
         tenant_id: str,
         user_id: str,
         *,
-        groups: Sequence[str] = (),
-        workspaces: Sequence[str] = (),
         admin: bool = False,
         revisions: RevisionRepository | None = None,
     ) -> None:
-        """Bootstrap helper used by imports/admin: tenant membership, groups and workspaces.
+        """Bootstrap helper used by imports/admin: tenant membership and admin.
 
         Pass ``revisions`` (inside the caller's unit of work) so the user's cached
         AuthorizedScope is invalidated immediately instead of after the cache TTL.
@@ -295,22 +291,6 @@ class AuthorizationService:
                 object=f"tenant:{tenant_id}",
             )
         ]
-        for g in groups:
-            tuples.append(
-                RelationTuple(
-                    user=f"user:{user_id}",
-                    relation="member",
-                    object=f"group:{object_id(tenant_id, g)}",
-                )
-            )
-        for w in workspaces:
-            tuples.append(
-                RelationTuple(
-                    user=f"user:{user_id}",
-                    relation="member",
-                    object=f"workspace:{object_id(tenant_id, w)}",
-                )
-            )
         await self.provider.write(tuples)
         if revisions is not None:
             await self._bump_membership(tenant_id, revisions, user_id)

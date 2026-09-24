@@ -45,8 +45,6 @@ async def _main(args: argparse.Namespace) -> int:
             await authz.grant_membership(
                 args.tenant,
                 args.user,
-                groups=args.group,
-                workspaces=args.workspace,
                 admin=args.admin,
                 revisions=uow.revisions,
             )
@@ -54,8 +52,7 @@ async def _main(args: argparse.Namespace) -> int:
     finally:
         await container.close()
     sys.stdout.write(
-        f"granted {args.user} in {args.tenant}: "
-        f"workspaces={args.workspace or []} groups={args.group or []} admin={args.admin}\n"
+        f"granted {args.user} in {args.tenant}: admin={args.admin}\n"
     )
     return 0
 
@@ -64,13 +61,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Grant a user their memberships in a tenant")
     parser.add_argument("--tenant", required=True)
     parser.add_argument("--user", required=True)
-    parser.add_argument(
-        "--workspace",
-        action="append",
-        default=[],
-        help="repeatable; the team boundary, and the one that does not work without this",
-    )
-    parser.add_argument("--group", action="append", default=[], help="repeatable")
     parser.add_argument(
         "--admin",
         action="store_true",

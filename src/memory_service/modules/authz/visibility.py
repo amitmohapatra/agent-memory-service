@@ -7,15 +7,12 @@ Read = non-empty intersection. This turns access control into one ``must_any`` f
 runs *inside* the search store and inside SQL, before any candidate is returned.
 
 Key grammar (tenant is always part of the key):
-    tenant:<t>            everything tenant-visible
-    ws:<t>/<workspace>    workspace-visible
-    user:<t>/<user>       user-level memory (any thread) of that user
-    group:<t>/<group>
-    thread:<t>/<thread>
-    work:<t>/<work>
-    agroup:<t>/<agent_group>
+    tenant:<t>                  everyone in the tenant
+    user:<t>/<user>             that user, any thread, and every agent acting for them
+    thread:<t>/<thread>         one conversation
+    agroup:<t>/<agent_group>    cooperating agents sharing a group id, at any depth
+    run:<t>/<run>               one agent run, and the run that spawned it
     principal:<t>/<principal>   PRIVATE to exactly one principal (user:<id> or agent:<id>)
-    global
 """
 
 from __future__ import annotations
@@ -38,13 +35,11 @@ def visibility_keys(
     *,
     owner_principal: str,
     scope: Scope | None = None,
-    workspace_id: str | None = None,
     user_id: str | None = None,
-    group_id: str | None = None,
     thread_id: str | None = None,
-    work_id: str | None = None,
     agent_group_id: str | None = None,
     agent_run_id: str | None = None,
+    parent_agent_run_id: str | None = None,
 ) -> list[str]:
     """Audience keys an object is readable by, given its visibility and anchors.
 
@@ -59,11 +54,8 @@ def visibility_keys(
     shape no stored row has - a release-blocking isolation gate proving nothing.
     """
     if scope is not None:
-        workspace_id = workspace_id or scope.workspace_id
         user_id = user_id or scope.user_id
-        group_id = group_id or scope.group_id
         thread_id = thread_id or scope.thread_id
-        work_id = work_id or scope.work_id
         agent_group_id = agent_group_id or scope.agent_group_id
     t = tenant_id
     match visibility:
@@ -73,10 +65,6 @@ def visibility_keys(
             if not user_id:
                 raise ValueError("USER visibility requires user_id")
             return [f"user:{t}/{user_id}"]
-        case Visibility.GROUP:
-            if not group_id:
-                raise ValueError("GROUP visibility requires group_id")
-            return [f"group:{t}/{group_id}"]
         case Visibility.AGENT_GROUP:
             if not agent_group_id:
                 raise ValueError("AGENT_GROUP visibility requires agent_group_id")
@@ -84,24 +72,31 @@ def visibility_keys(
         case Visibility.RUN:
             if not agent_run_id:
                 raise ValueError("RUN visibility requires agent_run_id")
-            # the writing run itself + the principal; child runs carry the parent's run key
-            return [f"run:{t}/{agent_run_id}", f"principal:{t}/{owner_principal}"]
+            # This run, and the run that spawned it. The parent's key is written HERE, at
+            # write time, which is what lets a supervisor read what its specialists produced.
+            #
+            # It used to carry the author's principal instead, and that made RUN an IDENTITY
+            # audience rather than a run one: principal_id is agent:{user}/{agent} with no run
+            # component, so every past and future run of the same agent read every other one's
+            # scratch for the whole TTL. Measured: five parallel workers sharing one agent_id
+            # saw each other's notes, a retry inherited the failed attempt's reasoning, and
+            # the supervisor that spawned them saw none of it. Hand-off ran backwards.
+            # Two directions, two namespaces, so hand-off does not become a party line.
+            #   run:<mine>      anything I write, read by me and by the runs I spawn
+            #   runup:<parent>  written by a child, read ONLY by the run that spawned it
+            # A sibling carries run:<its own>, run:<parent> and runup:<its own>, so it never
+            # matches runup:<parent> and never sees its sibling's notes. Peers that DO want to
+            # collaborate say so with AGENT_GROUP, which is not bounded by the run tree.
+            keys = [f"run:{t}/{agent_run_id}"]
+            if parent_agent_run_id:
+                keys.append(f"runup:{t}/{parent_agent_run_id}")
+            return keys
         case Visibility.THREAD:
             if not thread_id:
                 raise ValueError("THREAD visibility requires thread_id")
             return [f"thread:{t}/{thread_id}"]
-        case Visibility.WORK:
-            if not work_id:
-                raise ValueError("WORK visibility requires work_id")
-            return [f"work:{t}/{work_id}"]
-        case Visibility.WORKSPACE:
-            if not workspace_id:
-                raise ValueError("WORKSPACE visibility requires workspace_id")
-            return [f"ws:{t}/{workspace_id}"]
         case Visibility.TENANT:
             return [f"tenant:{t}"]
-        case Visibility.GLOBAL:
-            return [f"global:{t}"]  # never crosses a tenant: tenant is always authoritative
     raise ValueError(f"unknown visibility {visibility}")  # pragma: no cover
 
 
@@ -146,22 +141,27 @@ class VisibilitySpecification(BaseModel):
 
     @classmethod
     def from_scope(
-        cls, scope: AuthorizedScope, *, current_thread_id: str | None = None
+        cls,
+        scope: AuthorizedScope,
+        *,
+        current_thread_id: str | None = None,
+        current_agent_run_id: str | None = None,
     ) -> VisibilitySpecification:
         """Audience keys this caller reads with.
 
         ``current_thread_id`` narrows the THREAD audiences to the one conversation the
         caller is in. Omitted, every granted thread is in scope, which is right for a
         deliberate cross-thread search and wrong for a turn inside a thread.
+
+        ``current_agent_run_id`` adds the upward audience its own children write to, which is
+        how a supervisor reads what it spawned without its children reading each other.
         """
         t = scope.tenant_id
-        keys: set[str] = {f"global:{t}", f"tenant:{t}", f"principal:{t}/{scope.principal}"}
+        keys: set[str] = {f"tenant:{t}", f"principal:{t}/{scope.principal}"}
         if scope.user_id:
             keys.add(f"user:{t}/{scope.user_id}")
             # an agent acting for a user also sees that user's private memories? No:
             # PRIVATE means exactly one principal. Agents see USER-level memories of their user.
-        keys.update(f"ws:{t}/{w}" for w in scope.workspace_ids)
-        keys.update(f"group:{t}/{g}" for g in scope.group_ids)
         # The thread being READ IN, not every thread ever granted. Being authorized for a
         # thread is not the same as working in it: a caller who owns twenty conversations
         # carried all twenty audiences into every query, so a memory scoped to one of them
@@ -175,9 +175,11 @@ class VisibilitySpecification(BaseModel):
         if current_thread_id is not None:
             threads = [th for th in threads if th == current_thread_id]
         keys.update(f"thread:{t}/{th}" for th in threads)
-        keys.update(f"work:{t}/{w}" for w in scope.work_ids)
         keys.update(f"agroup:{t}/{ag}" for ag in scope.agent_group_ids)
         keys.update(f"run:{t}/{r}" for r in scope.run_ids)
+        if current_agent_run_id:
+            # what my own children addressed upwards to me
+            keys.add(f"runup:{t}/{current_agent_run_id}")
         return cls(tenant_id=t, keys=frozenset(keys), truncated=scope.truncated)
 
     def allows(self, object_tenant_id: str, object_keys: Iterable[str]) -> bool:

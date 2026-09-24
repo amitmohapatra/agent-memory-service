@@ -141,10 +141,14 @@ class MemoryContext:
         self, agent_id: str, *, agent_run_id: str | None = None, agent_group_id: str | None = None
     ) -> MemoryContext:
         """Context for an agent run acting for this user. Each call is a new run: the agent's
-        working notes (``Visibility.RUN``) are readable by this run, the runs it derives
-        with ``.agent(...)`` (hand-off context flows down) and the same agent later — never
-        by the user, sibling runs, or other agents. Share explicitly with ``memory_type=
-        "SHARED"`` / ``visibility="AGENT_GROUP"``."""
+        working notes (``Visibility.RUN``) are readable by this run and by the runs it derives
+        with ``.agent(...)`` — hand-off flows down, a child reports up to the run that spawned
+        it, and nothing reaches siblings, the user, other agents, or this agent's LATER runs.
+
+        Anything the agent should still know next time is not RUN: use ``visibility="USER"``
+        for its user, or ``"PRIVATE"`` for its own durable store (what a scheduled job with no
+        user uses). Peers that must collaborate share ``agent_group_id`` and
+        ``visibility="AGENT_GROUP"``, which is not bounded by the run tree."""
         return self.derive(
             agent_id=agent_id,
             agent_run_id=agent_run_id or f"run_{uuid.uuid4().hex}",
@@ -554,7 +558,7 @@ class ToolsAPI:
         task: str = "",
         step: int | None = None,
         sub_calls: list[dict[str, Any]] | None = None,
-        visibility: Visibility = "RUN",
+        visibility: Visibility = "PRIVATE",
     ) -> ToolResult:
         data = await self._ctx._request(
             "POST",
@@ -608,7 +612,7 @@ class ToolsAPI:
         call: ToolCall,
         executor: Callable[[str, dict[str, Any]], Awaitable[Any]],
         *,
-        visibility: Visibility = "RUN",
+        visibility: Visibility = "PRIVATE",
     ) -> ToolResult:
         """Run the caller's executor, then record the invocation idempotently.
 

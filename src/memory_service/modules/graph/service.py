@@ -148,10 +148,6 @@ class GraphService:
         scope = (
             Scope(level=ScopeLevel.THREAD, tenant_id=tenant_id, thread_id=document.thread_id)
             if document.thread_id
-            else Scope(
-                level=ScopeLevel.WORKSPACE, tenant_id=tenant_id, workspace_id=document.workspace_id
-            )
-            if document.workspace_id
             else Scope(level=ScopeLevel.TENANT, tenant_id=tenant_id)
         )
         ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=document.owner_user_id)

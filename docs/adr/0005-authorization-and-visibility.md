@@ -28,7 +28,7 @@ and the exact "retrieve globally then filter in memory" anti-pattern the spec fo
 4. When `list_objects` would exceed `max_listed_objects`, the scope is marked `truncated`
    and retrieval falls back to bounded per-object `batch_check` calls.
 5. The **calling service** is authenticated (`trusted_dev` | `jwt` | `gcp_iam` | `mtls`);
-   only then are the trusted context headers (`X-Memory-Tenant/-Workspace/-User/-Groups`)
+   only then are the trusted context headers (`X-Memory-Tenant/-Workspace/-User`)
    honored. Body-supplied security fields must match the headers exactly or the request is
    rejected; `custom_metadata` may not contain reserved keys.
 
@@ -38,5 +38,14 @@ and the exact "retrieve globally then filter in memory" anti-pattern the spec fo
   ones, and vice versa. Tested in `tests/security`.
 - `tests/security/test_isolation.py` cross-checks the specification against an independent
   oracle with property-based generation; it is part of `make security-test` and the release gate.
-- Group membership comes from OpenFGA and, when `trust_header_groups` is on, from the
-  authenticated upstream's `X-Memory-Groups` header.
+- Six audiences, and every one of them works: PRIVATE, RUN, THREAD, USER, AGENT_GROUP,
+  TENANT. GROUP, WORK, WORKSPACE and GLOBAL were withdrawn - GROUP could never be written
+  (the groups a request asserts were stored nowhere), WORK had no grant path so only its
+  author ever read it, GLOBAL was TENANT under a name implying otherwise, and WORKSPACE
+  needed a membership grant nothing in the service issued. An audience that cannot be used
+  is worse than one that does not exist, because the enum advertises it.
+- RUN is directional and carries no author key: `run:<mine>` flows down to the runs I spawn,
+  `runup:<parent>` reports up to the run that spawned me, and neither reaches a sibling. It
+  used to carry the author's principal, which made it an identity audience wearing a run's
+  name - parallel workers on one agent_id read each other and every later run inherited it
+  all. Anything durable belongs in USER, or PRIVATE for an agent with no user.

@@ -42,13 +42,9 @@ _NARROWNESS: dict[Visibility, int] = {
     Visibility.PRIVATE: 0,
     Visibility.RUN: 1,
     Visibility.USER: 2,
-    Visibility.GROUP: 3,
-    Visibility.AGENT_GROUP: 4,
-    Visibility.THREAD: 5,
-    Visibility.WORK: 6,
-    Visibility.WORKSPACE: 7,
-    Visibility.TENANT: 8,
-    Visibility.GLOBAL: 9,
+    Visibility.AGENT_GROUP: 3,
+    Visibility.THREAD: 4,
+    Visibility.TENANT: 5,
 }
 _ENTITY_SUMMARY_SYSTEM = (
     "You write the one-paragraph profile of an entity for a memory index, from a list of its "

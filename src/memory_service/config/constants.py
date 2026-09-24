@@ -167,7 +167,6 @@ class Headers:
     tenant: str = "X-Memory-Tenant"
     workspace: str = "X-Memory-Workspace"
     user: str = "X-Memory-User"
-    groups: str = "X-Memory-Groups"
     api_key: str = "X-API-Key"
 
 
@@ -265,21 +264,6 @@ TASKS = TaskTuning()
 class AuthorizationTuning:
     max_listed_objects: int = 2000
     decision_cache: bool = True
-    #: Whether ``X-Memory-Groups`` is believed without asking the authorization provider.
-    #:
-    #: ADR 0005 decides that it is: the header comes from an authenticated upstream that has
-    #: already resolved the caller's memberships, and re-deriving them here would make every
-    #: request pay a ListObjects it does not need. ``ScopeResolver`` has always taken the
-    #: switch - it just had no way to be given it. Nothing in wiring, constants or settings
-    #: reached the parameter, so the off position existed only in the signature and in the
-    #: ADR's prose, and a deployment whose upstream is not trusted had no way to say so
-    #: without editing source.
-    trust_header_groups: bool = True
-    #: Most groups a caller may assert in one request. Each becomes a ``group:{tenant}/{g}``
-    #: read key, and the list arrived uncapped from a header that is split on commas - the
-    #: same unbounded-enumeration shape the body-supplied group fix closed on 2026-09-23,
-    #: left open on the header path because only the body half was looked at.
-    max_asserted_groups: int = 64
 
 
 AUTHORIZATION = AuthorizationTuning()

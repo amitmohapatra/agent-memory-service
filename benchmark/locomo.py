@@ -190,7 +190,10 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
                     _speaker_ctx(ctx, speaker),
                     kind=ObservationKind.MESSAGE,
                     content=body,
-                    hints=ProcessingHints(visibility=Visibility.WORKSPACE),
+                    # TENANT, because the benchmark's two speakers share one corpus and
+                    # every question may draw on either. This was WORKSPACE, which meant the
+                    # same thing here and no longer exists as an audience.
+                    hints=ProcessingHints(visibility=Visibility.TENANT),
                     occurred_at=occurred_at,
                 )
                 await uow.commit()

@@ -116,18 +116,14 @@ async def test_store_side_visibility_filtering(container, uow_factory) -> None:
     assert owner.candidates and owner.candidates[0].kind == "chunk"
     assert all(c.payload["document_id"] == doc_id for c in owner.candidates)
     assert (await engine.retrieve(OTHER_USER, q, limit=5)).candidates == []
-    # 2. WORKSPACE visibility -> members of ws1 see it, non-members don't
-    async with uow_factory() as uow:  # grants bump the user revision -> cached scope invalid
-        for user, ws in (("u1", "ws1"), ("u2", "ws1"), ("u3", "ws2")):
-            await authz.grant_membership("acme", user, workspaces=[ws], revisions=uow.revisions)
-        await uow.commit()
+    # 2. TENANT visibility -> everyone in the tenant sees it, and nobody outside does.
+    # This was WORKSPACE, which needed a membership grant nothing in the service ever wrote;
+    # TENANT is the audience that means "wider than one person" now.
     shared_id = await _ingest(
-        container, uow_factory, visibility=Visibility.WORKSPACE, salt="\n\nShared copy.\n"
+        container, uow_factory, visibility=Visibility.TENANT, salt="\n\nShared copy.\n"
     )
     peer = await engine.retrieve(OTHER_USER, q, limit=10)
     assert peer.candidates and {c.payload["document_id"] for c in peer.candidates} == {shared_id}
-    stranger = OTHER_USER.model_copy(update={"user_id": "u3", "workspace_id": "ws2"})
-    assert (await engine.retrieve(stranger, q, limit=10)).candidates == []
     # the owner now sees both documents; the shared one never leaks the private one
     both = await engine.retrieve(OWNER, q, limit=10)
     assert {c.payload["document_id"] for c in both.candidates} == {doc_id, shared_id}
@@ -136,7 +132,7 @@ async def test_store_side_visibility_filtering(container, uow_factory) -> None:
     # a caller with no visibility keys at all gets nothing (filter is must_any, never empty=all)
     async with uow_factory() as uow:
         vis = await authz.visibility(OTHER_TENANT, revisions=uow.revisions)
-    assert not vis.allows("acme", ["ws:acme/ws1"])
+    assert not vis.allows("acme", ["tenant:acme"])
     empty = await container.search.search_hybrid(
         engine.indexer.collection(KNOWLEDGE),
         dense=await engine.indexer.embedding.embed_query(q),

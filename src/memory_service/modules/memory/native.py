@@ -390,7 +390,7 @@ def _evidence(observation: Observation) -> list[EvidenceRef]:
     ]
 
 
-_SHARED_LEVELS = frozenset({"AGENT_GROUP", "THREAD", "WORK", "WORKSPACE", "TENANT", "GROUP"})
+_SHARED_LEVELS = frozenset({"AGENT_GROUP", "THREAD", "TENANT"})
 
 
 def _other_principals_shared(mem: CanonicalMemory, ctx: MemoryExecutionContext) -> bool:
@@ -944,16 +944,10 @@ class NativeMemoryIntelligence:
                 if ctx.agent_group_id
                 else Visibility.THREAD
                 if ctx.thread_id
-                else Visibility.WORKSPACE
-                if ctx.workspace_id
                 else Visibility.TENANT
             )
-        elif mt is MemoryType.WORK and ctx.work_id:
-            visibility = Visibility.WORK
         elif ctx.thread_id:
             visibility = Visibility.THREAD
-        elif ctx.workspace_id:
-            visibility = Visibility.WORKSPACE
         elif ctx.user_id:
             visibility = Visibility.USER
         else:

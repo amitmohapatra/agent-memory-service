@@ -18,11 +18,9 @@ class _Lister(Protocol):
 
 class ScopeResolver:
     def __init__(
-        self, provider: _Lister, *, max_listed_objects: int = 2000, trust_header_groups: bool = True
-    ):
+        self, provider: _Lister, *, max_listed_objects: int = 2000):
         self.provider = provider
         self.max = max_listed_objects
-        self.trust_header_groups = trust_header_groups
 
     async def _list(self, user: str, relation: str, object_type: str) -> tuple[list[str], bool]:
         objects = await self.provider.list_objects(user, relation, object_type)
@@ -32,10 +30,7 @@ class ScopeResolver:
     async def resolve(self, ctx: MemoryExecutionContext) -> AuthorizedScope:
         principal = ctx.principal_id
         truncated = False
-        workspaces: list[str] = []
-        groups: list[str] = []
         threads: list[str] = []
-        works: list[str] = []
         documents: list[str] = []
         agents: list[str] = []
 
@@ -46,10 +41,7 @@ class ScopeResolver:
 
         for subject in subjects:
             for relation, object_type, sink in (
-                ("viewer", "workspace", workspaces),
-                ("member", "group", groups),
                 ("can_read", "thread", threads),
-                ("can_read", "work", works),
                 ("can_read", "document", documents),
             ):
                 found, over = await self._list(subject, relation, object_type)
@@ -57,8 +49,6 @@ class ScopeResolver:
                 sink.extend(x for x in found if x not in sink)
         if ctx.is_agent and ctx.agent_id:
             agents.append(ctx.agent_id)
-        if self.trust_header_groups:
-            groups.extend(g for g in ctx.group_ids if g not in groups)
         # only objects belonging to this tenant are ever exposed: object ids are tenant-prefixed
         prefix = f"{ctx.tenant_id}/"
 
@@ -68,12 +58,7 @@ class ScopeResolver:
         return AuthorizedScope(
             tenant_id=ctx.tenant_id,
             principal=principal,
-            workspace_ids=own(workspaces),
-            group_ids=sorted(
-                set(own(groups)) | set(ctx.group_ids if self.trust_header_groups else [])
-            ),
             thread_ids=own(threads),
-            work_ids=own(works),
             document_ids=own(documents),
             agent_ids=agents,
             run_ids=[r for r in (ctx.agent_run_id, ctx.parent_agent_run_id) if r],

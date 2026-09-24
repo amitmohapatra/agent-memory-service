@@ -65,16 +65,6 @@ MODEL: dict[str, TypeDef] = {
             "can_write": Relation(computed=("owner", "participant"), ttu=(("workspace", "admin"),)),
         },
     ),
-    "work": TypeDef(
-        "work",
-        {
-            "tenant": Relation(direct=("tenant",)),
-            "owner": Relation(direct=("user",)),
-            "participant": Relation(direct=("user", "agent", "group#member")),
-            "can_read": Relation(computed=("owner", "participant"), ttu=(("tenant", "admin"),)),
-            "can_write": Relation(computed=("owner", "participant")),
-        },
-    ),
     "document": TypeDef(
         "document",
         {

@@ -43,10 +43,9 @@ class _Uow:
     ("visibility", "missing"),
     [
         (Visibility.AGENT_GROUP, "agent_group_id"),
-        (Visibility.WORKSPACE, "workspace_id"),
         (Visibility.USER, "user_id"),
         (Visibility.THREAD, "thread_id"),
-        (Visibility.WORK, "work_id"),
+        (Visibility.RUN, "agent_run_id"),
     ],
 )
 async def test_unsatisfiable_visibility_is_rejected(visibility, missing):

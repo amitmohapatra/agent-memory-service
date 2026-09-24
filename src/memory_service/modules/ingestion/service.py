@@ -136,19 +136,17 @@ class IngestionService:
                 if ctx.thread_id
                 else Visibility.USER
                 if ctx.user_id
-                else Visibility.WORKSPACE
-                if ctx.workspace_id
                 else Visibility.TENANT
             )
             keys = visibility_keys(
                 ctx.tenant_id,
                 vis,
                 owner_principal=ctx.principal_id,
-                workspace_id=ctx.workspace_id,
                 user_id=ctx.user_id,
                 thread_id=ctx.thread_id,
-                work_id=ctx.work_id,
                 agent_group_id=ctx.agent_group_id,
+                agent_run_id=ctx.agent_run_id,
+                parent_agent_run_id=ctx.parent_agent_run_id,
             )
             document = Document(
                 tenant_id=ctx.tenant_id,

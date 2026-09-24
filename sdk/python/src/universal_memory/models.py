@@ -45,18 +45,12 @@ Lifetime = Literal["EPHEMERAL", "SHORT_TERM", "LONG_TERM", "ARCHIVAL"]
 Visibility = Literal[
     "PRIVATE",
     "USER",
-    "GROUP",
     "AGENT_GROUP",
     "RUN",
     "THREAD",
-    "WORK",
-    "WORKSPACE",
     "TENANT",
-    "GLOBAL",
 ]
-ScopeLevel = Literal[
-    "AGENT", "AGENT_GROUP", "WORK", "THREAD", "USER", "GROUP", "WORKSPACE", "TENANT", "GLOBAL"
-]
+ScopeLevel = Literal["AGENT", "AGENT_GROUP", "THREAD", "USER", "TENANT"]
 TemporalStatus = Literal[
     "CURRENT", "SUPERSEDED", "EXPIRED", "CONTRADICTED", "RETRACTED", "ARCHIVED"
 ]
@@ -134,7 +128,6 @@ class Scope(BaseModel):
     tenant_id: str
     workspace_id: str | None = None
     user_id: str | None = None
-    group_ids: list[str] = Field(default_factory=list)
     thread_id: str | None = None
     session_id: str | None = None
     turn_id: str | None = None

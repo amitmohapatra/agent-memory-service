@@ -60,13 +60,11 @@ def _validate_visibility(ctx: MemoryExecutionContext, hints: ProcessingHints | N
             ctx.tenant_id,
             requested,
             owner_principal=ctx.principal_id,
-            workspace_id=anchor("workspace_id"),
             user_id=anchor("user_id"),
-            group_id=ctx.group_ids[0] if "group_ids" in persisted and ctx.group_ids else None,
             thread_id=anchor("thread_id"),
-            work_id=anchor("work_id"),
             agent_group_id=anchor("agent_group_id"),
             agent_run_id=anchor("agent_run_id"),
+            parent_agent_run_id=anchor("parent_agent_run_id"),
         )
     except ValueError as exc:
         raise ValidationFailed(str(exc), details={"visibility": str(requested)}) from exc
@@ -162,7 +160,7 @@ class MemoryService:
         include_superseded: bool = False,
         limit: int = 100,
     ) -> list[CanonicalMemory]:
-        """Memories anchored to the caller's own scopes (user, thread, agent, work, workspace)."""
+        """Memories anchored to the caller's own scopes: agent, user, thread, agent group, tenant."""
         from memory_service.domain.enums import ScopeLevel
         from memory_service.domain.memory import Scope
 
@@ -196,15 +194,6 @@ class MemoryService:
                     thread_id=ctx.thread_id,
                 )
             )
-        if ctx.work_id:
-            anchors.append(
-                Scope(
-                    level=ScopeLevel.WORK,
-                    tenant_id=ctx.tenant_id,
-                    workspace_id=ctx.workspace_id,
-                    work_id=ctx.work_id,
-                )
-            )
         if ctx.agent_group_id:
             anchors.append(
                 Scope(
@@ -214,14 +203,16 @@ class MemoryService:
                     agent_group_id=ctx.agent_group_id,
                 )
             )
-        if ctx.workspace_id:
-            anchors.append(
-                Scope(
-                    level=ScopeLevel.WORKSPACE,
-                    tenant_id=ctx.tenant_id,
-                    workspace_id=ctx.workspace_id,
-                )
+        # Everyone in the tenant shares this one, so it is always an anchor. The WORKSPACE
+        # anchor used to stand in for it whenever a caller had a workspace, which is why its
+        # absence was not noticed until workspace stopped being an audience.
+        anchors.append(
+            Scope(
+                level=ScopeLevel.TENANT,
+                tenant_id=ctx.tenant_id,
+                workspace_id=ctx.workspace_id,
             )
+        )
         rows = await uow.memories.list_scope(
             ctx.tenant_id,
             scope_keys=[s.key() for s in anchors],

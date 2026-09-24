@@ -59,8 +59,8 @@ def _oracle(reader: dict, obj: dict) -> bool:
         return obj["work"] in reader["works"] or author
     if v == "AGENT_GROUP":
         return obj["agent_group"] in reader["agent_groups"] or author
-    if v == "RUN":  # the writing run, its direct children, and the writer itself
-        return obj["run"] in reader["runs"] or reader["principal"] == obj["owner"]
+    if v == "RUN":  # the writing run and the run that spawned it - identity does not enter
+        return obj["run"] in reader["runs"]
     raise AssertionError(v)
 
 
@@ -119,10 +119,7 @@ def _spec(reader: dict) -> VisibilitySpecification:
         tenant_id=reader["tenant"],
         principal=principal,
         user_id=reader["user"],
-        workspace_ids=reader["workspaces"],
-        group_ids=reader["groups"],
         thread_ids=reader["threads"],
-        work_ids=reader["works"],
         agent_group_ids=reader["agent_groups"],
         run_ids=reader.get("runs", []),
     )
@@ -142,10 +139,7 @@ def _keys(obj: dict) -> list[str]:
         Visibility(obj["visibility"]),
         owner_principal=obj["owner"],
         user_id=obj["user"],
-        group_id=obj["group"],
         thread_id=obj["thread"],
-        workspace_id=obj["workspace"],
-        work_id=obj["work"],
         agent_group_id=obj["agent_group"],
         agent_run_id=obj.get("run", "run0"),
     )
@@ -242,14 +236,13 @@ async def test_scope_resolution_is_tenant_bound() -> None:
             R(user="user:u1", relation="owner", object="thread:acme/thr1"),
             R(user="tenant:globex", relation="tenant", object="thread:globex/thr9"),
             R(user="user:u1", relation="owner", object="thread:globex/thr9"),
-            R(user="user:u1", relation="member", object="group:globex/secret"),
         ]
     )
     svc = AuthorizationService(provider, None)
     scope = await svc.scope(MemoryExecutionContext(tenant_id="acme", user_id="u1"))
-    assert scope.thread_ids == ["thr1"] and scope.group_ids == []
+    assert scope.thread_ids == ["thr1"]
     scope_g = await svc.scope(MemoryExecutionContext(tenant_id="globex", user_id="u1"))
-    assert scope_g.thread_ids == ["thr9"] and scope_g.group_ids == ["secret"]
+    assert scope_g.thread_ids == ["thr9"], "the same user id in another tenant is another scope"
     # require() denies objects of the other tenant even with a matching id
     from memory_service.domain.errors import ScopeDenied
 
@@ -329,10 +322,7 @@ def test_a_thread_memory_is_not_readable_from_another_thread_by_its_author() -> 
                 tenant_id="acme",
                 principal=author,
                 user_id="u1",
-                workspace_ids=[],
-                group_ids=[],
                 thread_ids=threads,
-                work_ids=[],
                 agent_group_ids=[],
                 run_ids=[],
             )
@@ -342,39 +332,13 @@ def test_a_thread_memory_is_not_readable_from_another_thread_by_its_author() -> 
     assert not _reader(["thrB"]).allows("acme", keys), "another thread must not, author or not"
 
 
-def test_losing_a_group_does_not_lose_what_you_wrote_in_it() -> None:
-    """The author escape where it is uncontroversial: you keep what you wrote.
-
-    A memory shared with a group stays readable by whoever wrote it after they leave the
-    group. Unlike THREAD, this does not make the group key redundant - a non-author still
-    needs the group - so any future narrowing of THREAD must leave this intact.
-    """
-    keys = readable_by("acme", Visibility.GROUP, owner_principal="user:u1", group_id="legal")
-    spec = VisibilitySpecification.from_scope(
-        AuthorizedScope(
-            tenant_id="acme",
-            principal="user:u1",
-            user_id="u1",
-            workspace_ids=[],
-            group_ids=[],  # no longer in legal
-            thread_ids=[],
-            work_ids=[],
-            agent_group_ids=[],
-            run_ids=[],
-        )
-    )
-    assert spec.allows("acme", keys)
-
 
 def _scope_for(principal: str, threads: list[str]) -> AuthorizedScope:
     return AuthorizedScope(
         tenant_id="acme",
         principal=principal,
         user_id=principal.split(":", 1)[1],
-        workspace_ids=[],
-        group_ids=[],
         thread_ids=threads,
-        work_ids=[],
         agent_group_ids=[],
         run_ids=[],
     )

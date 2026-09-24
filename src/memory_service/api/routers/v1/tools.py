@@ -114,11 +114,11 @@ class RecordRequest(BaseModel):
     step: int | None = Field(default=None, ge=0)
     sub_calls: list[SubCallIn] = Field(default_factory=list, max_length=64)
     visibility: Visibility = Field(
-        default=Visibility.RUN,
+        default=Visibility.PRIVATE,
         description=(
-            "Who may see the record, narrowest first: PRIVATE, RUN (this agent run and the "
-            "runs it spawns; the default), THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, "
-            "TENANT, GLOBAL."
+            "Who may see the record, narrowest first: PRIVATE (this agent alone, across runs "
+            "- the default, and what a procedure is mined from), RUN (this run and the run "
+            "that spawned it), THREAD, AGENT_GROUP, USER, TENANT."
         ),
     )
 

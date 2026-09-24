@@ -164,7 +164,7 @@ async def test_another_agents_unshared_calls_are_invisible(container) -> None:
             output={"price": 1},
             task=TASK,
             step=0,
-            visibility=Visibility.RUN,
+            visibility=Visibility.PRIVATE,
         )
         await uow.commit()
 
@@ -240,7 +240,7 @@ async def test_the_procedures_route_can_see_an_agents_own_procedures(
                     status="ok",
                     task=TASK,
                     step=step,
-                    visibility=Visibility.RUN,
+                    visibility=Visibility.PRIVATE,
                 )
             await register.set_outcome(uow, run_ctx, run_id=run, success=True)
         await uow.commit()

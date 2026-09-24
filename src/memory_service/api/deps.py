@@ -30,7 +30,6 @@ class ScopeBody(BaseModel):
     tenant_id: str | None = Field(default=None, examples=["acme"])
     workspace_id: str | None = Field(default=None, examples=["ws-finance"])
     user_id: str | None = Field(default=None, examples=["u-123"])
-    group_ids: list[str] = Field(default_factory=list, examples=[["legal", "finance"]])
     thread_id: str | None = Field(default=None, examples=["thr_01J8Z"])
     session_id: str | None = Field(default=None, examples=["ses_01J8Z"])
     turn_id: str | None = Field(default=None, examples=["trn_01J8Z"])
@@ -67,17 +66,10 @@ ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)
 
 def _header_scope(request: Request, container: Container) -> dict[str, Any]:
     h = request.headers
-    groups_raw = h.get(HEADERS.groups, "")
     return {
         "tenant_id": h.get(HEADERS.tenant),
         "workspace_id": h.get(HEADERS.workspace),
         "user_id": h.get(HEADERS.user),
-        # Capped: each group becomes a store-side read key, and an uncapped header let one
-        # request assert as many as it liked. The body half of this was closed already; the
-        # header half is the same shape and was missed because only the body was examined.
-        "group_ids": [g.strip() for g in groups_raw.split(",") if g.strip()][
-            : AUTHORIZATION.max_asserted_groups
-        ],
     }
 
 
@@ -127,28 +119,11 @@ def build_context(
     if not tenant_id:
         raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
     _require_tenant_matches_credential(request, container, tenant_id)
-    # Groups are a security field, and they were the one that was merged instead of checked.
-    # A group id is not a hint: ScopeResolver folds it straight into the AuthorizedScope and
-    # VisibilitySpecification turns it into a ``group:{tenant}/{g}`` read key, so a body that
-    # could add one could read every GROUP-visibility row for it without any membership ever
-    # being checked - and the list is uncapped, so ids could be enumerated in bulk in a single
-    # request. The tenant prefix held, so nothing crossed a tenant; everything inside one was
-    # reachable. ADR 0005 and this class's own docstring already say body security fields must
-    # match the headers exactly, so this restores the documented contract rather than
-    # inventing a rule: the header is authoritative, and a body that disagrees is refused
-    # rather than quietly widened.
-    header_groups = sorted(set(headers["group_ids"]))
-    if body.group_ids and sorted(set(body.group_ids)) != header_groups:
-        raise ValidationFailed(
-            "group_ids in body does not match trusted header", details={"field": "group_ids"}
-        )
-    group_ids = header_groups
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
             workspace_id=headers["workspace_id"] or body.workspace_id,
             user_id=headers["user_id"] or body.user_id,
-            group_ids=group_ids,
             thread_id=body.thread_id,
             session_id=body.session_id,
             turn_id=body.turn_id,

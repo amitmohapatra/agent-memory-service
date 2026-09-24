@@ -34,14 +34,6 @@ type thread
     define can_read: viewer or admin from tenant
     define can_write: owner or participant or admin from workspace
 
-type work
-  relations
-    define tenant: [tenant]
-    define owner: [user]
-    define participant: [user, agent, group#member]
-    define can_read: owner or participant or admin from tenant
-    define can_write: owner or participant
-
 type document
   relations
     define tenant: [tenant]

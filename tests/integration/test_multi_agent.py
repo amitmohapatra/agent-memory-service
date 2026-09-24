@@ -123,11 +123,18 @@ async def test_run_lineage_flows_down_not_up_or_sideways(container, uow_factory)
         update={"agent_id": "intern", "agent_run_id": new_id("agent_run")}
     )
     assert await _memory_texts(container, stranger_run, q) & notes == set()
-    # ... while the writing agent keeps its own notes across its later runs
+    # ... and a LATER run of the same agent does not inherit the earlier run's notes either.
+    #
+    # It used to, because RUN carried the author's principal key - and principal_id is
+    # agent:{user}/{agent} with no run in it, so RUN was an identity audience wearing a run's
+    # name. Five parallel workers on one agent_id read each other, a retry inherited the
+    # failed attempt's reasoning, and none of it ever expired inside the TTL. RUN is scoped to
+    # the run now; anything an agent should still know next time belongs in USER (for its
+    # user) or PRIVATE (its own durable store, which is what a scheduled job uses).
     later_planner = user.model_copy(
         update={"agent_id": "planner", "agent_run_id": new_id("agent_run")}
     )
-    assert "Plan: split the brief into revenue and cost." in await _memory_texts(
+    assert "Plan: split the brief into revenue and cost." not in await _memory_texts(
         container, later_planner, q
     )
 

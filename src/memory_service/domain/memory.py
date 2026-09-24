@@ -29,9 +29,7 @@ class Scope(BaseModel):
     tenant_id: str
     workspace_id: str | None = None
     user_id: str | None = None
-    group_id: str | None = None
     thread_id: str | None = None
-    work_id: str | None = None
     agent_id: str | None = None
     agent_group_id: str | None = None
 
@@ -40,11 +38,8 @@ class Scope(BaseModel):
         required = {
             ScopeLevel.AGENT: "agent_id",
             ScopeLevel.AGENT_GROUP: "agent_group_id",
-            ScopeLevel.WORK: "work_id",
             ScopeLevel.THREAD: "thread_id",
             ScopeLevel.USER: "user_id",
-            ScopeLevel.GROUP: "group_id",
-            ScopeLevel.WORKSPACE: "workspace_id",
         }
         field = required.get(self.level)
         if field and getattr(self, field) is None:
@@ -57,9 +52,7 @@ class Scope(BaseModel):
         for name in (
             "workspace_id",
             "user_id",
-            "group_id",
             "thread_id",
-            "work_id",
             "agent_id",
             "agent_group_id",
         ):

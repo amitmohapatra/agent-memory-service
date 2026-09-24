@@ -136,15 +136,12 @@ async def test_graph_visibility_and_isolation(container, uow_factory) -> None:
     res = await engine.retrieve(U2, "Why did Adjusted EBITDA increase despite lower revenue?")
     assert not [c for c in res.candidates if c.kind == "fact"]
     assert not [c for c in res.candidates if c.expansion_edge == "GRAPH_EVIDENCE"]
-    # a workspace-shared copy widens the audience of the shared entities only
-    async with uow_factory() as uow:
-        authz = container.services["authz"]
-        for user in ("u1", "u2"):
-            await authz.grant_membership("acme", user, workspaces=["ws1"], revisions=uow.revisions)
-        await uow.commit()
-    await _ingest(container, uow_factory, U1, visibility=Visibility.WORKSPACE, salt="\n\nShared.\n")
+    # ...and a tenant-shared copy widens the audience of the shared entities only.
+    # This was a WORKSPACE copy, which needed a membership grant nothing in the service ever
+    # wrote; TENANT is the audience that means "everyone here" now.
+    await _ingest(container, uow_factory, U1, visibility=Visibility.TENANT, salt="\n\nShared.\n")
     shared = await graph.query(U2, entities=["Adjusted EBITDA"])
-    assert shared.relations and all("ws:acme/ws1" in r.visibility_keys for r in shared.relations)
+    assert shared.relations and all("tenant:acme" in r.visibility_keys for r in shared.relations)
 
 
 async def test_memory_facts_supersession_and_as_of(container, uow_factory) -> None:

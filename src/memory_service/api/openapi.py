@@ -27,7 +27,7 @@ rather than pretending retrieval succeeded.
 ### Authentication
 The calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`
 (JWKS). The end-user identity and scope travel in trusted context headers
-(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`, `X-Memory-Groups`) which are
+(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which are
 only honored from an authenticated caller. Fine-grained authorization is evaluated by
 OpenFGA on every request.
 

@@ -14,7 +14,6 @@ from universal_memory.models import Scope
 HEADER_TENANT = "X-Memory-Tenant"
 HEADER_WORKSPACE = "X-Memory-Workspace"
 HEADER_USER = "X-Memory-User"
-HEADER_GROUPS = "X-Memory-Groups"
 HEADER_API_KEY = "X-API-Key"
 HEADER_IDEMPOTENCY = "Idempotency-Key"
 HEADER_TRACE = "X-Trace-ID"
@@ -62,8 +61,6 @@ class Transport:
             h[HEADER_WORKSPACE] = scope.workspace_id
         if scope.user_id:
             h[HEADER_USER] = scope.user_id
-        if scope.group_ids:
-            h[HEADER_GROUPS] = ",".join(scope.group_ids)
         if scope.trace_id:
             h[HEADER_TRACE] = scope.trace_id
         if scope.correlation_id:

@@ -79,15 +79,9 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
         level = ScopeLevel.USER
     elif vis is Visibility.AGENT_GROUP and ctx.agent_group_id:
         level = ScopeLevel.AGENT_GROUP
-    elif vis is Visibility.WORK and ctx.work_id:
-        level = ScopeLevel.WORK
     elif vis is Visibility.THREAD and ctx.thread_id:
         level = ScopeLevel.THREAD
-    elif vis is Visibility.GROUP and ctx.group_ids:
-        level = ScopeLevel.GROUP
-    elif vis is Visibility.WORKSPACE and ctx.workspace_id:
-        level = ScopeLevel.WORKSPACE
-    elif vis in (Visibility.TENANT, Visibility.GLOBAL):
+    elif vis is Visibility.TENANT:
         level = ScopeLevel.TENANT
     elif ctx.agent_id and vis is Visibility.PRIVATE:
         level = ScopeLevel.AGENT
@@ -95,8 +89,6 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
         level = ScopeLevel.THREAD
     elif ctx.user_id:
         level = ScopeLevel.USER
-    elif ctx.workspace_id:
-        level = ScopeLevel.WORKSPACE
     else:
         level = ScopeLevel.TENANT
     return Scope(
@@ -104,9 +96,7 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
         tenant_id=ctx.tenant_id,
         workspace_id=ctx.workspace_id,
         user_id=ctx.user_id if level in (ScopeLevel.USER, ScopeLevel.AGENT) else None,
-        group_id=ctx.group_ids[0] if level is ScopeLevel.GROUP and ctx.group_ids else None,
         thread_id=ctx.thread_id if level in (ScopeLevel.THREAD, ScopeLevel.AGENT) else None,
-        work_id=ctx.work_id if level is ScopeLevel.WORK else None,
         agent_id=ctx.agent_id if level is ScopeLevel.AGENT else None,
         agent_group_id=ctx.agent_group_id if level is ScopeLevel.AGENT_GROUP else None,
     )
@@ -124,13 +114,11 @@ def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) 
         visibility,
         owner_principal=ctx.principal_id,
         scope=scope,
-        workspace_id=ctx.workspace_id,
         user_id=ctx.user_id,
-        group_id=ctx.group_ids[0] if ctx.group_ids else None,
         thread_id=ctx.thread_id,
-        work_id=ctx.work_id,
         agent_group_id=ctx.agent_group_id,
         agent_run_id=ctx.agent_run_id,
+        parent_agent_run_id=ctx.parent_agent_run_id,
     )
 
 

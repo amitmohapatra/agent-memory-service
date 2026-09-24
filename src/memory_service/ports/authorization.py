@@ -45,10 +45,7 @@ class AuthorizedScope(BaseModel):
 
     tenant_id: str
     principal: str
-    workspace_ids: list[str] = Field(default_factory=list)
-    group_ids: list[str] = Field(default_factory=list)
     thread_ids: list[str] = Field(default_factory=list)
-    work_ids: list[str] = Field(default_factory=list)
     document_ids: list[str] = Field(default_factory=list)
     agent_ids: list[str] = Field(default_factory=list)
     run_ids: list[str] = Field(
@@ -64,10 +61,7 @@ class AuthorizedScope(BaseModel):
         return stable_key(
             self.tenant_id,
             self.principal,
-            ",".join(sorted(self.workspace_ids)),
-            ",".join(sorted(self.group_ids)),
             ",".join(sorted(self.thread_ids)),
-            ",".join(sorted(self.work_ids)),
             ",".join(sorted(self.document_ids)),
             ",".join(sorted(self.agent_ids)),
             ",".join(sorted(self.agent_group_ids)),

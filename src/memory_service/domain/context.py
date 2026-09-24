@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from memory_service.domain.ids import is_valid_id, new_id
 
 SECURITY_FIELDS: frozenset[str] = frozenset(
-    {"tenant_id", "workspace_id", "user_id", "group_ids", "principal_id", "principal_type"}
+    {"tenant_id", "workspace_id", "user_id", "principal_id", "principal_type"}
 )
 LINEAGE_FIELDS: frozenset[str] = frozenset(
     {
@@ -57,7 +57,6 @@ class MemoryExecutionContext(BaseModel):
     tenant_id: str = Field(..., description="Tenant boundary. Mandatory; never inferred.")
     workspace_id: str | None = Field(default=None, description="Workspace inside the tenant.")
     user_id: str | None = Field(default=None, description="End user on whose behalf we act.")
-    group_ids: list[str] = Field(default_factory=list, description="User group memberships.")
 
     # --- conversation lineage ------------------------------------------
     thread_id: str | None = Field(
@@ -114,14 +113,6 @@ class MemoryExecutionContext(BaseModel):
     def _ids_are_valid(cls, value: str | None) -> str | None:
         return _validate_optional_id(value)
 
-    @field_validator("group_ids")
-    @classmethod
-    def _groups_are_valid(cls, value: list[str]) -> list[str]:
-        for gid in value:
-            if not is_valid_id(gid):
-                raise ValueError(f"invalid group id: {gid!r}")
-        # deterministic order => stable scope hashes
-        return sorted(set(value))
 
     @model_validator(mode="after")
     def _metadata_cannot_override_security(self) -> Self:
@@ -232,7 +223,6 @@ class MemoryExecutionContext(BaseModel):
             self.tenant_id,
             self.workspace_id or "",
             self.user_id or "",
-            ",".join(self.group_ids),
             self.agent_id or "",
             self.agent_group_id or "",
             self.agent_run_id or "",

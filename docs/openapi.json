@@ -2050,6 +2050,19 @@
             "title": "Importance",
             "type": "number"
           },
+          "indexed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When this memory was last written to the search index. A memory is listed as soon as it is stored, but it is only retrievable once the index job has run, and the two are different moments: null means stored-but-not-yet-searchable. Null is also a normal steady state after an edit - changing a memory clears this until the re-index lands - so it reads as 'not yet', never as 'broken'.",
+            "title": "Indexed At"
+          },
           "lifetime": {
             "$ref": "#/components/schemas/Lifetime",
             "description": "EPHEMERAL (within the turn), SHORT_TERM (the current thread or session), LONG_TERM (durable) or ARCHIVAL (kept for audit, out of retrieval)."
@@ -3350,8 +3363,8 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/Visibility",
-            "default": "RUN",
-            "description": "Who may see the record, narrowest first: PRIVATE, RUN (this agent run and the runs it spawns; the default), THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL."
+            "default": "PRIVATE",
+            "description": "Who may see the record, narrowest first: PRIVATE (this agent alone, across runs - the default, and what a procedure is mined from), RUN (this run and the run that spawned it), THREAD, AGENT_GROUP, USER, TENANT."
           }
         },
         "required": [
@@ -3467,19 +3480,6 @@
             "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
             "title": "Custom Metadata",
             "type": "object"
-          },
-          "group_ids": {
-            "examples": [
-              [
-                "legal",
-                "finance"
-              ]
-            ],
-            "items": {
-              "type": "string"
-            },
-            "title": "Group Ids",
-            "type": "array"
           },
           "parent_agent_run_id": {
             "anyOf": [
@@ -3618,13 +3618,9 @@
         "enum": [
           "AGENT",
           "AGENT_GROUP",
-          "WORK",
           "THREAD",
           "USER",
-          "GROUP",
-          "WORKSPACE",
-          "TENANT",
-          "GLOBAL"
+          "TENANT"
         ],
         "title": "ScopeLevel",
         "type": "string"
@@ -4230,14 +4226,10 @@
         "enum": [
           "PRIVATE",
           "USER",
-          "GROUP",
           "AGENT_GROUP",
           "RUN",
           "THREAD",
-          "WORK",
-          "WORKSPACE",
-          "TENANT",
-          "GLOBAL"
+          "TENANT"
         ],
         "title": "Visibility",
         "type": "string"
@@ -4259,7 +4251,7 @@
     }
   },
   "info": {
-    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`\n(JWKS). The end-user identity and scope travel in trusted context headers\n(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`, `X-Memory-Groups`) which are\nonly honored from an authenticated caller. Fine-grained authorization is evaluated by\nOpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
+    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`\n(JWKS). The end-user identity and scope travel in trusted context headers\n(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which are\nonly honored from an authenticated caller. Fine-grained authorization is evaluated by\nOpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
     "title": "Memory Service API",
     "version": "0.1.0"
   },
@@ -4830,14 +4822,10 @@
                     "enum": [
                       "PRIVATE",
                       "USER",
-                      "GROUP",
                       "AGENT_GROUP",
                       "RUN",
                       "THREAD",
-                      "WORK",
-                      "WORKSPACE",
-                      "TENANT",
-                      "GLOBAL"
+                      "TENANT"
                     ],
                     "example": "THREAD",
                     "type": "string"

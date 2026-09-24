@@ -55,7 +55,6 @@ async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryC
     ctx = client.bind(
         tenant_id="acme",
         user_id="u1",
-        group_ids=["g1"],
         thread_id="thr_1",
         session_id="ses_1",
         turn_id="trn_1",
@@ -65,7 +64,6 @@ async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryC
     req = route.calls.last.request
     assert req.headers["X-Memory-Tenant"] == "acme"
     assert req.headers["X-Memory-User"] == "u1"
-    assert req.headers["X-Memory-Groups"] == "g1"
     assert req.headers["X-API-Key"] == "k"
     assert req.headers["Idempotency-Key"].startswith("msg-")
     # same content + lineage => same key (safe retries)
