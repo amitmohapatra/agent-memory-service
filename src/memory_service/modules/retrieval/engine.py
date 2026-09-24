@@ -583,5 +583,54 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
                 twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
                 continue
             by_hash[h] = c
+        if COLLAPSE_SUBSUMED and _subsumed_by(c, seen.values()) is not None:
+            twin = _subsumed_by(c, seen.values())
+            assert twin is not None
+            twin.payload.setdefault("duplicates", []).append(c.record_id)
+            twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
+            continue
         seen[c.record_id] = c
     return list(seen.values())
+
+
+#: Collapse a candidate whose text is wholly contained in one already kept. OFF by default:
+#: it has to earn its place in an ablation like anything else.
+#:
+#: Identical-text dedup above collapses exact twins. It cannot see the shape this service
+#: actually produces: since a turn is kept verbatim as well as extracted, one sentence yields
+#: BOTH "Melanie prefers tea" and the turn "I prefer tea, and my name is Amit..." - different
+#: text, different hash, two slots, one fact. A hundred-memory bundle can therefore carry
+#: closer to fifty distinct things, and the distractor ratio behind every position argument is
+#: twice as bad as the slot count suggests.
+#:
+#: That is not what the lost-in-the-middle work models - it assumes N distinct documents with
+#: one gold among them - so the remedy is not a better position, it is fewer copies of the
+#: same evidence competing for the positions there are.
+COLLAPSE_SUBSUMED = False
+
+#: Below this, containment is coincidence rather than subsumption ("tea" inside anything).
+SUBSUMPTION_MIN_CHARS = 25
+
+
+def _subsumed_by(candidate: Candidate, kept: Any) -> Candidate | None:
+    """An already-kept candidate whose text contains this one's, or None.
+
+    Containment only, not similarity: the longer text carries everything the shorter one says,
+    so dropping the shorter loses no information from the bundle. The reverse - a kept short
+    fact and a longer arrival that subsumes it - is deliberately left alone, because replacing
+    an accepted candidate would reorder a ranking the caller is entitled to.
+    """
+    text = _normalised(candidate.text)
+    if len(text) < SUBSUMPTION_MIN_CHARS:
+        return None
+    for other in kept:
+        if other.record_id == candidate.record_id:
+            continue
+        body = _normalised(other.text)
+        if len(body) > len(text) and text in body:
+            return other
+    return None
+
+
+def _normalised(text: str) -> str:
+    return " ".join((text or "").lower().split())
