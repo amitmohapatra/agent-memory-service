@@ -320,3 +320,28 @@ async def test_an_imperative_is_short_lived_and_a_restated_one_is_not(native) ->
     pref = (await _extract(native, "I prefer concise answers."))[0]
     assert pref.memory_type is MemoryType.PREFERENCE
     assert pref.lifetime is Lifetime.LONG_TERM, "stating a preference is not an imperative"
+
+
+def test_group_visibility_is_refused_rather_than_lost() -> None:
+    """A visibility whose anchor does not survive the write must fail at submission.
+
+    ``group_ids`` is asserted per request in the X-Memory-Groups header and is NOT in
+    ``PROVENANCE_FIELDS``, so it is gone by the time ``context_from_observation`` rebuilds
+    the context for ``memory.process_observation``. Requesting ``visibility=GROUP`` therefore
+    passed validation against the request's own context, returned 202, and then failed in the
+    job with "GROUP visibility requires group_id" - a write acknowledged and silently lost,
+    which is the exact failure _validate_visibility was written to prevent.
+
+    Until group_ids is persisted, GROUP is not expressible and says so at the door.
+    """
+    from memory_service.domain.errors import ValidationFailed
+    from memory_service.modules.memory.service import _validate_visibility
+
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", group_ids=["legal"])
+    assert ctx.group_ids == ["legal"], "the request really does carry it"
+    with pytest.raises(ValidationFailed):
+        _validate_visibility(ctx, ProcessingHints(visibility=Visibility.GROUP))
+
+    # an anchor that DOES survive is still accepted
+    ws = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
+    _validate_visibility(ws, ProcessingHints(visibility=Visibility.WORKSPACE))

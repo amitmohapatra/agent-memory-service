@@ -37,22 +37,36 @@ def _validate_visibility(ctx: MemoryExecutionContext, hints: ProcessingHints | N
     surfaces only when ``memory.process_observation`` runs — by which time the caller is long
     gone and no memory was ever created. Validating here turns silent data loss into a 422
     that names the missing anchor.
+
+    Checked against the anchors that SURVIVE, not the ones the request arrived with. The
+    memory is built later from ``context_from_observation``, which rebuilds the context out
+    of the observation row - so an anchor the request carries but the row does not is not an
+    anchor at all. ``group_ids`` is exactly that: it is asserted per-request in a header and
+    is absent from ``PROVENANCE_FIELDS``, so ``visibility=GROUP`` passed this check and then
+    failed in the job with "GROUP visibility requires group_id", 202 already returned and the
+    write lost - the precise failure the paragraph above says this function exists to stop.
+    Deriving the anchors from PROVENANCE_FIELDS keeps the two in step if either changes.
     """
     requested = getattr(hints, "visibility", None) if hints is not None else None
     if requested is None:
         return
+    persisted = set(MemoryExecutionContext.PROVENANCE_FIELDS)
+
+    def anchor(name: str) -> Any:
+        return getattr(ctx, name) if name in persisted else None
+
     try:
         visibility_keys(
             ctx.tenant_id,
             requested,
             owner_principal=ctx.principal_id,
-            workspace_id=ctx.workspace_id,
-            user_id=ctx.user_id,
-            group_id=ctx.group_ids[0] if ctx.group_ids else None,
-            thread_id=ctx.thread_id,
-            work_id=ctx.work_id,
-            agent_group_id=ctx.agent_group_id,
-            agent_run_id=ctx.agent_run_id,
+            workspace_id=anchor("workspace_id"),
+            user_id=anchor("user_id"),
+            group_id=ctx.group_ids[0] if "group_ids" in persisted and ctx.group_ids else None,
+            thread_id=anchor("thread_id"),
+            work_id=anchor("work_id"),
+            agent_group_id=anchor("agent_group_id"),
+            agent_run_id=anchor("agent_run_id"),
         )
     except ValueError as exc:
         raise ValidationFailed(str(exc), details={"visibility": str(requested)}) from exc
