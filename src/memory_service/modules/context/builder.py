@@ -274,7 +274,7 @@ class ContextBuilder:
             str(budget),
             ",".join(document_ids or []),
         )
-        cache_key = self._cache_key(ctx.tenant_id, bundle_id)
+        cache_key = self._cache_key(ctx, bundle_id)
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
         scope_raw: bytes | None = None
         bundle_raw: bytes | None = None
@@ -518,18 +518,31 @@ class ContextBuilder:
                     )
 
     async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:
-        """A bundle built earlier under the caller's tenant, while it is still cached."""
+        """A bundle this caller built earlier, while it is still cached.
+
+        The handle used to be looked up under the tenant alone, so a same-tenant caller who
+        held another principal's bundle id was served that principal's bundle with no
+        re-check - a cross-principal read of evidence ids and a supported/contradicted oracle
+        over someone else's memories. The automatic path was never exposed, because the
+        bundle_id it computes already folds in the scope fingerprint; only this replay,
+        reachable from ``POST /v1/verify`` with a ``bundle_id``, took the id on trust.
+
+        Including the caller's own fingerprint in the key is what closes it: a handle built
+        for another scope simply does not resolve, so the check cannot be forgotten at a call
+        site the way a separate guard could.
+        """
         if self.cache is None or not bundle_id:
             return None
         try:
-            raw = await self.cache.get(self._cache_key(ctx.tenant_id, bundle_id))
+            raw = await self.cache.get(self._cache_key(ctx, bundle_id))
         except CacheUnavailable:
             return None
         return ContextBundle.model_validate_json(raw) if raw is not None else None
 
     @staticmethod
-    def _cache_key(tenant_id: str, bundle_id: str) -> str:
-        return f"ctx:{tenant_id}:{bundle_id}"
+    def _cache_key(ctx: MemoryExecutionContext, bundle_id: str) -> str:
+        """Tenant, the caller's security scope, and the bundle. All three, always."""
+        return f"ctx:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{bundle_id}"
 
     async def _conversation_window(
         self, ctx: MemoryExecutionContext, result: RetrievalResult
