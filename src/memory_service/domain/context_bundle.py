@@ -7,6 +7,7 @@ everything; it contains bounded, ranked, provenance-carrying evidence.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -103,6 +104,38 @@ class EvidenceReport(BaseModel):
 #: deleted: the ranking is added at the cost of ten short lines, not of a second copy.
 MOST_RELEVANT_MAX = 10
 
+#: Share of the bundle promoted out of the timeline, and whether the block is repeated at the
+#: end as well as the head.
+#:
+#: Ten was chosen to stay inside the first screen, against a bundle that is a hundred memories
+#: at judged depth - so ninety per cent of the ranked set existed only inside a ~21,000
+#: character chronological list, which is the trough the paper above measures at 53.8 per cent.
+#: Read directly, that is what the failures look like: sixteen of fifty-two misses declined
+#: with the evidence present, and two pairs prove it was reachable - "which events has Jon
+#: participated in" answered "networking events, one on 20 June 2023" while "when did Jon
+#: visit networking events" answered "I don't know", in the same run over the same corpus.
+#:
+#: Two changes, both from the same figures. The block is now a share of what is actually in
+#: the bundle, so it scales with depth instead of shrinking to a tenth of it. And it is
+#: repeated immediately before the end of the prompt, because the paper's own numbers put the
+#: tail at 63.2 per cent against the middle's 53.8 - the best evidence now sits at both peaks
+#: of the U rather than only the first.
+MOST_RELEVANT_SHARE = 0.35
+#: OFF by default, and an ablation knob rather than a decision.
+#:
+#: Repeating the top few at the tail would put the best evidence at both peaks of the U, and
+#: the paper's own tail figure (63.2) is well above its middle (53.8). But it breaks an
+#: invariant this renderer was built on and which a test pins: every memory body appears
+#: exactly once, the promoted ones standing in the timeline as a pointer rather than a second
+#: copy. Duplicating eight bodies is real tokens out of a budget that evicts memories when it
+#: is exceeded, so it is worth measuring and not worth assuming. The proportional head block
+#: above costs nothing and carries most of the same argument; this is the part that has to
+#: earn its place.
+REPEAT_MOST_RELEVANT_AT_END = False
+#: How many of the ranked block the tail repeat carries. The tail is a reminder, not a second
+#: copy of the bundle: past a handful it costs tokens the timeline needs.
+MOST_RELEVANT_TAIL = 8
+
 #: What stands in the timeline for a memory printed in full under "Most relevant". Keeps
 #: the date, the weekday and the speaker in their chronological place - which is what the
 #: timeline is for - without paying for the body twice.
@@ -121,6 +154,16 @@ def _observed(m: Any) -> tuple[str, str]:
     except ValueError:
         return raw[:10], ""
     return when.date().isoformat(), when.strftime("%a")
+
+
+def _most_relevant_count(total: int) -> int:
+    """How many memories are promoted out of the timeline.
+
+    A share rather than a fixed count, so the block does not shrink to a tenth of the bundle
+    the moment the depth doubles. Floored at ``MOST_RELEVANT_MAX`` so a small bundle keeps the
+    behaviour it already had.
+    """
+    return max(MOST_RELEVANT_MAX, math.ceil(total * MOST_RELEVANT_SHARE))
 
 
 def _memory_line(m: Any, *, body: str | None = None) -> str:
@@ -187,7 +230,7 @@ class ContextBundle(BaseModel):
             # chronological alone discards the ranking entirely, and the position a memory
             # then lands in decides how well it is read, so the best-ranked few are repeated
             # above the timeline (see MOST_RELEVANT_MAX).
-            ranked = self.memories[:MOST_RELEVANT_MAX]
+            ranked = self.memories[: _most_relevant_count(len(self.memories))]
             shown: set[str] = set()
             if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
                 shown = {m.item_id for m in ranked}
@@ -200,6 +243,11 @@ class ContextBundle(BaseModel):
                     for m in ordered
                 )
             )
+        if self.memories and REPEAT_MOST_RELEVANT_AT_END and len(self.memories) > MOST_RELEVANT_MAX:
+            # The tail of the prompt is the second attention peak (63.2 against the middle's
+            # 53.8 in arXiv 2307.03172), and it is the last thing read before the question.
+            tail = self.memories[:MOST_RELEVANT_TAIL]
+            parts.append("## Most relevant, again\n" + "\n".join(_memory_line(m) for m in tail))
         if self.graph_facts:
             parts.append(
                 "## Facts\n" + "\n".join(f"- [{f.citation}] {f.text}" for f in self.graph_facts)
