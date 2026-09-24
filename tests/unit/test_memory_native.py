@@ -240,7 +240,10 @@ async def test_classification_defaults_and_hints(native) -> None:
         await _extract(native, "Draft plan.", kind=ObservationKind.AGENT_RESULT, ctx=AGENT)
     )[0]
     assert scope_for(agent_note, AGENT).level.value == "AGENT"
-    # owner is always in the audience (except PRIVATE, where the owner IS the audience)
+    # The author is in the audience of what they wrote, so that losing a membership does not
+    # lose access to it (except PRIVATE, where the author IS the audience). On THREAD this
+    # also means the memory is readable from any other thread by its author - see
+    # _NO_OWNER_KEY in modules/authz/visibility.py for why that is open rather than fixed.
     assert keys_for(scope_for(fact, CTX), fact.visibility, CTX) == [
         "thread:acme/thr_1",
         "principal:acme/user:u1",

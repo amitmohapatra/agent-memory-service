@@ -25,7 +25,7 @@ from memory_service.domain.enums import (
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
-from memory_service.modules.authz.visibility import visibility_keys
+from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
@@ -113,10 +113,13 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
 
 
 def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) -> list[str]:
-    """Audience keys for a memory. The owner principal can always read what it wrote
-    (a memory shared with a thread or workspace stays visible to its author even if the
-    author later loses that membership); everyone else needs the visibility's audience."""
-    keys = visibility_keys(
+    """Audience keys for a memory, from this write's execution context.
+
+    The owner-key rule lives in ``readable_by`` rather than here. It used to be applied at
+    this layer, which meant the security property test - which builds its objects with
+    ``visibility_keys`` - was asserting over a key shape no stored row ever had.
+    """
+    return readable_by(
         ctx.tenant_id,
         visibility,
         owner_principal=ctx.principal_id,
@@ -129,10 +132,6 @@ def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) 
         agent_group_id=ctx.agent_group_id,
         agent_run_id=ctx.agent_run_id,
     )
-    owner = f"principal:{ctx.tenant_id}/{ctx.principal_id}"
-    if owner in keys or visibility is Visibility.PRIVATE:
-        return keys
-    return [*keys, owner]
 
 
 #: Evidence that only says "an agent said this". Everything else describes the world: a user

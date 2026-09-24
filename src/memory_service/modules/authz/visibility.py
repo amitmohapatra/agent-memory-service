@@ -46,7 +46,18 @@ def visibility_keys(
     agent_group_id: str | None = None,
     agent_run_id: str | None = None,
 ) -> list[str]:
-    """Audience keys an object is readable by, given its visibility and anchors."""
+    """Audience keys an object is readable by, given its visibility and anchors.
+
+    The author's own ``principal:`` key is appended by ``readable_by`` for most visibilities,
+    so a memory shared with a workspace or a group stays readable by whoever wrote it even if
+    they later lose that membership. See ``_NO_OWNER_KEY`` for which are excluded, and for
+    why THREAD is not among them despite arguably needing to be.
+
+    That append used to live in ``keys_for``, one layer above, and the split is what hid a
+    defect for so long: tests/security/test_isolation.py built its objects with THIS
+    function, which never appended the key, so both sides of its property agreed on a key
+    shape no stored row has - a release-blocking isolation gate proving nothing.
+    """
     if scope is not None:
         workspace_id = workspace_id or scope.workspace_id
         user_id = user_id or scope.user_id
@@ -92,6 +103,40 @@ def visibility_keys(
         case Visibility.GLOBAL:
             return [f"global:{t}"]  # never crosses a tenant: tenant is always authoritative
     raise ValueError(f"unknown visibility {visibility}")  # pragma: no cover
+
+
+#: Visibilities that do NOT carry the author's own principal key, because they already name
+#: the principal themselves.
+#:
+#: THREAD is NOT in this set, and that is the open question. A thread-scoped memory carries
+#: its author's key, so the author matches it from any thread and the thread key is never
+#: reached: ``visibility=THREAD`` means "this thread, or anywhere if you wrote it", which is
+#: the leak an integrator reported when a new conversation recalled the previous one's turns.
+#:
+#: Removing it here is a one-line change and it was tried. It fails, because a thread is
+#: granted in exactly one place - ``conversation/service.py:100``, i.e. POST /v1/threads -
+#: and ``submit_observation`` never grants one. So an observation written with a thread_id
+#: that was not created through the conversation service is readable today ONLY via the
+#: author key: take it away and the author cannot read their own memory back in the very
+#: thread they wrote it in. Two integration tests demonstrate exactly that.
+#:
+#: So the fix is not this line. It is either granting the thread on observation write - which
+#: makes whoever names a thread_id its owner, and thread_id is not authenticated - or
+#: accepting that THREAD means "thread or author". That is an owner decision, not a patch.
+_NO_OWNER_KEY = frozenset({Visibility.PRIVATE, Visibility.RUN})
+
+
+def readable_by(
+    tenant_id: str, visibility: Visibility, *, owner_principal: str, **anchors: str | None
+) -> list[str]:
+    """``visibility_keys`` plus the author's own key, which is what a stored row carries."""
+    keys = visibility_keys(
+        tenant_id, visibility, owner_principal=owner_principal, **anchors  # type: ignore[arg-type]
+    )
+    if visibility in _NO_OWNER_KEY:
+        return keys
+    owner = f"principal:{tenant_id}/{owner_principal}"
+    return keys if owner in keys else [*keys, owner]
 
 
 class VisibilitySpecification(BaseModel):
