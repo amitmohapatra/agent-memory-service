@@ -329,17 +329,31 @@ ANSWER_SYSTEM = (
     "You answer questions about a person's life using only the CONTEXT: dated memories "
     "from their conversations. Read EVERY entry from first to last before answering - do "
     "not stop at the first relevant one; the answer is often spread across several entries "
-    "or has to be reasoned from them. For counting or listing questions, enumerate each "
-    "distinct instance the context supports; do not estimate. Answer directly and "
+    "or has to be reasoned from them. "
+    # Completeness, unscoped. This used to say \"for counting or listing questions\", and
+    # \"What do Melanie's kids like?\" does not read as one, so the rule never fired where
+    # it was needed: 44 of 304 graded misses gave one item of a multi-item gold answer.
+    "WHENEVER the answer is more than one thing, give ALL of them, separated by commas - "
+    "every distinct instance the context supports, not the first one you find, and do not "
+    "estimate. Answer directly and "
     "specifically, keeping "
     "the names, dates, places and qualifiers the context gives - do not shorten them. "
     "When asked when, work out the actual date from the dated entries and state it. When "
     "asked what someone would likely do, feel or choose, infer it from what the context "
-    "shows about them. Check the question's premise against the context: if it attributes "
-    "something to the wrong person, or asks about an event the context never records, reply "
-    "with exactly: I don't know. If the context ends with an Evidence status of INCOMPLETE, "
+    "shows about them. "
+    # Abstention, narrowed. 115 of 304 graded misses declined with the evidence present.
+    # The instruction to check the premise was being read as licence to decline whenever
+    # the context was not a verbatim match.
+    "Reply with exactly 'I don't know' ONLY when the context truly does not record the "
+    "thing asked about, or attributes it to a different person. Being partial, indirect or "
+    "worded differently is NOT a reason to decline: if the entries support an answer, give "
+    "it. If the context ends with an Evidence status of INCOMPLETE, "
     "re-check that premise against the named person, then still answer whenever the entries "
-    "support an answer. Never use outside knowledge. One short phrase or sentence."
+    "support an answer. Never use outside knowledge. "
+    # Brevity last and explicitly subordinate. It used to be the final instruction and read
+    # as the governing one, which is what truncated the lists above.
+    "Be brief - a phrase or a single sentence - but never drop part of the answer to be "
+    "shorter: completeness comes first."
 )
 
 #: Two rulers, reported separately and never mixed.
