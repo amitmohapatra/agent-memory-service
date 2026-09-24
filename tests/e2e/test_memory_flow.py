@@ -234,3 +234,42 @@ def test_the_same_turn_sent_by_both_paths_is_one_memory_with_two_receipts(client
     assert len(timezone) == 1, f"one turn, one memory: {[m['content'] for m in timezone]}"
     sources = {e["source_id"].split("_")[0] for e in timezone[0]["evidence"]}
     assert sources == {"msg", "obs"}, "both receipts are kept on the one row"
+
+
+def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
+    """The collision case: same user id, same thread id, different tenant.
+
+    Identifiers are chosen by callers, so two tenants naming a thread ``thr_1`` and a user
+    ``u1`` is ordinary, not adversarial. Every audience key is tenant-prefixed for that
+    reason (``thread:acme/thr_1``, never ``thread:thr_1``) and ``allows()`` compares the
+    tenant before it looks at a single key, so a collision cannot resolve into a match.
+
+    Covered exhaustively over visibilities in tests/security/test_isolation.py; this is the
+    same property end to end, through the API, and across the graph as well as the memories
+    - an org-wide knowledge graph is the place where a tenant-blind key would hurt most.
+    """
+    acme = {**H, "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+    globex = {**H, "X-Memory-Tenant": "globex", "X-Memory-User": "u1"}
+    scope = _scope()
+
+    assert client.post(
+        "/v1/observations",
+        headers=acme,
+        json={
+            "scope": scope,
+            "kind": "DECISION",
+            "content": "We decided to acquire Initech for 40 million.",
+        },
+    ).status_code == 202
+
+    q = {"scope": scope, "query": "what did we decide about acquiring?", "kinds": ["memory"]}
+    assert client.post("/v1/recall", headers=acme, json=q).json()["results"], "own tenant reads"
+    assert client.post("/v1/recall", headers=globex, json=q).json()["results"] == []
+
+    listed = client.get("/v1/memories", headers=globex, params={"thread_id": scope["thread_id"]})
+    assert listed.status_code == 200 and listed.json()["memories"] == []
+
+    g = {"scope": scope, "entities": ["Initech"], "hops": 2}
+    assert client.post("/v1/graph/query", headers=acme, json=g).json()["matched"], "own tenant"
+    theirs = client.post("/v1/graph/query", headers=globex, json=g).json()
+    assert theirs["matched"] == [] and theirs["facts"] == [] and theirs["visited"] == 0
