@@ -230,6 +230,10 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 	@# correct answer is to abstain.
 	$(call bench-run,$(BENCH_DB_CONV),,/opt/venv/bin/python -m benchmark.locomo $(LOCOMO_ARGS))
 
+#: Extra -e flags for a bench run, e.g. BENCH_EXTRA_ENV='-e BENCH_THREADED_INGEST=1'
+#: to ingest inside a thread the way /v1/messages does.
+BENCH_EXTRA_ENV ?=
+
 LOCOMO_ARGS ?=
 
 bench-external-prepare: ## Download BEIR SciFact into benchmark/data (git-ignored)
@@ -243,7 +247,7 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	@# actual request rate, and --calls-per-minute means what it says.
 	@# The only configuration in which the adversarial category means anything. The gateway
 	@# holds the provider key; this container is given a URL and a model name, never a secret.
-	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
+	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV) $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
 
 bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler or judge (no retrieval)
 	@# RESCORE_ARGS='benchmark/results/locomo_judged_v5.json --judge-ruler lenient'

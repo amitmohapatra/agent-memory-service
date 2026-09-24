@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
 import re
 import sys
@@ -43,6 +44,7 @@ from memory_service.application.container import build_container
 from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind, Visibility
+from memory_service.domain.ids import new_id
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
 
@@ -110,9 +112,31 @@ def _session_time(when: str) -> datetime | None:
         return None
 
 
+#: Ingest every turn inside a conversation thread, the way `/v1/messages` does.
+#:
+#: This benchmark has always ingested with no thread_id, and that is not a detail: the
+#: verbatim catch-all in native.py - the rule that keeps a turn no extraction pattern matched,
+#: and which its own docstring credits with rescuing 452 of 788 LoCoMo turns - returns None
+#: for any turn inside a thread. Every real chat message has one, because append_message
+#: raises without it. So the scores in this repository describe a configuration production
+#: cannot run, and the gap has never appeared in a number.
+#:
+#: Off by default, so the default run stays comparable with every result already recorded.
+THREADED_INGEST = os.environ.get("BENCH_THREADED_INGEST", "").strip().lower() in {"1", "true"}
+
+
 def _speaker_ctx(ctx: MemoryExecutionContext, speaker: str) -> MemoryExecutionContext:
     """The ingest context for one speaker: same tenant and workspace, their own user id."""
-    return ctx.model_copy(update={"user_id": speaker.strip().lower() or ctx.user_id})
+    update: dict[str, object] = {"user_id": speaker.strip().lower() or ctx.user_id}
+    if THREADED_INGEST:
+        # One thread for the whole conversation, which is what a chat client would do. The
+        # session and turn ids are what append_message would require alongside it.
+        update |= {
+            "thread_id": f"thr_{ctx.workspace_id}_bench",
+            "session_id": f"ses_{ctx.workspace_id}_bench",
+            "turn_id": new_id("turn"),
+        }
+    return ctx.model_copy(update=update)
 
 
 async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, str]:
