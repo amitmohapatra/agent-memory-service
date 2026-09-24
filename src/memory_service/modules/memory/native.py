@@ -504,7 +504,7 @@ class NativeMemoryIntelligence:
                     continue
                 seen.add(key)
                 out.append(cand)
-        verbatim = self._verbatim(text, ctx, evidence, kind)
+        verbatim = self._verbatim(text, observation, ctx, evidence)
         if verbatim is not None and normalized_hash(verbatim.content) not in seen:
             out.append(verbatim)
         return out
@@ -512,9 +512,9 @@ class NativeMemoryIntelligence:
     def _verbatim(
         self,
         text: str,
+        observation: Observation,
         ctx: MemoryExecutionContext,
         evidence: list[EvidenceRef],
-        kind: ObservationKind,
     ) -> MemoryCandidate | None:
         """The turn as it was said, so that what no rule matched is still retrievable.
 
@@ -530,15 +530,32 @@ class NativeMemoryIntelligence:
         for an asserted fact or merged with one. Any other memory type here would quietly
         feed raw chatter into the consolidation machinery.
         """
-        if not self.cfg.keep_verbatim_turns or kind is not ObservationKind.MESSAGE:
+        if not self.cfg.keep_verbatim_turns or observation.kind is not ObservationKind.MESSAGE:
             return None
-        # Only where nothing else will keep the turn. Inside a thread the hot-thread cache
-        # and the archive already hold every message with the thread's own scoping, so a
-        # verbatim copy would double-store each one. And an agent's messages
-        # are its working chatter: classify() gives a generic OBSERVATION thread/workspace
-        # visibility, which leaked "Thinking: ..." into the user's memory the first time
-        # this ran without the guard (tests/integration/test_multi_agent.py caught it).
-        if ctx.is_agent or ctx.thread_id:
+        # An agent's own messages are its working chatter: classify() gives a generic
+        # OBSERVATION thread/workspace visibility, which leaked "Thinking: ..." into the
+        # user's memory the first time this ran without a guard
+        # (tests/integration/test_multi_agent.py caught it).
+        #
+        # A turn inside a thread is excluded too, and that exclusion is now known to be the
+        # single biggest gap in this service - but it is NOT safe to simply lift.
+        #
+        # The stated reason is that the hot-thread cache and the archive already hold every
+        # message. They do, for STORAGE. Neither is searchable: ranked recall reads the
+        # vector store, and the bundle's conversation section is a recent window. So a fact
+        # stated in an older turn that no extraction rule matched cannot be found by any
+        # query. And every chat message has a thread - append_message requires one - so the
+        # exclusion is TOTAL for real traffic, while LoCoMo ingests without a thread_id and
+        # keeps its verbatim turns. The benchmark measures a configuration production
+        # cannot run, which is why this has never shown up in a score.
+        #
+        # Lifting it was tried and reverted on 2026-09-24. It works, and four tests that
+        # encode the current semantics fail in ways that are all benign (the "leak" one is
+        # the user's own message, not an agent note). What stopped it is that it doubles the
+        # stored memories for every chat message, and nothing here can measure what that
+        # does to precision or to the p99 budget, because no benchmark drives a thread. The
+        # measurement is the prerequisite, not the fix.
+        if observation.agent_authored or ctx.thread_id:
             return None
         body = text.strip()
         if not body:

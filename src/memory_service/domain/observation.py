@@ -38,6 +38,13 @@ class ProcessingHints(BaseModel):
     skip_summary: bool = False
 
 
+#: Roles whose text is the system talking rather than the human. A message carrying no role
+#: is treated as the human's: the rules that consult this exist to keep an agent's own notes
+#: out of the user's memory, and guessing wrong in that direction loses a user fact.
+AGENT_ROLES = frozenset({"AGENT", "ASSISTANT", "TOOL", "SYSTEM"})
+AGENT_KINDS = frozenset({ObservationKind.AGENT_RESULT, ObservationKind.TOOL_RESULT})
+
+
 class Observation(BaseModel):
     """'This happened or was learned.'"""
 
@@ -75,3 +82,20 @@ class Observation(BaseModel):
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     processed_at: datetime | None = None
+
+    @property
+    def agent_authored(self) -> bool:
+        """Whether the agent wrote this text, as opposed to merely relaying it.
+
+        Two rules used to ask this question and each answered it differently by reading
+        ``agent_id`` - which is true of any request carrying agent lineage, including a
+        human's own turn posted by an agent harness. One of them re-typed the human's
+        preferences into the agent's private memory; the other refused to keep the turn
+        verbatim. The role was recorded here the whole time with nothing reading it.
+        """
+        if self.kind in AGENT_KINDS:
+            return True
+        metadata = self.custom_metadata or {}
+        if str(metadata.get("kind", "")).upper() == "INTERNAL":
+            return True
+        return str(metadata.get("role", "")).upper() in AGENT_ROLES

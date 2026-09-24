@@ -18,7 +18,6 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
-    ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
@@ -190,34 +189,6 @@ def build_memory(
     )
 
 
-#: Roles whose text is the system talking, not the human. A message carrying no role at all
-#: is treated as the human's: this rule exists to keep an agent's own notes out of the user's
-#: memory, and the cost of guessing wrong in that direction is a lost user fact, which is the
-#: defect it was causing.
-_AGENT_ROLES = frozenset({"AGENT", "ASSISTANT", "TOOL", "SYSTEM"})
-_AGENT_KINDS = frozenset({ObservationKind.AGENT_RESULT, ObservationKind.TOOL_RESULT})
-
-
-def _agent_authored(observation: Observation) -> bool:
-    """Whether the agent wrote this text, as opposed to merely relaying it.
-
-    This used to read ``observation.agent_id``, which is true of *any* request carrying agent
-    lineage - including a human's own turn posted by an agent harness. Every first-person
-    preference a user stated through such a harness was therefore re-typed to AGENT, anchored
-    at ScopeLevel.AGENT and owned by ``agent:<user>/<agent>``, so the human could never see
-    their own preference again. ADR 0013 scopes the rule to "an agent-authored observation";
-    the condition implemented "any observation with an agent on the request", which is
-    strictly broader, and the role was recorded on the observation all along without anything
-    reading it.
-    """
-    if observation.kind in _AGENT_KINDS:
-        return True
-    metadata = observation.custom_metadata or {}
-    if str(metadata.get("kind", "")).upper() == "INTERNAL":
-        return True
-    return str(metadata.get("role", "")).upper() in _AGENT_ROLES
-
-
 class ObservationPipeline:
     def __init__(
         self,
@@ -299,7 +270,7 @@ class ObservationPipeline:
             update["memory_type"] = h.memory_type
         if h.custom_type:
             update["custom_type"] = h.custom_type
-        elif _agent_authored(o) and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
+        elif o.agent_authored and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
             # "my timezone is UTC" said by an agent is about the agent: it becomes the agent's
             # working memory, never a USER memory of the human it acts for (no chat pollution)
             update["memory_type"] = MemoryType.AGENT
