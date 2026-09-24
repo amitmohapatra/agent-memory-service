@@ -515,6 +515,7 @@ async def run(
     limit_questions: int | None,
     k: int,
     *,
+    concurrency: int = 1,
     sample: int | None = None,
     ablate: dict[str, bool] | None = None,
     judge: bool = False,
@@ -594,11 +595,32 @@ async def run(
                 file=sys.stderr,
                 flush=True,
             )
-            for asked, item in enumerate(questions, start=1):
+
+            async def _ask(
+                asked: int,
+                item: dict,
+                *,
+                # Bound at definition rather than closed over. The gather below finishes
+                # before the conversation loop advances, so late binding would not actually
+                # bite today - but "it cannot bite" is worth more than "it does not", and a
+                # closure over a loop variable is the kind of thing a later edit breaks
+                # silently.
+                builder: Any = builder,
+                ctx: Any = ctx,
+                index: int = index,
+                turns: dict = turns,
+                reference_date: Any = reference_date,
+                total_q: int = total_q,
+            ) -> None:
+                """One question, from retrieval to record.
+
+                The body is unchanged from the loop it replaces; only where it is called
+                from moved, so a sequential run is the same run it always was.
+                """
                 category = int(item.get("category", 0))
                 question = item.get("question") or ""
                 if not question:
-                    continue
+                    return
                 bundle, latency_ms = await _build_timed(builder, ctx, question, incidents)
                 latencies.append(latency_ms)
                 if asked % 10 == 0 or asked == total_q:
@@ -708,6 +730,10 @@ async def run(
                 # recoverable instead of a re-run.
                 records.append(
                     {
+                        # stripped before the result is written; it exists so a concurrent
+                        # run, whose records complete out of order, is diffable against a
+                        # sequential one
+                        "_order": (index, asked),
                         "conversation": index,
                         "category": CATEGORY_NAMES.get(category, str(category)),
                         "question": question,
@@ -741,6 +767,27 @@ async def run(
                         "hit": hit,
                     }
                 )
+
+            if concurrency <= 1:
+                for asked, item in enumerate(questions, start=1):
+                    await _ask(asked, item)
+            else:
+                # The accuracy path has always been strictly sequential, so every latency in
+                # this repository is a single-caller number and nothing here has produced a
+                # p99 under load. The gate in adapters/models/_runner.py admits one caller
+                # into a model at a time, which cannot show up until a second caller exists.
+                #
+                # Records are appended on completion, so with concurrency they arrive out of
+                # order; `_order` is stamped on each and stripped after the run, which keeps
+                # a concurrent result diffable against a sequential one.
+                gate = asyncio.Semaphore(concurrency)
+
+                async def _guarded(asked: int, item: dict, *, gate: Any = gate) -> None:
+                    async with gate:
+                        await _ask(asked, item)
+
+                await asyncio.gather(*(_guarded(n, q) for n, q in enumerate(questions, start=1)))
+        records.sort(key=lambda r: r["_order"])
     except Exception as exc:  # noqa: BLE001 - keep what was measured
         # A store that was unreachable for one call once took a 33-minute run with it: the
         # exception left run(), nothing was written, and 300 judged answers were lost. The
@@ -888,7 +935,8 @@ async def run(
             )
             + " Per-question detail is in `records`; rescore from it rather than re-running.",
         },
-        "records": records,
+        "concurrency": concurrency,
+        "records": [{k: v for k, v in r.items() if k != "_order"} for r in records],
         "aborted": aborted,
         "store_incidents": incidents,
         "query_p50_ms": round(latencies[len(latencies) // 2], 1) if latencies else 0.0,
@@ -909,6 +957,16 @@ def main() -> int:
     parser.add_argument("--conversations", type=int, default=None)
     parser.add_argument("--questions", type=int, default=None, help="cap per conversation")
     parser.add_argument("--k", type=int, default=10)
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help=(
+            "questions answered at once. 1 (the default) is the sequential run every result "
+            "here was taken with; above 1 puts a second caller on the retrieval path, which "
+            "is the only way the one-caller gate in adapters/models/_runner.py shows up"
+        ),
+    )
     parser.add_argument(
         "--sample",
         type=int,
@@ -953,6 +1011,7 @@ def main() -> int:
             args.questions,
             args.k,
             sample=args.sample,
+            concurrency=args.concurrency,
             ablate=ablate,
             judge=args.judge,
             calls_per_minute=args.calls_per_minute,
