@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
-from memory_service.config.constants import HEADERS
+from memory_service.config.constants import AUTHORIZATION, HEADERS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ValidationFailed
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
@@ -72,7 +72,12 @@ def _header_scope(request: Request, container: Container) -> dict[str, Any]:
         "tenant_id": h.get(HEADERS.tenant),
         "workspace_id": h.get(HEADERS.workspace),
         "user_id": h.get(HEADERS.user),
-        "group_ids": [g.strip() for g in groups_raw.split(",") if g.strip()],
+        # Capped: each group becomes a store-side read key, and an uncapped header let one
+        # request assert as many as it liked. The body half of this was closed already; the
+        # header half is the same shape and was missed because only the body was examined.
+        "group_ids": [g.strip() for g in groups_raw.split(",") if g.strip()][
+            : AUTHORIZATION.max_asserted_groups
+        ],
     }
 
 

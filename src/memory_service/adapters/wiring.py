@@ -160,6 +160,7 @@ def _wire_services(container: Container) -> None:
         max_listed_objects=constants.AUTHORIZATION.max_listed_objects,
         cache_ttl_seconds=constants.CACHE.authz_ttl_seconds,
         decision_cache=constants.AUTHORIZATION.decision_cache,
+        trust_header_groups=constants.AUTHORIZATION.trust_header_groups,
     )
 
 

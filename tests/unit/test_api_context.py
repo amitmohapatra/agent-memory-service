@@ -102,3 +102,19 @@ def test_missing_tenant_and_auth(settings, overrides) -> None:
         assert r.status_code == 422 and "tenant_id" in r.json()["error"]["message"]
         r = c.post("/echo-context", headers={"X-Memory-Tenant": "acme"}, json={})
         assert r.status_code == 401 and r.json()["error"]["code"] == "AUTHENTICATION"
+
+
+def test_a_header_cannot_assert_an_unbounded_number_of_groups(settings, overrides) -> None:
+    """Each group becomes a store-side read key; the header is split on commas and was
+    uncapped, which is the same unbounded-enumeration shape the body fix closed."""
+    from memory_service.config.constants import AUTHORIZATION
+
+    asserted = [f"g{n}" for n in range(AUTHORIZATION.max_asserted_groups + 25)]
+    with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
+        r = c.post(
+            "/echo-context",
+            headers={**HEADERS, "X-Memory-Groups": ",".join(asserted)},
+            json={},
+        )
+        assert r.status_code == 200, r.text
+        assert len(r.json()["group_ids"]) == AUTHORIZATION.max_asserted_groups
