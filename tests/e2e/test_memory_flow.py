@@ -73,6 +73,14 @@ def test_messages_and_observations_become_memories(client) -> None:
     )
     one = client.get(f"/v1/memories/{tz['memory_id']}", headers=H)
     assert one.status_code == 200 and one.json()["object"] == "europe/berlin"
+    # A memory is listed as soon as it is stored, but it is only retrievable once the
+    # memory.index job has run. Without a receipt on the row there is no way over the public
+    # API to tell those two moments apart, so a caller polling the list either papers over
+    # the window with a fixed sleep or reads "stored" as "searchable" and is wrong. The value
+    # may legitimately be null here - the job need not have drained - but the FIELD must be
+    # there on both reads, which share memory_to_api.
+    assert "indexed_at" in one.json()
+    assert all("indexed_at" in m for m in mems)
     # not visible to another user (403, existence not revealed as 404 either way)
     assert (
         client.get(

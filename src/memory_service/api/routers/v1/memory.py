@@ -140,6 +140,16 @@ class MemoryResponse(BaseModel):
     category: str | None = None
     created_at: datetime
     updated_at: datetime
+    indexed_at: datetime | None = Field(
+        default=None,
+        description=(
+            "When this memory was last written to the search index. A memory is listed as "
+            "soon as it is stored, but it is only retrievable once the index job has run, "
+            "and the two are different moments: null means stored-but-not-yet-searchable. "
+            "Null is also a normal steady state after an edit - changing a memory clears "
+            "this until the re-index lands - so it reads as 'not yet', never as 'broken'."
+        ),
+    )
 
 
 class MemoryListResponse(BaseModel):
@@ -174,6 +184,7 @@ def memory_to_api(m: CanonicalMemory) -> dict[str, Any]:
         "category": m.system_metadata.get("category"),
         "created_at": m.created_at,
         "updated_at": m.updated_at,
+        "indexed_at": m.system_metadata.get("indexed_at"),
     }
 
 

@@ -71,6 +71,9 @@ def _to_domain(r: MemoryRow) -> CanonicalMemory:
             **(r.system_metadata or {}),
             "provider": r.provider,
             "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+            # The search-index receipt. Carried here rather than on CanonicalMemory, which is
+            # extra="forbid" and describes what a memory IS, not where a copy of it has got to.
+            "indexed_at": r.indexed_at.isoformat() if r.indexed_at else None,
             "visibility_keys": list(r.visibility_keys or []),
         },
         custom_metadata=dict(r.custom_metadata or {}),
