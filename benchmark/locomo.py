@@ -34,6 +34,7 @@ from collections import defaultdict
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any
 
 from benchmark.common import provenance, reset_store, write_result
@@ -43,6 +44,7 @@ from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import _memory_line, _most_relevant_count
 from memory_service.domain.enums import ObservationKind, Visibility
 from memory_service.domain.ids import new_id
 from memory_service.domain.observation import ProcessingHints
@@ -221,6 +223,75 @@ def _content_tokens(text: object) -> set[str]:
 def _overlap(needle: set[str], haystack: set[str]) -> float:
     """Fraction of ``needle`` present in ``haystack``. 0.0 when there is nothing to find."""
     return round(len(needle & haystack) / len(needle), 4) if needle else 0.0
+
+
+def _evidence_ranks(memories: Sequence[Any], evidence: Sequence[str]) -> list[int | None]:
+    """Where each gold evidence turn landed in the retrieval ranking, or ``None`` if absent.
+
+    ``evidence_all_hit`` flattens the whole bundle into one token set before scoring
+    (``found = _content_tokens(bundle.render())``), so it cannot see order at all. Every
+    ordering change measured so far - the promotion share, the repeated tail, subsumption
+    collapse - was invisible to it *by construction* and read as an exact null: a knob that
+    only permutes the bundle cannot move a metric computed over the bundle's union. This is
+    the same overlap test applied per memory instead of over the render, which is the
+    smallest change that makes an ordering experiment falsifiable at all.
+
+    Scored against ``_memory_line`` rather than the raw body, because that is the text the
+    prompt actually shows - date, speaker and all.
+    """
+    ranked = [_content_tokens(_memory_line(m)) for m in memories]
+    out: list[int | None] = []
+    for text in evidence:
+        needle = _content_tokens(text)
+        best: int | None = None
+        best_score = 0.0
+        if needle:
+            for position, haystack in enumerate(ranked):
+                score = _overlap(needle, haystack)
+                if score > best_score:
+                    best, best_score = position, score
+        out.append(best if best_score >= EVIDENCE_OVERLAP_HIT else None)
+    return out
+
+
+def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | None]:
+    """Mean reciprocal rank, and whether the evidence reached the block the model reads first.
+
+    ``head`` is ``_most_relevant_count(len(memories))`` - the size of the "## Most relevant"
+    block that ``ContextBundle.render`` puts above the chronological timeline. Evidence below
+    it is still *present*, which is all ``evidence_all_hit`` ever asked; whether being below
+    it costs anything is the question these two numbers exist to answer.
+    """
+    if not ranks:
+        return {"evidence_mrr": None, "evidence_in_head": None, "evidence_worst_rank": None}
+    found = [r for r in ranks if r is not None]
+    return {
+        "evidence_mrr": round(sum(1.0 / (r + 1) for r in found) / len(ranks), 4),
+        "evidence_in_head": round(sum(1 for r in found if r < head) / len(ranks), 4),
+        # a multi-hop question is bounded by its LAST evidence item, the same way
+        # evidence_min_overlap bounds recall
+        "evidence_worst_rank": max(found) if len(found) == len(ranks) else None,
+    }
+
+
+def _rank_summary(records: Sequence[dict[str, Any]]) -> dict[str, float | None]:
+    """``evidence_mrr`` and ``evidence_in_head`` averaged over the answerable rows.
+
+    Adversarial rows are excluded for the same reason they are excluded from
+    ``evidence_all_recall``: they have no gold evidence, so a rank over them is undefined
+    rather than zero.
+    """
+    scored = [
+        r
+        for r in records
+        if r["category"] != "adversarial" and r.get("evidence_mrr") is not None
+    ]
+    if not scored:
+        return {"evidence_mrr": None, "evidence_in_head": None}
+    return {
+        "evidence_mrr": round(sum(r["evidence_mrr"] for r in scored) / len(scored), 4),
+        "evidence_in_head": round(sum(r["evidence_in_head"] for r in scored) / len(scored), 4),
+    }
 
 
 def _answer_present(bundle_text: str, answer: str) -> bool:
@@ -650,6 +721,14 @@ async def run(
                 # every one of them (40 of 43 in the first two conversations cite two or
                 # more turns), so the minimum is the recall that actually bounds it.
                 evidence_min_overlap = min(overlaps, default=0.0)
+                # ...and the same question asked of the ORDER rather than the union, which is
+                # the only thing a reordering can move (see _evidence_ranks).
+                evidence_ranks = _evidence_ranks(
+                    bundle.memories, [turns.get(e, "") for e in _evidence_ids(item)]
+                )
+                rank_metrics = _rank_metrics(
+                    evidence_ranks, _most_relevant_count(len(bundle.memories))
+                )
                 strict = _answer_present(rendered, answer)
                 abstained = "INSUFFICIENT" in status
 
@@ -736,6 +815,8 @@ async def run(
                         "evidence_min_overlap": evidence_min_overlap,
                         "evidence_all_hit": bool(overlaps)
                         and evidence_min_overlap >= EVIDENCE_OVERLAP_HIT,
+                        "evidence_ranks": evidence_ranks,
+                        **rank_metrics,
                         # per question, so p99 and a stage split can be derived from the
                         # file instead of from a summary computed once and never checkable
                         "latency_ms": round(latency_ms, 1),
@@ -881,6 +962,11 @@ async def run(
             if total_n
             else 0.0
         ),
+        # The order-aware companions to evidence_all_recall, over the same answerable rows.
+        # That number has been saturated at 0.9785 across every ablation taken, which is what
+        # a union metric does once retrieval works; these two can still move when nothing but
+        # the ranking changes, and are the instrument any promotion/reordering arm is read on.
+        **_rank_summary(records),
         "strict_recall": (
             round(
                 sum(1 for r in records if r["category"] != "adversarial" and r["strict_substring"])
