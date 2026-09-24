@@ -92,9 +92,16 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     39 -> 41 in Phase 2, for two facts about a host rather than two tunings: how many worker
     processes this machine's cores are worth (``service.workers``) and which port the Qdrant
     beside it publishes gRPC on (``search.qdrant_grpc_port``).
+
+    41 -> 42 for ``authentication.tenant_claim``, which is a credential fact and not a
+    tuning: it names the claim a credential must carry to act for a tenant. Without it the
+    tenant is asserted in a header and compared to nothing, so one credential reaches every
+    tenant on the deployment by changing that header - sound when a gateway stamps the tenant
+    as a constant (one deployment per customer), not sound when several teams share one. The
+    two deployments genuinely differ, which is what earns an environment field.
     """
     leaves = _leaves(Settings)
-    assert len(leaves) <= 41, f"{len(leaves)} env fields: {leaves}"
+    assert len(leaves) <= 42, f"{len(leaves)} env fields: {leaves}"
     for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 

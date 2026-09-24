@@ -126,6 +126,14 @@ class AuthenticationSettings(BaseModel):
     jwt_audience: str | None = None
     jwt_jwks_url: str | None = None
     trusted_dev_api_keys: list[SecretStr] = Field(default_factory=lambda: [SecretStr("dev-key")])
+    #: Claim on the credential naming the tenant it may act for. Unset, a credential may
+    #: assert ANY tenant - the tenant arrives in a header and nothing checks it against who
+    #: is calling, so one key reaches every tenant on the deployment by changing a header.
+    #: That is only safe where the tenant is a constant stamped by a gateway, i.e. one
+    #: deployment per customer. Set it for a SHARED deployment and the assertion becomes a
+    #: proof: the header must equal this claim or the request is refused. Fails closed - a
+    #: credential carrying no such claim is refused rather than trusted.
+    tenant_claim: str | None = None
 
 
 class AuthorizationSettings(BaseModel):

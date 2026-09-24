@@ -11,7 +11,7 @@ from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.config.constants import AUTHORIZATION, HEADERS
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.errors import ValidationFailed
+from memory_service.domain.errors import ScopeDenied, ValidationFailed
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
 from memory_service.observability.logging import bind_log_context
 from memory_service.observability.metrics import stage_seconds
@@ -81,6 +81,35 @@ def _header_scope(request: Request, container: Container) -> dict[str, Any]:
     }
 
 
+def _require_tenant_matches_credential(
+    request: Request, container: Container, tenant_id: str
+) -> None:
+    """Bind the asserted tenant to the credential asserting it, when configured to.
+
+    Authentication identifies the calling SERVICE - ``ServicePrincipal`` carries no tenant -
+    while the tenant arrives in a header, and nothing compared the two. Every boundary below
+    this point then works perfectly, on behalf of whichever tenant the caller claimed to be.
+    One credential reaches every tenant on the deployment by changing one header.
+
+    That is sound where the tenant is a constant a gateway stamps, which is one deployment
+    per customer. On a SHARED deployment it makes the credential the entire boundary, so
+    ``authentication.tenant_claim`` names the claim that must agree with the header.
+
+    Fails closed: with the setting on, a credential that carries no such claim is refused
+    rather than trusted, so switching a deployment to trusted_dev keys cannot quietly turn
+    the check off.
+    """
+    claim = container.settings.authentication.tenant_claim
+    if not claim:
+        return
+    principal: ServicePrincipal | None = getattr(request.state, "service_principal", None)
+    if principal is None or str(principal.claims.get(claim) or "") != tenant_id:
+        raise ScopeDenied(
+            "credential is not valid for this tenant",
+            details={"field": HEADERS.tenant},
+        )
+
+
 def build_context(
     request: Request, container: Container, body_scope: ScopeBody | None
 ) -> MemoryExecutionContext:
@@ -97,6 +126,7 @@ def build_context(
     tenant_id = headers["tenant_id"] or body.tenant_id
     if not tenant_id:
         raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
+    _require_tenant_matches_credential(request, container, tenant_id)
     # Groups are a security field, and they were the one that was merged instead of checked.
     # A group id is not a hint: ScopeResolver folds it straight into the AuthorizedScope and
     # VisibilitySpecification turns it into a ``group:{tenant}/{g}`` read key, so a body that

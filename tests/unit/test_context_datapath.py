@@ -559,8 +559,13 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
         async def build(self, *args: Any, **kwargs: Any) -> ContextBundle:
             raise AssertionError("the unverified arm must not build a ContextBundle")
 
+    app_settings = settings
+
     class _Container:
+        # `settings` because build_context reads authentication.tenant_claim to decide
+        # whether the asserted tenant has to agree with the credential presenting it
         services = {"authenticator": _Authenticator(), "context_builder": _Builder()}
+        settings = app_settings
 
     app = create_app(settings, overrides=overrides)
     app.dependency_overrides[get_container] = _Container
