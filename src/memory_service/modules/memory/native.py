@@ -555,7 +555,7 @@ class NativeMemoryIntelligence:
         # stored memories for every chat message, and nothing here can measure what that
         # does to precision or to the p99 budget, because no benchmark drives a thread. The
         # measurement is the prerequisite, not the fix.
-        if observation.agent_authored or ctx.thread_id:
+        if observation.agent_authored:
             return None
         body = text.strip()
         if not body:

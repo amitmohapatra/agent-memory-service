@@ -109,12 +109,20 @@ async def test_run_lineage_flows_down_not_up_or_sideways(container, uow_factory)
     assert "Plan: split the brief into revenue and cost." not in await _memory_texts(
         container, grandchild, q
     )
-    # the user (upwards) sees no agent working notes; an unrelated agent's fresh run sees nothing
-    assert await _memory_texts(container, user, q) == set()
+    # The user (upwards) sees no agent working notes, and an unrelated agent's fresh run sees
+    # none either. Stated as "no agent note" rather than "nothing at all": the user's own turn
+    # is kept verbatim now and is visible in the thread, so both of them legitimately match on
+    # it. Asserting an empty set here would be asserting that the human's own message is
+    # unfindable, which is the defect that cost 57 points of answer recall.
+    notes = {
+        "Plan: split the brief into revenue and cost.",
+        "Draft note: revenue section uses Table 1.",
+    }
+    assert await _memory_texts(container, user, q) & notes == set()
     stranger_run = user.model_copy(
         update={"agent_id": "intern", "agent_run_id": new_id("agent_run")}
     )
-    assert await _memory_texts(container, stranger_run, q) == set()
+    assert await _memory_texts(container, stranger_run, q) & notes == set()
     # ... while the writing agent keeps its own notes across its later runs
     later_planner = user.model_copy(
         update={"agent_id": "planner", "agent_run_id": new_id("agent_run")}

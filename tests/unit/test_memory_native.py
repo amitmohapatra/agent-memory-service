@@ -202,10 +202,15 @@ async def test_extraction_kinds_and_temporal(native) -> None:
     assert event[0].memory_type is MemoryType.EPISODIC
     multi = await _extract(native, "My name is Amit and my timezone is CET. I prefer tea.")
     assert [c.predicate for c in _extracted(multi)] == ["name", "timezone", "prefers"]
-    # Inside a thread (CTX has thr_1) the thread itself keeps the turn, so no verbatim copy;
-    # outside one the turn itself is kept alongside the facts, last, so ranking prefers the
-    # parsed fact over the transcript it came from.
-    assert [c.predicate for c in multi][-1] == "prefers"
+    # The turn itself is kept alongside the facts, last, so ranking prefers the parsed fact
+    # over the transcript it came from.
+    #
+    # This used to hold only OUTSIDE a thread: inside one the turn was dropped on the theory
+    # that the thread already kept it. It does - for storage, not for search - and measured
+    # on LoCoMo in the production shape that cost 57 points of answer recall (0.2026 against
+    # 0.7768) and took evidence recall from 0.9785 to 0.6996. Both contexts now keep it, so
+    # the two halves of this assertion are deliberately identical.
+    assert [c.predicate for c in multi][-1] == "said"
     threadless = CTX.model_copy(update={"thread_id": None})
     loose = await _extract(
         native, "My name is Amit and my timezone is CET. I prefer tea.", ctx=threadless

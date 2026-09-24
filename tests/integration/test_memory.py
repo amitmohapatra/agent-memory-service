@@ -171,15 +171,30 @@ async def test_agent_private_memories_stay_private(container, uow_factory) -> No
         kind=ObservationKind.AGENT_RESULT,
     )
     mine = await _memories(uow_factory, agent, container)
+    # The user's own turn is kept verbatim now and is visible inside the thread, so the agent
+    # sees that too; this test is about the agent's own working note, which is the thing that
+    # must not escape its run.
+    notes = [m for m in mine if m.memory_type is MemoryType.AGENT]
     # working notes of a run stay with that run (RUN: the run, its children, the writer)
-    assert len(mine) == 1 and mine[0].visibility is Visibility.RUN
-    assert mine[0].memory_type is MemoryType.AGENT and mine[0].lifetime is Lifetime.SHORT_TERM
-    assert mine[0].system_metadata["expires_at"] is not None
+    assert len(notes) == 1 and notes[0].visibility is Visibility.RUN
+    assert notes[0].lifetime is Lifetime.SHORT_TERM
+    assert notes[0].system_metadata["expires_at"] is not None
     engine = container.services["retrieval"]
     q = "plan for the report sections"
-    assert (await engine.retrieve(agent, q, kinds=("memory",))).candidates
-    assert (await engine.retrieve(other_agent, q, kinds=("memory",))).candidates == []
-    assert (await engine.retrieve(user, q, kinds=("memory",))).candidates == []
+
+    async def _sees_the_note(who) -> bool:
+        """Whether this caller can retrieve the agent's private working note.
+
+        Not "retrieves nothing": the user's own turn is kept verbatim and is visible to
+        everyone in the thread, so both the other agent and the user legitimately match on
+        it. What must not escape the run is the note itself.
+        """
+        found = (await engine.retrieve(who, q, kinds=("memory",))).candidates
+        return any("Intermediate plan" in c.text for c in found)
+
+    assert await _sees_the_note(agent)
+    assert not await _sees_the_note(other_agent)
+    assert not await _sees_the_note(user)
     # hints can widen visibility explicitly (shared with the thread)
     await _observe(
         container,
