@@ -198,3 +198,39 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     linked = [await writer.get_memory(i.item_id) for i in managers]
     assert any(m.contradicts for m in linked)
     await memory.aclose()
+
+
+def test_the_same_turn_sent_by_both_paths_is_one_memory_with_two_receipts(client) -> None:
+    """An integrator reported that enabling both write paths duplicates every turn.
+
+    PlanSmart sends ``record_messages: true`` AND ``observe_input/observe_output: true``, so
+    the same turn arrives at /v1/messages and at /v1/observations, and they asked us to
+    decide the contract: dedupe here, or tell callers to pick one flag.
+
+    Neither, because it already dedupes - and what they saw is the dedupe working. A listed
+    row carrying BOTH ``message`` and ``observation`` evidence is not two writes that leaked
+    through; it is one memory that knows it arrived twice, which is strictly better than
+    dropping either receipt. Reinforcement and corroboration read off that evidence, so a
+    version that kept only the first would under-count both.
+
+    Pinned for the near-duplicate too, which is the case a byte-hash would miss: a harness
+    that prefixes the turn with its role sends different bytes for the same fact.
+    """
+    scope = _scope()
+    text = "My timezone is Europe/Berlin."
+    assert client.post(
+        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": text}
+    ).status_code == 202
+    assert client.post(
+        "/v1/observations",
+        headers=H,
+        json={"scope": scope, "kind": "MESSAGE", "content": f"User: {text}"},
+    ).status_code == 202
+
+    mems = client.get(
+        "/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}
+    ).json()["memories"]
+    timezone = [m for m in mems if m["predicate"] == "timezone"]
+    assert len(timezone) == 1, f"one turn, one memory: {[m['content'] for m in timezone]}"
+    sources = {e["source_id"].split("_")[0] for e in timezone[0]["evidence"]}
+    assert sources == {"msg", "obs"}, "both receipts are kept on the one row"
