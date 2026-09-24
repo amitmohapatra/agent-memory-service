@@ -108,22 +108,18 @@ def visibility_keys(
 #: Visibilities that do NOT carry the author's own principal key, because they already name
 #: the principal themselves.
 #:
-#: THREAD is NOT in this set, and that is the open question. A thread-scoped memory carries
-#: its author's key, so the author matches it from any thread and the thread key is never
-#: reached: ``visibility=THREAD`` means "this thread, or anywhere if you wrote it", which is
-#: the leak an integrator reported when a new conversation recalled the previous one's turns.
+#: THREAD is here because the author IS the audience, so the escape cancelled the scope: the
+#: author matched their own key from any thread, the thread key was never reached, and
+#: ``visibility=THREAD`` meant "this thread, or anywhere if you wrote it". An integrator
+#: reported it as a new conversation recalling the previous one's turns.
 #:
-#: Removing it here is a one-line change and it was tried. It fails, because a thread is
-#: granted in exactly one place - ``conversation/service.py:100``, i.e. POST /v1/threads -
-#: and ``submit_observation`` never grants one. So an observation written with a thread_id
-#: that was not created through the conversation service is readable today ONLY via the
-#: author key: take it away and the author cannot read their own memory back in the very
-#: thread they wrote it in. Two integration tests demonstrate exactly that.
-#:
-#: So the fix is not this line. It is either granting the thread on observation write - which
-#: makes whoever names a thread_id its owner, and thread_id is not authenticated - or
-#: accepting that THREAD means "thread or author". That is an owner decision, not a patch.
-_NO_OWNER_KEY = frozenset({Visibility.PRIVATE, Visibility.RUN})
+#: Removing it alone is not enough and breaks worse. A thread used to be granted in exactly
+#: one place - ``conversation/service.py``, POST /v1/threads - so an observation naming a
+#: thread nobody created was readable ONLY through the author key, and taking it away left
+#: the author unable to read their own memory in the thread they wrote it in. The
+#: observations route therefore ensures the thread, and ``from_scope`` narrows the audience
+#: to the thread being read in. All three are needed; any one alone regresses something.
+_NO_OWNER_KEY = frozenset({Visibility.PRIVATE, Visibility.RUN, Visibility.THREAD})
 
 
 def readable_by(
@@ -149,7 +145,15 @@ class VisibilitySpecification(BaseModel):
     truncated: bool = False
 
     @classmethod
-    def from_scope(cls, scope: AuthorizedScope) -> VisibilitySpecification:
+    def from_scope(
+        cls, scope: AuthorizedScope, *, current_thread_id: str | None = None
+    ) -> VisibilitySpecification:
+        """Audience keys this caller reads with.
+
+        ``current_thread_id`` narrows the THREAD audiences to the one conversation the
+        caller is in. Omitted, every granted thread is in scope, which is right for a
+        deliberate cross-thread search and wrong for a turn inside a thread.
+        """
         t = scope.tenant_id
         keys: set[str] = {f"global:{t}", f"tenant:{t}", f"principal:{t}/{scope.principal}"}
         if scope.user_id:
@@ -158,7 +162,19 @@ class VisibilitySpecification(BaseModel):
             # PRIVATE means exactly one principal. Agents see USER-level memories of their user.
         keys.update(f"ws:{t}/{w}" for w in scope.workspace_ids)
         keys.update(f"group:{t}/{g}" for g in scope.group_ids)
-        keys.update(f"thread:{t}/{th}" for th in scope.thread_ids)
+        # The thread being READ IN, not every thread ever granted. Being authorized for a
+        # thread is not the same as working in it: a caller who owns twenty conversations
+        # carried all twenty audiences into every query, so a memory scoped to one of them
+        # was readable from all the others.
+        #
+        # Always an INTERSECTION with what was granted, never the named thread on its own.
+        # Naming a thread must grant nothing - measured: a second user who names someone
+        # else's thread matches no key today, and adding the bare name here would turn that
+        # into a genuine cross-user leak.
+        threads = scope.thread_ids
+        if current_thread_id is not None:
+            threads = [th for th in threads if th == current_thread_id]
+        keys.update(f"thread:{t}/{th}" for th in threads)
         keys.update(f"work:{t}/{w}" for w in scope.work_ids)
         keys.update(f"agroup:{t}/{ag}" for ag in scope.agent_group_ids)
         keys.update(f"run:{t}/{r}" for r in scope.run_ids)

@@ -213,6 +213,14 @@ async def submit_observation(
     payload = body.model_dump(mode="json")
 
     async def handler(uow):  # type: ignore[no-untyped-def]
+        if ctx.thread_id:
+            # An observation naming a thread implies the thread, the same way a message does.
+            # Without this the thread is never granted, and a THREAD-scoped memory written
+            # here is readable only through its author's own key - which is exactly what let
+            # it be read from every OTHER thread too. create_thread is get-or-create and
+            # calls authz.require on an existing one, so naming someone else's thread is
+            # refused rather than silently joined.
+            await container.services["conversation"].create_thread(uow, ctx)
         ack = await _service(container).submit_observation(
             uow,
             ctx,

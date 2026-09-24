@@ -241,13 +241,11 @@ async def test_classification_defaults_and_hints(native) -> None:
     )[0]
     assert scope_for(agent_note, AGENT).level.value == "AGENT"
     # The author is in the audience of what they wrote, so that losing a membership does not
-    # lose access to it (except PRIVATE, where the author IS the audience). On THREAD this
-    # also means the memory is readable from any other thread by its author - see
-    # _NO_OWNER_KEY in modules/authz/visibility.py for why that is open rather than fixed.
-    assert keys_for(scope_for(fact, CTX), fact.visibility, CTX) == [
-        "thread:acme/thr_1",
-        "principal:acme/user:u1",
-    ]
+    # lose access to it - except PRIVATE, where the author IS the audience, and except
+    # THREAD, where it made the thread key dead weight: the author matched from any thread,
+    # so a memory scoped to one conversation was readable in all of them. The author reaches
+    # this row through the thread grant now, which the write itself creates.
+    assert keys_for(scope_for(fact, CTX), fact.visibility, CTX) == ["thread:acme/thr_1"]
     assert keys_for(scope_for(agent_note, AGENT), Visibility.PRIVATE, AGENT) == [
         "principal:acme/agent:u1/planner"
     ]

@@ -32,6 +32,11 @@ def _ctx() -> MemoryExecutionContext:
 
 async def _remember(container, ctx, content: str) -> None:
     async with container.services["uow_factory"]() as uow:
+        # the thread an observation names is ensured by the API router, which is the
+        # only production caller of submit_observation; a test that reaches past it
+        # has to grant the thread itself or its THREAD-scoped memories are readable
+        # by nobody, including their author
+        await container.services["conversation"].create_thread(uow, ctx)
         await container.services["memory"].submit_observation(
             uow, ctx, kind=ObservationKind.EVENT, content=content
         )

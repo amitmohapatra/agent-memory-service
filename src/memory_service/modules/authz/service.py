@@ -141,7 +141,8 @@ class AuthorizationService:
         cached_scope: bytes | None = None,
     ) -> VisibilitySpecification:
         return VisibilitySpecification.from_scope(
-            await self.scope(
+            current_thread_id=ctx.thread_id,
+            scope=await self.scope(
                 ctx,
                 revisions=revisions,
                 revision_fingerprint=revision_fingerprint,

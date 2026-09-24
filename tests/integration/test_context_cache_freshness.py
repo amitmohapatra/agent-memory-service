@@ -54,6 +54,11 @@ async def test_indexing_moves_the_revisions_again_so_a_bundle_cached_mid_write_i
 ) -> None:
     ctx = _ctx()
     async with container.services["uow_factory"]() as uow:
+        # the thread an observation names is ensured by the API router, which is the
+        # only production caller of submit_observation; a test that reaches past it
+        # has to grant the thread itself or its THREAD-scoped memories are readable
+        # by nobody, including their author
+        await container.services["conversation"].create_thread(uow, ctx)
         await container.services["memory"].submit_observation(
             uow,
             ctx,
@@ -92,6 +97,11 @@ async def test_the_bundle_is_rebuilt_once_the_memory_is_indexed(container) -> No
     assert (await builder.build(ctx, QUERY)).cache_hit, "an unchanged scope serves from cache"
 
     async with container.services["uow_factory"]() as uow:
+        # the thread an observation names is ensured by the API router, which is the
+        # only production caller of submit_observation; a test that reaches past it
+        # has to grant the thread itself or its THREAD-scoped memories are readable
+        # by nobody, including their author
+        await container.services["conversation"].create_thread(uow, ctx)
         await container.services["memory"].submit_observation(
             uow,
             ctx,

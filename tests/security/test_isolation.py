@@ -35,10 +35,9 @@ def _oracle(reader: dict, obj: dict) -> bool:
     """Independent statement of the visibility rules (does not use the implementation).
 
     ``author`` is the escape hatch a stored row carries: whoever wrote a memory keeps read
-    access to it even if they later lose the audience it was shared with. It applies to
-    THREAD too, which is what makes a thread-scoped memory readable from any other thread by
-    its author - the leak an integrator reported. That is pinned below as current behaviour,
-    not endorsed; see ``_NO_OWNER_KEY`` in modules/authz/visibility.py.
+    access to it even if they later lose the audience it was shared with. THREAD is excluded
+    - there the author IS the audience, so the escape cancelled the scope entirely and a
+    memory belonging to one conversation could be read from all of them.
     """
     if reader["tenant"] != obj["tenant"]:
         return False
@@ -53,7 +52,7 @@ def _oracle(reader: dict, obj: dict) -> bool:
     if v == "GROUP":
         return obj["group"] in reader["groups"] or author
     if v == "THREAD":
-        return obj["thread"] in reader["threads"] or author
+        return obj["thread"] in reader["threads"]
     if v == "WORKSPACE":
         return obj["workspace"] in reader["workspaces"] or author
     if v == "WORK":
@@ -301,21 +300,20 @@ async def test_agent_inherits_user_access_but_not_user_private_memories() -> Non
     )
 
 
-def test_a_thread_memory_is_readable_from_another_thread_by_its_author() -> None:
-    """Current behaviour, pinned so that changing it is deliberate rather than accidental.
+def test_a_thread_memory_is_not_readable_from_another_thread_by_its_author() -> None:
+    """The leak an integrator reported: a new conversation recalling the previous one's turns.
 
     Every non-PRIVATE row carries its author's ``principal:`` key so that losing a
-    membership does not lose access to what you wrote. Applied to THREAD it is
-    self-defeating: the author matches their own key from any thread, the thread key is
-    never reached, and ``visibility=THREAD`` means "this thread, or anywhere if you wrote
-    it". An integrator reported exactly this - a new conversation recalling the previous
-    one's turns - and they are right about the behaviour.
+    membership does not lose access to what you wrote. Applied to THREAD it was
+    self-defeating - the author matched their own key from any thread, the thread key was
+    never reached, and ``visibility=THREAD`` meant "this thread, or anywhere if you wrote
+    it".
 
-    It is pinned rather than fixed because the one-line fix breaks something worse: a thread
-    is granted only by ``conversation/service.py:100`` (POST /v1/threads), and
-    ``submit_observation`` never grants one, so for an observation written with an
-    ungranted thread_id the author key is the ONLY thing making it readable - including in
-    the thread it was written in. See ``_NO_OWNER_KEY`` in modules/authz/visibility.py.
+    Dropping that key is only half of it, because the author still has to read the memory in
+    the thread it belongs to, and a thread used to be granted in exactly one place
+    (``conversation/service.py``, POST /v1/threads). An observation naming a thread now
+    ensures it, so the author reaches their own memory through the grant instead of through
+    authorship - a key that says which conversation, not which person.
 
     The property test above could not catch any of this: it built its objects with
     ``visibility_keys``, which never appended the author key, so both sides of the
@@ -323,7 +321,7 @@ def test_a_thread_memory_is_readable_from_another_thread_by_its_author() -> None
     """
     author = "user:u1"
     keys = readable_by("acme", Visibility.THREAD, owner_principal=author, thread_id="thrA")
-    assert f"principal:acme/{author}" in keys, "today the author key rides along"
+    assert f"principal:acme/{author}" not in keys, "the author key defeats thread scoping"
 
     def _reader(threads: list[str]) -> VisibilitySpecification:
         return VisibilitySpecification.from_scope(
@@ -341,9 +339,7 @@ def test_a_thread_memory_is_readable_from_another_thread_by_its_author() -> None
         )
 
     assert _reader(["thrA"]).allows("acme", keys), "the thread it belongs to reads it"
-    # ...and so does a completely unrelated thread, because the author wrote it. This is the
-    # assertion to invert when the owner decides THREAD should mean thread-local.
-    assert _reader(["thrB"]).allows("acme", keys), "the reported leak, stated as fact"
+    assert not _reader(["thrB"]).allows("acme", keys), "another thread must not, author or not"
 
 
 def test_losing_a_group_does_not_lose_what_you_wrote_in_it() -> None:
@@ -368,3 +364,52 @@ def test_losing_a_group_does_not_lose_what_you_wrote_in_it() -> None:
         )
     )
     assert spec.allows("acme", keys)
+
+
+def _scope_for(principal: str, threads: list[str]) -> AuthorizedScope:
+    return AuthorizedScope(
+        tenant_id="acme",
+        principal=principal,
+        user_id=principal.split(":", 1)[1],
+        workspace_ids=[],
+        group_ids=[],
+        thread_ids=threads,
+        work_ids=[],
+        agent_group_ids=[],
+        run_ids=[],
+    )
+
+
+def test_a_query_inside_a_thread_carries_only_that_thread() -> None:
+    """Being authorized for a thread is not the same as working in it.
+
+    ``from_scope`` put EVERY granted thread in the caller's audience, so someone with twenty
+    conversations carried twenty thread keys into every query and a memory scoped to one was
+    readable from all of them. The caller's current thread narrows it.
+    """
+    scope = _scope_for("user:u1", ["thrA", "thrB", "thrC"])
+    everywhere = VisibilitySpecification.from_scope(scope)
+    assert {"thread:acme/thrA", "thread:acme/thrB"} <= everywhere.keys
+
+    inside = VisibilitySpecification.from_scope(scope, current_thread_id="thrA")
+    assert "thread:acme/thrA" in inside.keys
+    assert "thread:acme/thrB" not in inside.keys
+    assert "thread:acme/thrC" not in inside.keys
+
+
+def test_naming_a_thread_grants_nothing() -> None:
+    """The narrowing is an INTERSECTION, and it has to stay one.
+
+    Measured against the running service before this was written: a second user who names
+    someone else's thread matches no key and reads nothing. If ``current_thread_id`` were
+    added to the audience directly rather than intersected with what was granted, that would
+    become a genuine cross-user leak - strictly worse than the same-user contamination this
+    change is fixing.
+    """
+    stranger = VisibilitySpecification.from_scope(
+        _scope_for("user:u2", []), current_thread_id="thrA"
+    )
+    assert "thread:acme/thrA" not in stranger.keys
+
+    keys = readable_by("acme", Visibility.THREAD, owner_principal="user:u1", thread_id="thrA")
+    assert not stranger.allows("acme", keys), "naming a thread is not being granted it"
