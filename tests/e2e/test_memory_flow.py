@@ -116,7 +116,15 @@ def test_messages_and_observations_become_memories(client) -> None:
         headers=H,
         json={"scope": scope, "query": "what is my timezone?", "kinds": ["memory"]},
     )
-    assert not any("Europe/Berlin" in i["text"] for i in r.json()["results"])
+    # ...by item_id, not by substring. One sentence becomes three memories here: the
+    # extracted fact ("My timezone is Europe/Berlin"), the preference beside it, and the
+    # verbatim turn that both were read out of, which still contains the words. Asserting
+    # the string was absent asserted that forgetting a fact also unsays the sentence it came
+    # from, which is a different promise and not one this endpoint makes.
+    assert tz["memory_id"] not in {i["item_id"] for i in r.json()["results"]}
+    assert any("Europe/Berlin" in i["text"] for i in r.json()["results"]), (
+        "the verbatim turn is still there - forgetting the fact does not retract the message"
+    )
     assert (
         client.delete(
             f"/v1/memories/{by_pred['decided']['memory_id']}", headers={**H, "X-Memory-User": "u2"}
