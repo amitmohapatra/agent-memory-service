@@ -2,9 +2,13 @@
 
 The old pass re-normalised every kept candidate's body on every comparison - O(n^2) string
 allocations for a scan needing n of them - and called ``_subsumed_by`` twice per candidate,
-once to test and once to fetch what the test had already found. Measured at 9.6-26 ms per
-query and sitting inside no timing stage, which is how it stayed invisible in a p99 already
-over its 300 ms budget.
+once to test and once to fetch what the test had already found, and it sat inside no timing
+stage - which is how it stayed invisible in a p99 already over its 300 ms budget.
+
+The saving is ~0.8 ms at the shipped depth (min-of-7: 1.33 -> 0.50 ms at n=100), not the
+9.6-26 ms the audit that raised it claimed. That figure was inherited and repeated in this
+file's own docstring after being disproved in the same commit that disproved it, which is the
+exact failure this suite exists to catch: a number left where it will be read as evidence.
 
 A latency change to a ranking function is only safe if the ranking is untouched, so the
 acceptance criterion is output identity rather than "the tests still pass". The reference

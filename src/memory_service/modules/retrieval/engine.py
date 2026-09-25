@@ -572,8 +572,11 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
     #: subsumption pass used to re-normalise EVERY kept candidate's body on every comparison,
     #: so an n-candidate pool paid O(n^2) string allocations for a scan that needs n of them,
     #: and it called ``_subsumed_by`` twice per candidate - once to test, once to fetch what
-    #: the test had already found. Measured at 9.6-26 ms per query depending on body length,
-    #: inside no timing stage, against a p99 already over its 300 ms budget.
+    #: the test had already found. Min-of-7 on pools of this service's own shapes: 0.54 -> 0.43
+    #: ms at n=50, 1.33 -> 0.50 at n=100, 4.25 -> 1.10 at n=200 - so ~0.8 ms at the shipped
+    #: depth. The audit that raised this put it at 9.6-26 ms, which is roughly tenfold too
+    #: high; it is NOT bookable against the 51.3 ms the p99 is over budget. It is in a timing
+    #: stage now so the next person does not have to take either figure on trust.
     kept: list[tuple[str, Candidate]] = []
     with stage_seconds.labels("retrieval.dedup").time():
         for c in candidates:
