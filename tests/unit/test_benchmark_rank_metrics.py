@@ -80,6 +80,8 @@ def test_a_question_with_no_evidence_annotated_reports_nothing() -> None:
         "complete_in_candidates": None,
         "complete_in_head": None,
         "evidence_head_size": 10,
+        "evidence_in_head_at": None,
+        "complete_in_head_at": None,
     }
 
 
@@ -97,6 +99,9 @@ def test_the_summary_excludes_adversarial_rows() -> None:
         # completeness must not be counted as a row that failed it
         "complete_evidence_in_candidates": 0.0,
         "complete_evidence_in_head": 0.0,
+        "evidence_in_head_at": {"10": 0.0, "20": 0.0, "30": 0.0, "50": 0.0},
+        "complete_evidence_in_head_at": {"10": 0.0, "20": 0.0, "30": 0.0, "50": 0.0},
+        "rank_metric_n": 1,
     }
 
 
@@ -108,4 +113,7 @@ def test_a_run_with_nothing_scorable_reports_none_rather_than_zero() -> None:
         "evidence_reconstructed": None,
         "complete_evidence_in_candidates": None,
         "complete_evidence_in_head": None,
+        "evidence_in_head_at": None,
+        "complete_evidence_in_head_at": None,
+        "rank_metric_n": 0,
     }

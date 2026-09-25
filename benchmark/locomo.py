@@ -355,6 +355,8 @@ def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | N
             "complete_in_candidates": None,
             "complete_in_head": None,
             "evidence_head_size": head,
+            "evidence_in_head_at": None,
+            "complete_in_head_at": None,
         }
     found = [r for r in ranks if r is not None]
     return {
@@ -372,6 +374,18 @@ def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | N
         "complete_in_candidates": len(found) == len(ranks),
         "complete_in_head": len(found) == len(ranks) and all(r < head for r in found),
         "evidence_head_size": head,
+        # The same two questions asked at FIXED depths. ``head`` above is
+        # ``_most_relevant_count(len(bundle.memories))`` - imported from the system under
+        # test - so raising MOST_RELEVANT_MAX from 10 to 30 raised the ruler along with the
+        # thing being measured, and a change worth +0.55 points at any fixed head was
+        # reported as +12.63. A ladder cannot do that: every arm of every future ablation is
+        # scored at the same depths whatever the renderer is configured to show.
+        "evidence_in_head_at": {
+            str(h): round(sum(1 for r in found if r < h) / len(ranks), 4) for h in HEAD_LADDER
+        },
+        "complete_in_head_at": {
+            str(h): len(found) == len(ranks) and all(r < h for r in found) for h in HEAD_LADDER
+        },
     }
 
 
@@ -392,6 +406,9 @@ def _rank_summary(records: Sequence[dict[str, Any]]) -> dict[str, float | None]:
             "evidence_reconstructed": None,
             "complete_evidence_in_candidates": None,
             "complete_evidence_in_head": None,
+            "evidence_in_head_at": None,
+            "complete_evidence_in_head_at": None,
+            "rank_metric_n": 0,
         }
     rec = [
         r["evidence_reconstructed"] for r in scored if r.get("evidence_reconstructed") is not None
@@ -406,6 +423,26 @@ def _rank_summary(records: Sequence[dict[str, Any]]) -> dict[str, float | None]:
         "complete_evidence_in_head": round(
             sum(1 for r in scored if r.get("complete_in_head")) / len(scored), 4
         ),
+        "evidence_in_head_at": {
+            str(h): round(
+                sum((r.get("evidence_in_head_at") or {}).get(str(h), 0.0) for r in scored)
+                / len(scored),
+                4,
+            )
+            for h in HEAD_LADDER
+        },
+        "complete_evidence_in_head_at": {
+            str(h): round(
+                sum(1 for r in scored if (r.get("complete_in_head_at") or {}).get(str(h)))
+                / len(scored),
+                4,
+            )
+            for h in HEAD_LADDER
+        },
+        # Every rank metric above is over rows that HAVE gold evidence. evidence_all_recall
+        # was over every answerable row, four of which have none annotated - so 0.9331 and
+        # 0.7188 were never on the same base. Recorded rather than silently reconciled.
+        "rank_metric_n": len(scored),
     }
 
 
@@ -437,6 +474,9 @@ ANSWER_OVERLAP_HIT = 0.6
 #: The same idea applied to LoCoMo's annotated supporting turns. Lower, because a whole
 #: dialogue turn carries far more words than its answer-bearing part.
 EVIDENCE_OVERLAP_HIT = 0.5
+#: Fixed depths every rank metric is ALSO reported at, independent of what the renderer is
+#: configured to promote. See ``_rank_metrics``.
+HEAD_LADDER = (10, 20, 30, 50)
 
 _EVIDENCE_IDS = re.compile(r"[A-Za-z]+\d+:\d+")
 
@@ -908,11 +948,13 @@ async def run(
                     # read as 0.197. Failures stay counted in n and in judge_failures.
                     hit = False
                 else:
-                    hit = (
-                        abstained
-                        if category == ADVERSARIAL
-                        else answer_overlap >= ANSWER_OVERLAP_HIT
-                    )
+                    # An adversarial question is graded on whether the system declined to
+                    # answer - but two of LoCoMo's 446 carry a real gold answer ("Did Caroline
+                    # make the bowl?" -> "No"), and grading those on abstention scores the
+                    # system wrong for answering a question that has an answer. Grade on the
+                    # answer whenever one exists, whatever the category says.
+                    unanswerable = category == ADVERSARIAL and not str(answer or "").strip()
+                    hit = abstained if unanswerable else answer_overlap >= ANSWER_OVERLAP_HIT
                 if hit:
                     bucket["hit"] += 1
                 # Persisted so the score can be re-derived - a different threshold, a stricter

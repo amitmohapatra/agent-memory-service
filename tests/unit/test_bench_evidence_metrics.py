@@ -129,3 +129,28 @@ def test_an_all_adversarial_run_reports_none_rather_than_zero() -> None:
     out = _rank_summary([{"category": "adversarial", **_rank_metrics([], head=30)}])
     assert out["complete_evidence_in_candidates"] is None
     assert out["complete_evidence_in_head"] is None
+
+
+def test_the_fixed_ladder_does_not_move_when_the_renderer_does() -> None:
+    """The regression guard for the largest reporting error this harness has produced.
+
+    ``evidence_in_head`` is scored at ``_most_relevant_count(len(memories))`` - a value
+    imported from the system under test. Raising MOST_RELEVANT_MAX from 10 to 30 raised the
+    ruler along with the thing being measured, and a change worth +0.55 points at any fixed
+    head was published as +12.63. The ladder is scored at depths the renderer cannot reach,
+    so the same ranks give the same number whatever the bundle is configured to promote.
+    """
+    ranks = [0, 1, 25, 44]
+    narrow = _rank_metrics(ranks, head=10)
+    wide = _rank_metrics(ranks, head=30)
+
+    assert narrow["evidence_in_head"] == 0.5, "two of four ranks are below 10"
+    assert wide["evidence_in_head"] == 0.75, "three of four are below 30 - the ruler moved"
+
+    for depth in ("10", "20", "30", "50"):
+        assert narrow["evidence_in_head_at"][depth] == wide["evidence_in_head_at"][depth], (
+            f"the fixed ladder moved at depth {depth} when only the renderer changed"
+        )
+    assert narrow["evidence_in_head_at"]["30"] == 0.75
+    assert narrow["complete_in_head_at"]["50"] is True, "all four ranks are below 50"
+    assert narrow["complete_in_head_at"]["30"] is False, "rank 44 is not"
