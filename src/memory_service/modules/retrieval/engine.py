@@ -568,28 +568,38 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
     """
     seen: dict[str, Candidate] = {}
     by_hash: dict[str, Candidate] = {}
-    for c in candidates:
-        if c.record_id in seen:
-            existing = seen[c.record_id]
-            existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
-            existing.score = max(existing.score, c.score)
-            continue
-        h = c.payload.get("text_hash") or (content_hash(c.text) if c.text else None)
-        if h:
-            twin = by_hash.get(h)
-            if twin is not None:
-                twin.payload.setdefault("duplicates", []).append(c.record_id)
-                twin.score = max(twin.score, c.score)
-                twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
+    #: ``(normalised text, candidate)`` for everything kept, in the order it was kept. The
+    #: subsumption pass used to re-normalise EVERY kept candidate's body on every comparison,
+    #: so an n-candidate pool paid O(n^2) string allocations for a scan that needs n of them,
+    #: and it called ``_subsumed_by`` twice per candidate - once to test, once to fetch what
+    #: the test had already found. Measured at 9.6-26 ms per query depending on body length,
+    #: inside no timing stage, against a p99 already over its 300 ms budget.
+    kept: list[tuple[str, Candidate]] = []
+    with stage_seconds.labels("retrieval.dedup").time():
+        for c in candidates:
+            if c.record_id in seen:
+                existing = seen[c.record_id]
+                existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
+                existing.score = max(existing.score, c.score)
                 continue
-            by_hash[h] = c
-        if COLLAPSE_SUBSUMED and _subsumed_by(c, seen.values()) is not None:
-            twin = _subsumed_by(c, seen.values())
-            assert twin is not None
-            twin.payload.setdefault("duplicates", []).append(c.record_id)
-            twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
-            continue
-        seen[c.record_id] = c
+            h = c.payload.get("text_hash") or (content_hash(c.text) if c.text else None)
+            if h:
+                twin = by_hash.get(h)
+                if twin is not None:
+                    twin.payload.setdefault("duplicates", []).append(c.record_id)
+                    twin.score = max(twin.score, c.score)
+                    twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
+                    continue
+                by_hash[h] = c
+            norm = _normalised(c.text) if COLLAPSE_SUBSUMED else ""
+            if COLLAPSE_SUBSUMED:
+                twin = _subsumed_by(norm, c.record_id, kept)
+                if twin is not None:
+                    twin.payload.setdefault("duplicates", []).append(c.record_id)
+                    twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
+                    continue
+            seen[c.record_id] = c
+            kept.append((norm, c))
     return list(seen.values())
 
 
@@ -616,21 +626,25 @@ COLLAPSE_SUBSUMED = True
 SUBSUMPTION_MIN_CHARS = 25
 
 
-def _subsumed_by(candidate: Candidate, kept: Any) -> Candidate | None:
+def _subsumed_by(
+    text: str, record_id: str, kept: Sequence[tuple[str, Candidate]]
+) -> Candidate | None:
     """An already-kept candidate whose text contains this one's, or None.
 
     Containment only, not similarity: the longer text carries everything the shorter one says,
     so dropping the shorter loses no information from the bundle. The reverse - a kept short
     fact and a longer arrival that subsumes it - is deliberately left alone, because replacing
     an accepted candidate would reorder a ranking the caller is entitled to.
+
+    Takes ``text`` already normalised, and ``kept`` as ``(normalised body, candidate)`` pairs,
+    because the caller is walking the same kept list for every candidate and normalising a
+    body once per comparison rather than once per body is the whole cost of this scan.
     """
-    text = _normalised(candidate.text)
     if len(text) < SUBSUMPTION_MIN_CHARS:
         return None
-    for other in kept:
-        if other.record_id == candidate.record_id:
+    for body, other in kept:
+        if other.record_id == record_id:
             continue
-        body = _normalised(other.text)
         if len(body) > len(text) and text in body:
             return other
     return None
