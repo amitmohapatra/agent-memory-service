@@ -65,6 +65,8 @@ CATEGORY_NAMES = {
 TENANT = "bench_conv"
 
 ADVERSARIAL = 5
+#: name -> id, for reading a category back off a persisted record (see ``rejudge``)
+_CATEGORY_IDS = {v: k for k, v in CATEGORY_NAMES.items()}
 _SESSION = re.compile(r"^session_(\d+)$")
 
 
@@ -1187,6 +1189,86 @@ async def run(
     }
 
 
+async def rejudge(path: str, ruler: str, *, calls_per_minute: float = 120.0) -> dict[str, Any]:
+    """Re-grade an existing run's ANSWERS under a different ruler, generating nothing.
+
+    Every judged row persists ``judged.produced`` - the text the model actually produced - for
+    exactly this reason: the scoring rules are a separate variable from the system, and mixing
+    the two is how a 20.1-point spread between rulers gets read as an architecture difference.
+    Re-grading costs one judge call per row and no retrieval, no ingestion and no generation,
+    so the same predictions can be scored under our strict ruler, under Mem0's published one
+    (``lenient``) and under LoCoMo-Refined without paying for the run three times.
+
+    This is the only honest way to compare against a published headline: run OUR answers
+    through THEIR rules, rather than setting two numbers side by side that were never produced
+    by the same grader.
+    """
+    # read before the event loop does anything else; ASYNC240 is right that a blocking
+    # pathlib read inside a coroutine is a smell, and this one is a single file at startup
+    previous = await asyncio.to_thread(lambda: json.loads(Path(path).read_text()))
+    container = await build_container(_settings(), __version__, overrides=bench_overrides())
+    llm = container.llm
+    if not getattr(llm, "enabled", False):
+        raise SystemExit("--rejudge needs a generative model; the judge is a model call.")
+    pacer = _Pacer(calls_per_minute)
+    records = [dict(r) for r in previous.get("records", [])]
+    per_category: dict[int, dict[str, int]] = defaultdict(lambda: {"n": 0, "hit": 0})
+    regraded = failures = 0
+    try:
+        for r in records:
+            produced = (r.get("judged") or {}).get("produced")
+            category = _CATEGORY_IDS.get(r["category"], -1)
+            bucket = per_category[category]
+            bucket["n"] += 1
+            if produced is None:
+                # never generated (an aborted row); it cannot be re-graded, and counting it as
+                # a miss would make the new ruler look worse than it is
+                if r.get("hit"):
+                    bucket["hit"] += 1
+                continue
+            await pacer.wait()
+            verdict = await _judge(llm, r["question"], r.get("answer") or "", produced, ruler=ruler)
+            if verdict.get("failed"):
+                failures += 1
+                if r.get("hit"):
+                    bucket["hit"] += 1
+                continue
+            regraded += 1
+            abstained = bool(verdict.get("abstained"))
+            hit = bool(verdict.get("correct"))
+            r["judged"] = {**(r.get("judged") or {}), **verdict, "produced": produced}
+            r["abstained"] = abstained
+            r["hit"] = hit
+            r["judge_ruler"] = ruler
+            if hit:
+                bucket["hit"] += 1
+    finally:
+        await container.close()
+    out = dict(previous)
+    out["records"] = records
+    answerable = {c: v for c, v in per_category.items() if c != ADVERSARIAL}
+    total_n = sum(v["n"] for v in answerable.values())
+    out["answer_recall_at_k"] = (
+        round(sum(v["hit"] for v in answerable.values()) / total_n, 4) if total_n else 0.0
+    )
+    adv = per_category.get(ADVERSARIAL, {"n": 0, "hit": 0})
+    out["abstention_rate_on_adversarial"] = (
+        round(adv["hit"] / adv["n"], 4) if adv["n"] else 0.0
+    )
+    out["by_category"] = {
+        CATEGORY_NAMES.get(c, str(c)): {"n": v["n"], "hit": v["hit"],
+                                        "score": round(v["hit"] / v["n"], 4) if v["n"] else 0.0}
+        for c, v in sorted(per_category.items())
+    }
+    out["judge_ruler"] = ruler
+    out["judge_failures"] = failures
+    out["rejudged_from"] = path
+    out["rejudged_rows"] = regraded
+    # the retrieval numbers are carried over untouched: re-grading changes the ruler, not what
+    # was retrieved, and re-deriving them here would invite them to drift from the source file
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--conversations", type=int, default=None)
@@ -1227,8 +1309,24 @@ def main() -> int:
         default="strict",
         help="grading rules for --judge: strict (ours) or lenient (Mem0's published ruler)",
     )
+    parser.add_argument(
+        "--rejudge",
+        metavar="RESULT.json",
+        default=None,
+        help="re-grade an existing run's stored answers under --judge-ruler, generating "
+        "nothing. The only apples-to-apples way to compare with a published headline: run "
+        "our answers through their rules.",
+    )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()
+    if args.rejudge:
+        out = asyncio.run(
+            rejudge(args.rejudge, args.judge_ruler, calls_per_minute=args.calls_per_minute)
+        )
+        write_result(args.out, out)
+        summary = {k: v for k, v in out.items() if k not in ("provenance", "records")}
+        sys.stdout.write(json.dumps(summary, indent=2))
+        return 0
     ablate = dict.fromkeys(args.off, False)
     result = asyncio.run(
         run(
