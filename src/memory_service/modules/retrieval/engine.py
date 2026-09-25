@@ -284,7 +284,14 @@ class RetrievalEngine:
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
                 # 4. bounded CPU rerank
-                pool = candidates
+                # list(), not an alias. ``unused`` below is everything in the pool that the
+                # cut dropped, and it feeds EvidenceReport.unused, which the grounding cascade
+                # scans for contradictions. Today the only rebinding between here and that
+                # computation is the ``candidates[:limit]`` in the else-branch below, so an
+                # alias happens to work; delete or move that one line and ``kept`` becomes the
+                # whole pool, ``unused`` goes silently empty, and the cascade stops seeing
+                # contradictions with every test still green.
+                pool = list(candidates)
                 # Always stated, so a caller can tell "reranking is off" from "the key is
                 # missing" - a test that toggled the flag after wiring read the absence as a
                 # KeyError rather than as the answer it was.
@@ -577,6 +584,11 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
     #: depth. The audit that raised this put it at 9.6-26 ms, which is roughly tenfold too
     #: high; it is NOT bookable against the 51.3 ms the p99 is over budget. It is in a timing
     #: stage now so the next person does not have to take either figure on trust.
+    #:
+    #: It was never invisible, either - context/builder.py wraps the whole of ``retrieve`` in
+    #: a timing stage and merges it into the same diagnostics dict, so this cost has always
+    #: been in the per-question artefact, attributed to its parent. What is new is the
+    #: sub-line, not the measurement.
     kept: list[tuple[str, Candidate]] = []
     with stage_seconds.labels("retrieval.dedup").time():
         for c in candidates:
