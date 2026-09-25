@@ -294,6 +294,7 @@ class OutboxRepository(Protocol):
         periodic work, which is the same case the ``obx_`` read already lets through.
         """
         ...
+
     async def mark_failed(self, outbox_id: int, *, error: str, dead: bool) -> None: ...
     async def purge_dispatched(self, *, older_than_seconds: int) -> int:
         """Delete rows whose job was handed to the queue. Returns how many went.

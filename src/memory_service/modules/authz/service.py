@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied
@@ -145,7 +145,7 @@ class AuthorizationService:
                 revisions=revisions,
                 revision_fingerprint=revision_fingerprint,
                 cached_scope=cached_scope,
-            )
+            ),
         )
 
     # -- decisions --------------------------------------------------------------

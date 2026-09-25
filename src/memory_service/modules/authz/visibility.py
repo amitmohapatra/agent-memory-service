@@ -122,7 +122,10 @@ def readable_by(
 ) -> list[str]:
     """``visibility_keys`` plus the author's own key, which is what a stored row carries."""
     keys = visibility_keys(
-        tenant_id, visibility, owner_principal=owner_principal, **anchors  # type: ignore[arg-type]
+        tenant_id,
+        visibility,
+        owner_principal=owner_principal,
+        **anchors,  # type: ignore[arg-type]
     )
     if visibility in _NO_OWNER_KEY:
         return keys

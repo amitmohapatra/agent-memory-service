@@ -320,5 +320,3 @@ async def test_an_imperative_is_short_lived_and_a_restated_one_is_not(native) ->
     pref = (await _extract(native, "I prefer concise answers."))[0]
     assert pref.memory_type is MemoryType.PREFERENCE
     assert pref.lifetime is Lifetime.LONG_TERM, "stating a preference is not an imperative"
-
-

@@ -101,9 +101,7 @@ object_st = st.fixed_dictionaries(
     lambda o: {
         **o,
         "owner": (
-            f"agent:{o['user']}/{o['owner_agent']}"
-            if o["owner_agent"]
-            else f"user:{o['user']}"
+            f"agent:{o['user']}/{o['owner_agent']}" if o["owner_agent"] else f"user:{o['user']}"
         ),
     }
 )
@@ -330,7 +328,6 @@ def test_a_thread_memory_is_not_readable_from_another_thread_by_its_author() -> 
 
     assert _reader(["thrA"]).allows("acme", keys), "the thread it belongs to reads it"
     assert not _reader(["thrB"]).allows("acme", keys), "another thread must not, author or not"
-
 
 
 def _scope_for(principal: str, threads: list[str]) -> AuthorizedScope:

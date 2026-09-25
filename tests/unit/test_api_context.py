@@ -12,7 +12,7 @@ HEADERS = {
     "X-API-Key": "test-key",
     "X-Memory-Tenant": "acme",
     "X-Memory-User": "u1",
-    }
+}
 
 
 def _app(settings, overrides):
@@ -62,8 +62,6 @@ def test_a_body_cannot_smuggle_a_field_the_scope_does_not_declare(settings, over
         assert r.status_code == 422, r.text
 
 
-
-
 def test_body_cannot_override_trusted_headers(settings, overrides) -> None:
     with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post("/echo-context", headers=HEADERS, json={"tenant_id": "globex"})
@@ -86,5 +84,3 @@ def test_missing_tenant_and_auth(settings, overrides) -> None:
         assert r.status_code == 422 and "tenant_id" in r.json()["error"]["message"]
         r = c.post("/echo-context", headers={"X-Memory-Tenant": "acme"}, json={})
         assert r.status_code == 401 and r.json()["error"]["code"] == "AUTHENTICATION"
-
-

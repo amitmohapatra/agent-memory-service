@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
-from memory_service.config.constants import AUTHORIZATION, HEADERS
+from memory_service.config.constants import HEADERS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied, ValidationFailed
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal

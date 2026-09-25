@@ -218,18 +218,24 @@ def test_the_same_turn_sent_by_both_paths_is_one_memory_with_two_receipts(client
     """
     scope = _scope()
     text = "My timezone is Europe/Berlin."
-    assert client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": text}
-    ).status_code == 202
-    assert client.post(
-        "/v1/observations",
-        headers=H,
-        json={"scope": scope, "kind": "MESSAGE", "content": f"User: {text}"},
-    ).status_code == 202
+    assert (
+        client.post(
+            "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": text}
+        ).status_code
+        == 202
+    )
+    assert (
+        client.post(
+            "/v1/observations",
+            headers=H,
+            json={"scope": scope, "kind": "MESSAGE", "content": f"User: {text}"},
+        ).status_code
+        == 202
+    )
 
-    mems = client.get(
-        "/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}
-    ).json()["memories"]
+    mems = client.get("/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}).json()[
+        "memories"
+    ]
     timezone = [m for m in mems if m["predicate"] == "timezone"]
     assert len(timezone) == 1, f"one turn, one memory: {[m['content'] for m in timezone]}"
     sources = {e["source_id"].split("_")[0] for e in timezone[0]["evidence"]}
@@ -252,15 +258,18 @@ def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
     globex = {**H, "X-Memory-Tenant": "globex", "X-Memory-User": "u1"}
     scope = _scope()
 
-    assert client.post(
-        "/v1/observations",
-        headers=acme,
-        json={
-            "scope": scope,
-            "kind": "DECISION",
-            "content": "We decided to acquire Initech for 40 million.",
-        },
-    ).status_code == 202
+    assert (
+        client.post(
+            "/v1/observations",
+            headers=acme,
+            json={
+                "scope": scope,
+                "kind": "DECISION",
+                "content": "We decided to acquire Initech for 40 million.",
+            },
+        ).status_code
+        == 202
+    )
 
     q = {"scope": scope, "query": "what did we decide about acquiring?", "kinds": ["memory"]}
     assert client.post("/v1/recall", headers=acme, json=q).json()["results"], "own tenant reads"

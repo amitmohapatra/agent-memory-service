@@ -67,7 +67,6 @@ def test_child_agent_inherits_lineage_and_adds_agent_fields() -> None:
     assert grandchild.parent_agent_run_id == child.agent_run_id
 
 
-
 def test_log_fields_include_tenant_and_trace_only_when_present() -> None:
     ctx = MemoryExecutionContext(tenant_id="t", thread_id="thr_1")
     fields = ctx.log_fields()

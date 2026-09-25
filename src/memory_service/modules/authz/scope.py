@@ -17,8 +17,7 @@ class _Lister(Protocol):
 
 
 class ScopeResolver:
-    def __init__(
-        self, provider: _Lister, *, max_listed_objects: int = 2000):
+    def __init__(self, provider: _Lister, *, max_listed_objects: int = 2000):
         self.provider = provider
         self.max = max_listed_objects
 

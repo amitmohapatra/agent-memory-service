@@ -13,7 +13,6 @@ customer. It is not sound when several product teams share one deployment, which
 from __future__ import annotations
 
 import pytest
-from fastapi import Request
 
 from memory_service.api.deps import ScopeBody, build_context
 from memory_service.domain.errors import ScopeDenied

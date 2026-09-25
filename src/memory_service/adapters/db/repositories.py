@@ -789,9 +789,7 @@ class SqlOutboxRepository:
 
     @staticmethod
     def _undispatched() -> Any:
-        return select(OutboxRow).where(
-            OutboxRow.dispatched_at.is_(None), OutboxRow.dead.is_(False)
-        )
+        return select(OutboxRow).where(OutboxRow.dispatched_at.is_(None), OutboxRow.dead.is_(False))
 
     async def by_ids(self, outbox_ids: Sequence[int]) -> list[OutboxEntry]:
         """The undispatched rows among ``outbox_ids``, locked. For the post-commit fast path.

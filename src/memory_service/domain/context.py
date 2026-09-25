@@ -113,7 +113,6 @@ class MemoryExecutionContext(BaseModel):
     def _ids_are_valid(cls, value: str | None) -> str | None:
         return _validate_optional_id(value)
 
-
     @model_validator(mode="after")
     def _metadata_cannot_override_security(self) -> Self:
         clash = RESERVED_METADATA_KEYS.intersection(self.custom_metadata)

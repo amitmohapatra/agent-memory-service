@@ -51,9 +51,7 @@ async def _main(args: argparse.Namespace) -> int:
             await uow.commit()
     finally:
         await container.close()
-    sys.stdout.write(
-        f"granted {args.user} in {args.tenant}: admin={args.admin}\n"
-    )
+    sys.stdout.write(f"granted {args.user} in {args.tenant}: admin={args.admin}\n")
     return 0
 
 

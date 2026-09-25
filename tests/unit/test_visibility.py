@@ -31,7 +31,10 @@ def test_visibility_keys_by_visibility() -> None:
     # spawns; "runup:" is read ONLY by the run that spawned this one, so a sibling carrying
     # run:<parent> never sees it.
     assert visibility_keys(
-        "acme", Visibility.RUN, owner_principal="agent:u1/a1", agent_run_id="run2",
+        "acme",
+        Visibility.RUN,
+        owner_principal="agent:u1/a1",
+        agent_run_id="run2",
         parent_agent_run_id="run1",
     ) == ["run:acme/run2", "runup:acme/run1"]
     assert visibility_keys(

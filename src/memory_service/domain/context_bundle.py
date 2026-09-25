@@ -8,8 +8,8 @@ everything; it contains bounded, ranked, provenance-carrying evidence.
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -301,9 +301,7 @@ class ContextBundle(BaseModel):
             # chronological alone discards the ranking entirely, and the position a memory
             # then lands in decides how well it is read, so the best-ranked few are repeated
             # above the timeline (see MOST_RELEVANT_MAX).
-            ranked = _head_with_siblings(
-                self.memories, _most_relevant_count(len(self.memories))
-            )
+            ranked = _head_with_siblings(self.memories, _most_relevant_count(len(self.memories)))
             shown: set[str] = set()
             if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
                 shown = {m.item_id for m in ranked}

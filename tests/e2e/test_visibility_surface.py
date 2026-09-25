@@ -67,9 +67,9 @@ def test_user_memory_follows_the_person_across_chats_and_agents(client) -> None:
     q = "what is my timezone?"
 
     assert _has(_read(client, _h("alice"), q), "Europe/Berlin"), "alice, a different chat"
-    assert _has(
-        _read(client, _h("alice"), q, _scope(agent_id="research")), "Europe/Berlin"
-    ), "her agent inherits it without any grant"
+    assert _has(_read(client, _h("alice"), q, _scope(agent_id="research")), "Europe/Berlin"), (
+        "her agent inherits it without any grant"
+    )
     assert not _has(_read(client, _h("bob"), q), "Europe/Berlin"), "another person does not"
 
 
@@ -94,9 +94,9 @@ def test_tenant_memory_reaches_the_whole_team_and_no_further(client) -> None:
 
     assert _has(_read(client, _h("alice"), q), "PagerDuty")
     assert _has(_read(client, _h("bob"), q), "PagerDuty"), "everyone on the team"
-    assert _has(
-        _read(client, _h("bob"), q, _scope(agent_id="writer")), "PagerDuty"
-    ), "and their agents"
+    assert _has(_read(client, _h("bob"), q, _scope(agent_id="writer")), "PagerDuty"), (
+        "and their agents"
+    )
 
     other = {**KEY, "X-Memory-Tenant": "data-team", "X-Memory-User": "alice"}
     assert not _has(_read(client, other, q), "PagerDuty"), "another tenant, same user id"
@@ -112,12 +112,12 @@ def test_private_is_one_principal_and_not_even_its_user(client) -> None:
         "the same agent, including on a later run - PRIVATE is its durable store"
     )
     assert not _has(_read(client, _h("alice"), q), "flaky query"), "not alice herself"
-    assert not _has(
-        _read(client, _h("alice"), q, _scope(agent_id="writer")), "flaky query"
-    ), "not her other agent"
-    assert not _has(
-        _read(client, _h("bob"), q, _scope(agent_id="research")), "flaky query"
-    ), "and not the same agent name under another user - the principal is bound"
+    assert not _has(_read(client, _h("alice"), q, _scope(agent_id="writer")), "flaky query"), (
+        "not her other agent"
+    )
+    assert not _has(_read(client, _h("bob"), q, _scope(agent_id="research")), "flaky query"), (
+        "and not the same agent name under another user - the principal is bound"
+    )
 
 
 def test_private_is_the_durable_store_of_a_job_that_has_no_user(client) -> None:
@@ -146,9 +146,9 @@ def test_agent_group_lets_peers_co_work_at_any_depth(client) -> None:
 
     peer = _scope(agent_id="peer_b", agent_run_id=new_id("agent_run"), agent_group_id=crew)
     assert _has(_read(client, _h("alice"), q, peer), "Upstream deps"), "a peer in the crew"
-    assert _has(
-        _read(client, _h("bob"), q, peer), "Upstream deps"
-    ), "even acting for another user - the crew is the audience, not the person"
+    assert _has(_read(client, _h("bob"), q, peer), "Upstream deps"), (
+        "even acting for another user - the crew is the audience, not the person"
+    )
 
     off_crew = _scope(agent_id="peer_c", agent_run_id=new_id("agent_run"), agent_group_id="other")
     assert not _has(_read(client, _h("alice"), q, off_crew), "Upstream deps"), "another crew"
@@ -203,7 +203,11 @@ def test_a_withdrawn_audience_is_refused_at_the_door(client, withdrawn: str) -> 
     r = client.post(
         "/v1/observations",
         headers=_h("alice"),
-        json={"scope": _scope(), "kind": "MESSAGE", "content": "x",
-              "hints": {"visibility": withdrawn}},
+        json={
+            "scope": _scope(),
+            "kind": "MESSAGE",
+            "content": "x",
+            "hints": {"visibility": withdrawn},
+        },
     )
     assert r.status_code == 422, f"{withdrawn} must not be accepted: {r.text}"
