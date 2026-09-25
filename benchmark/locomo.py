@@ -31,10 +31,10 @@ import re
 import sys
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Any
 
 from benchmark.common import provenance, reset_store, write_result
@@ -257,6 +257,50 @@ def _evidence_ranks(memories: Sequence[Any], evidence: Sequence[str]) -> list[in
     return out
 
 
+def _evidence_ranks_by_arm(
+    memories: Sequence[Any], evidence: Sequence[str]
+) -> dict[str, list[int | None]]:
+    """Where each gold turn landed within EACH arm's own contribution, or ``None`` if that
+    arm never carried it.
+
+    ``Candidate.retrievers`` survives fusion (``rrf_fuse`` returns a per-record arm list) and
+    survives dedup by set-union rather than being dropped, and it reaches this harness as the
+    bundle's ``retrievers``. So the arm that produced a memory is still readable at scoring
+    time, and two failures that ``evidence_ranks`` cannot tell apart become separable:
+
+        gold carried by a ``graph``-only memory that never reached the head
+            -> FUSION suppressed it; the evidence was retrieved
+        gold carried by no memory of any arm
+            -> RETRIEVAL never found it; no amount of re-ranking will help
+
+    Those have opposite fixes, and choosing between candidate-seeded expansion and fusion
+    work without separating them is guessing. The rank recorded is the position within that
+    arm's own sublist - "where would this have ranked if only this arm ran" - which is what
+    an arm-alone column in an oracle table means.
+    """
+    lines = [
+        (_content_tokens(_memory_line(m)), set(getattr(m, "retrievers", None) or []))
+        for m in memories
+    ]
+    arms = sorted({a for _, names in lines for a in names})
+    out: dict[str, list[int | None]] = {}
+    for arm in arms:
+        sub = [tokens for tokens, names in lines if arm in names]
+        ranks: list[int | None] = []
+        for text in evidence:
+            needle = _content_tokens(text)
+            best: int | None = None
+            best_score = 0.0
+            if needle:
+                for position, haystack in enumerate(sub):
+                    score = _overlap(needle, haystack)
+                    if score > best_score:
+                        best, best_score = position, score
+            ranks.append(best if best_score >= EVIDENCE_OVERLAP_HIT else None)
+        out[arm] = ranks
+    return out
+
+
 def _evidence_reconstructed(memories: Sequence[Any], evidence: Sequence[str]) -> float | None:
     """Coverage when a gold turn is matched against the GROUP of memories it produced.
 
@@ -304,7 +348,14 @@ def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | N
     it costs anything is the question these two numbers exist to answer.
     """
     if not ranks:
-        return {"evidence_mrr": None, "evidence_in_head": None, "evidence_worst_rank": None}
+        return {
+            "evidence_mrr": None,
+            "evidence_in_head": None,
+            "evidence_worst_rank": None,
+            "complete_in_candidates": None,
+            "complete_in_head": None,
+            "evidence_head_size": head,
+        }
     found = [r for r in ranks if r is not None]
     return {
         "evidence_mrr": round(sum(1.0 / (r + 1) for r in found) / len(ranks), 4),
@@ -312,6 +363,15 @@ def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | N
         # a multi-hop question is bounded by its LAST evidence item, the same way
         # evidence_min_overlap bounds recall
         "evidence_worst_rank": max(found) if len(found) == len(ranks) else None,
+        # The two that separate a retrieval failure from a selection failure. Both were
+        # computed by hand from ``evidence_ranks`` after every run so far, which meant the
+        # number that actually drove the roadmap lived in a throwaway script instead of in
+        # the result file. ``complete_in_candidates`` is the ceiling - the fraction of
+        # questions whose EVERY gold turn was retrieved at all - and the distance from it
+        # down to ``complete_in_head`` is everything selection is costing.
+        "complete_in_candidates": len(found) == len(ranks),
+        "complete_in_head": len(found) == len(ranks) and all(r < head for r in found),
+        "evidence_head_size": head,
     }
 
 
@@ -323,17 +383,29 @@ def _rank_summary(records: Sequence[dict[str, Any]]) -> dict[str, float | None]:
     rather than zero.
     """
     scored = [
-        r
-        for r in records
-        if r["category"] != "adversarial" and r.get("evidence_mrr") is not None
+        r for r in records if r["category"] != "adversarial" and r.get("evidence_mrr") is not None
     ]
     if not scored:
-        return {"evidence_mrr": None, "evidence_in_head": None, "evidence_reconstructed": None}
-    rec = [r["evidence_reconstructed"] for r in scored if r.get("evidence_reconstructed") is not None]
+        return {
+            "evidence_mrr": None,
+            "evidence_in_head": None,
+            "evidence_reconstructed": None,
+            "complete_evidence_in_candidates": None,
+            "complete_evidence_in_head": None,
+        }
+    rec = [
+        r["evidence_reconstructed"] for r in scored if r.get("evidence_reconstructed") is not None
+    ]
     return {
         "evidence_mrr": round(sum(r["evidence_mrr"] for r in scored) / len(scored), 4),
         "evidence_in_head": round(sum(r["evidence_in_head"] for r in scored) / len(scored), 4),
         "evidence_reconstructed": round(sum(rec) / len(rec), 4) if rec else None,
+        "complete_evidence_in_candidates": round(
+            sum(1 for r in scored if r.get("complete_in_candidates")) / len(scored), 4
+        ),
+        "complete_evidence_in_head": round(
+            sum(1 for r in scored if r.get("complete_in_head")) / len(scored), 4
+        ),
     }
 
 
@@ -771,6 +843,9 @@ async def run(
                 rank_metrics["evidence_reconstructed"] = _evidence_reconstructed(
                     bundle.memories, [turns.get(e, "") for e in _evidence_ids(item)]
                 )
+                evidence_ranks_by_arm = _evidence_ranks_by_arm(
+                    bundle.memories, [turns.get(e, "") for e in _evidence_ids(item)]
+                )
                 strict = _answer_present(rendered, answer)
                 abstained = "INSUFFICIENT" in status
 
@@ -857,7 +932,15 @@ async def run(
                         "evidence_min_overlap": evidence_min_overlap,
                         "evidence_all_hit": bool(overlaps)
                         and evidence_min_overlap >= EVIDENCE_OVERLAP_HIT,
+                        # The FULL per-turn overlap list, not just its max and min. Without
+                        # it ``evidence_all_recall`` (question-level: every turn clears the
+                        # bar) cannot be compared against ``evidence_reconstructed``
+                        # (item-level: the fraction of turns that clear it), and the two were
+                        # set side by side once already as though they measured the same
+                        # thing. Keeping the list makes either level derivable afterwards.
+                        "evidence_overlaps": [round(o, 4) for o in overlaps],
                         "evidence_ranks": evidence_ranks,
+                        "evidence_ranks_by_arm": evidence_ranks_by_arm,
                         **rank_metrics,
                         # per question, so p99 and a stage split can be derived from the
                         # file instead of from a summary computed once and never checkable

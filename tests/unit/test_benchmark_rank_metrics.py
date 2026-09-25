@@ -77,6 +77,9 @@ def test_a_question_with_no_evidence_annotated_reports_nothing() -> None:
         "evidence_mrr": None,
         "evidence_in_head": None,
         "evidence_worst_rank": None,
+        "complete_in_candidates": None,
+        "complete_in_head": None,
+        "evidence_head_size": 10,
     }
 
 
@@ -90,6 +93,10 @@ def test_the_summary_excludes_adversarial_rows() -> None:
         "evidence_mrr": 1.0,
         "evidence_in_head": 1.0,
         "evidence_reconstructed": None,
+        # absent from the record rather than False: a row that was never scored for
+        # completeness must not be counted as a row that failed it
+        "complete_evidence_in_candidates": 0.0,
+        "complete_evidence_in_head": 0.0,
     }
 
 
@@ -99,4 +106,6 @@ def test_a_run_with_nothing_scorable_reports_none_rather_than_zero() -> None:
         "evidence_mrr": None,
         "evidence_in_head": None,
         "evidence_reconstructed": None,
+        "complete_evidence_in_candidates": None,
+        "complete_evidence_in_head": None,
     }

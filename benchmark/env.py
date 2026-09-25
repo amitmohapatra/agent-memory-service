@@ -31,12 +31,42 @@ TOKEN_BUDGET = 12000
 MAX_TOKENS = 16384
 TIMEOUT = 120
 
+#: The candidate-recall SWEEP depth. ``complete_evidence_in_candidates`` is measured at
+#: ``final_k`` and therefore cannot see a gold turn carried by a memory ranked below it: at
+#: the shipped depth of 50 the metric has a hard ceiling at rank 49, so "the evidence is
+#: absent" and "the evidence is at rank 73" are the same reading. Retrieving 200 and scoring
+#: @50 / @100 / @200 off ONE run's ``evidence_ranks`` separates them, and the answer decides
+#: whether candidate-seeded expansion is needed at all or whether fusion is discarding
+#: evidence the arms already found. Measurement only - never a shipped depth, and its latency
+#: is meaningless because the render carries four times the memories.
+SWEEP_PREFETCH_K = 400
+SWEEP_FUSED_K = 400
+SWEEP_FINAL_K = 200
+SWEEP_MEMORIES_MAX = 200
+SWEEP_TOKEN_BUDGET = 32000
+
 JUDGED_RETRIEVAL = RETRIEVAL.model_copy(
     update={"prefetch_k": PREFETCH_K, "fused_k": FUSED_K, "final_k": FINAL_K}
 )
 JUDGED_CONTEXT = CONTEXT.model_copy(
     update={"memories_max": MEMORIES_MAX, "token_budget": TOKEN_BUDGET}
 )
+SWEEP_RETRIEVAL = RETRIEVAL.model_copy(
+    update={
+        "prefetch_k": SWEEP_PREFETCH_K,
+        "fused_k": SWEEP_FUSED_K,
+        "final_k": SWEEP_FINAL_K,
+    }
+)
+SWEEP_CONTEXT = CONTEXT.model_copy(
+    update={"memories_max": SWEEP_MEMORIES_MAX, "token_budget": SWEEP_TOKEN_BUDGET}
+)
+
+
+#: ``shipped`` is absent from both maps on purpose: it means "change nothing", and a None
+#: from ``.get`` is exactly what ``Overrides`` reads as "leave the frozen constant alone".
+_DEPTH_RETRIEVAL = {"judged": JUDGED_RETRIEVAL, "sweep": SWEEP_RETRIEVAL}
+_DEPTH_CONTEXT = {"judged": JUDGED_CONTEXT, "sweep": SWEEP_CONTEXT}
 
 
 def _flag(name: str, default: str) -> str:
@@ -66,8 +96,9 @@ class BenchEnv:
     #: ``native`` for the conversational benchmarks (LoCoMo, LongMemEval); ``disabled`` for
     #: the document benchmarks, which measure retrieval and not the graph.
     graph_enrichment: Literal["native", "disabled"] = "native"
-    #: ``shipped``: the frozen constants. ``judged``: the depth above.
-    depth: Literal["shipped", "judged"] = "shipped"
+    #: ``shipped``: the frozen constants. ``judged``: the judged depth above. ``sweep``:
+    #: retrieve 200 so candidate completeness can be read at @50/@100/@200 from one run.
+    depth: Literal["shipped", "judged", "sweep"] = "shipped"
     #: ``hash`` replaces the frozen encoder with the deterministic stand-in; every result
     #: produced that way is labelled ``representative: false``. The default follows the
     #: weights (``default_embedding``): frozen when they are present, the stand-in when not.
@@ -105,7 +136,7 @@ class BenchEnv:
         allowed = {
             "search": ("qdrant", "memory"),
             "graph_enrichment": ("native", "disabled"),
-            "depth": ("shipped", "judged"),
+            "depth": ("shipped", "judged", "sweep"),
             "embedding": ("frozen", "hash"),
             "authorization": ("openfga", "memory"),
             "cache": ("dragonfly", "memory"),
@@ -139,8 +170,8 @@ class BenchEnv:
             graph_enrichment="disabled" if self.graph_enrichment == "disabled" else None,
             embedding="hash" if self.embedding == "hash" else None,
             document_parser="builtin" if self.embedding == "hash" else None,
-            retrieval=JUDGED_RETRIEVAL if self.depth == "judged" else None,
-            context=JUDGED_CONTEXT if self.depth == "judged" else None,
+            retrieval=_DEPTH_RETRIEVAL.get(self.depth),
+            context=_DEPTH_CONTEXT.get(self.depth),
         )
         return replace(base, **changes) if changes else base
 
