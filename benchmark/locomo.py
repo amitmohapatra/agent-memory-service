@@ -938,6 +938,18 @@ async def run(
                         # (item-level: the fraction of turns that clear it), and the two were
                         # set side by side once already as though they measured the same
                         # thing. Keeping the list makes either level derivable afterwards.
+                        # What the ROUTER decided this question was, beside what LoCoMo
+                        # says it is. These are different claims - ``category`` is ground
+                        # truth about the question, ``query_type`` is our classification of
+                        # it - and the confusion matrix between them has never been taken on
+                        # the full set, because this field was computed at retrieval time
+                        # (engine sets diagnostics["query_type"]) and then dropped here. It
+                        # decides whether a per-type execution plan is worth building: a
+                        # deep path routed to 6% of the multi-hop questions is a deep path
+                        # that does almost nothing, and the widened patterns in router.py
+                        # were never re-measured after the rates in their own comments.
+                        "query_type": bundle.diagnostics.get("query_type"),
+                        "query_signals": bundle.diagnostics.get("signals"),
                         "evidence_overlaps": [round(o, 4) for o in overlaps],
                         "evidence_ranks": evidence_ranks,
                         "evidence_ranks_by_arm": evidence_ranks_by_arm,
