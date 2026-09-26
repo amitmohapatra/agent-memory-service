@@ -581,6 +581,7 @@ class ContextBuilder:
     ) -> ContextBundle:
         remaining = budget - window.token_estimate
         memories: list[ContextItem] = []
+        primary_memories = 0
         knowledge: list[ContextItem] = []
         graph_facts: list[ContextItem] = []
         summaries: list[ContextItem] = []
@@ -648,8 +649,13 @@ class ContextBuilder:
                 continue
             if item.token_estimate > remaining:
                 continue
-            if c.kind == "memory" and len(memories) < self.cfg.memories_max:
+            if c.kind == "memory" and (
+                primary_memories < self.cfg.memories_max
+                or c.expansion_edge == "GRAPH_EVIDENCE"
+            ):
                 memories.append(item)
+                if c.expansion_edge != "GRAPH_EVIDENCE":
+                    primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)
             elif c.kind == "summary" and len(summaries) < self.cfg.summaries_max:
