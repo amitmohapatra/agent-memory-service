@@ -154,3 +154,23 @@ def test_the_fixed_ladder_does_not_move_when_the_renderer_does() -> None:
     assert narrow["evidence_in_head_at"]["30"] == 0.75
     assert narrow["complete_in_head_at"]["50"] is True, "all four ranks are below 50"
     assert narrow["complete_in_head_at"]["30"] is False, "rank 44 is not"
+
+
+def test_complete_in_candidates_is_capped_at_a_depth_not_at_the_list_length() -> None:
+    """A longer bundle must not score better for being longer.
+
+    ``complete_in_candidates`` was ``len(found) == len(ranks)`` over the whole returned
+    list, which is the same thing as a depth cut only while every bundle is exactly
+    final_k long - true of every run taken so far, and false the moment graph companions
+    are allowed past ``memories_max``. On the ~725 graph-routed LoCoMo questions the list
+    then grows, a gold item at position 52 starts counting, and complete@50 rises with no
+    ranking improvement whatsoever. The credit would land on the graph fix.
+    """
+    inside = _rank_metrics([0, 49], head=30)
+    assert inside["complete_in_candidates"] is True, "rank 49 is within the depth"
+
+    spilled = _rank_metrics([0, 52], head=30)
+    assert spilled["complete_in_candidates"] is False, (
+        "a gold item past the depth must not count merely because the bundle was longer"
+    )
+    assert spilled["evidence_in_head_at"]["50"] == 0.5, "the ladder still sees it as one of two"

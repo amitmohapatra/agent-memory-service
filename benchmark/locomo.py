@@ -373,7 +373,14 @@ def _rank_metrics(ranks: Sequence[int | None], head: int) -> dict[str, float | N
         # the result file. ``complete_in_candidates`` is the ceiling - the fraction of
         # questions whose EVERY gold turn was retrieved at all - and the distance from it
         # down to ``complete_in_head`` is everything selection is costing.
-        "complete_in_candidates": len(found) == len(ranks),
+        # DEPTH-CAPPED on purpose. This used to be `len(found) == len(ranks)` over the whole
+        # returned list, which is only the same thing while every bundle is exactly final_k
+        # long. Fix B lets graph companions past `memories_max`, so on the ~725 graph-routed
+        # questions the list grows and a gold item at position 52 would start counting -
+        # complete@50 rising with no ranking improvement at all, credited to fix C. Scoring
+        # at a fixed depth makes the metric mean the same thing whatever the bundle length.
+        "complete_in_candidates": len(found) == len(ranks)
+        and all(r < CANDIDATE_DEPTH for r in found),
         "complete_in_head": len(found) == len(ranks) and all(r < head for r in found),
         "evidence_head_size": head,
         # The same two questions asked at FIXED depths. ``head`` above is
@@ -479,6 +486,9 @@ EVIDENCE_OVERLAP_HIT = 0.5
 #: Fixed depths every rank metric is ALSO reported at, independent of what the renderer is
 #: configured to promote. See ``_rank_metrics``.
 HEAD_LADDER = (10, 20, 30, 50)
+#: The depth ``complete_in_candidates`` is scored at, independent of how many memories a
+#: bundle actually returns. Equal to the shipped final_k; see the note at its computation.
+CANDIDATE_DEPTH = 50
 
 _EVIDENCE_IDS = re.compile(r"[A-Za-z]+\d+:\d+")
 
