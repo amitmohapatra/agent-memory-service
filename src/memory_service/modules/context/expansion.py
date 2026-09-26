@@ -121,6 +121,7 @@ class ExpansionStage:
     ) -> list[Candidate]:
         present = {c.record_id for c in existing}
         present_nodes = {c.payload.get("node_id") for c in existing if c.kind == "chunk"}
+        seeds_by_node = {c.payload.get("node_id"): c for c in reversed(seeds)}
         node_ids = [str(c.payload["node_id"]) for c in seeds if c.payload.get("node_id")]
         if not node_ids:
             return []
@@ -139,24 +140,24 @@ class ExpansionStage:
                 score, prio = _EDGE_PRIORITY.get(e.edge, (0.3, 9))
                 ordered.append((prio, score, e.edge.value, e.source_id, e.target_id))
             ordered.sort(key=lambda t: (t[0], -t[1]))
-            targets = [t[4] for t in ordered]
+            targets = list(dict.fromkeys([t[4] for t in ordered] + node_ids))
             chunks_by_node: dict[str, list[Chunk]] = {}
             for c in await uow.documents.chunks_for_nodes(ctx.tenant_id, targets):
                 chunks_by_node.setdefault(c.node_id, []).append(c)
             summaries = await uow.documents.node_summaries(
                 ctx.tenant_id, [t[4] for t in ordered if t[2] == "PARENT"]
             )
-            # same-node neighbours by ordinal
-            own = await uow.documents.chunks_for_nodes(
-                ctx.tenant_id, [c.node_id for c in seed_chunks]
-            )
-        by_node_own: dict[str, list[Chunk]] = {}
-        for c in own:
-            by_node_own.setdefault(c.node_id, []).append(c)
+        # One bulk read serves edge targets and same-node neighbours. Build positions once
+        # rather than rescanning the sibling list for each seed in a large section.
+        positions = {
+            c.chunk_id: i for siblings in chunks_by_node.values() for i, c in enumerate(siblings)
+        }
         if self.cfg.neighbor_expansion and (kinds is None or ContextGraphEdge.NEXT in kinds):
             for sc in seed_chunks:
-                siblings = by_node_own.get(sc.node_id, [])
-                idx = next((i for i, c in enumerate(siblings) if c.chunk_id == sc.chunk_id), -1)
+                siblings = chunks_by_node.get(sc.node_id, [])
+                idx = positions.get(sc.chunk_id)
+                if idx is None:
+                    continue
                 for j, edge in ((idx - 1, "PREVIOUS"), (idx + 1, "NEXT")):
                     if 0 <= j < len(siblings) and siblings[j].chunk_id not in present:
                         if len(added) >= budget:
@@ -169,9 +170,8 @@ class ExpansionStage:
         for _prio, score, edge, source, target in ordered:
             if len(added) >= budget:
                 break
-            source_chunk = next(
-                (c.record_id for c in seeds if c.payload.get("node_id") == source), source
-            )
+            source_seed = seeds_by_node.get(source)
+            source_chunk = source_seed.record_id if source_seed is not None else source
             if edge == "PARENT" and target in summaries and f"sum_{target}" not in present:
                 added.append(
                     Candidate(
@@ -182,7 +182,9 @@ class ExpansionStage:
                         retrievers=["expansion"],
                         payload={
                             "node_id": target,
-                            "document_id": seeds[0].payload.get("document_id"),
+                            "document_id": (
+                                source_seed.payload.get("document_id") if source_seed else None
+                            ),
                         },
                         expanded_from=source_chunk,
                         expansion_edge=edge,
@@ -201,6 +203,11 @@ class ExpansionStage:
         return added[:budget]
 
 
+def evidence_group_key(edge: ContextEdge) -> str:
+    """A source-specific identity: two documents' 'footnote 1' are separate obligations."""
+    return f"{edge.edge.value.lower()}:{edge.label or edge.target_id}:{edge.target_id}"
+
+
 def edges_to_groups(edges: Sequence[ContextEdge]) -> dict[str, str]:
     """Group name -> target node for the edges that define *required* companions."""
     out: dict[str, str] = {}
@@ -210,5 +217,5 @@ def edges_to_groups(edges: Sequence[ContextEdge]) -> dict[str, str]:
             ContextGraphEdge.FOOTNOTE,
             ContextGraphEdge.CROSS_REFERENCE,
         ):
-            out[f"{e.edge.value.lower()}:{e.label or e.target_id}"] = e.target_id
+            out[evidence_group_key(e)] = e.target_id
     return out

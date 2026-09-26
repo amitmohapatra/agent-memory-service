@@ -1,4 +1,4 @@
-"""Identical memories must collapse, not compete.
+"""Repeated representations of the same attributed source must collapse, not compete.
 
 Collapsing applied to chunks only — ``if c.kind == "chunk"`` — because memories carry no
 ``text_hash`` in their search payload, so there was nothing to group them by. The effect was
@@ -18,6 +18,14 @@ pytestmark = pytest.mark.integration
 
 
 def _candidate(record_id: str, text: str, score: float, *, kind: str = "memory", **payload):
+    if kind == "memory":
+        payload = {
+            "subject": "user:operator",
+            "owner_principal": "user:operator",
+            "observed_at": "2026-09-26T12:00:00Z",
+            "source_refs": [{"source_type": "message", "source_id": "order-event"}],
+            **payload,
+        }
     return Candidate(
         record_id=record_id,
         kind=kind,
@@ -89,3 +97,14 @@ def test_repeated_record_ids_still_merge() -> None:
     out = _dedup([a, b])
     assert len(out) == 1 and out[0].score == 0.9
     assert out[0].retrievers == ["exact", "fusion"]
+
+
+def test_equal_wording_in_different_order_events_keeps_both_occurrences() -> None:
+    first = _candidate("a", "SKU-1 was reordered", 0.9)
+    second = _candidate(
+        "b",
+        "SKU-1 was reordered",
+        0.8,
+        source_refs=[{"source_type": "message", "source_id": "another-order-event"}],
+    )
+    assert [c.record_id for c in _dedup([first, second])] == ["a", "b"]

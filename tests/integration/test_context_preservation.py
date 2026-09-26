@@ -11,6 +11,7 @@ import pytest
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType
 from memory_service.domain.ids import new_id
+from memory_service.modules.context.expansion import ExpansionStage, chunk_candidate
 from memory_service.modules.jobs.registry import register_handlers
 
 pytestmark = pytest.mark.integration
@@ -47,7 +48,9 @@ async def test_expansion_and_verification_complete_the_cross_page_chain(
     report = res.diagnostics["evidence"]
     assert report["status"] == "COMPLETE", report
     names = set(report["required_groups"])
-    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= names
+    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= {
+        name.rsplit(":", 1)[0] for name in names
+    }
     assert report["missing_groups"] == [] and set(report["satisfied_groups"]) == names
     # expansions are marked and come from the same document; the parent summary rides along
     expanded = [c for c in res.candidates if c.expansion_edge]
@@ -77,6 +80,41 @@ async def test_escalation_fetches_missing_companions(container, uow_factory) -> 
     # evidence items stay capped at the limit; companions ride along explicitly
     ranked = [c for c in res.candidates if c.kind == "chunk" and c.expansion_edge is None]
     assert len(ranked) == 1
+
+
+async def test_golden_definition_ablation_and_verification_recovery(container, uow_factory):
+    """A flat final score does not mean the definition arm is disconnected.
+
+    Isolate its contribution on the real cross-page golden document, then demonstrate
+    the independent verifier recovering the missing evidence when that arm is disabled.
+    """
+    document_id = await _ingest(container, uow_factory)
+    engine = container.services["retrieval"]
+    async with uow_factory() as uow:
+        chunks = await uow.documents.list_chunks(U1.tenant_id, document_id)
+        visibility = await container.services["authz"].visibility(U1, revisions=uow.revisions)
+    seed_chunk = next(c for c in chunks if c.page == 11 and "Adjusted EBITDA" in c.text)
+    seed = chunk_candidate(seed_chunk, score=1.0, edge="", source="")
+    seed.expansion_edge = None
+    seed.expanded_from = None
+    cfg = engine.cfg.model_copy(update={"parent_expansion": False, "neighbor_expansion": False})
+    enabled = ExpansionStage(uow_factory, settings=cfg)
+    disabled = ExpansionStage(
+        uow_factory, settings=cfg.model_copy(update={"definition_expansion": False})
+    )
+    on = await enabled.expand(U1, [seed], [seed], budget=8)
+    off = await disabled.expand(U1, [seed], [seed], budget=8)
+    assert any(c.expansion_edge == "DEFINED_BY" for c in on)
+    assert not any(c.expansion_edge == "DEFINED_BY" for c in off)
+    assert 1 not in {c.payload.get("page") for c in off}
+    routed = engine.router.routed(Q, QueryType.DOCUMENT_MULTI_HOP, identifiers=[], signals={})
+    diagnostics = {}
+    recovered = await engine.post_stages["verify"](
+        U1, routed, [seed, *off], visibility, diagnostics
+    )
+    assert diagnostics["evidence"]["status"] == "COMPLETE"
+    assert diagnostics["evidence"]["escalations"]
+    assert any(c.expansion_edge == "ESCALATION" and c.payload.get("page") == 1 for c in recovered)
 
 
 async def test_abstention_and_no_evidence(container, uow_factory) -> None:

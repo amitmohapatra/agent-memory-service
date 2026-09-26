@@ -160,7 +160,7 @@ class MemoryService:
         include_superseded: bool = False,
         limit: int = 100,
     ) -> list[CanonicalMemory]:
-        """Memories anchored to the caller's own scopes: agent, user, thread, agent group, tenant."""
+        """Memories anchored to the caller's agent, user, thread, agent group or tenant."""
         from memory_service.domain.enums import ScopeLevel
         from memory_service.domain.memory import Scope
 

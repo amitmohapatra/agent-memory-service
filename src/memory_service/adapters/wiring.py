@@ -524,6 +524,6 @@ def _wire_context_preservation(container: Container) -> None:
         engine.post_stages["expansion"] = expansion
     if settings.evidence_verification:
         engine.post_stages["verify"] = VerificationStage(
-            container.services["uow_factory"], expansion, settings=settings
+            container.services["uow_factory"], settings=settings
         )
     container.services["expansion"] = expansion

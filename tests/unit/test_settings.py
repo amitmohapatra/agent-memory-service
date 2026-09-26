@@ -16,12 +16,11 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
     assert RETRIEVAL.rerank is False
 
 
-def test_todays_depth_is_the_frozen_depth() -> None:
-    """One knob: ``final_k``, with prefetch and fusion derived from it. The depth itself is
-    unchanged - 100/100/50 is what every shipped-depth artifact on disk was produced at, and
-    moving it is a measured change, not a refactor. See ``test_retrieval_depth.py``."""
+def test_default_depth_matches_the_promoted_memory_configuration() -> None:
+    """Promote measured memory depth without widening document or mixed final pools."""
     assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (100, 100, 50)
-    assert (CONTEXT.memories_max, CONTEXT.token_budget) == (50, 8000)
+    assert RETRIEVAL.memory_recall_k == CONTEXT.memories_max == 100
+    assert CONTEXT.token_budget == 8000
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:

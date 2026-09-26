@@ -157,6 +157,43 @@ def _parts(builder: ContextBuilder) -> tuple[_Factory, _Engine]:
     return builder.uow_factory, builder.engine  # type: ignore[return-value]
 
 
+async def test_promoted_context_packs_100_memories_and_respects_a_smaller_budget():
+    builder = _builder(memories=120)
+    result = await builder.engine.retrieve(CTX, QUERY)
+    bundle = builder._assemble(
+        QUERY, result, ConversationWindow(), CONTEXT.token_budget, "revision"
+    )
+    assert [m.item_id for m in bundle.memories] == [f"mem_{i}" for i in range(100)]
+    assert bundle.token_estimate <= CONTEXT.token_budget
+
+    tight = builder._assemble(QUERY, result, ConversationWindow(), 200, "revision")
+    assert 0 < len(tight.memories) < 100
+    assert tight.token_estimate <= 200
+
+
+@pytest.mark.parametrize("edge", ["GRAPH_EVIDENCE"])
+async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens(edge):
+    builder = _builder(memories=3)
+    builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})
+    result = await builder.engine.retrieve(CTX, QUERY)
+    companion = Candidate(
+        record_id="mem_bridge",
+        kind="memory",
+        text="The missing bridge evidence.",
+        score=0.4,
+        retrievers=["graph"],
+        expansion_edge=edge,
+        expanded_from="graph",
+    )
+    result.candidates.append(companion)
+    bundle = builder._assemble(QUERY, result, ConversationWindow(), 500, "revision")
+    assert [m.item_id for m in bundle.memories] == ["mem_0", "mem_1", "mem_bridge"]
+    budget = sum(m.token_estimate for m in bundle.memories[:2])
+    tight = builder._assemble(QUERY, result, ConversationWindow(), budget, "revision")
+    assert [m.item_id for m in tight.memories] == ["mem_0", "mem_1"]
+    assert sum(m.token_estimate for m in tight.memories) <= budget
+
+
 # ---------------------------------------------------------------------------
 # 2. round trips
 # ---------------------------------------------------------------------------
@@ -502,7 +539,7 @@ async def test_content_terms_are_computed_once_per_record(monkeypatch: pytest.Mo
         signals={},
         has_thread=False,
     )
-    stage = ev.VerificationStage(_Factory(), None, settings=RETRIEVAL)  # type: ignore[arg-type]
+    stage = ev.VerificationStage(_Factory(), settings=RETRIEVAL)  # type: ignore[arg-type]
     await stage(CTX, routed, list(memories), VISIBILITY, {})
 
     repeated = {m.record_id: seen.count(m.text) for m in memories if seen.count(m.text) != 1}
@@ -580,27 +617,3 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
     assert response.json()["cache_hit"] is False
-
-
-async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens():
-    edge = "GRAPH_EVIDENCE"
-    builder = _builder(memories=3)
-    builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})
-    result = await builder.engine.retrieve(CTX, QUERY)
-    companion = Candidate(
-        record_id="mem_bridge",
-        kind="memory",
-        text="The missing bridge evidence.",
-        score=0.4,
-        retrievers=["graph"],
-        expansion_edge=edge,
-        expanded_from="graph",
-    )
-    result.candidates.append(companion)
-    bundle = builder._assemble(QUERY, result, ConversationWindow(), 500, "revision")
-    assert [m.item_id for m in bundle.memories] == ["mem_0", "mem_1", "mem_bridge"]
-    budget = sum(m.token_estimate for m in bundle.memories[:2])
-    tight = builder._assemble(QUERY, result, ConversationWindow(), budget, "revision")
-    assert [m.item_id for m in tight.memories] == ["mem_0", "mem_1"]
-    assert sum(m.token_estimate for m in tight.memories) <= budget
-

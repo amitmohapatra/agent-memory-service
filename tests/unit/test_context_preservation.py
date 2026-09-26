@@ -154,4 +154,4 @@ def test_abstention_rule_and_required_groups() -> None:
             edge=ContextGraphEdge.NEXT,
         ),
     ]
-    assert edges_to_groups(edges) == {"defined_by:Adjusted EBITDA": "n2", "footnote:3": "n3"}
+    assert edges_to_groups(edges) == {"defined_by:Adjusted EBITDA:n2": "n2", "footnote:3:n3": "n3"}

@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ContextGraphEdge, EvidenceStatus, QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.context.expansion import ExpansionStage, edges_to_groups
+from memory_service.modules.context.expansion import edges_to_groups, evidence_group_key
 from memory_service.modules.memory.native import _STOP as STOP_WORDS
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import RoutedQuery
@@ -208,35 +209,38 @@ def unsupported_subject(
     return None
 
 
+@dataclass
+class _Requirements:
+    """Companion metadata owned by one retrieval call, never shared between requests."""
+
+    groups: dict[str, set[str]] = field(default_factory=dict)
+    seed_groups: dict[str, list[str]] = field(default_factory=dict)
+    seed_nodes: list[str] = field(default_factory=list)
+
+
 class VerificationStage:
     name = "verify"
 
     def __init__(
         self,
         uow_factory: UnitOfWorkFactory,
-        expansion: ExpansionStage,
         *,
         settings: RetrievalSettings,
         seeds: int = 3,
     ) -> None:
         self.uow_factory = uow_factory
-        self.expansion = expansion
         self.cfg = settings
         self.seeds = seeds
-        self._last_seed_groups: dict[str, list[str]] = {}
-        #: node ids of the seeds the last call derived requirements from; empty means the
-        #: seeds had nothing to derive from, which is not the same as "nothing required"
-        self._last_seed_nodes: list[str] = []
 
-    async def required_groups(
+    async def _requirements(
         self, ctx: MemoryExecutionContext, seeds: Sequence[Candidate]
-    ) -> dict[str, set[str]]:
+    ) -> _Requirements:
         """Group name -> node ids that satisfy it (the target and its descendants, so a
         'see Section 8' reference is satisfied by any paragraph of Section 8)."""
         node_ids = [str(c.payload["node_id"]) for c in seeds if c.payload.get("node_id")]
-        self._last_seed_nodes = list(node_ids)
+        result = _Requirements(seed_nodes=node_ids)
         if not node_ids:
-            return {}
+            return result
         async with self.uow_factory() as uow:
             edges = await uow.documents.edges_from(
                 ctx.tenant_id, node_ids, kinds=list(_REQUIRED_EDGES)
@@ -246,10 +250,10 @@ class VerificationStage:
             # which seed node needs which group (the bundle packs a seed with its companions)
             seed_groups: dict[str, list[str]] = {}
             for e in edges:
-                name = f"{e.edge.value.lower()}:{e.label or e.target_id}"
+                name = evidence_group_key(e)
                 if name in groups:
                     seed_groups.setdefault(e.source_id, []).append(name)
-            self._last_seed_groups = seed_groups
+            result.seed_groups = seed_groups
             frontier = sorted(set(targets.values()))
             for _ in range(3):  # section > subsection > paragraph
                 if not frontier:
@@ -265,7 +269,8 @@ class VerificationStage:
                         if parent in ids:
                             ids.add(child)
                 frontier = sorted(set(parent_of))
-        return groups
+        result.groups = groups
+        return result
 
     @staticmethod
     def satisfied(groups: dict[str, set[str]], candidates: Sequence[Candidate]) -> set[str]:
@@ -317,7 +322,8 @@ class VerificationStage:
                 if unsupported:
                     report["status"] = EvidenceStatus.INCOMPLETE.value
                     report["notes"].append(unsupported)
-            groups = await self.required_groups(ctx, seeds)
+            requirements = await self._requirements(ctx, seeds)
+            groups = requirements.groups
             report["required_groups"] = sorted(groups)
             # COMPLETE has two very different meanings, and they were indistinguishable: the
             # companions were checked and found, or nothing was ever checked. Measured live,
@@ -329,14 +335,14 @@ class VerificationStage:
                     if seeds
                     else "no document seeds to derive requirements from"
                 )
-            if seeds and not self._last_seed_nodes:
+            if seeds and not requirements.seed_nodes:
                 report["notes"].append(
                     "seed chunks carry no context-graph node, so requirements could not be "
                     "derived from them"
                 )
             diagnostics["evidence_targets"] = {name: sorted(ids) for name, ids in groups.items()}
             diagnostics["evidence_seed_groups"] = {
-                node: sorted(set(names)) for node, names in self._last_seed_groups.items()
+                node: sorted(set(names)) for node, names in requirements.seed_groups.items()
             }
             done = self.satisfied(groups, candidates)
             rounds = 0

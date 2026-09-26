@@ -219,7 +219,7 @@ class ContextBuilder:
 
     def _config_fingerprint(self) -> str:
         parts = [
-            "source-lineage-v1",
+            "source-lineage-v1:rag-evidence-v5",
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
@@ -650,8 +650,7 @@ class ContextBuilder:
             if item.token_estimate > remaining:
                 continue
             if c.kind == "memory" and (
-                primary_memories < self.cfg.memories_max
-                or c.expansion_edge == "GRAPH_EVIDENCE"
+                primary_memories < self.cfg.memories_max or c.expansion_edge == "GRAPH_EVIDENCE"
             ):
                 memories.append(item)
                 if c.expansion_edge != "GRAPH_EVIDENCE":

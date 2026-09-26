@@ -296,7 +296,7 @@ def load_dense(
     return SentenceTransformersEmbedding(spec, threads=threads)
 
 
-def _load_graph(spec: DenseModel, threads: int) -> _OnnxEncoder:
+def _load_graph(spec: DenseModel, threads: int, *, allow_spinning: bool = False) -> _OnnxEncoder:
     """Open the tokenizer and the session, with the thread counts set before the session
     exists — ``SessionOptions`` is read at construction and ignored afterwards."""
     directory = Path(spec.source)
@@ -326,6 +326,10 @@ def _load_graph(spec: DenseModel, threads: int) -> _OnnxEncoder:
     options = ort.SessionOptions()
     options.intra_op_num_threads = threads
     options.inter_op_num_threads = 1
+    # The encoder shares CPUs with search and PostgreSQL. Sleeping between tasks avoids
+    # idle worker threads consuming their CPU budget after the forward pass finishes.
+    options.add_session_config_entry("session.intra_op.allow_spinning", str(int(allow_spinning)))
+    options.add_session_config_entry("session.inter_op.allow_spinning", str(int(allow_spinning)))
     options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     try:
         session = ort.InferenceSession(str(graph), options, providers=["CPUExecutionProvider"])
