@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import MemoryType, ObservationKind, Visibility
+from memory_service.domain.enums import MemoryType, ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.memory.reflection import ReflectionService
 from tests.support_llm import mocked_gateway
@@ -65,8 +65,8 @@ async def test_reflection_stores_indexed_insight_with_source_evidence(
     assert insight is not None
     assert insight.content == "User prefers terse, skimmable answers"
     assert insight.memory_type is MemoryType.PREFERENCE and insight.confidence == 0.6
-    assert insight.visibility is Visibility.PRIVATE and insight.owner_principal == "user:u1"
-    assert keys == ["principal:acme/user:u1"]
+    assert insight.visibility is sources[0].visibility and insight.owner_principal == "user:u1"
+    assert keys == sorted(sources[0].system_metadata["visibility_keys"])
     assert sorted(e.source_id for e in insight.evidence) == ids
     assert insight.system_metadata["category"] == "reflection"
     assert insight.system_metadata["source_memory_ids"] == ids
@@ -79,6 +79,7 @@ async def test_reflection_stores_indexed_insight_with_source_evidence(
 
 async def test_reflection_without_model_answer_changes_nothing(container, uow_factory) -> None:
     await _observe(container, uow_factory, U1, "I prefer concise answers with code samples.")
+    await _observe(container, uow_factory, U1, "I prefer bullet points over long paragraphs.")
     before = await _memories(container, uow_factory, U1)
     assert before
     with mocked_gateway(failing=True) as gw:

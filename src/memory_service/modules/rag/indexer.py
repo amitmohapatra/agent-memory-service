@@ -331,6 +331,7 @@ class Indexer:
                             "kind": "memory",
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
                             "memory_type": m.memory_type.value,
+                            "derived": bool(m.system_metadata.get("source_revisions")),
                             # lifetime, temporal_status, representation and thread_id are
                             # not written: no reader reads them and the payload projection
                             # (ports.search.PAYLOAD_FIELDS) would not return them if one

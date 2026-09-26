@@ -289,6 +289,8 @@ class ObservationPipeline:
     ) -> set[str]:
         affected: set[str] = set()
         now = datetime.now(UTC)
+        await self._serialize_sources(uow, ctx, candidates)
+        landed_ids: set[str] = set()
         for cand in candidates:
             if cand.lifetime is Lifetime.EPHEMERAL:
                 if self.working is not None:
@@ -336,15 +338,47 @@ class ObservationPipeline:
                     )
                     continue
             outcomes.append(outcome)
-            before = {m.memory_id for m in existing}
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
-            if self.landing is not None:
-                for created in sorted(ids - before):
-                    landed = await uow.memories.get(ctx.tenant_id, created)
-                    if landed is not None:
-                        affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
+            landed_ids |= ids
+        if self.landing is not None:
+            # Rebuild after all writes, including reinforced sources whose revision
+            # changes invalidate the previous derived representation.
+            groups: set[tuple] = set()
+            for memory_id in sorted(landed_ids):
+                landed = await uow.memories.get(ctx.tenant_id, memory_id)
+                if landed is None or landed.temporal.status is not TemporalStatus.CURRENT:
+                    continue
+                group = (
+                    landed.scope.key(),
+                    landed.subject,
+                    landed.predicate,
+                    landed.owner_principal,
+                    tuple(sorted(landed.system_metadata.get("visibility_keys", []))),
+                )
+                if group not in groups:
+                    affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
+                    groups.add(group)
         return affected
+
+    async def _serialize_sources(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        candidates: list[MemoryCandidate],
+    ) -> None:
+        if self.landing is not None:
+            # Lock before source writes in a stable order to avoid waiting for this
+            # consolidation lock while holding a source row another writer needs.
+            keys = sorted(
+                {
+                    f"derived-source:{ctx.tenant_id}:{scope_for(c, ctx).key()}:{c.subject}"
+                    for c in candidates
+                    if c.subject and c.lifetime is not Lifetime.EPHEMERAL
+                }
+            )
+            if keys:
+                await uow.serialize(*keys)
 
     @staticmethod
     def _new_memory(

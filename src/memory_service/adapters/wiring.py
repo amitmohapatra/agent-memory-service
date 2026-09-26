@@ -425,6 +425,7 @@ def _wire_retrieval(container: Container) -> None:
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
     from memory_service.modules.memory.forgetting import ForgettingService
+    from memory_service.modules.memory.landing import LandingReflection
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
@@ -441,6 +442,9 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
+        landing=LandingReflection(cfg)
+        if container.services["llm_assist"].wants("contextual_extraction")
+        else None,
     )
     container.services["memory"] = MemoryService(container.services["authz"])
     container.services["forgetting"] = ForgettingService(

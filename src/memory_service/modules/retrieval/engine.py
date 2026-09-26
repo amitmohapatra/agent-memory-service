@@ -100,6 +100,17 @@ class RetrievalResult:
     diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
+def is_derived(candidate: Candidate) -> bool:
+    """Includes pre-migration index records without the explicit derived flag."""
+    return candidate.kind == "memory" and (
+        bool(candidate.payload.get("derived"))
+        or candidate.payload.get("memory_type") in {"BELIEF", "ENTITY_SUMMARY"}
+        or any(
+            ref.get("source_type") == "memory" for ref in candidate.payload.get("source_refs", [])
+        )
+    )
+
+
 def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -> Candidate:
     """Project canonical evidence identically for exact and graph retrieval."""
     return Candidate(
@@ -110,6 +121,7 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
         retrievers=[retriever],
         payload={
             "memory_type": memory.memory_type.value,
+            "derived": bool(memory.system_metadata.get("source_revisions")),
             "temporal_status": memory.temporal.status.value,
             "subject": memory.subject,
             "predicate": memory.predicate,
@@ -346,6 +358,8 @@ class RetrievalEngine:
                     candidates, promoted = promote_source_turns(candidates)
                     diagnostics["source_turn_promotions"] = promoted
                 candidates = _dedup(candidates)[:pool_limit]
+                candidates = await self._validate_derived(ctx, candidates, visibility)
+                checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
                 # 4. bounded CPU rerank
@@ -395,6 +409,12 @@ class RetrievalEngine:
                     diagnostics.setdefault("stages", []).append(name)
                 if self.post_stages:
                     candidates = _cap_evidence(candidates, limit)
+                    candidates = await self._validate_derived(
+                        ctx, candidates, visibility, checked=checked_derived
+                    )
+                candidates = await self._expand_derived_sources(
+                    ctx, candidates, visibility, diagnostics
+                )
             finally:
                 # an exact hit never needs the encoding; a stage that raised never consumed
                 # its prefetch - neither may outlive the request or log as never retrieved
@@ -403,6 +423,80 @@ class RetrievalEngine:
         return RetrievalResult(
             routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
         )
+
+    async def _expand_derived_sources(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """Bounded one-hop evidence fetch; no model, graph walk or per-source query."""
+        present = {c.record_id for c in candidates}
+        wanted: dict[str, Candidate] = {}
+        for candidate in candidates:
+            if not is_derived(candidate):
+                continue
+            for ref in candidate.payload.get("source_refs", []):
+                source_id = ref.get("source_id")
+                if (
+                    ref.get("source_type") == "memory"
+                    and source_id not in present
+                    and source_id not in wanted
+                    and len(wanted) < self.cfg.derived_source_k
+                ):
+                    wanted[source_id] = candidate
+        if not wanted:
+            return candidates
+        async with self.uow_factory() as uow:
+            sources = await uow.memories.get_many(ctx.tenant_id, list(wanted))
+        additions = []
+        for memory in sources:
+            if (
+                memory.temporal.status.value != "CURRENT"
+                or memory.system_metadata.get("source_revisions")
+                or not visibility.allows(
+                    memory.tenant_id, memory.system_metadata.get("visibility_keys", [])
+                )
+            ):
+                continue
+            parent = wanted[memory.memory_id]
+            additions.append(
+                replace(
+                    memory_candidate(memory, retriever="derived_source", score=parent.score),
+                    expanded_from=parent.record_id,
+                    expansion_edge="DERIVED_SOURCE",
+                )
+            )
+        diagnostics["derived_sources"] = len(additions)
+        return [*candidates, *additions]
+
+    async def _validate_derived(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        *,
+        checked: set[str] | None = None,
+    ) -> list[Candidate]:
+        checked = checked or set()
+        ids = {c.record_id for c in candidates if is_derived(c) and c.record_id not in checked}
+        if not ids:
+            return candidates
+        async with self.uow_factory() as uow:
+            current = {
+                m.memory_id: m
+                for m in await uow.memories.get_many(ctx.tenant_id, sorted(ids))
+                if m.temporal.status.value == "CURRENT"
+                and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
+            }
+        return [
+            replace(c, text=current[c.record_id].content, payload={**c.payload, "derived": True})
+            if c.record_id in current
+            else c
+            for c in candidates
+            if c.record_id not in ids or c.record_id in current
+        ]
 
     async def _search_kind(
         self,

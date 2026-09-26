@@ -178,6 +178,7 @@ class EmbeddingSettings(BaseModel):
 
 
 LLMUse = Literal[
+    "contextual_extraction",
     "ambiguous_extraction",
     "ambiguous_worthiness",
     "relation_extraction",
@@ -222,7 +223,12 @@ class LLMSettings(BaseModel):
         description="which deterministic paths may consult the model; each falls back natively",
     )
     fast_uses: list[LLMUse] = Field(
-        default_factory=lambda: ["ambiguous_worthiness", "query_expansion", "chunk_context"]
+        default_factory=lambda: [
+            "ambiguous_worthiness",
+            "contextual_extraction",
+            "query_expansion",
+            "chunk_context",
+        ]
     )
     max_tokens: int = Field(default=1024, ge=1)
     timeout_seconds: float = Field(default=30.0, gt=0)

@@ -53,6 +53,21 @@ PROFILES: dict[str, tuple[dict, Overrides]] = {
             graph_enrichment="disabled",
         ),
     ),
+    "llm-ingestion": (
+        {
+            "models": {
+                "llm": {
+                    "enabled": True,
+                    "base_url": "http://bifrost.test/v1",
+                    "model": "test/strong",
+                    "fast_model": "test/fast",
+                    "max_retries": 0,
+                    "uses": ["contextual_extraction", "reflection"],
+                }
+            }
+        },
+        Overrides(cache="memory", tasks="memory", search="memory", blob="memory"),
+    ),
     # no generative model at all - the rule-based path has to carry the service
     "no-llm": (
         {"models": {"llm": {"enabled": False}}},
@@ -88,6 +103,9 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     )
 
     container = await build_container(settings, __version__, overrides=stand_ins)
+    assert (container.services["observation_pipeline"].landing is not None) == (
+        name == "llm-ingestion"
+    )
     try:
         async with container.database.engine.begin() as conn:
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))

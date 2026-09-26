@@ -352,14 +352,62 @@ class _Memories:
     def __init__(self, recent) -> None:
         self.recent = list(recent)
         self.added = []
+        self.reflected = {}
 
     async def list_recent(self, *, since, limit=1000):
-        return [m for m in self.recent if m.created_at >= since][:limit]
+        return [m for m in self.recent if m.updated_at >= since][:limit]
+
+    async def reflection_pending(self, *, limit=1000, tenant_id=None):
+        return [
+            m
+            for m in self.recent
+            if not m.system_metadata.get("source_revisions")
+            and (tenant_id is None or m.tenant_id == tenant_id)
+            and self.reflected.get(m.memory_id) != m.revision
+        ][:limit]
+
+    async def mark_reflected(self, sources, *, at):
+        self.reflected.update({m.memory_id: m.revision for m in sources})
+
+    async def related(
+        self,
+        tenant_id,
+        *,
+        scope_key,
+        subject,
+        owner_principal,
+        visibility_keys,
+        exclude=(),
+        limit=8,
+        include_derived=True,
+        include_verbatim=False,
+    ):
+        return [
+            m
+            for m in self.recent
+            if m.tenant_id == tenant_id
+            and m.scope.key() == scope_key
+            and m.subject == subject
+            and m.owner_principal == owner_principal
+            and set(m.system_metadata.get("visibility_keys", [])) == set(visibility_keys)
+            and m.memory_id not in exclude
+            and (include_derived or not m.system_metadata.get("source_revisions"))
+        ][:limit]
 
     async def candidates(
         self, tenant_id, *, scope_key, normalized_hash=None, subject=None, limit=20
     ):
         return [m for m in self.added if m.scope.key() == scope_key][:limit]
+
+    async def current_derived(self, tenant_id, slot):
+        return next(
+            (
+                m
+                for m in self.added
+                if m.tenant_id == tenant_id and m.system_metadata.get("derived_slot") == slot
+            ),
+            None,
+        )
 
     async def add(self, memory, *, visibility_keys):
         memory.system_metadata["visibility_keys"] = list(visibility_keys)
@@ -389,6 +437,9 @@ class _UoW:
     async def __aexit__(self, *exc):
         return None
 
+    async def serialize(self, *keys):
+        return None
+
     async def enqueue(self, spec):
         self.enqueued.append(spec)
         return 1
@@ -400,7 +451,12 @@ class _UoW:
 async def _sources(*texts: str, ctx=CTX, age=timedelta(hours=1)):
     plain = _native()
     now = datetime.now(UTC) - age
-    return [build_memory(await _first(plain, t, ctx), ctx, now=now) for t in texts]
+    from memory_service.modules.memory.pipeline import keys_for
+
+    memories = [build_memory(await _first(plain, t, ctx), ctx, now=now) for t in texts]
+    for memory in memories:
+        memory.system_metadata["visibility_keys"] = keys_for(memory.scope, memory.visibility, ctx)
+    return memories
 
 
 async def test_reflection_stores_validated_insights_with_provenance() -> None:
@@ -422,20 +478,25 @@ async def test_reflection_stores_validated_insights_with_provenance() -> None:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
         created = await service.reflect_all()
         assert gw.route.call_count == 1
+        schema = gw.prompts()[0]["response_format"]["json_schema"]["schema"]
+        assert schema["additionalProperties"] is False
+        assert schema["properties"]["insights"]["items"]["additionalProperties"] is False
         prompt = gw.prompts()[0]["messages"][1]["content"]
         assert all(i in prompt for i in ids) and "user:u1" in prompt
         assert len(created) == 1 and uow.memories.added[0].memory_id == created[0]
         insight = uow.memories.added[0]
         assert insight.content == "User prefers terse, structured answers"
         assert insight.memory_type is MemoryType.PREFERENCE and insight.confidence == 0.6
-        assert insight.owner_principal == "user:u1" and insight.visibility is Visibility.PRIVATE
+        assert insight.owner_principal == "user:u1" and insight.visibility is sources[0].visibility
         assert insight.scope.level.value == "USER" and insight.scope.user_id == "u1"
         assert sorted(e.source_id for e in insight.evidence) == sorted(ids)
         assert all(e.source_type == "memory" for e in insight.evidence)
         assert insight.system_metadata["category"] == "reflection"
         assert insight.system_metadata["source_memory_ids"] == sorted(ids)
         assert insight.system_metadata["contributors"] == ["user:u1"]
-        assert insight.system_metadata["visibility_keys"] == ["principal:acme/user:u1"]
+        assert insight.system_metadata["visibility_keys"] == sorted(
+            sources[0].system_metadata["visibility_keys"]
+        )
         assert [j.task_name for j in uow.enqueued] == ["memory.index"]
         assert uow.enqueued[0].payload == {"tenant_id": "acme", "memory_ids": created}
         assert uow.revisions.bumped and uow.commits == 1
@@ -447,20 +508,23 @@ async def test_reflection_stores_validated_insights_with_provenance() -> None:
         assert gw.route.call_count == 2 and len(uow.memories.added) == 1
 
 
-async def test_reflection_bounds_sources_and_skips_old_memories() -> None:
+async def test_reflection_bounds_batches_and_processes_older_pending_sources() -> None:
     fresh = await _sources(*[f"The widget {i} costs {i} USD." for i in range(45)])
     old = await _sources("I prefer tabs.", age=timedelta(days=3))
     uow = _UoW(_Memories(fresh + old))
-    with mocked_gateway(['{"insights": []}']) as gw:
+    with mocked_gateway(['{"insights": []}'] * 4) as gw:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
         assert await service.reflect_all() == []
-    prompt = gw.prompts()[0]["messages"][1]["content"]
-    assert prompt.count("\n- ") == 40 and old[0].memory_id not in prompt
-    assert uow.commits == 0 and uow.enqueued == []
+        assert await service.reflect_all() == []
+        assert gw.route.call_count == 3
+    prompts = [p["messages"][1]["content"] for p in gw.prompts()]
+    assert all(prompt.count("\n- ") <= 40 for prompt in prompts)
+    assert len(uow.memories.reflected) == 46
+    assert uow.enqueued == []
 
 
 async def test_reflection_is_a_no_op_when_gateway_fails_or_flag_off() -> None:
-    sources = await _sources("I prefer concise answers.")
+    sources = await _sources("I prefer concise answers.", "I prefer bullet points.")
     uow = _UoW(_Memories(sources))
     with mocked_gateway(failing=True) as gw:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
@@ -540,3 +604,12 @@ async def test_the_dense_band_is_embedded_in_one_batch() -> None:
     assert embedding.queries == 0, "a per-memory embed_query is the defect this replaces"
     assert embedding.batches == 1, f"entered the encoder {embedding.batches} times, expected 1"
     assert embedding.texts == 1 + len(band), "the candidate and the whole band go in together"
+
+
+async def test_generated_insight_cannot_reinforce_a_new_source_fact() -> None:
+    provider = _native()
+    candidate = await _first(provider, "I prefer concise answers.", CTX)
+    generated = build_memory(candidate, CTX, now=datetime.now(UTC))
+    generated.system_metadata["source_revisions"] = {"source-1": 1, "source-2": 1}
+    outcome = await provider.consolidate(candidate, [generated], CTX)
+    assert outcome.decision is DedupDecision.CREATE

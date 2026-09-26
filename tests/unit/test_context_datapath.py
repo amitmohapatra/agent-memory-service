@@ -171,7 +171,7 @@ async def test_promoted_context_packs_100_memories_and_respects_a_smaller_budget
     assert tight.token_estimate <= 200
 
 
-@pytest.mark.parametrize("edge", ["GRAPH_EVIDENCE"])
+@pytest.mark.parametrize("edge", ["GRAPH_EVIDENCE", "DERIVED_SOURCE"])
 async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens(edge):
     builder = _builder(memories=3)
     builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})

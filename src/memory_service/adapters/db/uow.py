@@ -26,7 +26,7 @@ from memory_service.adapters.db.tool_repository import SqlToolRepository
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.tasks import JobSpec
+from memory_service.ports.tasks import JobSpec, Queue
 
 log = get_logger(__name__)
 
@@ -148,6 +148,18 @@ class SqlUnitOfWork:
 
     async def commit(self) -> None:
         assert self._session is not None
+        # Source invalidation and removal of every derived index entry share this commit.
+        for tenant_id, ids in self.memories.invalidated.items():
+            if ids:
+                await self.enqueue(
+                    JobSpec(
+                        task_name="memory.index",
+                        queue=Queue.EMBEDDING,
+                        payload={"tenant_id": tenant_id, "memory_ids": sorted(ids)},
+                        tenant_id=tenant_id,
+                    )
+                )
+        self.memories.invalidated.clear()
         with span("db.commit"), stage_seconds.labels("db.commit").time():
             await self._session.commit()
         self._committed = True

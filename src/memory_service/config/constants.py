@@ -387,14 +387,16 @@ class MemoryIntelligenceSettings(BaseModel):
     #: The verbatim copy is an OBSERVATION, which is in DERIVED_MEMORY_TYPES, so it is
     #: excluded from supersession and reflection (landing.py:63, :77) and cannot disturb the
     #: fact machinery or the false-merge gate. It augments the rule output; it never
-    #: replaces it. Applies to user-authored messages outside a thread only: a thread's
-    #: turns are kept by the hot-thread cache and the archive, and an agent's messages are
-    #: working chatter that must not inherit a shared visibility.
+    #: replaces it. Applies to user-authored messages, including messages inside threads:
+    #: archival storage alone does not make older turns searchable. Agent working chatter
+    #: is excluded so it cannot inherit a shared visibility.
     keep_verbatim_turns: bool = True
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)
     # landing reflection and derived memories
-    landing_reflection_k: int = Field(default=8, ge=0, le=8)
+    consolidation_enabled: bool = True
+    consolidation_max_chars: int = Field(default=1800, ge=256, le=2000)
+    consolidation_max_sources: int = Field(default=64, ge=2, le=128)
     belief_min_support: int = Field(default=2, ge=2)
     entity_summary_min_facts: int = Field(default=2, ge=1)
     # forgetting: importance x recency x access decay
@@ -405,6 +407,9 @@ class MemoryIntelligenceSettings(BaseModel):
 
 
 MEMORY_INTELLIGENCE = MemoryIntelligenceSettings()
+
+# Complete source text admitted into one background reflection prompt.
+REFLECTION_SOURCE_CHARS = 2000
 
 
 class DocumentSettings(BaseModel):
@@ -509,7 +514,8 @@ class RetrievalSettings(BaseModel):
     memory_entity_search: bool = False
     memory_entity_search_timeout_ms: int = Field(default=200, ge=1, le=500)
     parent_expansion: bool = True
-    #: Experimental: promote containing source turns already present in the pool.
+    #: Experimental: replace a fact with its containing source turn already in the pool.
+    derived_source_k: int = Field(default=6, ge=0, le=16)
     source_turn_expansion: bool = False
     # Soft diversity cap before the primary cut. Zero preserves score order. Overflow
     # fills spare slots; exact hits, selected single documents and companions are exempt.

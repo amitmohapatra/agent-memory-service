@@ -101,6 +101,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "confidence",
     "contradicts",
     "contributors",
+    "derived",
     "document_id",
     "kind",
     "memory_type",

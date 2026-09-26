@@ -149,6 +149,7 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "contradicts",
                 "contributors",
                 "memory_type",
+                "derived",
                 "visibility",
                 "owner_principal",
                 "confidence",
@@ -272,6 +273,7 @@ class ContextBuilder:
         revision_fp = stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
         authz_fp = AuthorizationService.revision_fingerprint(ctx, revisions)
         bundle_id = stable_key(
+            "source-backed-consolidation-v1",
             ctx.tenant_id,
             ctx.scope_fingerprint(),
             revision_fp,
@@ -410,7 +412,7 @@ class ContextBuilder:
     ) -> None:
         """The bookkeeping a built bundle leaves behind, none of it on the request path."""
         self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
-        if self.cache is not None:
+        if self.cache is not None and not any(i.attributes.get("derived") for i in bundle.memories):
             self._track(self._store(self.cache, cache_key, bundle, api))
 
     async def _store(
@@ -650,10 +652,11 @@ class ContextBuilder:
             if item.token_estimate > remaining:
                 continue
             if c.kind == "memory" and (
-                primary_memories < self.cfg.memories_max or c.expansion_edge == "GRAPH_EVIDENCE"
+                primary_memories < self.cfg.memories_max
+                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}
             ):
                 memories.append(item)
-                if c.expansion_edge != "GRAPH_EVIDENCE":
+                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)

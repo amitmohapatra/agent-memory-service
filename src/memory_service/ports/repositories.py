@@ -314,6 +314,10 @@ class MemoryRepository(Protocol):
     ``forget`` soft-deletes and later purge is an operator task."""
 
     async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None: ...
+    async def current_derived(self, tenant_id: str, slot: str) -> CanonicalMemory | None:
+        """Indexed lookup of the unique live derived slot; caller serializes slot writes."""
+        ...
+
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]
@@ -359,8 +363,18 @@ class MemoryRepository(Protocol):
         ...
 
     async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
-        """CURRENT memories created at or after ``since``, newest first, across tenants
+        """Live CURRENT memories updated at or after ``since``, newest first, across tenants
         (periodic jobs discover the scopes with fresh activity)."""
+        ...
+
+    async def reflection_pending(
+        self, *, limit: int = 1000, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        """Oldest live source revisions not yet successfully considered for reflection."""
+        ...
+
+    async def mark_reflected(self, sources: Sequence[CanonicalMemory], *, at: datetime) -> None:
+        """Record exact considered revisions without modifying facts or index revisions."""
         ...
 
     async def related(
@@ -371,6 +385,10 @@ class MemoryRepository(Protocol):
         subject: str,
         exclude: Sequence[str] = (),
         limit: int = 8,
+        owner_principal: str | None = None,
+        visibility_keys: Sequence[str] | None = None,
+        include_derived: bool = True,
+        include_verbatim: bool = False,
     ) -> list[CanonicalMemory]:
         """CURRENT memories about ``subject`` in one scope, newest first (landing reflection,
         beliefs and entity summaries); bounded by ``limit``."""

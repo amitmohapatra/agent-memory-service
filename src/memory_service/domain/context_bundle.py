@@ -250,6 +250,7 @@ def _memory_line(m: Any, *, body: str | None = None) -> str:
     who = subject.split(":", 1)[1] if subject.startswith("user:") else ""
     parts = (
         f"- [{m.citation}]",
+        "summary created" if m.attributes.get("derived") else "",
         day,
         weekday,
         f"{who}:" if who else "",

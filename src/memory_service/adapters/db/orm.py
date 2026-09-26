@@ -568,6 +568,7 @@ class MemoryRow(Base):
     normalized_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     subject: Mapped[str | None] = mapped_column(String(300))
     predicate: Mapped[str | None] = mapped_column(String(200))
+    derived_slot: Mapped[str | None] = mapped_column(String(64))
     object: Mapped[str | None] = mapped_column(Text)
     temporal_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="CURRENT", server_default="CURRENT"
@@ -600,11 +601,26 @@ class MemoryRow(Base):
     deleted_at: Mapped[datetime | None]
 
     __table_args__ = (
+        Index(
+            "uq_memories_live_derived_slot",
+            "tenant_id",
+            "derived_slot",
+            unique=True,
+            postgresql_where=text(
+                "derived_slot IS NOT NULL AND temporal_status = 'CURRENT' AND deleted_at IS NULL"
+            ),
+        ),
         Index("ix_memories_tenant_hash", "tenant_id", "normalized_hash"),
         Index("ix_memories_tenant_scope", "tenant_id", "scope_key", "temporal_status"),
         Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
+        Index(
+            "ix_memories_recent_updates",
+            "updated_at",
+            "memory_id",
+            postgresql_where=text("temporal_status = 'CURRENT' AND deleted_at IS NULL"),
+        ),
         Index(
             "ix_memories_unindexed",
             "tenant_id",
@@ -623,6 +639,36 @@ class MemoryRow(Base):
             postgresql_where=text("temporal_status = 'CURRENT' AND deleted_at IS NULL"),
         ),
     )
+
+
+class MemoryReflectionProgressRow(Base):
+    """Successful reflection inputs, including batches that produced no new insight."""
+
+    __tablename__ = "memory_reflection_progress"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    memory_id: Mapped[str] = mapped_column(
+        ForeignKey("memories.memory_id", ondelete="CASCADE"), primary_key=True
+    )
+    source_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    processed_at: Mapped[datetime] = mapped_column(nullable=False)
+
+
+class MemoryDependencyRow(Base):
+    """Indexed source revisions for derived memories; content never lives in this table."""
+
+    __tablename__ = "memory_dependencies"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    derived_id: Mapped[str] = mapped_column(
+        ForeignKey("memories.memory_id", ondelete="CASCADE"), primary_key=True
+    )
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("memories.memory_id", ondelete="CASCADE"), primary_key=True
+    )
+    source_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (Index("ix_memory_dependencies_source", "tenant_id", "source_id"),)
 
 
 # --------------------------------------------------------------------------

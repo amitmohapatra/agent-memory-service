@@ -33,6 +33,7 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.narrative import extract_narrative_units
 from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate
 from memory_service.ports.models import EmbeddingProvider, ProviderInfo
 
@@ -482,8 +483,30 @@ class NativeMemoryIntelligence:
             ]
         out: list[MemoryCandidate] = []
         seen: set[str] = set()
+        sentences = split_sentences(text)
+        narrative = None
+        if (
+            kind is ObservationKind.MESSAGE
+            and not observation.agent_authored
+            and self.assist.wants("contextual_extraction")
+        ):
+            eligible = {
+                index
+                for index, sentence in enumerate(sentences)
+                if not _QUESTION.search(sentence)
+                and not _CHITCHAT.match(sentence)
+                and any(
+                    self._from_sentence(clause, ctx, evidence, kind=kind) is None
+                    for clause in split_clauses(sentence)
+                )
+            }
+            narrative = await extract_narrative_units(self.assist, sentences, eligible)
+        # A contextual attempt consumes this message's assist budget, including on failure.
+        # Do not multiply calls by falling through into sentence-by-sentence consultation.
         refine_left = worth_left = _ASSIST_MAX_SENTENCES
-        for sentence in split_sentences(text):
+        if narrative is not None:
+            refine_left = worth_left = 0
+        for sentence in sentences:
             for clause in split_clauses(sentence):
                 cand = self._from_sentence(clause, ctx, evidence, kind=kind)
                 if cand is None:
@@ -504,6 +527,25 @@ class NativeMemoryIntelligence:
                     continue
                 seen.add(key)
                 out.append(cand)
+        original_key = normalized_hash(text) if narrative else None
+        for content in narrative or []:
+            key = normalized_hash(content)
+            if key in seen or (self.cfg.keep_verbatim_turns and key == original_key):
+                continue
+            seen.add(key)
+            out.append(
+                MemoryCandidate(
+                    content=content,
+                    memory_type=MemoryType.OBSERVATION,
+                    lifetime=Lifetime.LONG_TERM,
+                    subject=_user_subject(ctx),
+                    predicate="said",
+                    evidence=evidence,
+                    importance=0.4,
+                    confidence=0.99,  # confidence in the quotation, not its factual truth
+                    category="narrative_unit",
+                )
+            )
         verbatim = self._verbatim(text, observation, ctx, evidence)
         if verbatim is not None and normalized_hash(verbatim.content) not in seen:
             out.append(verbatim)
@@ -537,24 +579,9 @@ class NativeMemoryIntelligence:
         # user's memory the first time this ran without a guard
         # (tests/integration/test_multi_agent.py caught it).
         #
-        # A turn inside a thread is excluded too, and that exclusion is now known to be the
-        # single biggest gap in this service - but it is NOT safe to simply lift.
-        #
-        # The stated reason is that the hot-thread cache and the archive already hold every
-        # message. They do, for STORAGE. Neither is searchable: ranked recall reads the
-        # vector store, and the bundle's conversation section is a recent window. So a fact
-        # stated in an older turn that no extraction rule matched cannot be found by any
-        # query. And every chat message has a thread - append_message requires one - so the
-        # exclusion is TOTAL for real traffic, while LoCoMo ingests without a thread_id and
-        # keeps its verbatim turns. The benchmark measures a configuration production
-        # cannot run, which is why this has never shown up in a score.
-        #
-        # Lifting it was tried and reverted on 2026-09-24. It works, and four tests that
-        # encode the current semantics fail in ways that are all benign (the "leak" one is
-        # the user's own message, not an agent note). What stopped it is that it doubles the
-        # stored memories for every chat message, and nothing here can measure what that
-        # does to precision or to the p99 budget, because no benchmark drives a thread. The
-        # measurement is the prerequisite, not the fix.
+        # User-authored messages are retained inside threads too: archived storage is not
+        # ranked retrieval. Keep this guard about authorship, not the presence of agent
+        # lineage or thread_id; a harness can relay a user's own words.
         if observation.agent_authored:
             return None
         body = text.strip()
@@ -994,7 +1021,11 @@ class NativeMemoryIntelligence:
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
         for mem in ordered:
-            if mem.temporal.status.value != "CURRENT" or mem.deleted_at is not None:
+            if (
+                mem.temporal.status.value != "CURRENT"
+                or mem.deleted_at is not None
+                or mem.system_metadata.get("source_revisions")
+            ):
                 continue
             # 1. identical normalized content -> reinforce
             if mem.normalized_hash == c_hash:
