@@ -192,29 +192,28 @@ def _most_relevant_count(total: int) -> int:
     return max(MOST_RELEVANT_MAX, math.ceil(total * MOST_RELEVANT_SHARE))
 
 
-#: Pull the memories extracted from the same turn in alongside one that ranked. Proposition-
-#: sized extraction means a gold turn often becomes several memories, none of which carries
-#: enough of it alone: on the full set the best SINGLE memory matches 69.6% of gold evidence
-#: while the whole bundle matches 93.3%. That 23.7-point gap is not extraction losing
-#: information, it is the retrieval unit being smaller than the question's unit - and no
-#: reordering can close it, because every fragment is individually a weak match. Reuniting a
-#: turn's fragments in the block the model reads first is the thing that can.
+#: Keep retrieved fragments of a source together in the head. This changes rendering,
+#: not candidate recall; its effect on answer accuracy must be measured with a reader.
 GROUP_BY_SOURCE = True
 
 
-def _source_ids(m: Any) -> set[str]:
-    return {
-        sid
-        for ref in (getattr(m, "evidence", None) or [])
-        if (sid := getattr(ref, "source_id", None))
-    }
+def _source_ids(m: Any) -> list[tuple[str, str]]:
+    # Stable order matters for memories with multiple sources. A set makes the rendered
+    # head depend on PYTHONHASHSEED; source type prevents unrelated id namespaces joining.
+    return list(
+        dict.fromkeys(
+            (getattr(ref, "source_type", ""), sid)
+            for ref in (getattr(m, "evidence", None) or [])
+            if (sid := getattr(ref, "source_id", None))
+        )
+    )
 
 
 def _head_with_siblings(memories: Sequence[Any], count: int) -> list[Any]:
     """The top ``count``, each followed by the memories extracted from the same turn."""
     if not GROUP_BY_SOURCE:
         return list(memories[:count])
-    by_source: dict[str, list[Any]] = {}
+    by_source: dict[tuple[str, str], list[Any]] = {}
     for m in memories:
         for sid in _source_ids(m):
             by_source.setdefault(sid, []).append(m)

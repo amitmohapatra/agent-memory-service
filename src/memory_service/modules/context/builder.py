@@ -112,6 +112,11 @@ def candidate_to_item(c: Candidate) -> ContextItem:
             observed_at=datetime.now(UTC),
         )
     ]
+    # Preserve the raw-source lineage, while keeping the memory's own citation stable.
+    # Older indexes and working-memory candidates have no source_refs; their record
+    # pointer remains valid until the index is rebuilt.
+    if c.kind == "memory" and (source_refs := p.get("source_refs")):
+        evidence = [EvidenceRef.model_validate(ref) for ref in source_refs]
     # _relevance existed, was correct, and was called by nothing but its own test, so every
     # item on the wire carried relevance=0.0 and score_kind="fusion" regardless of what
     # produced it — the incomparable-scale problem its docstring describes was still live.
@@ -214,6 +219,7 @@ class ContextBuilder:
 
     def _config_fingerprint(self) -> str:
         parts = [
+            "source-lineage-v1",
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
