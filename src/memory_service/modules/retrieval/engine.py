@@ -517,6 +517,7 @@ class RetrievalEngine:
             sparse=sparse,
             flt=flt,
             limit=self.cfg.fused_k,
+            rrf_k=self.cfg.hybrid_rrf_k,
             prefetch_limit=self.cfg.prefetch_k,
         )
 

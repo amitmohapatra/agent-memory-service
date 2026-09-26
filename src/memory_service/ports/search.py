@@ -153,8 +153,9 @@ class SearchStore(Protocol):
         flt: SearchFilter,
         limit: int,
         prefetch_limit: int,
+        rrf_k: int = 1,
     ) -> list[SearchHit]:
-        """Native RRF fusion when supported; otherwise client-side RRF over bounded prefetch."""
+        """Bounded hybrid fusion, scoring each arm as 1/(rrf_k + one-based rank)."""
         ...
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]: ...

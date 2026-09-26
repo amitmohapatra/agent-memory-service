@@ -270,6 +270,32 @@ async def test_every_read_projects_the_payload() -> None:
         assert selector.include == list(PAYLOAD_FIELDS)
 
 
+@pytest.mark.parametrize("order", [("b", "a", "c"), ("c", "a", "b"), ("a", "b", "c")])
+async def test_native_fusion_ties_have_stable_order_without_changing_scores(order) -> None:
+    class TiedClient(FakeClient):
+        async def query_points(self, **kwargs: Any) -> _Result:
+            self.calls.append(("query_points", kwargs))
+            return _Result(
+                [
+                    _Point(score=0.5 if name != "c" else 0.75, payload={"record_id": name})
+                    for name in order
+                ]
+            )
+
+    client = TiedClient()
+    hits = await _store(client).search_hybrid(
+        "c",
+        dense=[0.1] * 4,
+        sparse=SparseVector(indices=[1], values=[1.0]),
+        flt=_flt(),
+        limit=3,
+        prefetch_limit=8,
+    )
+    assert [(hit.record_id, hit.score) for hit in hits] == [("c", 0.75), ("a", 0.5), ("b", 0.5)]
+    assert len(client.calls) == 1
+    assert client.calls[0][1]["limit"] == 3
+
+
 @pytest.mark.parametrize(
     "error",
     [
