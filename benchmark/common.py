@@ -80,9 +80,26 @@ def provenance(**extra: Any) -> dict[str, Any]:
                     break
     except OSError:
         pass
+    # Host load AT RUN TIME. The single largest latency contaminant this project has hit:
+    # one p99 was inflated 5.3x by a load average of 7.46 on four cores, another run reached
+    # 119, and three separate measurements were invalidated by it. None of that was
+    # recoverable afterwards, because the load was recorded nowhere - a slower box and a real
+    # regression left identical artifacts. It costs one syscall.
+    try:
+        load1, load5, load15 = os.getloadavg()
+    except (OSError, AttributeError):
+        load1 = load5 = load15 = -1.0
     return {
         "timestamp": datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
+        "host_load": {
+            "loadavg_1m": round(load1, 2),
+            "loadavg_5m": round(load5, 2),
+            "loadavg_15m": round(load15, 2),
+            #: the number that matters - above ~1.0 the box is oversubscribed and every
+            #: latency percentile in this file should be read as an upper bound
+            "load_per_core": round(load1 / cpu_count, 2) if cpu_count else None,
+        },
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "machine": platform.machine(),
