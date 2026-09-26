@@ -13,24 +13,25 @@ expansion chunks are visibility-checked against the same specification the store
 from __future__ import annotations
 
 import asyncio
+import itertools
 from collections.abc import Awaitable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from prometheus_client import Counter, Gauge
 
 from memory_service.config.constants import GRAPH
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import QueryType
+from memory_service.domain.enums import QueryType, TemporalStatus
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
-from memory_service.modules.retrieval.engine import Candidate
+from memory_service.modules.retrieval.engine import Candidate, memory_candidate
 from memory_service.modules.retrieval.router import RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import REGISTRY, stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.intelligence import Entity, Relation
+from memory_service.ports.intelligence import Relation
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
@@ -132,6 +133,7 @@ class GraphStage:
         *,
         max_facts: int = 12,
         max_expansion_chunks: int = 6,
+        max_expansion_memories: int = 6,
         max_visited: int = 40,
         budget_seconds: float = GRAPH.prefetch_budget_ms / 1000,
         max_parked: int = GRAPH.max_parked_traversals,
@@ -140,6 +142,7 @@ class GraphStage:
         self.uow_factory = uow_factory
         self.max_facts = max_facts
         self.max_expansion_chunks = max_expansion_chunks
+        self.max_expansion_memories = max_expansion_memories
         # Retrieval-time traversal is tighter than /v1/graph: 40 nodes is enough for the
         # three-hop question below on the golden graph, and the traversal sits on the query
         # path of every temporal and multi-hop question.
@@ -254,18 +257,18 @@ class GraphStage:
             candidates.extend(f for f in facts if f.record_id not in existing_ids)
             # multi-hop expansion: pull the evidence chunks the facts point at
             chunk_ids: list[str] = []
+            seen_chunks = set(existing_ids)
             for r in ranked:
                 for ev in r.evidence:
-                    if (
-                        ev.chunk_id
-                        and ev.chunk_id not in existing_ids
-                        and ev.chunk_id not in chunk_ids
-                    ):
+                    if len(chunk_ids) >= self.max_expansion_chunks:
+                        break
+                    if ev.chunk_id and ev.chunk_id not in seen_chunks:
                         chunk_ids.append(ev.chunk_id)
+                        seen_chunks.add(ev.chunk_id)
                 if len(chunk_ids) >= self.max_expansion_chunks:
                     break
             if chunk_ids:
-                added = await self._expand(ctx, chunk_ids, visibility, names_of=answer.entities)
+                added = await self._expand(ctx, chunk_ids, visibility)
                 # expansion chunks go right after the ranked evidence, before the facts, so a
                 # caller's ``limit`` on evidence keeps the best-ranked items first
                 first_fact = next(
@@ -273,7 +276,71 @@ class GraphStage:
                 )
                 candidates[first_fact:first_fact] = added
                 diagnostics["graph"]["expansion_chunks"] = len(added)
+            # Conversation relations point at memories, not document chunks. Resolve both
+            # the direct foreign key and explicit memory evidence, with a separate hard
+            # bound so one high-degree entity cannot monopolise the context or database.
+            memory_ids: list[str] = []
+            seen_memories = set(existing_ids)
+            for relation in ranked:
+                pointers = itertools.chain(
+                    [relation.memory_id] if relation.memory_id else [],
+                    (ev.source_id for ev in relation.evidence if ev.source_type == "memory"),
+                )
+                for identifier in pointers:
+                    if len(memory_ids) >= self.max_expansion_memories:
+                        break
+                    if identifier not in seen_memories:
+                        memory_ids.append(identifier)
+                        seen_memories.add(identifier)
+                if len(memory_ids) >= self.max_expansion_memories:
+                    break
+            if memory_ids:
+                added = await self._expand_memories(ctx, memory_ids, visibility, as_of=as_of)
+                first_fact = next(
+                    (i for i, c in enumerate(candidates) if c.kind == "fact"), len(candidates)
+                )
+                candidates[first_fact:first_fact] = added
+                diagnostics["graph"]["expansion_memories"] = len(added)
         return candidates
+
+    async def _expand_memories(
+        self,
+        ctx: MemoryExecutionContext,
+        memory_ids: list[str],
+        visibility: VisibilitySpecification,
+        *,
+        as_of: datetime | None,
+    ) -> list[Candidate]:
+        """One bounded canonical read; a visible relation never grants its source access."""
+        async with self.uow_factory() as uow:
+            memories = await uow.memories.get_many(ctx.tenant_id, memory_ids)
+        now = datetime.now(UTC)
+        when = as_of or now
+        out: list[Candidate] = []
+        for memory in memories:
+            state = memory.temporal
+            if memory.deleted_at is not None or not visibility.allows(
+                memory.tenant_id, memory.system_metadata.get("visibility_keys", [])
+            ):
+                continue
+            if state.status is not TemporalStatus.CURRENT and not (
+                as_of is not None
+                and state.status is TemporalStatus.SUPERSEDED
+                and state.valid_to is not None
+            ):
+                continue
+            if (state.valid_from and when < state.valid_from) or (
+                state.valid_to and when >= state.valid_to
+            ):
+                continue
+            expires_at = memory.system_metadata.get("expires_at")
+            if expires_at and datetime.fromisoformat(expires_at) <= now:
+                continue
+            candidate = memory_candidate(memory, retriever="graph", score=0.4)
+            candidate.expanded_from = "graph"
+            candidate.expansion_edge = "GRAPH_EVIDENCE"
+            out.append(candidate)
+        return out
 
     def _start(
         self,
@@ -330,8 +397,6 @@ class GraphStage:
         ctx: MemoryExecutionContext,
         chunk_ids: list[str],
         visibility: VisibilitySpecification,
-        *,
-        names_of: list[Entity],
     ) -> list[Candidate]:
         out: list[Candidate] = []
         async with self.uow_factory() as uow:

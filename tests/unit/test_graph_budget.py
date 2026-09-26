@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -96,7 +97,7 @@ class _NoUoW:
 def _stage(delay: float, budget: float) -> tuple[GraphStage, _Graph]:
     graph = _Graph(delay)
     return (
-        GraphStage(graph, _NoUoW(), budget_seconds=budget),  # type: ignore[arg-type]
+        GraphStage(graph, _NoUoW(), budget_seconds=budget, max_expansion_memories=0),  # type: ignore[arg-type]
         graph,
     )
 
@@ -112,6 +113,57 @@ async def test_a_traversal_inside_the_budget_answers_with_its_facts() -> None:
     assert diagnostics["graph"]["budget_expired"] is False
     assert diagnostics["graph"]["matched"] == ["acme"] and diagnostics["graph"]["visited"] == 7
     assert graph.finished == 1
+
+
+@pytest.mark.parametrize("budget", [0, 2, 6])
+async def test_one_relation_cannot_overrun_the_evidence_expansion_budget(budget) -> None:
+    stage, graph = _stage(delay=0.0, budget=0.5)
+    stage.max_expansion_chunks = budget
+    answer = _answer()
+    answer.relations[0].evidence = [
+        EvidenceRef(
+            source_type="chunk", source_id=f"c{i}", chunk_id=f"c{i}", observed_at=datetime.now(UTC)
+        )
+        for i in range(20)
+    ]
+    graph.query = AsyncMock(return_value=answer)
+    stage._expand = AsyncMock(return_value=[])
+    await stage(CTX, _routed(), [], VISIBILITY, {})
+    if budget:
+        assert stage._expand.call_args.args[1] == [f"c{i}" for i in range(budget)]
+    else:
+        stage._expand.assert_not_called()
+
+
+@pytest.mark.parametrize("budget", [0, 1, 6])
+async def test_memory_pointers_are_deduplicated_bounded_and_skip_ranked_hits(budget):
+    stage, graph = _stage(delay=0.0, budget=0.5)
+    stage.max_expansion_memories = budget
+    answer = _answer()
+    answer.relations[0].memory_id = "mem_direct"
+    answer.relations[0].evidence = [
+        EvidenceRef(source_type="memory", source_id=identifier, observed_at=datetime.now(UTC))
+        for identifier in ["mem_direct", "mem_ranked", *[f"mem_{i}" for i in range(20)]]
+    ]
+    graph.query = AsyncMock(return_value=answer)
+    added = Candidate(
+        record_id="mem_direct",
+        kind="memory",
+        text="source text",
+        score=0.4,
+        expansion_edge="GRAPH_EVIDENCE",
+    )
+    stage._expand_memories = AsyncMock(return_value=[added])
+    ranked = Candidate(record_id="mem_ranked", kind="memory", text="ranked", score=1.0)
+    out = await stage(CTX, _routed(), [ranked], VISIBILITY, {})
+    if budget:
+        assert (
+            stage._expand_memories.call_args.args[1]
+            == ["mem_direct", *[f"mem_{i}" for i in range(5)]][:budget]
+        )
+        assert [c.record_id for c in out] == ["mem_ranked", "mem_direct", "rel_1"]
+    else:
+        stage._expand_memories.assert_not_called()
 
 
 async def test_an_expired_budget_answers_without_graph_facts() -> None:
