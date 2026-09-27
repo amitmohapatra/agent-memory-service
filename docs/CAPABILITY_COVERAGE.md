@@ -1,5 +1,41 @@
 # Capability coverage: what is actually covered, verified in code
 
+**26 September update:** landing consolidation is wired and lifecycle-tested; background
+reflection now has source-audience preservation, bounded cross-thread history and durable
+revision receipts. See [the current handoff](FINAL-RESULTS-2026-09-26.md) for validation and
+rollout status. The dormant-wiring statements in the historical September 25 audit below
+are superseded. A maintained conversation hierarchy, temporal ranking, semantic entity
+canonicalization and an MCP facade remain separate gaps; these changes do not establish
+competitor parity or benchmark superiority.
+
+## Current runtime distinctions (26 September)
+
+| Capability | Current scope and evidence |
+|---|---|
+| Conversational retrieval depth | Default 100 memories within an 8,000-token budget; explicit request limits still apply. Historical “off” statements below are superseded. |
+| Native consolidation | Landing producer and source lifecycle are wired; fixture coverage is not a corpus accuracy result. |
+| LLM observations | Bounded opt-in background consolidation; exact source audiences, revision receipts, source invalidation and cross-thread USER history. Full-corpus comparison is in progress. |
+| Continuous learning | Memory updates, not weight training. Existing schedule is every six hours. Subject-bound history is not an exhaustive cross-topic/global join. |
+| Graph retrieval | Bounded graph-to-memory hydration exists; typed-relation extraction and entity canonicalization are not established by wiring alone. |
+| Document RAG | Full 5,183-document/300-query SciFact evaluation reproduced nDCG@10 0.7436 and true recall@10 0.8731; six document capability fixtures separately cover structural cases. |
+| Conversational global/hierarchical reasoning | No validated exhaustive topic→episode→fact route. Document section summaries are a different capability. |
+| Temporal reasoning | Date provenance and validity exist; calibrated event-time ranking remains unvalidated. Derived timestamps now say “summary created.” |
+| Late interaction | No measured runtime ColBERT improvement. Pre-encoding documents does not make token interaction literally O(1). |
+| Agent facade | Existing HTTP API remains; no new MCP facade claimed. |
+
+The sections below retain earlier audit history; use the current result handoff for
+active defaults, costs, completed metrics and deployment status.
+
+**Re-audited 2026-09-25:** see [research, wiring and RAG verification](RESEARCH-RAG-2026-09-25.md).
+The historical coverage argument below establishes mechanisms, not competitor parity.
+See [the current feature follow-up](FEATURE-AUDIT-2026-09-25.md): graph-to-memory hydration
+and context packing are now implemented; safe continuous consolidation remains unfinished.
+The earlier assessment below predates that follow-up.
+
+Full external SciFact evaluation and bounded conversational graph-to-memory hydration now
+exist. Production landing reflection remains incomplete; a multi-hop fixture does not prove
+safe continuous consolidation or benchmark superiority.
+
 Written because a cut list argued from flag names is worthless. The question is never "is
 `raptor` on?" — it is "does anything answer a corpus-level question?". Each row below was
 checked against the source, and the verdict says which mechanism provides it.
@@ -17,7 +53,8 @@ checked against the source, and the verdict says which mechanism provides it.
 |---|---|---|---|
 | Exact match on identifiers, error codes, SKUs | `exact` + BM25 sparse with server-side IDF | on by default | — |
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
-| Rank fusion across retrievers | native Qdrant RRF (`FusionQuery`), `rrf_k=60` | on | — |
+| Rank fusion across retrievers | `hybrid_rrf_k` controls native dense/sparse fusion; default preserves legacy `FusionQuery`; `rrf_k=60` controls outer strategy fusion | on | Inner 60 reduced measured recall; see `ACCURACY-EXPERIMENTS-2026-09-26.md` |
+| Wider conversational recall | bounded `memory_recall_k`, respecting explicit caller limits, document selection and the context budget | opt-in, default off | Depth 100 improved paired answers modestly but regressed development abstention; not a general 85% result |
 | Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so `rerank` is now off by default too |
 | Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |
 | Referent resolution at answer time | `PARENT`, `PREVIOUS`, `NEXT` expansion | on | — |
@@ -66,10 +103,14 @@ half.
 
 ## 3. Memory types — measured, not assumed
 
-Of 25 types, **11 are produced by extraction**: `SEMANTIC`, `PREFERENCE`, `USER`, `TOOL`,
+**2026-09-25 correction:** the following is a historical inventory of implementations,
+not a count of types produced by the default pipeline. `BELIEF` and `ENTITY_SUMMARY`
+depend on a landing service that production wiring currently does not inject.
+
+The earlier inventory listed **11 types with producer implementations**: `SEMANTIC`, `PREFERENCE`, `USER`, `TOOL`,
 `OBSERVATION`, `AGENT`, `PROCEDURAL`, `TASK`, `EPISODIC`, `BELIEF`, `ENTITY_SUMMARY`.
 
-**14 are never produced anywhere** and are reachable only through an explicit caller hint:
+**Historical inventory (recheck production wiring before using this count): 14 were not produced** and are reachable only through an explicit caller hint:
 `WORKING`, `CONVERSATION`, `SHARED`, `WORK`, `SKILL`, `DECISION`, `FAILURE`, `OUTCOME`,
 `ARTIFACT`, `KNOWLEDGE_RAG`, `SUMMARY`, `DERIVED`, `POLICY`, `CUSTOM`.
 
@@ -102,7 +143,7 @@ is the defensible basis, and it reaches a *narrower* conclusion:
 
 Everything above establishes *redundancy*, not *quality*. It shows that removing a flag does
 not remove a capability. It cannot show that the covering mechanism is as good — only a
-baseline on a corpus nobody here wrote can do that, and it still does not exist.
+baseline on a corpus nobody here wrote can do that, and it now exists for SciFact; see the dated report above.
 
 Cut the seven flags on the coverage argument. Do not tune `candidate_k`, choose between
 `native` and its alternatives, or claim an accuracy number until that baseline lands.

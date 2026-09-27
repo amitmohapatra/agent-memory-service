@@ -21,7 +21,7 @@ and worker processes sharing PostgreSQL.
                                                                 v
                                                             adapters
                        PostgreSQL · Qdrant · Dragonfly · OpenFGA · Procrastinate · GCS/filesystem ·
-                       Docling · sentence-transformers/fastembed · Mem0/Cognee/LangMem · Graphiti · OPA
+                       Docling · ONNX/sentence-transformers/fastembed · native memory/graph intelligence
                        Bifrost (the only LLM path: one HTTP adapter, no provider SDK anywhere)
 ```
 
@@ -75,12 +75,18 @@ and canonical/search drift.
 ## Retrieval pipeline
 
 ```
-query -> authorized scope (OpenFGA, cached by revision) -> exact lookup -> QueryRouter (rules)
-      -> [conversation | BM25 | dense | KG] -> RRF -> prune -> CPU rerank (bounded K)
-      -> context/relationship expansion (bounded budget) -> evidence completeness verifier
-      -> complete: ContextBuilder | incomplete: escalate (broaden K, graph, structured, optional
-         PageIndex/sparse/ColBERT, filtered exact) -> still insufficient: ABSTAIN
+query -> rule-based route -> overlap encoder with authorized scope + graph prefetch
+      -> exact lookup or dense/BM25 search -> native RRF + stable ties -> dedup -> bounded cut
+      -> optional rerank -> graph facts/evidence -> document companion expansion
+      -> request-local evidence verification / bounded companion escalation
+      -> ContextBuilder packs provenance and evidence groups under the token budget
 ```
+
+Document selection is applied to exact hits and after every post-stage, before the next
+stage verifies evidence. Tenant and visibility filtering remain independent requirements.
+Companion group identities include their target nodes; verification metadata is local to a
+request. Expansion batches target/sibling reads, and graph evidence hydration has an enforced
+chunk cap. These bounds do not establish an end-to-end latency SLO.
 
 Chunks are indexed with deterministic context (document, section path, page, entities)
 prepended — Contextual Retrieval — while the original text is kept separately for display.
@@ -103,8 +109,9 @@ the single entry point modules use: a use is consulted only when its flag is in
 `models.llm.uses` (ambiguous_extraction, ambiguous_worthiness, relation_extraction,
 entity_resolution, conflict_adjudication, summaries, reflection, query_expansion,
 chunk_context) and any failure returns `None`, so the module continues with its native
-result. Third-party providers that need an LLM (Mem0, LangMem, Graphiti, Cognee) are
-pointed at the same gateway through their OpenAI-compatible base-URL settings.
+result. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
+in benchmark code. The production wiring does not enable every implemented memory feature;
+see [the capability audit](RESEARCH-RAG-2026-09-25.md).
 
 ## Caching
 
