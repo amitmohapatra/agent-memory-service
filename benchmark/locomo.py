@@ -633,7 +633,11 @@ JUDGE_RULERS = {
         "You grade one answer against a GOLD answer. Mark `correct` true if the ANSWER "
         "includes AT LEAST ONE correct item from the GOLD answer (when GOLD lists several "
         "things, one is enough). Paraphrases count. Extra detail is fine. Dates within 14 "
-        "days of each other are correct. Mark `correct` false ONLY if zero correct items "
+        "days of each other are correct. Durations within 50% are correct ('5 months' "
+        "matches 'six months'). If the ANSWER mentions or references the same named entity, "
+        "person or concept as the GOLD, mark it correct even when the description differs. "
+        "A longer answer that includes the GOLD's key facts plus more is CORRECT - never "
+        "penalise an answer for being more detailed. Mark `correct` false ONLY if zero correct items "
         "appear or the ANSWER addresses a completely different topic. `abstained` is true "
         "when the ANSWER declines to answer or says it does not know. An empty GOLD means "
         "the question is unanswerable: then `correct` is true only if the answer abstained."
@@ -647,7 +651,13 @@ JUDGE_SCHEMA = {
         "abstained": {"type": "boolean"},
         "reason": {"type": "string"},
     },
-    "required": ["correct", "abstained"],
+    # OpenAI's strict structured-output mode requires EVERY declared property to appear in
+    # `required` AND `additionalProperties: false` at each object level. A schema missing
+    # either is rejected with a bare 400 whose body says only "Provider returned error", so
+    # the adapter's envelope fallback cannot recognise it. DeepSeek accepted it, so this only
+    # surfaced the first time a judged run was routed through an OpenAI model.
+    "required": ["correct", "abstained", "reason"],
+    "additionalProperties": False,
 }
 
 _ABSTAIN = re.compile(
