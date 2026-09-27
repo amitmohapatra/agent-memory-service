@@ -14,6 +14,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
+import orjson
 from sqlalchemy import Select, Text, case, delete, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -104,6 +105,27 @@ def _time_conditions(as_of: datetime | None, valid_at: datetime | None) -> list[
     return conds
 
 
+# A triple alone is not an assertion: the same value may apply in different years,
+# documents or qualified contexts. SQL and cross-hop deduplication share this identity.
+_ASSERTION_FIELDS = (
+    "subject_id",
+    "predicate",
+    "object_id",
+    "document_id",
+    "layer",
+    "valid_from",
+    "valid_to",
+)
+RelationIdentity = tuple[Any, ...]
+
+
+def relation_identity(row: GraphRelationRow) -> RelationIdentity:
+    return (
+        *(getattr(row, field) for field in _ASSERTION_FIELDS),
+        orjson.dumps(row.attributes or {}, option=orjson.OPT_SORT_KEYS),
+    )
+
+
 def neighborhood_query(
     tenant_id: str,
     frontier: Sequence[str],
@@ -144,25 +166,23 @@ def neighborhood_query(
     # of the 600 slots. The limit was truncating exactly the diverse tail it protects.
     #
     # Two orderings, and they are different on purpose. The inner one picks WHICH row
-    # survives for each triple (the most confident, then the most-mentioned neighbour, then
-    # the most recent) and must start with the DISTINCT ON columns because PostgreSQL
-    # requires it. The outer one decides WHICH TRIPLES the limit keeps, by the same ranking
-    # the caller expects - so the limit takes the best triples rather than the
+    # survives for each assertion (confidence, neighbour mentions, then recency) and must
+    # start with the DISTINCT ON columns because PostgreSQL requires it. The outer one
+    # decides WHICH ASSERTIONS the limit keeps, by the same ranking the caller expects,
+    # so the limit takes the best assertions rather than the
     # alphabetically first ones.
     ranked = func.coalesce(GraphEntityRow.mention_count, 0).label("neighbour_mentions")
+    identity = (
+        *(getattr(GraphRelationRow, field) for field in _ASSERTION_FIELDS),
+        GraphRelationRow.attributes,
+    )
     inner = (
         select(GraphRelationRow, ranked)
         .outerjoin(GraphEntityRow, GraphEntityRow.entity_id == neighbour)
         .where(*conds)
-        .distinct(
-            GraphRelationRow.subject_id,
-            GraphRelationRow.predicate,
-            GraphRelationRow.object_id,
-        )
+        .distinct(*identity)
         .order_by(
-            GraphRelationRow.subject_id,
-            GraphRelationRow.predicate,
-            GraphRelationRow.object_id,
+            *identity,
             GraphRelationRow.confidence.desc(),
             ranked.desc(),
             GraphRelationRow.observed_at.desc(),
@@ -183,10 +203,10 @@ def neighborhood_query(
     )
 
 
-def first_of_each_triple(
-    rows: Iterable[GraphRelationRow], seen: set[tuple[str, str, str]]
+def first_of_each_assertion(
+    rows: Iterable[GraphRelationRow], seen: set[RelationIdentity]
 ) -> Iterator[GraphRelationRow]:
-    """The rows whose (subject, predicate, object) has not been seen yet, ACROSS hops.
+    """Keep one support per qualified assertion across hops, preserving temporal context.
 
     Each hop's query now deduplicates its own triples in SQL, before its limit, so this is
     no longer what stops one talkative entity filling a page of results. What it still does
@@ -195,10 +215,10 @@ def first_of_each_triple(
     the query's order, which is the most confident and most recent of them.
     """
     for r in rows:
-        triple = (r.subject_id, r.predicate, r.object_id)
-        if triple in seen:
+        identity = relation_identity(r)
+        if identity in seen:
             continue
-        seen.add(triple)
+        seen.add(identity)
         yield r
 
 
@@ -449,7 +469,7 @@ class PostgresGraphStore:
         visited: dict[str, None] = dict.fromkeys(entity_ids)
         frontier = list(entity_ids)
         relations: dict[str, GraphRelationRow] = {}  # rows; converted after the scope filter
-        triples: set[tuple[str, str, str]] = set()
+        seen: set[RelationIdentity] = set()
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
             async with self.session() as s:
                 for _ in range(max(0, hops)):
@@ -469,7 +489,7 @@ class PostgresGraphStore:
                         )
                     ).all()
                     next_frontier: list[str] = []
-                    for r in first_of_each_triple(rows, triples):
+                    for r in first_of_each_assertion(rows, seen):
                         relations.setdefault(r.relation_id, r)
                         for eid in (r.subject_id, r.object_id):
                             if eid not in visited and len(visited) < max_visited:

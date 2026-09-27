@@ -79,6 +79,7 @@ async def test_extraction_refinement_is_applied_and_keeps_native_evidence() -> N
     assert gw.prompts()[0]["model"] == "test/strong"
     assert FACT in gw.prompts()[0]["messages"][1]["content"]
     assert cand.content == "The Atlas project runs on Postgres 16"
+    assert cand.provider == "llm"
     assert (cand.subject, cand.predicate, cand.object) == (
         "atlas project",
         "database",
@@ -160,6 +161,7 @@ async def test_worthiness_stores_model_candidate_with_native_evidence() -> None:
     assert [c.category for c in cands] == ["assisted", "verbatim_turn"]
     cand = cands[0]
     assert cand.content == "Standup is in the afternoon"
+    assert cand.provider == "llm"
     assert cand.memory_type is MemoryType.SEMANTIC and cand.confidence == 0.6
     assert cand.category == "assisted" and cand.subject == "thread:thr_1"
     assert cand.evidence[0].message_id == "msg_1"

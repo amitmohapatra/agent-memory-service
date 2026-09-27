@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 
 def enable(container):
     container.services["observation_pipeline"].landing = LandingReflection(
-        MemoryIntelligenceSettings()
+        MemoryIntelligenceSettings(consolidation_enabled=True)
     )
 
 

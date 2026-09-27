@@ -25,7 +25,7 @@ import itertools
 import json
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +117,7 @@ class SentenceTransformersEmbedding:
         self.spec = spec
         self._runner = SerialRunner("encoder")
         self.dimension = int(self._model.get_embedding_dimension() or spec.dimension)
+        self._fingerprint = dense_fingerprint(spec, self.dimension)
         # The checkpoint's own limit governs truncation, as it always has (granite-small
         # declares 8192). ``spec.max_seq_length`` is the value the ONNX export will be pinned
         # to once it is measured (Phase 2); pinning it here now would change what today's
@@ -130,7 +131,7 @@ class SentenceTransformersEmbedding:
             locality="local",
         )
 
-    def _encode(self, texts: Sequence[str], *, prompt_name: str | None = None) -> list[list[float]]:
+    def _encode(self, texts: Sequence[str]) -> list[list[float]]:
         out = self._model.encode(
             list(texts),
             batch_size=self.spec.batch_size,
@@ -141,15 +142,13 @@ class SentenceTransformersEmbedding:
         return [[float(x) for x in row] for row in out]
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        return await self._runner.run(self._encode, list(texts))
+        return await _document_batches(self._runner, self._encode, texts, self.spec)
 
     async def embed_query(self, text: str) -> list[float]:
-        return (await self._runner.run(self._encode, [text]))[0]
+        return (await self._runner.run(self._encode, _prefixed([text], self.spec.query_prefix)))[0]
 
     def fingerprint(self) -> str:
-        return dense_fingerprint(self.spec, self.dimension)
+        return self._fingerprint
 
     def close(self) -> None:
         self._runner.close()
@@ -251,6 +250,7 @@ class OnnxEmbedding:
         self._runner = SerialRunner("encoder")
         self.spec = spec
         self.dimension = self._encoder.dimension
+        self._fingerprint = onnx_fingerprint(spec, self.dimension)
         self.max_tokens = spec.max_seq_length
         self.info = ProviderInfo(
             name=spec.id,
@@ -260,23 +260,16 @@ class OnnxEmbedding:
             locality="local",
         )
 
-    def _encode(self, texts: Sequence[str]) -> list[list[float]]:
-        size = max(1, self.spec.batch_size)
-        out: list[list[float]] = []
-        for start in range(0, len(texts), size):
-            out.extend(self._encoder.encode(texts[start : start + size]))
-        return out
-
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        return await self._runner.run(self._encode, list(texts))
+        return await _document_batches(self._runner, self._encoder.encode, texts, self.spec)
 
     async def embed_query(self, text: str) -> list[float]:
-        return (await self._runner.run(self._encode, [text]))[0]
+        return (
+            await self._runner.run(self._encoder.encode, _prefixed([text], self.spec.query_prefix))
+        )[0]
 
     def fingerprint(self) -> str:
-        return onnx_fingerprint(self.spec, self.dimension)
+        return self._fingerprint
 
     def close(self) -> None:
         self._runner.close()
@@ -294,6 +287,45 @@ def load_dense(
     if spec.runtime == "onnx":
         return OnnxEmbedding(spec, threads=threads)
     return SentenceTransformersEmbedding(spec, threads=threads)
+
+
+async def _document_batches(
+    runner: SerialRunner,
+    encode: Callable[[Sequence[str]], list[list[float]]],
+    texts: Sequence[str],
+    spec: DenseModel,
+) -> list[list[float]]:
+    """Yield the model between index batches so queued queries cannot wait for a document.
+
+    Retains ordered output while bounding each non-preemptible forward pass separately
+    from the model's throughput batch size. Prefix allocation is bounded by one batch;
+    output necessarily remains O(n*d).
+    """
+    size = min(spec.batch_size, spec.document_batch_size)
+    output: list[list[float]] = []
+    for start in range(0, len(texts), size):
+        batch = _prefixed(texts[start : start + size], spec.document_prefix)
+        output.extend(await runner.run(encode, batch))
+    return output
+
+
+def _prefixed(texts: Sequence[str], prefix: str) -> list[str]:
+    return [prefix + text for text in texts]
+
+
+def _profile_fingerprint(spec: DenseModel) -> str:
+    """Preserve the legacy profile's name, isolate changed vector-space parameters."""
+    profile = (
+        spec.revision,
+        spec.max_seq_length,
+        spec.normalize,
+        spec.query_prefix,
+        spec.document_prefix,
+    )
+    if profile == (None, 512, True, "", ""):
+        return ""
+    digest = hashlib.sha256(json.dumps(profile).encode()).hexdigest()[:16]
+    return f"-p{digest}"
 
 
 def _load_graph(spec: DenseModel, threads: int, *, allow_spinning: bool = False) -> _OnnxEncoder:
@@ -392,7 +424,7 @@ def onnx_fingerprint(spec: DenseModel, dimension: int | None = None) -> str:
     that much must not share a name."""
     name = (spec.model_path or spec.id).rstrip("/").split("/")[-1]
     graph = (spec.graph_file or DEFAULT_GRAPH_FILE).rsplit("/", 1)[-1].removesuffix(".onnx")
-    return f"onnx-{name}-{graph}-d{dimension or spec.dimension}"
+    return f"onnx-{name}-{graph}{_profile_fingerprint(spec)}-d{dimension or spec.dimension}"
 
 
 def _ort_version() -> str:
@@ -413,7 +445,8 @@ def dense_fingerprint(spec: DenseModel, dimension: int | None = None) -> str:
     graph = (
         f"-{spec.graph_file.rsplit('/', 1)[-1].removesuffix('.onnx')}" if spec.graph_file else ""
     )
-    return f"st-{name}-{spec.backend}{graph}-d{dimension or spec.dimension}"
+    profile = _profile_fingerprint(spec)
+    return f"st-{name}-{spec.backend}{graph}{profile}-d{dimension or spec.dimension}"
 
 
 def _st_version() -> str:

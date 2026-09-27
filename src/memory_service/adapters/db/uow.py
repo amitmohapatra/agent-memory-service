@@ -8,6 +8,8 @@ from typing import Self
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from memory_service.adapters.db.brief_repository import SqlBriefRepository
+from memory_service.adapters.db.credential_repository import SqlCredentialRepository
 from memory_service.adapters.db.document_repository import SqlDocumentRepository
 from memory_service.adapters.db.memory_repository import SqlMemoryRepository
 from memory_service.adapters.db.repositories import (
@@ -112,6 +114,8 @@ class SqlUnitOfWork:
         self.documents = SqlDocumentRepository(s)
         self.memories = SqlMemoryRepository(s)
         self.tools = SqlToolRepository(s)
+        self.credentials = SqlCredentialRepository(s)
+        self.briefs = SqlBriefRepository(s)
         return self
 
     async def __aexit__(

@@ -57,6 +57,10 @@ READERS = (
 #: than a second projection per collection.
 _NOT_FROM_A_READ = {"record_id", "tenant_id"}
 
+# Relations are assembled by the graph stage, not indexed as Qdrant records.
+# Their source-memory lineage is read only when filtering fact candidates.
+_GRAPH_ONLY_FIELDS = {"memory_id"}
+
 
 class _PayloadKeys(ast.NodeVisitor):
     """Collect every payload key a module reads.
@@ -139,7 +143,7 @@ def test_the_projection_is_exactly_what_the_readers_read() -> None:
     """The include list is a duplicate of knowledge that lives in six other files, so it is
     re-derived here rather than trusted. A key added to a reader and not here comes back as
     None from Qdrant while every test that uses a fake store keeps passing."""
-    read = _keys_read_in_src()
+    read = _keys_read_in_src() - _GRAPH_ONLY_FIELDS
     projected = set(PAYLOAD_FIELDS)
     assert read - projected == set(), (
         f"payload keys read in src but not requested from the store: {sorted(read - projected)}"
@@ -147,6 +151,25 @@ def test_the_projection_is_exactly_what_the_readers_read() -> None:
     assert projected - read == _NOT_FROM_A_READ, (
         f"requested from the store but read nowhere: {sorted(projected - read - _NOT_FROM_A_READ)}"
     )
+
+
+def test_graph_only_payload_fields_have_no_search_index_producer() -> None:
+    """Keep the projection exception narrow if relation storage changes later."""
+    indexer = ast.parse((SRC / "modules/rag/indexer.py").read_text())
+    graph = ast.parse((SRC / "modules/graph/retrieval.py").read_text())
+
+    def written_keys(tree: ast.AST) -> set[str]:
+        return {
+            key.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Dict)
+            for key in node.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+
+    assert not (_GRAPH_ONLY_FIELDS & written_keys(indexer))
+    assert written_keys(graph) >= _GRAPH_ONLY_FIELDS
+    assert not (_GRAPH_ONLY_FIELDS & set(PAYLOAD_FIELDS))
 
 
 def test_the_indexer_still_writes_the_keys_the_projection_asks_for() -> None:

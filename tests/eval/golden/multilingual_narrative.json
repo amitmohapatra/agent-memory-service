@@ -1,0 +1,606 @@
+{
+  "name": "multilingual_narrative_v1",
+  "provenance": "Agent-authored synthetic regression fixtures, not an independent public benchmark; translations have not had native-speaker review. Fixed before local model output. Sentence boundaries are supplied explicitly for this component screen.",
+  "records": [
+    {
+      "id": "antecedent:en",
+      "language": "en",
+      "category": "antecedent",
+      "sentences": [
+        "Maya moved to Berlin in 2022.",
+        "She joined a robotics company there.",
+        "Omar completed a chemistry degree in 2020."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:de",
+      "language": "de",
+      "category": "antecedent",
+      "sentences": [
+        "Maya zog 2022 nach Berlin.",
+        "Dort trat sie einem Robotikunternehmen bei.",
+        "Omar schloss 2020 ein Chemiestudium ab."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:es",
+      "language": "es",
+      "category": "antecedent",
+      "sentences": [
+        "Maya se mudó a Berlín en 2022.",
+        "Allí se incorporó a una empresa de robótica.",
+        "Omar terminó una carrera de química en 2020."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:fr",
+      "language": "fr",
+      "category": "antecedent",
+      "sentences": [
+        "Maya a déménagé à Berlin en 2022.",
+        "Elle y a rejoint une entreprise de robotique.",
+        "Omar a obtenu un diplôme de chimie en 2020."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:zh",
+      "language": "zh",
+      "category": "antecedent",
+      "sentences": [
+        "玛雅于2022年搬到了柏林。",
+        "她在那里加入了一家机器人公司。",
+        "奥马尔于2020年获得了化学学位。"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:ja",
+      "language": "ja",
+      "category": "antecedent",
+      "sentences": [
+        "マヤは2022年にベルリンへ引っ越しました。",
+        "彼女はそこでロボット企業に入社しました。",
+        "オマルは2020年に化学の学位を取得しました。"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:hi",
+      "language": "hi",
+      "category": "antecedent",
+      "sentences": [
+        "माया 2022 में बर्लिन चली गई।",
+        "वह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।",
+        "उमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:ar",
+      "language": "ar",
+      "category": "antecedent",
+      "sentences": [
+        "انتقلت مايا إلى برلين في عام 2022.",
+        "انضمت هناك إلى شركة للروبوتات.",
+        "حصل عمر على شهادة في الكيمياء في عام 2020."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:ru",
+      "language": "ru",
+      "category": "antecedent",
+      "sentences": [
+        "Майя переехала в Берлин в 2022 году.",
+        "Там она устроилась в компанию по робототехнике.",
+        "Омар получил диплом по химии в 2020 году."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:tr",
+      "language": "tr",
+      "category": "antecedent",
+      "sentences": [
+        "Maya 2022 yılında Berlin'e taşındı.",
+        "Orada bir robotik şirketine katıldı.",
+        "Omar 2020 yılında kimya diploması aldı."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:ko",
+      "language": "ko",
+      "category": "antecedent",
+      "sentences": [
+        "마야는 2022년에 베를린으로 이사했습니다.",
+        "그녀는 그곳에서 로봇 회사에 입사했습니다.",
+        "오마르는 2020년에 화학 학위를 취득했습니다."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "antecedent:th",
+      "language": "th",
+      "category": "antecedent",
+      "sentences": [
+        "มายาย้ายไปเบอร์ลินในปี 2022",
+        "เธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น",
+        "โอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:en",
+      "language": "en",
+      "category": "correction",
+      "sentences": [
+        "Maya said the inspection was on Tuesday.",
+        "She corrected herself: it was Wednesday, not Tuesday.",
+        "Omar's training starts in October."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:de",
+      "language": "de",
+      "category": "correction",
+      "sentences": [
+        "Maya sagte, die Inspektion sei am Dienstag.",
+        "Sie korrigierte sich: Sie sei am Mittwoch, nicht am Dienstag.",
+        "Omars Ausbildung beginnt im Oktober."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:es",
+      "language": "es",
+      "category": "correction",
+      "sentences": [
+        "Maya dijo que la inspección era el martes.",
+        "Se corrigió: era el miércoles, no el martes.",
+        "La formación de Omar empieza en octubre."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:fr",
+      "language": "fr",
+      "category": "correction",
+      "sentences": [
+        "Maya a dit que l’inspection était mardi.",
+        "Elle s’est corrigée : c’était mercredi, pas mardi.",
+        "La formation d’Omar commence en octobre."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:zh",
+      "language": "zh",
+      "category": "correction",
+      "sentences": [
+        "玛雅说检查是在星期二。",
+        "她更正说：是星期三，不是星期二。",
+        "奥马尔的培训在十月开始。"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:ja",
+      "language": "ja",
+      "category": "correction",
+      "sentences": [
+        "マヤは検査が火曜日だと言いました。",
+        "彼女は訂正しました。火曜日ではなく水曜日でした。",
+        "オマルの研修は10月に始まります。"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:hi",
+      "language": "hi",
+      "category": "correction",
+      "sentences": [
+        "माया ने कहा कि निरीक्षण मंगलवार को था।",
+        "उसने सुधार किया: वह बुधवार को था, मंगलवार को नहीं।",
+        "उमर का प्रशिक्षण अक्टूबर में शुरू होता है।"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:ar",
+      "language": "ar",
+      "category": "correction",
+      "sentences": [
+        "قالت مايا إن التفتيش كان يوم الثلاثاء.",
+        "صححت كلامها: كان يوم الأربعاء وليس الثلاثاء.",
+        "يبدأ تدريب عمر في أكتوبر."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:ru",
+      "language": "ru",
+      "category": "correction",
+      "sentences": [
+        "Майя сказала, что проверка была во вторник.",
+        "Она поправилась: проверка была в среду, а не во вторник.",
+        "Обучение Омара начинается в октябре."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:tr",
+      "language": "tr",
+      "category": "correction",
+      "sentences": [
+        "Maya denetimin salı günü olduğunu söyledi.",
+        "Kendini düzeltti: salı değil, çarşamba günüydü.",
+        "Omar'ın eğitimi ekim ayında başlıyor."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:ko",
+      "language": "ko",
+      "category": "correction",
+      "sentences": [
+        "마야는 점검이 화요일이라고 말했습니다.",
+        "그녀는 정정했습니다. 화요일이 아니라 수요일이었습니다.",
+        "오마르의 교육은 10월에 시작됩니다."
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "id": "correction:th",
+      "language": "th",
+      "category": "correction",
+      "sentences": [
+        "มายาบอกว่าการตรวจสอบอยู่ในวันอังคาร",
+        "เธอแก้ไขว่าเป็นวันพุธ ไม่ใช่วันอังคาร",
+        "การฝึกอบรมของโอมาร์เริ่มในเดือนตุลาคม"
+      ],
+      "eligible": [
+        0,
+        1,
+        2
+      ],
+      "expected_spans": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    }
+  ]
+}

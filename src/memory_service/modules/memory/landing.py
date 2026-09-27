@@ -11,8 +11,12 @@ from datetime import datetime
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, TemporalStatus
-from memory_service.domain.memory import CanonicalMemory
-from memory_service.modules.memory.derived import BeliefService, EntitySummaryService
+from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.modules.memory.derived import (
+    BeliefService,
+    EntitySummaryService,
+    source_statement,
+)
 from memory_service.modules.memory.native import _SINGLE_VALUED
 from memory_service.ports.uow import UnitOfWork
 
@@ -82,7 +86,8 @@ class LandingReflection:
         return not (
             not self.cfg.consolidation_enabled
             or memory.memory_type in {MemoryType.BELIEF, MemoryType.ENTITY_SUMMARY}
-            or memory.system_metadata.get("category") in {"verbatim_turn", "reflection"}
+            or memory.system_metadata.get("category") == "verbatim_turn"
+            or unverified_representation(memory.system_metadata)
             or memory.temporal.status is not TemporalStatus.CURRENT
             or memory.deleted_at is not None
         )
@@ -95,7 +100,8 @@ class LandingReflection:
         bounded = []
         size = len(subject) + 64
         for source in sources:
-            if size + len(source.content) + 1 <= self.cfg.consolidation_max_chars:
+            statement_size = len(source_statement(source)) + 1
+            if size + statement_size <= self.cfg.consolidation_max_chars:
                 bounded.append(source)
-                size += len(source.content) + 1
+                size += statement_size
         return bounded

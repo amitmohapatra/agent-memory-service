@@ -22,13 +22,14 @@ from typing import Any, Literal
 from memory_service.config.constants import NLISettings
 from memory_service.domain.context_bundle import ContextBundle
 from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
+from memory_service.domain.memory import unverified_representation
+from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK
 from memory_service.modules.grounding.lexical import content_tokens, coverage, words
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.metrics import grounding_claims_total, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.models import NLIProvider, NLIScore
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 _CLAUSE_SPLIT = re.compile(r";\s+|,\s+(?:and|but|while|whereas)\s+", re.IGNORECASE)
 _BRACKET_CITE = re.compile(r"\s*\[([^\[\]]{1,120})\]")
 _SOURCE_CITE = re.compile(r"\s*\((?:source|src|ref|see)\s*:?\s*([^()]{1,120})\)", re.IGNORECASE)
@@ -50,7 +51,6 @@ _ID_LIKE = re.compile(
 HEDGE_MAX_WORDS = 8
 DISCOURSE_MAX_WORDS = 8
 CLAUSE_MIN_TOKENS = 4
-CLAIM_MIN_TOKENS = 3
 
 _JUDGE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -159,10 +159,10 @@ def _restore_citations(text: str) -> str:
 
 
 def _assertive(text: str) -> bool:
-    if not text or text.endswith("?"):
+    if not text or text.endswith(("?", "\uff1f", "\u061f")):
         return False
     count = len(words(text))
-    if len(content_tokens(text)) < CLAIM_MIN_TOKENS:
+    if not content_tokens(text) or ACKNOWLEDGEMENT.fullmatch(text):
         return False
     if _HEDGE.match(text) and count < HEDGE_MAX_WORDS:
         return False
@@ -186,13 +186,13 @@ def decompose(answer: str, *, max_claims: int = 40) -> list[Claim]:
     content and push a well-supported claim down into the borderline band.
     """
     out: list[Claim] = []
-    for raw in _SENTENCE_SPLIT.split(_protect_citations(answer)):
+    for raw in SENTENCE_BREAK.split(_protect_citations(answer)):
         sentence = _LIST_MARKER.sub("", raw.strip())
         if not sentence:
             continue
         text, cites = _strip_citations(_restore_citations(sentence))
         for raw_clause in _clauses(text):
-            clause = raw_clause.rstrip(".!").strip()
+            clause = raw_clause.rstrip(".!\u3002\uff01\u0964\u0965\u06d4").strip()
             if _assertive(clause):
                 out.append(Claim(text=clause, citations=tuple(cites)))
             if len(out) >= max_claims:
@@ -207,7 +207,14 @@ def bundle_evidence(bundle: ContextBundle) -> tuple[list[Evidence], list[Evidenc
     """(packed, unused) evidence of a bundle; ordinal citations (``[1]``) count through the
     packed list in this order: memories, facts, summaries, knowledge."""
     packed = [
-        Evidence(item_id=i.item_id, text=i.text, kind=i.representation.value, citation=i.citation)
+        # Retain ordinal citation positions, but generated representations cannot act as
+        # independent proof of their own text. The original source must support the claim.
+        Evidence(
+            item_id=i.item_id,
+            text="" if unverified_representation(i.attributes) else i.text,
+            kind=i.representation.value,
+            citation=i.citation,
+        )
         for group in (bundle.memories, bundle.graph_facts, bundle.summaries, bundle.knowledge)
         for i in group
     ]
@@ -356,7 +363,15 @@ class GroundingCascade:
             notes.append(f"citation ({cite}) is not an evidence id; treated as uncited")
         cited = bool(premises)
         if premises:
-            mismatched = [e.item_id for e in premises if coverage(claim.text, e.text) == 0.0]
+            # A translated citation or a paraphrase need not share a single token.
+            # Trained NLI decides support; lexical stand-ins cannot make that inference.
+            # Blanked, unverified sources must remain unusable for every provider.
+            mismatched = [
+                e.item_id
+                for e in premises
+                if not e.text.strip()
+                or (not self.nli.representative and coverage(claim.text, e.text) == 0.0)
+            ]
             if mismatched:
                 return ClaimReport(
                     claim=claim.text,
@@ -448,7 +463,9 @@ class GroundingCascade:
             ((coverage(claim, e.text), i, e) for i, e in enumerate(evidence)),
             key=lambda t: (-t[0], t[1]),
         )
-        return [e for cov, _, e in ranked if cov > 0.0][: self.cfg.premises_per_claim]
+        return [
+            e for cov, _, e in ranked if e.text.strip() and (cov > 0.0 or self.nli.representative)
+        ][: self.cfg.premises_per_claim]
 
     async def _judge(self, claim: str, premises: Sequence[Evidence]) -> dict[str, Any] | None:
         if not self.assist.wants("grounding_judge"):

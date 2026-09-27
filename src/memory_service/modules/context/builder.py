@@ -29,11 +29,13 @@ from memory_service.domain.context_bundle import (
     UnusedEvidence,
 )
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import EvidenceStatus, MessageKind
+from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import stable_key
+from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
 from memory_service.modules.context.summaries import (
     SOURCE_CHARS,
     SUMMARY_SCHEMA,
@@ -42,6 +44,7 @@ from memory_service.modules.context.summaries import (
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_calls_allowed
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
@@ -49,6 +52,7 @@ from memory_service.modules.retrieval.engine import (
     RetrievalEngine,
     RetrievalResult,
 )
+from memory_service.modules.retrieval.router import QueryRouter
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.timings import Timings
@@ -57,6 +61,13 @@ from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
+
+
+def _cacheable(bundle: ContextBundle) -> bool:
+    return not any(
+        item.attributes.get("derived") or item.item_id.startswith("wm_") for item in bundle.memories
+    )
+
 
 _ROLLING_SYSTEM = (
     "You summarise the earlier part of a conversation that no longer fits the context "
@@ -149,7 +160,10 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "contradicts",
                 "contributors",
                 "memory_type",
+                "category",
+                "provider",
                 "derived",
+                "source_observed_to",
                 "visibility",
                 "owner_principal",
                 "confidence",
@@ -178,6 +192,8 @@ class _Lookup:
     scope: bytes | None
     #: the cached bundle bytes: present means the answer is already made
     bundle: bytes | None
+    semantic_key: str | None = None
+    semantic: bytes | None = None
 
 
 class ContextBuilder:
@@ -202,6 +218,10 @@ class ContextBuilder:
         self.cfg = settings
         self.retrieval_cfg = retrieval
         self.cache_ttl = cache_ttl_seconds
+        self.semantic_cache = (
+            SemanticBundleCache(cache, ttl_seconds=cache_ttl_seconds) if cache else None
+        )
+        self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
@@ -220,15 +240,17 @@ class ContextBuilder:
 
     def _config_fingerprint(self) -> str:
         parts = [
-            "source-lineage-v1:rag-evidence-v5",
+            "source-lineage-v2:rag-evidence-v7:multilingual-packing-v1",
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
         ]
+        if self.engine.reranker is not None:
+            parts.append(self.engine.reranker.fingerprint())
         # bundles built with model assistance must not be served to a deployment without it
-        llm_uses = [u for u in ("summaries", "query_expansion") if self.assist.wants(u)]
-        if llm_uses:
-            parts.append("llm:" + ",".join(llm_uses))
+        model_profile = self.assist.cache_fingerprint(("summaries", "query_expansion"))
+        if model_profile:
+            parts.append(model_profile)
         return stable_key(*parts)
 
     async def _lookup(
@@ -253,6 +275,46 @@ class ContextBuilder:
         bundle and the authorization scope is never needed, so the listing the resolver does
         when the scope cache is cold was work for an answer nobody read.
         """
+        revisions = await self._revisions(ctx)
+        revision_fp = self._revision_fingerprint(revisions)
+        authz_fp = AuthorizationService.revision_fingerprint(ctx, revisions)
+        namespace = stable_key(
+            "source-backed-consolidation-v1",
+            ctx.tenant_id,
+            ctx.scope_fingerprint(),
+            revision_fp,
+            self._fingerprint,
+            str(model_calls_allowed()),
+            str(budget),
+            ",".join(document_ids or []),
+        )
+        bundle_id = stable_key(namespace, query)
+        cache_key = self._cache_key(ctx, bundle_id)
+        semantic = self._semantic_key(namespace, ctx, query)
+        scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
+        scope_raw: bytes | None = None
+        bundle_raw: bytes | None = None
+        semantic_raw: bytes | None = None
+        if self.cache is not None:
+            with contextlib.suppress(CacheUnavailable):
+                values = await self.cache.mget(
+                    [scope_key, cache_key] + ([semantic] if semantic else [])
+                )
+                scope_raw, bundle_raw = values[:2]
+                semantic_raw = values[2] if semantic else None
+        return _Lookup(
+            bundle_id=bundle_id,
+            cache_key=cache_key,
+            revision_fp=revision_fp,
+            authz_fp=authz_fp,
+            scope=scope_raw,
+            bundle=bundle_raw,
+            semantic_key=semantic,
+            semantic=semantic_raw,
+        )
+
+    async def _revisions(self, ctx: MemoryExecutionContext) -> dict[str, int]:
+        """One shared dependency set for automatic lookup and explicit bundle replay."""
         async with self.uow_factory() as uow:
             # Every revision a bundle's content depends on. AGENT and GRAPH were missing, so
             # an agent-scoped memory or a graph enrichment bumped a counter nobody read and
@@ -269,34 +331,25 @@ class ContextBuilder:
                 (RevisionKind.MEMBERSHIP, ctx.user_id or ""),
                 (RevisionKind.MEMBERSHIP, ctx.agent_id or ""),
             ]
-            revisions = await uow.revisions.get_many(ctx.tenant_id, keys)
-        revision_fp = stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
-        authz_fp = AuthorizationService.revision_fingerprint(ctx, revisions)
-        bundle_id = stable_key(
-            "source-backed-consolidation-v1",
-            ctx.tenant_id,
-            ctx.scope_fingerprint(),
-            revision_fp,
-            self._fingerprint,
-            query,
-            str(budget),
-            ",".join(document_ids or []),
-        )
-        cache_key = self._cache_key(ctx, bundle_id)
-        scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
-        scope_raw: bytes | None = None
-        bundle_raw: bytes | None = None
-        if self.cache is not None:
-            with contextlib.suppress(CacheUnavailable):
-                scope_raw, bundle_raw = await self.cache.mget([scope_key, cache_key])
-        return _Lookup(
-            bundle_id=bundle_id,
-            cache_key=cache_key,
-            revision_fp=revision_fp,
-            authz_fp=authz_fp,
-            scope=scope_raw,
-            bundle=bundle_raw,
-        )
+            return await uow.revisions.get_many(ctx.tenant_id, keys)
+
+    @staticmethod
+    def _revision_fingerprint(revisions: dict[str, int]) -> str:
+        return stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
+
+    async def revision_fingerprint(self, ctx: MemoryExecutionContext) -> str:
+        """Current evidence/authorization revision for persistent derived views."""
+        return self._revision_fingerprint(await self._revisions(ctx))
+
+    def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
+        if self.semantic_cache is None or not self.retrieval_cfg.dense:
+            return None
+        if self.assist.wants("query_expansion") or self.assist.wants("summaries"):
+            return None
+        route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
+        if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
+            return None
+        return semantic_key(namespace, query)
 
     async def build(
         self,
@@ -367,6 +420,9 @@ class ContextBuilder:
         timings: Timings,
     ) -> ContextBundle:
         """Retrieve, window and assemble - the cache-miss half of a build."""
+        cached, embedding = await self._semantic_lookup(found, query)
+        if cached is not None:
+            return cached
         with timings.stage("visibility"):
             visibility = await self.engine.authz.visibility(
                 ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
@@ -374,7 +430,11 @@ class ContextBuilder:
         tokens_before = self.assist.tokens_used()
         with timings.stage("retrieve"):
             result = await self.engine.retrieve(
-                ctx, query, document_ids=document_ids, visibility=visibility
+                ctx,
+                query,
+                document_ids=document_ids,
+                visibility=visibility,
+                query_embedding=(query, embedding) if embedding is not None else None,
             )
         with timings.stage("window"):
             window = await self._conversation_window(ctx, result)
@@ -394,6 +454,7 @@ class ContextBuilder:
                     ),
                 )
         bundle = self._assemble(query, result, window, budget, found.revision_fp)
+        self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
             update={
@@ -401,6 +462,40 @@ class ContextBuilder:
                 "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
             }
         )
+
+    async def _semantic_lookup(
+        self, found: _Lookup, query: str
+    ) -> tuple[ContextBundle | None, list[float] | None]:
+        """Return a reusable bundle or an encoding the retrieval miss can consume."""
+        if found.semantic is None or self.semantic_cache is None:
+            return None, None
+        embedding = await self.engine.indexer.embedding.embed_query(query)
+        raw = await self.semantic_cache.lookup(found.semantic, embedding)
+        if raw is None:
+            return None, embedding
+        try:
+            cached = ContextBundle.model_validate_json(raw)
+        except ValueError:
+            return None, embedding
+        return cached.model_copy(
+            update={"query": query, "bundle_id": found.bundle_id, "cache_hit": True}
+        ), embedding
+
+    def _remember_semantic(
+        self, found: _Lookup, result: RetrievalResult, bundle: ContextBundle
+    ) -> None:
+        """Keep only a vector and reference; the existing bundle cache owns the payload."""
+        if (
+            self.semantic_cache is not None
+            and found.semantic_key is not None
+            and result.query_embedding is not None
+            and _cacheable(bundle)
+        ):
+            self._track(
+                self.semantic_cache.store(
+                    found.semantic_key, found.cache_key, result.query_embedding
+                )
+            )
 
     def _after_build(
         self,
@@ -412,7 +507,7 @@ class ContextBuilder:
     ) -> None:
         """The bookkeeping a built bundle leaves behind, none of it on the request path."""
         self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
-        if self.cache is not None and not any(i.attributes.get("derived") for i in bundle.memories):
+        if self.cache is not None and _cacheable(bundle):
             self._track(self._store(self.cache, cache_key, bundle, api))
 
     async def _store(
@@ -545,7 +640,11 @@ class ContextBuilder:
             raw = await self.cache.get(self._cache_key(ctx, bundle_id))
         except CacheUnavailable:
             return None
-        return ContextBundle.model_validate_json(raw) if raw is not None else None
+        if raw is None:
+            return None
+        bundle = ContextBundle.model_validate_json(raw)
+        current = self._revision_fingerprint(await self._revisions(ctx))
+        return bundle if bundle.revision_fingerprint == current else None
 
     @staticmethod
     def _cache_key(ctx: MemoryExecutionContext, bundle_id: str) -> str:
@@ -565,7 +664,8 @@ class ContextBuilder:
                 uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
             )
         window = render_window(ctx.thread_id, messages, self.cfg.conversation_token_budget)
-        older = [m for m in messages if m.message_id not in set(window.message_ids)]
+        included = set(window.message_ids)
+        older = [m for m in messages if m.message_id not in included]
         if older:
             summary = rolling_summary(older)
             if self.assist.wants("summaries"):
@@ -739,7 +839,9 @@ class ContextBuilder:
         unused = [
             UnusedEvidence(item_id=c.record_id, kind=c.kind, text=c.text)
             for c, _ in items
-            if c.record_id not in included_ids and c.kind in ("chunk", "memory", "summary")
+            if c.record_id not in included_ids
+            and c.kind in ("chunk", "memory", "summary")
+            and not unverified_representation(c.payload)
         ]
         unused.extend(
             UnusedEvidence(item_id=str(u["record_id"]), kind=str(u["kind"]), text=str(u["text"]))
@@ -823,8 +925,9 @@ def render_window(
         t = estimate_tokens(m.content) + 4
         if used + t > token_budget and chosen:
             break
-        chosen.insert(0, m)
+        chosen.append(m)
         used += t
+    chosen.reverse()
     rendered = "\n".join(f"{m.role.value}: {m.content}" for m in chosen)
     return ConversationWindow(
         thread_id=thread_id,

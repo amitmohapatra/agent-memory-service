@@ -31,6 +31,35 @@ class Base(DeclarativeBase):
     type_annotation_map = {dict[str, Any]: JSONB, datetime: DateTime(timezone=True)}
 
 
+class AgentCredentialRow(Base):
+    __tablename__ = "agent_credentials"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    principal_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    key_id: Mapped[str] = mapped_column(String(100))
+    ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class BriefRow(Base):
+    __tablename__ = "standing_briefs"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    brief_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(200))
+    context: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    spec: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    generation: Mapped[int] = mapped_column(Integer)
+    output: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    next_refresh_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        Index("ix_briefs_due", "next_refresh_at", "brief_id"),
+        Index("ix_briefs_scope", "tenant_id", "scope_key", "brief_id"),
+    )
+
+
 def _now() -> Any:
     return text("now()")
 

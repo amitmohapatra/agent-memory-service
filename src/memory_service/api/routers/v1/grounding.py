@@ -16,7 +16,9 @@ from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep
 from memory_service.api.errors import error_responses
 from memory_service.api.schemas.context import GroundingReportBody
 from memory_service.domain.errors import NotFound, ProviderNotConfigured
+from memory_service.domain.memory import unverified_representation
 from memory_service.modules.grounding.cascade import Evidence, EvidenceKind, bundle_evidence
+from memory_service.modules.llm.policy import model_call_policy, model_identity
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 422, 503)
@@ -96,10 +98,17 @@ class VerifyItem(BaseModel):
         examples=["chunk"],
     )
     citation: str | None = Field(default=None, examples=[_ITEM["citation"]])
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Evidence provenance; model-generated text cannot prove itself.",
+    )
 
     def to_evidence(self) -> Evidence:
         return Evidence(
-            item_id=self.item_id, text=self.text, kind=self.kind, citation=self.citation or ""
+            item_id=self.item_id,
+            text="" if unverified_representation(self.attributes) else self.text,
+            kind=self.kind,
+            citation=self.citation or "",
         )
 
 
@@ -110,6 +119,10 @@ class VerifyRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_VERIFY_EXAMPLE]})
 
+    use_llm: bool = Field(
+        default=False,
+        description="Allow configured LLM assistance on this read, independently of ingestion.",
+    )
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     answer: str = Field(..., min_length=1, max_length=8_000, examples=[_ANSWER])
     bundle_id: str | None = Field(default=None, max_length=64, examples=[None])
@@ -164,24 +177,25 @@ async def verify(
     request: Request, body: VerifyRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> VerifyResponse:
     ctx = build_context(request, container, body.scope)
-    cascade = container.services.get("grounding")
-    if cascade is None:
-        raise ProviderNotConfigured("the NLI classifier is disabled in this process")
-    builder = container.services["context_builder"]
-    source: Literal["bundle", "items", "query"]
-    if body.items:
-        source = "items"
-        evidence = [i.to_evidence() for i in body.items]
-        unused = [i.to_evidence() for i in body.unused or []]
-    elif body.bundle_id:
-        source = "bundle"
-        bundle = await builder.cached(ctx, body.bundle_id)
-        if bundle is None:
-            raise NotFound("bundle not found or no longer cached; pass items or query")
-        evidence, unused = bundle_evidence(bundle)
-    else:
-        source = "query"
-        bundle = await builder.build(ctx, str(body.query), document_ids=body.document_ids)
-        evidence, unused = bundle_evidence(bundle)
-    report = await cascade.verify(body.answer, evidence, unused=unused)
-    return VerifyResponse(source=source, **report.model_dump(mode="json"))
+    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+        cascade = container.services.get("grounding")
+        if cascade is None:
+            raise ProviderNotConfigured("the NLI classifier is disabled in this process")
+        builder = container.services["context_builder"]
+        source: Literal["bundle", "items", "query"]
+        if body.items:
+            source = "items"
+            evidence = [i.to_evidence() for i in body.items]
+            unused = [i.to_evidence() for i in body.unused or []]
+        elif body.bundle_id:
+            source = "bundle"
+            bundle = await builder.cached(ctx, body.bundle_id)
+            if bundle is None:
+                raise NotFound("bundle not found or no longer cached; pass items or query")
+            evidence, unused = bundle_evidence(bundle)
+        else:
+            source = "query"
+            bundle = await builder.build(ctx, str(body.query), document_ids=body.document_ids)
+            evidence, unused = bundle_evidence(bundle)
+        report = await cascade.verify(body.answer, evidence, unused=unused)
+        return VerifyResponse(source=source, **report.model_dump(mode="json"))

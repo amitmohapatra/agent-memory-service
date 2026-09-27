@@ -1,0 +1,864 @@
+{
+  "model": "qwen35-08b-q8",
+  "weights_sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+  "dataset_sha256": "8a24cae5862151b176fa2b048dc5c95bbec2b3c9be5c75e9281887449e537de4",
+  "dataset": "multilingual_narrative_v1",
+  "dataset_provenance": "Agent-authored synthetic regression fixtures, not an independent public benchmark; translations have not had native-speaker review. Fixed before local model output. Sentence boundaries are supplied explicitly for this component screen.",
+  "paid_calls": 0,
+  "prompt_sha256": "e8bdf741e2367cd55917f09e3aee59b57cfb86801b2b95254c9e722e7d27fa0b",
+  "selector_sha256": "50a0d4f26e13380594e461b5213070e0c5ede8d1157b3f72e1a3935ec08e0d10",
+  "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:00bd6c289c590e576948cb3639b8195e4d3e6dd6ba1d761f0e2b871fcd4df24f",
+  "records": [
+    {
+      "id": "antecedent:en",
+      "language": "en",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya moved to Berlin in 2022. She joined a robotics company there.",
+          "Omar completed a chemistry degree in 2020."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 276,
+        "total_tokens": 300,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "latency_ms": 33075.49930299865
+    },
+    {
+      "id": "antecedent:de",
+      "language": "de",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya zog 2022 nach Berlin. Dort trat sie einem Robotikunternehmen bei.",
+          "Omar schloss 2020 ein Chemiestudium ab."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 281,
+        "total_tokens": 306,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 21751.87833799282
+    },
+    {
+      "id": "antecedent:es",
+      "language": "es",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya se mudó a Berlín en 2022. Allí se incorporó a una empresa de robótica.",
+          "Omar terminó una carrera de química en 2020."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 285,
+        "total_tokens": 309,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 31932.71757400362
+    },
+    {
+      "id": "antecedent:fr",
+      "language": "fr",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya a déménagé à Berlin en 2022. Elle y a rejoint une entreprise de robotique.",
+          "Omar a obtenu un diplôme de chimie en 2020."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 286,
+        "total_tokens": 311,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 15178.250023978762
+    },
+    {
+      "id": "antecedent:zh",
+      "language": "zh",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "玛雅于2022年搬到了柏林。 她在那里加入了一家机器人公司。",
+          "奥马尔于2020年获得了化学学位。"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 276,
+        "total_tokens": 300,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 10257.004414976109
+    },
+    {
+      "id": "antecedent:ja",
+      "language": "ja",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "マヤは2022年にベルリンへ引っ越しました。 彼女はそこでロボット企業に入社しました。",
+          "オマルは2020年に化学の学位を取得しました。"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 282,
+        "total_tokens": 307,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 25903.135658008978
+    },
+    {
+      "id": "antecedent:hi",
+      "language": "hi",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "माया 2022 में बर्लिन चली गई। वह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।",
+          "उमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 300,
+        "total_tokens": 324,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 38388.88451701496
+    },
+    {
+      "id": "antecedent:ar",
+      "language": "ar",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "انتقلت مايا إلى برلين في عام 2022. انضمت هناك إلى شركة للروبوتات.",
+          "حصل عمر على شهادة في الكيمياء في عام 2020."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 286,
+        "total_tokens": 311,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 31615.669919003267
+    },
+    {
+      "id": "antecedent:ru",
+      "language": "ru",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Майя переехала в Берлин в 2022 году. Там она устроилась в компанию по робототехнике.",
+          "Омар получил диплом по химии в 2020 году."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 292,
+        "total_tokens": 317,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 25997.048110992182
+    },
+    {
+      "id": "antecedent:tr",
+      "language": "tr",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya 2022 yılında Berlin'e taşındı. Orada bir robotik şirketine katıldı.",
+          "Omar 2020 yılında kimya diploması aldı."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 283,
+        "total_tokens": 307,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 16834.561438998207
+    },
+    {
+      "id": "antecedent:ko",
+      "language": "ko",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "마야는 2022년에 베를린으로 이사했습니다. 그녀는 그곳에서 로봇 회사에 입사했습니다.",
+          "오마르는 2020년에 화학 학위를 취득했습니다."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 287,
+        "total_tokens": 312,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 10512.251054984517
+    },
+    {
+      "id": "antecedent:th",
+      "language": "th",
+      "category": "antecedent",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "มายาย้ายไปเบอร์ลินในปี 2022 เธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น",
+          "โอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 281,
+        "total_tokens": 306,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 9396.286035014782
+    },
+    {
+      "id": "correction:en",
+      "language": "en",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          },
+          {
+            "start": 10,
+            "end": 20
+          },
+          {
+            "start": 20,
+            "end": 30
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya said the inspection was on Tuesday. She corrected herself: it was Wednesday, not Tuesday.",
+          "Omar's training starts in October."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 54,
+        "prompt_tokens": 272,
+        "total_tokens": 326,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 13352.081363031175
+    },
+    {
+      "id": "correction:de",
+      "language": "de",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          },
+          {
+            "start": 10,
+            "end": 20
+          },
+          {
+            "start": 20,
+            "end": 30
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya sagte, die Inspektion sei am Dienstag. Sie korrigierte sich: Sie sei am Mittwoch, nicht am Dienstag.",
+          "Omars Ausbildung beginnt im Oktober."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 57,
+        "prompt_tokens": 278,
+        "total_tokens": 335,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 14825.710795004852
+    },
+    {
+      "id": "correction:es",
+      "language": "es",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya dijo que la inspección era el martes. Se corrigió: era el miércoles, no el martes.",
+          "La formación de Omar empieza en octubre."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 276,
+        "total_tokens": 301,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 8581.773814978078
+    },
+    {
+      "id": "correction:fr",
+      "language": "fr",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya a dit que l’inspection était mardi. Elle s’est corrigée : c’était mercredi, pas mardi.",
+          "La formation d’Omar commence en octobre."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 24,
+        "prompt_tokens": 280,
+        "total_tokens": 304,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 11869.596650009044
+    },
+    {
+      "id": "correction:zh",
+      "language": "zh",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "玛雅说检查是在星期二。 她更正说：是星期三，不是星期二。",
+          "奥马尔的培训在十月开始。"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 269,
+        "total_tokens": 294,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 13647.61979499599
+    },
+    {
+      "id": "correction:ja",
+      "language": "ja",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "マヤは検査が火曜日だと言いました。 彼女は訂正しました。火曜日ではなく水曜日でした。",
+          "オマルの研修は10月に始まります。"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 279,
+        "total_tokens": 304,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 10578.068450035062
+    },
+    {
+      "id": "correction:hi",
+      "language": "hi",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "माया ने कहा कि निरीक्षण मंगलवार को था। उसने सुधार किया: वह बुधवार को था, मंगलवार को नहीं।",
+          "उमर का प्रशिक्षण अक्टूबर में शुरू होता है।"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 298,
+        "total_tokens": 323,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 8934.46863302961
+    },
+    {
+      "id": "correction:ar",
+      "language": "ar",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          },
+          {
+            "start": 10,
+            "end": 20
+          },
+          {
+            "start": 20,
+            "end": 30
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "قالت مايا إن التفتيش كان يوم الثلاثاء. صححت كلامها: كان يوم الأربعاء وليس الثلاثاء.",
+          "يبدأ تدريب عمر في أكتوبر."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 54,
+        "prompt_tokens": 274,
+        "total_tokens": 328,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 13828.601493034512
+    },
+    {
+      "id": "correction:ru",
+      "language": "ru",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          },
+          {
+            "start": 10,
+            "end": 20
+          },
+          {
+            "start": 20,
+            "end": 25
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Майя сказала, что проверка была во вторник. Она поправилась: проверка была в среду, а не во вторник.",
+          "Обучение Омара начинается в октябре."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 54,
+        "prompt_tokens": 281,
+        "total_tokens": 335,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 14841.329320974182
+    },
+    {
+      "id": "correction:tr",
+      "language": "tr",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "Maya denetimin salı günü olduğunu söyledi. Kendini düzeltti: salı değil, çarşamba günüydü.",
+          "Omar'ın eğitimi ekim ayında başlıyor."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 287,
+        "total_tokens": 312,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 8899.189079995267
+    },
+    {
+      "id": "correction:ko",
+      "language": "ko",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "마야는 점검이 화요일이라고 말했습니다. 그녀는 정정했습니다. 화요일이 아니라 수요일이었습니다.",
+          "오마르의 교육은 10월에 시작됩니다."
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 25,
+        "prompt_tokens": 282,
+        "total_tokens": 307,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 9398.268916993402
+    },
+    {
+      "id": "correction:th",
+      "language": "th",
+      "category": "correction",
+      "output": {
+        "units": [
+          {
+            "start": 0,
+            "end": 10
+          },
+          {
+            "start": 10,
+            "end": 20
+          },
+          {
+            "start": 20,
+            "end": 30
+          }
+        ]
+      },
+      "assessment": {
+        "selected": [],
+        "expected": [
+          "มายาบอกว่าการตรวจสอบอยู่ในวันอังคาร เธอแก้ไขว่าเป็นวันพุธ ไม่ใช่วันอังคาร",
+          "การฝึกอบรมของโอมาร์เริ่มในเดือนตุลาคม"
+        ],
+        "exact_units": false,
+        "expected_units_found": 0,
+        "expected_units": 2,
+        "detached_dependency": false
+      },
+      "usage": {
+        "completion_tokens": 57,
+        "prompt_tokens": 272,
+        "total_tokens": 329,
+        "prompt_tokens_details": {
+          "cached_tokens": 183
+        }
+      },
+      "latency_ms": 27974.14916998241
+    }
+  ],
+  "complete": true,
+  "limitations": [
+    "Synthetic component screen, not LoCoMo/SciFact or independent language certification.",
+    "Uses the production prompt and source-span validator; bypasses Bifrost for local benchmarking.",
+    "Sentence boundaries are supplied; this does not validate production sentence extraction."
+  ],
+  "summary": {
+    "attempted": 24,
+    "parsed_outputs": 24,
+    "exact_unit_cases": 0,
+    "detached_dependencies": 0,
+    "latency_ms": {
+      "p50": 14825.71,
+      "p95": 33075.5,
+      "p99": 38388.88,
+      "max": 38388.88,
+      "samples": 24
+    }
+  }
+}

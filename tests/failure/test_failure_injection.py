@@ -112,7 +112,14 @@ async def test_worker_kill_requeues_the_job_and_processes_once(
         assert row is not None and row.job_id is not None
         job_id = row.job_id
         # a worker takes the job and is killed -9 while it is `doing`
-        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+        root = Path(__file__).resolve().parents[2]
+        # The worker must import this worktree, not another editable installation.
+        env = {
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                [str(root / "src"), str(root), os.environ.get("PYTHONPATH", "")]
+            ),
+        }
         proc = subprocess.Popen(  # noqa: S603
             [
                 sys.executable,
@@ -235,12 +242,12 @@ async def test_blob_outage_keeps_acknowledged_messages_and_recovers(container, u
 # -- search_rebuild ---------------------------------------------------------------
 
 
-async def test_search_rebuild_from_postgres_restores_identical_hits(container, uow_factory) -> None:
+async def test_search_rebuild_from_postgres_restores_identical_hits(
+    container, uow_factory, monkeypatch
+) -> None:
     register_handlers(container)
     async with uow_factory() as uow:
-        await container.services["authz"].grant_membership(
-            "acme", "u1", workspaces=["ws1"], revisions=uow.revisions
-        )
+        await container.services["authz"].grant_membership("acme", "u1", revisions=uow.revisions)
         await container.services["ingestion"].accept_file(
             uow,
             U1,
@@ -255,6 +262,10 @@ async def test_search_rebuild_from_postgres_restores_identical_hits(container, u
     await container.tasks.drain()
     await container.tasks.drain()
     engine = container.services["retrieval"]
+    # This tests rebuild fidelity, not the production wall-clock deadline. A loaded
+    # CI host must not randomly remove graph evidence from either side of the comparison.
+    # Expiry, cancellation and the frozen 150 ms default are tested in test_graph_budget.
+    monkeypatch.setattr(engine.post_stages["graph"], "budget_seconds", 5.0)
     q = "Why did Adjusted EBITDA increase despite lower revenue?"
     before = await engine.retrieve(U1, q)
     before_ids = [c.record_id for c in before.candidates]
@@ -274,22 +285,9 @@ async def test_search_rebuild_from_postgres_restores_identical_hits(container, u
     report = await rebuild_search_index(container, drop=True)
     assert report.ok and report.documents == 1 and report.chunks > 0 and report.memories >= 1
     after = await engine.retrieve(U1, q)
-    # The graph stage abandons its traversal past a wall budget and answers without facts,
-    # which is a latency guard, not a property of the rebuild: a cold traversal right after
-    # a drop can trip it on a loaded box and take a dozen rel_ candidates with it. What this
-    # test is about is the store coming back identical, so it compares what the store
-    # returns and asserts separately that the graph either contributed or said why.
-    assert not (before.diagnostics.get("graph") or {}).get("budget_expired"), (
-        "the baseline itself lost its graph facts to the budget; the comparison below "
-        "would be measuring the guard, not the rebuild"
-    )
-    graph_kinds = {"fact"}
-    from_store = [c.record_id for c in after.candidates if c.kind not in graph_kinds]
-    assert from_store == [c for c in before_ids if not c.startswith("rel_")]
-    if (after.diagnostics.get("graph") or {}).get("budget_expired"):
-        assert [c.record_id for c in after.candidates if c.kind in graph_kinds] == []
-    else:
-        assert [c.record_id for c in after.candidates] == before_ids
+    assert not (before.diagnostics.get("graph") or {}).get("budget_expired")
+    assert not (after.diagnostics.get("graph") or {}).get("budget_expired")
+    assert [c.record_id for c in after.candidates] == before_ids
     assert after.diagnostics["evidence"]["status"] == before.diagnostics["evidence"]["status"]
     assert {
         c.record_id

@@ -193,3 +193,41 @@ async def test_out_of_document_exact_hit_does_not_suppress_ranked_fallback(parts
     assert result.diagnostics["exact_hits"] == 0
     assert result.diagnostics["exact_fallback"] is True
     assert all(c.payload.get("document_id") == "doc_1" for c in result.candidates)
+
+
+@pytest.mark.parametrize(
+    "kinds,expected",
+    [
+        (("memory",), {"memory", "memory_fact"}),
+        (("chunk",), {"chunk", "summary", "document_fact"}),
+        (
+            ("chunk", "memory"),
+            {"chunk", "memory", "summary", "document_fact", "memory_fact", "unlinked"},
+        ),
+        ((), set()),
+    ],
+)
+async def test_source_selection_constrains_expansions_before_consumers(parts, kinds, expected):
+    engine = _engine(parts)
+    pool = [
+        Candidate(record_id=rid, kind=kind, text=rid, score=1, payload=payload)
+        for rid, kind, payload in (
+            ("chunk", "chunk", {"document_id": "doc_1"}),
+            ("memory", "memory", {}),
+            ("summary", "summary", {"document_id": "doc_1"}),
+            ("document_fact", "fact", {"document_id": "doc_1"}),
+            ("memory_fact", "fact", {"memory_id": "mem_1"}),
+            ("unlinked", "fact", {}),
+        )
+    ]
+
+    async def expand(ctx, routed, candidates, visibility, diagnostics):
+        return pool
+
+    async def verify(ctx, routed, candidates, visibility, diagnostics):
+        assert {c.record_id for c in candidates} == expected
+        return candidates
+
+    engine.post_stages = {"graph": expand, "verify": verify}
+    result = await engine.retrieve(CTX, QUERY, kinds=kinds, visibility=VISIBILITY)
+    assert {c.record_id for c in result.candidates} == expected

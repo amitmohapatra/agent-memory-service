@@ -12,6 +12,7 @@ import hashlib
 import re
 from collections.abc import Sequence
 
+from memory_service.domain.text import unicode_tokens
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.search import SparseVector
 
@@ -58,7 +59,13 @@ def stem(token: str) -> str:
 
 
 def tokenize(text: str) -> list[str]:
-    return [stem(t) for t in _TOKEN.findall(text.lower()) if t not in _STOP and len(t) > 1]
+    if text.isascii():
+        return _english_tokens(text.lower())
+    return list(unicode_tokens(text, _english_tokens))
+
+
+def _english_tokens(text: str) -> list[str]:
+    return [stem(t) for t in _TOKEN.findall(text) if t not in _STOP and len(t) > 1]
 
 
 def term_id(token: str) -> int:
@@ -67,7 +74,7 @@ def term_id(token: str) -> int:
 
 class Bm25SparseEncoder:
     info = ProviderInfo(
-        name="bm25-sparse", version="1", license="Apache-2.0", origin="internal", locality="local"
+        name="bm25-sparse", version="2", license="Apache-2.0", origin="internal", locality="local"
     )
 
     def __init__(self, *, k1: float = 1.2, b: float = 0.75, avg_doc_len: float = 256.0) -> None:
@@ -87,7 +94,8 @@ class Bm25SparseEncoder:
             return SparseVector(indices=[], values=[])
         counts: dict[int, float] = {}
         for tok in tokens:
-            counts[term_id(tok)] = counts.get(term_id(tok), 0.0) + 1.0
+            index = term_id(tok)
+            counts[index] = counts.get(index, 0.0) + 1.0
         if query:
             items = sorted((idx, 1.0) for idx in counts)
         else:
@@ -97,4 +105,4 @@ class Bm25SparseEncoder:
         return SparseVector(indices=[i for i, _ in items], values=[v for _, v in items])
 
     def fingerprint(self) -> str:
-        return f"bm25-v1-k{self.k1}-b{self.b}"
+        return f"bm25-v2-unicode-k{self.k1}-b{self.b}"

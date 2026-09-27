@@ -24,11 +24,12 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
-from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.visibility import readable_by
+from memory_service.modules.llm.policy import model_identity
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import memory_decisions_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -205,6 +206,7 @@ class ObservationPipeline:
             return []  # idempotent replay
         ctx = context_from_observation(observation)
         with (
+            model_identity(ctx.tenant_id, ctx.principal_id),
             span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
             stage_seconds.labels("memory.process").time(),
         ):
@@ -234,7 +236,9 @@ class ObservationPipeline:
                             tenant_id=tenant_id,
                         )
                     )
-                    await self._bump(uow, ctx)
+                    await bump_memory_revisions(
+                        uow, await uow.memories.get_many(tenant_id, sorted(affected))
+                    )
                 status = "PROCESSED" if candidates else "NO_MEMORY"
                 await uow.observations.mark_processed(tenant_id, observation_id, status=status)
                 await uow.commit()
@@ -493,12 +497,3 @@ class ObservationPipeline:
                 return {memory.memory_id, target.memory_id}
             case _:
                 return set()
-
-    @staticmethod
-    async def _bump(uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
-        if ctx.user_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.USER, ctx.user_id)
-        if ctx.thread_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, ctx.thread_id)
-        if ctx.agent_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.AGENT, ctx.agent_id)

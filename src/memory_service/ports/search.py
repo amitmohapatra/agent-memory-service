@@ -96,6 +96,8 @@ class CollectionSpec(BaseModel):
 #: cost is four short scalars per hit. Removing them is a decision about the response
 #: schema and belongs where that is versioned, not here.
 PAYLOAD_FIELDS: tuple[str, ...] = (
+    "category",
+    "provider",
     "attributes",
     "chunk_id",
     "confidence",
@@ -114,6 +116,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "record_id",
     "section_path",
     "source_refs",
+    "source_observed_to",
     "status",
     "subject",
     "tenant_id",

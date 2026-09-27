@@ -25,6 +25,7 @@ vendor/
 deploy_key.pub
 *.bundle
 .bench_data/
+.sdk-test-deps
 benchmark/data/
 deploy/bifrost/*.db
 

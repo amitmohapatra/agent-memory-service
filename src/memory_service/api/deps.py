@@ -153,6 +153,7 @@ async def get_header_context(
     container: ContainerDep,
     _: ServicePrincipalDep,
     thread_id: str | None = None,
+    session_id: str | None = None,
     work_id: str | None = None,
     task_id: str | None = None,
     agent_id: str | None = None,
@@ -168,6 +169,7 @@ async def get_header_context(
         container,
         ScopeBody(
             thread_id=thread_id,
+            session_id=session_id,
             work_id=work_id,
             task_id=task_id,
             agent_id=agent_id,

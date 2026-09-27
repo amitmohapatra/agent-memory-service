@@ -25,6 +25,10 @@ import httpx
 
 from universal_memory.errors import InsufficientEvidence
 from universal_memory.models import (
+    AgentKeyStatus,
+    Brief,
+    BriefInfo,
+    BriefSpec,
     ContextBundle,
     ContextItem,
     DocumentInfo,
@@ -119,6 +123,7 @@ class MemoryContext:
         self.chat = ChatAPI(self)
         self.files = FilesAPI(self)
         self.graph = GraphAPI(self)
+        self.briefs = BriefsAPI(self)
         self.tools = ToolsAPI(self)
         self.runs = RunsAPI(self)
         self._token: Any = None
@@ -163,12 +168,14 @@ class MemoryContext:
         *,
         token_budget: int | None = None,
         require_evidence: bool = False,
+        use_llm: bool = False,
         **options: Any,
     ) -> ContextBundle:
         """Bounded, ranked context for this turn. With ``require_evidence=True`` an
         ``INSUFFICIENT`` evidence report raises :class:`InsufficientEvidence` instead of
         returning a bundle the caller might answer from anyway."""
         payload: dict[str, Any] = {"query": query, "scope": self._scope_payload(), **options}
+        payload["use_llm"] = use_llm
         if token_budget is not None:
             payload["token_budget"] = token_budget
         data = await self._request("POST", "/v1/context", json=payload)
@@ -223,11 +230,13 @@ class MemoryContext:
         *,
         limit: int = 20,
         kinds: Sequence[RecallKind] | None = None,
+        use_llm: bool = False,
         **options: Any,
     ) -> list[ContextItem]:
         """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly.
         ``kinds`` narrows what is searched: chunk (document passages), memory, summary."""
         payload = {"query": query, "scope": self._scope_payload(), "limit": limit, **options}
+        payload["use_llm"] = use_llm
         if kinds is not None:
             payload["kinds"] = list(kinds)
         data = await self._request("POST", "/v1/recall", json=payload)
@@ -242,11 +251,13 @@ class MemoryContext:
         items: Sequence[ContextItem | dict[str, Any]] | None = None,
         unused: Sequence[dict[str, Any]] | None = None,
         document_ids: Sequence[str] | None = None,
+        use_llm: bool = False,
     ) -> GroundingReport:
         """Verify ``answer`` claim by claim (citation validation, NLI, judge for borderline
         claims, contradiction scan) against a ``bundle`` from :meth:`context`, explicit
         evidence ``items`` or a fresh retrieval for ``query`` under this scope."""
         payload: dict[str, Any] = {"answer": answer, "scope": self._scope_payload()}
+        payload["use_llm"] = use_llm
         if bundle is not None:
             payload["items"] = bundle.evidence_items()
             payload["unused"] = [u.model_dump(mode="json") for u in bundle.evidence.unused]
@@ -291,12 +302,71 @@ class MemoryContext:
         data = await self._request("GET", f"/v1/jobs/{job_id}")
         return JobHandle.model_validate(data)
 
+    async def set_model_key(
+        self, virtual_key: str, *, idempotency_key: str | None = None
+    ) -> AgentKeyStatus:
+        """Register/rotate this agent's key. The server returns status, never its secret."""
+        data = await self._request(
+            "PUT",
+            "/v1/agents/model-key",
+            json={"scope": self._scope_payload(), "virtual_key": virtual_key},
+            idempotency_key=idempotency_key,
+        )
+        return AgentKeyStatus.model_validate(data)
+
+    async def model_key_status(self) -> AgentKeyStatus:
+        data = await self._request("GET", "/v1/agents/model-key")
+        return AgentKeyStatus.model_validate(data)
+
+    async def revoke_model_key(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
+        data = await self._request(
+            "DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key
+        )
+        return AgentKeyStatus.model_validate(data)
+
     # -- plumbing -------------------------------------------------------
     def _scope_payload(self) -> dict[str, Any]:
         return self.scope.model_dump(mode="json", exclude_none=True)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await self._client.transport.request(method, path, scope=self.scope, **kwargs)
+
+
+class BriefsAPI:
+    """Persistent standing questions and pages; reads never generate text."""
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self.ctx = ctx
+
+    async def create(self, spec: BriefSpec, *, idempotency_key: str | None = None) -> Brief:
+        data = await self.ctx._request(
+            "POST",
+            "/v1/briefs",
+            json={"scope": self.ctx._scope_payload(), "spec": spec.model_dump(mode="json")},
+            idempotency_key=idempotency_key,
+        )
+        return Brief.model_validate(data)
+
+    async def update(
+        self, brief_id: str, spec: BriefSpec, *, idempotency_key: str | None = None
+    ) -> Brief:
+        data = await self.ctx._request(
+            "PUT",
+            f"/v1/briefs/{brief_id}",
+            json={"scope": self.ctx._scope_payload(), "spec": spec.model_dump(mode="json")},
+            idempotency_key=idempotency_key,
+        )
+        return Brief.model_validate(data)
+
+    async def get(self, brief_id: str) -> Brief:
+        return Brief.model_validate(await self.ctx._request("GET", f"/v1/briefs/{brief_id}"))
+
+    async def list(self, *, after: str = "", limit: int = 50) -> list[BriefInfo]:
+        data = await self.ctx._request("GET", "/v1/briefs", params={"after": after, "limit": limit})
+        return [BriefInfo.model_validate(row) for row in data]
+
+    async def delete(self, brief_id: str) -> None:
+        await self.ctx._request("DELETE", f"/v1/briefs/{brief_id}")
 
 
 class ChatAPI:
@@ -480,13 +550,12 @@ def _coerce_file(file: Any, filename: str | None, media_type: str | None) -> tup
 
 def _verify_item(item: ContextItem | dict[str, Any]) -> dict[str, Any]:
     if isinstance(item, ContextItem):
-        return {
-            "item_id": item.item_id,
-            "text": item.text,
-            "kind": item.representation,
-            "citation": item.citation,
-        }
-    return {k: v for k, v in dict(item).items() if k in ("item_id", "text", "kind", "citation")}
+        return item.verification_item()
+    return {
+        k: v
+        for k, v in dict(item).items()
+        if k in ("item_id", "text", "kind", "citation", "attributes")
+    }
 
 
 def _default_key(prefix: str, scope: Scope, *parts: str) -> str:
@@ -519,12 +588,14 @@ class GraphAPI:
         entities: list[str] | None = None,
         hops: int = 1,
         as_of: datetime | None = None,
+        use_llm: bool = False,
     ) -> GraphAnswer:
         payload: dict[str, Any] = {
             "scope": self._ctx._scope_payload(),
             "query": query,
             "entities": entities or [],
             "hops": hops,
+            "use_llm": use_llm,
         }
         if as_of is not None:
             payload["as_of"] = as_of.isoformat()

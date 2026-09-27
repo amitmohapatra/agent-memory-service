@@ -11,6 +11,7 @@ An adapter whose backend is not reachable **skips with the reason**. It never pa
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 
 import pytest
@@ -33,7 +34,10 @@ def _build(name: str):
         return MemoryCache()
     from memory_service.adapters.cache.redis_cache import RedisCache
 
-    return RedisCache(CacheSettings())
+    url = os.environ.get("MEMORY_TEST_CACHE_URL")
+    if not url:
+        pytest.skip("Set a dedicated MEMORY_TEST_CACHE_URL for cache contract tests")
+    return RedisCache(CacheSettings(url=url))
 
 
 # ``loop_scope="function"`` is load-bearing: the project sets

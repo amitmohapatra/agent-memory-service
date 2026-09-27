@@ -69,8 +69,13 @@ async def test_reparsing_replaces_vectors_rather_than_adding_a_generation(contai
     second = await _indexed_ids(container, "acme", handle.document_id)
     async with container.services["uow_factory"]() as uow:
         chunks = await uow.documents.list_chunks("acme", handle.document_id)
+        nodes = await uow.documents.list_nodes("acme", handle.document_id)
+        summaries = await uow.documents.node_summaries("acme", [n.node_id for n in nodes])
 
     chunk_ids = {c.chunk_id for c in chunks}
     orphans = [r for r in second if r.startswith("chk_") and r not in chunk_ids]
     assert orphans == [], f"{len(orphans)} vectors survive whose chunk row is gone"
     assert len([r for r in second if r.startswith("chk_")]) == len(chunk_ids)
+    summary_ids = {f"sum_{nid}" for nid in summaries}
+    assert summary_ids, "the fixture exercises summary indexing as well as chunks"
+    assert {r for r in second if r.startswith("sum_")} == summary_ids

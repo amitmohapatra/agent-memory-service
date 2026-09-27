@@ -1,5 +1,8 @@
-"""Deterministic QueryRouter. Rules first; a model is consulted only when configured and the
-rules cannot decide (never in ``llm.enabled=false`` mode)."""
+"""Deterministic query hints with language-independent access to semantic graph evidence.
+
+Rules classify familiar forms. An unclassified question still searches known entities;
+English keyword recognition is not an eligibility requirement for graph traversal.
+"""
 
 from __future__ import annotations
 
@@ -85,6 +88,9 @@ class RoutedQuery:
 
 
 class QueryRouter:
+    def __init__(self, *, semantic_graph: bool = True) -> None:
+        self.semantic_graph = semantic_graph
+
     def route(self, query: str, *, has_thread: bool = True) -> RoutedQuery:
         q = query.strip()
         ids = _ID.findall(q)
@@ -151,8 +157,8 @@ class QueryRouter:
             ),
             needs_memories=qt is not QueryType.EXACT_IDENTIFIER,
             needs_knowledge=qt not in (QueryType.CONVERSATION_HISTORY, QueryType.USER_MEMORY),
-            needs_graph=qt
-            in (
+            needs_graph=(qt is QueryType.GENERAL_SEMANTIC and self.semantic_graph)
+            or qt in (
                 QueryType.ENTITY_RELATION,
                 QueryType.DOCUMENT_MULTI_HOP,
                 QueryType.TEMPORAL,

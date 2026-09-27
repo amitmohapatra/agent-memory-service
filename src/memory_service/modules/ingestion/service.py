@@ -32,6 +32,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_identity
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import archive_bytes_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -161,7 +162,11 @@ class IngestionService:
                 source_system=source_system,
                 source_id=source_id,
                 custom_metadata=custom_metadata or {},
-                system_metadata={"visibility": vis.value, "trace_id": ctx.trace_id},
+                system_metadata={
+                    "visibility": vis.value,
+                    "trace_id": ctx.trace_id,
+                    "model_principal": ctx.principal_id,
+                },
             )
             await uow.documents.add(document, visibility_keys=keys, message_id=message_id)
             await uow.documents.stage_bytes(
@@ -237,7 +242,11 @@ class IngestionService:
         if content_hash(data) != document.checksum:
             raise CorruptSource("staged bytes do not match the document checksum")
 
-        with span("ingest.parse", tenant_id=tenant_id), stage_seconds.labels("ingest.parse").time():
+        with (
+            model_identity(tenant_id, document.model_principal),
+            span("ingest.parse", tenant_id=tenant_id),
+            stage_seconds.labels("ingest.parse").time(),
+        ):
             parser = (
                 self.parser
                 if document.media_type in self.parser.supported_media_types
@@ -278,8 +287,6 @@ class IngestionService:
                 max_tokens=self.cfg.max_chunk_tokens,
                 min_tokens=self.cfg.min_chunk_tokens,
                 overlap_tokens=self.cfg.chunk_overlap_tokens,
-                keep_tables_intact=self.cfg.keep_tables_intact,
-                keep_code_intact=self.cfg.keep_code_intact,
                 contextual=self.cfg.contextual_chunks,
             )
             if self.assist.wants("chunk_context"):

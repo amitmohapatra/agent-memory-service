@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.revisions import RevisionKind
 
 pytestmark = pytest.mark.integration
 
@@ -59,3 +60,13 @@ async def test_an_agent_run_cannot_replay_the_users_bundle(container) -> None:
 
 async def test_an_unknown_handle_is_simply_absent(container) -> None:
     assert await container.services["context_builder"].cached(_ctx("alice"), "nope") is None
+
+
+@pytest.mark.parametrize("kind", [RevisionKind.USER, RevisionKind.MEMBERSHIP])
+async def test_replay_rechecks_content_and_authorization_revisions(container, kind) -> None:
+    alice = _ctx("alice")
+    bundle_id = await _build(container, alice)
+    async with container.services["uow_factory"]() as uow:
+        await uow.revisions.bump(alice.tenant_id, kind, alice.user_id)
+        await uow.commit()
+    assert await container.services["context_builder"].cached(alice, bundle_id) is None

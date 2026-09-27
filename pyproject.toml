@@ -15,6 +15,7 @@ classifiers = [
 
 # Core runtime dependencies. Everything heavy or optional lives in an extra.
 dependencies = [
+  "cryptography>=44,<52",
   "fastapi>=0.141,<1",
   "pydantic>=2.13,<3",
   "pydantic-settings>=2.15,<3",
@@ -36,6 +37,7 @@ dependencies = [
   # The gateway client, shared with the agent harness so its retry and rate-limit
   # handling has one implementation rather than two that drift.
   "bifrost-sdk>=0.1",
+  "hindsight-client==0.10.1",
   "python-multipart>=0.0.20",
   "prometheus-client>=0.26",
   "opentelemetry-api>=1.44",

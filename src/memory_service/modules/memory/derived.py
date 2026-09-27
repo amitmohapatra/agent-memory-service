@@ -81,6 +81,15 @@ def _memory_evidence(sources: Sequence[CanonicalMemory]) -> list[EvidenceRef]:
     ]
 
 
+def source_statement(memory: CanonicalMemory) -> str:
+    return f"[observed {memory.temporal.observed_at.date().isoformat()}] {memory.content}"
+
+
+def _source_statements(sources: Sequence[CanonicalMemory]) -> str:
+    """Keep each relative-date statement beside its own observation date."""
+    return "\n".join(dict.fromkeys(source_statement(m) for m in sources))
+
+
 def _derived(
     ctx: MemoryExecutionContext,
     *,
@@ -105,6 +114,8 @@ def _derived(
     slot = source_slot(ctx, scope, subject, predicate, memory_type, sources)
     expiries = [m.system_metadata.get("expires_at") for m in sources]
     expiry = min((datetime.fromisoformat(x) for x in expiries if isinstance(x, str)), default=None)
+    observed = [m.temporal.observed_at for m in sources]
+    first_observed, last_observed = min(observed), max(observed)
     memory = CanonicalMemory(
         tenant_id=ctx.tenant_id,
         scope=scope,
@@ -116,7 +127,9 @@ def _derived(
         normalized_hash=normalized_hash(content),
         subject=subject,
         predicate=predicate,
-        temporal=TemporalState(observed_at=now, valid_from=now),
+        # A synthesis can span distinct events: it has no single inferred valid interval.
+        # Its evidence clock is the newest source, while creation time remains `now`.
+        temporal=TemporalState(observed_at=last_observed),
         evidence=_memory_evidence(sources),
         confidence=round(min(1.0, confidence), 4),
         importance=round(min(1.0, importance), 4),
@@ -128,6 +141,8 @@ def _derived(
             "contributors": sorted({m.owner_principal for m in sources}),
             "derived_slot": slot,
             "source_revisions": {m.memory_id: m.revision for m in sources},
+            "source_observed_from": first_observed.isoformat(),
+            "source_observed_to": last_observed.isoformat(),
             "expires_at": expiry.isoformat() if expiry else None,
             **extra,
         },
@@ -157,9 +172,10 @@ class BeliefService:
 
     @staticmethod
     def derive_content(subject: str, predicate: str, sources: Sequence[CanonicalMemory]) -> str:
-        ordered = sorted(sources, key=lambda m: (m.created_at, m.memory_id))
-        statements = list(dict.fromkeys(m.content for m in ordered))
-        return f"{subject} — {_label(predicate)} (source statements):\n" + "\n".join(statements)
+        ordered = sorted(sources, key=lambda m: (m.temporal.observed_at, m.memory_id))
+        return f"{subject} — {_label(predicate)} (source statements):\n" + _source_statements(
+            ordered
+        )
 
     async def upsert(
         self,
@@ -231,9 +247,10 @@ class EntitySummaryService:
 
     @staticmethod
     def derive_content(subject: str, facts: Sequence[CanonicalMemory]) -> str:
-        ordered = sorted(facts, key=lambda m: (m.predicate or "~", m.created_at, m.memory_id))
-        statements = list(dict.fromkeys(m.content for m in ordered))
-        return f"{subject} — recent source statements:\n" + "\n".join(statements)
+        ordered = sorted(
+            facts, key=lambda m: (m.predicate or "~", m.temporal.observed_at, m.memory_id)
+        )
+        return f"{subject} — recent source statements:\n" + _source_statements(ordered)
 
     async def rebuild(
         self,

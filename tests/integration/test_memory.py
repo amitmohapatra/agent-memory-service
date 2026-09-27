@@ -145,7 +145,16 @@ async def test_decisions_are_thread_scoped_and_shared_in_thread(container, uow_f
     # thread participant b can recall it; a stranger outside the thread cannot
     engine = container.services["retrieval"]
     got = await engine.retrieve(b, "why did we decide on PostgreSQL?", kinds=("memory",))
-    assert [c.record_id for c in got.candidates if c.kind == "memory"] == [decision.memory_id]
+    returned = {c.record_id for c in got.candidates if c.kind == "memory"}
+    # Short source statements are retained now, including the thread's "kick-off".
+    # This is an access test: require the decision and reject anything outside this thread,
+    # rather than assuming the setup message never became a canonical memory.
+    assert decision.memory_id in returned
+    assert returned <= {
+        m.memory_id
+        for m in mems
+        if m.visibility is Visibility.THREAD and m.scope.thread_id == thread
+    }
     stranger = U2.model_copy(update={"user_id": "u3"})
     assert (
         await engine.retrieve(stranger, "why did we decide on PostgreSQL?", kinds=("memory",))
@@ -275,12 +284,18 @@ async def test_forget_and_expiry(container, uow_factory) -> None:
     task = next(
         m for m in await _memories(uow_factory, U1, container) if m.memory_type is MemoryType.TASK
     )
+    graph = container.services["graph"]
+    before_expiry = await graph.query(U1, entities=[task.subject], hops=1)
+    assert any(r.memory_id == task.memory_id for r in before_expiry.relations)
     async with container.database.engine.begin() as conn:
         await conn.execute(
             text("UPDATE memories SET expires_at = :t WHERE memory_id = :id"),
             {"t": datetime.now(UTC) - timedelta(seconds=1), "id": task.memory_id},
         )
     await container.tasks.run_periodic("periodic.memory_expire")
+    await container.tasks.drain()  # durable search and graph projection cleanup
+    after_expiry = await graph.query(U1, entities=[task.subject], hops=1)
+    assert not any(r.memory_id == task.memory_id for r in after_expiry.relations)
     assert await _memories(uow_factory, U1, container) == []
     assert (await engine.retrieve(U1, "follow up with legal", kinds=("memory",))).candidates == []
     history = await _memories(uow_factory, U1, container, include_superseded=True)

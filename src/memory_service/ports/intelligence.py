@@ -62,6 +62,14 @@ class MemoryCandidate(BaseModel):
     )
 
 
+class ContextualExtractor(Protocol):
+    """Optional ingest-only enrichment; never owns identities, dates or access policy."""
+
+    name: str
+
+    async def extract(self, text: str, *, timestamp: datetime) -> list[str]: ...
+
+
 class ConsolidationOutcome(BaseModel):
     model_config = ConfigDict(frozen=True)
 

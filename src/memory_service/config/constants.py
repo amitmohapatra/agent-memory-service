@@ -69,7 +69,13 @@ class DenseModel(BaseModel):
     dimension: int = 384
     max_seq_length: int = 512
     normalize: bool = True
-    batch_size: int = 32
+    #: Retrieval-trained encoders such as E5 require asymmetric task prefixes.
+    query_prefix: str = ""
+    document_prefix: str = ""
+    batch_size: int = Field(default=32, ge=1)
+    #: Bound each non-preemptible indexing turn on the shared model runner. A full
+    #: 32-passage forward pass blocked interactive queries for seconds on CPU.
+    document_batch_size: int = Field(default=1, ge=1)
     device: str = "cpu"
     #: Intra-op threads the model may use: ``torch.set_num_threads`` for the torch runner,
     #: ORT ``intra_op_num_threads`` for the ONNX one. Two, because the deployment runs three
@@ -90,7 +96,7 @@ class SparseModel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: Literal["bm25"] = "bm25"
-    version: str = "v1"
+    version: str = "v2-unicode"
 
 
 class NLIModel(BaseModel):
@@ -102,9 +108,10 @@ class NLIModel(BaseModel):
     local_dir: str = "deberta-v3-base-mnli-fever-anli"
     model_path: str | None = None
     revision: str | None = None
+    runtime: Literal["torch", "onnx"] = "torch"
     graph_file: str | None = None
-    batch_size: int = 16
-    max_length: int = 512
+    batch_size: int = Field(default=16, ge=1, le=64)
+    max_length: int = Field(default=512, ge=32, le=512)
     #: as ``DenseModel.threads``; both runners call ``torch.set_num_threads``, which is
     #: process-wide, so the two counts are deliberately the same number
     threads: int = 2
@@ -123,8 +130,10 @@ class CrossEncoderModel(BaseModel):
     id: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
     local_dir: str = "ms-marco-MiniLM-L6-v2"
     model_path: str | None = None
+    revision: str | None = None
     backend: Literal["torch", "onnx"] = "torch"
     batch_size: int = 16
+    max_length: int = Field(default=512, ge=32, le=2048)
 
     @property
     def source(self) -> str:
@@ -394,7 +403,7 @@ class MemoryIntelligenceSettings(BaseModel):
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)
     # landing reflection and derived memories
-    consolidation_enabled: bool = True
+    consolidation_enabled: bool = False
     consolidation_max_chars: int = Field(default=1800, ge=256, le=2000)
     consolidation_max_sources: int = Field(default=64, ge=2, le=128)
     belief_min_support: int = Field(default=2, ge=2)
@@ -421,8 +430,6 @@ class DocumentSettings(BaseModel):
     min_chunk_tokens: int = 40
     chunk_overlap_tokens: int = 40
     contextual_chunks: bool = True
-    keep_tables_intact: bool = True
-    keep_code_intact: bool = True
     max_file_bytes: int = 100 * 1024 * 1024
 
 
@@ -474,6 +481,9 @@ class RetrievalSettings(BaseModel):
     bm25: bool = True
     dense: bool = True
     graph: bool = True
+    #: Unclassified questions can still name known graph entities in any language.
+    #: Resolve names under the caller's scope, with the same bounded traversal budget.
+    semantic_graph: bool = True
     #: Outer fusion of hybrid document candidates with optional strategy retrievers.
     rrf_k: int = 60
     # Dense/sparse fusion uses the same one-based rank convention as rrf_fuse. One

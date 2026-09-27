@@ -106,6 +106,7 @@ class _Engine:
     def __init__(self, authz: AuthorizationService, memories: int = 2) -> None:
         self.authz = authz
         self.indexer = _Indexer()
+        self.reranker = None
         self.calls = 0
         self.count = memories
 
@@ -139,7 +140,9 @@ class _Conversation:
     pass
 
 
-def _builder(cache: MemoryCache | None = None, memories: int = 2) -> ContextBuilder:
+def _builder(
+    cache: MemoryCache | None = None, memories: int = 2, *, assist: LLMAssist | None = None
+) -> ContextBuilder:
     authz = AuthorizationService(MemoryAuthorizationProvider(), cache)
     factory = _Factory()
     builder = ContextBuilder(
@@ -149,8 +152,54 @@ def _builder(cache: MemoryCache | None = None, memories: int = 2) -> ContextBuil
         cache,
         settings=CONTEXT,
         retrieval=RETRIEVAL,
+        assist=assist,
     )
     return builder
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"model": "test/new-strong"},
+        {"fast_model": "test/new-fast"},
+        {"fast_uses": ["summaries"]},
+        {"base_url": "http://another-gateway.test/v1"},
+        {"api_key": "rotated-operator-key"},
+        {"max_tokens": 777},
+    ],
+)
+async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(change):
+    from types import SimpleNamespace
+
+    from tests.support_llm import llm_settings
+
+    cache = MemoryCache()
+    provider = SimpleNamespace(enabled=True)
+    first = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
+    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
+    changed = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"], **change)))
+    try:
+        await first.build_api(CTX, QUERY)
+        await first.drain()
+        assert orjson.loads(await unchanged.build_api(CTX, QUERY))["cache_hit"] is True
+        assert orjson.loads(await changed.build_api(CTX, QUERY))["cache_hit"] is False
+        assert changed.engine.calls == 1 and unchanged.engine.calls == 0
+        assert "operator-key" not in changed._fingerprint
+    finally:
+        await first.close()
+        await unchanged.close()
+        await changed.close()
+
+
+def test_unused_model_configuration_does_not_fragment_native_cache():
+    from types import SimpleNamespace
+
+    from tests.support_llm import llm_settings
+
+    provider = SimpleNamespace(enabled=True)
+    first = _builder(assist=LLMAssist(provider, llm_settings([])))
+    changed = _builder(assist=LLMAssist(provider, llm_settings([], model="test/new")))
+    assert first._fingerprint == changed._fingerprint
 
 
 def _parts(builder: ContextBuilder) -> tuple[_Factory, _Engine]:

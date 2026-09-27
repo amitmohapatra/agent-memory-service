@@ -4,12 +4,38 @@ from datetime import UTC, datetime
 
 import pytest
 
+from memory_service.domain.ids import new_id
 from memory_service.modules.memory.reflection import ReflectionService
 from tests.integration.test_consolidation import sources
 from tests.integration.test_memory import U1, _memories, _observe
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
+
+
+async def test_generated_provider_is_excluded_before_consolidation_source_limit(
+    container, uow_factory
+):
+    memories = await sources(container, uow_factory)
+    generated = memories[0].model_copy(deep=True, update={"memory_id": new_id("memory")})
+    generated.system_metadata["provider"] = "llm"
+    async with uow_factory() as uow:
+        await uow.memories.add(
+            generated, visibility_keys=generated.system_metadata["visibility_keys"]
+        )
+        await uow.commit()
+    async with uow_factory() as uow:
+        pending = await uow.memories.reflection_pending(tenant_id=U1.tenant_id)
+        related = await uow.memories.related(
+            U1.tenant_id,
+            scope_key=generated.scope.key(),
+            subject=generated.subject,
+            include_derived=False,
+        )
+    for candidates in (pending, related):
+        ids = {m.memory_id for m in candidates}
+        assert generated.memory_id not in ids
+        assert memories[1].memory_id in ids
 
 
 async def test_receipts_survive_service_restart_and_source_changes(container, uow_factory):

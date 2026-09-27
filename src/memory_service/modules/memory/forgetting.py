@@ -20,8 +20,8 @@ from typing import Any
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
-from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.tasks import JobSpec, Queue
@@ -81,7 +81,7 @@ class ForgettingService:
         report = ForgettingReport(threshold=self.cfg.forgetting_archive_threshold)
         idle_before = now - timedelta(days=self.cfg.forgetting_min_idle_days)
         by_tenant: dict[str, list[str]] = {}
-        touched: set[tuple[str, RevisionKind, str]] = set()
+        archived: list[CanonicalMemory] = []
         async with self.uow_factory() as uow:
             rows = await uow.memories.list_idle(
                 idle_before=idle_before, limit=self.cfg.forgetting_batch
@@ -96,13 +96,7 @@ class ForgettingService:
                 await self._archive(uow, m, score=s, now=now)
                 by_tenant.setdefault(m.tenant_id, []).append(m.memory_id)
                 report.archived_ids.append(m.memory_id)
-                for kind, ident in (
-                    (RevisionKind.USER, m.scope.user_id),
-                    (RevisionKind.THREAD, m.scope.thread_id),
-                    (RevisionKind.AGENT, m.scope.agent_id),
-                ):
-                    if ident:
-                        touched.add((m.tenant_id, kind, ident))
+                archived.append(m)
             for tenant_id, ids in by_tenant.items():
                 await uow.enqueue(
                     JobSpec(
@@ -113,8 +107,7 @@ class ForgettingService:
                         tenant_id=tenant_id,
                     )
                 )
-            for tenant_id, kind, ident in sorted(touched):
-                await uow.revisions.bump(tenant_id, kind, ident)
+            await bump_memory_revisions(uow, archived)
             await uow.commit()
         report.archived = len(report.archived_ids)
         report.evicted_working = await self.evict_working(now=now)
@@ -165,13 +158,7 @@ class ForgettingService:
                 tenant_id=tenant_id,
             )
         )
-        for kind, ident in (
-            (RevisionKind.USER, memory.scope.user_id),
-            (RevisionKind.THREAD, memory.scope.thread_id),
-            (RevisionKind.AGENT, memory.scope.agent_id),
-        ):
-            if ident:
-                await uow.revisions.bump(tenant_id, kind, ident)
+        await bump_memory_revisions(uow, [memory])
         return memory
 
     async def evict_working(self, *, now: datetime | None = None) -> int:

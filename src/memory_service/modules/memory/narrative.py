@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Collection, Sequence
+from typing import Any
 
 from memory_service.modules.llm.assist import LLMAssist
 
@@ -41,26 +43,56 @@ _SYSTEM = (
     "self-contained unit exists. At most six units, at most four sentences per unit. "
     "Never produce rewritten facts, inferred identities or calculated dates."
 )
-_SCHEMA = {
-    "type": "object",
-    "required": ["units"],
-    "additionalProperties": False,
-    "properties": {
-        "units": {
-            "type": "array",
-            "maxItems": MAX_UNITS,
-            "items": {
-                "type": "object",
-                "required": ["start", "end"],
-                "additionalProperties": False,
-                "properties": {
-                    "start": {"type": "integer", "minimum": 0},
-                    "end": {"type": "integer", "minimum": 0},
+
+
+def span_schema(sentence_count: int) -> dict[str, Any]:
+    """Constrain generation to source indices before independent span validation.
+
+    The validator still enforces ordering, span length and eligibility. A schema-valid
+    index must not point outside the supplied message, even for a small local model.
+    """
+    if not 1 <= sentence_count <= MAX_SENTENCES:
+        raise ValueError("sentence_count must be within the narrative input budget")
+    return {
+        "type": "object",
+        "required": ["units"],
+        "additionalProperties": False,
+        "properties": {
+            "units": {
+                "type": "array",
+                "maxItems": MAX_UNITS,
+                "items": {
+                    "type": "object",
+                    "required": ["start", "end"],
+                    "additionalProperties": False,
+                    "properties": {
+                        key: {"type": "integer", "minimum": 0, "maximum": sentence_count - 1}
+                        for key in ("start", "end")
+                    },
                 },
             },
         },
-    },
-}
+    }
+
+
+def source_payload(sentences: Sequence[str], eligible: Collection[int]) -> str:
+    """One input contract for production and local model evaluation."""
+    return json.dumps(
+        {
+            "sentences": [{"index": i, "text": text} for i, text in enumerate(sentences)],
+            "eligible": sorted(eligible),
+        },
+        ensure_ascii=False,
+    )
+
+
+def eligible_for_contextual_extraction(sentences: list[str], eligible: set[int]) -> bool:
+    """Bound external work without truncating away a correction or retraction."""
+    return (
+        len(eligible) >= 2
+        and len(sentences) <= MAX_SENTENCES
+        and sum(map(len, sentences)) <= MAX_INPUT_CHARS
+    )
 
 
 async def extract_narrative_units(
@@ -72,24 +104,15 @@ async def extract_narrative_units(
     path. Bound both prompt size and output expansion independently of model compliance.
     Oversized messages bypass this path: truncation could hide a later retraction.
     """
-    if (
-        not assist.wants("contextual_extraction")
-        or len(eligible) < 2
-        or len(sentences) > MAX_SENTENCES
-        or sum(map(len, sentences)) > MAX_INPUT_CHARS
+    if not assist.wants("contextual_extraction") or not eligible_for_contextual_extraction(
+        sentences, eligible
     ):
         return None
     output = await assist.structured(
         "contextual_extraction",
         system=_SYSTEM,
-        user=json.dumps(
-            {
-                "sentences": [{"index": i, "text": text} for i, text in enumerate(sentences)],
-                "eligible": sorted(eligible),
-            },
-            ensure_ascii=False,
-        ),
-        schema=_SCHEMA,
+        user=source_payload(sentences, eligible),
+        schema=span_schema(len(sentences)),
         max_tokens=1536,
     )
     return _select_units(output, sentences, eligible)

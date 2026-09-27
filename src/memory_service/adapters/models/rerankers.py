@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
 from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
 from memory_service.adapters.models._precision import cpu_dtype_kwargs
+from memory_service.adapters.models._runner import SerialRunner
 from memory_service.adapters.models.sparse import tokenize
 from memory_service.config.constants import CrossEncoderModel
 from memory_service.domain.errors import DependencyUnavailable
+from memory_service.domain.ids import stable_key
 from memory_service.ports.models import ProviderInfo, RerankResult
 
 
@@ -69,7 +70,11 @@ class CrossEncoderReranker:
                 "sentence-transformers is required (install [models])"
             ) from exc
         source = spec.source
-        kwargs: dict[str, Any] = {"device": "cpu"}
+        kwargs: dict[str, Any] = {
+            "device": "cpu",
+            "max_length": spec.max_length,
+            "revision": spec.revision,
+        }
         if spec.backend == "onnx":
             kwargs["backend"] = "onnx"
         else:
@@ -86,7 +91,10 @@ class CrossEncoderReranker:
         import torch
 
         self._sigmoid = torch.nn.Sigmoid()
+        self._runner = SerialRunner("reranker")
         self.spec = spec
+        profile = stable_key(spec.model_dump_json())[:12]
+        self._fingerprint = f"ce-{spec.id.rsplit('/', 1)[-1]}-{profile}"
         self.info = ProviderInfo(
             name=spec.id,
             license="Apache-2.0",
@@ -97,9 +105,8 @@ class CrossEncoderReranker:
     def _score(self, query: str, documents: Sequence[str]) -> list[float]:
         """Relevance in 0..1, not a raw logit.
 
-        These cross-encoders are trained with binary cross-entropy, so the sigmoid of the
-        logit is a calibrated P(relevant) — which is what sentence-transformers applies by
-        default for a single-label model. Ours came back with ``activation_fn=Identity()``
+        Sigmoid produces bounded scores; calibration on the target corpus is a separate
+        measurement. Ours came back with ``activation_fn=Identity()``
         because the model directory carries no ``modules.json``, so a freshly constructed
         CrossEncoder gets no activation and we were publishing logits in the -11..+11 range
         as if they were scores. Asking for the sigmoid explicitly removes the dependence on
@@ -119,9 +126,12 @@ class CrossEncoderReranker:
     ) -> list[RerankResult]:
         if not documents:
             return []
-        scores = await asyncio.to_thread(self._score, query, documents)
+        scores = await self._runner.run(self._score, query, documents)
         order = sorted(range(len(documents)), key=lambda i: (-scores[i], i))
         return [RerankResult(index=i, score=scores[i]) for i in order[:top_k]]
 
     def fingerprint(self) -> str:
-        return f"ce-{(self.spec.model_path or self.spec.id).rstrip('/').split('/')[-1]}"
+        return self._fingerprint
+
+    def close(self) -> None:
+        self._runner.close()

@@ -1,0 +1,494 @@
+{
+  "complete": true,
+  "fixture_sha256": "8a24cae5862151b176fa2b048dc5c95bbec2b3c9be5c75e9281887449e537de4",
+  "parser_sha256": "ebd486af31603ed8876ed9e712c8484aed1d130da6e9f730d0e013ac36b57fca",
+  "fixture_provenance": "Agent-authored synthetic regression fixtures, not an independent public benchmark; translations have not had native-speaker review. Fixed before local model output. Sentence boundaries are supplied explicitly for this component screen.",
+  "runtime": {
+    "python": "3.12.14",
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "cpu_count": 4,
+    "packages": {
+      "onnxruntime": "1.30.0",
+      "tokenizers": "0.23.2",
+      "numpy": "2.5.3",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0"
+    }
+  },
+  "image_digest": "sha256:ab566c0e4855ec8e7991d8deb6a5fb47c7851076c14b79368db0dd1e020ff9dc",
+  "docling_version": "2.127.0",
+  "model_files_sha256": {
+    "docling-project--docling-layout-heron/config.json": "fdea30805ce2f5666b147fca941dcdd27ad468e27d6ed21902207d3da056a97d",
+    "docling-project--docling-layout-heron/model.safetensors": "00333a43451945aaf89db8ca9c0a17e75d1537c17db60fdb91aa95f4c7929e0c",
+    "docling-project--docling-layout-heron/preprocessor_config.json": "cd38cd59999e7a95d68e487fbe5132df3d4e5c32a0836add57e6126ba0c4eaf1",
+    "docling-project--docling-layout-heron-onnx/config.json": "c6e67b6cdf64fa245779d0409bb994aa96e8c1790e15ec07a65843628e232180",
+    "docling-project--docling-layout-heron-onnx/model.onnx": "59c81a3a2923042d85034ffc487f8f47e4854117e879aef89b2b9f728fb4922a",
+    "docling-project--docling-layout-heron-onnx/preprocessor_config.json": "54d086cf0d7d371f7fac36e5d3a0dae31e211298affc816106cc376506799d58",
+    "docling-project--docling-models/config.json": "9c34024dc28ff47b75818f415e769809798c29bf9bde6f2ccc63a4acb62396d9",
+    "docling-project--docling-models/model_artifacts/tableformer/accurate/tableformer_accurate.safetensors": "2a7d6c924b3cd12fb99a09280ca9c33a89c5d60b93253617d2e088c1a40374d9",
+    "docling-project--docling-models/model_artifacts/tableformer/accurate/tm_config.json": "984e122ceb8ccf84d84c9d2882f6f2302a44b4f1e577babd6289892c36f3cffd",
+    "docling-project--docling-models/model_artifacts/tableformer/fast/tableformer_fast.safetensors": "3119563aab5a7c96fda4d621119b63fd8806272b86c30936d15507616422f718",
+    "docling-project--docling-models/model_artifacts/tableformer/fast/tm_config.json": "dca6762508dddfae6d57d6cb4ef822c6000119dff0f3b6489db7413118c2622a"
+  },
+  "tesseract_version": "tesseract 5.5.0",
+  "installed_ocr_languages": [
+    "Arabic",
+    "Armenian",
+    "Bengali",
+    "Canadian_Aboriginal",
+    "Cherokee",
+    "Cyrillic",
+    "Devanagari",
+    "Ethiopic",
+    "Fraktur",
+    "Georgian",
+    "Greek",
+    "Gujarati",
+    "Gurmukhi",
+    "HanS",
+    "HanS_vert",
+    "HanT",
+    "HanT_vert",
+    "Hangul",
+    "Hangul_vert",
+    "Hebrew",
+    "Japanese",
+    "Japanese_vert",
+    "Kannada",
+    "Khmer",
+    "Lao",
+    "Latin",
+    "Malayalam",
+    "Myanmar",
+    "Oriya",
+    "Sinhala",
+    "Syriac",
+    "Tamil",
+    "Telugu",
+    "Thaana",
+    "Thai",
+    "Tibetan",
+    "Vietnamese",
+    "afr",
+    "amh",
+    "ara",
+    "asm",
+    "aze",
+    "aze_cyrl",
+    "bel",
+    "ben",
+    "bod",
+    "bos",
+    "bre",
+    "bul",
+    "cat",
+    "ceb",
+    "ces",
+    "chi_sim",
+    "chi_sim_vert",
+    "chi_tra",
+    "chi_tra_vert",
+    "chr",
+    "cos",
+    "cym",
+    "dan",
+    "deu",
+    "div",
+    "dzo",
+    "ell",
+    "eng",
+    "enm",
+    "epo",
+    "est",
+    "eus",
+    "fao",
+    "fas",
+    "fil",
+    "fin",
+    "fra",
+    "frk",
+    "frm",
+    "fry",
+    "gla",
+    "gle",
+    "glg",
+    "grc",
+    "guj",
+    "hat",
+    "heb",
+    "hin",
+    "hrv",
+    "hun",
+    "hye",
+    "iku",
+    "ind",
+    "isl",
+    "ita",
+    "ita_old",
+    "jav",
+    "jpn",
+    "jpn_vert",
+    "kan",
+    "kat",
+    "kat_old",
+    "kaz",
+    "khm",
+    "kir",
+    "kmr",
+    "kor",
+    "kor_vert",
+    "lao",
+    "lat",
+    "lav",
+    "lit",
+    "ltz",
+    "mal",
+    "mar",
+    "mkd",
+    "mlt",
+    "mon",
+    "mri",
+    "msa",
+    "mya",
+    "nep",
+    "nld",
+    "nor",
+    "oci",
+    "ori",
+    "osd",
+    "pan",
+    "pol",
+    "por",
+    "pus",
+    "que",
+    "ron",
+    "rus",
+    "san",
+    "sin",
+    "slk",
+    "slv",
+    "snd",
+    "spa",
+    "spa_old",
+    "sqi",
+    "srp",
+    "srp_latn",
+    "sun",
+    "swa",
+    "swe",
+    "syr",
+    "tam",
+    "tat",
+    "tel",
+    "tgk",
+    "tha",
+    "tir",
+    "ton",
+    "tur",
+    "uig",
+    "ukr",
+    "urd",
+    "uzb",
+    "uzb_cyrl",
+    "vie",
+    "yid",
+    "yor"
+  ],
+  "llm_calls": 0,
+  "records": [
+    {
+      "language": "en",
+      "format": "PNG",
+      "expected": "Maya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 222659.2424410046
+    },
+    {
+      "language": "en",
+      "format": "PDF",
+      "expected": "Maya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.\nMaya moved to Berlin in 2022.\nShe joined a robotics company there.\nOmar completed a chemistry degree in 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 9327.957056986634
+    },
+    {
+      "language": "de",
+      "format": "PNG",
+      "expected": "Maya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3201.3161379727535
+    },
+    {
+      "language": "de",
+      "format": "PDF",
+      "expected": "Maya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.\nMaya zog 2022 nach Berlin.\nDort trat sie einem Robotikunternehmen bei.\nOmar schloss 2020 ein Chemiestudium ab.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 5960.3385730297305
+    },
+    {
+      "language": "es",
+      "format": "PNG",
+      "expected": "Maya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3513.9836560119875
+    },
+    {
+      "language": "es",
+      "format": "PDF",
+      "expected": "Maya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.\nMaya se mudó a Berlín en 2022.\nAllí se incorporó a una empresa de robótica.\nOmar terminó una carrera de química en 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3310.910433996469
+    },
+    {
+      "language": "fr",
+      "format": "PNG",
+      "expected": "Maya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3600.9825529763475
+    },
+    {
+      "language": "fr",
+      "format": "PDF",
+      "expected": "Maya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.\nMaya a déménagé à Berlin en 2022.\nElle y a rejoint une entreprise de robotique.\nOmar a obtenu un diplôme de chimie en 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3313.61069297418
+    },
+    {
+      "language": "zh",
+      "format": "PNG",
+      "expected": "玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 2
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3357.3964509996586
+    },
+    {
+      "language": "zh",
+      "format": "PDF",
+      "expected": "玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。\n玛雅于2022年搬到了柏林。\n她在那里加入了一家机器人公司。\n奥马尔于2020年获得了化学学位。",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 2
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2894.550069991965
+    },
+    {
+      "language": "ja",
+      "format": "PNG",
+      "expected": "マヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2419.7454460081644
+    },
+    {
+      "language": "ja",
+      "format": "PDF",
+      "expected": "マヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。\nマヤは2022年にベルリンへ引っ越しました。\n彼女はそこでロボット企業に入社しました。\nオマルは2020年に化学の学位を取得しました。",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2552.9837000067346
+    },
+    {
+      "language": "hi",
+      "format": "PNG",
+      "expected": "माया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "sha256": "79a470365ccb210fa3c7d8d8ff2e005ef9d983cfd067f735a0caf7e15070ca9f",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 4001.7048599547707
+    },
+    {
+      "language": "hi",
+      "format": "PDF",
+      "expected": "माया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।\nमाया 2022 में बर्लिन चली गई।\nवह वहाँ एक रोबोटिक्स कंपनी में शामिल हुई।\nउमर ने 2020 में रसायन विज्ञान की डिग्री पूरी की।",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+        "sha256": "79a470365ccb210fa3c7d8d8ff2e005ef9d983cfd067f735a0caf7e15070ca9f",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2241.732975002378
+    },
+    {
+      "language": "ar",
+      "format": "PNG",
+      "expected": "انتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+        "sha256": "504d7407d86875acf7d04dfaa0fd7524d0b8797723bc4aa18022f29db25b0b6e",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2392.770214995835
+    },
+    {
+      "language": "ar",
+      "format": "PDF",
+      "expected": "انتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.\nانتقلت مايا إلى برلين في عام 2022.\nانضمت هناك إلى شركة للروبوتات.\nحصل عمر على شهادة في الكيمياء في عام 2020.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+        "sha256": "504d7407d86875acf7d04dfaa0fd7524d0b8797723bc4aa18022f29db25b0b6e",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2846.6864459915087
+    },
+    {
+      "language": "ru",
+      "format": "PNG",
+      "expected": "Майя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2698.110633995384
+    },
+    {
+      "language": "ru",
+      "format": "PDF",
+      "expected": "Майя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.\nМайя переехала в Берлин в 2022 году.\nТам она устроилась в компанию по робототехнике.\nОмар получил диплом по химии в 2020 году.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2899.2164389928803
+    },
+    {
+      "language": "tr",
+      "format": "PNG",
+      "expected": "Maya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2861.167212948203
+    },
+    {
+      "language": "tr",
+      "format": "PDF",
+      "expected": "Maya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.\nMaya 2022 yılında Berlin'e taşındı.\nOrada bir robotik şirketine katıldı.\nOmar 2020 yılında kimya diploması aldı.",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 2568.1990919983946
+    },
+    {
+      "language": "ko",
+      "format": "PNG",
+      "expected": "마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 1
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3299.187231983524
+    },
+    {
+      "language": "ko",
+      "format": "PDF",
+      "expected": "마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.\n마야는 2022년에 베를린으로 이사했습니다.\n그녀는 그곳에서 로봇 회사에 입사했습니다.\n오마르는 2020년에 화학 학위를 취득했습니다.",
+      "font": {
+        "path": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "sha256": "b76b0433203017ca80401b2ee0dd69350349871c4b19d504c34dbdd80541690a",
+        "index": 1
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3191.690209961962
+    },
+    {
+      "language": "th",
+      "format": "PNG",
+      "expected": "มายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
+        "sha256": "dfbd5ed0f1e68c3cbc51aa08f646d1ab0e68e7c4ceab70a69e465225ff701f93",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.png: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3395.558563992381
+    },
+    {
+      "language": "th",
+      "format": "PDF",
+      "expected": "มายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020\nมายาย้ายไปเบอร์ลินในปี 2022\nเธอเข้าทำงานในบริษัทหุ่นยนต์ที่นั่น\nโอมาร์สำเร็จการศึกษาด้านเคมีในปี 2020",
+      "font": {
+        "path": "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
+        "sha256": "dfbd5ed0f1e68c3cbc51aa08f646d1ab0e68e7c4ceab70a69e465225ff701f93",
+        "index": 0
+      },
+      "error": "CorruptSource: docling failed to parse fixture.pdf: ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+      "latency_ms": 3724.8459109687246
+    }
+  ],
+  "limitations": [
+    "Synthetic clean pages, not an independent scan/handwriting benchmark.",
+    "Each language uses three source sentences repeated four times to support script detection.",
+    "Character error rate ignores case, whitespace and punctuation; numbers are checked separately.",
+    "Parser/component latency, not ingestion queue or retrieval endpoint latency."
+  ]
+}

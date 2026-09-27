@@ -29,6 +29,23 @@ def test_bind_builds_scope_and_child_contexts(client: MemoryClient) -> None:
     assert grandchild.scope.agent_run_id and grandchild.scope.agent_run_id != "run_1"
 
 
+@respx.mock
+async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(client):
+    status = {"registered": True, "revoked": False, "revision": 1}
+    put = respx.put("http://memory.test/v1/agents/model-key").respond(200, json=status)
+    get = respx.get("http://memory.test/v1/agents/model-key").respond(200, json=status)
+    delete = respx.delete("http://memory.test/v1/agents/model-key").respond(
+        200, json={**status, "revoked": True, "revision": 2}
+    )
+    ctx = client.bind(tenant_id="acme", user_id="alice").agent("research")
+    assert (await ctx.set_model_key("vk-sdk-test", idempotency_key="rotate-1")).revision == 1
+    assert put.calls.last.request.headers["Idempotency-Key"] == "rotate-1"
+    assert (await ctx.model_key_status()).registered
+    assert get.calls.last.request.url.params["agent_id"] == "research"
+    assert (await ctx.revoke_model_key()).revoked
+    assert delete.calls.last.request.url.params["agent_id"] == "research"
+
+
 async def test_context_manager_propagates_via_contextvars(client: MemoryClient) -> None:
     ctx = client.bind(tenant_id="acme")
     assert current_context() is None
@@ -155,3 +172,28 @@ async def test_context_bundle_parses_and_flags_insufficient(client: MemoryClient
     ctx = client.bind(tenant_id="acme")
     bundle = await ctx.context("q")
     assert bundle.insufficient and bundle.evidence.missing_groups == ["PAGE11"]
+
+
+@respx.mock
+async def test_brief_sdk_preserves_scope_kind_and_async_status(client):
+    from universal_memory import BriefSpec
+
+    spec = BriefSpec(
+        kind="knowledge_page", title="Project status", question="Which projects are active?"
+    )
+    pending = {"brief_id": "brf_example", "spec": spec.model_dump(), "status": "pending"}
+    post = respx.post("http://memory.test/v1/briefs").respond(202, json=pending)
+    put = respx.put("http://memory.test/v1/briefs/brf_example").respond(202, json=pending)
+    get = respx.get("http://memory.test/v1/briefs/brf_example").respond(200, json=pending)
+    respx.get("http://memory.test/v1/briefs").respond(200, json=[pending])
+    respx.delete("http://memory.test/v1/briefs/brf_example").respond(200, json={"deleted": True})
+    ctx = client.bind(tenant_id="acme", user_id="alice", agent_id="research")
+    created = await ctx.briefs.create(spec, idempotency_key="brief-1")
+    assert created.status == "pending" and created.spec.kind == "knowledge_page"
+    assert post.calls.last.request.headers["Idempotency-Key"] == "brief-1"
+    assert (await ctx.briefs.update(created.brief_id, spec)).status == "pending"
+    assert put.call_count == 1
+    assert (await ctx.briefs.get(created.brief_id)).output is None
+    assert get.calls.last.request.url.params["agent_id"] == "research"
+    assert len(await ctx.briefs.list()) == 1
+    await ctx.briefs.delete(created.brief_id)

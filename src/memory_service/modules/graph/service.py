@@ -4,20 +4,22 @@ the caller's visibility."""
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from memory_service.config.constants import GraphSettings
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.memory import Scope
+from memory_service.domain.memory import Scope, unverified_representation
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.text import unicode_tokens
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichment
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_identity
 from memory_service.modules.memory.native import _STOP as _STOP_WORDS
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -74,15 +76,36 @@ class GraphAnswer:
 def query_terms(query: str, *, max_terms: int = 12) -> list[str]:
     """Canonical candidate entity names in a question: extracted entities, plus lowercased
     uni/bi/tri-grams so 'adjusted ebitda' matches even when not capitalised."""
-    names: list[str] = [canonical_entity(e) for e in extract_entities(query)]
-    words = [w for w in _WORD.findall(query) if w.casefold() not in _IGNORE]
-    lowered = [w.casefold() for w in words]
+    if max_terms <= 0:
+        return []
+    names: dict[str, None] = {}
+    for name in _query_names(query):
+        names.setdefault(name, None)
+        if len(names) >= max_terms * 3:
+            break
+    return list(names)
+
+
+def _query_names(query: str) -> Iterator[str]:
+    yield from (canonical_entity(e) for e in extract_entities(query))
+    raw = (
+        _WORD.findall(query)
+        if query.isascii()
+        else unicode_tokens(query, _WORD.findall, max_ngram=4)
+    )
+    lowered = [w.casefold() for w in raw if w.casefold() not in _IGNORE]
+    # A Latin name inside CJK text has no Unicode word boundary (e.g. 誰がAcmeを).
+    # Preserve whole script-separated words before bounded CJK n-grams exhaust the cap.
+    if not query.isascii():
+        yield from (word for word in lowered if word.isascii() and len(word) >= 3)
+    # Direct script terms cannot be recovered by adding spaces between CJK characters.
+    # Keep them before the ordinary word n-grams; never scan the whole entity table.
+    yield from (word for word in lowered if not word.isascii() and len(word) >= 2)
     for n in (3, 2, 1):
         for i in range(len(lowered) - n + 1):
             gram = " ".join(lowered[i : i + n])
-            if len(gram) >= 3 and gram not in names:
-                names.append(gram)
-    return names[: max_terms * 3]
+            if len(gram) >= 3:
+                yield gram
 
 
 class GraphService:
@@ -110,23 +133,27 @@ class GraphService:
         now = datetime.now(UTC)
         found = {m.memory_id for m in memories}
         n = 0
+        removed = 0
         with (
             span("graph.enrich_memories", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
         ):
             for mid in memory_ids:
                 if mid not in found:
-                    await self.store.supersede_for_memory(tenant_id, mid, at=now)
+                    removed += await self.store.supersede_for_memory(tenant_id, mid, at=now)
             for m in memories:
-                if m.temporal.status.value != "CURRENT":
-                    await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
+                if m.temporal.status.value != "CURRENT" or unverified_representation(
+                    m.system_metadata
+                ):
+                    removed += await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
                     continue
                 ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=m.scope.user_id)
-                entities, relations = await self.provider.enrich_memory(m, ctx)
+                with model_identity(tenant_id, m.owner_principal):
+                    entities, relations = await self.provider.enrich_memory(m, ctx)
                 await self.store.upsert_entities(entities)
                 await self.store.upsert_relations(relations)
                 n += len(relations)
-        if n:
+        if n or removed:
             async with self.uow_factory() as uow:
                 await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
                 await uow.commit()
@@ -152,6 +179,7 @@ class GraphService:
         )
         ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=document.owner_user_id)
         with (
+            model_identity(tenant_id, document.model_principal),
             span("graph.enrich_document", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
         ):

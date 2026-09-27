@@ -19,6 +19,7 @@ from typing import Any
 
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import Representation
+from memory_service.domain.text import SENTENCE_BREAK, unicode_tokens
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.native import _STOP as STOP_WORDS
 
@@ -72,15 +73,18 @@ def sentences(text: str) -> list[str]:
         for segment in re.split(r"\s+(?=\|)", line):
             if segment.startswith("|"):
                 continue  # inline table fragment
-            for piece in _SENT.split(segment):
+            splitter = _SENT if segment.isascii() else SENTENCE_BREAK
+            for piece in splitter.split(segment):
                 s = piece.strip().strip("*#- ")
-                if 25 <= len(s) <= 400:
+                minimum = 25 if s.isascii() else 8
+                if minimum <= len(s) <= 400:
                     out.append(s)
     return out
 
 
 def _terms(text: str) -> list[str]:
-    return [w for w in _WORD.findall(text.lower()) if w not in STOP_WORDS and len(w) > 2]
+    words = _WORD.findall(text.lower()) if text.isascii() else unicode_tokens(text, _WORD.findall)
+    return [w for w in words if w not in STOP_WORDS and len(w) > (2 if w.isascii() else 1)]
 
 
 def summarize(text: str, *, max_sentences: int = 3, max_chars: int = 600) -> str:

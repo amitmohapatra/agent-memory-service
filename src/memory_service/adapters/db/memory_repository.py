@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from memory_service.adapters.db.orm import (
     MemoryDependencyRow,
@@ -28,7 +29,23 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.evidence import EvidenceRef
-from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
+from memory_service.domain.memory import (
+    UNVERIFIED_MEMORY_CATEGORIES,
+    CanonicalMemory,
+    Scope,
+    TemporalState,
+)
+
+
+def _asserted_source_filter() -> ColumnElement[bool]:
+    """The same source-trust boundary for incremental and on-landing consolidation."""
+    return and_(
+        MemoryRow.derived_slot.is_(None),
+        func.coalesce(MemoryRow.system_metadata["category"].astext, "").not_in(
+            UNVERIFIED_MEMORY_CATEGORIES
+        ),
+        MemoryRow.provider.is_distinct_from("llm"),
+    )
 
 
 def _to_domain(r: MemoryRow) -> CanonicalMemory:
@@ -471,8 +488,7 @@ class SqlMemoryRepository:
             .where(
                 MemoryRow.deleted_at.is_(None),
                 MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
-                MemoryRow.derived_slot.is_(None),
-                MemoryRow.system_metadata["category"].astext.is_distinct_from("reflection"),
+                _asserted_source_filter(),
                 or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
                 or_(progress.memory_id.is_(None), progress.source_revision != MemoryRow.revision),
                 func.length(MemoryRow.content) <= REFLECTION_SOURCE_CHARS,
@@ -547,8 +563,7 @@ class SqlMemoryRepository:
             if include_verbatim:
                 source_categories.append("verbatim_turn")
             stmt = stmt.where(
-                MemoryRow.derived_slot.is_(None),
-                MemoryRow.system_metadata["category"].astext.is_distinct_from("reflection"),
+                _asserted_source_filter(),
                 or_(
                     MemoryRow.memory_type.not_in(
                         [

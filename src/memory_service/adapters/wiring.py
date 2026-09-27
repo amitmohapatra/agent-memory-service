@@ -318,17 +318,28 @@ def _wire_models(container: Container) -> None:
 
 def _wire_llm(container: Container) -> None:
     """The generative model is optional and reachable only through the Bifrost gateway."""
+    from memory_service.adapters.models.credential_cipher import AesCredentialCipher
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
+    from memory_service.modules.llm.credentials import AgentCredentials
 
+    credentials = AgentCredentials(
+        container.services["uow_factory"], AesCredentialCipher(container.settings.agent_credentials)
+    )
+    container.services["agent_credentials"] = credentials
     cfg = container.settings.models.llm
     if not cfg.enabled:
         container.llm = DisabledLLM()
         container.services["llm_assist"] = LLMAssist.disabled()
         return
-    llm = BifrostLLM(cfg, log_source_text=constants.LOG_SOURCE_TEXT)
+    llm = BifrostLLM(cfg, log_source_text=constants.LOG_SOURCE_TEXT, credentials=credentials)
     container.llm = llm
     container.services["llm_assist"] = LLMAssist(llm, cfg)
+    if cfg.enabled == "auto" and not cfg.api_key:
+        # Agent credentials are resolved only in their authenticated request/job scope.
+        # An unauthenticated background health probe cannot represent their gateway access.
+        container.add_closer("llm", llm.close)
+        return
     container.add_dependency(
         Dependency(name="llm", mandatory=False, ping=llm.ping, close=llm.close)
     )
@@ -339,6 +350,7 @@ def _wire_nli(container: Container) -> None:
     the deterministic stand-in with a warning when its weights cannot be loaded; reports
     then say ``representative: false``."""
     from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
+    from memory_service.adapters.models.onnx_nli import OnnxNLI
     from memory_service.domain.errors import DependencyUnavailable
     from memory_service.modules.grounding.cascade import GroundingCascade
 
@@ -347,7 +359,11 @@ def _wire_nli(container: Container) -> None:
         container.nli = None
         return
     nli: Any = LexicalNLI()
-    if stand_in != "lexical":
+    if stand_in != "lexical" and FROZEN_MODELS.nli.runtime == "onnx":
+        # An explicitly frozen graph must load. A lexical substitute cannot provide
+        # the multilingual verification contract of a trained model.
+        nli = OnnxNLI(FROZEN_MODELS.nli, threads=_model_threads(container))
+    elif stand_in != "lexical":
         try:
             # torch.set_num_threads is process-wide and the NLI head loads *after* the
             # encoder, so whatever it sets is what the encoder ends up running with. Left to
@@ -416,6 +432,11 @@ def _wire_retrieval(container: Container) -> None:
         assist=container.services["llm_assist"],
     )
     container.services["context_builder"] = builder
+    from memory_service.modules.briefs.service import BriefService
+
+    container.services["briefs"] = BriefService(
+        container.services["uow_factory"], builder, container.services["llm_assist"]
+    )
     # The builder buffers served-memory ids for up to access_flush_seconds and writes bundles
     # to the cache in the background. Without this, SIGTERM drops a whole window of both, per
     # worker, on every rolling deploy - for the counter the forgetting policy reads.
@@ -433,8 +454,18 @@ def _wire_memory(container: Container) -> None:
     from memory_service.ports.intelligence import MemoryIntelligenceProvider
 
     cfg = container.tuning.memory_intelligence
+    extractor = None
+    llm = container.settings.models.llm
+    if llm.enabled is True and llm.wants("contextual_extraction"):
+        from memory_service.adapters.models.hindsight import HindsightExtractor
+
+        extractor = HindsightExtractor(container.settings.hindsight)
+        container.add_closer("hindsight_extractor", extractor.close)
     provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
-        cfg, container.embedding, assist=container.services["llm_assist"]
+        cfg,
+        container.embedding,
+        assist=container.services["llm_assist"],
+        contextual_extractor=extractor,
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
@@ -442,9 +473,7 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
-        landing=LandingReflection(cfg)
-        if container.services["llm_assist"].wants("contextual_extraction")
-        else None,
+        landing=LandingReflection(cfg) if cfg.consolidation_enabled else None,
     )
     container.services["memory"] = MemoryService(container.services["authz"])
     container.services["forgetting"] = ForgettingService(

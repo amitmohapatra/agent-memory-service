@@ -24,6 +24,7 @@ from typing import Any
 from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ContextGraphEdge, EvidenceStatus, QueryType
+from memory_service.domain.text import unicode_tokens
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.expansion import edges_to_groups, evidence_group_key
 from memory_service.modules.memory.native import _STOP as STOP_WORDS
@@ -56,7 +57,8 @@ _REQUIRED_EDGES = (
 
 def content_terms(text: str) -> set[str]:
     lowered = text.lower()
-    terms = {w for w in _WORD.findall(lowered) if w not in STOP_WORDS and len(w) > 2}
+    words = _WORD.findall(lowered) if text.isascii() else unicode_tokens(text, _WORD.findall)
+    terms = {w for w in words if w not in STOP_WORDS and len(w) > (2 if w.isascii() else 1)}
     for run in _CJK.findall(lowered):
         # a lone ideograph is too common to carry signal; bigrams are the usual unit
         terms.update(run[i : i + 2] for i in range(len(run) - 1))
@@ -104,15 +106,16 @@ def overlaps(
 def _conflicting_memories(candidates: Sequence[Candidate]) -> list[tuple[str, str]]:
     """Pairs of retrieved memories that are linked as contradicting (multi-agent conflicts
     the consolidator refused to resolve silently)."""
-    ids = {c.record_id for c in candidates if c.kind == "memory"}
-    out: list[tuple[str, str]] = []
-    for c in candidates:
-        if c.kind != "memory":
-            continue
-        for other in c.payload.get("contradicts", []) or []:
-            if other in ids and (other, c.record_id) not in out:
-                out.append((c.record_id, other))
-    return out
+    memories = {c.record_id: c for c in candidates if c.kind == "memory"}
+    # Hash each undirected pair once: repeated and reciprocal links cannot multiply
+    # conflicts, and deduplication no longer scans an ever-growing output list.
+    pairs = {
+        (min(c.record_id, other), max(c.record_id, other))
+        for c in memories.values()
+        for other in c.payload.get("contradicts", []) or []
+        if other in memories
+    }
+    return sorted(pairs)
 
 
 _CAPITALISED = re.compile(r"\b([A-Z][a-z]{2,})(?:'s)?\b")

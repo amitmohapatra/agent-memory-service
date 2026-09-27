@@ -17,6 +17,7 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_identity
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -104,7 +105,8 @@ class Indexer:
     async def embed_cached(self, texts: Sequence[str], hashes: Sequence[str]) -> list[list[float]]:
         """Embed with a content-hash cache keyed by the embedding fingerprint."""
         out: list[list[float] | None] = [None] * len(texts)
-        keys = [f"emb:{self.embedding.fingerprint()}:{h}" for h in hashes]
+        fingerprint = self.embedding.fingerprint()
+        keys = [f"emb:{fingerprint}:{h}" for h in hashes]
         if self.cache is not None:
             try:
                 cached = await self.cache.mget(keys)
@@ -142,6 +144,7 @@ class Indexer:
         if not chunks or document is None:
             return 0
         with (
+            model_identity(tenant_id, document.model_principal),
             span("index.document", tenant_id=tenant_id),
             stage_seconds.labels("index.document").time(),
         ):
@@ -153,7 +156,8 @@ class Indexer:
             )
             # hierarchical summaries (M9): one per section/subsection/document, indexed as
             # kind="summary" records so GLOBAL_SUMMARY questions can find them
-            summaries = build_summaries(nodes, all_chunks, title=document.title)
+            extractive = build_summaries(nodes, all_chunks, title=document.title)
+            summaries = extractive
             if self.assist.wants("summaries"):
                 summaries = await abstractive_summaries(
                     self.assist, nodes, all_chunks, summaries, title=document.title
@@ -164,9 +168,13 @@ class Indexer:
                 tenant_id=tenant_id,
                 document=document,
                 visibility_keys=keys,
+                generated_ids={nid for nid, value in summaries.items() if value != extractive[nid]},
             )
             async with self.uow_factory() as uow:
-                await uow.documents.set_node_summaries(tenant_id, summaries)
+                # SQL summaries feed parent expansion, which has no generated-provenance
+                # column. Keep that evidence extractive; generated search representations
+                # above carry their provider label and cannot prove their own claims.
+                await uow.documents.set_node_summaries(tenant_id, extractive)
                 await uow.documents.mark_chunks_indexed(
                     [c.chunk_id for c in chunks],
                     fingerprint=self.fingerprint,
@@ -174,7 +182,9 @@ class Indexer:
                 )
                 await uow.commit()
             stale = await self._purge_superseded(
-                tenant_id, document_id, keep={c.chunk_id for c in all_chunks}
+                tenant_id,
+                document_id,
+                keep={c.chunk_id for c in all_chunks} | {f"sum_{nid}" for nid in summaries},
             )
         log.info(
             "index.document_done",
@@ -207,7 +217,7 @@ class Indexer:
         except Exception as exc:  # a purge failure must not fail the indexing that preceded it
             log.warning("index.purge_failed", document_id=document_id, error=type(exc).__name__)
             return 0
-        stale = [r for r in present if r.startswith("chk_") and r not in keep]
+        stale = [r for r in present if r.startswith(("chk_", "sum_")) and r not in keep]
         if stale:
             await self.store.delete(collection, stale)
         return len(stale)
@@ -220,6 +230,7 @@ class Indexer:
         tenant_id: str,
         document: Document,
         visibility_keys: Sequence[str],
+        generated_ids: set[str],
     ) -> None:
         if not summaries:
             return
@@ -237,6 +248,7 @@ class Indexer:
                 sparse=sparse[i],
                 payload={
                     "kind": "summary",
+                    "provider": "llm" if nid in generated_ids else "native",
                     "visibility_keys": list(visibility_keys),
                     "document_id": document.document_id,
                     "document_title": document.title,
@@ -331,7 +343,10 @@ class Indexer:
                             "kind": "memory",
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
                             "memory_type": m.memory_type.value,
+                            "category": m.system_metadata.get("category"),
+                            "provider": m.system_metadata.get("provider"),
                             "derived": bool(m.system_metadata.get("source_revisions")),
+                            "source_observed_to": m.system_metadata.get("source_observed_to"),
                             # lifetime, temporal_status, representation and thread_id are
                             # not written: no reader reads them and the payload projection
                             # (ports.search.PAYLOAD_FIELDS) would not return them if one

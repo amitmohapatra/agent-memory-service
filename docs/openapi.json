@@ -1,6 +1,71 @@
 {
   "components": {
     "schemas": {
+      "AgentKeyRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "scope": {
+              "agent_id": "research"
+            },
+            "virtual_key": "vk-example"
+          }
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "virtual_key": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Virtual Key",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "scope",
+          "virtual_key"
+        ],
+        "title": "AgentKeyRequest",
+        "type": "object"
+      },
+      "AgentKeyStatus": {
+        "properties": {
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "registered",
+          "revoked",
+          "revision"
+        ],
+        "title": "AgentKeyStatus",
+        "type": "object"
+      },
       "ArchiveStatus": {
         "enum": [
           "STAGED",
@@ -135,6 +200,176 @@
         "title": "Body_upload_file_v1_files_post",
         "type": "object"
       },
+      "BriefInfo": {
+        "properties": {
+          "brief_id": {
+            "title": "Brief Id",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/BriefSpec"
+          }
+        },
+        "required": [
+          "brief_id",
+          "spec"
+        ],
+        "title": "BriefInfo",
+        "type": "object"
+      },
+      "BriefOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "built_at": {
+            "format": "date-time",
+            "title": "Built At",
+            "type": "string"
+          },
+          "generated": {
+            "default": false,
+            "title": "Generated",
+            "type": "boolean"
+          },
+          "generation_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque model/prompt fingerprint; absent for extractive or legacy output.",
+            "title": "Generation Profile"
+          },
+          "revision_fingerprint": {
+            "title": "Revision Fingerprint",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ContextItem"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "valid_until": {
+            "format": "date-time",
+            "title": "Valid Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "revision_fingerprint",
+          "valid_until"
+        ],
+        "title": "BriefOutput",
+        "type": "object"
+      },
+      "BriefRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ScopeBody"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/BriefSpec"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "title": "BriefRequest",
+        "type": "object"
+      },
+      "BriefResponse": {
+        "properties": {
+          "brief_id": {
+            "title": "Brief Id",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BriefOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spec": {
+            "$ref": "#/components/schemas/BriefSpec"
+          },
+          "status": {
+            "description": "pending means no refresh has completed; ready is a current stored result; stale hides output until evidence or authorization changes are refreshed.",
+            "enum": [
+              "pending",
+              "ready",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brief_id",
+          "spec",
+          "status"
+        ],
+        "title": "BriefResponse",
+        "type": "object"
+      },
+      "BriefSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "mental_model",
+            "description": "mental_model maintains a standing answer; knowledge_page maintains a titled evidence page. Both share refresh and authorization rules.",
+            "enum": [
+              "mental_model",
+              "knowledge_page"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "refresh_seconds": {
+            "default": 3600,
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Refresh Seconds",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "use_llm": {
+            "default": false,
+            "title": "Use Llm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "title",
+          "question"
+        ],
+        "title": "BriefSpec",
+        "type": "object"
+      },
       "ClaimVerdictBody": {
         "additionalProperties": false,
         "examples": [
@@ -234,6 +469,141 @@
           "verdict"
         ],
         "title": "ClaimVerdictBody",
+        "type": "object"
+      },
+      "ContextItem": {
+        "description": "One ranked piece of context.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "structured extras: predicate/subject/object for facts and memories, fact attributes (period, currency, amount...), contradicts/contributors",
+            "title": "Attributes",
+            "type": "object"
+          },
+          "citation": {
+            "description": "stable citation key",
+            "title": "Citation",
+            "type": "string"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "expanded_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "item_id this was expanded from",
+            "title": "Expanded From"
+          },
+          "expansion_edge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PARENT | NEXT | DEFINED_BY | ...",
+            "title": "Expansion Edge"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "relevance": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "representation": {
+            "$ref": "#/components/schemas/Representation"
+          },
+          "retrievers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Retrievers",
+            "type": "array"
+          },
+          "score": {
+            "default": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "score_kind": {
+            "default": "fusion",
+            "description": "fusion is rank aggregation; cross_encoder is neural reranking; exact is an identifier match. Use relevance to compare across kinds.",
+            "enum": [
+              "cross_encoder",
+              "fusion",
+              "exact"
+            ],
+            "title": "Score Kind",
+            "type": "string"
+          },
+          "section_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "e.g. 'Financial Results > EBITDA'",
+            "title": "Section Path"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "token_estimate": {
+            "default": 0,
+            "title": "Token Estimate",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "representation",
+          "text",
+          "citation"
+        ],
+        "title": "ContextItem",
         "type": "object"
       },
       "ContextItemBody": {
@@ -457,6 +827,12 @@
               6000
             ],
             "title": "Token Budget"
+          },
+          "use_llm": {
+            "default": false,
+            "description": "Allow configured LLM assistance on this read, independently of ingestion.",
+            "title": "Use Llm",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1757,6 +2133,11 @@
           },
           "scope": {
             "$ref": "#/components/schemas/ScopeBody"
+          },
+          "use_llm": {
+            "default": false,
+            "title": "Use Llm",
+            "type": "boolean"
           }
         },
         "title": "GraphQueryRequest",
@@ -2996,6 +3377,12 @@
           }
         ],
         "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "Source provenance and qualifiers, including model-extracted status.",
+            "title": "Attributes",
+            "type": "object"
+          },
           "citation": {
             "title": "Citation",
             "type": "string"
@@ -3179,6 +3566,12 @@
                 "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
               }
             ]
+          },
+          "use_llm": {
+            "default": false,
+            "description": "Allow configured LLM assistance on this read, independently of ingestion.",
+            "title": "Use Llm",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3811,6 +4204,12 @@
           }
         ],
         "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "Evidence provenance; model-generated text cannot prove itself.",
+            "title": "Attributes",
+            "type": "object"
+          },
           "citation": {
             "anyOf": [
               {
@@ -4008,6 +4407,12 @@
               null
             ],
             "title": "Unused"
+          },
+          "use_llm": {
+            "default": false,
+            "description": "Allow configured LLM assistance on this read, independently of ingestion.",
+            "title": "Use Llm",
+            "type": "boolean"
           }
         },
         "required": [
@@ -4334,6 +4739,2018 @@
         ]
       }
     },
+    "/v1/agents/model-key": {
+      "delete": {
+        "operationId": "revoke_key_v1_agents_model_key_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Revoke the acting agent's model key and invalidate assisted read caches",
+        "tags": [
+          "agents"
+        ]
+      },
+      "get": {
+        "operationId": "key_status_v1_agents_model_key_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Read the acting agent's model-key status, without its secret",
+        "tags": [
+          "agents"
+        ]
+      },
+      "put": {
+        "operationId": "set_key_v1_agents_model_key_put",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Register or rotate the acting agent's encrypted Bifrost virtual key",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/v1/briefs": {
+      "get": {
+        "operationId": "list_briefs_v1_briefs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "After",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BriefInfo"
+                  },
+                  "title": "Response List Briefs V1 Briefs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List brief definitions in the exact execution scope (no generated content)",
+        "tags": [
+          "briefs"
+        ]
+      },
+      "post": {
+        "operationId": "create_brief_v1_briefs_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Create a standing question or knowledge page and queue its refresh",
+        "tags": [
+          "briefs"
+        ]
+      }
+    },
+    "/v1/briefs/{brief_id}": {
+      "delete": {
+        "operationId": "delete_brief_v1_briefs__brief_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Delete a brief definition and its stored output",
+        "tags": [
+          "briefs"
+        ]
+      },
+      "get": {
+        "operationId": "read_brief_v1_briefs__brief_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Work Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Read fresh stored evidence or synthesis without model calls",
+        "tags": [
+          "briefs"
+        ]
+      },
+      "put": {
+        "operationId": "update_brief_v1_briefs__brief_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "brief_id",
+            "required": true,
+            "schema": {
+              "title": "Brief Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BriefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Replace a brief definition and queue refresh",
+        "tags": [
+          "briefs"
+        ]
+      }
+    },
     "/v1/context": {
       "post": {
         "operationId": "context_v1_context_post",
@@ -4506,6 +6923,22 @@
                 }
               ],
               "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {
@@ -5130,6 +7563,22 @@
           },
           {
             "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "work_id",
             "required": false,
             "schema": {
@@ -5649,6 +8098,22 @@
           },
           {
             "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "work_id",
             "required": false,
             "schema": {
@@ -5911,6 +8376,22 @@
                 }
               ],
               "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {
@@ -6342,6 +8823,22 @@
                 }
               ],
               "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {
@@ -7240,6 +9737,22 @@
           },
           {
             "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "work_id",
             "required": false,
             "schema": {
@@ -7493,6 +10006,22 @@
                 }
               ],
               "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {
@@ -7796,6 +10325,22 @@
               "description": "Include INTERNAL agent/tool messages (lineage owners only)",
               "title": "Include Internal",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {

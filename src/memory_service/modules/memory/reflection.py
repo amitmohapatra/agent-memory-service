@@ -20,11 +20,12 @@ from memory_service.config.constants import REFLECTION_SOURCE_CHARS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType
 from memory_service.domain.errors import ValidationFailed
-from memory_service.domain.memory import CanonicalMemory
-from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_identity
 from memory_service.modules.memory.derived import _derived
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
@@ -192,6 +193,7 @@ class ReflectionService:
         *,
         now: datetime | None = None,
     ) -> list[str]:
+        memories = [m for m in memories if not unverified_representation(m.system_metadata)]
         if not memories or not self.assist.wants("reflection"):
             return []
         group = (
@@ -219,18 +221,20 @@ class ReflectionService:
             prompt_size += line_size
         if len(included) < 2:
             return []
-        out = await self.assist.structured(
-            "reflection",
-            system=_SYSTEM.format(n=self.max_insights),
-            user=self._prompt(principal, included),
-            schema=_SCHEMA,
-            max_tokens=2048,
-        )
+        with model_identity(tenant_id, principal):
+            out = await self.assist.structured(
+                "reflection",
+                system=_SYSTEM.format(n=self.max_insights),
+                user=self._prompt(principal, included),
+                schema=_SCHEMA,
+                max_tokens=2048,
+            )
         if out is None:
             return []
         by_id = {m.memory_id: m for m in included}
         ctx = _context_for(tenant_id, principal, memories)
         stored: list[str] = []
+        stored_memories: list[CanonicalMemory] = []
         async with self.uow_factory() as uow:
             for raw in list(out.get("insights") or [])[: self.max_insights]:
                 memory = self._insight(raw, by_id, ctx, now=now)
@@ -246,6 +250,7 @@ class ReflectionService:
                 except ValidationFailed:
                     continue  # A source changed while the model was working; discard stale output.
                 stored.append(memory.memory_id)
+                stored_memories.append(memory)
             if stored:
                 await uow.enqueue(
                     JobSpec(
@@ -256,10 +261,7 @@ class ReflectionService:
                         tenant_id=tenant_id,
                     )
                 )
-                if ctx.user_id:
-                    await uow.revisions.bump(tenant_id, RevisionKind.USER, ctx.user_id)
-                if ctx.agent_id:
-                    await uow.revisions.bump(tenant_id, RevisionKind.AGENT, ctx.agent_id)
+                await bump_memory_revisions(uow, stored_memories)
             await uow.memories.mark_reflected(included, at=now)
             await uow.commit()
         if stored:
@@ -353,11 +355,12 @@ def _context_for(
     if kind == "user":
         return MemoryExecutionContext(tenant_id=tenant_id, workspace_id=workspace_id, user_id=ident)
     if kind == "agent":
-        user_id = next((m.scope.user_id for m in memories if m.scope.user_id), None)
+        owner, separator, agent_id = ident.partition("/")
+        user_id = owner if separator else None
         return MemoryExecutionContext(
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             user_id=user_id,
-            agent_id=memories[0].scope.agent_id or ident,
+            agent_id=agent_id if separator else ident,
         )
     return MemoryExecutionContext(tenant_id=tenant_id, workspace_id=workspace_id)

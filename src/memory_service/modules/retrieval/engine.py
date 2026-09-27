@@ -18,7 +18,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
@@ -98,6 +98,7 @@ class RetrievalResult:
     candidates: list[Candidate]
     visibility: VisibilitySpecification
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    query_embedding: list[float] | None = None
 
 
 def is_derived(candidate: Candidate) -> bool:
@@ -121,7 +122,10 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
         retrievers=[retriever],
         payload={
             "memory_type": memory.memory_type.value,
+            "category": memory.system_metadata.get("category"),
+            "provider": memory.system_metadata.get("provider"),
             "derived": bool(memory.system_metadata.get("source_revisions")),
+            "source_observed_to": memory.system_metadata.get("source_observed_to"),
             "temporal_status": memory.temporal.status.value,
             "subject": memory.subject,
             "predicate": memory.predicate,
@@ -175,7 +179,7 @@ class RetrievalEngine:
         self.reranker = reranker
         self.cfg = settings
         self.rerank_k = rerank_k
-        self.router = router or QueryRouter()
+        self.router = router or QueryRouter(semantic_graph=settings.semantic_graph)
         self.assist = assist or LLMAssist.disabled()
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
@@ -194,10 +198,12 @@ class RetrievalEngine:
         kinds: Sequence[str] = ("chunk", "memory"),
         document_ids: Sequence[str] | None = None,
         visibility: VisibilitySpecification | None = None,
+        query_embedding: tuple[str, list[float]] | None = None,
     ) -> RetrievalResult:
         explicit_limit = limit is not None
         limit = limit or self.cfg.final_k
         selected_documents = frozenset(document_ids or ())
+        selected_kinds = frozenset(kinds)
         # Bound the query before anything expensive touches it. See
         # RetrievalSettings.max_query_chars: the cost of a query is paid again for every
         # cross-encoder pair, and the embedding models truncate at 512 tokens anyway.
@@ -242,7 +248,13 @@ class RetrievalEngine:
             # here, the visibility lookup, the collection check, the exact lookups and the
             # graph traversal all run under it instead of after it; what is awaited later
             # is only whatever is left of it.
-            encode_task = asyncio.ensure_future(self._encode(search_text))
+            reused = (
+                query_embedding[1]
+                if query_embedding and query_embedding[0] == search_text
+                else None
+            )
+            encode_task = asyncio.ensure_future(self._encode(search_text, dense=reused))
+            encoded: tuple[list[float] | None, Any] = (None, None)
             prefetched: dict[str, asyncio.Future[Any]] = {}
             try:
                 if visibility is None:
@@ -265,9 +277,10 @@ class RetrievalEngine:
                 if routed.identifiers and self.cfg.exact:
                     with timings.stage("exact"):
                         candidates.extend(
-                            _within_documents(
+                            _within_selection(
                                 await self._exact(ctx, routed.identifiers, visibility),
                                 selected_documents,
+                                selected_kinds,
                             )
                         )
                     diagnostics["exact_hits"] = len(candidates)
@@ -289,7 +302,7 @@ class RetrievalEngine:
                 )
                 if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
                     wanted = list(kinds)
-                    if routed.needs_summaries and "summary" not in wanted:
+                    if routed.needs_summaries and "chunk" in wanted and "summary" not in wanted:
                         wanted.append("summary")
                     wanted = [
                         kind
@@ -328,7 +341,7 @@ class RetrievalEngine:
                 # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate
                 #    texts (copies of the same document) so they cannot crowd out other
                 #    evidence
-                candidates = _within_documents(candidates, selected_documents)
+                candidates = _within_selection(candidates, selected_documents, selected_kinds)
                 if (
                     self.cfg.memory_entity_search
                     and routed.query_type is not QueryType.EXACT_IDENTIFIER
@@ -394,7 +407,9 @@ class RetrievalEngine:
                     # retrieved but ranked out: the grounding cascade scans these for
                     # contradictions
                     diagnostics["unused"] = [
-                        {"record_id": c.record_id, "kind": c.kind, "text": c.text} for c in unused
+                        {"record_id": c.record_id, "kind": c.kind, "text": c.text}
+                        for c in unused
+                        if not unverified_representation(c.payload)
                     ]
                 # 5. strategy hooks (graph M8, expansion/verification M9)
                 for name, stage in self.post_stages.items():
@@ -403,9 +418,9 @@ class RetrievalEngine:
                         candidates = await stage(
                             ctx, routed, candidates, visibility, diagnostics, **extra
                         )
-                    # A document selector constrains every retrieval path, including exact
-                    # lookups, graph facts and companions, before the next stage reads them.
-                    candidates = _within_documents(candidates, selected_documents)
+                    # Source selectors constrain graph facts and companions before any
+                    # later stage consumes them, just as they constrain ranked search.
+                    candidates = _within_selection(candidates, selected_documents, selected_kinds)
                     diagnostics.setdefault("stages", []).append(name)
                 if self.post_stages:
                     candidates = _cap_evidence(candidates, limit)
@@ -415,13 +430,18 @@ class RetrievalEngine:
                 candidates = await self._expand_derived_sources(
                     ctx, candidates, visibility, diagnostics
                 )
+                candidates = _within_selection(candidates, selected_documents, selected_kinds)
             finally:
                 # an exact hit never needs the encoding; a stage that raised never consumed
                 # its prefetch - neither may outlive the request or log as never retrieved
                 for task in (encode_task, *prefetched.values()):
                     _discard(task)
         return RetrievalResult(
-            routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
+            routed=routed,
+            candidates=candidates,
+            visibility=visibility,
+            diagnostics=diagnostics,
+            query_embedding=encoded[0],
         )
 
     async def _expand_derived_sources(
@@ -692,7 +712,9 @@ class RetrievalEngine:
                 out.extend(await lookup(ctx, matching, visibility))
         return out
 
-    async def _encode(self, query: str) -> tuple[list[float] | None, Any]:
+    async def _encode(
+        self, query: str, *, dense: list[float] | None = None
+    ) -> tuple[list[float] | None, Any]:
         """Encode the query once for every kind that will be searched.
 
         This used to live inside ``_hybrid``, which is called once per kind — so a query
@@ -701,7 +723,8 @@ class RetrievalEngine:
         58.6 ms and dense on is p50 532.9 ms over an identical corpus, and the encoder alone
         is 178 ms mean. Hoisting it out is a pure refactor with no behavioural change.
         """
-        dense = await self.indexer.embedding.embed_query(query) if self.cfg.dense else None
+        if self.cfg.dense and dense is None:
+            dense = await self.indexer.embedding.embed_query(query)
         sparse = self.indexer.sparse.encode_query(query) if self.cfg.bm25 else None
         return dense, sparse
 
@@ -782,10 +805,33 @@ def diverse_head(candidates: list[Candidate], *, limit: int, per_document: int) 
     return preferred + overflow[: limit - len(preferred)]
 
 
-def _within_documents(candidates: list[Candidate], selected: frozenset[str]) -> list[Candidate]:
-    if not selected:
-        return candidates
-    return [c for c in candidates if c.payload.get("document_id") in selected]
+def _within_selection(
+    candidates: list[Candidate], documents: frozenset[str], kinds: frozenset[str]
+) -> list[Candidate]:
+    """Apply the same source contract to every retrieval path in linear time.
+
+    Summaries belong to documents. Relations accompany their selected source; a
+    relation without source lineage is eligible only for an unrestricted source query.
+    """
+    unrestricted = {"chunk", "memory"} <= kinds
+    out: list[Candidate] = []
+    for candidate in candidates:
+        payload = candidate.payload
+        if documents and payload.get("document_id") not in documents:
+            continue
+        allowed = candidate.kind in kinds
+        if candidate.kind == "summary":
+            allowed = allowed or "chunk" in kinds
+        elif candidate.kind == "fact":
+            allowed = (
+                allowed
+                or unrestricted
+                or ("chunk" in kinds and bool(payload.get("document_id")))
+                or ("memory" in kinds and bool(payload.get("memory_id")))
+            )
+        if allowed:
+            out.append(candidate)
+    return out
 
 
 def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:

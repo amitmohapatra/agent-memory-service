@@ -1,0 +1,133 @@
+{
+  "dataset_sha256": "1b304c7c3d98ff9cef5efd02100a4dfa93fc9ee3babaceca752df9f9aa90b42d",
+  "llm_calls": 0,
+  "arms": {
+    "changed_granite": {
+      "input_sha256": "b5d5ca83994680917a49e56361bcd5dd9dd06345acecdf6f9bb93227107bd28c",
+      "buckets": {
+        "temporal": {
+          "complete_at_50": 264,
+          "complete_only_at_100": 18,
+          "represented_but_incomplete_at_100": 36,
+          "observed_source_not_represented": 2,
+          "gold_id_not_in_dataset": 1
+        },
+        "all": {
+          "complete_at_50": 1090,
+          "complete_only_at_100": 109,
+          "represented_but_incomplete_at_100": 322,
+          "observed_source_not_represented": 12,
+          "gold_id_not_in_dataset": 3
+        },
+        "open_domain": {
+          "complete_only_at_100": 8,
+          "complete_at_50": 39,
+          "represented_but_incomplete_at_100": 42,
+          "observed_source_not_represented": 3
+        },
+        "multi_hop": {
+          "complete_at_50": 91,
+          "represented_but_incomplete_at_100": 154,
+          "complete_only_at_100": 33,
+          "observed_source_not_represented": 2,
+          "gold_id_not_in_dataset": 2
+        },
+        "single_hop": {
+          "complete_at_50": 696,
+          "represented_but_incomplete_at_100": 90,
+          "complete_only_at_100": 50,
+          "observed_source_not_represented": 5
+        }
+      },
+      "annotation_issues": [
+        {
+          "conversation": 3,
+          "question": "What things has Nate reccomended to Joanna?",
+          "unknown_gold_ids": [
+            "D10:19"
+          ]
+        },
+        {
+          "conversation": 6,
+          "question": "What happened to John's job situation in 2022?",
+          "unknown_gold_ids": [
+            "D4:36"
+          ]
+        },
+        {
+          "conversation": 9,
+          "question": "When did Dave buy a vintage camera?",
+          "unknown_gold_ids": [
+            "D30:05"
+          ]
+        }
+      ]
+    },
+    "changed_e5": {
+      "input_sha256": "9d48218ef8f23bd1032d151b56d15a944997cfc57d531b4b05938c15b80d1a64",
+      "buckets": {
+        "temporal": {
+          "complete_at_50": 265,
+          "complete_only_at_100": 14,
+          "represented_but_incomplete_at_100": 39,
+          "observed_source_not_represented": 2,
+          "gold_id_not_in_dataset": 1
+        },
+        "all": {
+          "complete_at_50": 1124,
+          "represented_but_incomplete_at_100": 304,
+          "complete_only_at_100": 93,
+          "observed_source_not_represented": 12,
+          "gold_id_not_in_dataset": 3
+        },
+        "open_domain": {
+          "represented_but_incomplete_at_100": 45,
+          "complete_at_50": 36,
+          "complete_only_at_100": 8,
+          "observed_source_not_represented": 3
+        },
+        "multi_hop": {
+          "complete_at_50": 101,
+          "represented_but_incomplete_at_100": 147,
+          "complete_only_at_100": 30,
+          "observed_source_not_represented": 2,
+          "gold_id_not_in_dataset": 2
+        },
+        "single_hop": {
+          "complete_at_50": 722,
+          "represented_but_incomplete_at_100": 73,
+          "complete_only_at_100": 41,
+          "observed_source_not_represented": 5
+        }
+      },
+      "annotation_issues": [
+        {
+          "conversation": 3,
+          "question": "What things has Nate reccomended to Joanna?",
+          "unknown_gold_ids": [
+            "D10:19"
+          ]
+        },
+        {
+          "conversation": 6,
+          "question": "What happened to John's job situation in 2022?",
+          "unknown_gold_ids": [
+            "D4:36"
+          ]
+        },
+        {
+          "conversation": 9,
+          "question": "When did Dave buy a vintage camera?",
+          "unknown_gold_ids": [
+            "D30:05"
+          ]
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Diagnostic buckets use exact source IDs, not answer correctness.",
+    "The reported score denominator remains unchanged; invalid annotations are not removed.",
+    "A source-ID hit can be a fragment that omits the answer."
+  ]
+}
