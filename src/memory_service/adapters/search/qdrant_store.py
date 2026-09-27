@@ -369,7 +369,10 @@ class QdrantSearchStore:
         flt: SearchFilter,
         limit: int,
         prefetch_limit: int,
+        rrf_k: int = 1,
     ) -> list[SearchHit]:
+        if rrf_k < 0:
+            raise ValueError("rrf_k must be nonnegative")
         prefetch: list[models.Prefetch] = []
         qf = _filter(flt)
         if dense is not None:
@@ -412,7 +415,15 @@ class QdrantSearchStore:
                     lambda: self._client.query_points(
                         collection_name=self._name(collection),
                         prefetch=prefetch,
-                        query=models.FusionQuery(fusion=models.Fusion.RRF),
+                        # Keep the historical wire query for the default. Explicit RRF
+                        # has equal scores but may pick different cutoff ties on the
+                        # server. Custom constants translate our one-based ranks to
+                        # Qdrant's zero-based convention.
+                        query=(
+                            models.FusionQuery(fusion=models.Fusion.RRF)
+                            if rrf_k == 1
+                            else models.RrfQuery(rrf=models.Rrf(k=rrf_k + 1))
+                        ),
                         query_filter=qf,
                         limit=limit,
                         with_payload=_PAYLOAD,
@@ -422,7 +433,13 @@ class QdrantSearchStore:
                 raise DependencyUnavailable(
                     f"qdrant hybrid query failed: {type(exc).__name__}: {exc}"
                 ) from exc
-        return [self._hit(p, "fusion") for p in res.points]
+        # Native RRF leaves equal-score ordering unspecified. Resolve ties before the
+        # engine deduplicates/cuts the pool, or identical queries can pack different
+        # evidence. This stabilizes the returned pool without another RPC or wider search;
+        # it cannot stabilize membership when the server cuts through a tie at its limit.
+        hits = [self._hit(p, "fusion") for p in res.points]
+        hits.sort(key=lambda hit: (-hit.score, hit.record_id))
+        return hits
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
         if not record_ids:

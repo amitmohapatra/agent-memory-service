@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -144,7 +145,7 @@ async def test_graph_visibility_and_isolation(container, uow_factory) -> None:
     assert shared.relations and all("tenant:acme" in r.visibility_keys for r in shared.relations)
 
 
-async def test_memory_facts_supersession_and_as_of(container, uow_factory) -> None:
+async def test_memory_facts_supersession_and_as_of(container, uow_factory, monkeypatch) -> None:
     thread = new_id("thread")
     ctx = U1.model_copy(
         update={"thread_id": thread, "session_id": new_id("session"), "turn_id": new_id("turn")}
@@ -178,12 +179,25 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory) -> No
     assert old and old[0].status == "SUPERSEDED" and old[0].valid_to is not None
     # entity/relation questions reach the graph stage and return the typed fact
     engine = container.services["retrieval"]
+    # This verifies content and lifecycle, not the host's speed. The dedicated budget
+    # suite and real-model probes exercise the shipped 150 ms traversal deadline.
+    engine.post_stages["graph"].budget_seconds = 2.0
     res = await engine.retrieve(ctx, "who works for Globex?")
     assert res.routed.query_type is QueryType.ENTITY_RELATION
     facts = [c for c in res.candidates if c.kind == "fact"]
     assert any(
         c.payload["predicate"] == "works_at" and c.payload["status"] == "CURRENT" for c in facts
     )
+    # A graph hit must recover the source even when semantic/lexical retrieval misses it.
+    # Exercise the real graph, canonical SQL, post-stage cut and final context packing.
+    monkeypatch.setattr(engine, "_hybrid", AsyncMock(return_value=[]))
+    bundle = await container.services["context_builder"].build(ctx, "who works for Globex?")
+    recovered = next(m for m in bundle.memories if m.item_id == current[0].memory_id)
+    assert recovered.expansion_edge == "GRAPH_EVIDENCE"
+    assert recovered.citation == f"memory_id:{current[0].memory_id}"
+    async with uow_factory() as uow:
+        source = await uow.memories.get(ctx.tenant_id, current[0].memory_id)
+    assert recovered.evidence == source.evidence
     # forgetting the memory retires its facts
     async with uow_factory() as uow:
         await container.services["memory"].forget(uow, ctx, current[0].memory_id)

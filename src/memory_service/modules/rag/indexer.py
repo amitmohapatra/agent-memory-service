@@ -346,6 +346,9 @@ class Indexer:
                             "contradicts": list(m.temporal.contradicts),
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
+                            "source_refs": [
+                                ref.model_dump(mode="json", exclude_none=True) for ref in m.evidence
+                            ],
                             "text": m.content[:2000],
                             # so identical memories group in the store's payload rather than
                             # being rehashed on every retrieval (see engine._dedup)

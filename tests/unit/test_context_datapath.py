@@ -23,7 +23,7 @@ from memory_service.adapters.authz.memory_provider import MemoryAuthorizationPro
 from memory_service.adapters.cache.memory_cache import MemoryCache
 from memory_service.config.constants import CONTEXT, RETRIEVAL
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.context_bundle import ContextBundle
+from memory_service.domain.context_bundle import ContextBundle, ConversationWindow
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -580,3 +580,27 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
     assert response.json()["cache_hit"] is False
+
+
+async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens():
+    edge = "GRAPH_EVIDENCE"
+    builder = _builder(memories=3)
+    builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})
+    result = await builder.engine.retrieve(CTX, QUERY)
+    companion = Candidate(
+        record_id="mem_bridge",
+        kind="memory",
+        text="The missing bridge evidence.",
+        score=0.4,
+        retrievers=["graph"],
+        expansion_edge=edge,
+        expanded_from="graph",
+    )
+    result.candidates.append(companion)
+    bundle = builder._assemble(QUERY, result, ConversationWindow(), 500, "revision")
+    assert [m.item_id for m in bundle.memories] == ["mem_0", "mem_1", "mem_bridge"]
+    budget = sum(m.token_estimate for m in bundle.memories[:2])
+    tight = builder._assemble(QUERY, result, ConversationWindow(), budget, "revision")
+    assert [m.item_id for m in tight.memories] == ["mem_0", "mem_1"]
+    assert sum(m.token_estimate for m in tight.memories) <= budget
+

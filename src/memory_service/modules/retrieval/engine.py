@@ -17,6 +17,7 @@ from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.ids import content_hash
+from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
@@ -94,6 +95,33 @@ class RetrievalResult:
     candidates: list[Candidate]
     visibility: VisibilitySpecification
     diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -> Candidate:
+    """Project canonical evidence identically for exact and graph retrieval."""
+    return Candidate(
+        record_id=memory.memory_id,
+        kind="memory",
+        text=memory.content,
+        score=score,
+        retrievers=[retriever],
+        payload={
+            "memory_type": memory.memory_type.value,
+            "temporal_status": memory.temporal.status.value,
+            "subject": memory.subject,
+            "predicate": memory.predicate,
+            "object": memory.object,
+            "observed_at": memory.temporal.observed_at.isoformat(),
+            "valid_from": memory.temporal.valid_from.isoformat()
+            if memory.temporal.valid_from
+            else None,
+            "valid_to": memory.temporal.valid_to.isoformat() if memory.temporal.valid_to else None,
+            "source_refs": [
+                ref.model_dump(mode="json", exclude_none=True) for ref in memory.evidence
+            ],
+        },
+    )
+
 
 
 def rrf_fuse(
@@ -457,23 +485,7 @@ class RetrievalEngine:
                 for m in await uow.memories.get_many(ctx.tenant_id, memory_ids):
                     keys = m.system_metadata.get("visibility_keys", [])
                     if visibility.allows(m.tenant_id, keys):
-                        out.append(
-                            Candidate(
-                                record_id=m.memory_id,
-                                kind="memory",
-                                text=m.content,
-                                score=1.0,
-                                retrievers=["exact"],
-                                payload={
-                                    "memory_type": m.memory_type.value,
-                                    "temporal_status": m.temporal.status.value,
-                                    "subject": m.subject,
-                                    "predicate": m.predicate,
-                                    "object": m.object,
-                                    "observed_at": m.temporal.observed_at.isoformat(),
-                                },
-                            )
-                        )
+                        out.append(memory_candidate(m, retriever="exact", score=1.0))
         for prefix, lookup in self.exact_lookups.items():
             matching = [i for i in identifiers if i.startswith(prefix)]
             if matching:
@@ -517,6 +529,7 @@ class RetrievalEngine:
             sparse=sparse,
             flt=flt,
             limit=self.cfg.fused_k,
+            rrf_k=self.cfg.hybrid_rrf_k,
             prefetch_limit=self.cfg.prefetch_k,
         )
 

@@ -471,6 +471,11 @@ class RetrievalSettings(BaseModel):
     graph: bool = True
     #: Reciprocal rank fusion of the dense and sparse prefetches, natively in Qdrant.
     rrf_k: int = 60
+    #: Constant for the dense/sparse fusion Qdrant performs server-side. Our own rrf_fuse
+    #: scores 1/(k + rank0 + 1); Qdrant scores 1/(k + rank0), so the same behaviour needs
+    #: k+1 there and the adapter adds it. A value of 1 keeps the historical FusionQuery
+    #: wire form, which is identical to k=1 - so the default changes nothing until moved.
+    hybrid_rrf_k: int = Field(default=1, ge=0, le=1000)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(
