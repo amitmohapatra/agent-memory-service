@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
+from memory_service.domain.memory import unverified_representation
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["cross_encoder", "fusion", "exact"]
@@ -38,7 +39,13 @@ class ContextItem(BaseModel):
     relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Where ``score`` came from: a cross-encoder probability, a fusion rank score, or an
     #: exact identifier hit.
-    score_kind: ScoreKind = "fusion"
+    score_kind: ScoreKind = Field(
+        default="fusion",
+        description=(
+            "fusion is rank aggregation; cross_encoder is neural reranking; "
+            "exact is an identifier match. Use relevance to compare across kinds."
+        ),
+    )
     retrievers: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
     citation: str = Field(..., description="stable citation key")
@@ -250,6 +257,16 @@ def _memory_line(m: Any, *, body: str | None = None) -> str:
     who = subject.split(":", 1)[1] if subject.startswith("user:") else ""
     parts = (
         f"- [{m.citation}]",
+        "model-extracted, unverified; source speaker"
+        if unverified_representation(m.attributes)
+        else "",
+        (
+            "sources through"
+            if m.attributes.get("source_observed_to")
+            else "summary created"
+            if m.attributes.get("derived")
+            else ""
+        ),
         day,
         weekday,
         f"{who}:" if who else "",

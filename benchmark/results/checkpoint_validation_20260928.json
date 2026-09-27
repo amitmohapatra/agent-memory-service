@@ -1,0 +1,22 @@
+{
+  "ready_to_merge": false,
+  "runs": {
+    "multilingual-final-complete": {
+      "tests": 1581,
+      "passed": 1561,
+      "skipped": 19,
+      "failed": [
+        "tests.failure.test_failure_injection::test_search_rebuild_from_postgres_restores_identical_hits"
+      ]
+    },
+    "rebuild-fidelity-correction": {
+      "tests": 24,
+      "passed": 23,
+      "skipped": 0,
+      "failed": [
+        "tests.failure.test_failure_injection::test_worker_kill_requeues_the_job_and_processes_once"
+      ]
+    }
+  },
+  "note": "Checkpoint requested before validation completion. Do not combine these runs into an all-green claim."
+}

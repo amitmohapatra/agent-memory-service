@@ -4,14 +4,21 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
-from memory_service.adapters.db.orm import MemoryRow
+from memory_service.adapters.db.orm import (
+    MemoryDependencyRow,
+    MemoryReflectionProgressRow,
+    MemoryRow,
+)
+from memory_service.config.constants import REFLECTION_SOURCE_CHARS
 from memory_service.domain.enums import (
     Lifetime,
     MemoryType,
@@ -20,8 +27,25 @@ from memory_service.domain.enums import (
     TemporalStatus,
     Visibility,
 )
+from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.evidence import EvidenceRef
-from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
+from memory_service.domain.memory import (
+    UNVERIFIED_MEMORY_CATEGORIES,
+    CanonicalMemory,
+    Scope,
+    TemporalState,
+)
+
+
+def _asserted_source_filter() -> ColumnElement[bool]:
+    """The same source-trust boundary for incremental and on-landing consolidation."""
+    return and_(
+        MemoryRow.derived_slot.is_(None),
+        func.coalesce(MemoryRow.system_metadata["category"].astext, "").not_in(
+            UNVERIFIED_MEMORY_CATEGORIES
+        ),
+        MemoryRow.provider.is_distinct_from("llm"),
+    )
 
 
 def _to_domain(r: MemoryRow) -> CanonicalMemory:
@@ -73,6 +97,7 @@ def _to_domain(r: MemoryRow) -> CanonicalMemory:
             # extra="forbid" and describes what a memory IS, not where a copy of it has got to.
             "indexed_at": r.indexed_at.isoformat() if r.indexed_at else None,
             "visibility_keys": list(r.visibility_keys or []),
+            "derived_slot": r.derived_slot,
         },
         custom_metadata=dict(r.custom_metadata or {}),
         created_at=r.created_at,
@@ -86,11 +111,96 @@ def _evidence_json(memory: CanonicalMemory) -> list[dict[str, Any]]:
     return [json.loads(e.model_dump_json(exclude_none=True)) for e in memory.evidence]
 
 
+def _invalid_derived(row: MemoryRow) -> bool:
+    return bool(row.derived_slot or (row.system_metadata or {}).get("source_revisions")) and (
+        row.temporal_status == TemporalStatus.RETRACTED.value
+        or (row.expires_at is not None and row.expires_at <= datetime.now(UTC))
+    )
+
+
 class SqlMemoryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
+        self.invalidated: dict[str, set[str]] = {}
+
+    async def _invalidate_dependents(self, tenant_id: str, source_ids: Sequence[str]) -> None:
+        if not source_ids:
+            return
+        result = await self.s.execute(
+            text("""
+            WITH RECURSIVE affected(memory_id) AS (
+                SELECT derived_id FROM memory_dependencies
+                WHERE tenant_id = :tenant AND source_id = ANY(:sources)
+                UNION
+                SELECT d.derived_id FROM memory_dependencies d
+                JOIN affected a ON d.source_id = a.memory_id
+                WHERE d.tenant_id = :tenant
+            )
+            UPDATE memories SET temporal_status = 'RETRACTED', indexed_at = NULL,
+                updated_at = now(), revision = revision + 1
+            WHERE tenant_id = :tenant AND temporal_status != 'RETRACTED'
+                AND memory_id IN (SELECT memory_id FROM affected)
+            RETURNING memory_id
+        """),
+            {"tenant": tenant_id, "sources": list(source_ids)},
+        )
+        ids = list(result.scalars())
+        self.invalidated.setdefault(tenant_id, set()).update(ids)
+        if ids:
+            # Raw recursive SQL bypasses ORM synchronization; refresh any identity-map
+            # entries before this transaction can look them up again.
+            refreshed = await self.s.scalars(
+                select(MemoryRow)
+                .where(MemoryRow.memory_id.in_(ids))
+                .execution_options(populate_existing=True)
+            )
+            refreshed.all()
+
+    async def _source_rows(
+        self, memory: CanonicalMemory, visibility_keys: Sequence[str]
+    ) -> list[MemoryRow]:
+        ids = sorted({e.source_id for e in memory.evidence if e.source_type == "memory"})
+        if not ids:
+            return []
+        rows = list(
+            (
+                await self.s.scalars(
+                    select(MemoryRow)
+                    .where(MemoryRow.tenant_id == memory.tenant_id, MemoryRow.memory_id.in_(ids))
+                    .order_by(MemoryRow.memory_id)
+                    .with_for_update(read=True)
+                    .execution_options(populate_existing=True)
+                )
+            ).all()
+        )
+        expected = memory.system_metadata.get("source_revisions", {})
+        now = datetime.now(UTC)
+        if len(rows) != len(ids) or any(
+            r.deleted_at is not None
+            or r.temporal_status != TemporalStatus.CURRENT.value
+            or (r.expires_at is not None and r.expires_at <= now)
+            or expected.get(r.memory_id) != r.revision
+            or not set(visibility_keys).issubset(r.visibility_keys or [])
+            for r in rows
+        ):
+            raise ValidationFailed("Derived sources changed or have incompatible audiences")
+        if not visibility_keys:
+            raise ValidationFailed("Derived memory requires a nonempty source audience")
+        return rows
+
+    async def current_derived(self, tenant_id: str, slot: str) -> CanonicalMemory | None:
+        row = await self.s.scalar(
+            select(MemoryRow).where(
+                MemoryRow.tenant_id == tenant_id,
+                MemoryRow.derived_slot == slot,
+                MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                MemoryRow.deleted_at.is_(None),
+            )
+        )
+        return _to_domain(row) if row is not None else None
 
     async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None:
+        sources = await self._source_rows(memory, visibility_keys)
         sm = dict(memory.system_metadata)
         provider = str(sm.pop("provider", "native"))
         expires_raw = sm.pop("expires_at", None)
@@ -117,6 +227,7 @@ class SqlMemoryRepository:
                 normalized_hash=memory.normalized_hash,
                 subject=memory.subject,
                 predicate=memory.predicate,
+                derived_slot=sm.get("derived_slot"),
                 object=memory.object,
                 temporal_status=memory.temporal.status.value,
                 valid_from=memory.temporal.valid_from,
@@ -141,10 +252,23 @@ class SqlMemoryRepository:
             )
         )
         await self.s.flush()
+        self.s.add_all(
+            [
+                MemoryDependencyRow(
+                    tenant_id=memory.tenant_id,
+                    derived_id=memory.memory_id,
+                    source_id=source.memory_id,
+                    source_revision=source.revision,
+                )
+                for source in sources
+            ]
+        )
+        if sources:
+            await self.s.flush()
 
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None:
         r = await self.s.get(MemoryRow, memory_id)
-        if r is None or r.tenant_id != tenant_id or r.deleted_at is not None:
+        if r is None or r.tenant_id != tenant_id or r.deleted_at is not None or _invalid_derived(r):
             return None
         return _to_domain(r)
 
@@ -160,7 +284,7 @@ class SqlMemoryRepository:
                 )
             )
         ).all()
-        by_id = {r.memory_id: _to_domain(r) for r in rows}
+        by_id = {r.memory_id: _to_domain(r) for r in rows if not _invalid_derived(r)}
         return [by_id[i] for i in memory_ids if i in by_id]
 
     async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]:
@@ -209,6 +333,7 @@ class SqlMemoryRepository:
         r.indexed_at = None  # content or state changed -> re-index
         await self.s.flush()
         memory.revision = r.revision
+        await self._invalidate_dependents(memory.tenant_id, [memory.memory_id])
 
     async def candidates(
         self,
@@ -278,7 +403,7 @@ class SqlMemoryRepository:
         if memory_types:
             stmt = stmt.where(MemoryRow.memory_type.in_(list(memory_types)))
         rows = (await self.s.scalars(stmt.order_by(MemoryRow.updated_at.desc()).limit(limit))).all()
-        return [_to_domain(r) for r in rows]
+        return [_to_domain(r) for r in rows if not _invalid_derived(r)]
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool:
         r = await self.s.get(MemoryRow, memory_id)
@@ -286,7 +411,10 @@ class SqlMemoryRepository:
             return False
         r.deleted_at = datetime.now(r.created_at.tzinfo)
         r.temporal_status = TemporalStatus.RETRACTED.value
+        r.revision += 1
+        r.indexed_at = None
         await self.s.flush()
+        await self._invalidate_dependents(tenant_id, [memory_id])
         return True
 
     async def is_forgotten(self, tenant_id: str, memory_id: str) -> bool:
@@ -324,6 +452,8 @@ class SqlMemoryRepository:
             r.indexed_at = None
             out.append((r.tenant_id, r.memory_id))
         await self.s.flush()
+        for tenant in {t for t, _ in out}:
+            await self._invalidate_dependents(tenant, [i for t, i in out if t == tenant])
         return out
 
     async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
@@ -331,15 +461,73 @@ class SqlMemoryRepository:
             await self.s.scalars(
                 select(MemoryRow)
                 .where(
-                    MemoryRow.created_at >= since,
+                    MemoryRow.updated_at >= since,
                     MemoryRow.deleted_at.is_(None),
                     MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                    or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
                 )
-                .order_by(MemoryRow.created_at.desc())
+                .order_by(MemoryRow.updated_at.desc(), MemoryRow.memory_id.desc())
                 .limit(limit)
             )
         ).all()
         return [_to_domain(r) for r in rows]
+
+    async def reflection_pending(
+        self, *, limit: int = 1000, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        progress = MemoryReflectionProgressRow
+        statement = (
+            select(MemoryRow)
+            .outerjoin(
+                progress,
+                and_(
+                    progress.tenant_id == MemoryRow.tenant_id,
+                    progress.memory_id == MemoryRow.memory_id,
+                ),
+            )
+            .where(
+                MemoryRow.deleted_at.is_(None),
+                MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                _asserted_source_filter(),
+                or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
+                or_(progress.memory_id.is_(None), progress.source_revision != MemoryRow.revision),
+                func.length(MemoryRow.content) <= REFLECTION_SOURCE_CHARS,
+            )
+            .order_by(MemoryRow.updated_at, MemoryRow.memory_id)
+            .limit(limit)
+        )
+        if tenant_id is not None:
+            statement = statement.where(MemoryRow.tenant_id == tenant_id)
+        rows = (await self.s.scalars(statement)).all()
+        return [_to_domain(row) for row in rows]
+
+    async def mark_reflected(self, sources: Sequence[CanonicalMemory], *, at: datetime) -> None:
+        if not sources:
+            return
+        # One statement for the bounded batch. A racing update remains pending because
+        # its revision differs; a late worker may never downgrade a newer receipt.
+        statement = insert(MemoryReflectionProgressRow).values(
+            [
+                {
+                    "tenant_id": source.tenant_id,
+                    "memory_id": source.memory_id,
+                    "source_revision": source.revision,
+                    "processed_at": at,
+                }
+                for source in {m.memory_id: m for m in sources}.values()
+            ]
+        )
+        await self.s.execute(
+            statement.on_conflict_do_update(
+                index_elements=["tenant_id", "memory_id"],
+                set_={
+                    "source_revision": statement.excluded.source_revision,
+                    "processed_at": statement.excluded.processed_at,
+                },
+                where=statement.excluded.source_revision
+                >= MemoryReflectionProgressRow.source_revision,
+            )
+        )
 
     async def related(
         self,
@@ -349,6 +537,10 @@ class SqlMemoryRepository:
         subject: str,
         exclude: Sequence[str] = (),
         limit: int = 8,
+        owner_principal: str | None = None,
+        visibility_keys: Sequence[str] | None = None,
+        include_derived: bool = True,
+        include_verbatim: bool = False,
     ) -> list[CanonicalMemory]:
         stmt = select(MemoryRow).where(
             MemoryRow.tenant_id == tenant_id,
@@ -359,6 +551,31 @@ class SqlMemoryRepository:
         )
         if exclude:
             stmt = stmt.where(MemoryRow.memory_id.not_in(list(exclude)))
+        if owner_principal is not None:
+            stmt = stmt.where(MemoryRow.owner_principal == owner_principal)
+        if visibility_keys is not None:
+            stmt = stmt.where(
+                MemoryRow.visibility_keys.contains(list(visibility_keys)),
+                MemoryRow.visibility_keys.contained_by(list(visibility_keys)),
+            )
+        if not include_derived:
+            source_categories = ["narrative_unit"]
+            if include_verbatim:
+                source_categories.append("verbatim_turn")
+            stmt = stmt.where(
+                _asserted_source_filter(),
+                or_(
+                    MemoryRow.memory_type.not_in(
+                        [
+                            MemoryType.BELIEF.value,
+                            MemoryType.ENTITY_SUMMARY.value,
+                            MemoryType.OBSERVATION.value,
+                        ]
+                    ),
+                    MemoryRow.system_metadata["category"].astext.in_(source_categories),
+                ),
+                or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
+            )
         rows = (await self.s.scalars(stmt.order_by(MemoryRow.updated_at.desc()).limit(limit))).all()
         return [_to_domain(r) for r in rows]
 
@@ -405,5 +622,7 @@ class SqlMemoryRepository:
         r.temporal_status = status.value
         r.updated_at = now
         r.indexed_at = None
+        r.revision += 1
         await self.s.flush()
+        await self._invalidate_dependents(tenant_id, [memory_id])
         return True

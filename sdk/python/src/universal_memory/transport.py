@@ -72,6 +72,7 @@ class Transport:
         """Lineage for body-less (GET/DELETE) routes; security fields stay in headers."""
         fields = (
             "thread_id",
+            "session_id",
             "work_id",
             "task_id",
             "agent_id",

@@ -1,20 +1,9 @@
-"""``_dedup`` was made linear-ish. This proves it did not change what it returns.
+"""Deduplication preserves evidence and aggregates every dropped representation.
 
-The old pass re-normalised every kept candidate's body on every comparison - O(n^2) string
-allocations for a scan needing n of them - and called ``_subsumed_by`` twice per candidate,
-once to test and once to fetch what the test had already found, and it sat inside no timing
-stage - which is how it stayed invisible in a p99 already over its 300 ms budget.
-
-The saving is ~0.8 ms at the shipped depth (min-of-7: 1.33 -> 0.50 ms at n=100), not the
-9.6-26 ms the audit that raised it claimed. That figure was inherited and repeated in this
-file's own docstring after being disproved in the same commit that disproved it, which is the
-exact failure this suite exists to catch: a number left where it will be read as evidence.
-
-A latency change to a ranking function is only safe if the ranking is untouched, so the
-acceptance criterion is output identity rather than "the tests still pass". The reference
-below is the OLD algorithm, written out; the property is that both agree on randomised pools
-built from the shapes this service actually produces - verbatim turns, propositions extracted
-from them, exact twins, and unrelated text.
+The former oracle copied the pre-provenance implementation, including its attribution
+loss and discarded-alias score bug. Output identity to that implementation is no longer
+a valid contract. These randomized checks assert coverage, provenance, order, score and
+retriever conservation independently of the optimized grouping implementation.
 """
 
 from __future__ import annotations
@@ -25,13 +14,7 @@ import random
 import pytest
 
 from memory_service.modules.retrieval import engine as eng
-from memory_service.modules.retrieval.engine import (
-    SUBSUMPTION_MIN_CHARS,
-    Candidate,
-    _dedup,
-    _normalised,
-    content_hash,
-)
+from memory_service.modules.retrieval.engine import SUBSUMPTION_MIN_CHARS, Candidate, _dedup
 
 pytestmark = pytest.mark.unit
 
@@ -42,59 +25,29 @@ TURNS = [
 ]
 
 
-def _reference(candidates: list[Candidate]) -> list[Candidate]:
-    """The algorithm as it was before the change, normalising inside the inner loop."""
-    seen: dict[str, Candidate] = {}
-    by_hash: dict[str, Candidate] = {}
-    for c in candidates:
-        if c.record_id in seen:
-            existing = seen[c.record_id]
-            existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
-            existing.score = max(existing.score, c.score)
-            continue
-        h = c.payload.get("text_hash") or (content_hash(c.text) if c.text else None)
-        if h:
-            twin = by_hash.get(h)
-            if twin is not None:
-                twin.payload.setdefault("duplicates", []).append(c.record_id)
-                twin.score = max(twin.score, c.score)
-                twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
-                continue
-            by_hash[h] = c
-        if eng.COLLAPSE_SUBSUMED:
-            text = _normalised(c.text)
-            found = None
-            if len(text) >= SUBSUMPTION_MIN_CHARS:
-                for other in seen.values():
-                    if other.record_id == c.record_id:
-                        continue
-                    body = _normalised(other.text)
-                    if len(body) > len(text) and text in body:
-                        found = other
-                        break
-            if found is not None:
-                found.payload.setdefault("duplicates", []).append(c.record_id)
-                found.retrievers = sorted(set(found.retrievers) | set(c.retrievers))
-                continue
-        seen[c.record_id] = c
-    return list(seen.values())
-
-
 def _pool(rng: random.Random, n: int) -> list[Candidate]:
-    out: list[Candidate] = []
+    out = []
     for i in range(n):
         turn = rng.choice(TURNS)
         shape = rng.random()
-        if shape < 0.35:  # a proposition carved out of a turn - the subsumption case
+        if shape < 0.35:
             words = turn.split()
-            cut = rng.randint(4, max(5, len(words) - 2))
-            text = " ".join(words[:cut])
-        elif shape < 0.5:  # the verbatim turn
+            text = " ".join(words[: rng.randint(4, max(5, len(words) - 2))])
+        elif shape < 0.5:
             text = turn
-        elif shape < 0.62:  # an exact twin of something already emitted
+        elif shape < 0.62:
             text = out[rng.randrange(len(out))].text if out else turn
         else:
             text = f"unrelated observation number {i} about an entirely different subject"
+        actor = f"user:{rng.randrange(2)}"
+        payload = {
+            "subject": actor,
+            "owner_principal": actor,
+            "observed_at": f"2026-09-{25 + rng.randrange(2)}T12:00:00Z",
+            "source_refs": [{"source_type": "message", "source_id": f"source-{rng.randrange(2)}"}],
+        }
+        if i % 7 == 0:
+            payload = {}  # legacy hits do not prove common attribution
         out.append(
             Candidate(
                 record_id=f"r{i}",
@@ -102,7 +55,7 @@ def _pool(rng: random.Random, n: int) -> list[Candidate]:
                 text=text,
                 score=round(rng.random(), 6),
                 retrievers=[rng.choice(["dense", "bm25", "graph"])],
-                payload={},
+                payload=payload,
             )
         )
     return out
@@ -110,27 +63,36 @@ def _pool(rng: random.Random, n: int) -> list[Candidate]:
 
 @pytest.mark.parametrize("collapse", [True, False])
 @pytest.mark.parametrize("seed", range(40))
-def test_output_is_identical_to_the_previous_algorithm(
-    seed: int, collapse: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_every_input_keeps_its_evidence_or_a_valid_representative(seed, collapse, monkeypatch):
     monkeypatch.setattr(eng, "COLLAPSE_SUBSUMED", collapse)
     rng = random.Random(seed)
-    pool = _pool(rng, rng.randint(2, 60))
-
+    pool = _pool(rng, rng.randint(2, 80))
+    original = {c.record_id: c for c in pool}
     got = _dedup(copy.deepcopy(pool))
-    want = _reference(copy.deepcopy(pool))
+    assert [int(c.record_id[1:]) for c in got] == sorted(int(c.record_id[1:]) for c in got)
+    represented = []
+    for survivor in got:
+        ids = [survivor.record_id, *survivor.payload.get("duplicates", [])]
+        assert len(ids) == len(set(ids))
+        represented.extend(ids)
+        group = [original[identity] for identity in ids]
+        assert survivor.score == max(c.score for c in group)
+        assert set(survivor.retrievers) == {r for c in group for r in c.retrievers}
+        assert survivor.text == original[survivor.record_id].text
+        for dropped in group[1:]:
+            kept = original[survivor.record_id]
+            assert dropped.payload and dropped.payload == kept.payload, "attribution changed"
+            short, full = (
+                " ".join(dropped.text.lower().split()),
+                " ".join(kept.text.lower().split()),
+            )
+            assert dropped.text == kept.text or (
+                collapse and len(short) >= SUBSUMPTION_MIN_CHARS and short in full
+            )
+    assert sorted(represented) == sorted(original), "a source disappeared or was represented twice"
 
-    assert [c.record_id for c in got] == [c.record_id for c in want], "kept set or order moved"
-    assert [c.score for c in got] == [c.score for c in want]
-    assert [sorted(c.retrievers) for c in got] == [sorted(c.retrievers) for c in want]
-    assert [c.payload.get("duplicates") for c in got] == [
-        c.payload.get("duplicates") for c in want
-    ], "a collapse was recorded against a different survivor"
 
-
-def test_the_stage_is_timed_so_it_cannot_hide_from_the_budget_again() -> None:
-    """The cost was real and invisible: no stage covered it, so it never appeared in a p99
-    breakdown that was already over budget."""
+def test_the_stage_is_timed_so_it_cannot_hide_from_the_budget_again():
     from memory_service.observability.metrics import stage_seconds
 
     before = stage_seconds.labels("retrieval.dedup")._sum.get()

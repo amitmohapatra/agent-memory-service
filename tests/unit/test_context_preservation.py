@@ -10,7 +10,7 @@ from memory_service.domain.documents import Chunk, ContextEdge, DocumentNode
 from memory_service.domain.enums import ContextGraphEdge, MessageKind, MessageRole, Representation
 from memory_service.domain.ids import content_hash, new_id
 from memory_service.modules.context.builder import rolling_summary
-from memory_service.modules.context.evidence import content_terms, overlaps
+from memory_service.modules.context.evidence import _conflicting_memories, content_terms, overlaps
 from memory_service.modules.context.expansion import edges_to_groups
 from memory_service.modules.context.summaries import build_summaries, sentences, summarize
 from memory_service.modules.retrieval.engine import Candidate
@@ -38,6 +38,52 @@ def test_sentences_and_summary_are_extractive_and_bounded() -> None:
         assert s in TEXT
     assert summarize("short.") == "" and summarize("") == ""
     assert summarize(TEXT) == summarize(TEXT)  # deterministic
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        ["北京办公室在周一正式开放。", "上海办公室在周二正式开放。", "深圳办公室在周三正式开放。"],
+        ["दिल्ली कार्यालय सोमवार को खुलता है।", "मुंबई कार्यालय मंगलवार को खुलता है।"],
+        ["متى يفتح مكتب القاهرة الجديد؟", "يفتح مكتب القاهرة صباح يوم الاثنين."],
+        ["東京の新しい事務所は月曜日に開きます。", "大阪の新しい事務所は火曜日に開きます。"],
+    ],
+)
+def test_multilingual_summary_retains_verbatim_sentences(parts):
+    text = " ".join(parts)
+    assert sentences(text) == parts
+    result = summarize(text, max_sentences=1, max_chars=120)
+    assert result in parts and len(result) <= 120
+
+
+@pytest.mark.parametrize("term", ["दिल्ली", "القَاهِرَة", "café", "กรุงเทพ", "北京"])
+def test_evidence_terms_keep_marks_and_find_embedded_non_latin_terms(term):
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFD", term)
+    assert content_terms(term) == content_terms(decomposed)
+    evidence = Candidate(record_id="chunk", kind="chunk", text=f"新 {term} कार्यालय", score=1.0)
+    assert overlaps(term, [evidence])
+
+
+def test_unicode_evidence_does_not_accept_unrelated_text():
+    evidence = Candidate(record_id="chunk", kind="chunk", text="東京の博物館", score=1.0)
+    assert not overlaps("दिल्ली कार्यालय", [evidence])
+
+
+def test_repeated_reciprocal_conflicts_are_reported_once():
+    memories = [
+        Candidate(
+            record_id="a",
+            kind="memory",
+            text="A",
+            score=1,
+            payload={"contradicts": ["b", "b", "missing"]},
+        ),
+        Candidate(record_id="b", kind="memory", text="B", score=1, payload={"contradicts": ["a"]}),
+        Candidate(record_id="c", kind="chunk", text="C", score=1, payload={"contradicts": ["a"]}),
+    ]
+    assert _conflicting_memories(memories) == [("a", "b")]
 
 
 def test_build_summaries_walks_the_hierarchy() -> None:
@@ -154,4 +200,4 @@ def test_abstention_rule_and_required_groups() -> None:
             edge=ContextGraphEdge.NEXT,
         ),
     ]
-    assert edges_to_groups(edges) == {"defined_by:Adjusted EBITDA": "n2", "footnote:3": "n3"}
+    assert edges_to_groups(edges) == {"defined_by:Adjusted EBITDA:n2": "n2", "footnote:3:n3": "n3"}

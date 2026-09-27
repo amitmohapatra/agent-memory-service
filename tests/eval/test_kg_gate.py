@@ -111,7 +111,7 @@ async def test_kg_entities_facts_and_queries(container, uow_factory) -> None:
                 return False
             return _attrs_match(spec.get("attributes", {}), r.attributes)
 
-        found_ids: dict[str, str] = {}
+        found_ids: dict[str, set[str]] = {}
         missing_facts, forbidden_found = [], []
         for spec in golden["facts"][alias]:
             hits = [r for r in relations if matches(spec, r)]
@@ -122,7 +122,9 @@ async def test_kg_entities_facts_and_queries(container, uow_factory) -> None:
             total_expected += 1
             if hits:
                 total_found += 1
-                found_ids[spec["id"]] = hits[0].relation_id
+                # Identical facts can be supported at several source locations. Graph
+                # traversal deduplicates triples, so any fully matching support is valid.
+                found_ids[spec["id"]] = {r.relation_id for r in hits}
             else:
                 missing_facts.append(spec["id"])
         # 4. questions resolve to the expected fact through the graph query
@@ -130,8 +132,8 @@ async def test_kg_entities_facts_and_queries(container, uow_factory) -> None:
         for q in golden["queries"][alias]:
             queries_total += 1
             answer = await graph.query(CTX, query=q["question"], hops=q.get("hops", 1))
-            expected_rel = found_ids.get(q["expect_fact"])
-            if expected_rel and any(r.relation_id == expected_rel for r in answer.relations):
+            expected_rels = found_ids.get(q["expect_fact"], set())
+            if expected_rels.intersection(r.relation_id for r in answer.relations):
                 queries_ok += 1
             else:
                 query_failures.append(q["question"])

@@ -168,6 +168,18 @@ wheels = [
 ]
 
 [[package]]
+name = "aiohttp-retry"
+version = "2.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9d/61/ebda4d8e3d8cfa1fd3db0fb428db2dd7461d5742cea35178277ad180b033/aiohttp_retry-2.9.1.tar.gz", hash = "sha256:8eb75e904ed4ee5c2ec242fefe85bf04240f685391c4879d8f541d6028ff01f1", size = 13608, upload-time = "2024-11-06T10:44:54.574Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/99/84ba7273339d0f3dfa57901b846489d2e5c2cd731470167757f1935fffbd/aiohttp_retry-2.9.1-py3-none-any.whl", hash = "sha256:66d2759d1921838256a05a3f80ad7e724936f083e35be5abb5e16eed6be6dc54", size = 9981, upload-time = "2024-11-06T10:44:52.917Z" },
+]
+
+[[package]]
 name = "aiosignal"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1882,6 +1894,23 @@ wheels = [
 ]
 
 [[package]]
+name = "hindsight-client"
+version = "0.10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "aiohttp-retry" },
+    { name = "pydantic" },
+    { name = "python-dateutil" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/81/03d22890aa5fa8b09fa1c290814cf0ff716bd5c6b537305458467092e5a1/hindsight_client-0.10.1.tar.gz", hash = "sha256:764c4326c14123c5c9222f21ae5ebe62ef2323c60c8907b35667f5f82924c81d", size = 192363, upload-time = "2026-09-21T15:00:52.758Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5b/9b/aef41711ea4ea419386a10d7b5b52cebd9aac380127897629508ddff12b9/hindsight_client-0.10.1-py3-none-any.whl", hash = "sha256:04e03353a0f9dcfa7b1b1000cccc8f077a93a788b27af62cc5e014b2dd3b960c", size = 422723, upload-time = "2026-09-21T15:00:51.121Z" },
+]
+
+[[package]]
 name = "hpack"
 version = "4.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3035,7 +3064,9 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "bifrost-sdk" },
+    { name = "cryptography" },
     { name = "fastapi" },
+    { name = "hindsight-client" },
     { name = "httpx" },
     { name = "numpy" },
     { name = "openfga-sdk" },
@@ -3135,6 +3166,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.20,<2" },
     { name = "bifrost-sdk", editable = "vendor/bifrost-sdk" },
+    { name = "cryptography", specifier = ">=44,<52" },
     { name = "datasets", marker = "extra == 'eval'", specifier = ">=3" },
     { name = "deepeval", marker = "extra == 'eval'", specifier = ">=4.2" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.127" },
@@ -3143,6 +3175,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'models'", specifier = ">=0.8" },
     { name = "google-auth", marker = "extra == 'gcp'", specifier = ">=2" },
     { name = "google-cloud-storage", marker = "extra == 'gcp'", specifier = ">=3.14" },
+    { name = "hindsight-client", specifier = "==0.10.1" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "locust", marker = "extra == 'load'", specifier = ">=2.46" },
     { name = "memory-service", extras = ["gcp", "docling", "models", "eval", "load"], marker = "extra == 'all'" },

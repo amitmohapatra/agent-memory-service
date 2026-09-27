@@ -41,6 +41,13 @@ class Document(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     deleted_at: datetime | None = None
 
+    @property
+    def model_principal(self) -> str:
+        """Model billing identity recorded by ingestion, never caller custom metadata."""
+        return self.system_metadata.get("model_principal") or (
+            f"user:{self.owner_user_id}" if self.owner_user_id else "service:anonymous"
+        )
+
 
 class DocumentVersion(BaseModel):
     model_config = ConfigDict(extra="forbid")

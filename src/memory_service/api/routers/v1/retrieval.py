@@ -21,6 +21,7 @@ from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.grounding.cascade import attach
+from memory_service.modules.llm.policy import model_call_policy, model_identity
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -56,6 +57,10 @@ _CONTEXT_EXAMPLE: dict[str, Any] = {
 class RecallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_RECALL_EXAMPLE]})
 
+    use_llm: bool = Field(
+        default=False,
+        description="Allow configured LLM assistance on this read, independently of ingestion.",
+    )
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -116,6 +121,10 @@ class RecallItem(BaseModel):
     expanded_from: str | None = None
     expansion_edge: str | None = None
     evidence: list[EvidenceRef] = Field(default_factory=list)
+    attributes: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Source provenance and qualifiers, including model-extracted status.",
+    )
 
 
 class RecallResponse(BaseModel):
@@ -146,6 +155,10 @@ class RecallResponse(BaseModel):
 class ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CONTEXT_EXAMPLE]})
 
+    use_llm: bool = Field(
+        default=False,
+        description="Allow configured LLM assistance on this read, independently of ingestion.",
+    )
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -242,26 +255,29 @@ async def recall(
     request: Request, body: RecallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecallResponse:
     ctx = build_context(request, container, body.scope)
-    engine = container.services["retrieval"]
-    result = await engine.retrieve(
-        ctx,
-        body.query,
-        limit=body.limit,
-        kinds=tuple(k for k in body.kinds if k in ("chunk", "memory")),
-        document_ids=body.document_ids,
-    )
-    wanted = set(body.kinds)
-    items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
-    evidence = result.diagnostics.get("evidence")
-    return RecallResponse(
-        query=body.query,
-        query_type=result.routed.query_type,
-        results=[RecallItem.model_validate(i.model_dump(mode="json")) for i in items],
-        diagnostics={
-            k: v for k, v in result.diagnostics.items() if k not in ("evidence", "evidence_targets")
-        },
-        evidence=EvidenceReportBody.model_validate(evidence) if evidence is not None else None,
-    )
+    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+        engine = container.services["retrieval"]
+        result = await engine.retrieve(
+            ctx,
+            body.query,
+            limit=body.limit,
+            kinds=tuple(k for k in body.kinds if k in ("chunk", "memory")),
+            document_ids=body.document_ids,
+        )
+        wanted = set(body.kinds)
+        items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
+        evidence = result.diagnostics.get("evidence")
+        return RecallResponse(
+            query=body.query,
+            query_type=result.routed.query_type,
+            results=[RecallItem.model_validate(i.model_dump(mode="json")) for i in items],
+            diagnostics={
+                k: v
+                for k, v in result.diagnostics.items()
+                if k not in ("evidence", "evidence_targets")
+            },
+            evidence=EvidenceReportBody.model_validate(evidence) if evidence is not None else None,
+        )
 
 
 @router.post(
@@ -279,21 +295,22 @@ async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> Response | ContextResponse:
     ctx = build_context(request, container, body.scope)
-    builder = container.services["context_builder"]
-    if not body.answer:
-        # One serialisation for the whole request: a cache hit is the stored bytes, a miss is
-        # one dump. Parsing the cached bundle only to dump it, validate it and dump it again
-        # was most of what a 30-80 KB hit cost.
-        payload = await builder.build_api(
+    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+        builder = container.services["context_builder"]
+        if not body.answer:
+            # One serialisation for the whole request: a cache hit is the stored bytes, a miss is
+            # one dump. Parsing the cached bundle only to dump it, validate it and dump it again
+            # was most of what a 30-80 KB hit cost.
+            payload = await builder.build_api(
+                ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
+            )
+            return Response(content=payload, media_type="application/json")
+        # Grounding needs the bundle itself, so this arm keeps the model round trip.
+        cascade = container.services.get("grounding")
+        if cascade is None:
+            raise ProviderNotConfigured("the NLI classifier is disabled in this process")
+        bundle = await builder.build(
             ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
         )
-        return Response(content=payload, media_type="application/json")
-    # Grounding needs the bundle itself, so this arm keeps the model round trip.
-    cascade = container.services.get("grounding")
-    if cascade is None:
-        raise ProviderNotConfigured("the NLI classifier is disabled in this process")
-    bundle = await builder.build(
-        ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
-    )
-    bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
-    return ContextResponse.model_validate(bundle_to_api(bundle))
+        bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
+        return ContextResponse.model_validate(bundle_to_api(bundle))

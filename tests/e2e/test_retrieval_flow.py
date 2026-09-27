@@ -83,9 +83,9 @@ def test_recall_and_context_over_http(client) -> None:
     assert "here is the FY26 report" in bundle["conversation"]["rendered"]
     assert bundle["knowledge"][0]["item_id"] == top["item_id"]
     assert bundle["evidence"]["status"] == "COMPLETE"
-    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= set(
-        bundle["evidence"]["required_groups"]
-    )
+    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= {
+        name.rsplit(":", 1)[0] for name in bundle["evidence"]["required_groups"]
+    }
     assert bundle["summaries"] and "## Summaries" in bundle["rendered"]
     assert bundle["conversation"]["summary"] is None  # everything fits the window
     # recall exposes the same report; an unrelated question is INSUFFICIENT

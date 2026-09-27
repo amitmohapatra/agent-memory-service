@@ -13,6 +13,11 @@ from universal_memory.errors import (
     ValidationError,
 )
 from universal_memory.models import (
+    AgentKeyStatus,
+    Brief,
+    BriefInfo,
+    BriefOutput,
+    BriefSpec,
     ClaimVerdict,
     ContextBundle,
     ContextItem,
@@ -56,8 +61,13 @@ from universal_memory.models import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "AgentKeyStatus",
     "AuthenticationError",
     "AuthorizationError",
+    "Brief",
+    "BriefInfo",
+    "BriefOutput",
+    "BriefSpec",
     "ChatAPI",
     "ClaimVerdict",
     "ConflictError",

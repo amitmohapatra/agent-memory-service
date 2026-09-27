@@ -106,6 +106,7 @@ class _Engine:
     def __init__(self, authz: AuthorizationService, memories: int = 2) -> None:
         self.authz = authz
         self.indexer = _Indexer()
+        self.reranker = None
         self.calls = 0
         self.count = memories
 
@@ -139,7 +140,9 @@ class _Conversation:
     pass
 
 
-def _builder(cache: MemoryCache | None = None, memories: int = 2) -> ContextBuilder:
+def _builder(
+    cache: MemoryCache | None = None, memories: int = 2, *, assist: LLMAssist | None = None
+) -> ContextBuilder:
     authz = AuthorizationService(MemoryAuthorizationProvider(), cache)
     factory = _Factory()
     builder = ContextBuilder(
@@ -149,12 +152,95 @@ def _builder(cache: MemoryCache | None = None, memories: int = 2) -> ContextBuil
         cache,
         settings=CONTEXT,
         retrieval=RETRIEVAL,
+        assist=assist,
     )
     return builder
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"model": "test/new-strong"},
+        {"fast_model": "test/new-fast"},
+        {"fast_uses": ["summaries"]},
+        {"base_url": "http://another-gateway.test/v1"},
+        {"api_key": "rotated-operator-key"},
+        {"max_tokens": 777},
+    ],
+)
+async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(change):
+    from types import SimpleNamespace
+
+    from tests.support_llm import llm_settings
+
+    cache = MemoryCache()
+    provider = SimpleNamespace(enabled=True)
+    first = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
+    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
+    changed = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"], **change)))
+    try:
+        await first.build_api(CTX, QUERY)
+        await first.drain()
+        assert orjson.loads(await unchanged.build_api(CTX, QUERY))["cache_hit"] is True
+        assert orjson.loads(await changed.build_api(CTX, QUERY))["cache_hit"] is False
+        assert changed.engine.calls == 1 and unchanged.engine.calls == 0
+        assert "operator-key" not in changed._fingerprint
+    finally:
+        await first.close()
+        await unchanged.close()
+        await changed.close()
+
+
+def test_unused_model_configuration_does_not_fragment_native_cache():
+    from types import SimpleNamespace
+
+    from tests.support_llm import llm_settings
+
+    provider = SimpleNamespace(enabled=True)
+    first = _builder(assist=LLMAssist(provider, llm_settings([])))
+    changed = _builder(assist=LLMAssist(provider, llm_settings([], model="test/new")))
+    assert first._fingerprint == changed._fingerprint
+
+
 def _parts(builder: ContextBuilder) -> tuple[_Factory, _Engine]:
     return builder.uow_factory, builder.engine  # type: ignore[return-value]
+
+
+async def test_promoted_context_packs_100_memories_and_respects_a_smaller_budget():
+    builder = _builder(memories=120)
+    result = await builder.engine.retrieve(CTX, QUERY)
+    bundle = builder._assemble(
+        QUERY, result, ConversationWindow(), CONTEXT.token_budget, "revision"
+    )
+    assert [m.item_id for m in bundle.memories] == [f"mem_{i}" for i in range(100)]
+    assert bundle.token_estimate <= CONTEXT.token_budget
+
+    tight = builder._assemble(QUERY, result, ConversationWindow(), 200, "revision")
+    assert 0 < len(tight.memories) < 100
+    assert tight.token_estimate <= 200
+
+
+@pytest.mark.parametrize("edge", ["GRAPH_EVIDENCE", "DERIVED_SOURCE"])
+async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens(edge):
+    builder = _builder(memories=3)
+    builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})
+    result = await builder.engine.retrieve(CTX, QUERY)
+    companion = Candidate(
+        record_id="mem_bridge",
+        kind="memory",
+        text="The missing bridge evidence.",
+        score=0.4,
+        retrievers=["graph"],
+        expansion_edge=edge,
+        expanded_from="graph",
+    )
+    result.candidates.append(companion)
+    bundle = builder._assemble(QUERY, result, ConversationWindow(), 500, "revision")
+    assert [m.item_id for m in bundle.memories] == ["mem_0", "mem_1", "mem_bridge"]
+    budget = sum(m.token_estimate for m in bundle.memories[:2])
+    tight = builder._assemble(QUERY, result, ConversationWindow(), budget, "revision")
+    assert [m.item_id for m in tight.memories] == ["mem_0", "mem_1"]
+    assert sum(m.token_estimate for m in tight.memories) <= budget
 
 
 # ---------------------------------------------------------------------------
@@ -502,7 +588,7 @@ async def test_content_terms_are_computed_once_per_record(monkeypatch: pytest.Mo
         signals={},
         has_thread=False,
     )
-    stage = ev.VerificationStage(_Factory(), None, settings=RETRIEVAL)  # type: ignore[arg-type]
+    stage = ev.VerificationStage(_Factory(), settings=RETRIEVAL)  # type: ignore[arg-type]
     await stage(CTX, routed, list(memories), VISIBILITY, {})
 
     repeated = {m.record_id: seen.count(m.text) for m in memories if seen.count(m.text) != 1}
@@ -580,27 +666,3 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
     assert response.json()["cache_hit"] is False
-
-
-async def test_memory_companions_survive_a_full_primary_cap_but_obey_tokens():
-    edge = "GRAPH_EVIDENCE"
-    builder = _builder(memories=3)
-    builder.cfg = builder.cfg.model_copy(update={"memories_max": 2})
-    result = await builder.engine.retrieve(CTX, QUERY)
-    companion = Candidate(
-        record_id="mem_bridge",
-        kind="memory",
-        text="The missing bridge evidence.",
-        score=0.4,
-        retrievers=["graph"],
-        expansion_edge=edge,
-        expanded_from="graph",
-    )
-    result.candidates.append(companion)
-    bundle = builder._assemble(QUERY, result, ConversationWindow(), 500, "revision")
-    assert [m.item_id for m in bundle.memories] == ["mem_0", "mem_1", "mem_bridge"]
-    budget = sum(m.token_estimate for m in bundle.memories[:2])
-    tight = builder._assemble(QUERY, result, ConversationWindow(), budget, "revision")
-    assert [m.item_id for m in tight.memories] == ["mem_0", "mem_1"]
-    assert sum(m.token_estimate for m in tight.memories) <= budget
-

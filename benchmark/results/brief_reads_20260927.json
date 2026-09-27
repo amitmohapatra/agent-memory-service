@@ -1,0 +1,29 @@
+{
+  "complete": true,
+  "llm_calls": 0,
+  "platform": "macOS-12.7.6-x86_64-i386-64bit",
+  "service_sha256": "57c915223fec949453f1b89e16160f4b1a98b8b483a08b51466d694890b709e3",
+  "sequential_ms": {
+    "p50": 22.03,
+    "p95": 37.45,
+    "p99": 66.33,
+    "max": 156.98,
+    "samples": 500
+  },
+  "concurrent_ms": {
+    "p50": 126.17,
+    "p95": 211.4,
+    "p99": 336.96,
+    "max": 407.84,
+    "samples": 500
+  },
+  "concurrency": 8,
+  "response_bytes": 1563,
+  "limitations": [
+    "ASGI transport and in-process cache/authorization; PostgreSQL is real.",
+    "One small native brief after warmup, not a size/corpus scalability test.",
+    "Concurrent timing starts after the client semaphore, includes server queueing.",
+    "Rate limiting disabled; other host work may affect timings.",
+    "Not retrieval, network, live OpenFGA or a production p99 measurement."
+  ]
+}

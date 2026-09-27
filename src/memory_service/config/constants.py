@@ -69,7 +69,13 @@ class DenseModel(BaseModel):
     dimension: int = 384
     max_seq_length: int = 512
     normalize: bool = True
-    batch_size: int = 32
+    #: Retrieval-trained encoders such as E5 require asymmetric task prefixes.
+    query_prefix: str = ""
+    document_prefix: str = ""
+    batch_size: int = Field(default=32, ge=1)
+    #: Bound each non-preemptible indexing turn on the shared model runner. A full
+    #: 32-passage forward pass blocked interactive queries for seconds on CPU.
+    document_batch_size: int = Field(default=1, ge=1)
     device: str = "cpu"
     #: Intra-op threads the model may use: ``torch.set_num_threads`` for the torch runner,
     #: ORT ``intra_op_num_threads`` for the ONNX one. Two, because the deployment runs three
@@ -90,7 +96,7 @@ class SparseModel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: Literal["bm25"] = "bm25"
-    version: str = "v1"
+    version: str = "v2-unicode"
 
 
 class NLIModel(BaseModel):
@@ -102,9 +108,10 @@ class NLIModel(BaseModel):
     local_dir: str = "deberta-v3-base-mnli-fever-anli"
     model_path: str | None = None
     revision: str | None = None
+    runtime: Literal["torch", "onnx"] = "torch"
     graph_file: str | None = None
-    batch_size: int = 16
-    max_length: int = 512
+    batch_size: int = Field(default=16, ge=1, le=64)
+    max_length: int = Field(default=512, ge=32, le=512)
     #: as ``DenseModel.threads``; both runners call ``torch.set_num_threads``, which is
     #: process-wide, so the two counts are deliberately the same number
     threads: int = 2
@@ -123,8 +130,10 @@ class CrossEncoderModel(BaseModel):
     id: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
     local_dir: str = "ms-marco-MiniLM-L6-v2"
     model_path: str | None = None
+    revision: str | None = None
     backend: Literal["torch", "onnx"] = "torch"
     batch_size: int = 16
+    max_length: int = Field(default=512, ge=32, le=2048)
 
     @property
     def source(self) -> str:
@@ -387,14 +396,16 @@ class MemoryIntelligenceSettings(BaseModel):
     #: The verbatim copy is an OBSERVATION, which is in DERIVED_MEMORY_TYPES, so it is
     #: excluded from supersession and reflection (landing.py:63, :77) and cannot disturb the
     #: fact machinery or the false-merge gate. It augments the rule output; it never
-    #: replaces it. Applies to user-authored messages outside a thread only: a thread's
-    #: turns are kept by the hot-thread cache and the archive, and an agent's messages are
-    #: working chatter that must not inherit a shared visibility.
+    #: replaces it. Applies to user-authored messages, including messages inside threads:
+    #: archival storage alone does not make older turns searchable. Agent working chatter
+    #: is excluded so it cannot inherit a shared visibility.
     keep_verbatim_turns: bool = True
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)
     # landing reflection and derived memories
-    landing_reflection_k: int = Field(default=8, ge=0, le=8)
+    consolidation_enabled: bool = False
+    consolidation_max_chars: int = Field(default=1800, ge=256, le=2000)
+    consolidation_max_sources: int = Field(default=64, ge=2, le=128)
     belief_min_support: int = Field(default=2, ge=2)
     entity_summary_min_facts: int = Field(default=2, ge=1)
     # forgetting: importance x recency x access decay
@@ -406,6 +417,9 @@ class MemoryIntelligenceSettings(BaseModel):
 
 MEMORY_INTELLIGENCE = MemoryIntelligenceSettings()
 
+# Complete source text admitted into one background reflection prompt.
+REFLECTION_SOURCE_CHARS = 2000
+
 
 class DocumentSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -416,8 +430,6 @@ class DocumentSettings(BaseModel):
     min_chunk_tokens: int = 40
     chunk_overlap_tokens: int = 40
     contextual_chunks: bool = True
-    keep_tables_intact: bool = True
-    keep_code_intact: bool = True
     max_file_bytes: int = 100 * 1024 * 1024
 
 
@@ -469,12 +481,13 @@ class RetrievalSettings(BaseModel):
     bm25: bool = True
     dense: bool = True
     graph: bool = True
-    #: Reciprocal rank fusion of the dense and sparse prefetches, natively in Qdrant.
+    #: Unclassified questions can still name known graph entities in any language.
+    #: Resolve names under the caller's scope, with the same bounded traversal budget.
+    semantic_graph: bool = True
+    #: Outer fusion of hybrid document candidates with optional strategy retrievers.
     rrf_k: int = 60
-    #: Constant for the dense/sparse fusion Qdrant performs server-side. Our own rrf_fuse
-    #: scores 1/(k + rank0 + 1); Qdrant scores 1/(k + rank0), so the same behaviour needs
-    #: k+1 there and the adapter adds it. A value of 1 keeps the historical FusionQuery
-    #: wire form, which is identical to k=1 - so the default changes nothing until moved.
+    # Dense/sparse fusion uses the same one-based rank convention as rrf_fuse. One
+    # preserves Qdrant's historical default (zero-based k=2); tune explicitly, not silently.
     hybrid_rrf_k: int = Field(default=1, ge=0, le=1000)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
@@ -501,7 +514,22 @@ class RetrievalSettings(BaseModel):
     rerank_k: int = 20
     #: The one depth knob: what a caller receives. ``prefetch_k`` and ``fused_k`` follow it.
     final_k: int = Field(default=FINAL_K, ge=1)
+    # Wider recall for memory-only ranked pools. Full LoCoMo source recall improved from
+    # 77.40% to 83.90%; the user accepted measured p99 550.6 ms on 2026-09-26.
+    # Explicit caller limits and document/mixed pools retain final_k. ContextSettings
+    # packs this depth within the unchanged token budget. Zero restores final_k behavior.
+    memory_recall_k: int = Field(default=100, ge=0, le=200)
+    # Experimental actor/topic decomposition for aggregate conversational questions.
+    # Off until paired evidence and answer measurements justify promotion.
+    memory_entity_search: bool = False
+    memory_entity_search_timeout_ms: int = Field(default=200, ge=1, le=500)
     parent_expansion: bool = True
+    #: Experimental: replace a fact with its containing source turn already in the pool.
+    derived_source_k: int = Field(default=6, ge=0, le=16)
+    source_turn_expansion: bool = False
+    # Soft diversity cap before the primary cut. Zero preserves score order. Overflow
+    # fills spare slots; exact hits, selected single documents and companions are exempt.
+    max_chunks_per_document: int = Field(default=0, ge=0, le=50)
     neighbor_expansion: bool = True
     definition_expansion: bool = True
     expansion_budget_items: int = 8
@@ -556,7 +584,9 @@ class ContextSettings(BaseModel):
     #: 6000-token budget (measured: median 1380 rendered chars, ~345 tokens). Two numbers
     #: that must agree were written down twice and drifted. token_budget stays the real
     #: constraint.
-    memories_max: int = 50
+    # Primary memories only: graph source companions have their own bounded retrieval
+    # allowance and share the hard token budget, like required document companions.
+    memories_max: int = RETRIEVAL.memory_recall_k
     knowledge_max: int = 12
     graph_facts_max: int = 12
     summaries_max: int = 4

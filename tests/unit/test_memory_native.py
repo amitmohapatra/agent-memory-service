@@ -93,6 +93,42 @@ def test_text_utils() -> None:
         "My name is Amit",
         "my timezone is CET",
     ]
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("我住在北京。我的办公室在上海。", ["我住在北京。", "我的办公室在上海。"]),
+        ("मैं दिल्ली में रहता हूँ। मेरा कार्यालय मुंबई में है।", ["मैं दिल्ली में रहता हूँ।", "मेरा कार्यालय मुंबई में है।"]),
+        ("هل تعيش في القاهرة؟أنا أعيش في دبي.", ["هل تعيش في القاهرة؟", "أنا أعيش في دبي."]),
+        ("🙂 !!! １２３", []),  # noqa: RUF001 — test fullwidth digits
+    ],
+)
+def test_sentence_boundaries_preserve_substantive_non_latin_text(text, expected):
+    assert split_sentences(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["我已婚。", "Evliyim.", "Je travaille.", "Estoy casado.", "Office closed."]
+)
+async def test_short_statements_survive_as_source_observations(native, text):
+    assert split_sentences(text) == [text]
+    candidates = await _extract(native, text)
+    retained = [candidate for candidate in candidates if candidate.category == "verbatim_turn"]
+    assert len(retained) == 1
+    assert retained[0].content == text
+    assert retained[0].memory_type is MemoryType.OBSERVATION
+    assert retained[0].evidence[0].message_id == "msg_1"
+
+
+@pytest.mark.parametrize("text", ["ok", "Thanks!", "🙂 !!! \uff11\uff12\uff13", "我已婚\uff1f"])
+async def test_short_retention_does_not_admit_known_noise_or_questions(native, text):
+    assert await _extract(native, text) == []
+
+
+@pytest.mark.parametrize("question", ["你住在哪里？", "هل تعيش في القاهرة؟"])  # noqa: RUF001
+async def test_non_ascii_question_mark_does_not_create_a_fact(native, question):
+    assert await _extract(native, question) == []
     assert split_clauses("We decided to use Postgres and Redis") == [
         "We decided to use Postgres and Redis"
     ]
@@ -320,3 +356,37 @@ async def test_an_imperative_is_short_lived_and_a_restated_one_is_not(native) ->
     pref = (await _extract(native, "I prefer concise answers."))[0]
     assert pref.memory_type is MemoryType.PREFERENCE
     assert pref.lifetime is Lifetime.LONG_TERM, "stating a preference is not an imperative"
+
+
+@pytest.mark.parametrize("generated_kind", ["contextual_fact", "assisted", "reflection", "llm"])
+@pytest.mark.parametrize("generated_first", [False, True])
+@pytest.mark.parametrize("same_text", [False, True])
+async def test_generated_rewrite_cannot_merge_into_source(
+    native, generated_first, same_text, generated_kind
+):
+    from memory_service.domain.evidence import EvidenceRef
+    from memory_service.ports.intelligence import MemoryCandidate
+
+    source = MemoryCandidate(
+        content="Omar postponed the dashboard until Friday.",
+        memory_type=MemoryType.SEMANTIC,
+        lifetime=Lifetime.LONG_TERM,
+        visibility=Visibility.USER,
+        category="event",
+        evidence=[
+            EvidenceRef(
+                source_type="message", source_id="msg_source", observed_at=datetime.now(UTC)
+            )
+        ],
+    )
+    generated = source.model_copy(
+        update={
+            "category": generated_kind,
+            "provider": "llm" if generated_kind == "llm" else "hindsight",
+            "content": source.content if same_text else source.content + " after approval.",
+        }
+    )
+    previous, incoming = (generated, source) if generated_first else (source, generated)
+    stored = build_memory(previous, CTX, now=datetime.now(UTC))
+    result = await native.consolidate(incoming, [stored], CTX)
+    assert result.decision == DedupDecision.CREATE

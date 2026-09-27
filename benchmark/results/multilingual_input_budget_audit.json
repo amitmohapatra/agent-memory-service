@@ -1,0 +1,202 @@
+{
+  "component": "chunk contextual input token budget",
+  "tokenizer_sha256": "8bd47075711f75a143d1b78e01a41cc65c1c591b00d3cfeffc23db07adce1392",
+  "fixture_sha256": "8a24cae5862151b176fa2b048dc5c95bbec2b3c9be5c75e9281887449e537de4",
+  "llm_calls": 0,
+  "inference_calls": 0,
+  "rows": [
+    {
+      "language": "en",
+      "case": "short_title",
+      "chunks": 1,
+      "over_512": 0,
+      "max_actual_tokens": 314,
+      "max_body_estimate": 272
+    },
+    {
+      "language": "en",
+      "case": "long_title",
+      "chunks": 1,
+      "over_512": 1,
+      "max_actual_tokens": 1193,
+      "max_body_estimate": 272
+    },
+    {
+      "language": "de",
+      "case": "short_title",
+      "chunks": 1,
+      "over_512": 0,
+      "max_actual_tokens": 377,
+      "max_body_estimate": 275
+    },
+    {
+      "language": "de",
+      "case": "long_title",
+      "chunks": 1,
+      "over_512": 1,
+      "max_actual_tokens": 1176,
+      "max_body_estimate": 275
+    },
+    {
+      "language": "es",
+      "case": "short_title",
+      "chunks": 2,
+      "over_512": 0,
+      "max_actual_tokens": 358,
+      "max_body_estimate": 391
+    },
+    {
+      "language": "es",
+      "case": "long_title",
+      "chunks": 2,
+      "over_512": 2,
+      "max_actual_tokens": 1397,
+      "max_body_estimate": 391
+    },
+    {
+      "language": "fr",
+      "case": "short_title",
+      "chunks": 1,
+      "over_512": 0,
+      "max_actual_tokens": 396,
+      "max_body_estimate": 395
+    },
+    {
+      "language": "fr",
+      "case": "long_title",
+      "chunks": 1,
+      "over_512": 1,
+      "max_actual_tokens": 1515,
+      "max_body_estimate": 395
+    },
+    {
+      "language": "zh",
+      "case": "short_title",
+      "chunks": 4,
+      "over_512": 0,
+      "max_actual_tokens": 124,
+      "max_body_estimate": 381
+    },
+    {
+      "language": "zh",
+      "case": "long_title",
+      "chunks": 4,
+      "over_512": 4,
+      "max_actual_tokens": 1163,
+      "max_body_estimate": 381
+    },
+    {
+      "language": "ja",
+      "case": "short_title",
+      "chunks": 5,
+      "over_512": 0,
+      "max_actual_tokens": 82,
+      "max_body_estimate": 347
+    },
+    {
+      "language": "ja",
+      "case": "long_title",
+      "chunks": 5,
+      "over_512": 5,
+      "max_actual_tokens": 1281,
+      "max_body_estimate": 347
+    },
+    {
+      "language": "hi",
+      "case": "short_title",
+      "chunks": 8,
+      "over_512": 0,
+      "max_actual_tokens": 77,
+      "max_body_estimate": 380
+    },
+    {
+      "language": "hi",
+      "case": "long_title",
+      "chunks": 8,
+      "over_512": 8,
+      "max_actual_tokens": 1356,
+      "max_body_estimate": 380
+    },
+    {
+      "language": "ar",
+      "case": "short_title",
+      "chunks": 5,
+      "over_512": 0,
+      "max_actual_tokens": 109,
+      "max_body_estimate": 374
+    },
+    {
+      "language": "ar",
+      "case": "long_title",
+      "chunks": 5,
+      "over_512": 5,
+      "max_actual_tokens": 1308,
+      "max_body_estimate": 374
+    },
+    {
+      "language": "ru",
+      "case": "short_title",
+      "chunks": 6,
+      "over_512": 0,
+      "max_actual_tokens": 98,
+      "max_body_estimate": 391
+    },
+    {
+      "language": "ru",
+      "case": "long_title",
+      "chunks": 6,
+      "over_512": 6,
+      "max_actual_tokens": 1377,
+      "max_body_estimate": 391
+    },
+    {
+      "language": "tr",
+      "case": "short_title",
+      "chunks": 2,
+      "over_512": 0,
+      "max_actual_tokens": 300,
+      "max_body_estimate": 375
+    },
+    {
+      "language": "tr",
+      "case": "long_title",
+      "chunks": 2,
+      "over_512": 2,
+      "max_actual_tokens": 1419,
+      "max_body_estimate": 375
+    },
+    {
+      "language": "ko",
+      "case": "short_title",
+      "chunks": 5,
+      "over_512": 0,
+      "max_actual_tokens": 128,
+      "max_body_estimate": 373
+    },
+    {
+      "language": "ko",
+      "case": "long_title",
+      "chunks": 5,
+      "over_512": 5,
+      "max_actual_tokens": 1567,
+      "max_body_estimate": 373
+    },
+    {
+      "language": "th",
+      "case": "short_title",
+      "chunks": 8,
+      "over_512": 0,
+      "max_actual_tokens": 75,
+      "max_body_estimate": 375
+    },
+    {
+      "language": "th",
+      "case": "long_title",
+      "chunks": 8,
+      "over_512": 8,
+      "max_actual_tokens": 1275,
+      "max_body_estimate": 375
+    }
+  ],
+  "limitation": "Synthetic input-limit stress audit, not retrieval accuracy."
+}

@@ -1,0 +1,8 @@
+FROM memory-ocr-screen:20260928
+USER root
+RUN export VIRTUAL_ENV=/opt/venv; \
+    ver="$(/opt/venv/bin/python -c 'import importlib.metadata as m; print(m.version("opencv-python"))')"; \
+    uv pip uninstall opencv-python; \
+    uv pip install --no-cache "opencv-python-headless==$ver"; \
+    /opt/venv/bin/python -c 'import cv2; print("cv2", cv2.__version__, "headless OK")'
+USER nobody

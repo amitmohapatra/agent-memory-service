@@ -14,6 +14,7 @@ from typing import Any, Literal
 from memory_service.domain.documents import DocumentNode
 from memory_service.domain.enums import Representation
 from memory_service.domain.ids import content_hash
+from memory_service.domain.text import token_units
 
 BlockKind = Literal["heading", "paragraph", "table", "code", "list", "footnote", "caption"]
 
@@ -29,8 +30,15 @@ class Block:
 
 
 def estimate_tokens(text: str) -> int:
-    """Deterministic, tokenizer-free estimate (~4 chars/token for English, +1 per line)."""
-    return max(1, len(text) // 4 + text.count("\n"))
+    """Packing estimate; preserve English budgets, reserve bytes for other scripts.
+
+    A model-specific tokenizer remains authoritative for its input limit. This estimate
+    is deliberately conservative for multilingual text rather than silently undercounting
+    Chinese, Thai or Indic text by applying the English four-characters-per-token ratio.
+    """
+    if text.isascii():
+        return max(1, len(text) // 4 + text.count("\n"))
+    return max(1, sum(map(token_units, text)) // 4)
 
 
 _HEADING_NUMBER = re.compile(r"^(\d+(?:\.\d+)*)\.?\s+")

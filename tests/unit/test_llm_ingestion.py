@@ -52,7 +52,9 @@ def _fixture_nodes() -> list[DocumentNode]:
     return [
         _node(_long("restructuring", 40), ordinal=0),
         _node("A short paragraph that fits in one chunk.", ordinal=1),
-        _node(_table(), Representation.TABLE, ordinal=2),
+        # This fixture exercises an intact table after the split paragraph. Oversized
+        # tables now obey the same 100-token budget and have separate splitting tests.
+        _node(_table(10), Representation.TABLE, ordinal=2),
     ]
 
 

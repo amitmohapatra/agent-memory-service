@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any
 
@@ -28,7 +29,7 @@ class LexicalNLI:
     (paraphrases score low), so reports built with it say ``representative: false``."""
 
     info = ProviderInfo(
-        name="lexical-nli", version="1", license="Apache-2.0", origin="internal", locality="local"
+        name="lexical-nli", version="2", license="Apache-2.0", origin="internal", locality="local"
     )
     representative = False
 
@@ -55,10 +56,48 @@ class LexicalNLI:
         return NLIScore(entailment=e, neutral=round(1.0 - e - c, 4), contradiction=c)
 
     def fingerprint(self) -> str:
-        return "lexical-nli-v1"
+        return "lexical-nli-v2"
 
 
-class TransformersNLI:
+class BatchedNLI(ABC):
+    """Ordered scoring and one bounded CPU runner shared by trained NLI runtimes."""
+
+    info: ProviderInfo
+    representative = True
+    spec: NLIModel
+    _runner: SerialRunner
+
+    @abstractmethod
+    def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]: ...
+
+    async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
+        if not premises:
+            return []
+        pairs = [(premise, hypothesis) for premise in premises]
+        return await self._runner.run(self._score_pairs, pairs)
+
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        pairs = [(premise, hypothesis) for premises, hypothesis in groups for premise in premises]
+        if not pairs:
+            return [[] for _ in groups]
+        flat = await self._runner.run(self._score_pairs, pairs)
+        scores: list[list[NLIScore]] = []
+        cut = 0
+        for premises, _ in groups:
+            scores.append(flat[cut : cut + len(premises)])
+            cut += len(premises)
+        return scores
+
+    def close(self) -> None:
+        self._runner.close()
+
+    @abstractmethod
+    def fingerprint(self) -> str: ...
+
+
+class TransformersNLI(BatchedNLI):
     """``AutoModelForSequenceClassification`` cross-encoder (DeBERTa-v3 MNLI/FEVER/ANLI) on
     CPU, batched, and entered one caller at a time on its own thread. Label order is read
     from the model config."""
@@ -108,9 +147,6 @@ class TransformersNLI:
             locality="local",
         )
 
-    def _score(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
-        return self._score_pairs([(p, hypothesis) for p in premises])
-
     def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
         """Every (premise, hypothesis) pair, batched by the spec's batch size.
 
@@ -136,29 +172,6 @@ class TransformersNLI:
                     e, n, c = (float(row[i]) for i in self._order)
                     out.append(NLIScore(entailment=e, neutral=n, contradiction=c))
         return out
-
-    async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
-        if not premises:
-            return []
-        return await self._runner.run(self._score, list(premises), hypothesis)
-
-    async def entail_groups(
-        self, groups: Sequence[tuple[Sequence[str], str]]
-    ) -> list[list[NLIScore]]:
-        """One gate acquisition and one batched pass for every claim, then regrouped."""
-        pairs = [(premise, hypothesis) for premises, hypothesis in groups for premise in premises]
-        if not pairs:
-            return [[] for _ in groups]
-        flat = await self._runner.run(self._score_pairs, pairs)
-        scores: list[list[NLIScore]] = []
-        cut = 0
-        for premises, _ in groups:
-            scores.append(flat[cut : cut + len(premises)])
-            cut += len(premises)
-        return scores
-
-    def close(self) -> None:
-        self._runner.close()
 
     def fingerprint(self) -> str:
         source = self.spec.model_path or self.spec.id

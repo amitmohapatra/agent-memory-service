@@ -21,25 +21,45 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
-from bifrost_sdk import RETRYABLE, Bifrost, CircuitOpen, GatewayError, RateLimited, Unreachable
+from bifrost_sdk import (
+    RETRYABLE,
+    Bifrost,
+    CircuitOpen,
+    GatewayError,
+    Options,
+    RateLimited,
+    Unreachable,
+)
 
+from memory_service.adapters.models.catalog import ModelCatalog
 from memory_service.config.constants import LLM_TRANSPORT, LLMTransport
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.cost import record_llm_tokens
+from memory_service.modules.llm.policy import current_model_identity
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import llm_requests_total, llm_seconds, llm_tokens_total
 from memory_service.observability.tracing import span
+from memory_service.ports.credentials import CredentialResolver, ModelIdentity
 from memory_service.ports.models import LLMCompletion, LLMMessage, ProviderInfo
 
 log = get_logger(__name__)
 
 #: The only status for which falling back to a prompt-shaped schema is correct.
 _BAD_REQUEST = 400
+
+# Presence with an empty value means deny-all in Bifrost; absent headers can inherit
+# the virtual key's tools. Options.mcp(clients=[]) omits empties, so use explicit headers.
+MEMORY_CALL_OPTIONS = Options(
+    content_logging=False,
+    extra={"x-bf-mcp-include-clients": "", "x-bf-mcp-include-tools": ""},
+)
 
 
 class LLMCallFailed(DependencyUnavailable):
@@ -144,12 +164,14 @@ class BifrostLLM:
         log_source_text: bool = False,
         client: httpx.AsyncClient | None = None,
         transport: LLMTransport = LLM_TRANSPORT,
+        credentials: CredentialResolver | None = None,
     ) -> None:
         if not settings.enabled:
             raise ProviderNotConfigured("models.llm.enabled must be true")
         if not settings.model:
             raise ProviderNotConfigured("models.llm.model is required")
         self.settings = settings
+        self.credentials = credentials
         self.model = settings.model
         self.fast_model = settings.fast_model or settings.model
         self.log_source_text = log_source_text
@@ -163,6 +185,24 @@ class BifrostLLM:
         #: put the schema in the prompt from the first attempt instead of paying a wasted
         #: round trip each time (DeepSeek did, on every one of ~600 calls in one run).
         self._schema_in_prompt: set[str] = set()
+        self._credential_attempt: ContextVar[tuple[ModelIdentity, int | None] | None] = ContextVar(
+            "memory_credential_attempt", default=None
+        )
+        self._owns_http_client = client is None
+        headers = {"Content-Type": "application/json"}
+        if settings.api_key:
+            headers["Authorization"] = f"Bearer {settings.api_key.get_secret_value()}"
+        self._http_client = client or httpx.AsyncClient(
+            base_url=settings.base_url.rstrip("/"),
+            headers=headers,
+            timeout=httpx.Timeout(
+                settings.timeout_seconds, connect=min(5.0, settings.timeout_seconds)
+            ),
+        )
+        # httpx invokes request hooks for every SDK retry, after its backoff. This
+        # keeps retries in the shared SDK while denying a newly retired key before send.
+        self._http_client.event_hooks["request"].append(self._validate_attempt)
+        self._catalog = ModelCatalog(self._http_client)
         self._gateway = Bifrost(
             settings.base_url,
             api_key=settings.api_key.get_secret_value() if settings.api_key else None,
@@ -172,12 +212,21 @@ class BifrostLLM:
             max_tokens=settings.max_tokens,
             circuit_failure_threshold=transport.circuit_failure_threshold,
             circuit_open_seconds=transport.circuit_open_seconds,
-            client=client,
+            client=self._http_client,
         )
 
     # ------------------------------------------------------------------ port
     def model_for(self, use: str) -> str:
         return self.fast_model if use in self.settings.fast_uses else self.model
+
+    async def _resolve_model(self, use: str) -> str:
+        configured = self.model_for(use)
+        if configured != "auto":
+            return configured
+        async with self._call_options() as options:
+            return await self._catalog.resolve(
+                self._credential_attempt.get(), options, fast=use in self.settings.fast_uses
+            )
 
     async def complete(
         self,
@@ -204,7 +253,7 @@ class BifrostLLM:
         use: str = "generic",
     ) -> dict[str, Any]:
         turns = [m.model_dump() for m in messages]
-        model = self.model_for(use)
+        model = await self._resolve_model(use)
         response_format: dict[str, Any] | None = None
         if model not in self._schema_in_prompt:
             response_format = {
@@ -232,6 +281,7 @@ class BifrostLLM:
                 completion = await self._chat(
                     turns,
                     use=use,
+                    selected_model=model,
                     max_tokens=min(max_tokens, self.settings.max_tokens),
                     source=messages,
                     **envelope,
@@ -279,7 +329,18 @@ class BifrostLLM:
         return await self._gateway.ping()
 
     async def close(self) -> None:
+        await self._catalog.close()
         await self._gateway.aclose()
+        hooks = self._http_client.event_hooks["request"]
+        if self._validate_attempt in hooks:
+            hooks.remove(self._validate_attempt)
+        if self._owns_http_client:
+            await self._http_client.aclose()
+
+    async def _validate_attempt(self, request: httpx.Request) -> None:
+        binding = self._credential_attempt.get()
+        if binding is not None and self.credentials is not None:
+            await self.credentials.confirm(*binding)
 
     # ------------------------------------------------------------------ internals
     async def _chat(
@@ -290,6 +351,7 @@ class BifrostLLM:
         max_tokens: int,
         temperature: float = 0.0,
         source: Sequence[LLMMessage],
+        selected_model: str | None = None,
         **extra: Any,
     ) -> LLMCompletion:
         """One gateway call, in this service's error vocabulary.
@@ -297,17 +359,20 @@ class BifrostLLM:
         Returns the extracted completion rather than the raw payload: both callers want the
         text, and the outcome recorded here depends on whether there is any.
         """
-        model = self.model_for(use)
+        model = selected_model or await self._resolve_model(use)
         started = time.perf_counter()
         with span("llm.chat", use=use, model=model) as current:
             try:
-                data = await self._gateway.complete(
-                    turns,
-                    model=model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    **extra,
-                )
+                async with self._call_options() as options:
+                    data = await self._gateway.complete(
+                        turns,
+                        model=model,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        _options=options,
+                        tool_choice="none",
+                        **extra,
+                    )
             except CircuitOpen as exc:
                 # Nothing was sent: the shared client's breaker is open after consecutive
                 # failures, so this call fails immediately instead of paying the timeout.
@@ -368,6 +433,39 @@ class BifrostLLM:
             self._success(use, data, time.perf_counter() - started, current, model, source)
         return completion
 
+    @asynccontextmanager
+    async def _call_options(self) -> AsyncIterator[Options]:
+        """Bind one call to its owner and reject results from a retired credential."""
+        identity = current_model_identity()
+        credential = (
+            await self.credentials.resolve(identity)
+            if self.credentials is not None and identity is not None
+            else None
+        )
+        options = MEMORY_CALL_OPTIONS
+        if self.settings.enabled == "auto" and credential is None and not self.settings.api_key:
+            raise ProviderNotConfigured("Automatic assistance requires an agent or operator key")
+        if credential is not None:
+            # Per-request headers, never mutation of the shared client's defaults. Override
+            # both accepted gateway key forms so an operator Authorization cannot win.
+            value = credential.key.get_secret_value()
+            options = options.merged(
+                virtual_key=value,
+                extra={**options.extra, "Authorization": f"Bearer {value}"},
+            )
+        binding = (
+            (identity, credential.revision if credential is not None else None)
+            if identity is not None and self.credentials is not None
+            else None
+        )
+        token = self._credential_attempt.set(binding)
+        try:
+            yield options
+            if binding is not None and self.credentials is not None:
+                await self.credentials.confirm(*binding)
+        finally:
+            self._credential_attempt.reset(token)
+
     def _success(
         self,
         use: str,
@@ -423,6 +521,8 @@ class BifrostLLM:
         try:
             choice = data["choices"][0]
             message = choice.get("message") or {}
+            if message.get("tool_calls") or message.get("function_call"):
+                raise LLMCallFailed("memory model response unexpectedly requested a tool")
             content = message.get("content")
             if isinstance(content, list):  # some gateways return content parts
                 content = "".join(

@@ -18,7 +18,7 @@ from memory_service.modules.context.summaries import (
     build_summaries,
 )
 from memory_service.modules.jobs.registry import register_handlers
-from memory_service.modules.rag.indexer import Indexer
+from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
 from tests.integration.conftest import container, uow_factory  # noqa: F401
 from tests.support_llm import mocked_gateway
 
@@ -234,8 +234,10 @@ async def test_indexer_and_builder_use_the_model(container, uow_factory) -> None
     async with uow_factory() as uow:
         after = await uow.documents.node_summaries("acme", list(before))
     doc_node = next(n for n in nodes if n.representation is Representation.DOCUMENT)
-    assert after[doc_node.node_id] == f"{TITLE}: ACME grew EBITDA while revenue fell."
-    assert set(after) == set(before)
+    assert after == before  # SQL parent expansion always reads source-backed text.
+    records = await container.search.get(indexer.collection(KNOWLEDGE), [f"sum_{doc_node.node_id}"])
+    assert len(records) == 1 and records[0].payload["provider"] == "llm"
+    assert records[0].payload["text"] == f"{TITLE}: ACME grew EBITDA while revenue fell."
 
     thread = new_id("thread")
     tctx = ctx.model_copy(

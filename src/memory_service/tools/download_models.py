@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -58,6 +59,7 @@ class Model:
     default: bool = False
     #: "torch" loads safetensors through sentence-transformers; "onnx" fetches the graph only
     runtime: str = "torch"
+    revision: str | None = None
 
     @property
     def allow(self) -> list[str]:
@@ -81,6 +83,7 @@ def _frozen() -> tuple[Model, ...]:
             f"the dense encoder, {dense.dimension}-dim ({dense.backend} backend)",
             default=True,
             runtime="onnx" if dense.backend != "torch" else "torch",
+            revision=dense.revision,
         ),
         Model(
             nli.local_dir,
@@ -88,12 +91,19 @@ def _frozen() -> tuple[Model, ...]:
             "nli",
             "claim-support classifier for the grounding cascade",
             default=True,
+            runtime=nli.runtime,
+            revision=nli.revision,
         ),
     ]
     if reranker is not None:
         out.append(
             Model(
-                reranker.local_dir, reranker.id, "reranker", "cross-encoder reranker", default=True
+                reranker.local_dir,
+                reranker.id,
+                "reranker",
+                "cross-encoder reranker",
+                default=True,
+                revision=reranker.revision,
             )
         )
     return tuple(out)
@@ -111,6 +121,21 @@ DOCLING_DIRECTORY = "docling"
 
 def manifest_path(root: Path) -> Path:
     return root / "MANIFEST.json"
+
+
+def commit_manifest(root: Path, manifest: dict[str, Any], model: Model) -> None:
+    """Publish complete provenance before making refreshed model bytes reusable."""
+    with tempfile.NamedTemporaryFile(mode="w", dir=root, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.replace(temporary, manifest_path(root))
+        finally:
+            temporary.unlink(missing_ok=True)
+    if manifest.get(model.directory, {}).get("revision"):
+        (root / model.directory / ".download-in-progress").unlink(missing_ok=True)
 
 
 def load_manifest(root: Path) -> dict[str, Any]:
@@ -151,20 +176,36 @@ def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
 
     target = root / model.directory
     present = PRESENT[model.runtime]
+    incomplete = target / ".download-in-progress"
+    recorded = load_manifest(root).get(model.directory, {})
     if (
-        target.exists()
-        and not force
+        not force
+        and not incomplete.exists()
         and (any(target.glob(present)) or any(target.glob(f"*/{present}")))
+        and recorded.get("repo") == model.repo
+        and recorded.get("revision")
+        and (model.revision is None or model.revision == recorded["revision"])
     ):
-        revision = HfApi().model_info(model.repo).sha
-        return {"repo": model.repo, "revision": revision, "role": model.role, "cached": True}
+        # The upstream HEAD says nothing about bytes already on disk. Preserve their
+        # recorded identity; a forced refresh or explicit pin fetches a new snapshot.
+        return {**recorded, "role": model.role, "cached": True}
+    revision = HfApi().model_info(model.repo, revision=model.revision).sha
+    target.mkdir(parents=True, exist_ok=True)
+    incomplete.write_text(revision, encoding="utf-8")
+    if model.runtime == "torch":
+        # Exported graphs are derived from the checkpoint. A refreshed tokenizer and
+        # checkpoint must never keep an older runtime graph. Invalidate before fetch:
+        # even an interrupted refresh must require export before the next startup.
+        for graph in (target / GRAPH_DIR).glob("*.onnx*"):
+            if graph.is_file():
+                graph.unlink()
     snapshot_download(
         model.repo,
+        revision=revision,
         local_dir=str(target),
         allow_patterns=model.allow,
         ignore_patterns=model.ignore,
     )
-    revision = HfApi().model_info(model.repo).sha
     return {"repo": model.repo, "revision": revision, "role": model.role, "cached": False}
 
 
@@ -186,8 +227,8 @@ def _fetch_docling(root: Path, *, force: bool = False) -> None:
     target.mkdir(parents=True, exist_ok=True)
     # Exactly the models the parser is configured to use, and no others. The defaults also
     # pull RapidOCR, code-formula and picture-classifier weights; the parser enables none of
-    # them, and the OCR download fails outright in a slim image (cv2 needs libxcb). Fetching
-    # what is not used is not free - it is disk, image size and a longer first start.
+    # them. CPU OCR uses Tesseract language/script packs installed by the image, so another
+    # OCR model download here would add disk and startup cost without serving a request.
     fetch(
         output_dir=target,
         force=force,
@@ -700,7 +741,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(
                 f"{'cached' if entry['cached'] else 'downloaded'} {entry['revision'][:12]}\n"
             )
-        manifest_path(root).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        commit_manifest(root, manifest, model)
 
     sys.stdout.write(f"\nmanifest: {manifest_path(root)}\n")
     if not failures and (rc := ensure_dense_graph(root)):

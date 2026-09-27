@@ -109,7 +109,7 @@ def test_bm25_encoder_saturates_and_is_stable() -> None:
     q = enc.encode_query("Adjusted EBITDA adjusted")
     assert set(q.values) == {1.0} and len(q.indices) == len(set(q.indices))
     assert enc.encode_query("x y") == enc.encode_query("x y")
-    assert enc.fingerprint() == "bm25-v1-k1.2-b0.75"
+    assert enc.fingerprint() == "bm25-v2-unicode-k1.2-b0.75"
     assert enc.encode_query("the of and").indices == []
 
 

@@ -12,6 +12,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
+class AgentKeyStatus(BaseModel):
+    """Metadata only; neither a virtual key nor encrypted material is returned."""
+
+    registered: bool
+    revoked: bool
+    revision: int
+    updated_at: datetime | None = None
+
+
 # --------------------------------------------------------------------------- vocabularies
 
 MemoryType = Literal[
@@ -247,6 +257,16 @@ class ContextItem(BaseModel):
     def predicate(self) -> str | None:
         return self.attributes.get("predicate")
 
+    def verification_item(self) -> dict[str, Any]:
+        """Preserve provenance when forwarding retrieved text as grounding evidence."""
+        return {
+            "item_id": self.item_id,
+            "text": self.text,
+            "kind": self.representation,
+            "citation": self.citation,
+            "attributes": dict(self.attributes),
+        }
+
 
 class ConversationWindow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
@@ -350,7 +370,7 @@ class ContextBundle(BaseModel):
         """The packed evidence as ``/v1/verify`` items, in citation order (``[1]`` is the
         first memory, then facts, summaries, knowledge)."""
         return [
-            {"item_id": i.item_id, "text": i.text, "kind": i.representation, "citation": i.citation}
+            i.verification_item()
             for group in (self.memories, self.graph_facts, self.summaries, self.knowledge)
             for i in group
         ]
@@ -541,3 +561,33 @@ class ToolPlan(BaseModel):
     def render_script(self) -> str:
         """Starlark form for Bifrost code mode."""
         return self.script or ""
+
+
+class BriefSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["mental_model", "knowledge_page"] = "mental_model"
+    title: str = Field(min_length=1, max_length=200)
+    question: str = Field(min_length=1, max_length=4000)
+    use_llm: bool = False
+    refresh_seconds: int = Field(default=3600, ge=60, le=86400)
+
+
+class BriefOutput(BaseModel):
+    text: str
+    sources: list[ContextItem] = Field(default_factory=list)
+    generated: bool = False
+    generation_profile: str | None = None
+    revision_fingerprint: str
+    valid_until: datetime
+    built_at: datetime
+
+
+class BriefInfo(BaseModel):
+    brief_id: str
+    spec: BriefSpec
+
+
+class Brief(BriefInfo):
+    status: Literal["pending", "ready", "stale"]
+    output: BriefOutput | None = None

@@ -118,13 +118,19 @@ _NO_OWNER_KEY = frozenset({Visibility.PRIVATE, Visibility.RUN, Visibility.THREAD
 
 
 def readable_by(
-    tenant_id: str, visibility: Visibility, *, owner_principal: str, **anchors: str | None
+    tenant_id: str,
+    visibility: Visibility,
+    *,
+    owner_principal: str,
+    scope: Scope | None = None,
+    **anchors: str | None,
 ) -> list[str]:
     """``visibility_keys`` plus the author's own key, which is what a stored row carries."""
     keys = visibility_keys(
         tenant_id,
         visibility,
         owner_principal=owner_principal,
+        scope=scope,
         **anchors,  # type: ignore[arg-type]
     )
     if visibility in _NO_OWNER_KEY:

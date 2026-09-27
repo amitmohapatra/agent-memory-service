@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +19,15 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import new_id
+
+UNVERIFIED_MEMORY_CATEGORIES = ("contextual_fact", "assisted", "reflection")
+
+
+def unverified_representation(metadata: Mapping[str, Any]) -> bool:
+    """A model rewrite with source association, but no independently verified entailment."""
+    return metadata.get("category") in UNVERIFIED_MEMORY_CATEGORIES or (
+        metadata.get("provider") == "llm"
+    )
 
 
 class Scope(BaseModel):

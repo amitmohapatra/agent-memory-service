@@ -1,5 +1,4 @@
-"""GraphStage: a RetrievalEngine post-stage for entity/relation, multi-hop, temporal and
-decision queries.
+"""GraphStage: bounded graph evidence for typed and unclassified semantic queries.
 
     query entities -> bounded neighbourhood (1 hop, 2 for multi-hop) -> ranked facts
     -> the facts' *evidence chunks* are pulled in as knowledge candidates (multi-hop
@@ -56,7 +55,11 @@ graph_parked_cancelled_total = Counter(
     registry=REGISTRY,
 )
 
-_MULTI_HOP_TYPES = {QueryType.DOCUMENT_MULTI_HOP, QueryType.ENTITY_RELATION}
+_MULTI_HOP_TYPES = {
+    QueryType.DOCUMENT_MULTI_HOP,
+    QueryType.ENTITY_RELATION,
+    QueryType.GENERAL_SEMANTIC,
+}
 _STRUCTURAL = {"mentioned_in", "co_occurs_with", "discusses", "refers_to", "segment_of"}
 # query words that name a relation: "exclude" -> excludes, "drove" -> driven_by, "pay" -> ...
 _PREDICATE_CUES: dict[str, tuple[str, ...]] = {
@@ -185,6 +188,8 @@ class GraphStage:
             # Bergmann answers "who leads the freight operator used by Acme?" and needs
             # three. At two the traversal stopped on Westfalen and the answer was never
             # retrieved. ``max_visited`` is what bounds the cost.
+            # Unclassified questions use the same bound: failing an English intent rule
+            # says nothing about how many relations a question needs in another language.
             hops=3 if routed.query_type in _MULTI_HOP_TYPES else 1,
             as_of=as_of,
             visibility=visibility,

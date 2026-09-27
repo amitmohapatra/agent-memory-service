@@ -108,7 +108,7 @@ def test_lexical_signals_numbers_negation_polarity() -> None:
 
 async def test_lexical_nli_scores_are_deterministic_and_representative_false() -> None:
     nli = LexicalNLI()
-    assert nli.representative is False and nli.fingerprint() == "lexical-nli-v1"
+    assert nli.representative is False and nli.fingerprint() == "lexical-nli-v2"
     scores = await nli.entail([E1.text, E2.text, "unrelated text about weather"], "EBITDA rose")
     assert len(scores) == 3
     for s in scores:
@@ -145,7 +145,7 @@ async def test_cascade_verdicts_and_hallucination_rate() -> None:
     ]
     assert report.supported == 2 and report.contradicted == 2 and report.unsupported == 1
     assert report.per_claim_hallucination_rate == 0.6 and report.grounded is False
-    assert report.representative is False and report.nli_provider == "lexical-nli-v1"
+    assert report.representative is False and report.nli_provider == "lexical-nli-v2"
     assert report.evidence_count == 3 and report.llm_tokens == 0 and report.judge_consulted == 0
     assert any("stand-in" in n for n in report.notes)
     empty = await cascade().verify("Really?", [E1])
@@ -253,4 +253,42 @@ def test_bundle_evidence_order_and_attach() -> None:
 def GroundingReport_stub():  # noqa: N802 - tiny helper keeps the test readable
     from memory_service.domain.grounding import GroundingReport
 
-    return GroundingReport(nli_provider="lexical-nli-v1")
+    return GroundingReport(nli_provider="lexical-nli-v2")
+
+
+@pytest.mark.parametrize(
+    "attributes",
+    [
+        {"category": "contextual_fact"},
+        {"category": "assisted"},
+        {"category": "reflection"},
+        {"provider": "llm"},
+    ],
+)
+async def test_generated_rewrite_cannot_prove_itself_and_citations_keep_their_positions(attributes):
+    from tests.unit.test_bundle_rendering import _bundle
+
+    claim = "Omar postponed the dashboard until Friday."
+    generated = ContextItem(
+        item_id="generated",
+        representation=Representation.MEMORY,
+        text=claim,
+        citation="memory:generated",
+        attributes=attributes,
+    )
+    source = ContextItem(
+        item_id="source",
+        representation=Representation.MEMORY,
+        text="Omar discussed the dashboard.",
+        citation="memory:source",
+    )
+    bundle = _bundle([generated, source])
+    packed, _ = bundle_evidence(bundle)
+    assert resolve_citation("2", packed).item_id == "source"
+    for answer in (claim, claim + " [1]"):
+        report = await cascade().verify_bundle(bundle, answer)
+        assert report.supported == 0
+    source = source.model_copy(update={"text": claim})
+    supported = await cascade().verify_bundle(_bundle([generated, source]), claim + " [2]")
+    assert supported.supported == 1
+    assert "model-extracted, unverified" in bundle.render()

@@ -228,6 +228,12 @@ bundle.evidence  # what was found, what was missing, and the status
 
 Need just the search results? `await ctx.recall("...")` returns ranked items.
 
+Reads default to `use_llm=False`, independently of ingestion's model settings. Pass
+`use_llm=True` to permit the configured read helpers. Agent-owned virtual keys and persistent
+standing questions/pages are exposed through `ctx.set_model_key(...)` and `ctx.briefs`;
+see the [SDK examples](sdk/python/README.md) and
+[capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
+
 ### State a fact directly
 
 When your app knows something rather than inferring it from chat:
@@ -458,19 +464,29 @@ MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 # The models are not settings: `make models` puts the frozen set in ./models (git-ignored)
 # and the service finds it there, or under /models in the image.
 
-# Optional LLM — off by default, and only ever through a Bifrost gateway. Enabling it also
-# needs MODEL and USES: with USES empty nothing would call the model, and startup refuses
-# that rather than reporting an LLM it never consults.
-MEMORY__MODELS__LLM__ENABLED=false
+# Automatic assistance requires an agent/operator key. False prohibits generation.
+MEMORY__MODELS__LLM__ENABLED=auto
 ```
 
 ### About the LLM
 
-The service runs fully without one. When you enable it, **every call goes through
-[Bifrost](https://github.com/maximhq/bifrost)**, an external gateway you run yourself. The
-service holds only a Bifrost virtual key (in a git-ignored `secrets.env`); your provider keys
-stay in Bifrost. No provider SDK is importable anywhere in the codebase — a lint rule and an
-architecture test enforce it.
+The default `enabled=auto` mode activates bounded ingestion assistance when the acting
+agent has a registered virtual key. No per-agent model/use configuration is needed: the
+service queries the gateway's authenticated model catalogue and selects a recognized
+eligible text model. Opaque aliases are not guessed. Catalogue discovery is cached per
+owner/key revision for five minutes and performs no generation. Reads remain model-free
+unless `use_llm=True`; `enabled=false` prohibits generation even for registered agents.
+Explicit `enabled=true` configuration below remains supported for operator-selected uses.
+
+
+The service runs without one. Native model calls go through
+[Bifrost](https://github.com/maximhq/bifrost), an external gateway you run yourself. The
+operator key comes from deployment secrets; agent-owned virtual keys are encrypted in the
+native database. Provider keys stay in Bifrost. Agent requests exclude MCP clients/tools.
+The pinned Hindsight SDK provides extraction preview for eligible non-agent ingestion;
+that server owns its model configuration. Agent extraction stays on the Bifrost path because
+the SDK cannot carry a per-request model virtual key. Source storage and authorization stay
+native. See the [integration boundary](docs/HINDSIGHT-CAPABILITY-STATUS-20260927.md).
 
 There is deliberately **no gateway service in `docker-compose.yml`**. Starting one from this
 repository's own compose file would put provider keys inside the application's deployment,
@@ -509,13 +525,15 @@ are passed straight to the shared [`bifrost-sdk`](https://github.com/amitmohapat
 client, which owns the transport, the retries, the rate-limit parsing and the breaker — the
 same client the agent harness uses, so neither service can learn a lesson the other misses.
 
-Available uses: `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
+Available uses: `contextual_extraction`, `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,
-`chunk_context`, `grounding_judge`.
+`chunk_context`, `grounding_judge`, `briefs`.
 
-Each one is consulted **only** when the deterministic path signals genuine ambiguity, and any
-failure — gateway down, bad output, timeout — falls back to the deterministic result. Turning
-them all off changes quality, never correctness.
+Each use has its own gate. Ambiguous/contextual extraction consults the model only for
+eligible inputs; assisted brief refresh generates only when evidence or synthesis
+configuration changes. Native paths remain available. An explicitly assisted brief fails
+refresh if no valid cited model result is available; it does not silently substitute native
+text. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
 ---
 

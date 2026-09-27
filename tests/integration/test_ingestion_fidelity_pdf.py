@@ -1,6 +1,6 @@
 """Ingestion fidelity on real-world PDFs parsed by Docling: every line of every parsed node is
 preserved verbatim in exactly one chunk, the chunk carries the page the node came from,
-tables stay whole in one chunk, prose chunks carry a section path, and known table rows,
+table rows survive bounded splitting, prose chunks carry a section path, and known table rows,
 footnotes and two-column prose land on the right page. Needs Docling + its models
 (``models`` marker); runs in the validation container."""
 
@@ -79,10 +79,14 @@ async def test_pdf_lines_tables_pages_and_sections(container, uow_factory, filen
         lines = [ln.strip() for ln in n.text.splitlines() if len(ln.strip()) >= 12]
         if n.representation is Representation.TABLE:
             table_chunks = [c for c in chunks if c.node_id == n.node_id]
-            if len(table_chunks) != 1:
-                problems.append(f"table {n.title!r} split across {len(table_chunks)} chunks")
-            elif not all(ln in table_chunks[0].text for ln in lines):
-                problems.append(f"table {n.title!r} rows missing from its chunk")
+            if not table_chunks or not all(
+                any(line in chunk.text for chunk in table_chunks) for line in lines
+            ):
+                problems.append(f"table {n.title!r} rows missing from its chunks")
+            if any(
+                c.token_estimate > container.tuning.documents.max_chunk_tokens for c in table_chunks
+            ):
+                problems.append(f"table {n.title!r} exceeds the model input planning budget")
             continue
         for ln in lines:
             holders = [c for c in chunks if c.node_id == n.node_id and ln in c.text]
@@ -111,6 +115,10 @@ async def test_pdf_lines_tables_pages_and_sections(container, uow_factory, filen
             if c.page == page and node_by_id[c.node_id].representation is Representation.TABLE
         ]
         assert table_chunks, f"no table chunk on page {page}"
-        assert any(all(cell in c.text for cell in cells) for c in table_chunks), (
-            f"table cells {cells} not together in one chunk on page {page}"
-        )
+        # Values must retain their common table identity even when that table is too
+        # large for one encoder input. A table from another node cannot satisfy the group.
+        table_nodes = {c.node_id for c in table_chunks}
+        assert any(
+            all(any(cell in c.text for c in table_chunks if c.node_id == node) for cell in cells)
+            for node in table_nodes
+        ), f"table cells {cells} not together in one table on page {page}"

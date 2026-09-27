@@ -1,0 +1,10 @@
+{
+  "id": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+  "local_dir": "mdeberta-multilingual",
+  "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce",
+  "runtime": "onnx",
+  "graph_file": "onnx/model.onnx",
+  "batch_size": 8,
+  "threads": 2,
+  "model_path": "/Users/ricky/usage_data/ams-agent-capabilities/.bench_data/models/mdeberta-multilingual"
+}

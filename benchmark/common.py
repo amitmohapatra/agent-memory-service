@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -13,6 +14,12 @@ from pathlib import Path
 from typing import Any
 
 RESULTS = Path(__file__).resolve().parent / "results"
+
+
+def file_sha256(path: Path) -> str:
+    """Stream artifact identity without loading a model-sized file into memory."""
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def _git_commit() -> str:
@@ -31,6 +38,19 @@ def _pkg(name: str) -> str:
         return version(name)
     except PackageNotFoundError:
         return "not-installed"
+
+
+def local_model_runtime() -> dict[str, Any]:
+    """Record installed CPU inference versions without importing heavy runtimes."""
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "cpu_count": os.cpu_count(),
+        "packages": {
+            name: _pkg(name)
+            for name in ("onnxruntime", "tokenizers", "numpy", "torch", "transformers")
+        },
+    }
 
 
 def _model_manifest() -> dict[str, Any]:

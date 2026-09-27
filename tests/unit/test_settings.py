@@ -5,9 +5,11 @@ from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.config.settings import Settings
 
 
-def test_defaults_are_cpu_first_and_llm_disabled() -> None:
+def test_defaults_are_cpu_first_with_credential_gated_auto_assistance() -> None:
     s = Settings(_env_file=None)
-    assert s.models.llm.enabled is False
+    assert s.models.llm.enabled == "auto" and s.models.llm.api_key is None
+    assert s.models.llm.wants("contextual_extraction")
+    assert not s.models.llm.wants("ambiguous_worthiness")
     assert FROZEN_MODELS.dense.id == "ibm-granite/granite-embedding-small-english-r2"
     assert FROZEN_MODELS.dense.dimension == 384 and FROZEN_MODELS.dense.backend == "torch"
     assert FROZEN_MODELS.reranker is None, "no reranker ships (SciFact -5.2 nDCG, p=0.012)"
@@ -16,12 +18,11 @@ def test_defaults_are_cpu_first_and_llm_disabled() -> None:
     assert RETRIEVAL.rerank is False
 
 
-def test_todays_depth_is_the_frozen_depth() -> None:
-    """One knob: ``final_k``, with prefetch and fusion derived from it. The depth itself is
-    unchanged - 100/100/50 is what every shipped-depth artifact on disk was produced at, and
-    moving it is a measured change, not a refactor. See ``test_retrieval_depth.py``."""
+def test_default_depth_matches_the_promoted_memory_configuration() -> None:
+    """Promote measured memory depth without widening document or mixed final pools."""
     assert (RETRIEVAL.prefetch_k, RETRIEVAL.fused_k, RETRIEVAL.final_k) == (100, 100, 50)
-    assert (CONTEXT.memories_max, CONTEXT.token_budget) == (50, 8000)
+    assert RETRIEVAL.memory_recall_k == CONTEXT.memories_max == 100
+    assert CONTEXT.token_budget == 8000
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,7 +102,11 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     two deployments genuinely differ, which is what earns an environment field.
     """
     leaves = _leaves(Settings)
-    assert len(leaves) <= 42, f"{len(leaves)} env fields: {leaves}"
+    # Integrated extraction adds endpoint/auth/bank selection and its deployment's
+    # timeout/concurrency quota. Retrieval tuning stays frozen; LLM/use gates still apply.
+    # Two more credential facts: the active envelope-key version and its secret keyring.
+    # They permit tenant/agent-owned VKs without storing provider credentials in plaintext.
+    assert len(leaves) <= 49, f"{len(leaves)} env fields: {leaves}"
     for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 
@@ -141,6 +146,7 @@ def test_secrets_are_masked() -> None:
         authorization={"openfga_api_token": "supersecret"},
         authentication={"trusted_dev_api_keys": ["devsecret"]},
         models={"llm": {"api_key": "virtualkey"}},
+        hindsight={"api_key": "hindsightsecret"},
     )
     dumped = str(s.redacted())
     for secret in (
@@ -150,6 +156,7 @@ def test_secrets_are_masked() -> None:
         "supersecret",
         "devsecret",
         "virtualkey",
+        "hindsightsecret",
     ):
         assert secret not in dumped, secret
     # the adapters still get the real value, in both spellings

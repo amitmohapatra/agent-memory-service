@@ -28,7 +28,17 @@ FACT = "I prefer tea, and my name is Amit"
 
 def _c(rid: str, text: str, score: float) -> Candidate:
     return Candidate(
-        record_id=rid, kind="memory", text=text, score=score, retrievers=["fusion"], payload={}
+        record_id=rid,
+        kind="memory",
+        text=text,
+        score=score,
+        retrievers=["fusion"],
+        payload={
+            "owner_principal": "user:amit",
+            "subject": "user:amit",
+            "observed_at": "2026-09-26T12:00:00Z",
+            "source_refs": [{"source_type": "observation", "source_id": "same-turn"}],
+        },
     )
 
 

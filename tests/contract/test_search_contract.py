@@ -8,6 +8,7 @@ and hybrid fusion returns something ranked rather than one retriever's list.
 
 from __future__ import annotations
 
+import os
 import uuid
 
 import pytest
@@ -30,9 +31,13 @@ ADAPTERS = ("embedded", "server")
 def _build(name: str):
     from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 
-    return QdrantSearchStore(
-        SearchSettings(), local_path=":memory:" if name == "embedded" else None
-    )
+    if name == "embedded":
+        return QdrantSearchStore(SearchSettings(), local_path=":memory:")
+    url = os.environ.get("MEMORY_TEST_QDRANT_URL")
+    port = os.environ.get("MEMORY_TEST_QDRANT_GRPC_PORT")
+    if not url or not port:
+        pytest.skip("Set dedicated MEMORY_TEST_QDRANT_URL and MEMORY_TEST_QDRANT_GRPC_PORT")
+    return QdrantSearchStore(SearchSettings(qdrant_url=url, qdrant_grpc_port=int(port)))
 
 
 @pytest_asyncio.fixture(params=ADAPTERS, loop_scope="function")

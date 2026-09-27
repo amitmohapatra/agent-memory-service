@@ -143,7 +143,9 @@ def _speaker_ctx(ctx: MemoryExecutionContext, speaker: str) -> MemoryExecutionCo
     return ctx.model_copy(update=update)
 
 
-async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, str]:
+async def _ingest_conversation(
+    container, ctx, conversation: dict, *, source_ids: dict[str, str] | None = None
+) -> dict[str, str]:
     """Every turn becomes an observation. Returns dia_id -> the text that was submitted."""
     uow_factory = container.services["uow_factory"]
     memory = container.services["memory"]
@@ -187,7 +189,7 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
             # anchored on the workspace, not the user, so the questioner - a third context,
             # made a member of the workspace above - still sees every turn.
             async with uow_factory() as uow:
-                await memory.submit_observation(
+                ack = await memory.submit_observation(
                     uow,
                     _speaker_ctx(ctx, speaker),
                     kind=ObservationKind.MESSAGE,
@@ -198,6 +200,8 @@ async def _ingest_conversation(container, ctx, conversation: dict) -> dict[str, 
                     hints=ProcessingHints(visibility=Visibility.TENANT),
                     occurred_at=occurred_at,
                 )
+                if source_ids is not None:
+                    source_ids[ack.observation_id] = dia_id
                 await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()
@@ -1272,12 +1276,13 @@ async def rejudge(path: str, ruler: str, *, calls_per_minute: float = 120.0) -> 
         round(sum(v["hit"] for v in answerable.values()) / total_n, 4) if total_n else 0.0
     )
     adv = per_category.get(ADVERSARIAL, {"n": 0, "hit": 0})
-    out["abstention_rate_on_adversarial"] = (
-        round(adv["hit"] / adv["n"], 4) if adv["n"] else 0.0
-    )
+    out["abstention_rate_on_adversarial"] = round(adv["hit"] / adv["n"], 4) if adv["n"] else 0.0
     out["by_category"] = {
-        CATEGORY_NAMES.get(c, str(c)): {"n": v["n"], "hit": v["hit"],
-                                        "score": round(v["hit"] / v["n"], 4) if v["n"] else 0.0}
+        CATEGORY_NAMES.get(c, str(c)): {
+            "n": v["n"],
+            "hit": v["hit"],
+            "score": round(v["hit"] / v["n"], 4) if v["n"] else 0.0,
+        }
         for c, v in sorted(per_category.items())
     }
     out["judge_ruler"] = ruler

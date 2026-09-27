@@ -178,6 +178,7 @@ class EmbeddingSettings(BaseModel):
 
 
 LLMUse = Literal[
+    "contextual_extraction",
     "ambiguous_extraction",
     "ambiguous_worthiness",
     "relation_extraction",
@@ -185,23 +186,38 @@ LLMUse = Literal[
     "conflict_adjudication",
     "summaries",
     "reflection",
+    "briefs",
     "query_expansion",
     "chunk_context",
     "grounding_judge",
 ]
 
 
-class LLMSettings(BaseModel):
-    """Generative model access. The only provider is the Bifrost gateway (OpenAI-compatible);
-    provider keys live in Bifrost, the service holds a Bifrost *virtual key*."""
+class AgentCredentialSettings(BaseModel):
+    """Operator-managed envelope keys, never agent keys or model-provider credentials."""
 
-    #: The gateway is the only provider there is, so ``enabled`` says everything a second
-    #: ``provider`` field could. It used to be both, as ``enabled: bool`` and
-    #: ``provider: Literal["disabled", "bifrost"]``, kept in agreement by a validator whose
-    #: entire job was to reject the two spellings of "off" that disagreed. Two fields that
-    #: must always agree are one field; /version still reports "bifrost" or "disabled",
-    #: derived from this.
-    enabled: bool = False
+    active_key_id: str | None = Field(default=None, min_length=1, max_length=100)
+    encryption_keys: dict[str, SecretStr] = Field(default_factory=dict)
+
+
+class HindsightSettings(BaseModel):
+    """Integrated knowledge-processing service topology and deployment quota."""
+
+    base_url: str = "http://localhost:8888"
+    api_key: SecretStr | None = None
+    bank_id: str = Field(default="extraction-preview", min_length=1)
+    timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    max_concurrency: int = Field(default=1, ge=1, le=16)
+
+
+class LLMSettings(BaseModel):
+    """Generative access gates. Native calls use Bifrost; Hindsight extraction
+    uses its server's model configuration. Model provider keys stay outside this service.
+    """
+
+    #: Auto requires a registered agent key or an operator key at call time. False is
+    #: a deployment-wide prohibition. True retains explicit operator use selection.
+    enabled: bool | Literal["auto"] = "auto"
     base_url: str = Field(
         default="http://localhost:8090/v1", description="Bifrost OpenAI-compatible endpoint"
     )
@@ -210,26 +226,35 @@ class LLMSettings(BaseModel):
         description="Bifrost virtual key (MEMORY__MODELS__LLM__API_KEY or secrets.env)",
     )
     model: str | None = Field(
-        default="anthropic/claude-sonnet-5",
+        default="auto",
         description="strong model (Bifrost provider/model name) for complex uses",
     )
     fast_model: str | None = Field(
-        default="anthropic/claude-haiku-4-5-20251001",
+        default="auto",
         description="cheap model for fast_uses (classification-sized calls)",
     )
     uses: list[LLMUse] = Field(
         default_factory=list,
-        description="which deterministic paths may consult the model; each falls back natively",
+        description="which uses may consult the model; explicitly assisted briefs require "
+        "a valid model result, while native paths remain available",
     )
     fast_uses: list[LLMUse] = Field(
-        default_factory=lambda: ["ambiguous_worthiness", "query_expansion", "chunk_context"]
+        default_factory=lambda: [
+            "ambiguous_worthiness",
+            "contextual_extraction",
+            "query_expansion",
+            "chunk_context",
+        ]
     )
     max_tokens: int = Field(default=1024, ge=1)
     timeout_seconds: float = Field(default=30.0, gt=0)
     max_retries: int = Field(default=2, ge=0, description="retries on 429/5xx/timeouts, bounded")
 
     def wants(self, use: LLMUse) -> bool:
-        return self.enabled and use in self.uses
+        uses = self.uses
+        if self.enabled == "auto" and "uses" not in self.model_fields_set:
+            uses = ["contextual_extraction", "reflection", "briefs", "query_expansion"]
+        return self.enabled is not False and use in uses
 
 
 class ModelSettings(BaseModel):
@@ -274,6 +299,8 @@ class Settings(BaseSettings):
     blob: BlobSettings = BlobSettings()
     search: SearchSettings = SearchSettings()
     models: ModelSettings = ModelSettings()
+    hindsight: HindsightSettings = HindsightSettings()
+    agent_credentials: AgentCredentialSettings = AgentCredentialSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 
     #: Environments that are *deployed*, and so may not run the laptop defaults. ``test`` is
@@ -297,7 +324,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"blob.provider must be gcs in {where}")
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")
-        if self.models.llm.enabled and not self.models.llm.uses:
+        if self.models.llm.enabled is True and not self.models.llm.uses:
             # Opting in per use is the design — each path falls back natively, so a use you
             # have not enabled is a deterministic answer, not a broken one. What is not the
             # design is the silence: with uses empty the service starts clean, reports

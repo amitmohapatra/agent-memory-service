@@ -14,8 +14,9 @@ from sqlalchemy.dialects import postgresql
 
 from memory_service.adapters.db.orm import GraphRelationRow
 from memory_service.adapters.graph.postgres_store import (
-    first_of_each_triple,
+    first_of_each_assertion,
     neighborhood_query,
+    relation_identity,
 )
 
 pytestmark = pytest.mark.unit
@@ -84,21 +85,53 @@ def test_the_hop_reads_the_neighbour_end_for_its_mention_count() -> None:
 
 
 def test_identical_triples_are_kept_once_across_hops() -> None:
-    seen: set[tuple[str, str, str]] = set()
+    seen = set()
     first_hop = [
         _row("rel_1", "ent_a", "mentions", "ent_b"),
         _row("rel_2", "ent_a", "mentions", "ent_b"),  # same triple, a second memory said it
         _row("rel_3", "ent_a", "knows", "ent_b"),
     ]
-    assert [r.relation_id for r in first_of_each_triple(first_hop, seen)] == ["rel_1", "rel_3"]
+    assert [r.relation_id for r in first_of_each_assertion(first_hop, seen)] == ["rel_1", "rel_3"]
     # the set carries over: the next hop cannot bring the same triple back
     second_hop = [
         _row("rel_4", "ent_a", "mentions", "ent_b"),
         _row("rel_5", "ent_b", "mentions", "ent_c"),
     ]
-    assert [r.relation_id for r in first_of_each_triple(second_hop, seen)] == ["rel_5"]
+    assert [r.relation_id for r in first_of_each_assertion(second_hop, seen)] == ["rel_5"]
     assert seen == {
-        ("ent_a", "mentions", "ent_b"),
-        ("ent_a", "knows", "ent_b"),
-        ("ent_b", "mentions", "ent_c"),
+        relation_identity(first_hop[0]),
+        relation_identity(first_hop[2]),
+        relation_identity(second_hop[1]),
     }
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"attributes": {"period": "FY26"}},
+        {"document_id": "doc_other"},
+        {"valid_from": NOW},
+        {"valid_to": NOW},
+        {"layer": "causal"},
+    ],
+)
+def test_shared_triple_does_not_erase_a_different_qualified_assertion(change):
+    first = _row("rel_1", "revenue", "has_value", "eur412")
+    second = _row("rel_2", "revenue", "has_value", "eur412")
+    for field, value in change.items():
+        setattr(second, field, value)
+    assert len(list(first_of_each_assertion([first, second], set()))) == 2
+
+
+def test_attribute_key_order_does_not_turn_duplicates_into_distinct_facts():
+    first = _row("rel_1", "a", "knows", "b")
+    second = _row("rel_2", "a", "knows", "b")
+    first.attributes = {"period": "FY26", "currency": "EUR"}
+    second.attributes = {"currency": "EUR", "period": "FY26"}
+    assert len(list(first_of_each_assertion([first, second], set()))) == 1
+
+
+def test_sql_preserves_qualifiers_and_validity_before_the_limit():
+    distinct = _sql().split("DISTINCT ON (", 1)[1].split(")", 1)[0]
+    for field in ("attributes", "document_id", "layer", "valid_from", "valid_to"):
+        assert f"graph_relations.{field}" in distinct

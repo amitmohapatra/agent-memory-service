@@ -1,0 +1,3 @@
+# Preserved checkpoint experiment scripts
+
+These are the exact local orchestration and screening scripts, not portable production commands. They contain workstation paths and historical process IDs. Do not execute queues unchanged: restore/adapt paths, allocate new isolated databases, and remove stale PID dependencies first. Model weights, credentials, environments and vector caches are deliberately excluded. Scripts originally lived under `.bench_data/`; model JSON paths must point to downloaded, revision-pinned local weights. See `docs/PR-CHECKPOINT-20260928.md` for validation status and remaining work.

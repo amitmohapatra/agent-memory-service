@@ -38,6 +38,7 @@ def _ctx(run_id: str, agent_id: str = "ops-agent") -> MemoryExecutionContext:
         thread_id="thr_gate",
         agent_id=agent_id,
         agent_run_id=run_id,
+        agent_group_id="ops-group" if agent_id == "ops-agent" else "rival-group",
     )
 
 
@@ -61,7 +62,11 @@ async def _replay(container, service, run: dict) -> None:
                 cost=call.get("cost"),
                 task=run["task"],
                 step=call["step"],
-                visibility=Visibility.RUN,
+                # Cross-run learning requires deliberate sharing. RUN records belong to
+                # one execution; a probe run must not see its siblings' private history.
+                visibility=(
+                    Visibility.AGENT_GROUP if ctx.agent_id == "ops-agent" else Visibility.RUN
+                ),
             )
         await service.set_outcome(uow, ctx, run_id=run["run_id"], success=run["success"])
         await uow.commit()

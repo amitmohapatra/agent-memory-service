@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 from memory_service.config.constants import TASKS
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
-from memory_service.ports.tasks import Queue
+from memory_service.ports.tasks import JobSpec, Queue
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
@@ -102,36 +103,32 @@ def register_handlers(container: Container) -> None:
             return
         async with uow_factory() as uow:
             memories = await uow.memories.get_many(tenant_id, memory_ids)
-            touched = {
-                (kind, ident)
-                for memory in memories
-                for kind, ident in (
-                    (RevisionKind.USER, memory.scope.user_id),
-                    (RevisionKind.THREAD, memory.scope.thread_id),
-                    (RevisionKind.AGENT, memory.scope.agent_id),
-                )
-                if ident
-            }
-            for kind, ident in sorted(touched):
-                await uow.revisions.bump(tenant_id, kind, ident)
-            # A memory with no user, thread or agent is only reachable through the
-            # tenant-wide revision, so that one has to move for it to be seen at all.
-            if not touched and memories:
+            await bump_memory_revisions(uow, memories)
+            # A deletion is absent from get_many. Invalidate after index removal too:
+            # a read between the SQL commit and this job could cache the stale index.
+            if len(memories) < len(set(memory_ids)):
                 await uow.revisions.bump(tenant_id, RevisionKind.TENANT)
             await uow.commit()
 
     async def memory_expire(payload: dict[str, Any]) -> None:
-        """Mark SHORT_TERM memories past their TTL as EXPIRED and drop them from the index."""
+        """Expire SHORT_TERM memories and remove their search and graph projections."""
         async with uow_factory() as uow:
             expired = await uow.memories.expire_due(now=datetime.now(UTC))
+            by_tenant: dict[str, list[str]] = {}
+            for tenant_id, memory_id in expired:
+                by_tenant.setdefault(tenant_id, []).append(memory_id)
+            for tenant_id, ids in by_tenant.items():
+                await bump_memory_revisions(uow, await uow.memories.get_many(tenant_id, ids))
+                # Projection cleanup must survive a crash after the expiry commit.
+                await uow.enqueue(
+                    JobSpec(
+                        task_name=TASK_MEMORY_INDEX,
+                        queue=Queue.EMBEDDING,
+                        payload={"tenant_id": tenant_id, "memory_ids": ids},
+                        tenant_id=tenant_id,
+                    )
+                )
             await uow.commit()
-        indexer = container.services.get("indexer")
-        by_tenant: dict[str, list[str]] = {}
-        for tenant_id, memory_id in expired:
-            by_tenant.setdefault(tenant_id, []).append(memory_id)
-        for tenant_id, ids in by_tenant.items():
-            if indexer is not None:
-                await indexer.index_memories(tenant_id, ids)
         if expired:
             log.info("memory.expired", count=len(expired))
 
@@ -145,6 +142,12 @@ def register_handlers(container: Container) -> None:
         forgetting = container.services.get("forgetting")
         if forgetting is not None:
             await forgetting.sweep()
+
+    async def brief_refresh(payload: dict[str, Any]) -> None:
+        await container.services["briefs"].refresh(payload["tenant_id"], payload["brief_id"])
+
+    async def brief_schedule(payload: dict[str, Any]) -> None:
+        await container.services["briefs"].schedule_due()
 
     async def memory_reflect(payload: dict[str, Any]) -> None:
         """Derive insights over each principal's recent memories (LLM use ``reflection``)."""
@@ -204,6 +207,8 @@ def register_handlers(container: Container) -> None:
         if archiver is not None:
             await archiver.purge_staged_payloads()
 
+    queue.register("brief.refresh", Queue.SUMMARY, brief_refresh, retries=0)
+    queue.register_periodic("periodic.briefs", Queue.RECONCILE, brief_schedule, cron="* * * * *")
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)

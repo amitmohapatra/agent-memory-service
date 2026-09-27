@@ -76,6 +76,15 @@ def test_memory_line_drops_what_the_memory_does_not_carry() -> None:
     ]
 
 
+def test_derived_creation_date_is_not_presented_as_the_date_of_its_events() -> None:
+    item = _memory("insight", "Ari opened the workshop in June 2023.", day="2026-09-26")
+    item = item.model_copy(update={"attributes": {**item.attributes, "derived": True}})
+    line = _section(_bundle([item]).render(), "Memories")[0]
+    assert "summary created 2026-09-26 Sat" in line
+    assert "opened the workshop in June 2023" in line
+    assert line.count(item.text) == 1
+
+
 def test_memory_line_tolerates_an_unparseable_observed_at() -> None:
     item = _memory("mem_1", "Body.", who="mel")
     broken = item.model_copy(update={"attributes": {**item.attributes, "observed_at": "last May"}})

@@ -2,25 +2,26 @@
 
 Markdown/plain text is routed to the builtin parser (Docling splits inline formatting of
 Markdown into separate items, which loses paragraph boundaries). PDF and image inputs need
-Docling's layout/OCR models (downloaded from Hugging Face on first use); DOCX/PPTX/XLSX/HTML
-work offline.
+local Docling layout/table weights and Tesseract language/script packs. OCR selects a
+script per page, stays on CPU and does not require a generative model. DOCX/PPTX/XLSX/HTML
+do not load the PDF models.
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from memory_service.adapters.models._runner import SerialRunner
 from memory_service.adapters.parsers.builtin import BuiltinParser
-from memory_service.config.constants import DOCLING_ARTIFACTS_DIR, local_model_path
+from memory_service.config.constants import DOCLING_ARTIFACTS_DIR, MODEL_ROOTS, local_model_path
 from memory_service.domain.documents import DocumentVersion
 from memory_service.domain.errors import CorruptSource, DependencyUnavailable
 from memory_service.modules.ingestion.context_graph import build_context_graph
 from memory_service.modules.ingestion.hierarchy import Block, build_hierarchy
-from memory_service.observability.logging import get_logger
 from memory_service.ports.intelligence import ParsedDocument
 from memory_service.ports.models import ProviderInfo
 
@@ -51,9 +52,6 @@ _EXT = {
 }
 
 
-log = get_logger(__name__)
-
-
 class DoclingParser:
     info = ProviderInfo(
         name="docling", license="MIT", origin="docling-project/docling", locality="local"
@@ -63,6 +61,11 @@ class DoclingParser:
     def __init__(self) -> None:
         self._builtin = BuiltinParser()
         self._converter = None
+        self._artifacts = Path(
+            os.environ.get("MEMORY_DOCLING_ARTIFACTS")
+            or local_model_path(DOCLING_ARTIFACTS_DIR)
+            or MODEL_ROOTS[0] / DOCLING_ARTIFACTS_DIR
+        )
         #: Docling's layout and table models are the heaviest thing the service loads, and
         #: they fan their work over every core. ``asyncio.to_thread`` hands them to the event
         #: loop's default executor - ``min(32, cpu_count + 4)``, eight threads on a four-core
@@ -86,41 +89,55 @@ class DoclingParser:
         """
         if self._converter is None:
             try:
+                from docling.datamodel.accelerator_options import (
+                    AcceleratorDevice,
+                    AcceleratorOptions,
+                )
                 from docling.datamodel.base_models import InputFormat
-                from docling.datamodel.pipeline_options import PdfPipelineOptions
-                from docling.document_converter import DocumentConverter, PdfFormatOption
+                from docling.datamodel.pipeline_options import (
+                    PdfPipelineOptions,
+                    TesseractCliOcrOptions,
+                )
+                from docling.document_converter import (
+                    DocumentConverter,
+                    ImageFormatOption,
+                    PdfFormatOption,
+                )
             except ImportError as exc:
                 raise DependencyUnavailable("docling is not installed (install [docling])") from exc
 
-            artifacts = (
-                os.environ.get("MEMORY_DOCLING_ARTIFACTS")
-                or local_model_path(DOCLING_ARTIFACTS_DIR)
-                or ""
-            )
             options = PdfPipelineOptions()
             # Layout and table structure are what this service actually consumes: the context
             # graph is built from section paths, page numbers and IN_TABLE edges.
             options.do_table_structure = True
-            # OCR is deliberately off. It is a different capability (scanned images, not
-            # digital PDFs), it pulls a third model family, and its runtime needs cv2 - which
-            # needs libxcb, which a python:slim image does not have. Leaving the default True
-            # meant the first scanned page died with an ImportError from inside a worker
-            # instead of a clear "this build cannot OCR". If OCR is wanted, it needs an image
-            # built for it, and `download_models` has to fetch the rapidocr weights to match.
-            options.do_ocr = False
-            if artifacts and Path(artifacts).is_dir():
-                options.artifacts_path = artifacts
-            else:
-                log.warning(
-                    "docling.artifacts_missing",
-                    path=artifacts or "<unset>",
-                    detail="docling will try to download its models on first use",
-                    hint="run `make models` and set MEMORY_DOCLING_ARTIFACTS",
-                )
+            options.do_ocr = True
+            # Empty languages selects per-page orientation/script detection. The image
+            # installs both language and script traineddata, including osd. Tesseract
+            # cannot download missing weights or execute a generative model/tool call.
+            options.ocr_options = TesseractCliOcrOptions(lang=[])
+            options.accelerator_options = AcceleratorOptions(
+                device=AcceleratorDevice.CPU, num_threads=2
+            )
+            options.artifacts_path = self._artifacts
             self._converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=options),
+                    InputFormat.IMAGE: ImageFormatOption(pipeline_options=options),
+                }
             )
         return self._converter
+
+    def _require_pdf_dependencies(self) -> None:
+        if not self._artifacts.is_dir():
+            raise DependencyUnavailable(
+                f"Docling layout/table weights are missing at {self._artifacts}; "
+                "run `make models` and set MEMORY_DOCLING_ARTIFACTS"
+            )
+        if shutil.which("tesseract") is None:
+            raise DependencyUnavailable(
+                "CPU OCR requires tesseract and its language/script packs; rebuild the "
+                "image with the docling extra"
+            )
 
     async def parse(
         self, *, document_id: str, tenant_id: str, filename: str, media_type: str, data: bytes
@@ -162,6 +179,8 @@ class DoclingParser:
     def _convert(
         self, filename: str, media_type: str, data: bytes
     ) -> tuple[list[Block], str | None, int | None]:
+        if media_type == "application/pdf" or media_type.startswith("image/"):
+            self._require_pdf_dependencies()
         converter = self._get_converter()
         suffix = _EXT.get(media_type) or Path(filename).suffix or ".bin"
         with tempfile.TemporaryDirectory() as tmp:

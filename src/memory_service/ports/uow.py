@@ -10,6 +10,8 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
+from memory_service.ports.briefs import BriefRepository
+from memory_service.ports.credentials import CredentialRepository
 from memory_service.ports.repositories import (
     AgentRunRepository,
     ArchiveRepository,
@@ -30,6 +32,8 @@ from memory_service.ports.tasks import JobSpec
 
 @runtime_checkable
 class UnitOfWork(Protocol):
+    briefs: BriefRepository
+    credentials: CredentialRepository
     threads: ThreadRepository
     sessions: SessionRepository
     turns: TurnRepository

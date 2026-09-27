@@ -109,9 +109,7 @@ def test_an_enabled_llm_must_name_a_model() -> None:
     with pytest.raises(ValueError, match="model"):
         Settings(models={"llm": {"enabled": True, "model": None}})  # type: ignore[arg-type]
     defaults = LLMSettings()
-    assert defaults.model.startswith("anthropic/claude") and defaults.fast_model.startswith(
-        "anthropic/claude"
-    )
+    assert defaults.model == defaults.fast_model == "auto"
 
 
 @respx.mock
@@ -295,31 +293,6 @@ async def test_assist_falls_back_to_none_on_any_failure() -> None:
     assert LLMAssist.disabled().wants("summaries") is False
 
 
-async def _rate_limited(settings) -> str | None:
-    """Whether the provider is refusing traffic right now, and what it said."""
-    async with httpx.AsyncClient(base_url=settings.base_url, timeout=30) as client:
-        try:
-            response = await client.post(
-                "/chat/completions",
-                json={
-                    "model": settings.model,
-                    "messages": [{"role": "user", "content": "hi"}],
-                    "max_tokens": 8,
-                },
-            )
-        except httpx.HTTPError as exc:
-            return f"gateway unreachable: {exc}"
-    if response.status_code != 429 and '"code":"429"' not in response.text:
-        return None
-    # The gateway wraps the provider's message; the useful part is the tail of that message
-    # ("... limit: 20 ... Please retry in 28.9s."), not the routing envelope around it.
-    try:
-        message = str(response.json()["error"]["message"])
-    except (ValueError, KeyError, TypeError):
-        message = response.text
-    return message.strip().splitlines()[-1][-160:] or message[-160:]
-
-
 # --------------------------------- a rate limit has to say how long to wait
 
 
@@ -440,19 +413,11 @@ async def test_source_logging_still_records_the_response_when_there_is_one() -> 
 async def test_live_bifrost_roundtrip() -> None:
     """Hits the running gateway. Needs MEMORY__MODELS__LLM__ENABLED=true plus model and key."""
     settings = Settings().models.llm
-    if not settings.enabled or not settings.model:
+    if settings.enabled is not True or not settings.api_key or settings.model in (None, "auto"):
         pytest.skip("Bifrost not configured (MEMORY__MODELS__LLM__*)")
     llm = BifrostLLM(settings)
     if not await llm.ping():
         pytest.skip(f"Bifrost not reachable at {settings.base_url}")
-    if (limited := await _rate_limited(settings)) is not None:
-        # The provider refusing traffic is not a defect in this adapter. Established up
-        # front rather than caught below: the SDK honours the delay Gemini puts in the
-        # response *body*, so a rate-limited call no longer fails fast — it waits the ~30s
-        # it was asked for, twice, and then surfaces as LLMCallFailed. Catching that would
-        # mean either skipping on every gateway failure (hiding real ones) or reporting a
-        # free tier's "limit: 20" as a bug in this code.
-        pytest.skip(f"model provider is rate limited: {limited}")
     # max_tokens=8 was enough when every model emitted text immediately. A reasoning model
     # spends the output budget on thinking first — measured against gemini-3.6-flash, "Reply
     # with exactly: OK" consumed 57 reasoning tokens — so a small budget returns 200 OK with

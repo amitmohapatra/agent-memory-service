@@ -10,6 +10,8 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "memory_service"
 
 BANNED_IN_CORE = {
+    "hindsight_client",
+    "hindsight_client_api",
     "qdrant_client",
     "redis",
     "google",
@@ -91,14 +93,10 @@ def test_no_llm_provider_sdk_anywhere_under_src() -> None:
 
 
 def test_llm_settings_offer_no_way_to_name_a_provider() -> None:
-    """The gateway is the only way out, and there is no field that could say otherwise.
+    """No direct model-vendor SDK or caller-selected memory backend.
 
-    This used to assert that `provider` was a Literal["disabled", "bifrost"], which made the
-    guarantee a matter of keeping a two-value enum two-valued. The field is gone: a
-    deployment can point `base_url` at a different gateway, which is the operator's business,
-    but nothing in the settings can select a provider SDK — there is no key for it, so there
-    is nothing to widen by accident. `test_no_llm_provider_sdk_anywhere_under_src` covers the
-    other half: none of them is importable either.
+    Hindsight selects a memory framework's preview API, not a model vendor. Its server
+    owns model routing. Global LLM/use gates still apply (test_memory_feature_wiring).
     """
     from memory_service.config.settings import LLMSettings
 

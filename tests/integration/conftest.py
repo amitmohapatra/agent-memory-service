@@ -19,6 +19,8 @@ from tests.conftest import (  # noqa: E402  (one definition, see tests/conftest.
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
+    "standing_briefs",
+    "agent_credentials",
     "tool_invocations",
     "run_outcomes",
     "tools",

@@ -35,22 +35,26 @@ def _spec(**over) -> JobSpec:
     )
 
 
-@pytest_asyncio.fixture(params=ADAPTERS, loop_scope="function")
-async def queue(request: pytest.FixtureRequest):
-    if request.param == "inline":
+@pytest.fixture(params=ADAPTERS)
+def queue_dsn(request: pytest.FixtureRequest) -> str | None:
+    # Build the isolated schema before entering the async fixture. Merely naming its
+    # URL made every real-queue case skip when run against a fresh test database.
+    return None if request.param == "inline" else request.getfixturevalue("queue_database")
+
+
+@pytest_asyncio.fixture(loop_scope="function")
+async def queue(queue_dsn: str | None):
+    if queue_dsn is None:
         from memory_service.adapters.tasks.inline_queue import InlineTaskQueue
 
         yield InlineTaskQueue()
         return
 
     from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
-    from tests.conftest import QUEUE_DB_URL
 
-    dsn = QUEUE_DB_URL.replace("postgresql+psycopg://", "postgresql://")
-    adapter = ProcrastinateTaskQueue(dsn)
-    if not await adapter.ping():
-        pytest.skip("procrastinate queue database not reachable")
+    adapter = ProcrastinateTaskQueue(queue_dsn)
     try:
+        assert await adapter.ping(), "isolated queue database was created but is unreachable"
         yield adapter
     finally:
         await adapter.close()

@@ -57,6 +57,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # is never used.
 FROM runtime-deps AS runtime-cv
 ARG EXTRAS
+RUN if echo "$EXTRAS" | grep -qw docling; then \
+      apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-all \
+      && rm -rf /var/lib/apt/lists/*; \
+    fi
 RUN --mount=type=cache,target=/root/.cache/uv \
     if echo "$EXTRAS" | grep -qw docling; then \
       export VIRTUAL_ENV=/opt/venv; \
@@ -107,6 +111,7 @@ RUN mkdir -p /data/blob && chown -R nobody:nogroup /data
 # one number in one place is how they drift.
 ENV WEB_CONCURRENCY=3 \
     OMP_NUM_THREADS=2 \
+    OMP_THREAD_LIMIT=2 \
     MKL_NUM_THREADS=2
 
 EXPOSE 8080
@@ -114,7 +119,7 @@ USER nobody
 CMD ["memory-api"]
 
 FROM base AS validation
-RUN apt-get update && apt-get install -y --no-install-recommends make git procps && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends make git procps tesseract-ocr tesseract-ocr-all && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --all-extras --dev --no-install-workspace
 ENV PATH="/opt/venv/bin:$PATH"

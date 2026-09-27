@@ -12,12 +12,12 @@ from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation, ProcessingHints
-from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
 
@@ -160,7 +160,7 @@ class MemoryService:
         include_superseded: bool = False,
         limit: int = 100,
     ) -> list[CanonicalMemory]:
-        """Memories anchored to the caller's own scopes: agent, user, thread, agent group, tenant."""
+        """Memories anchored to the caller's agent, user, thread, agent group or tenant."""
         from memory_service.domain.enums import ScopeLevel
         from memory_service.domain.memory import Scope
 
@@ -255,10 +255,5 @@ class MemoryService:
                 tenant_id=ctx.tenant_id,
             )
         )
-        if memory.scope.user_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.USER, memory.scope.user_id)
-        if memory.scope.thread_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, memory.scope.thread_id)
-        if memory.scope.agent_id:
-            await uow.revisions.bump(ctx.tenant_id, RevisionKind.AGENT, memory.scope.agent_id)
+        await bump_memory_revisions(uow, [memory])
         return memory

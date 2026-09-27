@@ -57,7 +57,7 @@ def test_verify_over_http(client) -> None:
     grounding = bundle["evidence"]["grounding"]
     assert [c["verdict"] for c in grounding["claims"]] == ["supported", "contradicted"]
     assert grounding["per_claim_hallucination_rate"] == 0.5
-    assert grounding["representative"] is False and grounding["nli_provider"] == "lexical-nli-v1"
+    assert grounding["representative"] is False and grounding["nli_provider"] == "lexical-nli-v2"
     assert grounding["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["item_id"]
     assert "X-Memory-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
     # the plain bundle is unchanged (the report is attached to the response only)
@@ -152,3 +152,43 @@ async def test_verify_through_the_sdk(app, client) -> None:
     with pytest.raises(ValueError, match="bundle, items or a query"):
         await ctx.verify(GOOD)
     await memory.aclose()
+
+
+async def test_sdk_inline_verification_preserves_generated_provenance(app, client) -> None:
+    from universal_memory.models import ContextItem
+
+    memory = sdk_client(app)
+    ctx = memory.bind(tenant_id="acme", user_id="u1")
+    claim = "The launch budget was 900 million dollars."
+    generated = ContextItem(
+        item_id="generated",
+        representation="MEMORY",
+        text=claim,
+        citation="memory:generated",
+        attributes={"category": "contextual_fact", "provider": "hindsight-preview"},
+    )
+    source = ContextItem(
+        item_id="source",
+        representation="MEMORY",
+        text="The team discussed the launch.",
+        citation="memory:source",
+    )
+    try:
+        bundle = (await ctx.context("launch budget")).model_copy(
+            update={"memories": [generated, source]}
+        )
+        for options in (
+            {"bundle": bundle},
+            {"items": [generated]},
+            {"items": [generated.verification_item()]},
+        ):
+            report = await ctx.verify(claim + " [1]", **options)
+            assert report.supported == 0
+        supported = bundle.model_copy(
+            update={"memories": [generated, source.model_copy(update={"text": claim})]}
+        )
+        report = await ctx.verify(claim + " [2]", bundle=supported)
+        assert report.supported == 1
+        assert report.claims[0].evidence_ids == ["source"]
+    finally:
+        await memory.aclose()

@@ -46,7 +46,7 @@
   ],
   "gate": "grounding",
   "golden_set": "grounding_claims_v1",
-  "nli_provider": "lexical-nli-v1",
+  "nli_provider": "lexical-nli-v2",
   "note": "lexical NLI is a deterministic stand-in; only the deterministic categories are asserted and the quality numbers are not representative",
   "per_verdict": {
     "borderline": {
@@ -80,71 +80,18 @@
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "d223e658d7d62ff2f9c7f07e14e149d35bd294e1",
+    "git_commit": "f988c26c25facf8671cb1adb4cb5add93ad6da26",
     "llm": {
-      "enabled": false,
-      "provider": "disabled"
+      "enabled": "auto",
+      "fast_model": "auto",
+      "gateway_version": "<!doctype html>\n<html lang=\"en\" suppressHydrationWarning>\n\t<head>\n\t\t<meta charse",
+      "model": "auto",
+      "provider": "bifrost",
+      "uses": []
     },
     "machine": "x86_64",
     "memory_gb": null,
-    "models": {
-      "bge-reranker-v2-m3": {
-        "repo": "BAAI/bge-reranker-v2-m3",
-        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
-      },
-      "deberta-v3-base-mnli-fever-anli": {
-        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
-        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
-      },
-      "embedding": {
-        "repo": "ibm-granite/granite-embedding-english-r2",
-        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
-      },
-      "embedding-small": {
-        "repo": "ibm-granite/granite-embedding-small-english-r2",
-        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
-      },
-      "embeddinggemma-300m": {
-        "repo": "google/embeddinggemma-300m",
-        "revision": null
-      },
-      "gliner-relex": {
-        "repo": "knowledgator/gliner-relex-large-v1",
-        "revision": null
-      },
-      "gliner2-base": {
-        "repo": "fastino/gliner2-base-v1",
-        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
-      },
-      "granite-embedding-reranker-english-r2": {
-        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
-        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
-      },
-      "granite-embedding-small-english-r2": {
-        "repo": "ibm-granite/granite-embedding-small-english-r2",
-        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
-      },
-      "late-interaction": {
-        "repo": "answerdotai/answerai-colbert-small-v1",
-        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
-      },
-      "ms-marco-MiniLM-L6-v2": {
-        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
-        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
-      },
-      "qwen3-embedding-0.6b": {
-        "repo": "Qwen/Qwen3-Embedding-0.6B",
-        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
-      },
-      "reranker": {
-        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
-        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
-      },
-      "sparse": {
-        "repo": "Qdrant/Splade_PP_en_v1",
-        "revision": null
-      }
-    },
+    "models": {},
     "packages": {
       "docling": "not-installed",
       "fastapi": "0.141.1",
@@ -160,7 +107,7 @@
     },
     "platform": "macOS-12.7.6-x86_64-i386-64bit",
     "python": "3.12.14",
-    "timestamp": "2026-09-23T06:27:28.256690+00:00"
+    "timestamp": "2026-09-27T19:51:33.698454+00:00"
   },
   "representative": false,
   "rows": [

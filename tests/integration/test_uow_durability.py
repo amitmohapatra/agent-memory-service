@@ -323,8 +323,6 @@ async def test_by_ids_returns_only_undispatched_rows_that_were_asked_for(
     async with uow_factory() as uow:
         assert [e.outbox_id for e in await uow.outbox.by_ids([ids[1]])] == [ids[1]]
         assert await uow.outbox.by_ids([]) == []
-        assert await uow.outbox.by_ids([ids[0], 10**9]) == [
-            e for e in await uow.outbox.by_ids([ids[0]])
-        ]
+        assert await uow.outbox.by_ids([ids[0], 10**9]) == await uow.outbox.by_ids([ids[0]])
         await uow.outbox.mark_dispatched(ids[0], job_id="job-1")
         assert await uow.outbox.by_ids([ids[0]]) == [], "a dispatched row is not pending"

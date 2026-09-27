@@ -20,20 +20,10 @@ from typing import Any
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import Representation
 from memory_service.domain.ids import content_hash
+from memory_service.domain.text import SENTENCE_BREAK, token_units
 from memory_service.modules.ingestion.context_graph import extract_entities
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
-
-#: Sentence boundary: terminal punctuation followed by whitespace.
-#:
-#: This used to require the *next* character to be uppercase or a digit, which meant text
-#: that does not capitalise sentences never split at all — OCR output, chat logs, and every
-#: non-capitalising script (Chinese, Japanese, Arabic, Hebrew, Devanagari). A paragraph of
-#: such text became one chunk of any size, and the encoder truncated it at its context
-#: window with nothing reporting the loss. Requiring whitespace after the punctuation still
-#: keeps "3.5 million" and "v1.2" intact, which is what the lookahead was really protecting.
-#: The fullwidth forms are CJK sentence terminators, not typos for the ASCII ones.
-_SENTENCE = re.compile(r"(?<=[.!?。！？])\s+")  # noqa: RUF001
 
 _CONTEXT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -60,6 +50,7 @@ _CONTEXT_SYSTEM = (
     '{"contexts": [{"index": <chunk index>, "context": "..."}]}.'
 )
 _CONTEXT_MAX_CHARS = 400
+_HEADER_MAX_TOKENS = 96
 
 
 def _document_salience(nodes: Iterable[DocumentNode], *, keep: int = 8) -> list[str]:
@@ -115,34 +106,49 @@ def contextual_header(
         lines.append(f"Table: {table_title}")
     if entities:
         lines.append("Entities: " + ", ".join(entities[:12]))
-    return "\n".join(lines)
+    header = "\n".join(lines)
+    # Source bodies must not be displaced by unbounded titles or section paths. Full
+    # metadata remains on the document/node; this prefix is an indexing representation.
+    # This shares the conservative packing estimate, not an exact tokenizer guarantee.
+    weight = 0
+    for index, char in enumerate(header):
+        weight += token_units(char)
+        if weight > _HEADER_MAX_TOKENS * 4:
+            return header[:index].rstrip()
+    return header
 
 
 def _hard_split(text: str, max_tokens: int) -> list[str]:
-    """Last-resort split on whitespace when there is no punctuation to cut on.
+    """Linear scan with a whitespace preference; unspaced text is bounded too.
 
-    Minified JSON, a CSV export stripped of newlines, a scriptio-continua language: none of
-    them contain sentence boundaries, and without this a chunk of any length reaches the
-    encoder, which truncates at its context window and silently drops the tail. The budget
-    has to hold for every input, not only well-formed prose.
+    Repeatedly joining all words made long inputs quadratic and never split a single
+    oversized word. Track its weighted length instead; source characters are never omitted.
     """
-    words = text.split()
-    if not words:
-        return []
+    if max_tokens < 1:
+        raise ValueError("max_tokens must be positive")
     parts: list[str] = []
-    current: list[str] = []
-    for word in words:
-        current.append(word)
-        if estimate_tokens(" ".join(current)) >= max_tokens:
-            parts.append(" ".join(current))
-            current = []
-    if current:
-        parts.append(" ".join(current))
+    start = weight = boundary_weight = 0
+    boundary = -1
+    for index, char in enumerate(text):
+        cost = token_units(char)
+        if cost > max_tokens * 4:
+            raise ValueError("max_tokens cannot hold one source character")
+        while weight + cost > max_tokens * 4 and index > start:
+            cut = boundary if boundary > start else index
+            if part := text[start:cut].strip():
+                parts.append(part)
+            weight = weight - boundary_weight if boundary > start else 0
+            start, boundary, boundary_weight = cut, -1, 0
+        weight += cost
+        if char.isspace():
+            boundary, boundary_weight = index + 1, weight
+    if part := text[start:].strip():
+        parts.append(part)
     return parts
 
 
 def _split_sentences(text: str, max_tokens: int, overlap_tokens: int) -> list[str]:
-    sentences = [s.strip() for s in _SENTENCE.split(text) if s.strip()]
+    sentences = [s.strip() for s in SENTENCE_BREAK.split(text) if s.strip()]
     if not sentences:
         return [text]
     # a "sentence" longer than the whole budget is not a sentence
@@ -154,65 +160,72 @@ def _split_sentences(text: str, max_tokens: int, overlap_tokens: int) -> list[st
             expanded.append(sentence)
     sentences = expanded
     parts: list[str] = []
-    current: list[str] = []
-    current_tokens = 0
+    current: list[tuple[str, int]] = []
+    current_units = 0
+    budget = max_tokens * 4
     for sentence in sentences:
-        t = estimate_tokens(sentence)
-        if t > max_tokens:  # a single huge "sentence": hard split by words
-            words = sentence.split()
-            step = max(1, max_tokens * 3)
-            for i in range(0, len(words), step):
-                parts.append(" ".join(words[i : i + step]))
-            continue
-        if current and current_tokens + t > max_tokens:
-            parts.append(" ".join(current))
+        units = sum(map(token_units, sentence))
+        if current and current_units + 1 + units > budget:
+            parts.append(" ".join(text for text, _ in current))
             # overlap: keep trailing sentences worth ~overlap_tokens
-            kept: list[str] = []
-            kept_tokens = 0
-            for s in reversed(current):
-                if kept_tokens + estimate_tokens(s) > overlap_tokens:
+            kept: list[tuple[str, int]] = []
+            kept_units = 0
+            for retained, weight in reversed(current):
+                added = weight + bool(kept)
+                if (
+                    kept_units + added > overlap_tokens * 4
+                    or kept_units + added + 1 + units > budget
+                ):
                     break
-                kept.insert(0, s)
-                kept_tokens += estimate_tokens(s)
-            current, current_tokens = kept, kept_tokens
-        current.append(sentence)
-        current_tokens += t
+                kept.append((retained, weight))
+                kept_units += added
+            current, current_units = list(reversed(kept)), kept_units
+        current_units += units + bool(current)
+        current.append((sentence, units))
     if current:
-        parts.append(" ".join(current))
+        parts.append(" ".join(text for text, _ in current))
     return parts
 
 
 def _split_table(text: str, max_tokens: int) -> list[str]:
     rows = text.split("\n")
     if len(rows) < 3:
-        return [text]
+        return _hard_split(text, max_tokens)
     header = rows[:2] if re.match(r"^\s*\|?\s*:?-{2,}", rows[1]) else rows[:1]
-    body = rows[len(header) :]
-    parts: list[str] = []
-    current: list[str] = []
-    for row in body:
-        candidate = "\n".join([*header, *current, row])
-        if current and estimate_tokens(candidate) > max_tokens:
-            parts.append("\n".join([*header, *current]))
-            current = []
-        current.append(row)
-    if current:
-        parts.append("\n".join([*header, *current]))
-    return parts
+    prefix = "\n".join(header) + "\n"
+    # Repeating a header that consumes the budget leaves no room for source rows.
+    # Preserve all text in bounded fragments; node lineage retains the full table.
+    if sum(map(token_units, prefix)) + 16 > max_tokens * 4:
+        return _hard_split(text, max_tokens)
+    return _pack_units(rows[len(header) :], max_tokens, separator="\n", prefix=prefix)
 
 
 def _split_code(text: str, max_tokens: int) -> list[str]:
-    blocks = re.split(r"\n\s*\n", text)
+    return _pack_units(re.split(r"\n\s*\n", text), max_tokens, separator="\n\n")
+
+
+def _pack_units(
+    units: Iterable[str], max_tokens: int, *, separator: str, prefix: str = ""
+) -> list[str]:
+    """Pack natural units in linear time, splitting even a single oversized unit."""
+    prefix_weight = sum(map(token_units, prefix))
+    available = (max_tokens * 4 - prefix_weight) // 4
+    separator_weight = sum(map(token_units, separator))
     parts: list[str] = []
     current: list[str] = []
-    for block in blocks:
-        candidate = "\n\n".join([*current, block])
-        if current and estimate_tokens(candidate) > max_tokens:
-            parts.append("\n\n".join(current))
-            current = []
-        current.append(block)
+    weight = prefix_weight
+    for unit in units:
+        for fragment in _hard_split(unit, available):
+            fragment_weight = sum(map(token_units, fragment))
+            added = fragment_weight + (separator_weight if current else 0)
+            if current and weight + added > max_tokens * 4:
+                parts.append(prefix + separator.join(current))
+                current = []
+                weight = prefix_weight
+            weight += fragment_weight + (separator_weight if current else 0)
+            current.append(fragment)
     if current:
-        parts.append("\n\n".join(current))
+        parts.append(prefix + separator.join(current))
     return parts
 
 
@@ -223,11 +236,10 @@ def chunk_nodes(
     max_tokens: int = 400,
     min_tokens: int = 40,
     overlap_tokens: int = 40,
-    keep_tables_intact: bool = True,
-    keep_code_intact: bool = True,
     contextual: bool = True,
 ) -> list[Chunk]:
     chunks: list[Chunk] = []
+    nodes = tuple(nodes)
     document_entities = _document_salience(nodes)
     for node in nodes:
         if (
@@ -237,21 +249,14 @@ def chunk_nodes(
         ):
             continue
         entities = _chunk_entities(node, document_entities)
-        tokens = node.token_estimate or estimate_tokens(node.text)
+        # Stored estimates can predate a tokenizer/packing policy change.
+        tokens = estimate_tokens(node.text)
         if tokens <= max_tokens:
             parts = [node.text]
         elif node.representation is Representation.TABLE:
-            parts = (
-                [node.text]
-                if keep_tables_intact and tokens <= max_tokens * 4
-                else _split_table(node.text, max_tokens)
-            )
+            parts = _split_table(node.text, max_tokens)
         elif node.representation is Representation.CODE_BLOCK:
-            parts = (
-                [node.text]
-                if keep_code_intact and tokens <= max_tokens * 4
-                else _split_code(node.text, max_tokens)
-            )
+            parts = _split_code(node.text, max_tokens)
         else:
             parts = _split_sentences(node.text, max_tokens, overlap_tokens)
         table_title = node.title if node.representation is Representation.TABLE else None
@@ -289,7 +294,7 @@ def chunk_nodes(
             merged
             and merged[-1].node_id == c.node_id
             and c.token_estimate < min_tokens
-            and merged[-1].token_estimate + c.token_estimate <= max_tokens
+            and estimate_tokens(merged[-1].text + "\n" + c.text) <= max_tokens
         ):
             prev = merged[-1]
             text = prev.text + "\n" + c.text

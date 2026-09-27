@@ -1,0 +1,58 @@
+{
+  "complete": true,
+  "documents": 5183,
+  "queries": 300,
+  "llm_calls": 0,
+  "data_sha256": "76232844a3c0695fd19ad697856a605ea9cbf9aaf00798da470658432995c8ad",
+  "metrics": {
+    "granite": {
+      "dense": {
+        "ndcg@10": 0.7429,
+        "recall@10": 0.8659,
+        "queries": 300
+      },
+      "sparse": {
+        "ndcg@10": 0.6583,
+        "recall@10": 0.778,
+        "queries": 300
+      },
+      "hybrid_k1": {
+        "ndcg@10": 0.7409,
+        "recall@10": 0.8912,
+        "queries": 300
+      },
+      "hybrid_k60": {
+        "ndcg@10": 0.7201,
+        "recall@10": 0.8494,
+        "queries": 300
+      }
+    },
+    "e5": {
+      "dense": {
+        "ndcg@10": 0.6749,
+        "recall@10": 0.7966,
+        "queries": 300
+      },
+      "sparse": {
+        "ndcg@10": 0.6583,
+        "recall@10": 0.778,
+        "queries": 300
+      },
+      "hybrid_k1": {
+        "ndcg@10": 0.7055,
+        "recall@10": 0.8482,
+        "queries": 300
+      },
+      "hybrid_k60": {
+        "ndcg@10": 0.6942,
+        "recall@10": 0.8204,
+        "queries": 300
+      }
+    }
+  },
+  "inputs": {
+    "granite": "e0b5a049cc9c4e3050399ae4e7c6eac41d329f2dd325688bc4af3c96d80b5330",
+    "e5": "d408393dbe7f04a1ada912f9b5439ebd568be9985da19fcd840c3f088ac23f09"
+  },
+  "default_model_changed": false
+}

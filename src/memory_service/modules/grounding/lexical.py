@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import re
 
+from memory_service.domain.text import normalise_number, unicode_tokens
+
 _WORD = re.compile(r"[a-z0-9](?:[a-z0-9'\-/]*[a-z0-9])?")
-_NUMBER = re.compile(r"(?<![A-Za-z\d])\d+(?:[.,]\d+)*")
+_NUMBER = re.compile(r"(?<![A-Za-z\d])\d+(?:[.,\u066b\u066c\uff0e\uff0c]\d+)*")
 _STOP_WORDS = """
 a an the and or but if then of to in on at by for with from as is are was were be been
 being it its this that these those there here i me my we our you your they them he she
@@ -56,19 +58,25 @@ def stem(word: str) -> str:
 
 
 def words(text: str) -> list[str]:
-    return _WORD.findall(text.lower())
+    if text.isascii():
+        return _WORD.findall(text.lower())
+    return list(unicode_tokens(text, _WORD.findall))
 
 
 def content_tokens(text: str) -> set[str]:
     """Stemmed content words plus normalised numbers."""
-    out = {stem(w) for w in words(text) if w not in _STOP and len(w) > 1 and not w.isdigit()}
+    out = {
+        stem(w) if w.isascii() else w
+        for w in words(text)
+        if w not in _STOP and (len(w) > 1 or not w.isascii()) and not w.isdigit()
+    }
     return out | numbers(text)
 
 
 def numbers(text: str) -> set[str]:
     out: set[str] = set()
     for raw in _NUMBER.findall(text):
-        cleaned = raw.replace(",", "")
+        cleaned = normalise_number(raw)
         try:
             out.add(str(float(cleaned)))
         except ValueError:

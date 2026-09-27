@@ -30,17 +30,25 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.domain.observation import Observation
+from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate
+from memory_service.modules.memory.narrative import (
+    eligible_for_contextual_extraction,
+    extract_narrative_units,
+)
+from memory_service.ports.intelligence import (
+    ConsolidationOutcome,
+    ContextualExtractor,
+    MemoryCandidate,
+)
 from memory_service.ports.models import EmbeddingProvider, ProviderInfo
 
 # --------------------------------------------------------------------------- text utils
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 _WORD = re.compile(r"[a-z0-9](?:[a-z0-9'+\-./@]*[a-z0-9])?")
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+_NUMBER = re.compile(r"\d+(?:[.,\u066b\u066c\uff0e\uff0c]\d+)*")
 _STOP_WORDS = """
 a an the and or but if then of to in on at by for with from as is are was were be been
 being it its this that these those there here i me my we our you your they them he she
@@ -91,7 +99,7 @@ def jaccard(a: set[str], b: set[str]) -> float:
 
 
 def numbers(text: str) -> set[str]:
-    return {n.replace(",", "") for n in _NUMBER.findall(text)}
+    return {normalise_number(n) for n in _NUMBER.findall(text)}
 
 
 def has_negation(text: str) -> bool:
@@ -156,13 +164,23 @@ def strip_turn_prefix(text: str) -> str:
 
 def split_sentences(text: str, *, max_sentences: int = 40) -> list[str]:
     out = []
-    for raw in _SENTENCE_SPLIT.split(strip_turn_prefix(text)):
+    for raw in SENTENCE_BREAK.split(strip_turn_prefix(text)):
         s = raw.strip().strip("-•*# ").strip()
-        if len(s) >= 8 and len(_WORD.findall(s.lower())) >= 3:
+        if _has_sentence_content(s):
             out.append(s)
         if len(out) >= max_sentences:
             break
     return out
+
+
+def _has_sentence_content(text: str) -> bool:
+    """Keep lexical content without using English word length as a fact classifier.
+
+    One Turkish word or three Chinese characters can express a complete durable fact.
+    Unknown short text is retained as a source observation, not promoted to a typed fact.
+    The existing explicit noise/question policies still govern admission below.
+    """
+    return any(char.isalpha() for char in text) and not ACKNOWLEDGEMENT.fullmatch(text)
 
 
 _CLAUSE_SPLIT = re.compile(
@@ -236,10 +254,8 @@ _EVENT_HINT = re.compile(
     r"released|failed|outage|incident|rolled back|merged|launched|migrated|happened)\b",
     re.IGNORECASE,
 )
-_QUESTION = re.compile(r"\?\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I)
-_CHITCHAT = re.compile(
-    r"^(?:hi|hello|hey|thanks|thank you|ok|okay|sure|great|cool|yes|no|got it|sounds good)\b[.!]?$",
-    re.IGNORECASE,
+_QUESTION = re.compile(
+    r"[?\uff1f\u061f]\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I
 )
 
 _SINGLE_VALUED_SLOTS = """
@@ -415,10 +431,12 @@ class NativeMemoryIntelligence:
         embedding: EmbeddingProvider | None = None,
         *,
         assist: LLMAssist | None = None,
+        contextual_extractor: ContextualExtractor | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
         self.assist = assist or LLMAssist.disabled()
+        self.contextual_extractor = contextual_extractor
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
@@ -482,8 +500,14 @@ class NativeMemoryIntelligence:
             ]
         out: list[MemoryCandidate] = []
         seen: set[str] = set()
+        sentences = split_sentences(text)
+        contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
+        # A contextual attempt consumes this message's assist budget, including on failure.
+        # Do not multiply calls by falling through into sentence-by-sentence consultation.
         refine_left = worth_left = _ASSIST_MAX_SENTENCES
-        for sentence in split_sentences(text):
+        if contextual is not None:
+            refine_left = worth_left = 0
+        for sentence in sentences:
             for clause in split_clauses(sentence):
                 cand = self._from_sentence(clause, ctx, evidence, kind=kind)
                 if cand is None:
@@ -504,10 +528,82 @@ class NativeMemoryIntelligence:
                     continue
                 seen.add(key)
                 out.append(cand)
+        original_key = normalized_hash(text) if self.cfg.keep_verbatim_turns else None
+        for cand in contextual or []:
+            key = normalized_hash(cand.content)
+            if key in seen or key == original_key:
+                continue
+            seen.add(key)
+            out.append(cand)
         verbatim = self._verbatim(text, observation, ctx, evidence)
         if verbatim is not None and normalized_hash(verbatim.content) not in seen:
             out.append(verbatim)
         return out
+
+    async def _contextual_candidates(
+        self,
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+        evidence: list[EvidenceRef],
+        sentences: list[str],
+    ) -> list[MemoryCandidate] | None:
+        """None means no attempt; an empty list still consumes the message's call budget."""
+        if (
+            observation.kind is not ObservationKind.MESSAGE
+            or observation.agent_authored
+            or not self.assist.wants("contextual_extraction")
+        ):
+            return None
+        eligible = {
+            index
+            for index, sentence in enumerate(sentences)
+            if not _QUESTION.search(sentence)
+            and not ACKNOWLEDGEMENT.match(sentence)
+            and any(
+                self._from_sentence(clause, ctx, evidence, kind=observation.kind) is None
+                for clause in split_clauses(sentence)
+            )
+        }
+        if not eligible_for_contextual_extraction(sentences, eligible):
+            return None
+        units, provider, category, confidence = await self._contextual_units(
+            observation, ctx, sentences, eligible
+        )
+        return [
+            MemoryCandidate(
+                content=content,
+                memory_type=MemoryType.OBSERVATION,
+                lifetime=Lifetime.LONG_TERM,
+                subject=_user_subject(ctx),
+                predicate="said",
+                evidence=evidence,
+                importance=0.4,
+                confidence=confidence,
+                category=category,
+                provider=provider,
+            )
+            for content in units or []
+        ]
+
+    async def _contextual_units(
+        self,
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+        sentences: list[str],
+        eligible: set[int],
+    ) -> tuple[list[str] | None, str, str, float]:
+        """Select one extraction engine before making any model request."""
+        extractor = self.contextual_extractor
+        if extractor is None or ctx.is_agent:
+            # Every agent stays on the credential-aware transport, including before its
+            # first key registration. Hindsight cannot revalidate an agent policy after
+            # waiting for a server extraction slot, and cannot accept its model VK.
+            units = await extract_narrative_units(self.assist, sentences, eligible)
+            return units, "native", "narrative_unit", 0.99
+        units = await extractor.extract(
+            observation.content.strip(), timestamp=observation.occurred_at
+        )
+        return units, extractor.name, "contextual_fact", 0.5
 
     def _verbatim(
         self,
@@ -537,24 +633,9 @@ class NativeMemoryIntelligence:
         # user's memory the first time this ran without a guard
         # (tests/integration/test_multi_agent.py caught it).
         #
-        # A turn inside a thread is excluded too, and that exclusion is now known to be the
-        # single biggest gap in this service - but it is NOT safe to simply lift.
-        #
-        # The stated reason is that the hot-thread cache and the archive already hold every
-        # message. They do, for STORAGE. Neither is searchable: ranked recall reads the
-        # vector store, and the bundle's conversation section is a recent window. So a fact
-        # stated in an older turn that no extraction rule matched cannot be found by any
-        # query. And every chat message has a thread - append_message requires one - so the
-        # exclusion is TOTAL for real traffic, while LoCoMo ingests without a thread_id and
-        # keeps its verbatim turns. The benchmark measures a configuration production
-        # cannot run, which is why this has never shown up in a score.
-        #
-        # Lifting it was tried and reverted on 2026-09-24. It works, and four tests that
-        # encode the current semantics fail in ways that are all benign (the "leak" one is
-        # the user's own message, not an agent note). What stopped it is that it doubles the
-        # stored memories for every chat message, and nothing here can measure what that
-        # does to precision or to the p99 budget, because no benchmark drives a thread. The
-        # measurement is the prerequisite, not the fix.
+        # User-authored messages are retained inside threads too: archived storage is not
+        # ranked retrieval. Keep this guard about authorship, not the presence of agent
+        # lineage or thread_id; a harness can relay a user's own words.
         if observation.agent_authored:
             return None
         body = text.strip()
@@ -569,7 +650,7 @@ class NativeMemoryIntelligence:
         # ends in a question mark only in its first sentence. Judged whole, 199 of 788
         # LoCoMo turns were dropped and 21 of 79 wrong answers had their gold in that set.
         if not any(
-            not _QUESTION.search(s) and not _CHITCHAT.match(s) for s in split_sentences(body)
+            not _QUESTION.search(s) and not ACKNOWLEDGEMENT.match(s) for s in split_sentences(body)
         ):
             return None
         return MemoryCandidate(
@@ -590,7 +671,7 @@ class NativeMemoryIntelligence:
         return (
             self.assist.wants("ambiguous_worthiness")
             and not _QUESTION.search(s)
-            and not _CHITCHAT.match(s)
+            and not ACKNOWLEDGEMENT.match(s)
         )
 
     async def _assist_extraction(
@@ -616,7 +697,7 @@ class NativeMemoryIntelligence:
         content = _bounded(out.get("content"), 2000)
         if mt is None or content is None:
             return cand
-        update: dict[str, Any] = {"content": content, "memory_type": mt}
+        update: dict[str, Any] = {"content": content, "memory_type": mt, "provider": "llm"}
         if mt is not cand.memory_type:
             update["lifetime"] = _LIFETIME_BY_TYPE.get(mt, cand.lifetime)
             update["importance"] = _IMPORTANCE_BY_TYPE.get(mt, cand.importance)
@@ -663,6 +744,7 @@ class NativeMemoryIntelligence:
             importance=_IMPORTANCE_BY_TYPE.get(mt, 0.5),
             confidence=0.6,
             category="assisted",
+            provider="llm",
             negates_prior=bool(_REPLACEMENT.search(s)),
             valid_from=parse_date(vf_m.group(1)) if vf_m else None,
             valid_to=parse_date(vt_m.group(1)) if vt_m else None,
@@ -708,7 +790,7 @@ class NativeMemoryIntelligence:
         *,
         kind: ObservationKind = ObservationKind.MESSAGE,
     ) -> MemoryCandidate | None:
-        if _QUESTION.search(s) or _CHITCHAT.match(s):
+        if _QUESTION.search(s) or ACKNOWLEDGEMENT.match(s):
             return None
         negates = bool(_REPLACEMENT.search(s))
         vf_m, vt_m = _VALID_FROM.search(s), _VALID_TO.search(s)
@@ -981,6 +1063,9 @@ class NativeMemoryIntelligence:
         c_numbers = numbers(candidate.content)
         c_neg = has_negation(candidate.content)
         c_obj = _clean_object(candidate.object or "")
+        generated = unverified_representation(
+            {"category": candidate.category, "provider": candidate.provider}
+        )
         best: ConsolidationOutcome | None = None
         grey: tuple[CanonicalMemory, float] | None = None
         #: Memories whose lexical similarity puts them in the band where a dense comparison
@@ -994,7 +1079,15 @@ class NativeMemoryIntelligence:
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
         for mem in ordered:
-            if mem.temporal.status.value != "CURRENT" or mem.deleted_at is not None:
+            if (
+                mem.temporal.status.value != "CURRENT"
+                or mem.deleted_at is not None
+                or mem.system_metadata.get("source_revisions")
+            ):
+                continue
+            if generated != unverified_representation(mem.system_metadata):
+                # Never let a generated rewrite reinforce or replace an asserted source,
+                # even when its text happens to be identical.
                 continue
             # 1. identical normalized content -> reinforce
             if mem.normalized_hash == c_hash:
@@ -1005,6 +1098,15 @@ class NativeMemoryIntelligence:
                     score=1.0,
                     reason="identical normalized content",
                 )
+            # Source transcripts may be reinforced only by identical wording. Fuzzy
+            # similarity is not equivalence: a small foreign-language negation or changed
+            # relationship can otherwise replace the only surviving source statement.
+            if (
+                generated
+                or candidate.category in {"verbatim_turn", "narrative_unit"}
+                or (mem.system_metadata.get("category") in {"verbatim_turn", "narrative_unit"})
+            ):
+                continue
             same_slot = (
                 candidate.subject
                 and candidate.predicate

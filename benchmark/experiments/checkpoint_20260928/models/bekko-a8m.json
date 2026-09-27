@@ -1,0 +1,14 @@
+{
+  "id": "hotchpotch/bekko-embedding-v1-a8m",
+  "local_dir": "bekko-a8m",
+  "revision": "c721113d59a1d91b447450324f51c4b3332c924a",
+  "runtime": "onnx",
+  "backend": "onnx",
+  "graph_file": "onnx/model.onnx",
+  "dimension": 384,
+  "max_seq_length": 512,
+  "batch_size": 8,
+  "document_batch_size": 1,
+  "threads": 2,
+  "model_path": "/Users/ricky/usage_data/ams-agent-capabilities/.bench_data/models/bekko-a8m"
+}

@@ -14,6 +14,7 @@ This graph is separate from the semantic Knowledge Graph (M8) and is what makes
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable
 
@@ -93,7 +94,10 @@ _ACRONYM = re.compile(r"\b([A-Z][A-Z0-9&]{1,9})\b")
 _CAP_PHRASE = re.compile(
     r"\b([A-Z][a-zA-Z0-9\-]+(?:\s+(?:of|and|for|the|de|du)?\s*[A-Z][a-zA-Z0-9\-]+){0,4})\b"
 )
-_QUOTED_TERM = re.compile(r"[\"“]([A-Za-z][A-Za-z0-9 \-]{2,40})[\"”]")
+_QUOTED_TERM = re.compile(
+    r"[\"\u201c\u300c\u300e\u00ab]([^\W\d_][^\"\u201d\u300d\u300f\u00bb\n]{1,39})"
+    r"[\"\u201d\u300d\u300f\u00bb]"
+)
 
 
 _CONNECTORS = {"of", "and", "for", "the", "de", "du"}
@@ -116,7 +120,7 @@ def _phrase_variants(phrase: str) -> list[str]:
 
 
 def canonical_entity(name: str) -> str:
-    return " ".join(name.strip().split()).casefold()
+    return unicodedata.normalize("NFC", " ".join(name.strip().split())).casefold()
 
 
 def extract_entities(text: str, *, max_entities: int = 24) -> list[str]:

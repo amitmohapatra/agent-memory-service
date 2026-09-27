@@ -166,6 +166,21 @@ def test_the_fingerprint_carries_the_measured_width_not_the_declared_one() -> No
     assert onnx_fingerprint(DenseModel(runtime="onnx"), 256).endswith("-d256")
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"max_seq_length": 128},
+        {"normalize": False},
+        {"revision": "pinned-revision"},
+        {"query_prefix": "query: "},
+        {"document_prefix": "passage: "},
+    ],
+)
+def test_changed_embedding_profiles_never_reuse_the_baseline_index(change) -> None:
+    spec = DenseModel()
+    assert onnx_fingerprint(spec.model_copy(update=change)) != onnx_fingerprint(spec)
+
+
 # --- the adapter around the graph -------------------------------------------------------
 
 
@@ -179,13 +194,52 @@ def adapter(session: FakeSession, **spec_fields: Any) -> OnnxEmbedding:
 
 async def test_documents_are_encoded_in_batches_of_the_frozen_size() -> None:
     session = FakeSession(lambda feed: np.ones((len(feed["input_ids"]), 1, 2), dtype=np.float32))
-    emb = adapter(session, batch_size=2)
+    emb = adapter(session, batch_size=2, document_batch_size=2)
     try:
         vectors = await emb.embed_documents(["a", "b", "c", "d", "e"])
     finally:
         emb.close()
     assert len(vectors) == 5
     assert [len(feed["input_ids"]) for feed in session.feeds] == [2, 2, 1]
+
+
+async def test_an_interactive_query_runs_between_background_index_batches() -> None:
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def hidden(feed):
+        if len(session.feeds) == 1:
+            loop.call_soon_threadsafe(entered.set)
+            assert release.wait(timeout=5), "test did not release the first index batch"
+        return np.ones((len(feed["input_ids"]), 1, 2), dtype=np.float32)
+
+    session = FakeSession(hidden)
+    emb = adapter(session, batch_size=2, document_batch_size=2)
+    indexing = asyncio.create_task(emb.embed_documents(["a", "b", "c", "d", "e"]))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        query = asyncio.create_task(emb.embed_query("interactive query"))
+        await asyncio.sleep(0)  # queue the query while the first batch owns the model
+        release.set()
+        documents, vector = await asyncio.gather(indexing, query)
+        assert len(documents) == 5 and len(vector) == 2
+        assert [len(feed["input_ids"]) for feed in session.feeds] == [2, 1, 2, 1]
+    finally:
+        release.set()
+        await indexing
+        emb.close()
+
+
+async def test_indexing_turn_is_bounded_below_the_model_throughput_batch() -> None:
+    session = FakeSession(lambda feed: np.ones((len(feed["input_ids"]), 1, 2), dtype=np.float32))
+    emb = adapter(session, batch_size=32, document_batch_size=3)
+    try:
+        vectors = await emb.embed_documents(["a"] * 8)
+        assert len(vectors) == 8
+        assert [len(feed["input_ids"]) for feed in session.feeds] == [3, 3, 2]
+    finally:
+        emb.close()
 
 
 async def test_no_texts_never_reaches_the_session() -> None:
@@ -196,6 +250,18 @@ async def test_no_texts_never_reaches_the_session() -> None:
     finally:
         emb.close()
     assert session.feeds == []
+
+
+async def test_asymmetric_prefixes_reach_query_and_document_encodings() -> None:
+    session = FakeSession(lambda feed: np.ones((len(feed["input_ids"]), 1, 2)))
+    emb = adapter(session, query_prefix="query: ", document_prefix="passage: ")
+    try:
+        await emb.embed_query("test")
+        await emb.embed_documents(["test"])
+    finally:
+        emb.close()
+    assert session.feeds[0]["input_ids"].tolist() == [[6, 4]]
+    assert session.feeds[1]["input_ids"].tolist() == [[8, 4]]
 
 
 async def test_two_queries_are_never_inside_the_model_at_once() -> None:

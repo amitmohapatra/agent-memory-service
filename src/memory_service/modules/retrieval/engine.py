@@ -10,19 +10,22 @@ from __future__ import annotations
 import asyncio
 import itertools
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from memory_service.config.constants import RetrievalSettings
+from memory_service.config.constants import RetrievalSettings, derived_k
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
+from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
+from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
+from memory_service.modules.retrieval.source_turns import promote_source_turns
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
@@ -95,6 +98,18 @@ class RetrievalResult:
     candidates: list[Candidate]
     visibility: VisibilitySpecification
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    query_embedding: list[float] | None = None
+
+
+def is_derived(candidate: Candidate) -> bool:
+    """Includes pre-migration index records without the explicit derived flag."""
+    return candidate.kind == "memory" and (
+        bool(candidate.payload.get("derived"))
+        or candidate.payload.get("memory_type") in {"BELIEF", "ENTITY_SUMMARY"}
+        or any(
+            ref.get("source_type") == "memory" for ref in candidate.payload.get("source_refs", [])
+        )
+    )
 
 
 def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -> Candidate:
@@ -107,6 +122,10 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
         retrievers=[retriever],
         payload={
             "memory_type": memory.memory_type.value,
+            "category": memory.system_metadata.get("category"),
+            "provider": memory.system_metadata.get("provider"),
+            "derived": bool(memory.system_metadata.get("source_revisions")),
+            "source_observed_to": memory.system_metadata.get("source_observed_to"),
             "temporal_status": memory.temporal.status.value,
             "subject": memory.subject,
             "predicate": memory.predicate,
@@ -121,7 +140,6 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             ],
         },
     )
-
 
 
 def rrf_fuse(
@@ -161,7 +179,7 @@ class RetrievalEngine:
         self.reranker = reranker
         self.cfg = settings
         self.rerank_k = rerank_k
-        self.router = router or QueryRouter()
+        self.router = router or QueryRouter(semantic_graph=settings.semantic_graph)
         self.assist = assist or LLMAssist.disabled()
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
@@ -180,8 +198,12 @@ class RetrievalEngine:
         kinds: Sequence[str] = ("chunk", "memory"),
         document_ids: Sequence[str] | None = None,
         visibility: VisibilitySpecification | None = None,
+        query_embedding: tuple[str, list[float]] | None = None,
     ) -> RetrievalResult:
+        explicit_limit = limit is not None
         limit = limit or self.cfg.final_k
+        selected_documents = frozenset(document_ids or ())
+        selected_kinds = frozenset(kinds)
         # Bound the query before anything expensive touches it. See
         # RetrievalSettings.max_query_chars: the cost of a query is paid again for every
         # cross-encoder pair, and the embedding models truncate at 512 tokens anyway.
@@ -226,7 +248,13 @@ class RetrievalEngine:
             # here, the visibility lookup, the collection check, the exact lookups and the
             # graph traversal all run under it instead of after it; what is awaited later
             # is only whatever is left of it.
-            encode_task = asyncio.ensure_future(self._encode(search_text))
+            reused = (
+                query_embedding[1]
+                if query_embedding and query_embedding[0] == search_text
+                else None
+            )
+            encode_task = asyncio.ensure_future(self._encode(search_text, dense=reused))
+            encoded: tuple[list[float] | None, Any] = (None, None)
             prefetched: dict[str, asyncio.Future[Any]] = {}
             try:
                 if visibility is None:
@@ -248,7 +276,13 @@ class RetrievalEngine:
                 # 1. exact identifiers (O(1)/O(log n) lookups, no ranking)
                 if routed.identifiers and self.cfg.exact:
                     with timings.stage("exact"):
-                        candidates.extend(await self._exact(ctx, routed.identifiers, visibility))
+                        candidates.extend(
+                            _within_selection(
+                                await self._exact(ctx, routed.identifiers, visibility),
+                                selected_documents,
+                                selected_kinds,
+                            )
+                        )
                     diagnostics["exact_hits"] = len(candidates)
                     if not candidates:
                         diagnostics["exact_fallback"] = True
@@ -268,7 +302,7 @@ class RetrievalEngine:
                 )
                 if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
                     wanted = list(kinds)
-                    if routed.needs_summaries and "summary" not in wanted:
+                    if routed.needs_summaries and "chunk" in wanted and "summary" not in wanted:
                         wanted.append("summary")
                     wanted = [
                         kind
@@ -307,8 +341,38 @@ class RetrievalEngine:
                 # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate
                 #    texts (copies of the same document) so they cannot crowd out other
                 #    evidence
+                candidates = _within_selection(candidates, selected_documents, selected_kinds)
+                if (
+                    self.cfg.memory_entity_search
+                    and routed.query_type is not QueryType.EXACT_IDENTIFIER
+                    and not selected_documents
+                    and not explicit_limit
+                    and routed.signals.get("multi_hop")
+                    and candidates
+                    and all(c.kind == "memory" for c in candidates)
+                ):
+                    with timings.stage("memory_entity_search"):
+                        candidates = await self._entity_search(
+                            routed.query, candidates, visibility, diagnostics
+                        )
+                pool_limit = max(self.cfg.fused_k, limit)
+                if (
+                    not explicit_limit
+                    and not selected_documents
+                    and self.cfg.memory_recall_k > limit
+                    and candidates
+                    and all(c.kind == "memory" for c in candidates)
+                ):
+                    limit = self.cfg.memory_recall_k
+                    pool_limit = max(pool_limit, derived_k(limit))
+                    diagnostics["memory_recall_k"] = limit
                 before = len(candidates)
-                candidates = _dedup(candidates)[: max(self.cfg.fused_k, limit)]
+                if self.cfg.source_turn_expansion:
+                    candidates, promoted = promote_source_turns(candidates)
+                    diagnostics["source_turn_promotions"] = promoted
+                candidates = _dedup(candidates)[:pool_limit]
+                candidates = await self._validate_derived(ctx, candidates, visibility)
+                checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
                 # 4. bounded CPU rerank
@@ -326,17 +390,26 @@ class RetrievalEngine:
                 diagnostics["reranked"] = False
                 if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
                     with timings.stage("rerank"):
-                        candidates = await self._rerank(routed.query, candidates, limit=limit)
+                        candidates = await self._rerank(
+                            routed.query, candidates, limit=len(candidates)
+                        )
                     diagnostics["reranked"] = True
-                else:
-                    candidates = candidates[:limit]
+                candidates = diverse_head(
+                    candidates,
+                    limit=limit,
+                    per_document=self.cfg.max_chunks_per_document
+                    if len(selected_documents) != 1
+                    else 0,
+                )
                 kept = {c.record_id for c in candidates}
                 unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
                 if unused:
                     # retrieved but ranked out: the grounding cascade scans these for
                     # contradictions
                     diagnostics["unused"] = [
-                        {"record_id": c.record_id, "kind": c.kind, "text": c.text} for c in unused
+                        {"record_id": c.record_id, "kind": c.kind, "text": c.text}
+                        for c in unused
+                        if not unverified_representation(c.payload)
                     ]
                 # 5. strategy hooks (graph M8, expansion/verification M9)
                 for name, stage in self.post_stages.items():
@@ -345,17 +418,105 @@ class RetrievalEngine:
                         candidates = await stage(
                             ctx, routed, candidates, visibility, diagnostics, **extra
                         )
+                    # Source selectors constrain graph facts and companions before any
+                    # later stage consumes them, just as they constrain ranked search.
+                    candidates = _within_selection(candidates, selected_documents, selected_kinds)
                     diagnostics.setdefault("stages", []).append(name)
                 if self.post_stages:
                     candidates = _cap_evidence(candidates, limit)
+                    candidates = await self._validate_derived(
+                        ctx, candidates, visibility, checked=checked_derived
+                    )
+                candidates = await self._expand_derived_sources(
+                    ctx, candidates, visibility, diagnostics
+                )
+                candidates = _within_selection(candidates, selected_documents, selected_kinds)
             finally:
                 # an exact hit never needs the encoding; a stage that raised never consumed
                 # its prefetch - neither may outlive the request or log as never retrieved
                 for task in (encode_task, *prefetched.values()):
                     _discard(task)
         return RetrievalResult(
-            routed=routed, candidates=candidates, visibility=visibility, diagnostics=diagnostics
+            routed=routed,
+            candidates=candidates,
+            visibility=visibility,
+            diagnostics=diagnostics,
+            query_embedding=encoded[0],
         )
+
+    async def _expand_derived_sources(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """Bounded one-hop evidence fetch; no model, graph walk or per-source query."""
+        present = {c.record_id for c in candidates}
+        wanted: dict[str, Candidate] = {}
+        for candidate in candidates:
+            if not is_derived(candidate):
+                continue
+            for ref in candidate.payload.get("source_refs", []):
+                source_id = ref.get("source_id")
+                if (
+                    ref.get("source_type") == "memory"
+                    and source_id not in present
+                    and source_id not in wanted
+                    and len(wanted) < self.cfg.derived_source_k
+                ):
+                    wanted[source_id] = candidate
+        if not wanted:
+            return candidates
+        async with self.uow_factory() as uow:
+            sources = await uow.memories.get_many(ctx.tenant_id, list(wanted))
+        additions = []
+        for memory in sources:
+            if (
+                memory.temporal.status.value != "CURRENT"
+                or memory.system_metadata.get("source_revisions")
+                or not visibility.allows(
+                    memory.tenant_id, memory.system_metadata.get("visibility_keys", [])
+                )
+            ):
+                continue
+            parent = wanted[memory.memory_id]
+            additions.append(
+                replace(
+                    memory_candidate(memory, retriever="derived_source", score=parent.score),
+                    expanded_from=parent.record_id,
+                    expansion_edge="DERIVED_SOURCE",
+                )
+            )
+        diagnostics["derived_sources"] = len(additions)
+        return [*candidates, *additions]
+
+    async def _validate_derived(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        *,
+        checked: set[str] | None = None,
+    ) -> list[Candidate]:
+        checked = checked or set()
+        ids = {c.record_id for c in candidates if is_derived(c) and c.record_id not in checked}
+        if not ids:
+            return candidates
+        async with self.uow_factory() as uow:
+            current = {
+                m.memory_id: m
+                for m in await uow.memories.get_many(ctx.tenant_id, sorted(ids))
+                if m.temporal.status.value == "CURRENT"
+                and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
+            }
+        return [
+            replace(c, text=current[c.record_id].content, payload={**c.payload, "derived": True})
+            if c.record_id in current
+            else c
+            for c in candidates
+            if c.record_id not in ids or c.record_id in current
+        ]
 
     async def _search_kind(
         self,
@@ -397,6 +558,65 @@ class RetrievalEngine:
                 payload=h.payload,
             )
             for h in hits
+        ]
+
+    async def _entity_search(
+        self,
+        query: str,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        plan = plan_memory_queries(query, candidates)
+        if plan is None:
+            return candidates
+        detail: dict[str, Any] = {"subjects": list(plan.subjects), "topic": plan.topic}
+        diagnostics["memory_entity_search"] = detail
+        tasks: list[asyncio.Task[list[SearchHit]]] = []
+        try:
+            async with asyncio.timeout(self.cfg.memory_entity_search_timeout_ms / 1000):
+                encoded = await self._encode(plan.topic)
+                tasks = [
+                    asyncio.create_task(
+                        self._hybrid(
+                            plan.topic,
+                            visibility,
+                            kind="memory",
+                            document_ids=None,
+                            encoded=encoded,
+                            subject=subject,
+                        )
+                    )
+                    for subject in plan.subjects
+                ]
+                extra = await asyncio.gather(*tasks)
+        except (TimeoutError, DependencyUnavailable) as exc:
+            detail["fallback"] = type(exc).__name__
+            return candidates
+        finally:
+            for task in tasks:
+                _discard(task)
+        original = {c.record_id: c for c in candidates}
+        base = [
+            SearchHit(record_id=c.record_id, score=c.score, retriever="fusion", payload=c.payload)
+            for c in candidates
+        ]
+        # The original question gets twice the weight of each actor view. A topic view
+        # supplements the original intent, including facts spoken by somebody else.
+        fused = rrf_fuse([base, base, *extra], k=self.cfg.rrf_k)
+        detail["new_candidates"] = sum(rid not in original for rid, *_ in fused)
+        return [
+            replace(original[rid], score=score)
+            if rid in original
+            else Candidate(
+                record_id=rid,
+                kind="memory",
+                text=str(payload.get("text", "")),
+                score=score,
+                retrievers=["entity_topic"],
+                payload=payload,
+            )
+            for rid, score, _, payload in fused
         ]
 
     async def _expand_query(self, query: str) -> QueryExpansion | None:
@@ -492,7 +712,9 @@ class RetrievalEngine:
                 out.extend(await lookup(ctx, matching, visibility))
         return out
 
-    async def _encode(self, query: str) -> tuple[list[float] | None, Any]:
+    async def _encode(
+        self, query: str, *, dense: list[float] | None = None
+    ) -> tuple[list[float] | None, Any]:
         """Encode the query once for every kind that will be searched.
 
         This used to live inside ``_hybrid``, which is called once per kind — so a query
@@ -501,7 +723,8 @@ class RetrievalEngine:
         58.6 ms and dense on is p50 532.9 ms over an identical corpus, and the encoder alone
         is 178 ms mean. Hoisting it out is a pure refactor with no behavioural change.
         """
-        dense = await self.indexer.embedding.embed_query(query) if self.cfg.dense else None
+        if self.cfg.dense and dense is None:
+            dense = await self.indexer.embedding.embed_query(query)
         sparse = self.indexer.sparse.encode_query(query) if self.cfg.bm25 else None
         return dense, sparse
 
@@ -513,24 +736,28 @@ class RetrievalEngine:
         kind: str,
         document_ids: Sequence[str] | None,
         encoded: tuple[list[float] | None, Any] | None = None,
+        subject: str | None = None,
     ) -> list[SearchHit]:
         collection = self.indexer.collection(MEMORIES if kind == "memory" else KNOWLEDGE)
         flt = visibility.search_filter(kind=kind)
         if kind == "memory":
             flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
+            if subject is not None:
+                flt = flt.model_copy(update={"must": {**flt.must, "subject": subject}})
         if document_ids:
             flt = flt.model_copy(
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         dense, sparse = encoded if encoded is not None else await self._encode(query)
+        memory_depth = derived_k(self.cfg.memory_recall_k) if kind == "memory" else 0
         return await self.store.search_hybrid(
             collection,
             dense=dense,
             sparse=sparse,
             flt=flt,
-            limit=self.cfg.fused_k,
+            limit=max(self.cfg.fused_k, memory_depth),
+            prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
             rrf_k=self.cfg.hybrid_rrf_k,
-            prefetch_limit=self.cfg.prefetch_k,
         )
 
     async def _rerank(
@@ -546,6 +773,65 @@ class RetrievalEngine:
             c.rerank_score = r.score
             reranked.append(c)
         return (reranked + tail)[:limit]
+
+
+def diverse_head(candidates: list[Candidate], *, limit: int, per_document: int) -> list[Candidate]:
+    """O(n) soft document cap, stable within each tier, with no loss of result capacity.
+
+    Diversity is for primary document discovery. Explicit identifiers and companions
+    retain their positions; a single selected document bypasses this at the call site.
+    """
+    if per_document <= 0:
+        return candidates[:limit]
+    counts: dict[str, int] = {}
+    preferred: list[Candidate] = []
+    overflow: list[Candidate] = []
+    for candidate in candidates:
+        document = candidate.payload.get("document_id")
+        if (
+            candidate.kind != "chunk"
+            or not document
+            or candidate.expansion_edge
+            or "exact" in candidate.retrievers
+        ):
+            preferred.append(candidate)
+        elif counts.get(document, 0) < per_document:
+            counts[document] = counts.get(document, 0) + 1
+            preferred.append(candidate)
+        else:
+            overflow.append(candidate)
+        if len(preferred) >= limit:
+            return preferred
+    return preferred + overflow[: limit - len(preferred)]
+
+
+def _within_selection(
+    candidates: list[Candidate], documents: frozenset[str], kinds: frozenset[str]
+) -> list[Candidate]:
+    """Apply the same source contract to every retrieval path in linear time.
+
+    Summaries belong to documents. Relations accompany their selected source; a
+    relation without source lineage is eligible only for an unrestricted source query.
+    """
+    unrestricted = {"chunk", "memory"} <= kinds
+    out: list[Candidate] = []
+    for candidate in candidates:
+        payload = candidate.payload
+        if documents and payload.get("document_id") not in documents:
+            continue
+        allowed = candidate.kind in kinds
+        if candidate.kind == "summary":
+            allowed = allowed or "chunk" in kinds
+        elif candidate.kind == "fact":
+            allowed = (
+                allowed
+                or unrestricted
+                or ("chunk" in kinds and bool(payload.get("document_id")))
+                or ("memory" in kinds and bool(payload.get("memory_id")))
+            )
+        if allowed:
+            out.append(candidate)
+    return out
 
 
 def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
@@ -572,67 +858,81 @@ def _discard(task: asyncio.Future[Any]) -> None:
         task.exception()
 
 
-def _dedup(candidates: list[Candidate]) -> list[Candidate]:
-    """Merge repeated record ids and collapse identical texts onto the first occurrence.
+def _dedup_context(candidate: Candidate) -> tuple:
+    """Equal words need equal attribution before memory evidence can be collapsed."""
+    if candidate.kind != "memory":
+        return (candidate.kind,)
+    payload = candidate.payload
+    refs = payload.get("source_refs") or []
+    sources = tuple(
+        sorted(
+            (ref.get("source_type", ""), ref.get("source_id", ""))
+            for ref in refs
+            if ref.get("source_type") and ref.get("source_id")
+        )
+    )
+    # Legacy/ephemeral hits without provenance cannot establish the same event.
+    if not sources or len(sources) != len(refs):
+        return (candidate.kind, candidate.record_id)
+    subject = payload.get("subject")
+    if not subject or (isinstance(subject, str) and subject.startswith(("thread:", "workspace:"))):
+        # Native event/task extraction uses scope identifiers when no actor is parsed.
+        # They do not name a different speaker from the same original observation.
+        subject = payload.get("owner_principal")
+        if not subject:
+            return (candidate.kind, candidate.record_id)
+    return (
+        candidate.kind,
+        subject,
+        payload.get("owner_principal"),
+        payload.get("observed_at"),
+        sources,
+    )
 
-    Collapsing used to apply to chunks only — ``if c.kind == "chunk"`` — because memories
-    carry no ``text_hash`` in their search payload, so there was nothing to group them by.
-    The effect was that identical memories never collapsed at all. Measured on a live
-    bundle: eleven memory items with **two** distinct texts, six copies of one sentence and
-    five of another, crowding out every other piece of evidence. Hashing the text here
-    instead of trusting a payload field fixes it for data already indexed, with no reindex.
 
-    Candidates arrive ranked, so the first occurrence is the best-scoring one; the rest are
-    recorded as ``duplicates`` rather than discarded silently. Every twin already passed the
-    store's visibility filter, so collapsing cannot widen what this caller may see.
+def _dedup(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """Collapse representations of the same evidence, preserving speaker and event.
+
+    Other text collapses within its representation kind. Memories compare within a provenance
+    group: equal words from different people, dates or source turns remain distinct.
+    Normalization is linear in input text; containment costs O(sum(group_size**2)),
+    bounded by the retrieval pool, rather than comparing every memory with every other.
     """
-    seen: dict[str, Candidate] = {}
-    by_hash: dict[str, Candidate] = {}
-    #: ``(normalised text, candidate)`` for everything kept, in the order it was kept. The
-    #: subsumption pass used to re-normalise EVERY kept candidate's body on every comparison,
-    #: so an n-candidate pool paid O(n^2) string allocations for a scan that needs n of them,
-    #: and it called ``_subsumed_by`` twice per candidate - once to test, once to fetch what
-    #: the test had already found. Min-of-7 on pools of this service's own shapes: 0.54 -> 0.43
-    #: ms at n=50, 1.33 -> 0.50 at n=100, 4.25 -> 1.10 at n=200 - so ~0.8 ms at the shipped
-    #: depth. The audit that raised this put it at 9.6-26 ms, which is roughly tenfold too
-    #: high; it is NOT bookable against the 51.3 ms the p99 is over budget. It is in a timing
-    #: stage now so the next person does not have to take either figure on trust.
-    #:
-    #: It was never invisible, either - context/builder.py wraps the whole of ``retrieve`` in
-    #: a timing stage and merges it into the same diagnostics dict, so this cost has always
-    #: been in the per-question artefact, attributed to its parent. What is new is the
-    #: sub-line, not the measurement.
-    kept: list[tuple[str, Candidate]] = []
+    out: list[Candidate] = []
+    aliases: dict[tuple[str, str], Candidate] = {}
+    by_hash: dict[tuple, Candidate] = {}
+    groups: dict[tuple, list[tuple[str, Candidate]]] = {}
     with stage_seconds.labels("retrieval.dedup").time():
-        for c in candidates:
-            if c.record_id in seen:
-                existing = seen[c.record_id]
-                existing.retrievers = sorted(set(existing.retrievers) | set(c.retrievers))
-                existing.score = max(existing.score, c.score)
-                continue
-            h = c.payload.get("text_hash") or (content_hash(c.text) if c.text else None)
-            if h:
-                twin = by_hash.get(h)
-                if twin is not None:
-                    twin.payload.setdefault("duplicates", []).append(c.record_id)
-                    twin.score = max(twin.score, c.score)
-                    twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
-                    continue
-                by_hash[h] = c
-            norm = _normalised(c.text) if COLLAPSE_SUBSUMED else ""
-            if COLLAPSE_SUBSUMED:
-                twin = _subsumed_by(norm, c.record_id, kept)
-                if twin is not None:
-                    twin.payload.setdefault("duplicates", []).append(c.record_id)
-                    twin.retrievers = sorted(set(twin.retrievers) | set(c.retrievers))
-                    continue
-            seen[c.record_id] = c
-            kept.append((norm, c))
-    return list(seen.values())
+        for candidate in candidates:
+            identity = (candidate.kind, candidate.record_id)
+            twin = aliases.get(identity)
+            context = _dedup_context(candidate)
+            digest = candidate.payload.get("text_hash") or (
+                content_hash(candidate.text) if candidate.text else None
+            )
+            hash_key = (context, digest)
+            if twin is None and digest:
+                twin = by_hash.get(hash_key)
+            norm = _normalised(candidate.text) if COLLAPSE_SUBSUMED else ""
+            if twin is None and COLLAPSE_SUBSUMED:
+                twin = _subsumed_by(norm, candidate.record_id, groups.get(context, ()))
+            if twin is None:
+                twin = candidate
+                out.append(candidate)
+                groups.setdefault(context, []).append((norm, candidate))
+            else:
+                if twin.record_id != candidate.record_id and identity not in aliases:
+                    twin.payload.setdefault("duplicates", []).append(candidate.record_id)
+                twin.score = max(twin.score, candidate.score)
+                twin.retrievers = sorted(set(twin.retrievers) | set(candidate.retrievers))
+            aliases[identity] = twin
+            if digest:
+                by_hash[hash_key] = twin
+    return out
 
 
-#: Collapse a candidate whose text is wholly contained in one already kept. OFF by default:
-#: it has to earn its place in an ablation like anything else.
+#: Collapse a candidate whose text is wholly contained in one already kept. Enabled in the
+#: shipped baseline; changes must be evaluated against that baseline.
 #:
 #: Identical-text dedup above collapses exact twins. It cannot see the shape this service
 #: actually produces: since a turn is kept verbatim as well as extracted, one sentence yields
