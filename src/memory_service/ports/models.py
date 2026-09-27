@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from memory_service.domain.provenance import require_permitted_model
 from memory_service.ports.search import SparseVector
 
 
@@ -29,6 +30,13 @@ class ProviderInfo(BaseModel):
         default="in-process", description="where data goes: in-process|region"
     )
     requires_llm: bool = False
+
+    @field_validator("name", "origin")
+    @classmethod
+    def _permitted_origin(cls, value: str) -> str:
+        """Every adapter records its model here, so this is where the provenance rule
+        (domain/provenance.py) refuses an excluded family before any weights load."""
+        return require_permitted_model(value)
 
 
 @runtime_checkable

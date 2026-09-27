@@ -122,10 +122,12 @@ download catalogue is derived from it, so the code and the weights cannot drift 
 | Reranker | none | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
-The benchmark challengers (BGE small/base/M3, Granite R2 base, GTE, Qwen3-Embedding,
-bge-reranker-v2-m3, SPLADE, GLiNER2, the former reranker) are listed in
-`benchmark/challengers.txt`; `make models-all` fetches them, and only `make bench-embedding`
-/ `make bench-reranker` ever load one.
+The benchmark challengers (Granite R2 base, Granite reranker, SPLADE, GLiNER2, the former
+reranker) are listed in `benchmark/challengers.txt`; `make models-all` fetches them, and only
+`make bench-embedding` / `make bench-reranker` ever load one. **No Chinese-origin model or
+derivative runs anywhere in the stack** - not as a default, a challenger, an operator setting
+or a gateway model. The rule is `src/memory_service/domain/provenance.py`, and
+`tests/unit/test_model_provenance.py` asserts it on every surface that names a model.
 
 **These defaults were chosen by measurement, on CPU.** `make bench-embedding` runs every
 candidate through the real pipeline and the golden set; the numbers below are from
@@ -134,13 +136,11 @@ candidate through the real pipeline and the golden set; the numbers below are fr
 | Candidate | dim | Recall@20 | EGR | query p95 | index |
 |---|---|---|---|---|---|
 | `granite-embedding-small-english-r2` | 384 | 1.00 | 1.00 | **204 ms** | 59 s |
-| `bge-small-en-v1.5` | 384 | 1.00 | 1.00 | 289 ms | **21 s** |
-| `bge-base-en-v1.5` | 768 | 1.00 | 1.00 | 353 ms | 33 s |
 | `granite-embedding-english-r2` | 768 | 1.00 | 1.00 | 2,020 ms | 369 s |
-| `Qwen/Qwen3-Embedding-0.6B` | 1024 | 1.00 | 1.00 | 3,545 ms | 673 s |
 
 Rerankers, scoring 20 candidates: `ms-marco-MiniLM-L6-v2` 1,399 ms ·
-`granite-embedding-reranker-english-r2` 11,978 ms · `BAAI/bge-reranker-v2-m3` 35,794 ms.
+`granite-embedding-reranker-english-r2` 11,978 ms. (Rows for models since excluded by
+provenance remain in `benchmark/results/embedding.json`; they are evidence, not candidates.)
 
 Three things that table is actually telling you:
 
@@ -148,9 +148,9 @@ Three things that table is actually telling you:
   means the golden set (18 questions over 2 documents) is too easy to separate them. Quality
   here is *undiscriminated*, not *equal*, and the set needs harder questions before it can
   rank encoders.
-- **Bigger is not better under a latency budget.** Qwen3-Embedding and `bge-reranker-v2-m3`
-  are strong models that buy no measurable recall here and cost 17x and 26x their smaller
-  siblings. They are configuration-selectable for GPU deployments, not defaults.
+- **Bigger is not better under a latency budget.** The 768-dim Granite and the 1024-dim
+  challengers since excluded bought no measurable recall here and cost 10-26x their smaller
+  siblings.
 - **The 300 ms recall budget does not survive real models on this hardware.** End-to-end
   recall p95 was 3.5-4.1 s for *every* candidate. Those budgets were set against the
   deterministic stand-in and need re-justifying against a deployed instance — see

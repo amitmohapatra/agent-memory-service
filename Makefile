@@ -161,13 +161,13 @@ BENCH_QDRANT_URL ?= http://host.docker.internal:6333
 #: The gateway, reached from inside the benchmark container. It holds the provider key;
 #: the service is only ever told a URL and a model name.
 BIFROST_URL ?= http://host.docker.internal:8091/v1
-# DeepSeek V4.1-Flash. Flash only, on purpose: the judge and the answerer are
-# classification-sized calls, and the cheap tier is $0.30/$1.20 per 1M tokens
-# ($0.15/$0.60 off-peak) against deepseek-v4-pro at $0.435/$0.87. It also limits by
-# concurrency rather than a daily quota, which is what broke the last judged run:
-# 17 HTTP 429s from a free Gemini key, then 62 calls the circuit breaker refused.
+# Flash-class only, on purpose: the judge and the answerer are classification-sized calls.
+# Gemini 3.8 Flash is the gateway model that answered on 2026-09-28 (Anthropic had no credit,
+# Gemini 2.5 Flash is retired, and DeepSeek is excluded by provenance - see
+# src/memory_service/domain/provenance.py). Pace with --calls-per-minute; a judged LoCoMo
+# arm is ~2,000 calls, so run the 20-question smoke first and read the cost it reports.
 # The answerer and the judge are the same model here; separating them is Phase 4.
-BENCH_LLM_MODEL ?= deepseek/deepseek-flash
+BENCH_LLM_MODEL ?= gemini/gemini-3.8-flash
 BENCH_LIMIT ?=
 
 #: Every containerised benchmark runs through this one block. It passes exactly what the

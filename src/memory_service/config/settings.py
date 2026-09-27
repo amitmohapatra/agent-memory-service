@@ -24,8 +24,10 @@ import os
 from functools import lru_cache
 from typing import Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from memory_service.domain.provenance import require_permitted_model
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -249,6 +251,14 @@ class LLMSettings(BaseModel):
     max_tokens: int = Field(default=1024, ge=1)
     timeout_seconds: float = Field(default=30.0, gt=0)
     max_retries: int = Field(default=2, ge=0, description="retries on 429/5xx/timeouts, bounded")
+
+    @field_validator("model", "fast_model")
+    @classmethod
+    def _permitted_model(cls, value: str | None) -> str | None:
+        """An operator naming a model is bound by the same provenance rule as discovery."""
+        if value and value != "auto":
+            require_permitted_model(value)
+        return value
 
     def wants(self, use: LLMUse) -> bool:
         uses = self.uses

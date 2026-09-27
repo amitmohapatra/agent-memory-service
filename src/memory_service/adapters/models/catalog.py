@@ -16,13 +16,13 @@ import httpx
 from bifrost_sdk import Options
 
 from memory_service.domain.errors import ProviderNotConfigured
+from memory_service.domain.provenance import permitted_model
 from memory_service.ports.credentials import ModelIdentity
 
 _FAMILIES = re.compile(
     r"^(?:openai/gpt-[45][\w.:-]*|anthropic/claude-(?:haiku|sonnet|opus)-[\w.:-]+"
     r"|(?:google|gemini)/gemini-[\d.]+-(?:flash|pro)(?:-[\w.]+)?)$"
 )
-_EXCLUDED = re.compile(r"qwen|deepseek|glm|kimi|minimax|bge", re.IGNORECASE)
 CatalogKey = tuple[ModelIdentity, int | None] | None
 
 
@@ -30,7 +30,7 @@ def choose_model(models: tuple[str, ...], *, fast: bool) -> str:
     eligible = []
     for name in models:
         canonical = name.removeprefix("openrouter/")
-        if not _FAMILIES.fullmatch(canonical) or _EXCLUDED.search(canonical):
+        if not _FAMILIES.fullmatch(canonical) or not permitted_model(canonical):
             continue
         compact = any(part in canonical for part in ("flash", "haiku", "mini", "nano"))
         # Prefer a compact model for bounded extraction/expansion, and a full model for

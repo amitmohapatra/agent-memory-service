@@ -49,12 +49,13 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
 from memory_service.ports.search import SearchFilter
 
+#: Candidates the embedding benchmark may load. Bounded by the provenance rule
+#: (domain/provenance.py): no Chinese-origin checkpoint is a candidate here either.
 MODELS: dict[str, tuple[str, int]] = {
-    "bge-small-en-v1.5": ("BAAI/bge-small-en-v1.5", 384),
-    "bge-base-en-v1.5": ("BAAI/bge-base-en-v1.5", 768),
     "granite-embedding-small-english-r2": ("ibm-granite/granite-embedding-small-english-r2", 384),
     "granite-embedding-english-r2": ("ibm-granite/granite-embedding-english-r2", 768),
-    "qwen3-embedding-0.6b": ("Qwen/Qwen3-Embedding-0.6B", 1024),
+    "bekko-embedding-v1-a8m": ("hotchpotch/bekko-embedding-v1-a8m", 384),
+    "multilingual-e5-small": ("intfloat/multilingual-e5-small", 384),
 }
 BACKENDS = ("torch", "onnx", "openvino")
 QUICK_BACKENDS = ("torch",)
