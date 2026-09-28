@@ -158,7 +158,8 @@ class QueryRouter:
             needs_memories=qt is not QueryType.EXACT_IDENTIFIER,
             needs_knowledge=qt not in (QueryType.CONVERSATION_HISTORY, QueryType.USER_MEMORY),
             needs_graph=(qt is QueryType.GENERAL_SEMANTIC and self.semantic_graph)
-            or qt in (
+            or qt
+            in (
                 QueryType.ENTITY_RELATION,
                 QueryType.DOCUMENT_MULTI_HOP,
                 QueryType.TEMPORAL,

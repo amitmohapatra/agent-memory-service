@@ -28,8 +28,8 @@ pytestmark = pytest.mark.unit
 #: budgets or retries - those are the benchmark's to pin.
 JUDGED_ENV = {
     "MEMORY__MODELS__LLM__ENABLED": "true",
-    "MEMORY__MODELS__LLM__MODEL": "deepseek/deepseek-flash",
-    "MEMORY__MODELS__LLM__FAST_MODEL": "deepseek/deepseek-flash",
+    "MEMORY__MODELS__LLM__MODEL": "gemini/gemini-3.8-flash",
+    "MEMORY__MODELS__LLM__FAST_MODEL": "gemini/gemini-3.8-flash",
     "MEMORY__MODELS__LLM__USES": '["grounding_judge"]',
     "MEMORY__MODELS__LLM__FAST_USES": '["grounding_judge"]',
 }
@@ -63,7 +63,7 @@ def test_the_environment_still_wins_for_what_it_names(judged: None) -> None:
     """The other half: this must not become a merge that ignores the environment."""
     llm = _settings().models.llm
     assert llm.enabled is True
-    assert llm.model == "deepseek/deepseek-flash"
+    assert llm.model == "gemini/gemini-3.8-flash"
     assert llm.uses == ["grounding_judge"]
 
 

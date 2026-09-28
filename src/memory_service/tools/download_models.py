@@ -190,6 +190,8 @@ def fetch(model: Model, root: Path, *, force: bool = False) -> dict[str, Any]:
         # recorded identity; a forced refresh or explicit pin fetches a new snapshot.
         return {**recorded, "role": model.role, "cached": True}
     revision = HfApi().model_info(model.repo, revision=model.revision).sha
+    if not revision:
+        raise RuntimeError(f"{model.repo}: the Hub reported no revision sha")
     target.mkdir(parents=True, exist_ok=True)
     incomplete.write_text(revision, encoding="utf-8")
     if model.runtime == "torch":
