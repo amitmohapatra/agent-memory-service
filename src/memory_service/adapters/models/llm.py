@@ -46,10 +46,27 @@ from memory_service.modules.llm.policy import current_model_identity
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import llm_requests_total, llm_seconds, llm_tokens_total
 from memory_service.observability.tracing import span
-from memory_service.ports.credentials import CredentialResolver, ModelIdentity
+from memory_service.ports.credentials import (
+    CredentialResolver,
+    ModelIdentity,
+    ResolvedCredential,
+)
 from memory_service.ports.models import LLMCompletion, LLMMessage, ProviderInfo
 
 log = get_logger(__name__)
+
+
+def _catalog_key(
+    binding: tuple[ModelIdentity, ResolvedCredential | None] | None,
+) -> tuple[ModelIdentity, int | None] | None:
+    """Discovery is cached per credential row and revision, never per key material."""
+    if binding is None:
+        return None
+    identity, resolved = binding
+    if resolved is None:
+        return (identity, None)
+    return (resolved.identity, resolved.revision)
+
 
 #: The only status for which falling back to a prompt-shaped schema is correct.
 _BAD_REQUEST = 400
@@ -185,9 +202,9 @@ class BifrostLLM:
         #: put the schema in the prompt from the first attempt instead of paying a wasted
         #: round trip each time (DeepSeek did, on every one of ~600 calls in one run).
         self._schema_in_prompt: set[str] = set()
-        self._credential_attempt: ContextVar[tuple[ModelIdentity, int | None] | None] = ContextVar(
-            "memory_credential_attempt", default=None
-        )
+        self._credential_attempt: ContextVar[
+            tuple[ModelIdentity, ResolvedCredential | None] | None
+        ] = ContextVar("memory_credential_attempt", default=None)
         self._owns_http_client = client is None
         headers = {"Content-Type": "application/json"}
         if settings.api_key:
@@ -225,7 +242,9 @@ class BifrostLLM:
             return configured
         async with self._call_options() as options:
             return await self._catalog.resolve(
-                self._credential_attempt.get(), options, fast=use in self.settings.fast_uses
+                _catalog_key(self._credential_attempt.get()),
+                options,
+                fast=use in self.settings.fast_uses,
             )
 
     async def complete(
@@ -454,7 +473,7 @@ class BifrostLLM:
                 extra={**options.extra, "Authorization": f"Bearer {value}"},
             )
         binding = (
-            (identity, credential.revision if credential is not None else None)
+            (identity, credential)
             if identity is not None and self.credentials is not None
             else None
         )

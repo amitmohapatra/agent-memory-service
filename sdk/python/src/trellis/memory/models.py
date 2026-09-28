@@ -715,3 +715,129 @@ class ReadAuditRecord(BaseModel):
     scope_fingerprint: str
     record_ids: list[str]
     at: datetime
+
+
+# --------------------------------------------------------------------------- pagination
+
+
+class Page[T](BaseModel):
+    """One page of a list route: the items and the cursor of the next page (None on the last).
+    Pass ``next_cursor`` back as ``cursor`` to continue; every paged route accepts it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[T]
+    next_cursor: str | None = None
+
+    @property
+    def has_more(self) -> bool:
+        return self.next_cursor is not None
+
+
+# --------------------------------------------------------------------------- feedback
+
+FeedbackTargetKind = Literal["run", "answer", "memory", "tool_call", "brief", "procedure"]
+FeedbackVerdict = Literal["confirm", "reject", "correct", "approve", "edit"]
+FeedbackSource = Literal["human", "judge", "interrupt"]
+ProjectionAction = Literal["none", "memory_reinforced", "memory_retracted", "memory_superseded"]
+
+
+class FeedbackProjection(BaseModel):
+    """What the service did with a record once its projector ran."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    action: ProjectionAction
+    memory_id: str | None = None
+    superseded_by: str | None = None
+    reason: str | None = None
+    projected_at: datetime
+
+
+class Feedback(BaseModel):
+    """A stored judgement (the ``trellis.contracts.Feedback`` record plus its projection)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    feedback_id: str
+    tenant_id: str
+    workspace_id: str | None = None
+    user_id: str | None = None
+    agent_id: str | None = None
+    agent_run_id: str | None = None
+    trace_id: str | None = None
+    target_kind: FeedbackTargetKind
+    target_id: str
+    verdict: FeedbackVerdict
+    correction: Any = None
+    score: float | None = None
+    comment: str | None = None
+    reviewer: str | None = None
+    source: FeedbackSource = "human"
+    evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    projection: FeedbackProjection | None = None
+
+
+# --------------------------------------------------------------------------- webhooks
+
+WebhookEvent = Literal[
+    "memory.created",
+    "memory.superseded",
+    "memory.retracted",
+    "feedback.received",
+    "feedback.projected",
+    "webhook.test",
+]
+DeliveryStatus = Literal["PENDING", "DELIVERED", "FAILED", "DEAD"]
+
+
+class WebhookInfo(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    subscription_id: str
+    tenant_id: str
+    workspace_id: str | None = None
+    url: str
+    events: list[WebhookEvent]
+    description: str | None = None
+    enabled: bool
+    failures: int = 0
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class WebhookCreated(WebhookInfo):
+    """The subscription plus its HMAC secret, shown once (None on an idempotent replay)."""
+
+    secret: str | None = None
+
+
+class DeliveryInfo(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    delivery_id: str
+    subscription_id: str
+    event_id: str
+    event_type: WebhookEvent
+    status: DeliveryStatus
+    attempts: int
+    status_code: int | None = None
+    last_error: str | None = None
+    created_at: datetime
+    delivered_at: datetime | None = None
+
+
+class WebhookEventPayload(BaseModel):
+    """What a receiver gets: the event, as the service serialises it."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    event_id: str
+    type: WebhookEvent
+    tenant_id: str
+    workspace_id: str | None = None
+    occurred_at: datetime
+    data: dict[str, Any] = Field(default_factory=dict)

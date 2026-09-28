@@ -269,7 +269,7 @@ class IngestionService:
             raise CorruptSource("staged bytes do not match the document checksum")
 
         with (
-            model_identity(tenant_id, document.model_principal),
+            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
             span("ingest.parse", tenant_id=tenant_id),
             stage_seconds.labels("ingest.parse").time(),
         ):

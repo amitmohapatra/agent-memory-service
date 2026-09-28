@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import ContainerDep, PlatformDep, request_context
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
 from memory_service.api.schemas.tenancy import (
     CreatedTenantResponse,
     CreateTenantRequest,
@@ -94,14 +95,21 @@ async def create_tenant(
     summary="List tenants (cursor: the last tenant_id seen)",
 )
 async def list_tenants(
+    request: Request,
+    response: Response,
     container: ContainerDep,
     _: PlatformDep,
     after: str = "",
+    cursor: CursorQuery = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[TenantResponse]:
+    position = decode_cursor(cursor, fields=("tenant_id",))
+    start = position["tenant_id"] if position else after
     async with container.services["uow_factory"]() as uow:
-        tenants = await _service(container).list_tenants(uow, after=after, limit=limit)
-    return [TenantResponse.of(t) for t in tenants]
+        tenants = await _service(container).list_tenants(uow, after=start, limit=limit + 1)
+    items, next_cursor = page(tenants, limit=limit, position=lambda t: {"tenant_id": t.tenant_id})
+    link_next(request, response, next_cursor)
+    return [TenantResponse.of(t) for t in items]
 
 
 @router.get(

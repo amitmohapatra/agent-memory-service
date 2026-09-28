@@ -106,6 +106,15 @@ TAGS: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "feedback",
+        "description": "Human, judge and interrupt judgements on runs, answers, memories, tool "
+        "calls, briefs and procedures; a verdict on a memory is projected into it (ADR 0023).",
+    },
+    {
+        "name": "webhooks",
+        "description": "Outbound, signed event deliveries to a tenant's subscriptions (ADR 0023).",
+    },
+    {
         "name": "retrieval",
         "description": "Scope-filtered recall, ContextBundle assembly, and "
         "grounding verification of an answer against evidence.",
@@ -179,9 +188,12 @@ WRITE_RESPONSE_HEADERS: dict[str, str] = {
 DEPRECATED_ROUTE_HEADERS: dict[str, str] = {
     DEPRECATION_HEADER: "RFC 9745 structured-field date (@<unix seconds>) of this alias "
     f"route's deprecation; the route is removed in {ALIASES_REMOVED_IN}.",
-    LINK_HEADER: 'RFC 8288 link with rel="successor-version" (RFC 5829) naming the canonical '
-    "route.",
+    LINK_HEADER: 'RFC 8288 link: rel="next" names the next page of a list (present exactly '
+    'when one exists, ADR 0023); rel="successor-version" (RFC 5829) names the canonical '
+    "route of a deprecated alias.",
 }
+#: On the responses of cursor-paged list routes: the next page, when there is one.
+PAGED_RESPONSE_HEADERS: dict[str, str] = {LINK_HEADER: DEPRECATED_ROUTE_HEADERS[LINK_HEADER]}
 #: Every public operation can answer these before the route runs.
 EDGE_STATUSES = (413, 429)
 
@@ -218,6 +230,8 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
         headers += list(WRITE_RESPONSE_HEADERS)
     if op.get("deprecated"):
         headers += list(DEPRECATED_ROUTE_HEADERS)
+    elif any(p.get("name") == "cursor" for p in op.get("parameters", [])):
+        headers += list(PAGED_RESPONSE_HEADERS)
     for status, response in responses.items():
         response.setdefault("headers", {}).update(_response_header_refs(headers))
         if status == "429":

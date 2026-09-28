@@ -148,7 +148,9 @@ class GraphService:
                     removed += await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
                     continue
                 ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=m.scope.user_id)
-                with model_identity(tenant_id, m.owner_principal):
+                with model_identity(
+                    tenant_id, m.owner_principal, workspace_id=m.scope.workspace_id
+                ):
                     entities, relations = await self.provider.enrich_memory(m, ctx)
                 await self.store.upsert_entities(entities)
                 await self.store.upsert_relations(relations)
@@ -179,7 +181,7 @@ class GraphService:
         )
         ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=document.owner_user_id)
         with (
-            model_identity(tenant_id, document.model_principal),
+            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
             span("graph.enrich_document", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
         ):

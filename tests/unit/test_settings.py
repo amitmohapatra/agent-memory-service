@@ -108,7 +108,11 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # They permit tenant/agent-owned VKs without storing provider credentials in plaintext.
     # 49 -> 50 for ``authentication.bootstrap_admin_key``: the one secret that onboards tenants
     # in api_key mode. A deployment fact, and the only one a shared deployment adds.
-    assert len(leaves) <= 50, f"{len(leaves)} env fields: {leaves}"
+    # 50 -> 51 for ``webhooks.allow_local_targets`` (ADR 0023): whether this deployment's
+    # webhook receivers may live on the local network. A topology fact (docker-compose
+    # development says yes, anything deployed says no and refuses the flag); the delivery
+    # tuning (timeout, attempts, disable threshold, subscription cap) is in constants.py.
+    assert len(leaves) <= 51, f"{len(leaves)} env fields: {leaves}"
     for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 

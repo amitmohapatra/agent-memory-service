@@ -349,12 +349,15 @@ def _wire_llm(container: Container) -> None:
     from memory_service.adapters.models.credential_cipher import AesCredentialCipher
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
-    from memory_service.modules.llm.credentials import AgentCredentials
+    from memory_service.modules.llm.credentials import ModelCredentials
+    from memory_service.modules.webhooks.service import WebhookService
 
-    credentials = AgentCredentials(
-        container.services["uow_factory"], AesCredentialCipher(container.settings.agent_credentials)
+    cipher = AesCredentialCipher(container.settings.agent_credentials)
+    credentials = ModelCredentials(container.services["uow_factory"], cipher)
+    container.services["model_credentials"] = credentials
+    container.services["webhooks"] = WebhookService(
+        container.services["uow_factory"], cipher, container.settings.webhooks
     )
-    container.services["agent_credentials"] = credentials
     cfg = container.settings.models.llm
     if not cfg.enabled:
         container.llm = DisabledLLM()
@@ -473,6 +476,7 @@ def _wire_retrieval(container: Container) -> None:
 
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
+    from memory_service.modules.feedback.service import FeedbackService
     from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.landing import LandingReflection
     from memory_service.modules.memory.native import NativeMemoryIntelligence
@@ -502,8 +506,16 @@ def _wire_memory(container: Container) -> None:
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
         landing=LandingReflection(cfg) if cfg.consolidation_enabled else None,
+        events=container.services.get("webhooks"),
     )
     container.services["memory"] = MemoryService(container.services["authz"])
+    if "webhooks" in container.services:
+        container.services["feedback"] = FeedbackService(
+            container.services["uow_factory"],
+            container.services["authz"],
+            container.services["memory"],
+            container.services["webhooks"],
+        )
     container.services["forgetting"] = ForgettingService(
         container.services["uow_factory"],
         settings=cfg,

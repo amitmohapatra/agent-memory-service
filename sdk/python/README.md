@@ -105,3 +105,30 @@ Errors are RFC 9457 problems mapped to one exception per `code`: `Authentication
 `RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`, `InsufficientEvidence`.
 Each carries `status`, `retryable`, `trace_id`, `request_id` and `details`. A request that
 got no response raises `TimeoutError` or `DependencyUnavailableError` with `status` 0.
+
+
+## Feedback, webhooks and paging (0.2.1)
+
+```python
+from trellis.memory import MemoryClient
+from trellis.memory.webhooks import verify_signature
+
+async with MemoryClient(base_url, api_key=key) as client:
+    async with client.bind(tenant_id="acme", user_id="u1", workspace_id="fin") as ctx:
+        memories = await ctx.memories_page(limit=50)  # .items, .next_cursor
+        async for memory in ctx.iter_memories():  # every page
+            ...
+        await ctx.feedback.submit("memory", memories.items[0].memory_id, "confirm", score=0.9)
+        page = await ctx.feedback.page_for("memory", memories.items[0].memory_id)
+
+    admin = client.administer("acme")
+    hook = await admin.webhooks.create(
+        "https://hooks.example.com/trellis", ["memory.created", "feedback.projected"]
+    )
+    secret = hook.secret  # shown once
+    await admin.workspaces.set_model_key("fin", "vk-...")  # the team's Bifrost key
+
+# in the receiver
+if not verify_signature(secret, request.headers["X-Trellis-Signature"], raw_body):
+    return 401
+```

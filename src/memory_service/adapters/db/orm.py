@@ -969,3 +969,86 @@ class ReadAuditRow(Base):
         Index("ix_memory_reads_tenant_at", "tenant_id", "at"),  # the listing
         Index("ix_memory_reads_at", "at"),  # the purge
     )
+
+
+class FeedbackRow(Base):
+    __tablename__ = "feedback"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    feedback_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    user_id: Mapped[str | None] = mapped_column(String(200))
+    agent_id: Mapped[str | None] = mapped_column(String(200))
+    agent_run_id: Mapped[str | None] = mapped_column(String(200))
+    trace_id: Mapped[str | None] = mapped_column(String(64))
+    target_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    correction: Mapped[Any | None] = mapped_column(JSONB, nullable=True)
+    score: Mapped[float | None] = mapped_column(Float)
+    comment: Mapped[str | None] = mapped_column(String(4000))
+    reviewer: Mapped[str | None] = mapped_column(String(200))
+    evidence_refs: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, default=dict, server_default="{}"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    projection: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    projected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index(
+            "ix_feedback_target",
+            "tenant_id",
+            "target_kind",
+            "target_id",
+            created_at.desc(),
+            feedback_id.desc(),
+        ),
+    )
+
+
+class WebhookSubscriptionRow(Base):
+    __tablename__ = "webhook_subscriptions"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    subscription_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    events: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500))
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    secret_key_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class WebhookDeliveryRow(Base):
+    __tablename__ = "webhook_deliveries"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    delivery_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    subscription_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index(
+            "ix_webhook_deliveries_subscription",
+            "tenant_id",
+            "subscription_id",
+            created_at.desc(),
+            delivery_id.desc(),
+        ),
+    )

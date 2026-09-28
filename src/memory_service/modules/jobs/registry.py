@@ -7,9 +7,16 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from memory_service.config.constants import TASKS
+from memory_service.config.constants import TASKS, WEBHOOKS
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.webhooks.service import (
+    TASK_WEBHOOK_DELIVER,
+    TASK_WEBHOOK_FANOUT,
+    TASK_WEBHOOK_PURGE,
+)
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
 
@@ -24,7 +31,6 @@ TASK_OUTBOX_SWEEP = "system.outbox_sweep"
 TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
 TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
-TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
 TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
@@ -76,6 +82,29 @@ def register_handlers(container: Container) -> None:
         graph = container.services.get("graph")
         if graph is not None:
             await graph.enrich_document(payload["tenant_id"], payload["document_id"])
+
+    async def feedback_project(payload: dict[str, Any]) -> None:
+        """Learn from one feedback record (idempotent; see modules.feedback)."""
+        feedback = container.services.get("feedback")
+        if feedback is not None:
+            await feedback.project(payload["tenant_id"], payload["feedback_id"])
+
+    async def webhook_fanout(payload: dict[str, Any]) -> None:
+        webhooks = container.services.get("webhooks")
+        if webhooks is not None:
+            await webhooks.fanout(payload)
+
+    async def webhook_deliver(payload: dict[str, Any]) -> None:
+        """One attempt; the queue retries a raised DeliveryError with backoff, and the
+        delivery row's own attempt counter decides which attempt is the last."""
+        webhooks = container.services.get("webhooks")
+        if webhooks is not None:
+            await webhooks.deliver(payload)
+
+    async def webhook_purge(payload: dict[str, Any]) -> None:
+        webhooks = container.services.get("webhooks")
+        if webhooks is not None:
+            await webhooks.purge()
 
     async def memory_index(payload: dict[str, Any]) -> None:
         tenant_id, memory_ids = payload["tenant_id"], list(payload["memory_ids"])
@@ -231,6 +260,15 @@ def register_handlers(container: Container) -> None:
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
+    queue.register(TASK_FEEDBACK_PROJECT, Queue.RECONCILE, feedback_project, retries=3)
+    queue.register(TASK_WEBHOOK_FANOUT, Queue.RECONCILE, webhook_fanout, retries=3)
+    queue.register(
+        TASK_WEBHOOK_DELIVER,
+        Queue.RECONCILE,
+        webhook_deliver,
+        retries=WEBHOOKS.max_attempts - 1,  # retries after the first run: max_attempts runs
+    )
+    queue.register_periodic(TASK_WEBHOOK_PURGE, Queue.RECONCILE, webhook_purge, cron="23 * * * *")
     queue.register(TASK_MEMORY_EXPIRE, Queue.RECONCILE, memory_expire, retries=0)
     queue.register(TASK_MEMORY_FORGET, Queue.RECONCILE, memory_forget, retries=0)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)

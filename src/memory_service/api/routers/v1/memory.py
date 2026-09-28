@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,6 +18,7 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
 from memory_service.api.schemas.conversation import ProcessingHintsIn
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
@@ -155,6 +156,9 @@ class MemoryResponse(BaseModel):
 
 class MemoryListResponse(BaseModel):
     memories: list[MemoryResponse]
+    next_cursor: str | None = Field(
+        default=None, description="pass as `cursor` for the next page; null on the last"
+    )
 
 
 def memory_to_api(m: CanonicalMemory) -> dict[str, Any]:
@@ -243,11 +247,12 @@ async def submit_observation(
     "/memories",
     response_model=MemoryListResponse,
     tags=["memory"],
-    summary="List current memories anchored to the caller's scopes",
+    summary="List current memories anchored to the caller's scopes, newest created first",
     responses=_READ_ERRORS,
 )
 async def list_memories(
     request: Request,
+    response: Response,
     container: ContainerDep,
     _: ServicePrincipalDep,
     memory_type: Annotated[
@@ -261,6 +266,7 @@ async def list_memories(
         ),
     ] = None,
     include_superseded: bool = False,
+    cursor: CursorQuery = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     thread_id: str | None = None,
     work_id: str | None = None,
@@ -268,7 +274,11 @@ async def list_memories(
     agent_group_id: str | None = None,
 ) -> MemoryListResponse:
     """Security fields come from trusted headers; lineage anchors (thread, work, agent) are
-    query parameters so a caller can list the memories of a specific thread or agent."""
+    query parameters so a caller can list the memories of a specific thread or agent.
+    Newest created first; the page is `limit` visible memories and `next_cursor` (also the
+    `Link` header) names the next one."""
+    position = decode_cursor(cursor, fields={"created_at": datetime, "memory_id": str})
+    before = (position["created_at"], position["memory_id"]) if position else None
     ctx = build_context(
         request,
         container,
@@ -282,9 +292,18 @@ async def list_memories(
             ctx,
             memory_types=[m.value for m in memory_type] if memory_type else None,
             include_superseded=include_superseded,
-            limit=limit,
+            before=before,
+            limit=limit + 1,
         )
-    return MemoryListResponse(memories=[MemoryResponse(**memory_to_api(m)) for m in rows])
+    items, next_cursor = page(
+        rows,
+        limit=limit,
+        position=lambda m: {"created_at": m.created_at.isoformat(), "memory_id": m.memory_id},
+    )
+    link_next(request, response, next_cursor)
+    return MemoryListResponse(
+        memories=[MemoryResponse(**memory_to_api(m)) for m in items], next_cursor=next_cursor
+    )
 
 
 @router.get(

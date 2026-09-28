@@ -333,6 +333,9 @@ class MessageListResponse(BaseModel):
     next_before_sequence: int | None = Field(
         default=None, description="Pass as ?before_sequence= to page backwards"
     )
+    next_cursor: str | None = Field(
+        default=None, description="pass as `cursor` for the next page; null on the last"
+    )
 
 
 class JobResponse(BaseModel):

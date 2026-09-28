@@ -1,7 +1,9 @@
 """Content revisions follow audiences, including readers other than a memory's owner."""
 
 from collections.abc import Iterable
+from datetime import datetime
 
+from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.uow import UnitOfWork
@@ -52,3 +54,20 @@ async def bump_memory_revisions(uow: UnitOfWork, memories: Iterable[CanonicalMem
     }
     for tenant_id, kind, identifier in sorted(touched):
         await uow.revisions.bump(tenant_id, kind, identifier)
+
+
+async def supersede(
+    uow: UnitOfWork, old: CanonicalMemory, new: CanonicalMemory, *, now: datetime
+) -> None:
+    """Link ``new`` as the current revision of ``old``: the old row closes its validity and
+    points forward, the new one points back, so the chain reads in both directions."""
+    new.temporal = new.temporal.model_copy(update={"supersedes": old.memory_id})
+    old.temporal = old.temporal.model_copy(
+        update={
+            "status": TemporalStatus.SUPERSEDED,
+            "superseded_by": new.memory_id,
+            "valid_to": old.temporal.valid_to or now,
+        }
+    )
+    old.updated_at = now
+    await uow.memories.update(old)

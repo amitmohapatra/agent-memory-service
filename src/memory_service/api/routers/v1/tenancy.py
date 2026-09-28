@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
@@ -21,6 +21,7 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
     CreateGroupRequest,
@@ -100,13 +101,31 @@ async def issue_key(
     )
 
 
-@router.get("/keys", response_model=list[ApiKeyResponse], responses=_ERRORS, summary="List keys")
+@router.get(
+    "/keys",
+    response_model=list[ApiKeyResponse],
+    responses=_ERRORS,
+    summary="List keys, oldest first (cursor paged)",
+)
 async def list_keys(
-    container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    response: Response,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[ApiKeyResponse]:
+    position = decode_cursor(cursor, fields={"created_at": datetime, "key_id": str})
+    after = (position["created_at"], position["key_id"]) if position else None
     async with container.services["uow_factory"]() as uow:
-        keys = await _service(container).list_keys(uow, tenant_id)
-    return [ApiKeyResponse.of(k) for k in keys]
+        keys = await _service(container).list_keys(uow, tenant_id, after=after, limit=limit + 1)
+    items, next_cursor = page(
+        keys,
+        limit=limit,
+        position=lambda k: {"created_at": k.created_at.isoformat(), "key_id": k.key_id},
+    )
+    link_next(request, response, next_cursor)
+    return [ApiKeyResponse.of(k) for k in items]
 
 
 @router.delete(
@@ -170,11 +189,23 @@ async def create_workspace(
     summary="List workspaces",
 )
 async def list_workspaces(
-    container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    response: Response,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[WorkspaceResponse]:
+    position = decode_cursor(cursor, fields=("workspace_id",))
     async with container.services["uow_factory"]() as uow:
-        workspaces = await _service(container).list_workspaces(uow, tenant_id)
-    return [WorkspaceResponse.of(w) for w in workspaces]
+        workspaces = await _service(container).list_workspaces(
+            uow, tenant_id, after=position["workspace_id"] if position else "", limit=limit + 1
+        )
+    items, next_cursor = page(
+        workspaces, limit=limit, position=lambda w: {"workspace_id": w.workspace_id}
+    )
+    link_next(request, response, next_cursor)
+    return [WorkspaceResponse.of(w) for w in items]
 
 
 @router.get(
@@ -299,13 +330,28 @@ async def create_group(
     )
 
 
-@router.get("/groups", response_model=list[GroupResponse], responses=_ERRORS, summary="List groups")
+@router.get(
+    "/groups",
+    response_model=list[GroupResponse],
+    responses=_ERRORS,
+    summary="List groups (cursor paged)",
+)
 async def list_groups(
-    container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    response: Response,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[GroupResponse]:
+    position = decode_cursor(cursor, fields=("group_id",))
     async with container.services["uow_factory"]() as uow:
-        groups = await _service(container).list_groups(uow, tenant_id)
-    return [GroupResponse.of(g) for g in groups]
+        groups = await _service(container).list_groups(
+            uow, tenant_id, after=position["group_id"] if position else "", limit=limit + 1
+        )
+    items, next_cursor = page(groups, limit=limit, position=lambda g: {"group_id": g.group_id})
+    link_next(request, response, next_cursor)
+    return [GroupResponse.of(g) for g in items]
 
 
 @router.delete("/groups/{group_id}", status_code=204, responses=_ERRORS, summary="Delete a group")
@@ -373,9 +419,12 @@ async def remove_group_user(
     "/reads",
     response_model=list[ReadAuditResponse],
     responses=_ERRORS,
-    summary="Who read which records, newest first; page older entries with before=<last at>",
+    summary="Who read which records, newest first (cursor paged; the keyset is the instant, so "
+    "entries sharing one instant across a page boundary need a larger page)",
 )
 async def list_reads(
+    request: Request,
+    response: Response,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     after: Annotated[
@@ -385,14 +434,23 @@ async def list_reads(
         datetime | None,
         Query(description="only entries older than this instant: the cursor for the next page"),
     ] = None,
+    cursor: CursorQuery = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> list[ReadAuditResponse]:
+    position = decode_cursor(cursor, fields={"before": datetime})
+    if position is not None:
+        before = position["before"]
     await container.services["read_audit"].flush()
     async with container.services["uow_factory"]() as uow:
         entries = await uow.read_audit.list(
-            tenant_id, after=_aware(after), before=_aware(before), limit=limit
+            tenant_id, after=_aware(after), before=_aware(before), limit=limit + 1
         )
-    return [ReadAuditResponse.model_validate(e.model_dump()) for e in entries]
+    items = entries[:limit]
+    next_cursor = (
+        encode_cursor({"before": items[-1].at.isoformat()}) if len(entries) > limit else None
+    )
+    link_next(request, response, next_cursor)
+    return [ReadAuditResponse.model_validate(e.model_dump()) for e in items]
 
 
 def _aware(instant: datetime | None) -> datetime | None:

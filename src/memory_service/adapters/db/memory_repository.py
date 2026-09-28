@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, or_, select, text, update
+from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -389,21 +389,38 @@ class SqlMemoryRepository:
         scope_keys: Sequence[str],
         memory_types: Sequence[str] | None = None,
         current_only: bool = True,
+        before: tuple[datetime, str] | None = None,
         limit: int = 200,
     ) -> list[CanonicalMemory]:
+        """Newest created first. The page holds ``limit`` valid rows: a derived row that has
+        lapsed is skipped and replaced by the next one, so fewer than ``limit`` rows means
+        the scope is exhausted (the keyset is ``(created_at, memory_id)``, which never moves)."""
         if not scope_keys:
             return []
-        stmt = select(MemoryRow).where(
-            MemoryRow.tenant_id == tenant_id,
-            MemoryRow.scope_key.in_(list(scope_keys)),
-            MemoryRow.deleted_at.is_(None),
-        )
-        if current_only:
-            stmt = stmt.where(MemoryRow.temporal_status == TemporalStatus.CURRENT.value)
-        if memory_types:
-            stmt = stmt.where(MemoryRow.memory_type.in_(list(memory_types)))
-        rows = (await self.s.scalars(stmt.order_by(MemoryRow.updated_at.desc()).limit(limit))).all()
-        return [_to_domain(r) for r in rows if not _invalid_derived(r)]
+        out: list[CanonicalMemory] = []
+        while len(out) < limit:
+            stmt = select(MemoryRow).where(
+                MemoryRow.tenant_id == tenant_id,
+                MemoryRow.scope_key.in_(list(scope_keys)),
+                MemoryRow.deleted_at.is_(None),
+            )
+            if current_only:
+                stmt = stmt.where(MemoryRow.temporal_status == TemporalStatus.CURRENT.value)
+            if memory_types:
+                stmt = stmt.where(MemoryRow.memory_type.in_(list(memory_types)))
+            if before is not None:
+                stmt = stmt.where(
+                    tuple_(MemoryRow.created_at, MemoryRow.memory_id)
+                    < tuple_(literal(before[0]), literal(before[1]))
+                )
+            stmt = stmt.order_by(MemoryRow.created_at.desc(), MemoryRow.memory_id.desc())
+            wanted = limit - len(out)
+            rows = (await self.s.scalars(stmt.limit(wanted))).all()
+            out.extend(_to_domain(r) for r in rows if not _invalid_derived(r))
+            if len(rows) < wanted:
+                break
+            before = (rows[-1].created_at, rows[-1].memory_id)
+        return out
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool:
         r = await self.s.get(MemoryRow, memory_id)

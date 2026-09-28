@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,12 +204,16 @@ class SqlApiKeyRepository:
         row = await self.s.get(ApiKeyRow, key_id)
         return _key(row) if row is not None else None
 
-    async def list(self, tenant_id: str) -> list[ApiKey]:
-        stmt = (
-            select(ApiKeyRow)
-            .where(ApiKeyRow.tenant_id == tenant_id)
-            .order_by(ApiKeyRow.created_at, ApiKeyRow.key_id)
-        )
+    async def list(
+        self, tenant_id: str, *, after: tuple[datetime, str] | None = None, limit: int = 100
+    ) -> list[ApiKey]:
+        stmt = select(ApiKeyRow).where(ApiKeyRow.tenant_id == tenant_id)
+        if after is not None:
+            stmt = stmt.where(
+                tuple_(ApiKeyRow.created_at, ApiKeyRow.key_id)
+                > tuple_(literal(after[0]), literal(after[1]))
+            )
+        stmt = stmt.order_by(ApiKeyRow.created_at, ApiKeyRow.key_id).limit(limit)
         return [_key(r) for r in (await self.s.scalars(stmt)).all()]
 
     async def revoke(self, tenant_id: str, key_id: str, *, at: datetime) -> bool:
@@ -259,11 +263,16 @@ class SqlWorkspaceRepository:
         row = await self.s.get(WorkspaceRow, (tenant_id, workspace_id))
         return _workspace(row) if row is not None and row.deleted_at is None else None
 
-    async def list(self, tenant_id: str) -> list[Workspace]:
+    async def list(self, tenant_id: str, *, after: str = "", limit: int = 100) -> list[Workspace]:
         stmt = (
             select(WorkspaceRow)
-            .where(WorkspaceRow.tenant_id == tenant_id, WorkspaceRow.deleted_at.is_(None))
+            .where(
+                WorkspaceRow.tenant_id == tenant_id,
+                WorkspaceRow.deleted_at.is_(None),
+                WorkspaceRow.workspace_id > after,
+            )
             .order_by(WorkspaceRow.workspace_id)
+            .limit(limit)
         )
         return [_workspace(r) for r in (await self.s.scalars(stmt)).all()]
 
@@ -346,11 +355,16 @@ class SqlGroupRepository:
         row = await self.s.get(GroupRow, (tenant_id, group_id))
         return _group(row) if row is not None and row.deleted_at is None else None
 
-    async def list(self, tenant_id: str) -> list[Group]:
+    async def list(self, tenant_id: str, *, after: str = "", limit: int = 100) -> list[Group]:
         stmt = (
             select(GroupRow)
-            .where(GroupRow.tenant_id == tenant_id, GroupRow.deleted_at.is_(None))
+            .where(
+                GroupRow.tenant_id == tenant_id,
+                GroupRow.deleted_at.is_(None),
+                GroupRow.group_id > after,
+            )
             .order_by(GroupRow.group_id)
+            .limit(limit)
         )
         return [_group(r) for r in (await self.s.scalars(stmt)).all()]
 

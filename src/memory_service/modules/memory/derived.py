@@ -24,10 +24,11 @@ from statistics import fmean
 from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus
+from memory_service.domain.enums import Lifetime, MemoryType
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.revisions import supersede
 from memory_service.observability.logging import get_logger
 from memory_service.ports.uow import UnitOfWork
 
@@ -152,21 +153,6 @@ def _derived(
     return memory, keys
 
 
-async def _supersede(
-    uow: UnitOfWork, old: CanonicalMemory, new: CanonicalMemory, *, now: datetime
-) -> None:
-    new.temporal = new.temporal.model_copy(update={"supersedes": old.memory_id})
-    old.temporal = old.temporal.model_copy(
-        update={
-            "status": TemporalStatus.SUPERSEDED,
-            "superseded_by": new.memory_id,
-            "valid_to": old.temporal.valid_to or now,
-        }
-    )
-    old.updated_at = now
-    await uow.memories.update(old)
-
-
 class BeliefService:
     """Revise-not-duplicate upsert of one belief per (scope, subject, predicate)."""
 
@@ -230,7 +216,7 @@ class BeliefService:
             },
         )
         if existing is not None:
-            await _supersede(uow, existing, belief, now=now)
+            await supersede(uow, existing, belief, now=now)
         await uow.memories.add(belief, visibility_keys=keys)
         log.info(
             "memory.belief_%s" % ("revised" if existing else "created"),
@@ -292,6 +278,6 @@ class EntitySummaryService:
             extra={"extractive": extractive, "fact_count": len(facts)},
         )
         if existing is not None:
-            await _supersede(uow, existing, summary, now=now)
+            await supersede(uow, existing, summary, now=now)
         await uow.memories.add(summary, visibility_keys=keys)
         return summary, True

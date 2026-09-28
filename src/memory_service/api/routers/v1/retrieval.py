@@ -25,7 +25,7 @@ from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.grounding.cascade import attach
-from memory_service.modules.llm.policy import model_call_policy, model_identity
+from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 
 
 def _audit(
@@ -285,7 +285,7 @@ async def recall(
     request: Request, body: RecallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecallResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+    with model_call_policy(body.use_llm), model_identity_of(ctx):
         engine = container.services["retrieval"]
         result = await engine.retrieve(
             ctx,
@@ -326,7 +326,7 @@ async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> Response | ContextResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+    with model_call_policy(body.use_llm), model_identity_of(ctx):
         builder = container.services["context_builder"]
         if not body.answer:
             # One serialisation for the whole request: a cache hit is the stored bytes, a miss is

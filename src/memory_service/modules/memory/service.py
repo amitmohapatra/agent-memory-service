@@ -121,9 +121,14 @@ class MemoryService:
         *,
         memory_types: list[str] | None = None,
         include_superseded: bool = False,
+        before: tuple[datetime, str] | None = None,
         limit: int = 100,
     ) -> list[CanonicalMemory]:
-        """Memories anchored to the caller's agent, user, thread, agent group or tenant."""
+        """Memories anchored to the caller's agent, user, thread, agent group or tenant,
+        newest created first. ``before`` is the (created_at, memory_id) keyset of the next
+        page; the page holds ``limit`` *visible* rows, however many hidden rows lie between
+        them, and a row written or reinforced during the walk is never skipped because the
+        keyset never moves."""
         from memory_service.domain.enums import ScopeLevel
         from memory_service.domain.memory import Scope
 
@@ -185,21 +190,27 @@ class MemoryService:
                 workspace_id=ctx.workspace_id,
             )
         )
-        rows = await uow.memories.list_scope(
-            ctx.tenant_id,
-            scope_keys=[s.key() for s in anchors],
-            memory_types=memory_types,
-            current_only=not include_superseded,
-            limit=limit * 2,
-        )
         spec = await self.authz.visibility(ctx, revisions=uow.revisions)
-        out = []
-        for m in rows:
-            keys = m.system_metadata.get("visibility_keys", [])
-            if spec.allows(m.tenant_id, keys):
-                out.append(m)
-            if len(out) >= limit:
-                break
+        scope_keys = [s.key() for s in anchors]
+        out: list[CanonicalMemory] = []
+        batch = max(limit * 2, 50)
+        while len(out) < limit:
+            rows = await uow.memories.list_scope(
+                ctx.tenant_id,
+                scope_keys=scope_keys,
+                memory_types=memory_types,
+                current_only=not include_superseded,
+                before=before,
+                limit=batch,
+            )
+            for m in rows:
+                if spec.allows(m.tenant_id, m.system_metadata.get("visibility_keys", [])):
+                    out.append(m)
+                if len(out) >= limit:
+                    break
+            if len(rows) < batch:
+                break  # the store is exhausted: fewer than a batch came back
+            before = (rows[-1].created_at, rows[-1].memory_id)
         return out
 
     async def forget(

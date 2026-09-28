@@ -1,6 +1,6 @@
 [project]
 name = "trellis-memory"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python SDK for trellis-memory, the multi-agent memory service. Bind a context, chat, get a ContextBundle."
 readme = "README.md"
 requires-python = ">=3.12"

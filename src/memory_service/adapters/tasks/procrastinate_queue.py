@@ -39,7 +39,9 @@ _STATUS_MAP = {
 
 
 def _retry_strategy(retries: int) -> procrastinate.RetryStrategy | bool:
-    """``retries`` additional attempts after the first; 0 disables retries entirely."""
+    """``retries`` additional attempts after the first (Procrastinate's ``job.attempts`` is
+    the number of *previous* runs, so ``max_attempts=N`` retries while fewer than N have
+    failed: N + 1 runs in all); 0 disables retries entirely."""
     if retries <= 0:
         return False
     return procrastinate.RetryStrategy(max_attempts=retries, wait=1, exponential_wait=2)

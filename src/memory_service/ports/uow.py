@@ -12,6 +12,7 @@ from typing import Protocol, Self, runtime_checkable
 
 from memory_service.ports.briefs import BriefRepository
 from memory_service.ports.credentials import CredentialRepository
+from memory_service.ports.feedback import FeedbackRepository
 from memory_service.ports.repositories import (
     AgentRunRepository,
     ArchiveRepository,
@@ -35,6 +36,7 @@ from memory_service.ports.tenancy import (
     TenantRepository,
     WorkspaceRepository,
 )
+from memory_service.ports.webhooks import WebhookDeliveryRepository, WebhookRepository
 
 
 @runtime_checkable
@@ -59,6 +61,9 @@ class UnitOfWork(Protocol):
     workspaces: WorkspaceRepository
     groups: GroupRepository
     read_audit: ReadAuditRepository
+    feedback: FeedbackRepository
+    webhooks: WebhookRepository
+    webhook_deliveries: WebhookDeliveryRepository
 
     async def __aenter__(self) -> Self: ...
 

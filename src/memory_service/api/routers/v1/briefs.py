@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import (
@@ -14,6 +14,7 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
 from memory_service.domain.briefs import BriefInfo, BriefOutput, BriefSpec, StoredBrief, brief_scope
 
 router = APIRouter()
@@ -118,16 +119,23 @@ async def update_brief(
     summary="List brief definitions in the exact execution scope (no generated content)",
 )
 async def list_briefs(
+    request: Request,
+    response: Response,
     container: ContainerDep,
     ctx: HeaderContextDep,
-    after: str = Query(default="", max_length=200),
+    after: str = Query(default="", max_length=200, description="the last brief_id seen"),
+    cursor: CursorQuery = None,
     limit: int = Query(default=50, ge=1, le=100),
 ):
+    position = decode_cursor(cursor, fields=("brief_id",))
+    start = position["brief_id"] if position else after
     async with container.services["uow_factory"]() as uow:
         rows = await uow.briefs.list_owned(
-            ctx.tenant_id, brief_scope(ctx), after=after, limit=limit
+            ctx.tenant_id, brief_scope(ctx), after=start, limit=limit + 1
         )
-    return rows
+    items, next_cursor = page(rows, limit=limit, position=lambda b: {"brief_id": b.brief_id})
+    link_next(request, response, next_cursor)
+    return items
 
 
 @router.get(

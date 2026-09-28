@@ -144,7 +144,7 @@ class Indexer:
         if not chunks or document is None:
             return 0
         with (
-            model_identity(tenant_id, document.model_principal),
+            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
             span("index.document", tenant_id=tenant_id),
             stage_seconds.labels("index.document").time(),
         ):

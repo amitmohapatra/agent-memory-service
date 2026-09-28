@@ -15,6 +15,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
+from memory_service.config.constants import HEADERS
 from memory_service.config.settings import ObservabilitySettings
 
 _configured = False
@@ -65,7 +66,7 @@ def current_trace_id() -> str | None:
 # this process exports spans: Datadog (per service) and Langfuse (per agent) join on the
 # 32-hex trace id, so one must exist for every request and it must be the same one everywhere.
 
-TRACEPARENT_HEADER = "traceparent"
+TRACEPARENT_HEADER = HEADERS.traceparent
 #: version-traceid-parentid-flags; a future version may append fields, version 00 may not
 _TRACEPARENT = re.compile(r"^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(-.*)?$")
 

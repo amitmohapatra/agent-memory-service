@@ -108,7 +108,8 @@ async def test_registered_key_auto_discovers_then_calls_with_no_mcp():
         return httpx.Response(200, json={"choices": [{"message": {"content": "accepted"}}]})
 
     credentials = AsyncMock()
-    credentials.resolve.return_value = ResolvedCredential(SecretStr("vk-owner"), 3)
+    resolved = ResolvedCredential(SecretStr("vk-owner"), 3, ModelIdentity("tenant", "agent"))
+    credentials.resolve.return_value = resolved
     async with httpx.AsyncClient(
         base_url="http://gateway.test/v1", transport=httpx.MockTransport(response)
     ) as client:
@@ -123,6 +124,7 @@ async def test_registered_key_auto_discovers_then_calls_with_no_mcp():
                         == "accepted"
                     )
             assert paths == ["/v1/models", "/v1/chat/completions", "/v1/chat/completions"]
-            credentials.confirm.assert_awaited_with(ModelIdentity("tenant", "agent"), 3)
+            # the call is confirmed against the row and revision it ran under
+            credentials.confirm.assert_awaited_with(ModelIdentity("tenant", "agent"), resolved)
         finally:
             await provider.close()

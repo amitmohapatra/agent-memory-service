@@ -12,7 +12,7 @@ from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep
 from memory_service.api.errors import error_responses
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.evidence import EvidenceRef
-from memory_service.modules.llm.policy import model_call_policy, model_identity
+from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -97,7 +97,7 @@ async def graph_query(
 ) -> GraphQueryResponse:
     ctx = build_context(request, container, body.scope)
     graph = container.services["graph"]
-    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+    with model_call_policy(body.use_llm), model_identity_of(ctx):
         answer = await graph.query(
             ctx,
             query=body.query,

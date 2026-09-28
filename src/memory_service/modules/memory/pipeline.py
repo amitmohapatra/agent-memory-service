@@ -24,8 +24,10 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
+from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.visibility import readable_by
-from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
+from memory_service.modules.llm.policy import model_identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
@@ -40,13 +42,13 @@ from memory_service.ports.intelligence import (
 )
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
+from memory_service.ports.webhooks import EventPublisher
 
 if TYPE_CHECKING:
     from memory_service.modules.memory.landing import LandingReflection
 
 log = get_logger(__name__)
 
-TASK_MEMORY_INDEX = "memory.index"
 TASK_MEMORY_EXPIRE = "memory.expire"
 
 SHORT_TERM_TTL = timedelta(days=7)
@@ -189,6 +191,7 @@ class ObservationPipeline:
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
         landing: LandingReflection | None = None,
+        events: EventPublisher | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
@@ -196,6 +199,7 @@ class ObservationPipeline:
         self.working = working
         self.gate = gate
         self.landing = landing
+        self.events = events
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -208,7 +212,7 @@ class ObservationPipeline:
             return []  # idempotent replay
         ctx = context_from_observation(observation)
         with (
-            model_identity(ctx.tenant_id, ctx.principal_id),
+            model_identity_of(ctx),
             span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
             stage_seconds.labels("memory.process").time(),
         ):
@@ -227,7 +231,11 @@ class ObservationPipeline:
                 or observation.hints.importance is not None
             )
             async with self.uow_factory() as uow:
-                affected = await self._apply_all(uow, ctx, candidates, outcomes, hinted=hinted)
+                affected, created = await self._apply_all(
+                    uow, ctx, candidates, outcomes, hinted=hinted
+                )
+                if created and self.events is not None:
+                    await self._announce(uow, ctx, created)
                 if affected:
                     await uow.enqueue(
                         JobSpec(
@@ -292,8 +300,10 @@ class ObservationPipeline:
         outcomes: list[ConsolidationOutcome],
         *,
         hinted: bool = False,
-    ) -> set[str]:
+    ) -> tuple[set[str], set[str]]:
+        """Returns the ids written (created or reinforced) and the ids created."""
         affected: set[str] = set()
+        created: set[str] = set()
         now = datetime.now(UTC)
         await self._serialize_sources(uow, ctx, candidates)
         landed_ids: set[str] = set()
@@ -347,25 +357,56 @@ class ObservationPipeline:
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
             landed_ids |= ids
+            if outcome.decision is DedupDecision.CREATE:
+                created |= ids
         if self.landing is not None:
-            # Rebuild after all writes, including reinforced sources whose revision
-            # changes invalidate the previous derived representation.
-            groups: set[tuple] = set()
-            for memory_id in sorted(landed_ids):
-                landed = await uow.memories.get(ctx.tenant_id, memory_id)
-                if landed is None or landed.temporal.status is not TemporalStatus.CURRENT:
-                    continue
-                group = (
-                    landed.scope.key(),
-                    landed.subject,
-                    landed.predicate,
-                    landed.owner_principal,
-                    tuple(sorted(landed.system_metadata.get("visibility_keys", []))),
-                )
-                if group not in groups:
-                    affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
-                    groups.add(group)
+            affected |= await self._reland(uow, ctx, landed_ids, now=now)
+        return affected, created
+
+    async def _reland(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, landed_ids: set[str], *, now: datetime
+    ) -> set[str]:
+        """Rebuild the landing representation after all writes, once per group, including
+        reinforced sources whose revision changes invalidate the previous derived one."""
+        assert self.landing is not None
+        affected: set[str] = set()
+        groups: set[tuple] = set()
+        for memory_id in sorted(landed_ids):
+            landed = await uow.memories.get(ctx.tenant_id, memory_id)
+            if landed is None or landed.temporal.status is not TemporalStatus.CURRENT:
+                continue
+            group = (
+                landed.scope.key(),
+                landed.subject,
+                landed.predicate,
+                landed.owner_principal,
+                tuple(sorted(landed.system_metadata.get("visibility_keys", []))),
+            )
+            if group not in groups:
+                affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
+                groups.add(group)
         return affected
+
+    async def _announce(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, created: set[str]
+    ) -> None:
+        """One ``memory.created`` event per new memory, in the writing transaction."""
+        assert self.events is not None
+        for memory in await uow.memories.get_many(ctx.tenant_id, sorted(created)):
+            await self.events.publish(
+                uow,
+                Event(
+                    type=WebhookEvent.MEMORY_CREATED,
+                    tenant_id=ctx.tenant_id,
+                    workspace_id=memory.scope.workspace_id,
+                    data={  # identity only: a receiver reads content through the API
+                        "memory_id": memory.memory_id,
+                        "memory_type": memory.memory_type.value,
+                        "scope_level": memory.scope.level.value,
+                        "owner_principal": memory.owner_principal,
+                    },
+                ),
+            )
 
     async def _serialize_sources(
         self,

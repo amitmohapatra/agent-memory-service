@@ -17,7 +17,7 @@ import hashlib
 import time
 import uuid
 import warnings
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Self
@@ -34,7 +34,13 @@ from trellis.memory.models import (
     ContextBundle,
     ContextItem,
     CreatedTenant,
+    DeliveryInfo,
     DocumentInfo,
+    EvidenceRef,
+    Feedback,
+    FeedbackSource,
+    FeedbackTargetKind,
+    FeedbackVerdict,
     FileHandle,
     GraphAnswer,
     GroundingReport,
@@ -53,6 +59,7 @@ from trellis.memory.models import (
     MessageRole,
     ObservationAck,
     ObservationKind,
+    Page,
     ReadAuditRecord,
     RecallKind,
     Scope,
@@ -63,6 +70,9 @@ from trellis.memory.models import (
     ToolResult,
     ToolStatus,
     Visibility,
+    WebhookCreated,
+    WebhookEvent,
+    WebhookInfo,
     WorkspaceInfo,
     WorkspaceMemberInfo,
 )
@@ -149,6 +159,7 @@ class MemoryContext:
         self.briefs = BriefsAPI(self)
         self.tools = ToolsAPI(self)
         self.runs = RunsAPI(self)
+        self.feedback = FeedbackAPI(self)
         self._token: Any = None
 
     @property
@@ -319,14 +330,60 @@ class MemoryContext:
         memory_types: Sequence[MemoryType] | None = None,
         include_superseded: bool = False,
         limit: int = 100,
+        cursor: str | None = None,
     ) -> list[MemoryResult]:
         """Current memories anchored to this context's scopes (user, thread, agent run,
-        work, workspace) — the inventory view; ``recall`` is the ranked, query-driven view."""
+        work, workspace) — the inventory view; ``recall`` is the ranked, query-driven view.
+        One page; :meth:`memories_page` also returns the cursor, :meth:`iter_memories`
+        walks every page."""
+        page = await self.memories_page(
+            memory_types=memory_types,
+            include_superseded=include_superseded,
+            limit=limit,
+            cursor=cursor,
+        )
+        return page.items
+
+    async def memories_page(
+        self,
+        *,
+        memory_types: Sequence[MemoryType] | None = None,
+        include_superseded: bool = False,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> Page[MemoryResult]:
         params: dict[str, Any] = {"limit": limit, "include_superseded": include_superseded}
         if memory_types:
             params["memory_type"] = list(memory_types)
+        if cursor:
+            params["cursor"] = cursor
         data = await self._request("GET", "/v1/memories", params=params)
-        return [MemoryResult.model_validate(m) for m in data.get("memories", [])]
+        return Page[MemoryResult](
+            items=[MemoryResult.model_validate(m) for m in data.get("memories", [])],
+            next_cursor=data.get("next_cursor"),
+        )
+
+    async def iter_memories(
+        self,
+        *,
+        memory_types: Sequence[MemoryType] | None = None,
+        include_superseded: bool = False,
+        page_size: int = 100,
+    ) -> AsyncIterator[MemoryResult]:
+        """Every memory the inventory view lists, page by page."""
+        cursor: str | None = None
+        while True:
+            page = await self.memories_page(
+                memory_types=memory_types,
+                include_superseded=include_superseded,
+                limit=page_size,
+                cursor=cursor,
+            )
+            for item in page.items:
+                yield item
+            if page.next_cursor is None:
+                return
+            cursor = page.next_cursor
 
     async def forget(self, memory_id: str) -> None:
         await self._request(
@@ -368,6 +425,100 @@ class MemoryContext:
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await self._client.transport.request(method, path, scope=self.scope, **kwargs)
 
+    async def _request_page(self, path: str, **params: Any) -> tuple[Any, str | None]:
+        query = {k: v for k, v in params.items() if v is not None}
+        return await self._client.transport.request_page(path, scope=self.scope, params=query)
+
+
+class FeedbackAPI:
+    """Judgements on what the platform did: stored apart from memory, learned from off the
+    request path (a verdict on a memory reinforces, retracts or corrects it)."""
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    async def submit(
+        self,
+        target_kind: FeedbackTargetKind,
+        target_id: str,
+        verdict: FeedbackVerdict,
+        *,
+        correction: Any = None,
+        score: float | None = None,
+        comment: str | None = None,
+        reviewer: str | None = None,
+        source: FeedbackSource = "human",
+        evidence_refs: Sequence[EvidenceRef] = (),
+        metadata: dict[str, Any] | None = None,
+        feedback_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> Feedback:
+        """Record one judgement. A retry with the same ``feedback_id`` returns the stored
+        record; the identity fields (tenant, workspace, user, agent, run) come from this
+        context and nothing else of the scope travels in the body."""
+        scope = self._ctx.scope
+        payload: dict[str, Any] = {
+            "feedback_id": feedback_id,
+            "tenant_id": scope.tenant_id,
+            "workspace_id": scope.workspace_id,
+            "user_id": scope.user_id,
+            "agent_id": scope.agent_id,
+            "agent_run_id": scope.agent_run_id,
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "verdict": verdict,
+            "correction": correction,
+            "score": score,
+            "comment": comment,
+            "reviewer": reviewer,
+            "source": source,
+            "evidence_refs": [e.model_dump(mode="json", exclude_none=True) for e in evidence_refs],
+            "metadata": metadata or {},
+        }
+        body = {k: v for k, v in payload.items() if v is not None}
+        data = await self._ctx._request(
+            "POST", "/v1/feedback", json=body, idempotency_key=idempotency_key
+        )
+        return Feedback.model_validate(data)
+
+    async def get(self, feedback_id: str) -> Feedback:
+        return Feedback.model_validate(
+            await self._ctx._request("GET", f"/v1/feedback/{feedback_id}")
+        )
+
+    async def list_for(
+        self,
+        target_kind: FeedbackTargetKind,
+        target_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> list[Feedback]:
+        """One page of the feedback on a target, newest first; ``page_for`` also returns the
+        cursor of the next page."""
+        return (await self.page_for(target_kind, target_id, limit=limit, cursor=cursor)).items
+
+    async def page_for(
+        self,
+        target_kind: FeedbackTargetKind,
+        target_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> Page[Feedback]:
+        params: dict[str, Any] = {
+            "target_kind": target_kind,
+            "target_id": target_id,
+            "limit": limit,
+        }
+        if cursor:
+            params["cursor"] = cursor
+        data = await self._ctx._request("GET", "/v1/feedback", params=params)
+        return Page[Feedback](
+            items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
+            next_cursor=data.get("next_cursor"),
+        )
+
 
 class BriefsAPI:
     """Persistent standing questions and pages; reads never generate text."""
@@ -398,9 +549,20 @@ class BriefsAPI:
     async def get(self, brief_id: str) -> Brief:
         return Brief.model_validate(await self.ctx._request("GET", f"/v1/briefs/{brief_id}"))
 
-    async def list(self, *, after: str = "", limit: int = 50) -> list[BriefInfo]:
-        data = await self.ctx._request("GET", "/v1/briefs", params={"after": after, "limit": limit})
-        return [BriefInfo.model_validate(row) for row in data]
+    async def list(
+        self, *, after: str = "", limit: int = 50, cursor: str | None = None
+    ) -> list[BriefInfo]:
+        return (await self.page(after=after, limit=limit, cursor=cursor)).items
+
+    async def page(
+        self, *, after: str = "", limit: int = 50, cursor: str | None = None
+    ) -> Page[BriefInfo]:
+        data, next_cursor = await self.ctx._request_page(
+            "/v1/briefs", after=after or None, limit=limit, cursor=cursor
+        )
+        return Page[BriefInfo](
+            items=[BriefInfo.model_validate(b) for b in data], next_cursor=next_cursor
+        )
 
     async def delete(self, brief_id: str) -> None:
         await self.ctx._request("DELETE", f"/v1/briefs/{brief_id}")
@@ -824,11 +986,21 @@ class AdminAPI:
             )
         )
 
-    async def tenants(self, *, after: str = "", limit: int = 100) -> list[TenantInfo]:
-        data = await self._t.request(
-            "GET", "/v1/admin/tenants", params={"after": after, "limit": limit}
+    async def tenants(
+        self, *, after: str = "", limit: int = 100, cursor: str | None = None
+    ) -> list[TenantInfo]:
+        return (await self.tenants_page(after=after, limit=limit, cursor=cursor)).items
+
+    async def tenants_page(
+        self, *, after: str = "", limit: int = 100, cursor: str | None = None
+    ) -> Page[TenantInfo]:
+        params = {"after": after or None, "limit": limit, "cursor": cursor}
+        data, next_cursor = await self._t.request_page(
+            "/v1/admin/tenants", params={k: v for k, v in params.items() if v is not None}
         )
-        return [TenantInfo.model_validate(t) for t in data]
+        return Page[TenantInfo](
+            items=[TenantInfo.model_validate(t) for t in data], next_cursor=next_cursor
+        )
 
     async def get_tenant(self, tenant_id: str) -> TenantInfo:
         return TenantInfo.model_validate(
@@ -852,21 +1024,53 @@ class TenantAPI:
         self.keys = KeysAPI(self)
         self.workspaces = WorkspacesAPI(self)
         self.groups = GroupsAPI(self)
+        self.webhooks = WebhooksAPI(self)
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await self._t.request(method, path, headers=self._headers, **kwargs)
 
+    async def _page(self, path: str, **params: Any) -> tuple[Any, str | None]:
+        query = {k: v for k, v in params.items() if v is not None}
+        return await self._t.request_page(path, params=query, headers=self._headers)
+
+    async def model_key_status(self) -> AgentKeyStatus:
+        """The tenant's model key: the level every agent and workspace without a key of its
+        own resolves to before the operator key."""
+        return AgentKeyStatus.model_validate(await self._request("GET", "/v1/model-key"))
+
+    async def set_model_key(
+        self, virtual_key: str, *, idempotency_key: str | None = None
+    ) -> AgentKeyStatus:
+        data = await self._request(
+            "PUT",
+            "/v1/model-key",
+            json={"virtual_key": virtual_key},
+            idempotency_key=idempotency_key,
+        )
+        return AgentKeyStatus.model_validate(data)
+
+    async def revoke_model_key(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
+        data = await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
+        return AgentKeyStatus.model_validate(data)
+
     async def reads(
-        self, *, after: Any = None, before: Any = None, limit: int = 100
+        self, *, after: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
     ) -> list[ReadAuditRecord]:
-        """Who read which records, newest first. Page older entries with
-        ``before=<the last entry's at>``; ``after`` is a since-filter."""
-        params: dict[str, Any] = {"limit": limit}
+        """Who read which records, newest first. Page older entries with the cursor (or
+        ``before=<the last entry's at>``); ``after`` is a since-filter."""
+        return (await self.reads_page(after=after, before=before, limit=limit, cursor=cursor)).items
+
+    async def reads_page(
+        self, *, after: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
+    ) -> Page[ReadAuditRecord]:
+        params: dict[str, Any] = {"limit": limit, "cursor": cursor}
         for name, value in (("after", after), ("before", before)):
             if value is not None:
                 params[name] = value.isoformat() if hasattr(value, "isoformat") else value
-        data = await self._request("GET", "/v1/reads", params=params)
-        return [ReadAuditRecord.model_validate(r) for r in data]
+        data, next_cursor = await self._page("/v1/reads", **params)
+        return Page[ReadAuditRecord](
+            items=[ReadAuditRecord.model_validate(r) for r in data], next_cursor=next_cursor
+        )
 
 
 class KeysAPI:
@@ -896,10 +1100,14 @@ class KeysAPI:
             )
         )
 
-    async def list(self) -> list[ApiKeyInfo]:
-        return [
-            ApiKeyInfo.model_validate(k) for k in await self._tenant._request("GET", "/v1/keys")
-        ]
+    async def list(self, *, limit: int = 100, cursor: str | None = None) -> list[ApiKeyInfo]:
+        return (await self.page(limit=limit, cursor=cursor)).items
+
+    async def page(self, *, limit: int = 100, cursor: str | None = None) -> Page[ApiKeyInfo]:
+        data, next_cursor = await self._tenant._page("/v1/keys", limit=limit, cursor=cursor)
+        return Page[ApiKeyInfo](
+            items=[ApiKeyInfo.model_validate(k) for k in data], next_cursor=next_cursor
+        )
 
     async def revoke(self, key_id: str) -> None:
         await self._tenant._request("DELETE", f"/v1/keys/{key_id}")
@@ -919,9 +1127,38 @@ class WorkspacesAPI:
             )
         )
 
-    async def list(self) -> list[WorkspaceInfo]:
-        data = await self._tenant._request("GET", "/v1/workspaces")
-        return [WorkspaceInfo.model_validate(w) for w in data]
+    async def list(self, *, limit: int = 100, cursor: str | None = None) -> list[WorkspaceInfo]:
+        return (await self.page(limit=limit, cursor=cursor)).items
+
+    async def page(self, *, limit: int = 100, cursor: str | None = None) -> Page[WorkspaceInfo]:
+        data, next_cursor = await self._tenant._page("/v1/workspaces", limit=limit, cursor=cursor)
+        return Page[WorkspaceInfo](
+            items=[WorkspaceInfo.model_validate(w) for w in data], next_cursor=next_cursor
+        )
+
+    async def model_key_status(self, workspace_id: str) -> AgentKeyStatus:
+        """The team's model key: used by every agent of the workspace without one of its own."""
+        data = await self._tenant._request("GET", f"/v1/workspaces/{workspace_id}/model-key")
+        return AgentKeyStatus.model_validate(data)
+
+    async def set_model_key(
+        self, workspace_id: str, virtual_key: str, *, idempotency_key: str | None = None
+    ) -> AgentKeyStatus:
+        data = await self._tenant._request(
+            "PUT",
+            f"/v1/workspaces/{workspace_id}/model-key",
+            json={"virtual_key": virtual_key},
+            idempotency_key=idempotency_key,
+        )
+        return AgentKeyStatus.model_validate(data)
+
+    async def revoke_model_key(
+        self, workspace_id: str, *, idempotency_key: str | None = None
+    ) -> AgentKeyStatus:
+        data = await self._tenant._request(
+            "DELETE", f"/v1/workspaces/{workspace_id}/model-key", idempotency_key=idempotency_key
+        )
+        return AgentKeyStatus.model_validate(data)
 
     async def get(self, workspace_id: str) -> WorkspaceInfo:
         return WorkspaceInfo.model_validate(
@@ -963,10 +1200,14 @@ class GroupsAPI:
             )
         )
 
-    async def list(self) -> list[GroupInfo]:
-        return [
-            GroupInfo.model_validate(g) for g in await self._tenant._request("GET", "/v1/groups")
-        ]
+    async def list(self, *, limit: int = 100, cursor: str | None = None) -> list[GroupInfo]:
+        return (await self.page(limit=limit, cursor=cursor)).items
+
+    async def page(self, *, limit: int = 100, cursor: str | None = None) -> Page[GroupInfo]:
+        data, next_cursor = await self._tenant._page("/v1/groups", limit=limit, cursor=cursor)
+        return Page[GroupInfo](
+            items=[GroupInfo.model_validate(g) for g in data], next_cursor=next_cursor
+        )
 
     async def delete(self, group_id: str) -> None:
         await self._tenant._request("DELETE", f"/v1/groups/{group_id}")
@@ -986,3 +1227,102 @@ class GroupsAPI:
 
 #: Deprecated name of :class:`DocumentsAPI` (ADR 0022); removed in ``ALIASES_REMOVED_IN``.
 FilesAPI = DocumentsAPI
+
+
+class WebhooksAPI:
+    """Outbound webhooks: the tenant's subscriptions and their deliveries. Verify what you
+    receive with :func:`trellis.memory.webhooks.verify_signature`."""
+
+    def __init__(self, tenant: TenantAPI) -> None:
+        self._tenant = tenant
+
+    async def create(
+        self,
+        url: str,
+        events: Sequence[WebhookEvent],
+        *,
+        workspace_id: str | None = None,
+        description: str | None = None,
+        subscription_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> WebhookCreated:
+        """Subscribe ``url`` to ``events``; the returned ``secret`` is shown once."""
+        payload = {
+            "url": url,
+            "events": list(events),
+            "workspace_id": workspace_id,
+            "description": description,
+            "subscription_id": subscription_id,
+        }
+        body = {k: v for k, v in payload.items() if v is not None}
+        data = await self._tenant._request(
+            "POST", "/v1/webhooks", json=body, idempotency_key=idempotency_key
+        )
+        return WebhookCreated.model_validate(data)
+
+    async def list(self, *, limit: int = 100, cursor: str | None = None) -> list[WebhookInfo]:
+        return (await self.page(limit=limit, cursor=cursor)).items
+
+    async def page(self, *, limit: int = 100, cursor: str | None = None) -> Page[WebhookInfo]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        data = await self._tenant._request("GET", "/v1/webhooks", params=params)
+        return Page[WebhookInfo](
+            items=[WebhookInfo.model_validate(w) for w in data.get("webhooks", [])],
+            next_cursor=data.get("next_cursor"),
+        )
+
+    async def get(self, subscription_id: str) -> WebhookInfo:
+        return WebhookInfo.model_validate(
+            await self._tenant._request("GET", f"/v1/webhooks/{subscription_id}")
+        )
+
+    async def update(
+        self,
+        subscription_id: str,
+        *,
+        url: str | None = None,
+        events: Sequence[WebhookEvent] | None = None,
+        enabled: bool | None = None,
+        description: str | None = None,
+    ) -> WebhookInfo:
+        changes: dict[str, Any] = {}
+        if url is not None:
+            changes["url"] = url
+        if events is not None:
+            changes["events"] = list(events)
+        if enabled is not None:
+            changes["enabled"] = enabled
+        if description is not None:
+            changes["description"] = description
+        data = await self._tenant._request("PATCH", f"/v1/webhooks/{subscription_id}", json=changes)
+        return WebhookInfo.model_validate(data)
+
+    async def delete(self, subscription_id: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/webhooks/{subscription_id}")
+
+    async def deliveries(
+        self, subscription_id: str, *, limit: int = 100, cursor: str | None = None
+    ) -> list[DeliveryInfo]:
+        return (await self.deliveries_page(subscription_id, limit=limit, cursor=cursor)).items
+
+    async def deliveries_page(
+        self, subscription_id: str, *, limit: int = 100, cursor: str | None = None
+    ) -> Page[DeliveryInfo]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        data = await self._tenant._request(
+            "GET", f"/v1/webhooks/{subscription_id}/deliveries", params=params
+        )
+        return Page[DeliveryInfo](
+            items=[DeliveryInfo.model_validate(d) for d in data.get("deliveries", [])],
+            next_cursor=data.get("next_cursor"),
+        )
+
+    async def test(self, subscription_id: str) -> DeliveryInfo:
+        """Queue a ``webhook.test`` delivery to the subscription's URL."""
+        return DeliveryInfo.model_validate(
+            await self._tenant._request("POST", f"/v1/webhooks/{subscription_id}/test")
+        )

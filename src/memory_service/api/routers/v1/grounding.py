@@ -18,7 +18,7 @@ from memory_service.api.schemas.context import GroundingReportBody
 from memory_service.domain.errors import NotFound, ProviderNotConfigured
 from memory_service.domain.memory import unverified_representation
 from memory_service.modules.grounding.cascade import Evidence, EvidenceKind, bundle_evidence
-from memory_service.modules.llm.policy import model_call_policy, model_identity
+from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 422, 503)
@@ -177,7 +177,7 @@ async def verify(
     request: Request, body: VerifyRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> VerifyResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity(ctx.tenant_id, ctx.principal_id):
+    with model_call_policy(body.use_llm), model_identity_of(ctx):
         cascade = container.services.get("grounding")
         if cascade is None:
             raise ProviderNotConfigured("the NLI classifier is disabled in this process")

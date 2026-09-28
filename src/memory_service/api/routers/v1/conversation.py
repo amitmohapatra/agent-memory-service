@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
@@ -15,6 +15,7 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
 from memory_service.api.schemas.conversation import (
     CreateMessageRequest,
     CreateThreadRequest,
@@ -149,6 +150,8 @@ async def delete_thread(thread_id: str, ctx: HeaderContextDep, container: Contai
     responses=_READ_ERRORS,
 )
 async def list_messages(
+    request: Request,
+    response: Response,
     thread_id: str,
     ctx: HeaderContextDep,
     container: ContainerDep,
@@ -156,28 +159,35 @@ async def list_messages(
     before_sequence: Annotated[
         int | None, Query(ge=1, description="Return messages with sequence < this value")
     ] = None,
+    cursor: CursorQuery = None,
     include_internal: Annotated[
         bool, Query(description="Include INTERNAL agent/tool messages (lineage owners only)")
     ] = False,
 ) -> MessageListResponse:
+    position = decode_cursor(cursor, fields={"before_sequence": int})
+    if position is not None:
+        before_sequence = position["before_sequence"] or None
     archive = container.services.get("archive_service")
     async with container.services["uow_factory"]() as uow:
-        messages = await _service(container).list_messages(
+        rows = await _service(container).list_messages(
             uow,
             ctx,
             thread_id,
-            limit=limit,
+            limit=limit + 1,
             before_sequence=before_sequence,
             include_internal=include_internal,
         )
-    messages = [await _hydrate(archive, m) for m in messages]
-    next_before = (
-        messages[0].sequence if len(messages) == limit and messages[0].sequence > 1 else None
-    )
+    # one row more than the page proves an older page exists; the page is the newest ``limit``
+    has_more = len(rows) > limit
+    messages = [await _hydrate(archive, m) for m in (rows[-limit:] if has_more else rows)]
+    next_before = messages[0].sequence if has_more and messages else None
+    next_cursor = encode_cursor({"before_sequence": next_before}) if next_before else None
+    link_next(request, response, next_cursor)
     return MessageListResponse(
         thread_id=thread_id,
         messages=[_message_response(m) for m in messages],
         next_before_sequence=next_before,
+        next_cursor=next_cursor,
     )
 
 

@@ -591,7 +591,46 @@ configuration changes. Native paths remain available. An explicitly assisted bri
 refresh if no valid cited model result is available; it does not silently substitute native
 text. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
-### Headers, tracing and errors
+### Feedback, team model keys, pagination and webhooks (ADR 0023)
+
+**Feedback.** `POST /v1/feedback` takes the `trellis.contracts.Feedback` record (target kind
+`run | answer | memory | tool_call | brief | procedure`, verdict `confirm | reject | correct |
+approve | edit`, source `human | judge | interrupt`). Identity fields come from the trusted
+headers; a body that disagrees is refused. A memory target must be readable; `reject`,
+`correct` and `edit` also need its owner or a tenant admin. The record is stored and
+projected asynchronously: on a memory, `confirm`/`approve` reinforce it, `reject` retracts
+it, `correct`/`edit` write a corrected memory that supersedes it; the outcome is written
+back as `projection`. Read it
+back with `GET /v1/feedback/{id}` or list a target's feedback with
+`GET /v1/feedback?target_kind=memory&target_id=mem_...`.
+
+```python
+record = await ctx.feedback.submit("memory", memory.memory_id, "correct",
+                                   correction="The renewal is in March, not May.")
+page = await ctx.feedback.page_for("memory", memory.memory_id)   # .items, .next_cursor
+```
+
+**Team model keys.** A model call resolves the most specific Bifrost key that exists: the
+agent's own, then the workspace's, then the tenant's, then the operator's. Tenant admins set
+the team levels with `PUT /v1/workspaces/{id}/model-key` and `PUT /v1/model-key`
+(`admin.workspaces.set_model_key(...)`, `admin.set_model_key(...)`); a revoked key at any
+level refuses instead of borrowing the next one.
+
+**Pagination.** Every list route takes `cursor` and `limit` and answers
+`Link: <...>; rel="next"` when a next page exists (envelope bodies also carry
+`next_cursor`). In the SDK every `list()` returns one page as a list and its `page()`
+sibling returns `items` with `next_cursor`: `await ctx.memories_page()`,
+`async for m in ctx.iter_memories(): ...`, `await admin.keys.page(cursor=...)`.
+
+**Webhooks.** Tenant admins subscribe a public https URL to `memory.created`,
+`memory.superseded` and `memory.retracted` (the last two from the feedback projector),
+`feedback.received`, `feedback.projected` (and `webhook.test`) with `POST /v1/webhooks`;
+the signing secret is shown once and a delivery carries ids and verdicts, never content. Deliveries are
+signed (`X-Trellis-Signature: t=<unix>,v1=<hmac-sha256>`), retried with backoff, and listed
+under `GET /v1/webhooks/{id}/deliveries`. Receivers verify with
+`trellis.memory.webhooks.verify_signature(secret, header, raw_body)`.
+
+## Headers, tracing and errors
 
 The SDK sends these; a client without the SDK sends them itself (`docs/openapi.json` names
 them on every operation, ADR 0022 explains them):

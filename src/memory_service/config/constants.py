@@ -180,9 +180,44 @@ class Headers:
     user: str = "X-Trellis-User"
     api_key: str = "X-API-Key"
     llm_tokens: str = "X-Trellis-LLM-Tokens"
+    request_id: str = "X-Request-ID"
+    traceparent: str = "traceparent"
 
 
 HEADERS = Headers()
+
+
+class WebhookHeaders:
+    """What an outbound webhook delivery carries besides the request and trace ids
+    (ADR 0023). The signature is ``t=<unix seconds>,v1=<hex hmac-sha256 of "t.body">``."""
+
+    signature: str = "X-Trellis-Signature"
+    event: str = "X-Trellis-Event"
+    delivery: str = "X-Trellis-Delivery"
+
+
+WEBHOOK_HEADERS = WebhookHeaders()
+
+
+@dataclass(frozen=True)
+class WebhookTuning:
+    """How deliveries behave (ADR 0023): the same for every deployment, so not settings."""
+
+    timeout_seconds: float = 10.0
+    max_attempts: int = 6
+    disable_after_failures: int = 20
+    max_subscriptions_per_tenant: int = 50
+    #: How much of a receiver's response body is read before the connection is closed.
+    response_read_cap_bytes: int = 64 * 1024
+    #: How long a delivery row is kept for ``GET /v1/webhooks/{id}/deliveries``.
+    delivery_retention_days: int = 30
+
+
+WEBHOOKS = WebhookTuning()
+#: Hostnames a webhook may never point at unless ``webhooks.allow_local_targets`` is set;
+#: ``modules/webhooks/targets.py`` covers the address forms (loopback, private, link-local).
+WEBHOOK_LOCAL_HOSTS: frozenset[str] = frozenset({"localhost"})
+WEBHOOK_LOCAL_SUFFIXES: tuple[str, ...] = (".localhost", ".local", ".internal")
 
 #: The release that removes every alias ADR 0022 keeps for one release.
 ALIASES_REMOVED_IN = "0.3.0"

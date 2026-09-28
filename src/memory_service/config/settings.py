@@ -206,6 +206,17 @@ class AgentCredentialSettings(BaseModel):
     encryption_keys: dict[str, SecretStr] = Field(default_factory=dict)
 
 
+class WebhookSettings(BaseModel):
+    """Outbound webhooks (ADR 0023). Delivery tuning lives in ``config/constants.py``; the one
+    deployment fact is whether receivers may live on the local network (docker-compose
+    development), which is refused in deployed environments."""
+
+    allow_local_targets: bool = Field(
+        default=False,
+        description="permit http and loopback, private and link-local targets: development only",
+    )
+
+
 class HindsightSettings(BaseModel):
     """Integrated knowledge-processing service topology and deployment quota."""
 
@@ -315,6 +326,7 @@ class Settings(BaseSettings):
     models: ModelSettings = ModelSettings()
     hindsight: HindsightSettings = HindsightSettings()
     agent_credentials: AgentCredentialSettings = AgentCredentialSettings()
+    webhooks: WebhookSettings = WebhookSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
 
     #: Environments that are *deployed*, and so may not run the laptop defaults. ``test`` is
@@ -343,6 +355,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"authentication.bootstrap_admin_key must be at least 32 characters in "
                     f"{where} (e.g. `openssl rand -base64 32`)"
+                )
+            if self.webhooks.allow_local_targets:
+                raise ValueError(
+                    f"webhooks.allow_local_targets is a development flag and is not allowed "
+                    f"in {where}"
                 )
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")

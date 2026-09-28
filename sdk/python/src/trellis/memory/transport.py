@@ -140,6 +140,46 @@ class Transport:
         data: Any | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
+        """The decoded body of a successful response (None for an empty one)."""
+        response = await self._perform(
+            method,
+            path,
+            scope=scope,
+            json=json,
+            params=params,
+            idempotency_key=idempotency_key,
+            files=files,
+            data=data,
+            headers=headers,
+        )
+        return _decoded(response)
+
+    async def request_page(
+        self,
+        path: str,
+        *,
+        scope: Scope | None = None,
+        params: dict[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> tuple[Any, str | None]:
+        """A list route's body and the cursor of the next page, read from its ``Link``
+        header (``rel="next"``), which every paged route sends (ADR 0023)."""
+        response = await self._perform("GET", path, scope=scope, params=params, headers=headers)
+        return _decoded(response), next_cursor(response.headers.get("link"))
+
+    async def _perform(
+        self,
+        method: str,
+        path: str,
+        *,
+        scope: Scope | None = None,
+        json: Any | None = None,
+        params: dict[str, Any] | None = None,
+        idempotency_key: str | None = None,
+        files: Any | None = None,
+        data: Any | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> httpx.Response:
         # Header names are case-insensitive on the wire, so they are folded once here: a
         # caller's "x-request-id" or "Traceparent" is honoured rather than joined by a second
         # spelling. A plain dict is what httpx merges anyway, and far cheaper than its Headers.
@@ -173,9 +213,7 @@ class Transport:
                     continue
                 raise _transport_error(exc) from exc
             if response.status_code < 400:
-                if response.status_code == 204 or not response.content:
-                    return None
-                return response.json()
+                return response
             err = error_from_problem(response.status_code, _safe_json(response))
             if err.retryable and safe_to_retry and attempt <= self.max_retries:
                 await asyncio.sleep(_backoff(attempt))
@@ -185,6 +223,29 @@ class Transport:
     async def aclose(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+
+_NEXT_LINK = re.compile(r'<([^>]+)>\s*;\s*rel="?next"?')
+
+
+def _decoded(response: httpx.Response) -> Any:
+    if response.status_code == 204 or not response.content:
+        return None
+    return response.json()
+
+
+def next_cursor(link_header: str | None) -> str | None:
+    """The ``cursor`` of the ``rel="next"`` link, or None on the last page."""
+    if not link_header:
+        return None
+    for part in link_header.split(","):
+        match = _NEXT_LINK.search(part)
+        if match is None:
+            continue
+        query = httpx.URL(match.group(1)).params
+        value = query.get("cursor")
+        return str(value) if value else None
+    return None
 
 
 def _transport_error(exc: httpx.TransportError) -> MemoryError:

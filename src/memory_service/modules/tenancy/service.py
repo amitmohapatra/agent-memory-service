@@ -190,8 +190,15 @@ class TenancyService:
         log.info("api_key.issued", tenant_id=tenant_id, key_id=key_id, role=role.value)
         return IssuedKey(key=key, token=token)
 
-    async def list_keys(self, uow: UnitOfWork, tenant_id: str) -> list[ApiKey]:
-        return await uow.api_keys.list(tenant_id)
+    async def list_keys(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        *,
+        after: tuple[datetime, str] | None = None,
+        limit: int = 100,
+    ) -> list[ApiKey]:
+        return await uow.api_keys.list(tenant_id, after=after, limit=limit)
 
     async def revoke_key(self, uow: UnitOfWork, tenant_id: str, key_id: str) -> bool:
         """Idempotent: revoking a revoked or unknown key of this tenant is not an error, so a
@@ -232,8 +239,12 @@ class TenancyService:
             raise NotFound("Workspace not found")
         return workspace
 
-    async def list_workspaces(self, uow: UnitOfWork, tenant_id: str) -> list[Workspace]:
-        return await uow.workspaces.list(tenant_id)
+    async def list_workspaces(
+        self, uow: UnitOfWork, tenant_id: str, *, after: str = "", limit: int = 100
+    ) -> list[Workspace]:
+        return await uow.workspaces.list(
+            tenant_id, after=_valid(after, "workspace") if after else "", limit=limit
+        )
 
     async def delete_workspace(
         self, uow: UnitOfWork, tenant_id: str, workspace_id: str
@@ -340,8 +351,12 @@ class TenancyService:
             raise NotFound("Group not found")
         return group
 
-    async def list_groups(self, uow: UnitOfWork, tenant_id: str) -> list[Group]:
-        return await uow.groups.list(tenant_id)
+    async def list_groups(
+        self, uow: UnitOfWork, tenant_id: str, *, after: str = "", limit: int = 100
+    ) -> list[Group]:
+        return await uow.groups.list(
+            tenant_id, after=_valid(after, "group") if after else "", limit=limit
+        )
 
     async def delete_group(self, uow: UnitOfWork, tenant_id: str, group_id: str) -> None:
         """Its users leave the group and the group leaves every workspace it was admitted

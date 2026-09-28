@@ -11,8 +11,9 @@ from memory_service.config.settings import AgentCredentialSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.ids import new_id
-from memory_service.modules.llm.credentials import AgentCredentials, agent_identity
+from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
 from memory_service.modules.llm.policy import current_model_identity, model_identity
+from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
 from tests.support_hindsight import preview_server
 from tests.support_llm import chat_response, mocked_gateway
@@ -25,7 +26,7 @@ BOB = ALICE.model_copy(update={"user_id": "bob"})
 
 
 def service(uow_factory):
-    return AgentCredentials(
+    return ModelCredentials(
         uow_factory,
         AesCredentialCipher(
             AgentCredentialSettings(active_key_id="test", encryption_keys={"test": TEST_KEY})
@@ -44,9 +45,10 @@ async def test_storage_rotation_revocation_and_tenant_owner_isolation(container,
     credentials = service(uow_factory)
     first = await save(credentials, uow_factory, ALICE, "vk-alice-test")
     assert first.revision == 1
-    assert (
-        await credentials.resolve(agent_identity(ALICE))
-    ).key.get_secret_value() == "vk-alice-test"
+    resolved_first = await credentials.resolve(agent_identity(ALICE))
+    assert resolved_first is not None
+    assert resolved_first.key.get_secret_value() == "vk-alice-test"
+    assert resolved_first.identity == ModelIdentity("acme", ALICE.principal_id)
     assert await credentials.resolve(agent_identity(BOB)) is None
     assert (
         await credentials.resolve(agent_identity(ALICE.model_copy(update={"tenant_id": "rival"})))
@@ -57,8 +59,8 @@ async def test_storage_rotation_revocation_and_tenant_owner_isolation(container,
     assert b"vk-alice-test" not in stored
     second = await save(credentials, uow_factory, ALICE, "vk-rotated-test")
     assert second.revision == 2
-    with pytest.raises(ProviderNotConfigured):
-        await credentials.confirm(agent_identity(ALICE), first.revision)
+    with pytest.raises(ProviderNotConfigured):  # the call ran under the rotated-away key
+        await credentials.confirm(agent_identity(ALICE), resolved_first)
     revoked = await save(credentials, uow_factory, ALICE, None)
     assert revoked.revision == 3 and revoked.ciphertext is None
     assert (await credentials.metadata(ALICE)).ciphertext is None
@@ -134,7 +136,7 @@ async def test_rotated_inflight_response_is_discarded(container, uow_factory):
 
 def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     container = client.app.state.container
-    container.services["agent_credentials"] = service(container.services["uow_factory"])
+    container.services["model_credentials"] = service(container.services["uow_factory"])
     headers = {
         "X-API-Key": "test-key",
         "X-Trellis-Tenant": new_id("request"),
@@ -173,7 +175,7 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
 def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
     container = client.app.state.container
     credentials = service(container.services["uow_factory"])
-    container.services["agent_credentials"] = credentials
+    container.services["model_credentials"] = credentials
     headers = {
         "X-API-Key": "test-key",
         "X-Trellis-Tenant": new_id("request"),
@@ -385,7 +387,7 @@ async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_config
     container.settings.models.llm = LLMSettings(base_url=BASE)
     _wire_llm(container)
     _wire_memory(container)
-    credentials = container.services["agent_credentials"]
+    credentials = container.services["model_credentials"]
     await save(credentials, uow_factory, ALICE, "vk-auto-ingest")
     assert container.services["memory_provider"].contextual_extractor is None
     with respx.mock(assert_all_called=False) as gateway:

@@ -20,7 +20,7 @@ from memory_service.config.constants import ALIASES_REMOVED_IN, DEPRECATED_HEADE
 from memory_service.domain.errors import ValidationFailed
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
-REQUEST_ID_HEADER: Final = "X-Request-ID"
+REQUEST_ID_HEADER: Final = HEADERS.request_id
 TRACE_ID_HEADER: Final = "X-Trace-ID"
 CORRELATION_ID_HEADER: Final = "X-Correlation-ID"
 AUTHORIZATION_HEADER: Final = "Authorization"
