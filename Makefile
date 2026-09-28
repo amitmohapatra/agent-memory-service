@@ -169,6 +169,10 @@ BIFROST_URL ?= http://host.docker.internal:8091/v1
 # arm is ~2,000 calls, so run the 20-question smoke first and read the cost it reports.
 # The answerer and the judge are the same model here; separating them is Phase 4.
 BENCH_LLM_MODEL ?= gemini/gemini-3.8-flash
+# The gateway credential the judged runs spend through: the Bifrost virtual key that caps the
+# accuracy budget (governance key "memory-accuracy-usd10", 10 USD/year, OpenRouter nano/mini
+# and gemini-3.8-flash only). Export it from .env: `set -a; . ./.env; set +a`.
+MEMORY__MODELS__LLM__API_KEY ?=
 BENCH_LIMIT ?=
 
 #: Every containerised benchmark runs through this one block. It passes exactly what the
@@ -204,6 +208,7 @@ endef
 BENCH_LLM_ENV = -e BENCH_DEPTH=judged \
   -e MEMORY__MODELS__LLM__ENABLED=true \
   -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
+  -e MEMORY__MODELS__LLM__API_KEY="$(MEMORY__MODELS__LLM__API_KEY)" \
   -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
   -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
   -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
