@@ -30,15 +30,29 @@ contract. Nothing in the guide claims a number that is not in one of those files
 | 4 | Retrieval *(not written yet)* | four retrievers, one ranking, and why reranking is off |
 | 5 | The knowledge graph *(not written yet)* | the questions vector search cannot answer |
 | 6 | Trust *(not written yet)* | grounding, contradiction, and memory poisoning |
-| 7 | Authorization *(not written yet)* | ten visibility levels, and who an agent really is |
+| 7 | Authorization *(not written yet)* | seven visibility levels, and who an agent really is |
 | 8 | Models *(not written yet)* | which models, where, why — and running without an LLM |
-| 9 | API and SDK *(not written yet)* | every endpoint and its SDK call, side by side |
+| 9 | [API and SDK](api/README.md) | every endpoint and its SDK call, side by side — **written**, one page per area |
 | 10 | Architecture *(not written yet)* | ports, adapters, and the path a write takes |
 | 11 | Operations *(not written yet)* | deploying, configuring, and what hardware it needs |
 | 12 | Testing and gates *(not written yet)* | how the claims in this documentation are kept true |
 
-Only chapter 1 is written. The rest is the planned outline, listed so you can see where
-the guide is going — the chapters are unlinked rather than linked-and-missing on purpose.
+Chapters 1 and 9 are written; the rest is the planned outline, listed so you can see where the
+guide is going — those chapters are unlinked rather than linked-and-missing on purpose.
+
+Chapter 9 is [`api/`](api/README.md): one page per API area, each with a diagram, every route, and
+the SDK call that makes it.
+
+| Area | Page |
+|---|---|
+| observations, memories, the knowledge graph, jobs | [api/memory.md](api/memory.md) |
+| context bundles, recall, verify, conversation, briefs | [api/context.md](api/context.md) |
+| documents into retrievable knowledge | [api/documents.md](api/documents.md) |
+| tool memory and procedures | [api/tools.md](api/tools.md) |
+| feedback and what it changes | [api/feedback.md](api/feedback.md) |
+| outbound webhooks and their signatures | [api/webhooks.md](api/webhooks.md) |
+| workspaces, groups, keys, model keys, the read audit | [api/tenancy.md](api/tenancy.md) |
+| onboarding a tenant; health, readiness and `/version` | [api/admin.md](api/admin.md) |
 
 ## Reference
 
@@ -48,9 +62,10 @@ the guide is going — the chapters are unlinked rather than linked-and-missing 
   error, with examples. Regenerate with `make openapi`.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the one-page structural summary. Chapter 10 is the
   explained version.
-- [`adr/`](adr/) — architecture decision records, numbered in the order taken. Each states
-  the context, the decision, and what it cost. When a decision is later reversed or never
-  carried out, the ADR is amended rather than rewritten, so the record stays honest.
+- [`adr/README.md`](adr/README.md) — the **index** of the architecture decision records, one line
+  and a status each, in the order they were taken. Every record states the context, the decision,
+  and what it cost. When a decision is later reversed or never carried out, the ADR is amended
+  rather than rewritten, so the record stays honest.
 - [`MEASUREMENTS.md`](MEASUREMENTS.md) — the raw measurements behind the defaults, each
   traceable to a file in `benchmark/results/`.
 - [`CAPABILITY_COVERAGE.md`](CAPABILITY_COVERAGE.md) — which capability provides what, and

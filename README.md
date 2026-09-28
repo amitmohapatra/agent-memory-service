@@ -8,6 +8,8 @@ Works with any framework (LangGraph today, plain Python anywhere) because the co
 nothing about your agent library.
 
 ```python
+import uuid
+
 from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
@@ -15,9 +17,11 @@ memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 ctx = memory.bind(
     tenant_id="acme",
     user_id="u1",
-    thread_id=thread_id,
-    session_id=session_id,
-    turn_id=turn_id,
+    # your own ids: the service creates them on first use. A turn belongs to a session,
+    # a session to a thread — and each turn id must be new.
+    thread_id="chat-42",
+    session_id="s-2026-09-28",
+    turn_id=f"t-{uuid.uuid4().hex[:8]}",
 )
 
 await ctx.chat.user("I'm in Berlin and I prefer short answers.")
@@ -28,6 +32,21 @@ await ctx.chat.assistant(answer)
 
 Next turn — in a different session, a week later — the agent already knows the timezone and
 the preference. You did not write retrieval code, a vector store, or a summariser.
+
+That is verified rather than illustrative: those calls were run against a service on
+`localhost:8080` with the dev key while this documentation was written — `chat.user`, then
+`context` (a 1,313-character rendered bundle over 9 memories and 1 document passage, evidence
+status `INSUFFICIENT` for that query), then `chat.assistant`, `remember`, `recall`, `history` and
+`memories`. The service was running its stand-in providers (`embedding=hash-embedding`,
+`reranker=lexical`, `nli` non-representative, `llm=disabled`, per `GET /version`), so that run
+says the wire and the scope rules work and says **nothing** about retrieval quality — for quality,
+read [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) and
+[`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md).
+
+**One thing to do first on a fresh service**: onboard the tenant (and a workspace, if you will
+write anything WORKSPACE-visible) — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
+member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a first script gets
+`Workspace not found`.
 
 ---
 
@@ -45,6 +64,8 @@ the preference. You did not write retrieval code, a vector store, or a summarise
 | [Configuration](#configuration) | the knobs that matter |
 | [How it works](#how-it-works) | architecture in one screen |
 | [Status](#status-read-this-before-you-trust-a-number) | what is proven and what is not |
+| [**The API, area by area**](docs/api/README.md) | every route, a diagram each, and the SDK call that makes it |
+| [The decision records](docs/adr/README.md) | every ADR, one line and a status each |
 
 ---
 
@@ -102,8 +123,15 @@ missing model is a startup error rather than a silent fall back to something wea
 suite and `examples/serve.py` do have a deterministic stand-in, which is why they run
 without weights — see below.)
 
-The API is on **http://localhost:8080** — interactive docs at `/docs`, health at
-`/health/ready`. The dev API key is `dev-key`.
+The API is on **http://localhost:8080** — interactive docs at `/docs`, liveness at
+`/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`.
+
+`/health/ready` is the one to wire to a load balancer: `200` when every mandatory store answered
+(`ready`) *or* only an optional provider is down (`degraded`), and **`503`** when a mandatory one
+is (`not_ready`). Mandatory: `postgres`, `task_queue`, `qdrant`, `blob`, `openfga`. Optional:
+`cache`, `llm`. `/version` says which provider is actually *running* per port and lists anything
+that fell back under `degraded`. All of it, with the response bodies:
+[`docs/api/admin.md`](docs/api/admin.md).
 
 ```bash
 pip install -e sdk/python        # the trellis-memory SDK

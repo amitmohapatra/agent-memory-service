@@ -1,0 +1,143 @@
+# Tenancy: who may see what
+
+A tenant is the wall nothing crosses. Inside it, a **workspace** is a team that shares what it
+stores, a **group** is a set of users a workspace can admit at once, a **key** is a credential bound
+to the tenant that issued it, and a **model key** is the Bifrost virtual key a read may spend
+against. The read audit says who actually read which records (ADR 0021, ADR 0023).
+
+## How a read is authorized
+
+```mermaid
+flowchart TB
+  K["X-API-Key (or Bearer)"] --> T["the tenant, from the credential"]
+  H["X-Trellis-Workspace · -User"] --> S["the scope, within the credential's limits"]
+  T --> S
+  S --> A["audience filter, built before search runs"]
+  A --> Q["the store: dense + BM25, already filtered"]
+  Q --> R["results"]
+  R --> AU["read audit: credential · principal · kind · record_ids · query_hash"]
+  subgraph membership
+    W["workspace member: user:… | agent:… | group:…"]
+    G["group members"]
+  end
+  W --> A
+  G --> W
+```
+
+The filter is built **before** the search, not applied to its results: a store-side filter cannot
+be forgotten by a caller, and a result that was never a candidate cannot leak through a ranking bug.
+
+## Routes
+
+| Route | Purpose | SDK (`t = memory.administer("acme")`) |
+| --- | --- | --- |
+| `POST /v1/keys` | issue an admin or service key; the secret is shown once | `t.keys.issue(role, name, …)` |
+| `GET /v1/keys` | the tenant's keys, oldest first (cursor paged) | `t.keys.list()`, `t.keys.page()` |
+| `DELETE /v1/keys/{key_id}` | revoke; it fails on its next request from any instance | `t.keys.revoke(key_id)` |
+| `POST /v1/workspaces` | create a workspace | `t.workspaces.create(name, workspace_id=…)` |
+| `GET /v1/workspaces` · `/{id}` | list, or read one | `t.workspaces.list()`, `.get(id)` |
+| `DELETE /v1/workspaces/{id}` | delete it; every member loses the audience and every key bound to it is revoked at once | `t.workspaces.delete(id)` |
+| `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>`, `agent:<id>` or `group:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
+| `DELETE /v1/workspaces/{id}/members/{principal_ref}` | remove a member; its next request no longer reads the workspace | `t.workspaces.remove_member(id, principal)` |
+| `GET /v1/workspaces/{id}/members` | who is in it | `t.workspaces.members(id)` |
+| `POST /v1/groups` · `GET /v1/groups` · `DELETE /v1/groups/{id}` | a set of users a workspace can admit at once | `t.groups.create(...)`, `.list()`, `.delete(id)` |
+| `PUT` / `DELETE /v1/groups/{id}/members/{user_id}` · `GET /v1/groups/{id}/members` | group membership | `t.groups.add_user(...)`, `.remove_user(...)`, `.members(id)` |
+| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
+| `GET` / `PUT` / `DELETE /v1/workspaces/{id}/model-key` | the workspace's key, used by its agents | `t.workspaces.model_key_status(id)`, `.set_model_key(id, vk)`, `.revoke_model_key(id)` |
+| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.model_key_status()`, `ctx.set_model_key(vk)`, `ctx.revoke_model_key()` |
+| `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
+
+## Onboarding a team, in full
+
+```python
+t = memory.administer("acme")
+
+await t.workspaces.create("supply-chain", workspace_id="supply-chain-ws")
+await t.workspaces.set_member("supply-chain-ws", "user:planner-7")
+await t.workspaces.set_member("supply-chain-ws", "agent:reorder-agent")
+
+group = await t.groups.create("planners")
+await t.groups.add_user(group.group_id, "planner-8")
+await t.workspaces.set_member("supply-chain-ws", f"group:{group.group_id}")
+
+issued = await t.keys.issue("service", "reorder-agent", workspace_id="supply-chain-ws")
+print(issued.token)          # shown once: store it now
+```
+
+Only now will a `visibility="WORKSPACE"` write be readable by that team. A workspace-visible write
+with no workspace row answers `Workspace not found`, and that is the single most common first-run
+surprise.
+
+**A workspace id cannot be reclaimed.** An id that already labels threads or documents cannot later
+become a workspace (`in use as an anchor`), and a deleted workspace's id is never reused
+(`exists or was used before`) — so a new team never inherits an old team's anchors or audit trail.
+
+## Keys
+
+| Role | May | Held by |
+| --- | --- | --- |
+| `platform` | onboard tenants and issue their first admin key; never a row in a tenant | the operator's bootstrap credential ([admin.md](admin.md)) |
+| `admin` | administer one tenant: keys, workspaces, groups, webhooks, model keys, the read audit | a tenant's own administrators |
+| `service` | act for that tenant's users and agents: read and write memory within the scope it is given | **a harness** |
+
+`POST /v1/keys` issues the `admin` and `service` roles; `platform` is not issuable through it.
+
+**Workspace membership has its own three roles**, and they are not the key roles: `admin`,
+`member` and `viewer`. Every one of them *reads* the workspace; `admin` and `member` also write
+into it. So a `viewer` sees the team's memory and cannot add to it — which is also why a viewer
+cannot retract a memory it disagrees with ([feedback.md](feedback.md)).
+
+A key is bound to the tenant it was issued for: presenting a valid key with another tenant's header
+is a `403`, not a read. Revocation takes effect on the next request from **any** instance, not when
+a cache expires. `expires_in_days` is available at issue time, and a `workspace_id` on the key binds
+it to that workspace (and is revoked with it).
+
+## Model keys: four levels, resolved in order
+
+A read that is permitted to use an LLM spends *someone's* virtual key, and the service resolves the
+most specific level that has a row:
+
+```
+the acting principal's key  →  its workspace's key  →  the tenant's key  →  (no row anywhere) the operator's
+```
+
+Two rules make that safe rather than merely convenient:
+
+* **a revocation at the resolved level refuses** — a revoked agent never silently borrows the
+  team's or the operator's key, because a tombstone raises instead of falling through;
+* **the operator fallback applies only while no row exists at any level**, and a key registered
+  mid-request fails that request closed rather than mixing keys.
+
+Each key is stored encrypted, and a read returns **metadata only** — `registered`, `revoked`,
+`revision`, `updated_at` — never the key or its ciphertext. Revoking one invalidates the assisted
+read output built with it.
+
+```python
+status = await ctx.set_model_key("vk-…")     # the acting agent's own key
+print(status.registered, status.revision)
+print(await t.model_key_status())            # the tenant level, metadata only
+```
+
+## The read audit
+
+```python
+for record in await t.reads(limit=50):
+    print(record.at, record.credential, record.principal, record.kind, record.record_ids)
+```
+
+Each entry names the credential and the principal that read, whether it was a `recall` or a
+`context` assembly, the `record_ids` that came back, and a `query_hash` plus a `scope_fingerprint`
+rather than the query text — the audit answers *who read which records* without becoming a second
+copy of what was asked. Newest first, pageable by cursor (or `before=<the last entry's at>`);
+`after` is a since-filter. The keyset is the instant, so entries sharing one instant across a page
+boundary need a larger page.
+
+## What this area does not do
+
+* it does not let a caller widen its own scope: the credential fixes the tenant, and a body that
+  disagrees with a trusted header is refused;
+* it does not provision external authorization for you — a WORKSPACE audience means membership in
+  this service's authorization store, and nothing else grants it;
+* it does not show a key or a model key twice;
+* it does not have per-user ACLs on individual memories: the audience levels are the vocabulary,
+  and they are deliberately few.
