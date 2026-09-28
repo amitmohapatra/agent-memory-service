@@ -109,8 +109,8 @@ def test_latency_report_has_the_performance_json_shape() -> None:
 def test_headers_and_scope() -> None:
     assert harness.headers("k", "t", "u") == {
         "X-API-Key": "k",
-        "X-Memory-Tenant": "t",
-        "X-Memory-User": "u",
+        "X-Trellis-Tenant": "t",
+        "X-Trellis-User": "u",
     }
     scope = harness.new_scope()
     assert set(scope) == {"thread_id", "session_id", "turn_id"}

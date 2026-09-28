@@ -3,7 +3,7 @@
 The API middleware opens an accounting scope before handing the request to the app; every
 gateway call made while serving it adds its usage to the same mutable counter (the object is
 shared across the tasks Starlette spawns, so child-task context copies still see it). The
-total is exposed as ``X-Memory-LLM-Tokens`` and, per report, as ``llm_tokens``.
+total is exposed as ``X-Trellis-LLM-Tokens`` and, per report, as ``llm_tokens``.
 """
 
 from __future__ import annotations

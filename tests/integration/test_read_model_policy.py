@@ -6,7 +6,7 @@ from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
 
-HEADERS = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "reader"}
+HEADERS = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "reader"}
 
 
 @pytest.mark.parametrize("route", ["context", "recall", "verify"])

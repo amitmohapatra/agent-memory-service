@@ -245,7 +245,7 @@ async def test_the_procedures_route_can_see_an_agents_own_procedures(
             await register.set_outcome(uow, run_ctx, run_id=run, success=True)
         await uow.commit()
 
-    headers = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+    headers = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
     app = create_app(container.settings, overrides=integration_overrides(blob=None))
     with TestClient(app, raise_server_exceptions=False) as http:
         scoped = http.get(

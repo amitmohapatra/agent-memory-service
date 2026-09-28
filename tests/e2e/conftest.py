@@ -84,7 +84,7 @@ def container(app, client):
 
 
 def sdk_client(app, *, api_key: str = "test-key"):
-    from universal_memory import MemoryClient
+    from trellis.memory import MemoryClient
 
     transport = httpx.ASGITransport(app=app)
     http = httpx.AsyncClient(transport=transport, base_url="http://memory.test")

@@ -1,6 +1,6 @@
 # ADR 0015: Release gates are produced by code, evaluated by code, and caveated honestly
 
-**Status:** accepted · **Date:** 2026-09-15
+**Status:** accepted · **Date:** 2026-09-15 · **Amended by:** ADR 0022 (problem details)
 
 ## Context
 The specification's hard gates (acknowledged data loss = 0, unauthorized retrieval = 0,

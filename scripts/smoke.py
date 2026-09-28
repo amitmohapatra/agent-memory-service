@@ -1,4 +1,4 @@
-"""One real turn through a running Memory Service, end to end.
+"""One real turn through a running trellis-memory service, end to end.
 
 Not a unit test: it speaks HTTP to whatever is listening, so it catches the things the suite
 cannot — a container that starts but cannot reach Postgres, a migration that did not run, an
@@ -35,7 +35,7 @@ def main() -> int:
         "agent_id": "smoke-agent",
     }
     fact = f"The smoke marker for run {run} is EGRET-{run.upper()}."
-    headers = {"X-API-Key": API_KEY, "X-Memory-Tenant": TENANT, "X-Memory-User": scope["user_id"]}
+    headers = {"X-API-Key": API_KEY, "X-Trellis-Tenant": TENANT, "X-Trellis-User": scope["user_id"]}
 
     with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as http:
         for probe in ("/health/live", "/health/ready"):

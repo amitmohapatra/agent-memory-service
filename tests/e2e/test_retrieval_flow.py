@@ -12,7 +12,7 @@ from tests.e2e.conftest import sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 Q = "Why did Adjusted EBITDA increase despite lower revenue?"
 
 
@@ -31,7 +31,7 @@ def _upload(client, scope: dict[str, str]) -> str:
         json={"scope": scope, "role": "USER", "content": "here is the FY26 report"},
     ).json()
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=H,
         files={"file": ("acme_fy26_annual_report.md", FIXTURE.read_bytes(), "text/markdown")},
         data={"scope": json.dumps(scope), "message_id": msg["message_id"], "title": "ACME FY26"},
@@ -120,12 +120,12 @@ def test_recall_and_context_over_http(client) -> None:
     assert client.post("/v1/recall", json={"scope": scope, "query": Q}).status_code == 401
     # another user in the same tenant: the thread-scoped document is invisible
     other = client.post(
-        "/v1/recall", headers={**H, "X-Memory-User": "u2"}, json={"scope": {}, "query": Q}
+        "/v1/recall", headers={**H, "X-Trellis-User": "u2"}, json={"scope": {}, "query": Q}
     )
     assert other.status_code == 200 and other.json()["results"] == []
     # another tenant: nothing
     stranger = client.post(
-        "/v1/recall", headers={**H, "X-Memory-Tenant": "globex"}, json={"scope": {}, "query": Q}
+        "/v1/recall", headers={**H, "X-Trellis-Tenant": "globex"}, json={"scope": {}, "query": Q}
     )
     assert stranger.status_code == 200 and stranger.json()["results"] == []
 
@@ -141,7 +141,7 @@ async def test_sdk_context_and_recall(app, client) -> None:
     assert bundle.evidence.status == "COMPLETE" and bundle.token_estimate <= 4000
     assert "increased to EUR 98" in bundle.rendered
     assert bundle.evidence.required_groups and not bundle.evidence.missing_groups
-    from universal_memory import InsufficientEvidence
+    from trellis.memory import InsufficientEvidence
 
     with pytest.raises(InsufficientEvidence) as exc:
         await ctx.context("Who won the 1998 football championship?", require_evidence=True)

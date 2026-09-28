@@ -8,6 +8,7 @@ silently) and not a 500 (``Visibility("NOPE")`` used to raise ValueError out of 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, get_args
 
 import pytest
@@ -27,17 +28,17 @@ from memory_service.domain import enums
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
 from memory_service.domain.tools import CacheScope, SideEffects, ToolSource, ToolStatus
 from memory_service.modules.grounding import cascade
-from universal_memory import models as sdk
+from trellis.memory import models as sdk
 
-HEADERS = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+HEADERS = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 SCOPE = {"thread_id": "thr_1"}
 
 
 def _errors(response: Any) -> list[dict[str, Any]]:
     body = response.json()
     assert response.status_code == 422, response.text
-    assert body["error"]["code"] == "VALIDATION"
-    return body["error"]["details"]["errors"]
+    assert body["code"] == "VALIDATION"
+    return body["details"]["errors"]
 
 
 def _locs(response: Any) -> set[str]:
@@ -62,9 +63,9 @@ def test_recall_kinds_must_name_at_least_one_kind(client: TestClient) -> None:
 
 def test_tool_record_rejects_unknown_visibility_status_and_source(client: TestClient) -> None:
     base = {"scope": SCOPE, "tool": "t", "args": {}}
-    r = client.post("/v1/tools/record", headers=HEADERS, json={**base, "visibility": "NOPE"})
+    r = client.post("/v1/tools/invocations", headers=HEADERS, json={**base, "visibility": "NOPE"})
     assert _locs(r) == {"body.visibility"}
-    r = client.post("/v1/tools/record", headers=HEADERS, json={**base, "status": "meh"})
+    r = client.post("/v1/tools/invocations", headers=HEADERS, json={**base, "status": "meh"})
     assert _locs(r) == {"body.status"}
     r = client.post(
         "/v1/tools/plan",
@@ -77,11 +78,11 @@ def test_tool_record_rejects_unknown_visibility_status_and_source(client: TestCl
 def test_tool_record_sub_calls_are_typed_and_bounded(client: TestClient) -> None:
     base = {"scope": SCOPE, "tool": "t", "args": {}}
     r = client.post(
-        "/v1/tools/record", headers=HEADERS, json={**base, "sub_calls": [{"ordinal": -1}]}
+        "/v1/tools/invocations", headers=HEADERS, json={**base, "sub_calls": [{"ordinal": -1}]}
     )
     assert _locs(r) == {"body.sub_calls.0.ordinal", "body.sub_calls.0.tool"}
     r = client.post(
-        "/v1/tools/record",
+        "/v1/tools/invocations",
         headers=HEADERS,
         json={**base, "sub_calls": [{"ordinal": i, "tool": "x"} for i in range(65)]},
     )
@@ -104,7 +105,7 @@ def test_verify_item_kind_is_closed(client: TestClient) -> None:
 
 def test_file_visibility_form_field_is_an_enum(client: TestClient) -> None:
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=HEADERS,
         files={"file": ("a.txt", b"hello", "text/plain")},
         data={"scope": json.dumps(SCOPE), "visibility": "NOPE"},
@@ -116,7 +117,7 @@ def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings, ov
     """Input is validated at the edge; a ValidationError past it is a bug, not a 422.
 
     Every request field is typed on the route signature, and the two by-hand coercions that
-    remain (the /v1/files form, the execution context) catch their own ValidationError and
+    remain (the /v1/documents form, the execution context) catch their own ValidationError and
     raise ValidationFailed. So a pydantic failure that escapes a handler means the service
     built a bad model from its own data, and it must surface as an INTERNAL 500 carrying the
     request id, not be dressed up as the caller's mistake.
@@ -136,11 +137,12 @@ def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings, ov
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.post("/coerce", json={"n": "not a number"}, headers={"X-Request-ID": "req_test"})
         assert r.status_code == 500, r.text
-        error = r.json()["error"]
+        error = r.json()
         assert error["code"] == "INTERNAL" and error["retryable"] is False
-        # the request id rides in the envelope (the 500 path bypasses the header middleware)
-        assert error["trace_id"] == "req_test"
-        # the input value is not echoed back: the envelope never contains source text
+        # the ids ride in the problem (the 500 path bypasses the header middleware)
+        assert error["request_id"] == "req_test"
+        assert re.fullmatch(r"[0-9a-f]{32}", error["trace_id"])
+        # the input value is not echoed back: the problem never contains source text
         assert "not a number" not in r.text
 
 
@@ -198,10 +200,10 @@ def test_request_knobs_are_clamped(
 def test_tool_payloads_are_bounded_by_serialised_size(client: TestClient) -> None:
     big = {"k": "x" * TOOL_JSON_MAX_BYTES}
     base = {"scope": SCOPE, "tool": "t"}
-    r = client.post("/v1/tools/record", headers=HEADERS, json={**base, "args": big})
+    r = client.post("/v1/tools/invocations", headers=HEADERS, json={**base, "args": big})
     assert _locs(r) == {"body.args"}
     r = client.post(
-        "/v1/tools/record", headers=HEADERS, json={**base, "output": "x" * (256 * 1024 + 1)}
+        "/v1/tools/invocations", headers=HEADERS, json={**base, "output": "x" * (256 * 1024 + 1)}
     )
     assert _locs(r) == {"body.output"}
     r = client.post(
@@ -235,7 +237,7 @@ def test_custom_metadata_is_bounded_everywhere_it_appears(client: TestClient) ->
     assert "body.scope.custom_metadata" in _locs(r)
     # the multipart form: parsed by hand, bounded by the same rule
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=HEADERS,
         files={"file": ("a.txt", b"hello", "text/plain")},
         data={"scope": json.dumps(SCOPE), "custom_metadata": json.dumps(too_deep)},

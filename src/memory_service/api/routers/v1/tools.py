@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.api.headers import alias_route
 from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
 from memory_service.domain.tools import ToolSource, ToolStatus
@@ -211,15 +212,20 @@ async def _scope_keys(container: Any, ctx: Any) -> list[str]:
     return list(visibility.keys)
 
 
+_RECORD_ROUTE: dict[str, Any] = {
+    "response_model": RecordResponse,
+    "status_code": 202,
+    "tags": ["tools"],
+    "summary": "Record one tool call (idempotent on run + step + tool + arguments)",
+    "responses": _ERRORS,
+}
+
+
+@router.post("/tools/invocations", name="record_invocation", **_RECORD_ROUTE)
 @router.post(
-    "/tools/record",
-    response_model=RecordResponse,
-    status_code=202,
-    tags=["tools"],
-    summary="Record one tool call (idempotent on run + step + tool + arguments)",
-    responses=_ERRORS,
+    "/tools/record", name="record_tool", **{**_RECORD_ROUTE, **alias_route("/v1/tools/record")}
 )
-async def record_tool(
+async def record_invocation(
     request: Request, body: RecordRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecordResponse:
     ctx = build_context(request, container, body.scope)

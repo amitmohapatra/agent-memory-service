@@ -1,5 +1,5 @@
 """Hardening behaviours at the HTTP edge: rate limiting (per tenant, shared counter,
-fail-open on cache outage), body size limit, and error envelopes."""
+fail-open on cache outage), body size limit, and problem details."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from memory_service.config import constants
 from tests.conftest import _test_overrides
 
 pytestmark = pytest.mark.e2e
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 
 
 @pytest.fixture
@@ -29,16 +29,16 @@ def limited(make_settings, tmp_path, monkeypatch):
         yield c, app.state.container
 
 
-def test_rate_limit_per_tenant_with_envelope_and_fail_open(limited) -> None:
+def test_rate_limit_per_tenant_with_a_problem_and_fail_open(limited) -> None:
     client, container = limited
     codes = [client.get("/version", headers=H).status_code for _ in range(7)]
     assert codes[:5] == [200] * 5 and codes[5:] == [429, 429]
     r = client.get("/version", headers=H)
-    body = r.json()["error"]
+    body = r.json()
     assert body["code"] == "RATE_LIMIT" and body["retryable"] is True and body["trace_id"]
     assert r.headers["Retry-After"].isdigit() and r.headers["X-RateLimit-Remaining"] == "0"
     # another tenant has its own budget; health endpoints are never limited
-    assert client.get("/version", headers={**H, "X-Memory-Tenant": "globex"}).status_code == 200
+    assert client.get("/version", headers={**H, "X-Trellis-Tenant": "globex"}).status_code == 200
     assert client.get("/health/live").status_code == 200
     # a cache outage fails open: the limit is a hardening measure, not availability's master
     container.cache.available = False
@@ -56,4 +56,4 @@ def test_body_size_limit_is_enforced_before_parsing(limited) -> None:
         headers=H,
         content=b"x" * 4096,
     )
-    assert r.status_code == 413 and r.json()["error"]["code"] == "VALIDATION"
+    assert r.status_code == 413 and r.json()["code"] == "VALIDATION"

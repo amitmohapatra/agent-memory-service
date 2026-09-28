@@ -231,7 +231,14 @@ class MemoryExecutionContext(BaseModel):
     def log_fields(self) -> dict[str, str]:
         """Fields attached to every log line / span for this request."""
         out: dict[str, str] = {"tenant_id": self.tenant_id, "trace_id": self.trace_id}
-        for name in ("thread_id", "session_id", "turn_id", "agent_run_id", "request_id"):
+        for name in (
+            "thread_id",
+            "session_id",
+            "turn_id",
+            "agent_run_id",
+            "request_id",
+            "correlation_id",
+        ):
             value = getattr(self, name)
             if value:
                 out[name] = value

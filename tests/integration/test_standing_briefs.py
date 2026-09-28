@@ -137,8 +137,8 @@ async def test_assisted_refresh_uses_citations_and_never_calls_model_on_read(
 def test_briefs_http_idempotency_owner_scoping_and_no_raw_context(client):
     headers = {
         "X-API-Key": "test-key",
-        "X-Memory-Tenant": "brief-http",
-        "X-Memory-User": "owner",
+        "X-Trellis-Tenant": "brief-http",
+        "X-Trellis-User": "owner",
         "Idempotency-Key": "standing-question",
     }
     body = {
@@ -155,7 +155,7 @@ def test_briefs_http_idempotency_owner_scoping_and_no_raw_context(client):
     assert read.status_code == 200
     denied = client.get(
         f"/v1/briefs/{bid}",
-        headers={**headers, "X-Memory-User": "other"},
+        headers={**headers, "X-Trellis-User": "other"},
         params={"agent_id": "research"},
     )
     assert denied.status_code == 404
@@ -265,8 +265,8 @@ async def test_unknown_model_citations_are_rejected_without_native_fallback(cont
 def test_session_bound_brief_round_trip(client):
     headers = {
         "X-API-Key": "test-key",
-        "X-Memory-Tenant": "brief-session",
-        "X-Memory-User": "owner",
+        "X-Trellis-Tenant": "brief-session",
+        "X-Trellis-User": "owner",
     }
     scope = {"thread_id": "thread-1", "session_id": "session-1", "agent_id": "research"}
     created = client.post(

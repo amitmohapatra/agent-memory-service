@@ -1,4 +1,4 @@
-"""Start a single-process Memory Service for the examples: the API with its jobs run inline.
+"""Start a single-process trellis-memory service for the examples: the API with its jobs run inline.
 
 Needs PostgreSQL (migrated here before the server starts) and a Redis/Dragonfly, both at the
 ``MEMORY__*`` defaults unless the environment says otherwise. Without a Qdrant server the

@@ -1,4 +1,4 @@
-"""Network-level load test against a deployed Memory Service (Locust).
+"""Network-level load test against a deployed trellis-memory service (Locust).
 
     uv run locust -f benchmark/load/locustfile.py --headless -u 20 -r 20 -t 300s \
         --host http://localhost:8080
@@ -80,8 +80,8 @@ class MemoryUser(HttpUser):
         self.user_id = random.choice(USERS)
         self.headers = {
             "X-API-Key": API_KEY,
-            "X-Memory-Tenant": TENANT,
-            "X-Memory-User": self.user_id,
+            "X-Trellis-Tenant": TENANT,
+            "X-Trellis-User": self.user_id,
         }
         self.scope = {
             "thread_id": f"thr_load_{uuid.uuid4().hex}",
@@ -162,11 +162,11 @@ class MemoryUser(HttpUser):
             body = DOC + f"\n<!-- {uuid.uuid4().hex} -->\n".encode()
             payload = ("note.md", body, "text/markdown")
         self.client.post(
-            "/v1/files",
+            "/v1/documents",
             headers=self.headers,
             files={"file": payload},
             data={"scope": json.dumps(self.scope), "title": "load note"},
-            name=f"POST /v1/files ({'pdf' if PDF else 'text'})",
+            name=f"POST /v1/documents ({'pdf' if PDF else 'text'})",
         )
 
     @task(1)

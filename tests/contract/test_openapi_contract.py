@@ -39,7 +39,7 @@ def test_every_public_operation_has_error_responses_and_standard_headers(
                 if status not in responses:
                     problems.append(f"{method.upper()} {path}: missing {status} response")
             params = {p["name"] for p in op.get("parameters", [])}
-            for header in ("X-Request-ID", "X-Trace-ID", "X-Correlation-ID"):
+            for header in ("X-Request-ID", "traceparent", "X-Correlation-ID"):
                 if header not in params:
                     problems.append(f"{method.upper()} {path}: missing {header} header")
             if method in ("post", "put", "patch", "delete") and "Idempotency-Key" not in params:

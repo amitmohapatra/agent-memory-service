@@ -1,4 +1,4 @@
-"""Domain exceptions. The API layer maps these onto the typed error envelope."""
+"""Domain exceptions. The API layer maps these onto RFC 9457 problem details (api/errors.py)."""
 
 from __future__ import annotations
 

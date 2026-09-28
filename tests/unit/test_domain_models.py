@@ -125,3 +125,11 @@ def test_context_bundle_render_marks_insufficient_evidence() -> None:
         token_estimate=0,
     )
     assert "INSUFFICIENT" in bundle.render()
+
+
+def test_an_id_with_a_trailing_newline_is_not_an_id() -> None:
+    from memory_service.domain.ids import is_valid_id
+    from memory_service.domain.tenancy import is_valid_tenant_id
+
+    assert is_valid_id("thr_1") and not is_valid_id("thr_1\n")
+    assert is_valid_tenant_id("acme") and not is_valid_tenant_id("acme\n")

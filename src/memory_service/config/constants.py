@@ -161,7 +161,7 @@ DOCLING_ARTIFACTS_DIR = "docling"
 # Service
 # ---------------------------------------------------------------------------
 
-SERVICE_NAME = "memory-service"
+SERVICE_NAME = "trellis-memory"
 API_VERSION = "v1"
 HOST = "0.0.0.0"  # noqa: S104 - a container listens on every interface
 #: never log raw source text (prompts, model output, message bodies)
@@ -173,13 +173,29 @@ RATE_LIMIT_BURST = 200
 
 @dataclass(frozen=True)
 class Headers:
-    tenant: str = "X-Memory-Tenant"
-    workspace: str = "X-Memory-Workspace"
-    user: str = "X-Memory-User"
+    """The trusted context headers (ADR 0022). ``llm_tokens`` is a response header."""
+
+    tenant: str = "X-Trellis-Tenant"
+    workspace: str = "X-Trellis-Workspace"
+    user: str = "X-Trellis-User"
     api_key: str = "X-API-Key"
+    llm_tokens: str = "X-Trellis-LLM-Tokens"
 
 
 HEADERS = Headers()
+
+#: The release that removes every alias ADR 0022 keeps for one release.
+ALIASES_REMOVED_IN = "0.3.0"
+#: The scope headers' pre-trellis spellings, read as aliases until ``ALIASES_REMOVED_IN``
+#: (ADR 0022). ``api/headers.py`` reads requests through this; ``api/openapi.py`` documents it.
+DEPRECATED_HEADER_ALIASES: Mapping[str, str] = {
+    HEADERS.tenant: "X-Memory-Tenant",
+    HEADERS.workspace: "X-Memory-Workspace",
+    HEADERS.user: "X-Memory-User",
+}
+#: The response header's pre-trellis spelling, emitted alongside the new one until
+#: ``ALIASES_REMOVED_IN``.
+DEPRECATED_RESPONSE_HEADER_ALIASES: Mapping[str, str] = {HEADERS.llm_tokens: "X-Memory-LLM-Tokens"}
 
 # ---------------------------------------------------------------------------
 # Stores

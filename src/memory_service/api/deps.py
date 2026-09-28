@@ -7,9 +7,10 @@ from typing import Annotated, Any
 from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from memory_service.api.headers import require_one_spelling
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
-from memory_service.config.constants import HEADERS
+from memory_service.config.constants import ALIASES_REMOVED_IN, HEADERS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import (
     AuthorizationFailed,
@@ -45,7 +46,13 @@ class ScopeBody(BaseModel):
     agent_group_id: str | None = None
     agent_run_id: str | None = None
     parent_agent_run_id: str | None = None
-    trace_id: str | None = None
+    trace_id: str | None = Field(
+        default=None,
+        deprecated=True,
+        description="Ignored since 0.2.0 (ADR 0022): the trace is the request's traceparent "
+        "(X-Trace-ID names it on the response); an opaque id belongs in X-Correlation-ID. "
+        f"Accepted until {ALIASES_REMOVED_IN} so older clients are not refused.",
+    )
     correlation_id: str | None = None
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
@@ -73,9 +80,9 @@ ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)
 def _header_scope(request: Request, container: Container) -> dict[str, Any]:
     h = request.headers
     return {
-        "tenant_id": h.get(HEADERS.tenant),
-        "workspace_id": h.get(HEADERS.workspace),
-        "user_id": h.get(HEADERS.user),
+        "tenant_id": require_one_spelling(h, HEADERS.tenant),
+        "workspace_id": require_one_spelling(h, HEADERS.workspace),
+        "user_id": require_one_spelling(h, HEADERS.user),
     }
 
 
@@ -150,7 +157,7 @@ def _credential_scope(
     claims = credential_claims(request) if credential_mode(request) == "api_key" else {}
     tenant_id = headers["tenant_id"] or body.tenant_id or claims.get("tenant")
     if not tenant_id:
-        raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
+        raise ValidationFailed(f"tenant_id is required ({HEADERS.tenant} header)")
     _require_tenant_matches_credential(request, container, tenant_id)
     workspace_id = headers["workspace_id"] or body.workspace_id
     bound_workspace = claims.get("workspace")
@@ -214,7 +221,8 @@ def build_context(
             parent_agent_run_id=body.parent_agent_run_id,
             request_id=request.state.request_id,
             correlation_id=body.correlation_id or request.state.correlation_id,
-            trace_id=body.trace_id or request.state.trace_id,
+            # never the body's: the trace id in headers, logs, rows and problems is one id
+            trace_id=request.state.trace_id,
             custom_metadata=body.custom_metadata,
         )
     except ValidationError as exc:
@@ -224,6 +232,8 @@ def build_context(
         ) from exc
     bind_log_context(**ctx.log_fields())
     request.state.context = ctx
+    # the response echoes the id the logs carry, whichever of header or body named it
+    request.state.correlation_id = ctx.correlation_id
     return ctx
 
 
@@ -305,7 +315,7 @@ def administered_tenant(request: Request, principal: ServicePrincipal, container
     """The tenant an administrative call acts on: the key's own tenant, or - for a
     credential that names none, the platform key and development keys - the header."""
     claimed = principal.claims.get("tenant") if principal.mode == "api_key" else None
-    named = request.headers.get(HEADERS.tenant)
+    named = require_one_spelling(request.headers, HEADERS.tenant)
     if named and not is_valid_tenant_id(named):
         raise ValidationFailed("invalid tenant_id", details={"field": HEADERS.tenant})
     if claimed and named and named != claimed:
@@ -316,7 +326,7 @@ def administered_tenant(request: Request, principal: ServicePrincipal, container
         )
     tenant = claimed or named
     if not tenant:
-        raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
+        raise ValidationFailed(f"tenant_id is required ({HEADERS.tenant} header)")
     if not is_platform(principal):
         # a suspended tenant's own administrators are suspended with it; the platform is
         # who resumes it, so it is not stopped here

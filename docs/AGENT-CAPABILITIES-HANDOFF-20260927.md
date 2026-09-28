@@ -87,7 +87,7 @@ Existing deployments that explicitly set false remain model-free. Offline tests 
 `bifrost`, `models` and `docker` markers unless specifically running their isolated fixtures.
 
 ```python
-from universal_memory import BriefSpec, MemoryClient
+from trellis.memory import BriefSpec, MemoryClient
 
 async with MemoryClient(base_url, api_key=service_key) as memory:
     # Bind a durable agent identity without a run for a brief intended across its runs.

@@ -24,9 +24,9 @@ TENANT = "search-team"
 
 
 def _h(user: str | None = None) -> dict[str, str]:
-    h = {**KEY, "X-Memory-Tenant": TENANT}
+    h = {**KEY, "X-Trellis-Tenant": TENANT}
     if user:
-        h["X-Memory-User"] = user
+        h["X-Trellis-User"] = user
     return h
 
 
@@ -98,7 +98,7 @@ def test_tenant_memory_reaches_the_whole_team_and_no_further(client) -> None:
         "and their agents"
     )
 
-    other = {**KEY, "X-Memory-Tenant": "data-team", "X-Memory-User": "alice"}
+    other = {**KEY, "X-Trellis-Tenant": "data-team", "X-Trellis-User": "alice"}
     assert not _has(_read(client, other, q), "PagerDuty"), "another tenant, same user id"
 
 

@@ -1,7 +1,7 @@
 """A credential may act for the tenant it names, and on a shared deployment only that one.
 
 Authentication identifies the calling SERVICE: ``ServicePrincipal`` carries service_id, mode
-and claims, and no tenant. The tenant arrives in ``X-Memory-Tenant``. Nothing compared the
+and claims, and no tenant. The tenant arrives in ``X-Trellis-Tenant``. Nothing compared the
 two, so every boundary below worked perfectly on behalf of whichever tenant the caller said
 it was - one credential reached every tenant on the deployment by changing one header.
 
@@ -33,7 +33,7 @@ class _State:
 
 class _Request:
     def __init__(self, tenant: str, principal: ServicePrincipal | None) -> None:
-        self.headers = {"X-Memory-Tenant": tenant, "X-Memory-User": "u1"}
+        self.headers = {"X-Trellis-Tenant": tenant, "X-Trellis-User": "u1"}
         self.state = _State(principal)
 
 

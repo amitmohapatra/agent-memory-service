@@ -1,6 +1,6 @@
 # ADR 0021: Tenants, API keys and workspaces are the service's own
 
-**Status:** accepted · **Date:** 2026-09-28 · **Amends:** ADR 0005 (reinstates `WORKSPACE`)
+**Status:** accepted · **Date:** 2026-09-28 · **Amends:** ADR 0005 (reinstates `WORKSPACE`) · **Amended by:** ADR 0022 (header names)
 
 ## Context
 Several teams in one company will run agents against one deployment, each for its own

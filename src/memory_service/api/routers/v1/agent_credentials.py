@@ -81,7 +81,7 @@ async def set_key(
         request,
         container,
         ctx,
-        key=request.headers.get("Idempotency-Key")
+        key=request.state.idempotency_key
         or default_idempotency_key(ctx, "agent-key-put", ctx.request_id),
         payload={"principal": ctx.principal_id, "action": "rotate", "digest": digest},
         handler=write,
@@ -104,7 +104,7 @@ async def revoke_key(request: Request, container: ContainerDep, ctx: HeaderConte
         request,
         container,
         ctx,
-        key=request.headers.get("Idempotency-Key")
+        key=request.state.idempotency_key
         or default_idempotency_key(ctx, "agent-key-delete", ctx.request_id),
         payload={"principal": ctx.principal_id, "action": "revoke"},
         handler=write,

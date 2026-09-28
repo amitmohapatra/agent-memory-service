@@ -1,6 +1,6 @@
 # ADR 0005: OpenFGA relationships + visibility keys for store-side filtering
 
-**Status:** accepted · **Date:** 2026-09-14
+**Status:** accepted · **Date:** 2026-09-14 · **Amended by:** ADR 0021 (`WORKSPACE`), ADR 0022 (header names)
 
 ## Context
 Every retrieval must be scope-filtered *before* any model sees data, with zero cross-tenant,
@@ -28,7 +28,8 @@ and the exact "retrieve globally then filter in memory" anti-pattern the spec fo
 4. When `list_objects` would exceed `max_listed_objects`, the scope is marked `truncated`
    and retrieval falls back to bounded per-object `batch_check` calls.
 5. The **calling service** is authenticated (`trusted_dev` | `jwt` | `gcp_iam` | `mtls`);
-   only then are the trusted context headers (`X-Memory-Tenant/-Workspace/-User`)
+   only then are the trusted context headers (`X-Memory-Tenant/-Workspace/-User`, now
+   `X-Trellis-*`, ADR 0022)
    honored. Body-supplied security fields must match the headers exactly or the request is
    rejected; `custom_metadata` may not contain reserved keys.
 

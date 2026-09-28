@@ -60,7 +60,7 @@ rule extractor remains the model-free floor. Verbatim retention already covers e
 ### D3 — Tenancy, keys, teams (the platform layer)
 - Auth mode `api_key` (DB-backed) beside `trusted_dev`/`jwt`. Key format `mk_<prefix>.<secret>`; only a SHA-256 is
   stored; row = `key_id, tenant_id, role ∈ {admin, service, agent}, workspace_id?, expires_at, revoked_at, last_used_at`.
-  Tenant is **derived from the key**; a `X-Memory-Tenant` header must match or be absent. This closes the
+  Tenant is **derived from the key**; a `X-Trellis-Tenant` header must match or be absent. This closes the
   "one key reaches every tenant by changing a header" hole for shared deployments.
 - One bootstrap secret, `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY`, is the platform super-admin. That is the whole
   configuration a new deployment needs beyond store URLs.
@@ -104,7 +104,7 @@ Rule kept: no delta is accepted unless the metric is shown sensitive to the exac
 host load recorded; Mem0's ruler reported beside the strict one.
 
 ### D7 — Parity without a second engine (planned, M3–M5)
-Hindsight stays an optional extra (`memory-service[hindsight]`), not a core dependency: its SDK cannot carry a team key
+Hindsight stays an optional extra (`trellis-memory-service[hindsight]`), not a core dependency: its SDK cannot carry a team key
 and its server is not deployed here. Parity is native: briefs (mental models/pages), feedback (fact edit/history),
 `POST /v1/webhooks` (outbox → signed per-tenant HTTP delivery), cursor pagination and filters on `/v1/memories`,
 and an opt-in deep mode (`use_llm=true` on `/context` with the team key) later.

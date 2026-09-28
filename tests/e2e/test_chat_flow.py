@@ -6,11 +6,11 @@ import pytest
 
 from memory_service.domain.ids import new_id
 from tests.e2e.conftest import sdk_client
-from universal_memory import AuthorizationError, NotFoundError, ValidationError
+from trellis.memory import AuthorizationError, NotFoundError, ValidationError
 
 pytestmark = pytest.mark.e2e
 
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 
 
 def _scope(**kw):
@@ -90,7 +90,7 @@ def test_idempotent_retry_returns_same_ack(client) -> None:
         headers={**H, "Idempotency-Key": "k-1"},
         json={**body, "content": "different"},
     )
-    assert conflict.status_code == 409 and conflict.json()["error"]["code"] == "CONFLICT"
+    assert conflict.status_code == 409 and conflict.json()["code"] == "CONFLICT"
     # without a header the server derives the key from lineage + content: a network retry of
     # the same request never duplicates, while a distinct key is a distinct request
     a = client.post("/v1/messages", headers=H, json={**body, "content": "retry me"})
@@ -174,7 +174,7 @@ def test_authorization_boundaries(client) -> None:
     client.post(
         "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "private"}
     )
-    other_user = {**H, "X-Memory-User": "u2"}
+    other_user = {**H, "X-Trellis-User": "u2"}
     assert client.get(f"/v1/threads/{scope['thread_id']}", headers=other_user).status_code == 403
     assert (
         client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=other_user).status_code
@@ -185,8 +185,8 @@ def test_authorization_boundaries(client) -> None:
         headers=other_user,
         json={"scope": scope, "role": "USER", "content": "hijack"},
     )
-    assert r.status_code == 403 and r.json()["error"]["code"] == "SCOPE_DENIED"
-    other_tenant = {**H, "X-Memory-Tenant": "globex"}
+    assert r.status_code == 403 and r.json()["code"] == "SCOPE_DENIED"
+    other_tenant = {**H, "X-Trellis-Tenant": "globex"}
     assert client.get(f"/v1/threads/{scope['thread_id']}", headers=other_tenant).status_code == 404
     # agent acting for the owner may write internal messages to the thread
     agent_scope = {**scope, "agent_id": "helper", "agent_run_id": new_id("agent_run")}
@@ -231,7 +231,7 @@ def test_validation_errors(client) -> None:
         headers=H,
         json={"scope": _scope(), "role": "USER", "content": "x", "unknown": 1},
     )
-    assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION"
+    assert r.status_code == 422 and r.json()["code"] == "VALIDATION"
     assert client.get("/v1/jobs/obx_999999", headers=H).status_code == 404
     assert client.get("/v1/jobs/nope", headers=H).status_code == 404
 

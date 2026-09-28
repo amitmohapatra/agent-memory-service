@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from memory_service.api.headers import IDEMPOTENT_REPLAYED_HEADER
 from memory_service.application.container import Container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.ids import stable_key
@@ -68,7 +69,9 @@ async def run_idempotent(
     cached = await idem.lookup_cached(ctx.tenant_id, key, request_hash)
     if cached is not None:
         return JSONResponse(
-            status_code=cached.status, content=cached.body, headers={"Idempotent-Replayed": "true"}
+            status_code=cached.status,
+            content=cached.body,
+            headers={IDEMPOTENT_REPLAYED_HEADER: "true"},
         )
 
     async with uow_factory() as uow:
@@ -77,7 +80,7 @@ async def run_idempotent(
             return JSONResponse(
                 status_code=replay.status,
                 content=replay.body,
-                headers={"Idempotent-Replayed": "true"},
+                headers={IDEMPOTENT_REPLAYED_HEADER: "true"},
             )
         status, body, after_commit = await handler(uow)
         kept = stored_body(body) if stored_body is not None else body

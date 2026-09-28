@@ -1,9 +1,9 @@
-# universal-memory
+# trellis-memory
 
-Python SDK for the Enterprise Multi-Agent Memory Service.
+Python SDK for trellis-memory, the multi-agent memory service.
 
 ```python
-from universal_memory import MemoryClient
+from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://memory-service:8080", api_key="dev-key")
 
@@ -41,7 +41,7 @@ Registering a key alone does not enable model calls.
 ## Standing questions and knowledge pages
 
 ```python
-from universal_memory import BriefSpec
+from trellis.memory import BriefSpec
 
 brief = await agent.briefs.create(
     BriefSpec(
@@ -69,7 +69,7 @@ for configuration, isolation guarantees and measured limits.
 
 ## Closed sets are typed
 
-Every closed vocabulary on the wire is a `Literal` in `universal_memory.models`
+Every closed vocabulary on the wire is a `Literal` in `trellis.memory.models`
 (`MemoryType`, `Visibility`, `Lifetime`, `MessageRole`, `MessageKind`, `ObservationKind`,
 `JobStatus`, `DocumentStatus`, `ArchiveStatus`, `QueryType`, `Representation`,
 `TemporalStatus`, `EvidenceStatus`, `RecallKind`, `EvidenceKind`, `ToolSource`, `ToolStatus`,
@@ -83,3 +83,25 @@ dropped. The service keeps the SDK's Literals equal to its own enums with a test
 `recall(kinds=...)` accepts `chunk` (document passages), `memory` and `summary`. Earlier
 docs listed a `fact` kind; the engine never served it (the call just returned nothing), so
 it is gone from the type and the service now rejects it.
+
+## Headers, tracing and errors
+
+Every call carries the scope as `X-Trellis-Tenant` / `X-Trellis-Workspace` / `X-Trellis-User`,
+an `X-Request-ID` (one per call, kept across retries) and, when the agent is tracing with
+OpenTelemetry (`pip install trellis-memory[otel]`), the active span's `traceparent`; without
+it, `bind(trace_id=<32 hex>)` produces one. The service continues the trace and answers
+with `traceparent` and `X-Trace-ID`.
+
+A `trace_id` that is not a 32-hex W3C id is sent as `X-Correlation-ID` (echoed, not traced);
+an explicit `correlation_id` wins. The SDK does not send `X-Trace-ID`: the service names the
+trace on the response. Every scope id follows the service's grammar (a letter or digit, then
+letters, digits and `._:-`, at most 200 characters) and is checked when the scope is built.
+An `http_client` you pass in is given the service credential as a default header, so give
+the SDK a client of its own; an httpx client instrumented by OpenTelemetry injects its own
+`traceparent` at send time, which then replaces the one built from `trace_id`.
+
+Errors are RFC 9457 problems mapped to one exception per `code`: `AuthenticationError`,
+`AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError`,
+`RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`, `InsufficientEvidence`.
+Each carries `status`, `retryable`, `trace_id`, `request_id` and `details`. A request that
+got no response raises `TimeoutError` or `DependencyUnavailableError` with `status` 0.

@@ -338,7 +338,7 @@ async def test_cache_flush_over_the_api_never_hides_acknowledged_messages(app, c
 
     import httpx
 
-    H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+    H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
     container = app.state.container
     scope = {
         "thread_id": new_id("thread"),

@@ -1,15 +1,16 @@
-"""universal-memory: Python SDK for the Enterprise Multi-Agent Memory Service."""
+"""trellis-memory: Python SDK for trellis-memory, the multi-agent memory service."""
 
-from universal_memory.client import (
+from trellis.memory.client import (
     AdminAPI,
     ChatAPI,
+    DocumentsAPI,
     FilesAPI,
     MemoryClient,
     MemoryContext,
     TenantAPI,
     current_context,
 )
-from universal_memory.errors import (
+from trellis.memory.errors import (
     AuthenticationError,
     AuthorizationError,
     ConflictError,
@@ -18,9 +19,10 @@ from universal_memory.errors import (
     MemoryError,
     NotFoundError,
     RateLimitedError,
+    TimeoutError,
     ValidationError,
 )
-from universal_memory.models import (
+from trellis.memory.models import (
     AgentKeyStatus,
     ApiKeyInfo,
     Brief,
@@ -78,7 +80,7 @@ from universal_memory.models import (
     WorkspaceMemberInfo,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "AdminAPI",
@@ -99,6 +101,7 @@ __all__ = [
     "DependencyUnavailableError",
     "DocumentInfo",
     "DocumentStatus",
+    "DocumentsAPI",
     "EvidenceKind",
     "EvidenceRef",
     "FileHandle",
@@ -140,6 +143,7 @@ __all__ = [
     "TenantInfo",
     "TenantStatus",
     "ThreadInfo",
+    "TimeoutError",
     "Tool",
     "ToolCall",
     "ToolPlan",

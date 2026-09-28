@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
+import warnings
 from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from datetime import datetime
@@ -23,8 +24,8 @@ from typing import Any, Self
 
 import httpx
 
-from universal_memory.errors import InsufficientEvidence
-from universal_memory.models import (
+from trellis.memory.errors import InsufficientEvidence
+from trellis.memory.models import (
     AgentKeyStatus,
     ApiKeyInfo,
     Brief,
@@ -65,11 +66,12 @@ from universal_memory.models import (
     WorkspaceInfo,
     WorkspaceMemberInfo,
 )
-from universal_memory.transport import Transport
+from trellis.memory.transport import HEADER_TENANT, Transport
 
-_current_context: ContextVar[MemoryContext | None] = ContextVar(
-    "universal_memory_ctx", default=None
-)
+#: the release that removes the aliases this SDK keeps for one release (ADR 0022)
+ALIASES_REMOVED_IN = "0.3.0"
+
+_current_context: ContextVar[MemoryContext | None] = ContextVar("trellis.memory_ctx", default=None)
 
 
 def current_context() -> MemoryContext | None:
@@ -142,12 +144,24 @@ class MemoryContext:
         self._client = client
         self.scope = scope
         self.chat = ChatAPI(self)
-        self.files = FilesAPI(self)
+        self.documents = DocumentsAPI(self)
         self.graph = GraphAPI(self)
         self.briefs = BriefsAPI(self)
         self.tools = ToolsAPI(self)
         self.runs = RunsAPI(self)
         self._token: Any = None
+
+    @property
+    def files(self) -> DocumentsAPI:
+        """Deprecated spelling of :attr:`documents` (ADR 0022); removed in
+        ``ALIASES_REMOVED_IN``."""
+        warnings.warn(
+            "MemoryContext.files is deprecated; use MemoryContext.documents "
+            f"(removed in {ALIASES_REMOVED_IN})",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.documents
 
     # -- context manager: propagate via contextvars ---------------------
     async def __aenter__(self) -> Self:
@@ -347,7 +361,9 @@ class MemoryContext:
 
     # -- plumbing -------------------------------------------------------
     def _scope_payload(self) -> dict[str, Any]:
-        return self.scope.model_dump(mode="json", exclude_none=True)
+        # trace_id travels as traceparent (or as the correlation id): the body field is
+        # deprecated on the service and is not sent
+        return self.scope.model_dump(mode="json", exclude_none=True, exclude={"trace_id"})
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await self._client.transport.request(method, path, scope=self.scope, **kwargs)
@@ -405,7 +421,7 @@ class ChatAPI:
         ack = await self._message("USER", content, idempotency_key=idempotency_key, **metadata)
         if attachments:
             for att in attachments:
-                await self._ctx.files.add(att, message_id=ack.message_id)
+                await self._ctx.documents.add(att, message_id=ack.message_id)
         return ack
 
     async def assistant(
@@ -486,7 +502,9 @@ class ChatAPI:
         return MessageAck.model_validate(data)
 
 
-class FilesAPI:
+class DocumentsAPI:
+    """Documents ingested into RAG memory: upload, status, readiness."""
+
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
 
@@ -519,7 +537,7 @@ class FilesAPI:
         form_digest = hashlib.blake2b(fields.encode(), digest_size=6).hexdigest()
         tenant = self._ctx.scope.tenant_id or ""
         key = idempotency_key or f"file-{tenant}-{digest}-{form_digest}"
-        form = {"scope": self._ctx.scope.model_dump_json(exclude_none=True)}
+        form = {"scope": self._ctx.scope.model_dump_json(exclude_none=True, exclude={"trace_id"})}
         if message_id:
             form["message_id"] = message_id
         if title:
@@ -529,7 +547,11 @@ class FilesAPI:
         if metadata:
             form["custom_metadata"] = json.dumps(metadata)
         result = await self._ctx._request(
-            "POST", "/v1/files", files={"file": (name, data, mtype)}, data=form, idempotency_key=key
+            "POST",
+            "/v1/documents",
+            files={"file": (name, data, mtype)},
+            data=form,
+            idempotency_key=key,
         )
         return FileHandle.model_validate(result)
 
@@ -655,7 +677,7 @@ class ToolsAPI:
     ) -> ToolResult:
         data = await self._ctx._request(
             "POST",
-            "/v1/tools/record",
+            "/v1/tools/invocations",
             json={
                 "scope": self._ctx._scope_payload(),
                 "tool": tool,
@@ -826,7 +848,7 @@ class TenantAPI:
 
     def __init__(self, client: MemoryClient, *, tenant_id: str | None = None) -> None:
         self._t = client.transport
-        self._headers = {"X-Memory-Tenant": tenant_id} if tenant_id else {}
+        self._headers = {HEADER_TENANT: tenant_id} if tenant_id else {}
         self.keys = KeysAPI(self)
         self.workspaces = WorkspacesAPI(self)
         self.groups = GroupsAPI(self)
@@ -960,3 +982,7 @@ class GroupsAPI:
     async def members(self, group_id: str) -> list[GroupMemberInfo]:
         data = await self._tenant._request("GET", f"/v1/groups/{group_id}/members")
         return [GroupMemberInfo.model_validate(m) for m in data]
+
+
+#: Deprecated name of :class:`DocumentsAPI` (ADR 0022); removed in ``ALIASES_REMOVED_IN``.
+FilesAPI = DocumentsAPI

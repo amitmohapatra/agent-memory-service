@@ -13,7 +13,7 @@ from tests.e2e.conftest import sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 Q = "Why did Adjusted EBITDA increase despite lower revenue?"
 GOOD = "Adjusted EBITDA increased to EUR 98 million from EUR 81 million, despite lower revenue."
 BAD = "Adjusted EBITDA increased to EUR 150 million from EUR 81 million."
@@ -34,7 +34,7 @@ def _upload(client, scope: dict[str, str]) -> str:
         json={"scope": scope, "role": "USER", "content": "here is the FY26 report"},
     ).json()
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=H,
         files={"file": ("acme_fy26_annual_report.md", FIXTURE.read_bytes(), "text/markdown")},
         data={"scope": json.dumps(scope), "message_id": msg["message_id"], "title": "ACME FY26"},
@@ -59,7 +59,7 @@ def test_verify_over_http(client) -> None:
     assert grounding["per_claim_hallucination_rate"] == 0.5
     assert grounding["representative"] is False and grounding["nli_provider"] == "lexical-nli-v2"
     assert grounding["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["item_id"]
-    assert "X-Memory-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
+    assert "X-Trellis-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
     # the plain bundle is unchanged (the report is attached to the response only)
     plain = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q}).json()
     assert plain["evidence"]["grounding"] is None and plain["bundle_id"] == bundle["bundle_id"]
@@ -99,7 +99,7 @@ def test_verify_over_http(client) -> None:
     assert r.json()["claims"][0]["verdict"] == "unsupported"
     assert r.json()["claims"][0]["method"] == "citation"
 
-    # validation: exactly one evidence source; unknown bundle; error envelope
+    # validation: exactly one evidence source; unknown bundle; problem details
     for payload in (
         {"scope": scope, "answer": GOOD},
         {"scope": scope, "answer": GOOD, "query": Q, "items": items},
@@ -107,11 +107,11 @@ def test_verify_over_http(client) -> None:
         {"scope": scope, "answer": "", "query": Q},
     ):
         r = client.post("/v1/verify", headers=H, json=payload)
-        assert r.status_code == 422 and r.json()["error"]["code"] == "VALIDATION", payload
+        assert r.status_code == 422 and r.json()["code"] == "VALIDATION", payload
     r = client.post(
         "/v1/verify", headers=H, json={"scope": scope, "answer": GOOD, "bundle_id": "nope"}
     )
-    assert r.status_code == 404 and r.json()["error"]["code"] == "NOT_FOUND"
+    assert r.status_code == 404 and r.json()["code"] == "NOT_FOUND"
     assert (
         client.post("/v1/verify", json={"scope": scope, "answer": GOOD, "query": Q}).status_code
         == 401
@@ -120,7 +120,7 @@ def test_verify_over_http(client) -> None:
     # another user cannot verify against this user's document: no evidence, nothing supported
     other = client.post(
         "/v1/verify",
-        headers={**H, "X-Memory-User": "u2"},
+        headers={**H, "X-Trellis-User": "u2"},
         json={"scope": {}, "answer": GOOD, "query": Q},
     )
     assert other.status_code == 200 and other.json()["evidence_count"] == 0
@@ -128,7 +128,7 @@ def test_verify_over_http(client) -> None:
     # nor by the bundle handle of the other tenant
     r = client.post(
         "/v1/verify",
-        headers={**H, "X-Memory-Tenant": "globex"},
+        headers={**H, "X-Trellis-Tenant": "globex"},
         json={"scope": {}, "answer": GOOD, "bundle_id": bundle["bundle_id"]},
     )
     assert r.status_code == 404
@@ -155,7 +155,7 @@ async def test_verify_through_the_sdk(app, client) -> None:
 
 
 async def test_sdk_inline_verification_preserves_generated_provenance(app, client) -> None:
-    from universal_memory.models import ContextItem
+    from trellis.memory.models import ContextItem
 
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1")

@@ -16,7 +16,7 @@ import pytest
 from memory_service.api.app import create_app
 from tests.agent.conftest import BOOTSTRAP, sdk
 from tests.conftest import PG_AVAILABLE, _test_overrides
-from universal_memory import MemoryError
+from trellis.memory import MemoryError
 
 pytestmark = pytest.mark.e2e
 PLATFORM = {"X-API-Key": BOOTSTRAP}
@@ -70,7 +70,7 @@ async def test_roles_and_tenants_are_enforced_on_administration(app, running) ->
     # an admin key naming another tenant is refused, not silently redirected
     r = running.post(
         "/v1/workspaces",
-        headers=_admin_headers(acme.admin_key.token, **{"X-Memory-Tenant": "globex"}),
+        headers=_admin_headers(acme.admin_key.token, **{"X-Trellis-Tenant": "globex"}),
         json={"name": "Finance"},
     )
     assert r.status_code == 403, r.text
@@ -78,7 +78,7 @@ async def test_roles_and_tenants_are_enforced_on_administration(app, running) ->
     assert (
         running.post(
             "/v1/workspaces",
-            headers={**PLATFORM, "X-Memory-Tenant": "globex"},
+            headers={**PLATFORM, "X-Trellis-Tenant": "globex"},
             json={"name": "Ops"},
         ).status_code
         == 201
@@ -89,7 +89,7 @@ async def test_roles_and_tenants_are_enforced_on_administration(app, running) ->
         await platform.bind(tenant_id="globex", user_id="u1").recall("anything")
     assert no_memory.value.status == 403
     # tenants are separate even for the platform's own listing of keys
-    listed = running.get("/v1/keys", headers={**PLATFORM, "X-Memory-Tenant": "acme"}).json()
+    listed = running.get("/v1/keys", headers={**PLATFORM, "X-Trellis-Tenant": "acme"}).json()
     assert {k["tenant_id"] for k in listed} == {"acme"} and globex.tenant.tenant_id == "globex"
 
 
@@ -202,7 +202,7 @@ async def test_two_onboardings_of_one_id_at_once_yield_one_tenant_and_one_409(ap
     assert len(created) == 1 and len(refused) == 2, results
     assert {r.status for r in refused} == {409}
     assert len(await platform.admin.tenants()) == 1
-    keys = running.get("/v1/keys", headers={**PLATFORM, "X-Memory-Tenant": "acme"}).json()
+    keys = running.get("/v1/keys", headers={**PLATFORM, "X-Trellis-Tenant": "acme"}).json()
     assert len(keys) == 1, "the losers issued no admin key"
 
 
@@ -275,7 +275,7 @@ async def test_a_retried_onboarding_replays_the_tenant_and_never_the_admin_token
     assert again.status_code == 201 and again.headers.get("Idempotent-Replayed") == "true"
     assert again.json()["admin_key"]["key_id"] == first.json()["admin_key"]["key_id"]
     assert again.json()["admin_key"]["token"] is None, "the secret is shown exactly once"
-    listed = running.get("/v1/keys", headers={**PLATFORM, "X-Memory-Tenant": "acme"}).json()
+    listed = running.get("/v1/keys", headers={**PLATFORM, "X-Trellis-Tenant": "acme"}).json()
     assert len(listed) == 1, "one tenant, one admin key"
     token = first.json()["admin_key"]["token"]
     assert running.get("/v1/keys", headers={"X-API-Key": token}).status_code == 200
@@ -291,7 +291,7 @@ async def test_the_platform_cannot_issue_a_key_for_a_suspended_tenant(app, runni
     await platform.admin.update_tenant("acme", status="suspended")
     r = running.post(
         "/v1/keys",
-        headers={**PLATFORM, "X-Memory-Tenant": "acme"},
+        headers={**PLATFORM, "X-Trellis-Tenant": "acme"},
         json={"role": "service", "name": "h"},
     )
     assert r.status_code == 409, r.text
@@ -387,7 +387,7 @@ async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running)
     thread = await harness.bind(user_id="u3").chat.create(title="mine")  # own thread, no team
     planted = running.post(
         "/v1/messages",
-        headers={"X-API-Key": token, "X-Memory-User": "u3", "X-Memory-Workspace": "finance"},
+        headers={"X-API-Key": token, "X-Trellis-User": "u3", "X-Trellis-Workspace": "finance"},
         json={
             "scope": {"thread_id": thread.thread_id, "session_id": "ses_1", "turn_id": "trn_1"},
             "role": "USER",
@@ -397,8 +397,8 @@ async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running)
     )
     assert planted.status_code == 403, planted.text
     tool = running.post(
-        "/v1/tools/record",
-        headers={"X-API-Key": token, "X-Memory-User": "u3", "X-Memory-Workspace": "finance"},
+        "/v1/tools/invocations",
+        headers={"X-API-Key": token, "X-Trellis-User": "u3", "X-Trellis-Workspace": "finance"},
         json={
             "scope": {"agent_id": "bot", "agent_run_id": "run_1"},
             "tool": "search",
@@ -411,7 +411,7 @@ async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running)
     member = harness.bind(user_id="u1", workspace_id="finance")
     ok = running.post(
         "/v1/messages",
-        headers={"X-API-Key": token, "X-Memory-User": "u1", "X-Memory-Workspace": "finance"},
+        headers={"X-API-Key": token, "X-Trellis-User": "u1", "X-Trellis-Workspace": "finance"},
         json={
             "scope": {
                 "thread_id": (await member.chat.create(title="ours")).thread_id,
@@ -437,10 +437,12 @@ async def test_only_members_ingest_documents_into_a_team(app, running) -> None:
     doc = ("plan.md", b"# Planted\n", "text/markdown")
     for user in ("u3", "v1"):
         with pytest.raises(MemoryError) as refused:
-            await harness.bind(user_id=user, workspace_id="finance").files.add(doc)
+            await harness.bind(user_id=user, workspace_id="finance").documents.add(doc)
         assert refused.value.status == 403, user
-    assert (await harness.bind(user_id="u1", workspace_id="finance").files.add(doc)).document_id
-    assert (await harness.bind(user_id="u3", workspace_id="anchor-only").files.add(doc)).document_id
+    assert (await harness.bind(user_id="u1", workspace_id="finance").documents.add(doc)).document_id
+    assert (
+        await harness.bind(user_id="u3", workspace_id="anchor-only").documents.add(doc)
+    ).document_id
 
 
 async def test_an_admin_cannot_revoke_another_tenant_s_key(app, running) -> None:
@@ -458,11 +460,12 @@ async def test_an_admin_cannot_revoke_another_tenant_s_key(app, running) -> None
 
 async def test_the_platform_cannot_administer_a_tenant_nobody_onboarded(app, running) -> None:
     r = running.post(
-        "/v1/workspaces", headers={**PLATFORM, "X-Memory-Tenant": "ghost"}, json={"name": "x"}
+        "/v1/workspaces", headers={**PLATFORM, "X-Trellis-Tenant": "ghost"}, json={"name": "x"}
     )
     assert r.status_code == 404, r.text
     assert (
-        running.get("/v1/keys", headers={**PLATFORM, "X-Memory-Tenant": "ghost"}).status_code == 404
+        running.get("/v1/keys", headers={**PLATFORM, "X-Trellis-Tenant": "ghost"}).status_code
+        == 404
     )
 
 
@@ -479,7 +482,7 @@ async def test_the_registry_reloads_suspensions_and_quotas_from_the_store(app, r
     assert registry.quota_for(None, key.token) == ("acme", 3)
     r = running.post(
         "/v1/recall",
-        headers={"X-API-Key": "dev-key", "X-Memory-Tenant": "acme"},
+        headers={"X-API-Key": "dev-key", "X-Trellis-Tenant": "acme"},
         json={"scope": {"user_id": "u1"}, "query": "anything"},
     )
     assert r.status_code in (401, 403), "a suspended tenant is refused whatever the credential"
@@ -527,8 +530,8 @@ async def test_a_workspace_upload_is_gated_not_500(app, running) -> None:
         # before any audience is minted, and that early return is not what is under test
         body = f"# plan for {user} in {workspace}\n".encode()
         r = running.post(
-            "/v1/files",
-            headers={"X-API-Key": token, "X-Memory-User": user, "X-Memory-Workspace": workspace},
+            "/v1/documents",
+            headers={"X-API-Key": token, "X-Trellis-User": user, "X-Trellis-Workspace": workspace},
             files={"file": ("plan.md", body, "text/markdown")},
             data={"visibility": "WORKSPACE"},
         )
@@ -538,8 +541,8 @@ async def test_a_workspace_upload_is_gated_not_500(app, running) -> None:
     assert upload("u1", "finance") in (200, 201, 202)
     assert upload("u1", "ghost") == 404
     r = running.post(
-        "/v1/files",
-        headers={"X-API-Key": token, "X-Memory-User": "u1"},
+        "/v1/documents",
+        headers={"X-API-Key": token, "X-Trellis-User": "u1"},
         files={"file": ("plan.md", b"# x\n", "text/markdown")},
         data={"visibility": "WORKSPACE"},
     )
@@ -550,8 +553,8 @@ async def test_a_workspace_tool_record_without_an_anchor_is_422_not_500(app, run
     acme = await sdk(app, BOOTSTRAP).admin.create_tenant("Acme", tenant_id="acme")
     token = (await sdk(app, acme.admin_key.token).tenant.keys.issue("service", "h")).token
     r = running.post(
-        "/v1/tools/record",
-        headers={"X-API-Key": token, "X-Memory-User": "u1"},
+        "/v1/tools/invocations",
+        headers={"X-API-Key": token, "X-Trellis-User": "u1"},
         json={
             "scope": {"agent_id": "bot", "agent_run_id": "run_1"},
             "tool": "search",
@@ -589,8 +592,8 @@ async def test_a_document_keeps_the_audience_its_uploader_chose_inside_a_team(ap
 
     def upload(user: str, visibility: str) -> str:
         r = running.post(
-            "/v1/files",
-            headers={"X-API-Key": token, "X-Memory-User": user, "X-Memory-Workspace": "finance"},
+            "/v1/documents",
+            headers={"X-API-Key": token, "X-Trellis-User": user, "X-Trellis-Workspace": "finance"},
             files={
                 "file": ("notes.md", f"# {visibility} notes of {user}\n".encode(), "text/markdown")
             },
@@ -601,7 +604,7 @@ async def test_a_document_keeps_the_audience_its_uploader_chose_inside_a_team(ap
 
     private = upload("u1", "PRIVATE")
     shared = upload("u1", "WORKSPACE")
-    peer = {"X-API-Key": token, "X-Memory-User": "u2", "X-Memory-Workspace": "finance"}
+    peer = {"X-API-Key": token, "X-Trellis-User": "u2", "X-Trellis-Workspace": "finance"}
     assert running.get(f"/v1/documents/{shared}", headers=peer).status_code == 200
     assert running.get(f"/v1/documents/{private}", headers=peer).status_code in (403, 404), (
         "a private upload inside the team is not the team's"

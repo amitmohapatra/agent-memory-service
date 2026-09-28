@@ -13,7 +13,7 @@ from tests.e2e.conftest import sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 
 
 def _scope() -> dict[str, str]:
@@ -32,7 +32,7 @@ def test_graph_query_and_context_facts(client) -> None:
         json={"scope": scope, "role": "USER", "content": "report attached"},
     ).json()
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=H,
         files={"file": ("acme_fy26_annual_report.md", FIXTURE.read_bytes(), "text/markdown")},
         data={"scope": json.dumps(scope), "message_id": msg["message_id"], "title": "ACME FY26"},
@@ -63,7 +63,7 @@ def test_graph_query_and_context_facts(client) -> None:
     # other user: nothing (thread-scoped document)
     r = client.post(
         "/v1/graph/query",
-        headers={**H, "X-Memory-User": "u2"},
+        headers={**H, "X-Trellis-User": "u2"},
         json={"scope": {}, "entities": ["Adjusted EBITDA"]},
     )
     assert r.status_code == 200 and r.json()["facts"] == [] and r.json()["matched"] == []

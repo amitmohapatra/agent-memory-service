@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from tests.e2e.conftest import sdk_client
-from universal_memory import ToolCall
+from trellis.memory import ToolCall
 
 pytestmark = pytest.mark.e2e
 

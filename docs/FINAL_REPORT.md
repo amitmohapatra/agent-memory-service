@@ -31,7 +31,7 @@ segments with checksums and a reconciler, Docling-backed document parsing into a
 graph, hybrid retrieval (dense + BM25, RRF, bounded rerank) with graph, expansion and
 verification stages, native rule-based memory intelligence with temporal consolidation,
 a PostgreSQL knowledge graph, multi-agent visibility semantics, a Python SDK
-(`universal-memory`) and a LangGraph adapter. Fifteen ADRs record the decisions
+(`trellis-memory`) and a LangGraph adapter. Fifteen ADRs record the decisions
 (`docs/adr/`); `docs/MILESTONES.md` lists what each milestone delivered.
 
 ## Gate evidence (from `benchmark/results/`)

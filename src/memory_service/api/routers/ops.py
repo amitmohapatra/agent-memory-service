@@ -7,7 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 
-from memory_service.api.errors import error_responses
+from memory_service.__about__ import __version__
 from memory_service.application.container import Container
 from memory_service.config import constants
 from memory_service.observability.metrics import render_metrics
@@ -44,8 +44,8 @@ class ReadyResponse(BaseModel):
 
 
 class VersionResponse(BaseModel):
-    service: str = Field(..., examples=["memory-service"])
-    version: str = Field(..., examples=["0.1.0"])
+    service: str = Field(..., examples=[constants.SERVICE_NAME])
+    version: str = Field(..., examples=[__version__])
     api_version: str = Field(..., examples=["v1"])
     environment: str = Field(..., examples=["dev"])
     degraded: list[str] = Field(
@@ -85,7 +85,12 @@ async def live() -> LiveResponse:
     description=(
         "Verifies mandatory backing stores. Optional providers never fail readiness when disabled."
     ),
-    responses={**error_responses(503)},
+    responses={
+        503: {
+            "model": ReadyResponse,
+            "description": "not_ready: a mandatory store is down (the same body, status 503)",
+        }
+    },
 )
 async def ready(request: Request, response: Response) -> ReadyResponse:
     results = await _container(request).readiness()

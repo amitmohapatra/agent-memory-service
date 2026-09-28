@@ -219,7 +219,7 @@ and the gold turns' rank in the dense-only, sparse-only and fused lists before t
    - Verify: `uv run pytest tests/contract tests/e2e -q`; new contract tests: POST /v1/tools with visibility='NOPE' -> 422; POST /v1/recall kinds=['fact'] -> 422.
 
 9. **Type the response side: query_type -> QueryType, representation -> Representation, MemoryResponse enums, DocumentResponse.status -> DocumentStatus, JobResponse.status -> JobStatus, ClaimVerdictBody.verdict/method -> Literal, VerifyResponse.source -> Literal, FactOut.status -> TemporalStatus, RecallResponse.evidence -> EvidenceReport, ContextResponse lists -> typed ContextItem models and extra='forbid'; regenerate docs/openapi.json and move the SDK's str fields to Literal.**
-   - Where: src/memory_service/api/routers/v1/retrieval.py:80, :108, :137-141, :183; routers/v1/memory.py:66; sdk/python/src/universal_memory/client.py:198,200,388,539; sdk/python/src/universal_memory/models.py:155,200; docs/openapi.json
+   - Where: src/memory_service/api/routers/v1/retrieval.py:80, :108, :137-141, :183; routers/v1/memory.py:66; sdk/python/src/trellis/memory/client.py:198,200,388,539; sdk/python/src/trellis/memory/models.py:155,200; docs/openapi.json
    - Why: The OpenAPI contract leaks closed sets as str and ContextResponse allows extra keys; the SDK already assumes Literals for verdict and status.
    - Expected: The schema becomes a real contract the harness and SDK can rely on.
    - Latency: none measurable

@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from universal_memory import (
+from trellis.memory import (
     AuthorizationError,
     InsufficientEvidence,
     MemoryClient,
@@ -145,20 +145,20 @@ async def tour() -> int:
 
     async def ingest() -> str:
         salt = f"\n\n<!-- tour {RUN} -->\n".encode()
-        handle = await user.files.add(
+        handle = await user.documents.add(
             FIXTURES / "acme_fy26_annual_report.md", title="ACME FY26 Annual Report"
         )
-        handle2 = await user.files.add(
+        handle2 = await user.documents.add(
             (FIXTURES / "globex_fy26_annual_report.md").read_bytes() + salt,
             filename="globex_fy26_annual_report.md",
             media_type="text/markdown",
             title="GLOBEX FY26 Annual Report",
         )
-        doc = await user.files.wait_ready(handle.document_id)
-        doc2 = await user.files.wait_ready(handle2.document_id)
+        doc = await user.documents.wait_ready(handle.document_id)
+        doc2 = await user.documents.wait_ready(handle2.document_id)
         assert doc.status == "READY" and doc2.status == "READY", (doc.status, doc2.status)
         assert doc.archive_status == "ARCHIVED"
-        dup = await user.files.add(
+        dup = await user.documents.add(
             FIXTURES / "acme_fy26_annual_report.md", title="duplicate upload"
         )
         assert dup.document_id == handle.document_id and dup.deduplicated
@@ -168,7 +168,7 @@ async def tour() -> int:
             assert job.status in ("SUCCEEDED", "PENDING", "RUNNING")
         return f"acme={handle.document_id} globex={handle2.document_id} (same bytes -> dedup)"
 
-    await c.step("POST /v1/files, GET /v1/documents/{id}, GET /v1/jobs/{id}", ingest)
+    await c.step("POST /v1/documents, GET /v1/documents/{id}, GET /v1/jobs/{id}", ingest)
 
     # ---------------------------------------------------------------- retrieval
     print("\n## Retrieval (recall, context, evidence)")

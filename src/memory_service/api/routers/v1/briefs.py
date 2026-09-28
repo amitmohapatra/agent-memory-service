@@ -68,8 +68,7 @@ async def create_brief(
         request,
         container,
         ctx,
-        key=request.headers.get("Idempotency-Key")
-        or default_idempotency_key(ctx, "brief", ctx.request_id),
+        key=request.state.idempotency_key or default_idempotency_key(ctx, "brief", ctx.request_id),
         payload={"scope": brief_scope(ctx), "spec": body.spec.model_dump(mode="json")},
         handler=write,
     )
@@ -100,7 +99,7 @@ async def update_brief(
         request,
         container,
         ctx,
-        key=request.headers.get("Idempotency-Key")
+        key=request.state.idempotency_key
         or default_idempotency_key(ctx, "brief-update", ctx.request_id),
         payload={
             "scope": brief_scope(ctx),

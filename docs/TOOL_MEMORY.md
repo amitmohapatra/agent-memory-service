@@ -26,7 +26,7 @@ Companion to `TARGET_STACK.md`.
 > service exists to prevent.
 >
 > What remains is the part the model genuinely cannot know: **what worked here before.**
-> `POST /v1/tools/record` writes an invocation, `POST /v1/runs/{id}/outcome` labels the run,
+> `POST /v1/tools/invocations` writes an invocation, `POST /v1/runs/{id}/outcome` labels the run,
 > and `POST /v1/tools/plan` returns the mined procedure with its support count, success rate,
 > argument bindings and observed failure modes. Sections 30.0, 30.2, 30.4 and 30.6 below
 > describe the removed endpoints and are kept as design history, not as current API.
@@ -198,7 +198,7 @@ agent framework entirely. The memory service supports both paths:
   virtual key's allow-list as the `available_tools` set.
 - **Agent mode path.** When Bifrost executes tools autonomously the app never sees the calls,
   so records come from Bifrost's side: a Bifrost plugin (its plugin hook system) or its
-  OTel/log export posts each tool execution to `POST /v1/tools/record` with the virtual key
+  OTel/log export posts each tool execution to `POST /v1/tools/invocations` with the virtual key
   → tenant/agent mapping. Cache lookups are not possible on this path (Bifrost decides), so
   `cacheable` policies apply only to explicit execution; the docs say so.
 - **Governance stays in one place.** Which tools an agent may call is decided by the Bifrost

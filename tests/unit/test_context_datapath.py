@@ -658,7 +658,7 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     with TestClient(app, raise_server_exceptions=False) as c:
         response = c.post(
             "/v1/context",
-            headers={"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"},
+            headers={"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"},
             json={"scope": {"thread_id": "thr_1"}, "query": QUERY},
         )
 

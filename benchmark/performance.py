@@ -8,7 +8,7 @@ corpus of ``--copies`` fixture documents plus a chat history:
     cached_context_p95_ms   POST /v1/context        (same query again -> bundle cache hit)
     recall_p95_ms           POST /v1/recall         (hybrid + graph + verification)
     context_bundle_p95_ms   POST /v1/context        (uncached: retrieval + assembly)
-    file_accept_p95_ms      POST /v1/files          (stage + checksum + durable ack)
+    file_accept_p95_ms      POST /v1/documents      (stage + checksum + durable ack)
 
 Every number carries the environment it was measured in (``providers`` and
 ``representative``): with the hash embedding and local Qdrant the figures bound the

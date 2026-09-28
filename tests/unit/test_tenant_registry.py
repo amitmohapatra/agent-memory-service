@@ -203,7 +203,7 @@ async def _status(
 
     headers = [(b"x-api-key", key.encode())]
     if tenant is not None:
-        headers.append((b"x-memory-tenant", tenant.encode()))
+        headers.append((b"x-trellis-tenant", tenant.encode()))
     scope = {"type": "http", "path": "/v1/recall", "headers": headers, "app": app, "state": {}}
     await middleware(scope, receive, send)
     start = next(m for m in sent if m.get("type") == "http.response.start")

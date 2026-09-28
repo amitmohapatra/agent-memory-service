@@ -8,7 +8,7 @@ and worker processes sharing PostgreSQL.
 ```
                        +---------------------------+
    Plain Python  ----> |                           |
-   REST client   ----> |   universal-memory SDK    | ----> Memory Service (FastAPI)
+   REST client   ----> |   trellis-memory SDK      | ----> trellis-memory service (FastAPI)
    LangGraph adapter-> |                           |            |
                        +---------------------------+            v
                                                         application (use cases)
@@ -42,7 +42,7 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 | `application` | composition root (`Container`), use-case orchestration | domain, ports |
 | `modules/*` | feature slices: conversation, working_memory, ingestion, classification, extraction, dedup, consolidation, temporal, metadata, rag, document_context, graph, retrieval, context, summarization, reflection, lifecycle, archive, evaluation, imports | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
-| `api` | FastAPI routers, typed schemas with examples, error envelope, middleware, OpenAPI customization | application |
+| `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application |
 
 ## Data placement
 

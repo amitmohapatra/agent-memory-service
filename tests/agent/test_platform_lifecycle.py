@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from tests.agent.conftest import BOOTSTRAP, sdk
-from universal_memory import MemoryError
+from trellis.memory import MemoryError
 
 pytestmark = pytest.mark.e2e
 

@@ -12,7 +12,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from memory_service.__about__ import __version__
 from memory_service.api.errors import install_error_handlers
 from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddleware
-from memory_service.api.openapi import custom_openapi
+from memory_service.api.openapi import TITLE, custom_openapi, operation_id
 from memory_service.api.routers import ops
 from memory_service.application.container import Container, Overrides, build_container
 from memory_service.config import constants
@@ -72,12 +72,13 @@ def create_app(
             log.info("app.stopped")
 
     app = FastAPI(
-        title="Memory Service API",
+        title=TITLE,
         version=__version__,
         lifespan=lifespan,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        generate_unique_id_function=operation_id,
         # No default_response_class: naming one (ORJSONResponse, say) turns *off* FastAPI's
         # own fast path, which serialises a response model straight to JSON bytes through
         # pydantic's Rust core and never builds the intermediate dict. Both fastapi 0.141's
@@ -87,7 +88,7 @@ def create_app(
     app.state.settings = settings
     # Added innermost first, so the order a request meets them is the reverse: correlation
     # ids wrap everything, the rate limit sits inside them, and compression sits closest to
-    # the route - it acts on what the route produced, not on a 413 or a 429 envelope.
+    # the route - it acts on what the route produced, not on a 413 or a 429 problem.
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     app.add_middleware(
         RateLimitMiddleware,

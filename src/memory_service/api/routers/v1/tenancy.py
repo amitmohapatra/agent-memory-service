@@ -1,7 +1,7 @@
 """Tenant administration: keys, workspaces (teams), groups and the read audit.
 
 The tenant is the credential's own; the platform key may administer any tenant by naming it
-in ``X-Memory-Tenant``. Membership changes take effect on the next request: the authorization
+in ``X-Trellis-Tenant``. Membership changes take effect on the next request: the authorization
 tuples are written with the rows and the membership revision is bumped in the same unit of work.
 """
 

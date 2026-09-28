@@ -9,7 +9,7 @@ from memory_service.api.app import create_app
 
 pytestmark = pytest.mark.integration
 
-HEADERS = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme"}
+HEADERS = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme"}
 
 
 def test_version_reports_the_parser_that_is_actually_running(make_settings, make_overrides) -> None:

@@ -1,13 +1,17 @@
-"""Request middleware: correlation headers, timing, metrics, log context, body limit.
+"""Request middleware: ids and trace context, the body limit, rate limiting, the wire rules.
 
 Both middlewares are plain ASGI callables rather than ``BaseHTTPMiddleware`` subclasses.
 BaseHTTPMiddleware runs every request through an anyio task group with a memory-object
 stream between the two halves, which buys a ``Request``/``Response`` API and costs a task,
 two streams and a body round trip per request per middleware. At three workers and 20 rps
-that is pure event-loop overhead on the path being measured. The semantics below are the
-ones that were there before, to the header: the same ids, the same 413 envelope before the
-body is read, the same per-tenant window with the same burst, fail-open on a cache outage,
-the same 429 body and headers, and the same exemptions.
+that is pure event-loop overhead on the path being measured.
+
+``CorrelationMiddleware`` resolves the request, correlation and trace ids (W3C
+``traceparent`` in and out, ADR 0022), refuses a request whose scope or credential headers
+carry more than one value before anything reads them, answers the 413 before the body is
+read, and writes the id headers, the alias routes' ``Deprecation``/``Link`` headers and the
+LLM-token header on every response it sees. ``RateLimitMiddleware`` keeps the per-tenant
+window with its burst, fails open on a cache outage, and answers the 429 with its headers.
 """
 
 from __future__ import annotations
@@ -15,22 +19,42 @@ from __future__ import annotations
 import asyncio
 import time
 
-from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from memory_service.api.errors import build_problem, problem_response
+from memory_service.api.headers import (
+    AUTHORIZATION_HEADER,
+    CORRELATION_ID_HEADER,
+    IDEMPOTENCY_KEY_HEADER,
+    RATE_LIMIT_LIMIT_HEADER,
+    RATE_LIMIT_REMAINING_HEADER,
+    REQUEST_ID_HEADER,
+    RETRY_AFTER_HEADER,
+    correlation_headers,
+    deprecation_headers_for,
+    refuse_ambiguous_headers,
+    route_path,
+    scope_header,
+)
+from memory_service.config.constants import DEPRECATED_RESPONSE_HEADER_ALIASES, HEADERS
+from memory_service.domain.enums import ErrorCode
+from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.ids import is_valid_id, new_id
 from memory_service.domain.tenancy import bare_credential
 from memory_service.modules.llm.cost import start_llm_accounting
 from memory_service.observability.logging import bind_log_context, clear_log_context, get_logger
 from memory_service.observability.metrics import http_request_seconds, http_requests_total
-from memory_service.observability.tracing import current_trace_id
-
-HEADER_REQUEST_ID = "X-Request-ID"
-HEADER_TRACE_ID = "X-Trace-ID"
-HEADER_CORRELATION_ID = "X-Correlation-ID"
-HEADER_IDEMPOTENCY_KEY = "Idempotency-Key"
-HEADER_LLM_TOKENS = "X-Memory-LLM-Tokens"
+from memory_service.observability.tracing import (
+    TRACEPARENT_HEADER,
+    current_span_id,
+    current_trace_flags,
+    current_trace_id,
+    format_traceparent,
+    new_span_id,
+    new_trace_id,
+    parse_traceparent,
+)
 
 #: never counted, never logged, never rate limited: the probes an orchestrator runs
 QUIET_PATHS = ("/health/live", "/health/ready", "/metrics")
@@ -45,6 +69,27 @@ def _header_id(headers: Headers, name: str, kind: str) -> str:
     return new_id(kind)
 
 
+def _trace_context(headers: Headers) -> tuple[str, str]:
+    """The request's trace id and the ``traceparent`` the response will carry.
+
+    The exported trace wins when this process is tracing (its server span already continued
+    an incoming ``traceparent``); otherwise the caller's ``traceparent``, else a fresh id.
+    Never the request id, and never ``X-Trace-ID``, which is a response header: the one
+    request header that names a trace is the one the OpenTelemetry propagator reads too, and
+    it is read the way the propagator reads it (the first when a proxy sent two), so dev and
+    production behave the same (ADR 0022).
+    """
+    active = current_trace_id()
+    parent = parse_traceparent(headers.get(TRACEPARENT_HEADER))
+    if active:
+        trace_id, flags = active, current_trace_flags()
+    elif parent:
+        trace_id, flags = parent.trace_id, parent.flags
+    else:
+        trace_id, flags = new_trace_id(), "00"
+    return trace_id, format_traceparent(trace_id, current_span_id() or new_span_id(), flags)
+
+
 class CorrelationMiddleware:
     def __init__(self, app: ASGIApp, *, max_body_bytes: int) -> None:
         self.app = app
@@ -55,14 +100,19 @@ class CorrelationMiddleware:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
-        request_id = _header_id(headers, HEADER_REQUEST_ID, "request")
-        correlation_id = _header_id(headers, HEADER_CORRELATION_ID, "request")
-        trace_id = headers.get(HEADER_TRACE_ID) or current_trace_id() or request_id
+        request_id = _header_id(headers, REQUEST_ID_HEADER, "request")
+        correlation_id = _header_id(headers, CORRELATION_ID_HEADER, "request")
+        trace_id, traceparent = _trace_context(headers)
         state = scope.setdefault("state", {})
         state["request_id"] = request_id
         state["correlation_id"] = correlation_id
         state["trace_id"] = trace_id
-        state["idempotency_key"] = headers.get(HEADER_IDEMPOTENCY_KEY)
+        state["traceparent"] = traceparent
+        state["idempotency_key"] = headers.get(IDEMPOTENCY_KEY_HEADER)
+        path = scope["path"]
+        marks = deprecation_headers_for(
+            scope["method"], route_path(scope), scope.get("root_path") or ""
+        )
 
         content_length = headers.get("content-length")
         if (
@@ -70,17 +120,38 @@ class CorrelationMiddleware:
             and content_length.isdigit()
             and int(content_length) > self.max_body_bytes
         ):
-            response = JSONResponse(
-                status_code=413,
-                content={
-                    "error": {
-                        "code": "VALIDATION",
-                        "message": f"Body exceeds {self.max_body_bytes} bytes",
-                        "retryable": False,
-                        "trace_id": trace_id,
-                        "details": {},
-                    }
-                },
+            response = problem_response(
+                build_problem(
+                    code=ErrorCode.VALIDATION,
+                    message=f"Body exceeds {self.max_body_bytes} bytes",
+                    status=413,
+                    retryable=False,
+                    instance=path,
+                    trace_id=trace_id,
+                    request_id=request_id,
+                ),
+                headers={**correlation_headers(state), **marks},
+            )
+            await response(scope, receive, send)
+            return
+        try:
+            refuse_ambiguous_headers(headers)
+        except ValidationFailed as exc:
+            # Before the credential is verified and before any bucket is touched: a client
+            # must not name a tenant per request with values the context builder is about to
+            # refuse, and the limiter and the authenticator must key on one credential.
+            response = problem_response(
+                build_problem(
+                    code=exc.code,
+                    message=exc.message,
+                    status=exc.http_status,
+                    retryable=exc.retryable,
+                    instance=path,
+                    trace_id=trace_id,
+                    request_id=request_id,
+                    details=exc.details,
+                ),
+                headers={**correlation_headers(state), **marks},
             )
             await response(scope, receive, send)
             return
@@ -110,11 +181,15 @@ class CorrelationMiddleware:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 response_headers = MutableHeaders(scope=message)
-                response_headers[HEADER_REQUEST_ID] = request_id
-                response_headers[HEADER_TRACE_ID] = trace_id
-                response_headers[HEADER_CORRELATION_ID] = correlation_id
+                # from the state, not the locals: a body may have named the correlation id
+                # (build_context writes the effective one back), and the response must echo
+                # the id the logs carry
+                response_headers.update(correlation_headers(state))
+                response_headers.update(marks)
                 if llm_tokens.total:
-                    response_headers[HEADER_LLM_TOKENS] = str(llm_tokens.total)
+                    response_headers[HEADERS.llm_tokens] = str(llm_tokens.total)
+                    for alias in DEPRECATED_RESPONSE_HEADER_ALIASES.values():
+                        response_headers[alias] = str(llm_tokens.total)
                 record(message["status"])
             await send(message)
 
@@ -166,16 +241,19 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
-        api_key = bare_credential(headers.get("x-api-key") or headers.get("authorization") or "-")
+        api_key = bare_credential(
+            headers.get(HEADERS.api_key) or headers.get(AUTHORIZATION_HEADER) or "-"
+        )
         # A tenant's own quota, when the platform set one: read from this process, never
         # from a store, so the override costs the request nothing (modules/tenancy/registry.py).
         # The tenant is the header's, or the one the caller's key names. A tenant quota
         # applies even where the service default is off.
         registry = getattr(container, "services", {}).get("tenant_registry")
+        named = scope_header(headers, HEADERS.tenant)
         if registry is not None:
-            tenant, per_minute = registry.quota_for(headers.get("x-memory-tenant"), api_key)
+            tenant, per_minute = registry.quota_for(named, api_key)
         else:
-            tenant, per_minute = headers.get("x-memory-tenant") or "-", None
+            tenant, per_minute = named or "-", None
         if per_minute is None:
             per_minute = self.per_minute
         if per_minute <= 0:
@@ -194,21 +272,22 @@ class RateLimitMiddleware:
         limit = per_minute + self.burst
         if count > limit:
             retry_after = 60 - int(time.time() % 60)
-            response = JSONResponse(
-                status_code=429,
+            state = scope.get("state", {})
+            response = problem_response(
+                build_problem(
+                    code=ErrorCode.RATE_LIMIT,
+                    message="Too many requests for this tenant; retry after the window",
+                    status=429,
+                    retryable=True,
+                    instance=scope["path"],
+                    trace_id=state.get("trace_id"),
+                    request_id=state.get("request_id"),
+                    details={"limit_per_minute": per_minute, "window_seconds": 60},
+                ),
                 headers={
-                    "Retry-After": str(retry_after),
-                    "X-RateLimit-Limit": str(per_minute),
-                    "X-RateLimit-Remaining": "0",
-                },
-                content={
-                    "error": {
-                        "code": "RATE_LIMIT",
-                        "message": "Too many requests for this tenant; retry after the window",
-                        "retryable": True,
-                        "trace_id": scope.get("state", {}).get("trace_id", ""),
-                        "details": {"limit_per_minute": per_minute, "window_seconds": 60},
-                    }
+                    RETRY_AFTER_HEADER: str(retry_after),
+                    RATE_LIMIT_LIMIT_HEADER: str(per_minute),
+                    RATE_LIMIT_REMAINING_HEADER: "0",
                 },
             )
             await response(scope, receive, send)
@@ -217,8 +296,8 @@ class RateLimitMiddleware:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 response_headers = MutableHeaders(scope=message)
-                response_headers["X-RateLimit-Limit"] = str(per_minute)
-                response_headers["X-RateLimit-Remaining"] = str(max(0, limit - count))
+                response_headers[RATE_LIMIT_LIMIT_HEADER] = str(per_minute)
+                response_headers[RATE_LIMIT_REMAINING_HEADER] = str(max(0, limit - count))
             await send(message)
 
         await self.app(scope, receive, send_wrapper)

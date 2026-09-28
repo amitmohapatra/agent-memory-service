@@ -1,4 +1,4 @@
-# Memory Service
+# trellis-memory
 
 **Durable, scope-aware memory for AI agents.** One service your agents talk to so they
 remember what happened, what the user prefers, what the documents say, and which tools
@@ -8,7 +8,7 @@ Works with any framework (LangGraph today, plain Python anywhere) because the co
 nothing about your agent library.
 
 ```python
-from universal_memory import MemoryClient
+from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 
@@ -106,7 +106,7 @@ The API is on **http://localhost:8080** — interactive docs at `/docs`, health 
 `/health/ready`. The dev API key is `dev-key`.
 
 ```bash
-pip install -e sdk/python        # the universal-memory SDK
+pip install -e sdk/python        # the trellis-memory SDK
 ```
 
 ### What actually runs
@@ -176,7 +176,7 @@ setting; `serve.py` prints which mode it is in, and any benchmark produced that 
 Every call happens inside a scope. Bind it once per request and forget about it:
 
 ```python
-from universal_memory import MemoryClient
+from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 
@@ -249,8 +249,8 @@ decide what, if anything, is worth keeping.
 ### Add documents
 
 ```python
-doc = await ctx.files.add(open("fy26.pdf", "rb"), title="FY26 annual report")
-await ctx.files.wait_ready(doc.document_id)
+doc = await ctx.documents.add(open("fy26.pdf", "rb"), title="FY26 annual report")
+await ctx.documents.wait_ready(doc.document_id)
 ```
 
 The file is parsed into sections, tables and footnotes with page numbers preserved. After
@@ -591,12 +591,43 @@ configuration changes. Native paths remain available. An explicitly assisted bri
 refresh if no valid cited model result is available; it does not silently substitute native
 text. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
+### Headers, tracing and errors
+
+The SDK sends these; a client without the SDK sends them itself (`docs/openapi.json` names
+them on every operation, ADR 0022 explains them):
+
+| Header | Purpose |
+|---|---|
+| `X-API-Key` (or `Authorization: Bearer`) | The calling service's credential. |
+| `X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User` | Who the request acts for. In `api_key` mode the tenant comes from the key. The pre-0.2 spellings `X-Memory-*` are read until 0.3.0; a request carrying both spellings, or either more than once, with different values is refused before the credential is read, so a gateway that stamps these headers must strip both spellings. |
+| `traceparent` | W3C Trace Context. Sent when the agent is tracing; the response carries the trace the request ran under, and `X-Trace-ID` repeats its 32-hex trace id. |
+| `X-Request-ID` | One id per call, kept across the SDK's retries; echoed when it is an id (a letter or digit, then letters, digits and `._:-`, at most 200 characters), else replaced. |
+| `X-Correlation-ID` | An opaque id of yours (a letter or digit, then letters, digits and `._:-`, at most 200 characters), echoed. A `correlation_id` in the body scope wins over the header. `bind(trace_id=...)` with a non-W3C value lands here. |
+| `X-Trace-ID` | Response: the 32-hex trace id the request ran under, the same one `traceparent` carries. |
+| `Idempotency-Key` | Makes a write safe to retry. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
+| `X-Trellis-LLM-Tokens` | Response: LLM tokens the request spent, when it spent any (also sent as `X-Memory-LLM-Tokens` until 0.3.0). |
+
+Every error is an RFC 9457 problem (`application/problem+json`):
+
+```json
+{"type": "urn:trellis:problem:scope-denied", "title": "Outside the caller's scope",
+ "status": 403, "detail": "thread thr_01J... is outside the caller's scope",
+ "instance": "/v1/recall", "code": "SCOPE_DENIED", "retryable": false,
+ "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "request_id": "req_01J...", "details": {}}
+```
+
+The SDK raises one exception class per `code` (`AuthorizationError`, `NotFoundError`,
+`RateLimitedError`, ...) with `trace_id` and `request_id` on it, `TimeoutError` or
+`DependencyUnavailableError` (status 0) when no response came, and retries `retryable`
+errors on reads and idempotent writes; a connection that never opened is retried for any
+call, a timeout only when the write is idempotent.
+
 ---
 
 ## How it works
 
 ```
-your agent ──► universal-memory SDK ──► Memory Service (FastAPI)
+your agent ──► trellis-memory SDK ──► trellis-memory service (FastAPI)
                                               │
                             ┌─────────────────┼──────────────────┐
                          domain            modules            ports

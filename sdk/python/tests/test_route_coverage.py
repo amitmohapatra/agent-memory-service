@@ -11,9 +11,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 OPENAPI = ROOT / "docs" / "openapi.json"
-CLIENT = ROOT / "sdk" / "python" / "src" / "universal_memory" / "client.py"
+CLIENT = ROOT / "sdk" / "python" / "src" / "trellis" / "memory" / "client.py"
 
-# ops routes are reached through MemoryClient.health()/version(); /metrics is for Prometheus
+# ops routes are reached through MemoryClient.health()/version(); /metrics is for Prometheus.
+# Deprecated routes are one-release aliases (ADR 0022): the SDK speaks the canonical noun only.
 EXEMPT = {("GET", "/metrics")}
 
 
@@ -23,9 +24,9 @@ def test_every_openapi_route_has_an_sdk_call() -> None:
     source = CLIENT.read_text()
     missing = []
     for path, ops in schema["paths"].items():
-        for method in ops:
+        for method, op in ops.items():
             key = (method.upper(), path)
-            if key in EXEMPT:
+            if key in EXEMPT or op.get("deprecated"):
                 continue
             # "/v1/memories/{memory_id}" -> "/v1/memories/{" ; "/health/live" -> as is
             needle = re.sub(r"\{[^}]+\}.*$", "{", path)

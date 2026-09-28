@@ -1,7 +1,7 @@
 """The agent's view: a real service in ``api_key`` mode, driven only through the SDK.
 
 A test holds keys the way a harness would - the bootstrap secret, an admin key, a service
-key - and everything it learns, it learns through ``universal_memory``. The two exceptions
+key - and everything it learns, it learns through ``trellis.memory``. The two exceptions
 are named where they happen: backdating rows to make retention due, and reading the
 service's own configuration to know the default quota. PostgreSQL is real; search, cache and authorization are the in-process
 stand-ins the hermetic suite uses, so a leak here is a leak in the service's own logic.
@@ -56,7 +56,7 @@ def running(app) -> Iterator[TestClient]:
 
 
 def sdk(app, token: str):
-    from universal_memory import MemoryClient
+    from trellis.memory import MemoryClient
 
     transport = httpx.ASGITransport(app=app)
     http = httpx.AsyncClient(transport=transport, base_url="http://memory.test")

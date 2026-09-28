@@ -7,10 +7,11 @@ are kept in step with the service by a test in the service repository.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AgentKeyStatus(BaseModel):
@@ -131,11 +132,20 @@ SideEffects = Literal["none", "read", "write", "external", "unknown"]
 CacheScope = Literal["run", "thread", "user", "tenant"]
 
 
+#: the service's id grammar (domain/ids.py ID_PATTERN)
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:\-]{0,199}")
+
+
 class Scope(BaseModel):
     """Identity and lineage for one request. Built by ``MemoryClient.bind``.
 
     ``tenant_id`` may be omitted when the client's API key names its tenant (``api_key``
-    mode); given, it must agree with the key.
+    mode); given, it must agree with the key. ``trace_id`` travels as ``traceparent`` and is
+    continued by the service when it is a W3C trace id (32 hex); any other value is sent as
+    the correlation id instead, which the service echoes but does not trace. An explicit
+    ``correlation_id`` wins. Every id here follows the service's grammar (a letter or digit,
+    then letters, digits and ``._:-``, at most 200 characters), checked when the scope is
+    built rather than refused by the service or rejected by the HTTP client as a header.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -155,6 +165,31 @@ class Scope(BaseModel):
     trace_id: str | None = None
     correlation_id: str | None = None
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator(
+        "tenant_id",
+        "workspace_id",
+        "user_id",
+        "thread_id",
+        "session_id",
+        "turn_id",
+        "work_id",
+        "task_id",
+        "agent_id",
+        "agent_group_id",
+        "agent_run_id",
+        "parent_agent_run_id",
+        "trace_id",
+        "correlation_id",
+    )
+    @classmethod
+    def _ids_follow_the_service_grammar(cls, value: str | None) -> str | None:
+        if value is not None and not _ID.fullmatch(value):
+            raise ValueError(
+                "not an id: a letter or digit, then letters, digits and ._:-, at most 200 "
+                "characters"
+            )
+        return value
 
 
 class MessageAck(BaseModel):

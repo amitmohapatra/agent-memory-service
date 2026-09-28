@@ -59,7 +59,7 @@ def new_id(kind: str) -> str:
 
 
 def is_valid_id(value: str) -> bool:
-    return bool(ID_PATTERN.match(value))
+    return bool(ID_PATTERN.fullmatch(value))
 
 
 def content_hash(data: bytes | str) -> str:

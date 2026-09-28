@@ -48,8 +48,9 @@ def test_swagger_redoc_openapi_available(client: TestClient) -> None:
     assert client.get("/docs").status_code == 200
     assert client.get("/redoc").status_code == 200
     schema = client.get("/openapi.json").json()
-    assert schema["info"]["title"] == "Memory Service API"
-    assert "ErrorEnvelope" in schema["components"]["schemas"]
+    assert schema["info"]["title"] == "trellis-memory API"
+    assert "Problem" in schema["components"]["schemas"]
+    assert "ErrorEnvelope" not in schema["components"]["schemas"]
     assert set(schema["components"]["securitySchemes"]) == {"ApiKeyAuth", "BearerAuth"}
 
 
@@ -64,20 +65,20 @@ def test_correlation_headers_round_trip(client: TestClient) -> None:
     assert r2.headers["X-Request-ID"].startswith("req_")
 
 
-def test_error_envelope_for_unknown_route(client: TestClient) -> None:
+def test_problem_for_unknown_route(client: TestClient) -> None:
     r = client.get("/does-not-exist")
     assert r.status_code == 404
-    body = r.json()["error"]
+    body = r.json()
     assert body["code"] == "NOT_FOUND" and body["retryable"] is False and body["trace_id"]
 
 
-def test_body_limit_returns_envelope(client: TestClient) -> None:
+def test_body_limit_returns_a_problem(client: TestClient) -> None:
     r = client.post("/version", headers={"Content-Length": str(10**9)}, content=b"")
     assert r.status_code == 413
-    assert r.json()["error"]["code"] == "VALIDATION"
+    assert r.json()["code"] == "VALIDATION"
 
 
-def test_domain_error_maps_to_envelope(settings, overrides) -> None:
+def test_domain_error_maps_to_a_problem(settings, overrides) -> None:
     from fastapi import APIRouter
 
     from memory_service.api.app import create_app
@@ -101,15 +102,21 @@ def test_domain_error_maps_to_envelope(settings, overrides) -> None:
     app.include_router(router)
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get("/boom-scope")
-        assert r.status_code == 403 and r.json()["error"] == {
+        assert r.status_code == 403 and r.headers["content-type"] == "application/problem+json"
+        assert r.json() == {
+            "type": "urn:trellis:problem:scope-denied",
+            "title": "Outside the caller's scope",
+            "status": 403,
+            "detail": "nope",
+            "instance": "/boom-scope",
             "code": "SCOPE_DENIED",
-            "message": "nope",
             "retryable": False,
             "trace_id": r.headers["X-Trace-ID"],
+            "request_id": r.headers["X-Request-ID"],
             "details": {"object": "thread:t1"},
         }
         r = c.get("/boom-dep")
-        assert r.status_code == 503 and r.json()["error"]["retryable"] is True
+        assert r.status_code == 503 and r.json()["retryable"] is True
         r = c.get("/boom-unhandled")
         assert r.status_code == 500
         assert "secret internal detail" not in r.text

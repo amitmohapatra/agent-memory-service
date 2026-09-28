@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from starlette.datastructures import Headers
 
 from memory_service.api.deps import ScopeBody, build_context
 from memory_service.domain.errors import ScopeDenied, ValidationFailed
@@ -21,7 +22,7 @@ class _State:
 
 class _Request:
     def __init__(self, principal: ServicePrincipal | None, **headers: str) -> None:
-        self.headers = headers
+        self.headers = Headers(headers)
         self.state = _State(principal)
 
 
@@ -46,14 +47,14 @@ def _build(principal: ServicePrincipal | None, body: ScopeBody | None = None, **
 
 
 def test_the_tenant_comes_from_the_key_when_the_caller_sends_none() -> None:
-    ctx = _build(_key("acme"), **{"X-Memory-User": "u1"})
+    ctx = _build(_key("acme"), **{"X-Trellis-User": "u1"})
     assert ctx.tenant_id == "acme" and ctx.user_id == "u1"
 
 
 def test_a_header_may_agree_with_the_key_and_may_not_contradict_it() -> None:
-    assert _build(_key("acme"), **{"X-Memory-Tenant": "acme"}).tenant_id == "acme"
+    assert _build(_key("acme"), **{"X-Trellis-Tenant": "acme"}).tenant_id == "acme"
     with pytest.raises(ScopeDenied):
-        _build(_key("acme"), **{"X-Memory-Tenant": "globex"})
+        _build(_key("acme"), **{"X-Trellis-Tenant": "globex"})
     with pytest.raises(ScopeDenied):
         _build(_key("acme"), ScopeBody(tenant_id="globex"))
 
@@ -61,7 +62,7 @@ def test_a_header_may_agree_with_the_key_and_may_not_contradict_it() -> None:
 def test_the_platform_key_acts_for_no_tenant() -> None:
     platform = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
     with pytest.raises(ScopeDenied, match="platform key"):
-        _build(platform, **{"X-Memory-Tenant": "acme"})
+        _build(platform, **{"X-Trellis-Tenant": "acme"})
     with pytest.raises(ValidationFailed):
         _build(platform)
 
@@ -69,14 +70,14 @@ def test_the_platform_key_acts_for_no_tenant() -> None:
 def test_a_workspace_bound_key_pins_the_workspace() -> None:
     bound = _key("acme", workspace="finance")
     assert _build(bound).workspace_id == "finance"
-    assert _build(bound, **{"X-Memory-Workspace": "finance"}).workspace_id == "finance"
+    assert _build(bound, **{"X-Trellis-Workspace": "finance"}).workspace_id == "finance"
     with pytest.raises(ScopeDenied, match="another workspace"):
-        _build(bound, **{"X-Memory-Workspace": "legal"})
+        _build(bound, **{"X-Trellis-Workspace": "legal"})
 
 
 def test_development_keys_keep_the_header_semantics() -> None:
     dev = ServicePrincipal(service_id="dev:1", mode="trusted_dev", claims={})
-    assert _build(dev, **{"X-Memory-Tenant": "anything"}).tenant_id == "anything"
+    assert _build(dev, **{"X-Trellis-Tenant": "anything"}).tenant_id == "anything"
 
 
 def test_an_admin_key_may_not_name_another_tenant_on_administration_routes() -> None:
@@ -85,18 +86,18 @@ def test_an_admin_key_may_not_name_another_tenant_on_administration_routes() -> 
     c = _Container()
     admin = _key("acme", role="admin")
     assert administered_tenant(_Request(admin), admin, c) == "acme"  # type: ignore[arg-type]
-    named = _Request(admin, **{"X-Memory-Tenant": "acme"})
+    named = _Request(admin, **{"X-Trellis-Tenant": "acme"})
     assert administered_tenant(named, admin, c) == "acme"  # type: ignore[arg-type]
     with pytest.raises(ScopeDenied):
-        administered_tenant(_Request(admin, **{"X-Memory-Tenant": "globex"}), admin, c)  # type: ignore[arg-type]
+        administered_tenant(_Request(admin, **{"X-Trellis-Tenant": "globex"}), admin, c)  # type: ignore[arg-type]
     platform = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
-    by_header = _Request(platform, **{"X-Memory-Tenant": "globex"})
+    by_header = _Request(platform, **{"X-Trellis-Tenant": "globex"})
     assert administered_tenant(by_header, platform, c) == "globex"  # type: ignore[arg-type]
     with pytest.raises(ValidationFailed):
         administered_tenant(_Request(platform), platform, c)  # type: ignore[arg-type]
     with pytest.raises(ValidationFailed, match="invalid tenant_id"):
         administered_tenant(
-            _Request(platform, **{"X-Memory-Tenant": "not a/valid id"}), platform, c
+            _Request(platform, **{"X-Trellis-Tenant": "not a/valid id"}), platform, c
         )  # type: ignore[arg-type]
 
 
@@ -134,9 +135,9 @@ def test_a_suspended_tenant_is_refused_for_every_credential_kind() -> None:
     c.services = {"tenant_registry": _Registry()}
     dev = ServicePrincipal(service_id="dev:1", mode="trusted_dev", claims={})
     with pytest.raises(AuthorizationFailed, match="suspended"):
-        build_context(_Request(dev, **{"X-Memory-Tenant": "acme"}), c, ScopeBody())  # type: ignore[arg-type]
+        build_context(_Request(dev, **{"X-Trellis-Tenant": "acme"}), c, ScopeBody())  # type: ignore[arg-type]
     assert (
-        build_context(_Request(dev, **{"X-Memory-Tenant": "globex"}), c, ScopeBody()).tenant_id
+        build_context(_Request(dev, **{"X-Trellis-Tenant": "globex"}), c, ScopeBody()).tenant_id
         == "globex"
     )  # type: ignore[arg-type]
 
@@ -156,7 +157,7 @@ def test_a_suspended_tenant_s_administrators_are_stopped_but_the_platform_is_not
         administered_tenant(_Request(admin), admin, c)  # type: ignore[arg-type]
     platform = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
     assert (
-        administered_tenant(_Request(platform, **{"X-Memory-Tenant": "acme"}), platform, c)
+        administered_tenant(_Request(platform, **{"X-Trellis-Tenant": "acme"}), platform, c)
         == "acme"
     )  # type: ignore[arg-type]
 
@@ -176,3 +177,45 @@ def test_the_platform_role_is_the_bootstrap_secret_and_nothing_else() -> None:
     assert not _has_role(listed, (KeyRole.ADMIN,)), "a list is not a role, and not a crash"
     real = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
     assert _has_role(real, (KeyRole.PLATFORM,))
+
+
+def test_the_deprecated_spellings_feed_the_same_binding_checks() -> None:
+    """``X-Memory-*`` is read for one release (ADR 0022) through the same checks: a key's
+    tenant binds whichever spelling carried the header, a pair that disagrees is refused,
+    and a workspace-bound key refuses another workspace under the old name too."""
+    from memory_service.api.deps import administered_tenant
+
+    key = _key("acme")
+    assert _build(key, **{"X-Memory-Tenant": "acme"}).tenant_id == "acme"
+    with pytest.raises(ScopeDenied):
+        _build(key, **{"X-Memory-Tenant": "globex"})
+    with pytest.raises(ValidationFailed, match="different values"):
+        _build(key, **{"X-Trellis-Tenant": "globex", "X-Memory-Tenant": "acme"})
+    bound = _key("acme", workspace="finance")
+    assert _build(bound, **{"X-Memory-Workspace": "finance"}).workspace_id == "finance"
+    with pytest.raises(ScopeDenied):
+        _build(bound, **{"X-Memory-Workspace": "legal"})
+    dev = ServicePrincipal(service_id="dev:1", mode="trusted_dev", claims={})
+    ctx = _build(dev, **{"X-Memory-Tenant": "acme", "X-Memory-Workspace": "finance"})
+    assert (ctx.tenant_id, ctx.workspace_id) == ("acme", "finance")
+    admin = _key("acme", role="admin")
+    with pytest.raises(ScopeDenied):
+        administered_tenant(_Request(admin, **{"X-Memory-Tenant": "globex"}), admin, _Container())  # type: ignore[arg-type]
+
+
+def test_the_body_never_names_the_trace() -> None:
+    """The trace id in headers, logs, rows and problems is the one the correlation middleware
+    resolved; a body ``trace_id`` is accepted for compatibility and ignored (ADR 0022)."""
+    ctx = _build(_key("acme"), ScopeBody(trace_id="opaque-from-the-body"))
+    assert ctx.trace_id == "trace_id_test"
+
+
+def test_the_admin_path_refuses_two_spellings_that_disagree() -> None:
+    from memory_service.api.deps import administered_tenant
+
+    platform = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
+    disagree = _Request(platform, **{"X-Trellis-Tenant": "acme", "X-Memory-Tenant": "globex"})
+    with pytest.raises(ValidationFailed, match="different values"):
+        administered_tenant(disagree, platform, _Container())  # type: ignore[arg-type]
+    agree = _Request(platform, **{"X-Trellis-Tenant": "acme", "X-Memory-Tenant": "acme"})
+    assert administered_tenant(agree, platform, _Container()) == "acme"  # type: ignore[arg-type]

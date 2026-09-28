@@ -11,7 +11,7 @@ from tests.e2e.conftest import sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 
 
 def test_upload_parse_and_status(client) -> None:
@@ -26,7 +26,7 @@ def test_upload_parse_and_status(client) -> None:
         json={"scope": scope, "role": "USER", "content": "here is the report"},
     ).json()
     r = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=H,
         files={"file": ("acme_fy26_annual_report.md", FIXTURE.read_bytes(), "text/markdown")},
         data={"scope": json.dumps(scope), "message_id": msg["message_id"], "title": "ACME FY26"},
@@ -44,7 +44,7 @@ def test_upload_parse_and_status(client) -> None:
     assert job["status"] == "SUCCEEDED"
     # same bytes again -> dedup
     again = client.post(
-        "/v1/files",
+        "/v1/documents",
         headers=H,
         files={"file": ("copy.md", FIXTURE.read_bytes(), "text/markdown")},
         data={"scope": json.dumps(scope)},
@@ -53,13 +53,13 @@ def test_upload_parse_and_status(client) -> None:
     # other user cannot see the document (thread-scoped)
     assert (
         client.get(
-            f"/v1/documents/{ack['document_id']}", headers={**H, "X-Memory-User": "u2"}
+            f"/v1/documents/{ack['document_id']}", headers={**H, "X-Trellis-User": "u2"}
         ).status_code
         == 403
     )
     assert (
         client.post(
-            "/v1/files",
+            "/v1/documents",
             headers=H,
             files={"file": ("x.exe", b"MZ", "application/x-msdownload")},
             data={"scope": "{}"},
@@ -80,7 +80,7 @@ async def test_sdk_attachments(app, client) -> None:
     ack = await ctx.chat.user(
         "summarise this", attachments=[("notes.md", b"# Notes\n\nA short note.", "text/markdown")]
     )
-    handle = await ctx.files.add(
+    handle = await ctx.documents.add(
         io.BytesIO(b"# Two\n\nAnother.").getvalue(),
         filename="two.md",
         media_type="text/markdown",

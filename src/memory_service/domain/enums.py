@@ -211,7 +211,7 @@ class ContextGraphEdge(StrEnum):
 
 
 class ErrorCode(StrEnum):
-    """Public API error categories (see ``api/errors.py`` for the envelope)."""
+    """Public API error categories (``api/errors.py`` carries them in problem details)."""
 
     VALIDATION = "VALIDATION"
     AUTHENTICATION = "AUTHENTICATION"

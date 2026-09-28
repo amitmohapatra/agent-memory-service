@@ -18,6 +18,7 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.headers import alias_route
 from memory_service.api.idempotent import run_idempotent
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, DocumentStatus, Visibility
@@ -108,23 +109,21 @@ class DocumentResponse(BaseModel):
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.post(
-    "/files",
-    response_model=FileAckResponse,
-    status_code=202,
-    tags=["files"],
-    summary="Ingest a file into RAG memory (multipart)",
-    description=(
+_UPLOAD_ROUTE: dict[str, Any] = {
+    "response_model": FileAckResponse,
+    "status_code": 202,
+    "summary": "Ingest a file into RAG memory (multipart)",
+    "description": (
         "Fields: `file` (binary), `scope` (JSON object, same shape as message scope), optional "
         "`message_id`, `title`, `visibility` "
         "(PRIVATE|RUN|THREAD|AGENT_GROUP|USER|WORKSPACE|TENANT), "
         "`custom_metadata` (JSON). Identical bytes within a tenant are deduplicated by SHA-256."
     ),
-    responses={
+    "responses": {
         **_WRITE_ERRORS,
         202: {"model": FileAckResponse, "description": "Accepted (durable)"},
     },
-    openapi_extra={
+    "openapi_extra": {
         "requestBody": {
             "content": {
                 "multipart/form-data": {
@@ -159,8 +158,23 @@ class DocumentResponse(BaseModel):
             }
         }
     },
+}
+
+_FILES_ALIAS = alias_route("/v1/files")
+
+
+@router.post("/documents", tags=["documents"], name="upload_document", **_UPLOAD_ROUTE)
+@router.post(
+    "/files",
+    tags=["files"],
+    name="upload_file",
+    **{
+        **_UPLOAD_ROUTE,
+        **_FILES_ALIAS,
+        "description": f"{_FILES_ALIAS['description']} {_UPLOAD_ROUTE['description']}",
+    },
 )
-async def upload_file(
+async def upload_document(
     request: Request,
     container: ContainerDep,
     _: ServicePrincipalDep,
@@ -173,7 +187,7 @@ async def upload_file(
         Form(
             description=(
                 "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, "
-                "AGENT_GROUP, USER, WORKSPACE (the team named in X-Memory-Workspace; members "
+                "AGENT_GROUP, USER, WORKSPACE (the team named in X-Trellis-Workspace; members "
                 "only), TENANT. Omit for the thread, else the user."
             )
         ),
@@ -231,7 +245,7 @@ async def upload_file(
 @router.get(
     "/documents/{document_id}",
     response_model=DocumentResponse,
-    tags=["files"],
+    tags=["documents"],
     summary="Document status",
     responses=_READ_ERRORS,
 )

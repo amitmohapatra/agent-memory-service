@@ -1,7 +1,7 @@
 [project]
-name = "memory-service"
-version = "0.1.0"
-description = "Enterprise Multi-Agent Memory Service: durable, scope-aware, context-preserving memory for chat, agents and RAG."
+name = "trellis-memory-service"
+version = "0.2.0"
+description = "trellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -63,7 +63,7 @@ eval = ["deepeval>=4.2", "ragas>=0.4", "datasets>=3", "nltk>=3.9"]
 load = ["locust>=2.46"]
 # Everything except dev tooling
 all = [
-  "memory-service[gcp,docling,models,eval,load]",
+  "trellis-memory-service[gcp,docling,models,eval,load]",
 ]
 
 [dependency-groups]
@@ -82,7 +82,7 @@ dev = [
   "pre-commit>=4",
   "openapi-spec-validator>=0.7",
   "schemathesis>=4",
-  "universal-memory",
+  "trellis-memory",
 ]
 
 [project.scripts]
@@ -106,7 +106,7 @@ members = ["sdk/python"]
 # cannot reach a sibling directory, so "../bifrost-sdk" makes the image unbuildable.
 # `make vendor` regenerates it from the real checkout; see the Makefile.
 bifrost-sdk = { path = "vendor/bifrost-sdk", editable = true }
-universal-memory = { workspace = true }
+trellis-memory = { workspace = true }
 # CPU-only PyTorch on Linux (the service is CPU-first; the CUDA wheels add ~4 GB for nothing)
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
@@ -160,7 +160,7 @@ ignore = [
 "src/memory_service/modules/retrieval/router.py" = ["E501"]
 "src/memory_service/modules/graph/document_facts.py" = ["E501", "RUF001", "RUF002", "RUF059", "PLW2901", "C401", "B007", "C416", "SIM905"]
 "src/memory_service/modules/graph/native.py" = ["E501"]  # regex grammar reads better unwrapped
-"sdk/python/src/universal_memory/errors.py" = ["N818", "A001"]
+"sdk/python/src/trellis/memory/errors.py" = ["N818", "A001"]
 "src/memory_service/tools/**" = ["E501"]
 "src/memory_service/adapters/**" = ["TID251"]
 "tests/**/conftest.py" = ["TID251"]
@@ -172,7 +172,7 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = [
   "memory_service",
-  "universal_memory",
+  "trellis",
 ]
 
 # Hexagonal boundary: the domain package may not import adapters or third-party SDKs.
@@ -258,6 +258,6 @@ filterwarnings = ["error::RuntimeWarning:memory_service"]
 [tool.coverage.run]
 source = [
   "memory_service",
-  "universal_memory",
+  "trellis.memory",
 ]
 branch = true

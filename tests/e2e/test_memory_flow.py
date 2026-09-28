@@ -9,7 +9,7 @@ from memory_service.domain.ids import new_id
 from tests.e2e.conftest import sdk_client
 
 pytestmark = pytest.mark.e2e
-H = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 
 
 def _scope() -> dict[str, str]:
@@ -84,7 +84,7 @@ def test_messages_and_observations_become_memories(client) -> None:
     # not visible to another user (403, existence not revealed as 404 either way)
     assert (
         client.get(
-            f"/v1/memories/{tz['memory_id']}", headers={**H, "X-Memory-User": "u2"}
+            f"/v1/memories/{tz['memory_id']}", headers={**H, "X-Trellis-User": "u2"}
         ).status_code
         == 403
     )
@@ -127,7 +127,7 @@ def test_messages_and_observations_become_memories(client) -> None:
     )
     assert (
         client.delete(
-            f"/v1/memories/{by_pred['decided']['memory_id']}", headers={**H, "X-Memory-User": "u2"}
+            f"/v1/memories/{by_pred['decided']['memory_id']}", headers={**H, "X-Trellis-User": "u2"}
         ).status_code
         == 403
     )
@@ -254,8 +254,8 @@ def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
     same property end to end, through the API, and across the graph as well as the memories
     - an org-wide knowledge graph is the place where a tenant-blind key would hurt most.
     """
-    acme = {**H, "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
-    globex = {**H, "X-Memory-Tenant": "globex", "X-Memory-User": "u1"}
+    acme = {**H, "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
+    globex = {**H, "X-Trellis-Tenant": "globex", "X-Trellis-User": "u1"}
     scope = _scope()
 
     assert (

@@ -2,7 +2,7 @@
 
 import httpx
 
-from universal_memory.transport import Transport
+from trellis.memory.transport import Transport
 
 
 def test_injected_client_without_base_url_gets_one():

@@ -1,14 +1,26 @@
+import re
+
 import httpx
 import pytest
 import respx
+from opentelemetry.sdk.trace import TracerProvider
+from packaging.version import Version
+from pydantic import ValidationError
 
-from universal_memory import (
+import trellis.memory
+from trellis.memory import (
     AuthorizationError,
     DependencyUnavailableError,
+    DocumentsAPI,
+    FilesAPI,
     MemoryClient,
     MemoryContext,
+    MemoryError,
+    TimeoutError,
     current_context,
 )
+from trellis.memory import client as client_module
+from trellis.memory import transport as transport_module
 
 
 @pytest.fixture
@@ -79,8 +91,8 @@ async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryC
     ack = await ctx.chat.user("hello")
     assert ack.message_id == "msg_1" and ack.job_ids == ["job_1"]
     req = route.calls.last.request
-    assert req.headers["X-Memory-Tenant"] == "acme"
-    assert req.headers["X-Memory-User"] == "u1"
+    assert req.headers["X-Trellis-Tenant"] == "acme"
+    assert req.headers["X-Trellis-User"] == "u1"
     assert req.headers["X-API-Key"] == "k"
     assert req.headers["Idempotency-Key"].startswith("msg-")
     # same content + lineage => same key (safe retries)
@@ -97,7 +109,7 @@ async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryC
 
 
 @respx.mock
-async def test_error_envelope_maps_to_typed_exception(client: MemoryClient) -> None:
+async def test_a_0_1_error_envelope_still_maps_to_the_typed_exception(client: MemoryClient) -> None:
     respx.post("http://memory.test/v1/context").mock(
         return_value=httpx.Response(
             403,
@@ -176,7 +188,7 @@ async def test_context_bundle_parses_and_flags_insufficient(client: MemoryClient
 
 @respx.mock
 async def test_brief_sdk_preserves_scope_kind_and_async_status(client):
-    from universal_memory import BriefSpec
+    from trellis.memory import BriefSpec
 
     spec = BriefSpec(
         kind="knowledge_page", title="Project status", question="Which projects are active?"
@@ -204,7 +216,7 @@ async def test_administer_names_the_tenant_and_a_keyed_bind_sends_no_tenant_head
     seen: list[str | None] = []
 
     def capture(request: httpx.Request) -> httpx.Response:
-        seen.append(request.headers.get("X-Memory-Tenant"))
+        seen.append(request.headers.get("X-Trellis-Tenant"))
         return httpx.Response(200, json=[] if request.method == "GET" else {"results": []})
 
     respx.get("http://memory.test/v1/keys").mock(side_effect=capture)
@@ -214,3 +226,323 @@ async def test_administer_names_the_tenant_and_a_keyed_bind_sends_no_tenant_head
     await client.tenant.keys.list()
     await client.bind(user_id="u1").recall("anything")
     assert seen == ["globex", None, None]
+
+
+TRACE = "4bf92f3577b34da6a3ce929d0e0e4736"
+TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
+
+
+@respx.mock
+async def test_a_problem_maps_to_the_typed_exception(client: MemoryClient) -> None:
+    respx.post("http://memory.test/v1/context").mock(
+        return_value=httpx.Response(
+            403,
+            headers={"content-type": "application/problem+json"},
+            json={
+                "type": "urn:trellis:problem:scope-denied",
+                "title": "Outside the caller's scope",
+                "status": 403,
+                "detail": "denied",
+                "instance": "/v1/context",
+                "code": "SCOPE_DENIED",
+                "retryable": False,
+                "trace_id": TRACE,
+                "request_id": "req_1",
+                "details": {"object": "thread:t1"},
+            },
+        )
+    )
+    with pytest.raises(AuthorizationError) as exc:
+        await client.bind(tenant_id="acme").context("q")
+    err = exc.value
+    assert (err.code, err.status, err.message) == ("SCOPE_DENIED", 403, "denied")
+    assert (err.trace_id, err.request_id, err.details) == (TRACE, "req_1", {"object": "thread:t1"})
+    assert err.retryable is False
+
+
+@respx.mock
+async def test_every_call_carries_a_request_id_kept_across_its_retries(
+    client: MemoryClient,
+) -> None:
+    route = respx.get("http://memory.test/v1/jobs/job_1").mock(
+        side_effect=[
+            httpx.Response(503, json={"code": "DEPENDENCY_UNAVAILABLE", "retryable": True}),
+            httpx.Response(200, json={"job_id": "job_1", "status": "SUCCEEDED"}),
+        ]
+    )
+    await client.bind(tenant_id="acme").job("job_1")
+    ids = [call.request.headers["X-Request-ID"] for call in route.calls]
+    assert len(ids) == 2 and ids[0] == ids[1] and re.fullmatch(r"[0-9a-f]{32}", ids[0])
+    version = respx.get("http://memory.test/version").mock(
+        return_value=httpx.Response(200, json={"version": "0.2.0"})
+    )
+    await client.transport.request("GET", "/version", headers={"X-Request-ID": "mine"})
+    assert version.calls.last.request.headers["X-Request-ID"] == "mine"
+
+
+@respx.mock
+async def test_traceparent_is_built_from_a_w3c_scope_trace_id(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/recall").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    await client.bind(tenant_id="acme", trace_id=TRACE.upper()).recall("q")
+    headers = route.calls.last.request.headers
+    match = TRACEPARENT.match(headers["traceparent"])
+    assert match and match.group(1) == TRACE and match.group(3) == "01"
+    assert "X-Trace-ID" not in headers  # a response header; traceparent is the request's
+    # an opaque id is not a trace the service would continue: it travels as the correlation id
+    await client.bind(tenant_id="acme", trace_id="opaque-id").recall("q")
+    headers = route.calls.last.request.headers
+    assert "traceparent" not in headers and "X-Trace-ID" not in headers
+    assert headers["X-Correlation-ID"] == "opaque-id"
+    await client.bind(tenant_id="acme", trace_id="opaque-id", correlation_id="corr-1").recall("q")
+    assert route.calls.last.request.headers["X-Correlation-ID"] == "corr-1"
+    await client.bind(tenant_id="acme").recall("q")
+    assert "traceparent" not in route.calls.last.request.headers
+
+
+@respx.mock
+async def test_the_active_opentelemetry_span_wins_over_the_scope(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/recall").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    tracer = TracerProvider().get_tracer("agent")
+    with tracer.start_as_current_span("turn") as span:
+        await client.bind(tenant_id="acme", trace_id=TRACE).recall("q")
+    context = span.get_span_context()
+    match = TRACEPARENT.match(route.calls.last.request.headers["traceparent"])
+    assert match and match.group(1) == format(context.trace_id, "032x") != TRACE
+    assert match.group(2) == format(context.span_id, "016x")
+
+
+@respx.mock
+async def test_without_the_otel_extra_the_scope_trace_id_is_used(
+    client: MemoryClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(transport_module, "_PROPAGATOR", None)
+    route = respx.post("http://memory.test/v1/recall").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    tracer = TracerProvider().get_tracer("agent")
+    with tracer.start_as_current_span("turn"):
+        await client.bind(tenant_id="acme", trace_id=TRACE).recall("q")
+    match = TRACEPARENT.match(route.calls.last.request.headers["traceparent"])
+    assert match and match.group(1) == TRACE
+
+
+@respx.mock
+async def test_documents_is_the_noun_and_files_its_deprecated_alias(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/documents").mock(
+        return_value=httpx.Response(
+            202,
+            json={"document_id": "doc_1", "filename": "a.md", "checksum": "c", "size_bytes": 5},
+        )
+    )
+    ctx = client.bind(tenant_id="acme", user_id="u1")
+    assert isinstance(ctx.documents, DocumentsAPI) and FilesAPI is DocumentsAPI
+    with pytest.warns(DeprecationWarning, match="documents"):
+        alias = ctx.files
+    assert alias is ctx.documents
+    handle = await ctx.documents.add(b"hello", filename="a.md", media_type="text/markdown")
+    assert handle.document_id == "doc_1" and route.called
+
+
+@respx.mock
+async def test_tool_records_go_to_the_invocations_route(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/tools/invocations").mock(
+        return_value=httpx.Response(
+            202, json={"invocation_id": "tiv_1", "step": 0, "args_hash": "h", "recorded": True}
+        )
+    )
+    result = await client.bind(tenant_id="acme", agent_id="bot").tools.record("search", {"q": "x"})
+    assert result.invocation_id == "tiv_1" and route.called
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(502, text="<html>Bad Gateway</html>", headers={"content-type": "text/html"}),
+        httpx.Response(500, json=["not", "a", "problem"]),
+        httpx.Response(500, json={"error": "boom"}),
+        httpx.Response(404, json={"unexpected": "shape"}),
+    ],
+)
+async def test_an_unrecognised_error_body_still_raises_a_typed_error(
+    client: MemoryClient, response: httpx.Response
+) -> None:
+    respx.get("http://memory.test/v1/jobs/job_1").mock(return_value=response)
+    with pytest.raises(MemoryError) as exc:
+        await client.bind(tenant_id="acme").job("job_1")
+    assert exc.value.code == "INTERNAL" and exc.value.status == response.status_code
+    assert exc.value.retryable is False and exc.value.message == f"HTTP {response.status_code}"
+
+
+@respx.mock
+async def test_a_plain_rfc_9457_problem_keeps_its_words(client: MemoryClient) -> None:
+    """A gateway in front of the service answers problems without the ``code`` extension."""
+    respx.get("http://memory.test/v1/jobs/job_1").mock(
+        return_value=httpx.Response(
+            503,
+            headers={"content-type": "application/problem+json"},
+            json={"type": "about:blank", "title": "Service Unavailable", "status": 503},
+        )
+    )
+    with pytest.raises(MemoryError) as exc:
+        await client.bind(tenant_id="acme").job("job_1")
+    assert exc.value.code == "INTERNAL" and exc.value.message == "Service Unavailable"
+    assert exc.value.retryable is True  # from the status, so the read was retried
+
+
+@respx.mock
+@pytest.mark.parametrize("trace_id", ["0" * 32, "a" * 31, "a" * 33])
+async def test_a_trace_id_the_service_would_reject_travels_as_correlation(
+    client: MemoryClient, trace_id: str
+) -> None:
+    route = respx.post("http://memory.test/v1/recall").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    await client.bind(tenant_id="acme", trace_id=trace_id).recall("q")
+    headers = route.calls.last.request.headers
+    assert "traceparent" not in headers and "X-Trace-ID" not in headers
+    assert headers["X-Correlation-ID"] == trace_id
+
+
+def test_w3c_trace_id_rejects_what_the_service_rejects() -> None:
+    assert transport_module.w3c_trace_id(TRACE.upper()) == TRACE
+    assert transport_module.w3c_trace_id(TRACE + "\n") is None
+    assert transport_module.w3c_trace_id("0" * 32) is None
+    assert transport_module.w3c_trace_id(None) is None
+
+
+@respx.mock
+async def test_a_request_id_given_in_any_case_is_kept_alone(client: MemoryClient) -> None:
+    route = respx.get("http://memory.test/version").mock(
+        return_value=httpx.Response(200, json={"version": "0.2.0"})
+    )
+    await client.transport.request("GET", "/version", headers={"x-request-id": "mine"})
+    sent = route.calls.last.request.headers
+    assert sent.get_list("x-request-id") == ["mine"]
+
+
+@respx.mock
+async def test_a_gateway_body_keeps_its_message_and_request_id(client: MemoryClient) -> None:
+    respx.get("http://memory.test/v1/jobs/job_1").mock(
+        return_value=httpx.Response(403, json={"message": "Forbidden", "request_id": "gw-1"})
+    )
+    with pytest.raises(MemoryError) as exc:
+        await client.bind(tenant_id="acme").job("job_1")
+    assert exc.value.message == "Forbidden" and exc.value.request_id == "gw-1"
+    assert exc.value.code == "INTERNAL" and exc.value.status == 403
+
+
+@respx.mock
+async def test_a_caller_s_traceparent_is_sent_once_whatever_its_case(client: MemoryClient) -> None:
+    from trellis.memory.models import Scope
+
+    route = respx.get("http://memory.test/version").mock(return_value=httpx.Response(200, json={}))
+    mine = f"00-{'b' * 32}-{'c' * 16}-01"
+    await client.transport.request(
+        "GET", "/version", scope=Scope(trace_id=TRACE), headers={"Traceparent": mine}
+    )
+    assert route.calls.last.request.headers.get_list("traceparent") == [mine]
+
+
+@respx.mock
+async def test_a_gateway_s_untyped_members_are_not_trusted(client: MemoryClient) -> None:
+    route = respx.get("http://memory.test/v1/jobs/job_1").mock(
+        return_value=httpx.Response(
+            503,
+            json={"message": "down", "retryable": "false", "details": ["x"], "request_id": 7},
+        )
+    )
+    with pytest.raises(MemoryError) as exc:
+        await client.bind(tenant_id="acme").job("job_1")
+    # the status says retryable, the string does not count either way: the read was retried
+    assert exc.value.retryable is True and route.call_count == 3
+    assert exc.value.details == {} and exc.value.request_id is None
+    respx.get("http://memory.test/v1/jobs/job_2").mock(
+        return_value=httpx.Response(403, json={"message": "no", "retryable": "true"})
+    )
+    with pytest.raises(MemoryError) as exc:
+        await client.bind(tenant_id="acme").job("job_2")
+    assert exc.value.retryable is False
+
+
+@respx.mock
+async def test_the_body_scope_carries_no_trace_id(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/recall").mock(
+        return_value=httpx.Response(200, json={"results": []})
+    )
+    await client.bind(tenant_id="acme", trace_id=TRACE, correlation_id="corr-1").recall("q")
+    import json
+
+    sent = json.loads(route.calls.last.request.content)
+    assert "trace_id" not in sent["scope"] and sent["scope"]["correlation_id"] == "corr-1"
+
+
+def test_every_documented_exception_is_exported() -> None:
+    assert issubclass(TimeoutError, MemoryError)
+
+
+@respx.mock
+async def test_a_timeout_on_a_non_idempotent_write_is_not_retried(client: MemoryClient) -> None:
+    """A read or write timeout means the service may have the request: a retry would duplicate
+    a write that carries no idempotency key."""
+    route = respx.post("http://memory.test/v1/admin/tenants").mock(
+        side_effect=httpx.ReadTimeout("slow")
+    )
+    with pytest.raises(TimeoutError) as exc:
+        await client.admin.create_tenant("Acme", tenant_id="acme")
+    assert exc.value.code == "TIMEOUT" and exc.value.status == 0 and exc.value.retryable
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_a_connection_that_never_opened_is_retried(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/admin/tenants").mock(
+        side_effect=httpx.ConnectError("refused")
+    )
+    with pytest.raises(DependencyUnavailableError) as exc:
+        await client.admin.create_tenant("Acme", tenant_id="acme")
+    assert exc.value.code == "DEPENDENCY_UNAVAILABLE" and route.call_count == 3
+
+
+@respx.mock
+async def test_a_timeout_on_a_read_is_retried(client: MemoryClient) -> None:
+    route = respx.get("http://memory.test/v1/jobs/job_1").mock(
+        side_effect=httpx.ReadTimeout("slow")
+    )
+    with pytest.raises(TimeoutError):
+        await client.bind(tenant_id="acme").job("job_1")
+    assert route.call_count == 3
+
+
+@respx.mock
+async def test_the_upload_form_scope_carries_no_trace_id(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/documents").mock(
+        return_value=httpx.Response(
+            202,
+            json={"document_id": "doc_1", "filename": "a.md", "checksum": "c", "size_bytes": 5},
+        )
+    )
+    ctx = client.bind(tenant_id="acme", user_id="u1", trace_id=TRACE, correlation_id="corr-1")
+    await ctx.documents.add(b"hello", filename="a.md", media_type="text/markdown")
+    body = route.calls.last.request.content.decode(errors="replace")
+    assert "corr-1" in body and TRACE not in body.split("traceparent")[0]
+    assert '"trace_id"' not in body
+    assert route.calls.last.request.headers["traceparent"].startswith(f"00-{TRACE}-")
+
+
+def test_an_id_that_is_not_an_id_is_refused_when_the_scope_is_built(client: MemoryClient) -> None:
+    """Header values must be ASCII and the service refuses anything outside its id grammar;
+    the SDK says so at bind time instead of failing inside the HTTP client."""
+    with pytest.raises(ValidationError, match="not an id"):
+        client.bind(tenant_id="acme", trace_id="turn-\u00e9")
+    with pytest.raises(ValidationError, match="not an id"):
+        client.bind(tenant_id="acme", user_id="-starts-with-a-dash")
+    assert client.bind(tenant_id="acme", correlation_id="turn-42").scope.correlation_id == "turn-42"
+
+
+def test_the_sdk_deprecation_window_is_still_open() -> None:
+    assert Version(trellis.memory.__version__) < Version(client_module.ALIASES_REMOVED_IN)

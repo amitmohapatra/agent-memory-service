@@ -7,7 +7,7 @@ updated at once by the instance that made an administrative change:
 
 - ``tenant_id -> rate_limit_per_minute`` for the tenants that override the service default;
 - ``key_id -> tenant_id`` for the keys of those tenants, because a caller holding a key
-  usually sends no ``X-Memory-Tenant`` - the key names the tenant. The token's key id is
+  usually sends no ``X-Trellis-Tenant`` - the key names the tenant. The token's key id is
   readable without verifying it (``mk_<key_id>.<secret>``); a wrong guess only picks a
   quota, authentication still decides who the caller is;
 - the suspended tenants, so a suspension bites for every credential kind (``jwt`` and

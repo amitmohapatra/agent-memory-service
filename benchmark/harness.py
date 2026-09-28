@@ -22,7 +22,7 @@ from benchmark.retrieval import FIXTURES, _pct
 from memory_service.config.settings import Settings
 from memory_service.domain.ids import new_id
 
-H = {"X-API-Key": "bench", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
+H = {"X-API-Key": "bench", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
 FACTS = [
     "My timezone is Europe/Berlin.",
     "I prefer concise answers.",
@@ -45,7 +45,7 @@ Settle = Callable[[], Awaitable[Any]]
 
 
 def headers(api_key: str = "bench", tenant: str = "acme", user: str = "u1") -> dict[str, str]:
-    return {"X-API-Key": api_key, "X-Memory-Tenant": tenant, "X-Memory-User": user}
+    return {"X-API-Key": api_key, "X-Trellis-Tenant": tenant, "X-Trellis-User": user}
 
 
 def new_scope() -> dict[str, str]:
@@ -194,7 +194,7 @@ async def drive_stream(
             salt = f"\n\n<!-- durability copy {n} -->\n".encode()
             r = await post_with_retry(
                 client,
-                "/v1/files",
+                "/v1/documents",
                 hdrs,
                 files={"file": (f"report_{n}.md", fixture + salt, "text/markdown")},
                 data={"scope": json.dumps(scope), "title": f"report {n}"},
@@ -308,7 +308,7 @@ async def build_corpus(
         for n in range(copies):
             salt = b"" if n == 0 else f"\n\n<!-- perf copy {n} -->\n".encode()
             r = await client.post(
-                "/v1/files",
+                "/v1/documents",
                 headers=hdrs,
                 files={"file": (filename, data + salt, "text/markdown")},
                 data={"scope": json.dumps(scope), "title": f"{alias}-{n}"},
@@ -387,7 +387,7 @@ async def measure_budgeted(
         ms, code = await timed(
             client,
             "POST",
-            "/v1/files",
+            "/v1/documents",
             hdrs,
             files={"file": (f"accept_{i}.md", fixture + salt, "text/markdown")},
             data={"scope": json.dumps(scope), "title": f"accept {i}"},

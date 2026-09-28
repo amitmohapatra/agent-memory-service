@@ -132,7 +132,7 @@ def test_ports_are_protocols_not_implementations() -> None:
 
 
 def test_sdk_does_not_depend_on_service_internals() -> None:
-    sdk = Path(__file__).resolve().parents[2] / "sdk" / "python" / "src" / "universal_memory"
+    sdk = Path(__file__).resolve().parents[2] / "sdk" / "python" / "src" / "trellis" / "memory"
     for path in sdk.rglob("*.py"):
         assert "memory_service" not in _imports(path), f"{path.name} imports memory_service"
 

@@ -137,8 +137,8 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     container.services["agent_credentials"] = service(container.services["uow_factory"])
     headers = {
         "X-API-Key": "test-key",
-        "X-Memory-Tenant": new_id("request"),
-        "X-Memory-User": "alice",
+        "X-Trellis-Tenant": new_id("request"),
+        "X-Trellis-User": "alice",
     }
     body = {"scope": {"agent_id": "research"}, "virtual_key": "vk-http-test"}
     first = client.put(
@@ -157,7 +157,7 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     )
     assert conflict.status_code == 409 and "vk-different-test" not in conflict.text
     other = client.get(
-        "/v1/agents/model-key?agent_id=research", headers={**headers, "X-Memory-User": "bob"}
+        "/v1/agents/model-key?agent_id=research", headers={**headers, "X-Trellis-User": "bob"}
     )
     assert other.status_code == 200 and not other.json()["registered"]
     revoked = client.delete("/v1/agents/model-key?agent_id=research", headers=headers)
@@ -176,8 +176,8 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
     container.services["agent_credentials"] = credentials
     headers = {
         "X-API-Key": "test-key",
-        "X-Memory-Tenant": new_id("request"),
-        "X-Memory-User": "alice",
+        "X-Trellis-Tenant": new_id("request"),
+        "X-Trellis-User": "alice",
     }
     scope = {"agent_id": "research"}
     query = {"scope": scope, "query": "astronomical instrumentation"}
