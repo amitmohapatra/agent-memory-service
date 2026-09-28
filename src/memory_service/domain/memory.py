@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +19,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import new_id
+from memory_service.domain.predicates import predicate_label
 
 UNVERIFIED_MEMORY_CATEGORIES = ("contextual_fact", "assisted", "reflection")
 
@@ -172,3 +173,26 @@ class MemoryResult(BaseModel):
     score: float | None = None
     retrievers: list[str] = Field(default_factory=list, description="which strategies hit")
     reason: str | None = None
+
+
+def dated_statement(day: str, text: str) -> str:
+    """One source statement kept beside the day it was observed.
+
+    Every relative date inside ``text`` ("last Tuesday") is only interpretable against this
+    day, so the two never travel apart.
+    """
+    return f"[observed {day}] {text}"
+
+
+def aggregate_statement(subject: str, predicate: str, dated: Sequence[tuple[str, str]]) -> str:
+    """The several current values of one multi-valued slot, as one block.
+
+    The shape a belief carries (``modules.memory.derived.BeliefService.derive_content``) and
+    the shape the renderer groups a bundle into (``domain.context_bundle``) are the same
+    text, built here once: a reader must not have to learn two layouts for the same fact,
+    and a write-path belief and a read-side grouping of the same memories must not disagree.
+
+    ``dated`` is ``(day, text)`` oldest first; duplicates collapse, order is preserved.
+    """
+    body = "\n".join(dict.fromkeys(dated_statement(day, text) for day, text in dated))
+    return f"{subject} — {predicate_label(predicate)} (source statements):\n{body}"

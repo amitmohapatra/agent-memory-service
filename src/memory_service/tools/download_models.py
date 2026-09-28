@@ -74,16 +74,26 @@ def _frozen() -> tuple[Model, ...]:
     """The catalogue, derived from the frozen set so the two cannot disagree."""
     from memory_service.config.constants import FROZEN_MODELS
 
-    dense, nli, reranker = FROZEN_MODELS.dense, FROZEN_MODELS.nli, FROZEN_MODELS.reranker
+    dense, dense_ml = FROZEN_MODELS.dense, FROZEN_MODELS.dense_ml
+    nli, reranker = FROZEN_MODELS.nli, FROZEN_MODELS.reranker
     out = [
         Model(
             dense.local_dir,
             dense.id,
             "embedding",
-            f"the dense encoder, {dense.dimension}-dim ({dense.backend} backend)",
+            f"the English dense encoder, {dense.dimension}-dim ({dense.backend} backend)",
             default=True,
             runtime="onnx" if dense.backend != "torch" else "torch",
             revision=dense.revision,
+        ),
+        Model(
+            dense_ml.local_dir,
+            dense_ml.id,
+            "embedding",
+            f"the multilingual dense encoder, {dense_ml.dimension}-dim (onnx graph)",
+            default=True,
+            runtime=dense_ml.runtime,
+            revision=dense_ml.revision,
         ),
         Model(
             nli.local_dir,

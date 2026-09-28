@@ -26,7 +26,13 @@ from typing import Any
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType
 from memory_service.domain.evidence import EvidenceRef
-from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
+from memory_service.domain.memory import (
+    CanonicalMemory,
+    Scope,
+    TemporalState,
+    aggregate_statement,
+    dated_statement,
+)
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.revisions import supersede
 from memory_service.observability.logging import get_logger
@@ -71,10 +77,6 @@ def source_slot(
     ).hexdigest()
 
 
-def _label(text: str) -> str:
-    return text.replace("_", " ")
-
-
 def _memory_evidence(sources: Sequence[CanonicalMemory]) -> list[EvidenceRef]:
     return [
         EvidenceRef(source_type="memory", source_id=m.memory_id, observed_at=m.temporal.observed_at)
@@ -83,7 +85,12 @@ def _memory_evidence(sources: Sequence[CanonicalMemory]) -> list[EvidenceRef]:
 
 
 def source_statement(memory: CanonicalMemory) -> str:
-    return f"[observed {memory.temporal.observed_at.date().isoformat()}] {memory.content}"
+    return dated_statement(memory.temporal.observed_at.date().isoformat(), memory.content)
+
+
+def _dated(sources: Sequence[CanonicalMemory]) -> list[tuple[str, str]]:
+    """``(day, content)`` pairs: what the shared aggregate formatter reads."""
+    return [(m.temporal.observed_at.date().isoformat(), m.content) for m in sources]
 
 
 def _source_statements(sources: Sequence[CanonicalMemory]) -> str:
@@ -159,9 +166,7 @@ class BeliefService:
     @staticmethod
     def derive_content(subject: str, predicate: str, sources: Sequence[CanonicalMemory]) -> str:
         ordered = sorted(sources, key=lambda m: (m.temporal.observed_at, m.memory_id))
-        return f"{subject} — {_label(predicate)} (source statements):\n" + _source_statements(
-            ordered
-        )
+        return aggregate_statement(subject, predicate, _dated(ordered))
 
     async def upsert(
         self,

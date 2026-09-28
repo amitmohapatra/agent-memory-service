@@ -348,17 +348,17 @@ done through the API (executed end to end by `tests/agent/test_platform_lifecycl
 
 ```python
 platform = MemoryClient(url, api_key=BOOTSTRAP_ADMIN_KEY)
-acme = await platform.admin.create_tenant("Acme", tenant_id="acme")   # admin key, shown once
+acme = await platform.admin.create_tenant("Acme", tenant_id="acme")  # admin key, shown once
 
 admin = MemoryClient(url, api_key=acme.admin_key.token)
 await admin.tenant.workspaces.create("Finance", workspace_id="finance")  # a team
 await admin.tenant.workspaces.set_member("finance", "user:u1")
 await admin.tenant.groups.create("Analysts", group_id="analysts")
 await admin.tenant.groups.add_user("analysts", "u2")
-await admin.tenant.workspaces.set_member("finance", "group:analysts")   # a group at once
-service = await admin.tenant.keys.issue("service", "finance-harness")   # what the harness holds
+await admin.tenant.workspaces.set_member("finance", "group:analysts")  # a group at once
+service = await admin.tenant.keys.issue("service", "finance-harness")  # what the harness holds
 
-harness = MemoryClient(url, api_key=service.token)                      # no tenant_id anywhere
+harness = MemoryClient(url, api_key=service.token)  # no tenant_id anywhere
 u1 = harness.bind(user_id="u1", workspace_id="finance")
 await u1.remember("Forecast review is Tuesdays at 10:00.", visibility="WORKSPACE")
 ```
@@ -605,9 +605,10 @@ back with `GET /v1/feedback/{id}` or list a target's feedback with
 `GET /v1/feedback?target_kind=memory&target_id=mem_...`.
 
 ```python
-record = await ctx.feedback.submit("memory", memory.memory_id, "correct",
-                                   correction="The renewal is in March, not May.")
-page = await ctx.feedback.page_for("memory", memory.memory_id)   # .items, .next_cursor
+record = await ctx.feedback.submit(
+    "memory", memory.memory_id, "correct", correction="The renewal is in March, not May."
+)
+page = await ctx.feedback.page_for("memory", memory.memory_id)  # .items, .next_cursor
 ```
 
 **Team model keys.** A model call resolves the most specific Bifrost key that exists: the

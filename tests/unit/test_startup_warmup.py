@@ -34,9 +34,20 @@ class _Encoder:
         return [0.0]
 
 
+class _Space:
+    def __init__(self, name: str, encoder: Any) -> None:
+        self.name = name
+        self.encoder = encoder
+
+
+class _Spaces:
+    def __init__(self, *encoders: Any) -> None:
+        self.spaces = [_Space(f"space_{n}", encoder) for n, encoder in enumerate(encoders)]
+
+
 class _Indexer:
-    def __init__(self, embedding: Any = None, sparse: Any = None) -> None:
-        self.embedding = embedding
+    def __init__(self, *dense: Any, sparse: Any = None) -> None:
+        self.spaces = _Spaces(*dense)
         self.sparse = sparse
 
 
@@ -45,15 +56,17 @@ class _Container:
         self.services: dict[str, Any] = {} if indexer is None else {"indexer": indexer}
 
 
-async def test_both_encoders_are_warmed_before_the_first_request() -> None:
-    dense, sparse = _Encoder(), _Encoder()
-    await _warm_encoders(_Container(_Indexer(dense, sparse)))  # type: ignore[arg-type]
-    assert dense.calls and sparse.calls, "a cold encoder pays its first inference in a request"
+async def test_every_encoder_is_warmed_before_the_first_request() -> None:
+    english, multilingual, sparse = _Encoder(), _Encoder(), _Encoder()
+    await _warm_encoders(_Container(_Indexer(english, multilingual, sparse=sparse)))  # type: ignore[arg-type]
+    assert english.calls and multilingual.calls and sparse.calls, (
+        "a cold encoder pays its first inference in a request"
+    )
 
 
 async def test_a_failing_encoder_does_not_stop_the_service_starting() -> None:
     dense, sparse = _Encoder(fail=True), _Encoder()
-    await _warm_encoders(_Container(_Indexer(dense, sparse)))  # type: ignore[arg-type]
+    await _warm_encoders(_Container(_Indexer(dense, sparse=sparse)))  # type: ignore[arg-type]
     assert sparse.calls, "one cold model must not stop the others warming"
 
 
@@ -64,5 +77,5 @@ async def test_a_container_without_an_indexer_warms_nothing_and_raises_nothing()
 async def test_an_encoder_that_cannot_embed_a_query_is_skipped() -> None:
     """A sparse implementation need not expose the query path; it must not be called blindly."""
     sparse = _Encoder()
-    await _warm_encoders(_Container(_Indexer(object(), sparse)))  # type: ignore[arg-type]
+    await _warm_encoders(_Container(_Indexer(object(), sparse=sparse)))  # type: ignore[arg-type]
     assert sparse.calls

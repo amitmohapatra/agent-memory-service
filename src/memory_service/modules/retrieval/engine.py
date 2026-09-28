@@ -19,8 +19,11 @@ from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
+from memory_service.modules.grounding.lexical import content_tokens
+from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
@@ -31,7 +34,14 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.models import Reranker
-from memory_service.ports.search import SearchHit, SearchStore
+from memory_service.ports.search import (
+    AnchoredPrefetch,
+    Retriever,
+    SearchHit,
+    SearchStore,
+    SparseVector,
+    VectorName,
+)
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
@@ -143,19 +153,55 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
 
 
 def rrf_fuse(
-    lists: Sequence[Sequence[SearchHit]], *, k: int = 60
+    lists: Sequence[Sequence[SearchHit]],
+    *,
+    k: int = 60,
+    weights: Sequence[float] | None = None,
 ) -> list[tuple[str, float, list[str], dict[str, Any]]]:
-    """Client-side reciprocal rank fusion (used when the store cannot fuse natively)."""
+    """Client-side reciprocal rank fusion (used when the store cannot fuse natively).
+
+    ``weights`` scales each list's contribution, one per list, the way the store's weighted
+    RRF does; absent, every list weighs 1.0.
+    """
     scores: dict[str, float] = {}
     retrievers: dict[str, list[str]] = {}
     payloads: dict[str, dict[str, Any]] = {}
-    for hits in lists:
+    for position, hits in enumerate(lists):
+        weight = 1.0 if weights is None else float(weights[position])
         for rank, hit in enumerate(hits):
-            scores[hit.record_id] = scores.get(hit.record_id, 0.0) + 1.0 / (k + rank + 1)
-            retrievers.setdefault(hit.record_id, []).append(hit.retriever)
+            scores[hit.record_id] = scores.get(hit.record_id, 0.0) + weight / (k + rank + 1)
+            retrievers.setdefault(hit.record_id, []).append(str(hit.retriever))
             payloads.setdefault(hit.record_id, hit.payload)
     ordered = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
     return [(rid, s, retrievers[rid], payloads[rid]) for rid, s in ordered]
+
+
+@dataclass(frozen=True)
+class QueryVectors:
+    """What one query was encoded into: a vector per dense space its script is searched in,
+    the sparse vector, and the script that decided the spaces."""
+
+    dense: dict[VectorName, list[float]]
+    sparse: SparseVector | None
+    script: Script
+
+
+#: entity anchors read off a query; a question names a handful of things at most
+MAX_QUERY_ENTITIES = 6
+
+
+def query_entities(query: str) -> list[str]:
+    """The entities a query names, in the canonical form the index stores them in.
+
+    A sentence-initial "What" is capitalised like a name; a candidate with no content token
+    is a function word and anchors nothing.
+    """
+    out: list[str] = []
+    for name in extract_entities(query, max_entities=MAX_QUERY_ENTITIES):
+        canonical = canonical_entity(name)
+        if canonical and canonical not in out and content_tokens(canonical):
+            out.append(canonical)
+    return out
 
 
 class RetrievalEngine:
@@ -249,12 +295,12 @@ class RetrievalEngine:
             # graph traversal all run under it instead of after it; what is awaited later
             # is only whatever is left of it.
             reused = (
-                query_embedding[1]
+                {self.indexer.spaces.primary_space.name: query_embedding[1]}
                 if query_embedding and query_embedding[0] == search_text
                 else None
             )
-            encode_task = asyncio.ensure_future(self._encode(search_text, dense=reused))
-            encoded: tuple[list[float] | None, Any] = (None, None)
+            encode_task = asyncio.ensure_future(self._encode(search_text, known=reused))
+            encoded: QueryVectors | None = None
             prefetched: dict[str, asyncio.Future[Any]] = {}
             try:
                 if visibility is None:
@@ -314,6 +360,7 @@ class RetrievalEngine:
                     ]
                     with timings.stage("encode"):
                         encoded = await encode_task
+                    diagnostics["query_script"] = encoded.script.value
                     # one store round trip per kind, concurrently; `wanted` order is kept so
                     # the interleave below is what it was when they ran one after another
                     with timings.stage("search"):
@@ -441,7 +488,10 @@ class RetrievalEngine:
             candidates=candidates,
             visibility=visibility,
             diagnostics=diagnostics,
-            query_embedding=encoded[0],
+            # the primary space's vector, for the semantic cache to remember the query by
+            query_embedding=(
+                encoded.dense.get(self.indexer.spaces.primary_space.name) if encoded else None
+            ),
         )
 
     async def _expand_derived_sources(
@@ -527,7 +577,7 @@ class RetrievalEngine:
         *,
         kind: str,
         document_ids: Sequence[str] | None,
-        encoded: tuple[list[float] | None, Any],
+        encoded: QueryVectors,
         diagnostics: dict[str, Any],
     ) -> list[Candidate]:
         """Ranked candidates of one kind: the store's hybrid search, fused with any extra
@@ -544,7 +594,7 @@ class RetrievalEngine:
                 lists.append(extra_hits)
             fused = rrf_fuse(lists, k=self.cfg.rrf_k)[: self.cfg.fused_k]
             hits = [
-                SearchHit(record_id=rid, score=s, retriever="fusion", payload=p)
+                SearchHit(record_id=rid, score=s, retriever=Retriever.FUSION, payload=p)
                 for rid, s, _, p in fused
             ]
             retrievers_of = {rid: names for rid, _, names, _ in fused}
@@ -598,7 +648,12 @@ class RetrievalEngine:
                 _discard(task)
         original = {c.record_id: c for c in candidates}
         base = [
-            SearchHit(record_id=c.record_id, score=c.score, retriever="fusion", payload=c.payload)
+            SearchHit(
+                record_id=c.record_id,
+                score=c.score,
+                retriever=Retriever.FUSION,
+                payload=c.payload,
+            )
             for c in candidates
         ]
         # The original question gets twice the weight of each actor view. A topic view
@@ -713,8 +768,8 @@ class RetrievalEngine:
         return out
 
     async def _encode(
-        self, query: str, *, dense: list[float] | None = None
-    ) -> tuple[list[float] | None, Any]:
+        self, query: str, *, known: dict[VectorName, list[float]] | None = None
+    ) -> QueryVectors:
         """Encode the query once for every kind that will be searched.
 
         This used to live inside ``_hybrid``, which is called once per kind — so a query
@@ -722,11 +777,30 @@ class RetrievalEngine:
         pass is the dominant cost of a search: measured on this box, dense off is p50
         58.6 ms and dense on is p50 532.9 ms over an identical corpus, and the encoder alone
         is 178 ms mean. Hoisting it out is a pure refactor with no behavioural change.
+
+        The query's script decides which dense spaces are encoded and searched: the English
+        specialist only sees Latin-script text, so a Cyrillic or Thai question pays one
+        encode, not two. The spaces it does need are encoded concurrently.
         """
-        if self.cfg.dense and dense is None:
-            dense = await self.indexer.embedding.embed_query(query)
+        script = detect_script(query)
+        dense = (
+            await self.indexer.spaces.embed_query(query, script=script, known=known)
+            if self.cfg.dense
+            else {}
+        )
         sparse = self.indexer.sparse.encode_query(query) if self.cfg.bm25 else None
-        return dense, sparse
+        return QueryVectors(dense=dense, sparse=sparse, script=script)
+
+    def _anchors(self, query: str, encoded: QueryVectors, *, kind: str) -> list[AnchoredPrefetch]:
+        """The entity prefetch: memories sharing an entity with the query, as their own RRF
+        list, searched with the vector the query already has for the primary space."""
+        primary = self.indexer.spaces.primary_space.name
+        if not (self.cfg.entity_prefetch and kind == "memory" and primary in encoded.dense):
+            return []
+        entities = query_entities(query)
+        return (
+            [AnchoredPrefetch(vector=primary, must_any={"entities": entities})] if entities else []
+        )
 
     async def _hybrid(
         self,
@@ -735,7 +809,7 @@ class RetrievalEngine:
         *,
         kind: str,
         document_ids: Sequence[str] | None,
-        encoded: tuple[list[float] | None, Any] | None = None,
+        encoded: QueryVectors | None = None,
         subject: str | None = None,
     ) -> list[SearchHit]:
         collection = self.indexer.collection(MEMORIES if kind == "memory" else KNOWLEDGE)
@@ -748,16 +822,18 @@ class RetrievalEngine:
             flt = flt.model_copy(
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
-        dense, sparse = encoded if encoded is not None else await self._encode(query)
+        vectors = encoded if encoded is not None else await self._encode(query)
         memory_depth = derived_k(self.cfg.memory_recall_k) if kind == "memory" else 0
         return await self.store.search_hybrid(
             collection,
-            dense=dense,
-            sparse=sparse,
+            dense=vectors.dense,
+            sparse=vectors.sparse,
             flt=flt,
             limit=max(self.cfg.fused_k, memory_depth),
             prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
             rrf_k=self.cfg.hybrid_rrf_k,
+            weights=self.cfg.hybrid_weights,
+            anchors=self._anchors(query, vectors, kind=kind),
         )
 
     async def _rerank(

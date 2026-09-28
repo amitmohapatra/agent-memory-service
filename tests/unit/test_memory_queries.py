@@ -7,11 +7,12 @@ import pytest
 
 from memory_service.config.constants import RETRIEVAL
 from memory_service.domain.errors import DependencyUnavailable
+from memory_service.domain.script import Script
 from memory_service.modules.context.builder import candidate_to_item
 from memory_service.modules.rag.indexer import MEMORIES
-from memory_service.modules.retrieval.engine import Candidate
+from memory_service.modules.retrieval.engine import Candidate, QueryVectors
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
-from memory_service.ports.search import SearchHit, SearchRecord
+from memory_service.ports.search import SearchHit, SearchRecord, VectorName
 from tests.unit import test_llm_retrieval as base
 
 parts = base.parts
@@ -83,7 +84,7 @@ async def test_subject_search_keeps_tenant_visibility_and_current_filters(parts)
         base.VISIBILITY,
         kind="memory",
         document_ids=None,
-        encoded=(None, None),
+        encoded=QueryVectors(dense={}, sparse=None, script=Script.LATIN),
         subject="user:Alice",
     )
     flt = engine.store.search_hybrid.call_args.kwargs["flt"]
@@ -95,7 +96,9 @@ async def test_subject_search_keeps_tenant_visibility_and_current_filters(parts)
 
 async def test_actor_views_share_one_encoding_and_preserve_original_evidence(parts):
     engine = base._engine(parts)
-    engine._encode = AsyncMock(return_value=(None, None))
+    engine._encode = AsyncMock(
+        return_value=QueryVectors(dense={}, sparse=None, script=Script.LATIN)
+    )
     engine._hybrid = AsyncMock(
         return_value=[
             SearchHit(
@@ -150,7 +153,9 @@ async def test_optional_search_failure_returns_original_candidates(parts, failur
 async def test_timeout_cancels_slow_search_and_keeps_primary_results(parts):
     engine = base._engine(parts)
     engine.cfg = RETRIEVAL.model_copy(update={"memory_entity_search_timeout_ms": 1})
-    engine._encode = AsyncMock(return_value=(None, None))
+    engine._encode = AsyncMock(
+        return_value=QueryVectors(dense={}, sparse=None, script=Script.LATIN)
+    )
     cancelled = asyncio.Event()
 
     async def slow(*args, **kwargs):
@@ -207,7 +212,7 @@ async def test_real_store_actor_search_cannot_cross_visibility_tenant_or_current
                 record_id=identifier,
                 collection=indexer.collection(MEMORIES),
                 tenant_id=tenant,
-                dense=dense,
+                dense={VectorName.DENSE_ML: dense},
                 sparse=sparse,
                 payload={
                     "kind": "memory",

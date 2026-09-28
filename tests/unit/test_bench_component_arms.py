@@ -32,7 +32,7 @@ def test_the_default_still_stands_everything_in() -> None:
     [
         ("authorization", "openfga", "authorization"),
         ("cache", "dragonfly", "cache"),
-        ("nli", "deberta", "nli"),
+        ("nli", "frozen", "nli"),
     ],
 )
 def test_asking_for_the_real_component_stops_standing_it_in(
@@ -54,6 +54,6 @@ def test_an_unknown_arm_is_refused_rather_than_ignored(monkeypatch: pytest.Monke
 def test_the_arms_are_read_from_their_own_variables(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BENCH_AUTHZ", "openfga")
     monkeypatch.setenv("BENCH_CACHE", "dragonfly")
-    monkeypatch.setenv("BENCH_NLI", "deberta")
+    monkeypatch.setenv("BENCH_NLI", "frozen")
     env = BenchEnv.from_environ()
-    assert (env.authorization, env.cache, env.nli) == ("openfga", "dragonfly", "deberta")
+    assert (env.authorization, env.cache, env.nli) == ("openfga", "dragonfly", "frozen")

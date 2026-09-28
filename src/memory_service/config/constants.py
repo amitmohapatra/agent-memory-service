@@ -24,6 +24,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memory_service.ports.search import VectorName
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -45,7 +47,7 @@ def local_model_path(local_dir: str) -> str | None:
 
 
 class DenseModel(BaseModel):
-    """The dense encoder, as loaded by sentence-transformers or by our own ONNX runner."""
+    """A dense encoder, as loaded by sentence-transformers or by our own ONNX runner."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -54,6 +56,8 @@ class DenseModel(BaseModel):
     local_dir: str = "granite-embedding-small-english-r2"
     model_path: str | None = None
     revision: str | None = None
+    #: the checkpoint's licence, reported with the provider
+    license: str = "Apache-2.0"
     #: Which runner loads it. ``torch``: sentence-transformers. ``onnx``: the tokenizer +
     #: ``onnxruntime`` session this repository owns (``adapters/models/embeddings.py``),
     #: because sentence-transformers' own ONNX backend reaches the graph through
@@ -100,20 +104,29 @@ class SparseModel(BaseModel):
 
 
 class NLIModel(BaseModel):
-    """The claim-support cross-encoder behind the grounding cascade."""
+    """The claim-support cross-encoder behind the grounding cascade.
+
+    Multilingual, and frozen on measured evidence: the FP32 graph scores the English golden
+    grounding set 36/40 - the same as the English DeBERTa it replaces - and 78.67% on
+    same-language XNLI across 15 languages
+    (``benchmark/results/multilingual_nli_mdeberta_fp32.json``).
+    Its int8 quantisation lost eleven points on English and is not shipped. One model, one
+    runtime: the ONNX session this repository owns (``adapters/models/onnx_nli.py``).
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    id: str = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
-    local_dir: str = "deberta-v3-base-mnli-fever-anli"
+    id: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
+    local_dir: str = "mdeberta-v3-base-xnli-multilingual-nli-2mil7"
     model_path: str | None = None
-    revision: str | None = None
-    runtime: Literal["torch", "onnx"] = "torch"
-    graph_file: str | None = None
-    batch_size: int = Field(default=16, ge=1, le=64)
+    revision: str | None = "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+    license: str = "MIT"
+    runtime: Literal["onnx"] = "onnx"
+    #: the FP32 graph; the quantised ``onnx/model_quantized.onnx`` failed quality
+    graph_file: str | None = "onnx/model.onnx"
+    batch_size: int = Field(default=8, ge=1, le=64)
     max_length: int = Field(default=512, ge=32, le=512)
-    #: as ``DenseModel.threads``; both runners call ``torch.set_num_threads``, which is
-    #: process-wide, so the two counts are deliberately the same number
+    #: as ``DenseModel.threads``: ORT ``intra_op_num_threads``, one share of the cores
     threads: int = 2
 
     @property
@@ -143,7 +156,23 @@ class CrossEncoderModel(BaseModel):
 class FrozenModels(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    #: the English specialist: named vector ``dense_en``, searched for Latin-script queries
     dense: DenseModel = DenseModel()
+    #: The multilingual encoder: named vector ``dense_ml``, searched for every query.
+    #:
+    #: Bekko a8m: ModernBERT (Answer.AI/LightOn) + mmBERT (JHU) lineage, a Japanese
+    #: maintainer, MIT. Measured (``docs/CPU-MULTILINGUAL-DECISION-20260928.md``): XQuAD
+    #: paragraph R@10 0.9883 over 12 languages where the English encoder reads 0.6596; fused
+    #: with it and BM25, SciFact 0.7557/0.8926 against 0.7409/0.8912 for English + BM25; 1,200
+    #: encodes at 20 RPS with p99 108.84 ms. Its larger sibling (a25m) costs a p99 of 1,046 ms
+    #: for no English gain and is not shipped.
+    dense_ml: DenseModel = DenseModel(
+        id="hotchpotch/bekko-embedding-v1-a8m",
+        local_dir="bekko-embedding-v1-a8m",
+        revision="c721113d59a1d91b447450324f51c4b3332c924a",
+        license="MIT",
+        batch_size=8,
+    )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()
     #: Off on measured evidence: SciFact-1000 nDCG@10 79.33 vs 84.51 without it (paired sign
@@ -543,6 +572,14 @@ class RetrievalSettings(BaseModel):
     # Dense/sparse fusion uses the same one-based rank convention as rrf_fuse. One
     # preserves Qdrant's historical default (zero-based k=2); tune explicitly, not silently.
     hybrid_rrf_k: int = Field(default=1, ge=0, le=1000)
+    #: Weight of each hybrid arm (``dense_en``, ``dense_ml``, ``bm25``) in the store's RRF,
+    #: fitted offline from per-arm rank dumps (``benchmark/fit_rrf_weights.py``) and spent on
+    #: depth. ``None`` is equal weights, which every measurement before the fit was made at.
+    hybrid_weights: dict[VectorName, float] | None = None
+    #: Entity -> memory routing: memories sharing an entity with the query enter the fusion
+    #: as one more RRF list (``ports.search.AnchoredPrefetch``). Off until its judged arm
+    #: shows strict multi-hop does not lose by it.
+    entity_prefetch: bool = False
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

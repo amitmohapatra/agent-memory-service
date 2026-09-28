@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
-from memory_service.domain.memory import unverified_representation
+from memory_service.domain.memory import aggregate_statement, unverified_representation
+from memory_service.domain.predicates import is_multi_valued
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["cross_encoder", "fusion", "exact"]
@@ -271,8 +272,106 @@ def _memory_line(m: Any, *, body: str | None = None) -> str:
         weekday,
         f"{who}:" if who else "",
         m.text if body is None else body,
+        _resolved_dates(m) if body is None else "",
     )
     return " ".join(p for p in parts if p)
+
+
+def _resolved_dates(m: Any) -> str:
+    """``(three days ago = 2023-05-05)``: the relative dates the text names, resolved at
+    ingest against the day it was said, so the reader never does that arithmetic.
+
+    Named and counted offsets only, never weekday phrases like "last Tuesday" - see
+    ``modules.memory.temporal`` for why guessing those is worse than leaving them."""
+    mentions = m.attributes.get("dated_mentions") or ()
+    pairs = [
+        f"{mention.get('text')} = {mention.get('date')}"
+        for mention in mentions
+        if isinstance(mention, dict) and mention.get("text") and mention.get("date")
+    ]
+    return f"({'; '.join(pairs)})" if pairs else ""
+
+
+#: How many memories of one multi-valued slot it takes before they are gathered into a single
+#: dated block rather than printed as separate lines.
+#:
+#: A bundle routinely holds several statements about the same slot - four "participated in"
+#: memories about one person, said on four different days. Printed as four lines among forty
+#: they read as four unrelated facts, and a question that needs all of them ("which events has
+#: Jon been to") is answered from whichever line was read last. Fragmentation is the largest
+#: loss bucket on LoCoMo: 226 of 416 misses (ADR 0024, D6 step 4). One block per (subject,
+#: predicate) says these values are all current, and says it in the same words a consolidated
+#: belief would use - so the read-side grouping and a write-path belief cannot disagree.
+#:
+#: Two is the floor because a "group" of one is just the memory's own line.
+AGGREGATE_MIN_MEMBERS = 2
+
+
+def _aggregate_key(m: Any) -> tuple[str, str] | None:
+    """``(subject, predicate)`` when this memory is one value of a multi-valued slot.
+
+    ``None`` for anything that must keep its own line: a memory with no subject or predicate,
+    a single-valued slot (where the newest value is the answer and older ones are superseded
+    history, not a set), and a derived memory, which is already an aggregate of its sources.
+    """
+    if m.attributes.get("derived"):
+        return None
+    subject = str(m.attributes.get("subject") or "")
+    predicate = str(m.attributes.get("predicate") or "")
+    if not subject or not is_multi_valued(predicate):
+        return None
+    return subject, predicate
+
+
+def _aggregate_line(subject: str, predicate: str, members: Sequence[Any]) -> str:
+    """Every gathered value of one slot as a single citable block, oldest first.
+
+    Carries every member's citation, so the reader can still attribute each statement, and
+    every member's resolved relative dates. The unverified warning is kept if it applies to
+    any member: an aggregate is no more trustworthy than its least trustworthy source.
+    """
+    citations = "; ".join(dict.fromkeys(m.citation for m in members))
+    warning = (
+        "model-extracted, unverified; source speaker"
+        if any(unverified_representation(m.attributes) for m in members)
+        else ""
+    )
+    dated = [
+        (_observed(m)[0], " ".join(filter(None, (m.text, _resolved_dates(m))))) for m in members
+    ]
+    head = " ".join(filter(None, (f"- [{citations}]", warning)))
+    return f"{head} {aggregate_statement(subject, predicate, dated)}"
+
+
+def _timeline_lines(ordered: Sequence[Any], shown: set[str]) -> list[str]:
+    """The chronological block, with each multi-valued slot gathered into one dated block.
+
+    ``ordered`` is oldest first, so a gathered block is oldest first too and lands at its
+    oldest member's place in the timeline. ``shown`` are the ids already printed in full under
+    "Most relevant"; those stand here as a pointer and are never gathered, which keeps the
+    invariant this renderer is built on: every memory body appears exactly once.
+    """
+    groups: dict[tuple[str, str], list[Any]] = {}
+    for m in ordered:
+        key = _aggregate_key(m)
+        if key is not None and m.item_id not in shown:
+            groups.setdefault(key, []).append(m)
+    gathered = {
+        m.item_id: key
+        for key, members in groups.items()
+        if len(members) >= AGGREGATE_MIN_MEMBERS
+        for m in members
+    }
+    lines: list[str] = []
+    done: set[tuple[str, str]] = set()
+    for m in ordered:
+        key = gathered.get(m.item_id)
+        if key is None:
+            lines.append(_memory_line(m, body=SHOWN_ABOVE if m.item_id in shown else None))
+        elif key not in done:
+            done.add(key)
+            lines.append(_aggregate_line(*key, groups[key]))
+    return lines
 
 
 class ContextBundle(BaseModel):
@@ -323,13 +422,7 @@ class ContextBundle(BaseModel):
                 shown = {m.item_id for m in ranked}
                 parts.append("## Most relevant\n" + "\n".join(_memory_line(m) for m in ranked))
             ordered = sorted(self.memories, key=lambda m: str(m.attributes.get("observed_at", "")))
-            parts.append(
-                "## Memories\n"
-                + "\n".join(
-                    _memory_line(m, body=SHOWN_ABOVE if m.item_id in shown else None)
-                    for m in ordered
-                )
-            )
+            parts.append("## Memories\n" + "\n".join(_timeline_lines(ordered, shown)))
         if self.memories and REPEAT_MOST_RELEVANT_AT_END and len(self.memories) > MOST_RELEVANT_MAX:
             # The tail of the prompt is the second attention peak (63.2 against the middle's
             # 53.8 in arXiv 2307.03172), and it is the last thing read before the question.

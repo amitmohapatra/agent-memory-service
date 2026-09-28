@@ -54,6 +54,12 @@ def requires_torch() -> None:
     pytest.importorskip("transformers", reason=NO_RUNTIME)
 
 
+def requires_onnxruntime() -> None:
+    """Skip unless the ONNX runtime and the tokenizers it feeds are importable here."""
+    pytest.importorskip("onnxruntime", reason=NO_RUNTIME)
+    pytest.importorskip("tokenizers", reason=NO_RUNTIME)
+
+
 def requires_sentence_transformers() -> None:
     requires_torch()
     pytest.importorskip("sentence_transformers", reason=NO_RUNTIME)

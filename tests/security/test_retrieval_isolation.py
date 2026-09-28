@@ -22,8 +22,9 @@ from memory_service.config.settings import SearchSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
 from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
+from memory_service.modules.rag.spaces import DenseSpaces
 from memory_service.modules.retrieval.engine import RetrievalEngine
-from memory_service.ports.search import SearchRecord
+from memory_service.ports.search import SearchRecord, VectorName
 from tests.security.test_isolation import TENANTS, _keys, _oracle, _spec
 
 # 288 reader configurations, each running the full retrieval pipeline over every visibility
@@ -100,7 +101,7 @@ async def engine_and_ids() -> tuple[RetrievalEngine, dict[str, dict[str, Any]]]:
     store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = HashEmbedding(dimension=32)
     sparse = Bm25SparseEncoder()
-    indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]
+    indexer = Indexer(_NoUoW(), store, DenseSpaces.single(embedding), sparse, None)  # type: ignore[arg-type]
     collection = indexer.collection(KNOWLEDGE)
     await indexer.ensure_collections()
     dense = (await embedding.embed_documents([TEXT]))[0]
@@ -115,7 +116,7 @@ async def engine_and_ids() -> tuple[RetrievalEngine, dict[str, dict[str, Any]]]:
                 record_id=rid,
                 collection=collection,
                 tenant_id=obj["tenant"],
-                dense=dense,
+                dense={VectorName.DENSE_ML: dense},
                 sparse=sv,
                 payload={
                     "kind": "chunk",

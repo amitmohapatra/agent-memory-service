@@ -9,6 +9,14 @@ every READY document's chunks and summaries and every CURRENT memory:
 ``--drop`` deletes the current collections first (full rebuild); without it the rebuild
 upserts over what is there. Documents and memories that fail are reported, never skipped
 silently. Also used by the failure-injection suite (``search_rebuild`` scenario).
+
+Moving an existing tenant onto the multilingual runtime is this tool twice: the rebuild
+writes every record with both dense vectors (``dense_en``, ``dense_ml``), its script tag,
+its entity anchors and its resolved dates into the collections the new fingerprint names,
+then ``--prune`` drops the single-vector generation nothing reads any more::
+
+    make reindex-image REINDEX_ARGS="--drop"
+    make reindex-image REINDEX_ARGS="--prune-dry-run"   # list, then --prune to drop
 """
 
 from __future__ import annotations
@@ -98,6 +106,7 @@ async def rebuild_search_index(
     for tenant, memory_id in mem_rows:
         by_tenant.setdefault(tenant, []).append(memory_id)
     for tenant, ids in by_tenant.items():
+        log.info("reindex.tenant", tenant_id=tenant, memories=len(ids))
         for start in range(0, len(ids), 200):
             batch = ids[start : start + 200]
             try:

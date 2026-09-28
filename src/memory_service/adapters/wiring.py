@@ -309,15 +309,36 @@ def _wire_models(container: Container) -> None:
     from memory_service.adapters.models.embeddings import HashEmbedding, load_dense
     from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
     from memory_service.adapters.models.sparse import Bm25SparseEncoder
+    from memory_service.domain.script import Script
+    from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
+    from memory_service.ports.search import VectorName
 
     stand_in = container.overrides
     if stand_in.embedding == "hash":
-        container.embedding = HashEmbedding(stand_in.embedding_dimension)
+        # the stand-in stands in for the space every query searches
+        spaces = DenseSpaces.single(HashEmbedding(stand_in.embedding_dimension))
     else:
         dense = stand_in.dense_model or FROZEN_MODELS.dense
         # The thread count is frozen with the model (constants.DenseModel.threads); the
         # environment field is what is left of the served-model tier and is going away.
-        container.embedding = load_dense(dense, threads=_model_threads(container, dense))
+        threads = _model_threads(container, dense)
+        english = load_dense(dense, threads=threads)
+        if stand_in.multilingual_dense == "disabled":
+            # the single-encoder arm: the English specialist answers every script
+            spaces = DenseSpaces.single(english, VectorName.DENSE_EN)
+        else:
+            spaces = DenseSpaces(
+                [
+                    DenseSpace(
+                        VectorName.DENSE_EN, english, query_scripts=frozenset({Script.LATIN})
+                    ),
+                    DenseSpace(
+                        VectorName.DENSE_ML, load_dense(FROZEN_MODELS.dense_ml, threads=threads)
+                    ),
+                ]
+            )
+    container.dense_spaces = spaces
+    container.embedding = spaces.primary
     container.sparse = Bm25SparseEncoder()
 
     reranker: Any = None
@@ -377,12 +398,16 @@ def _wire_llm(container: Container) -> None:
 
 
 def _wire_nli(container: Container) -> None:
-    """Claim-support classifier + grounding cascade. Like the parser, the model degrades to
-    the deterministic stand-in with a warning when its weights cannot be loaded; reports
-    then say ``representative: false``."""
-    from memory_service.adapters.models.nli import LexicalNLI, TransformersNLI
+    """Claim-support classifier + grounding cascade.
+
+    The frozen graph must load: a lexical substitute cannot provide the multilingual
+    verification contract of a trained model, so a missing graph is a startup error rather
+    than a report that quietly says ``representative: false``. The stand-in is chosen only
+    by the ``nli="lexical"`` override (the hermetic suite, the benchmarks that do not score
+    grounding).
+    """
+    from memory_service.adapters.models.nli import LexicalNLI
     from memory_service.adapters.models.onnx_nli import OnnxNLI
-    from memory_service.domain.errors import DependencyUnavailable
     from memory_service.modules.grounding.cascade import GroundingCascade
 
     stand_in = container.overrides.nli
@@ -390,22 +415,8 @@ def _wire_nli(container: Container) -> None:
         container.nli = None
         return
     nli: Any = LexicalNLI()
-    if stand_in != "lexical" and FROZEN_MODELS.nli.runtime == "onnx":
-        # An explicitly frozen graph must load. A lexical substitute cannot provide
-        # the multilingual verification contract of a trained model.
+    if stand_in != "lexical":
         nli = OnnxNLI(FROZEN_MODELS.nli, threads=_model_threads(container))
-    elif stand_in != "lexical":
-        try:
-            # torch.set_num_threads is process-wide and the NLI head loads *after* the
-            # encoder, so whatever it sets is what the encoder ends up running with. Left to
-            # its own frozen default it silently reset the count the encoder had just chosen,
-            # which made MEMORY__MODELS__EMBEDDING__THREADS inert in every process that loads
-            # both - that is, every API and worker process - over the component that is 61%
-            # of query p99. Both models are given the same number on purpose: two models that
-            # each fan over every core are worse than two that each take a share.
-            nli = TransformersNLI(FROZEN_MODELS.nli, threads=_model_threads(container))
-        except DependencyUnavailable as exc:
-            log.warning("nli.unavailable", error=exc.message, fallback="lexical")
     container.nli = nli
     container.services["grounding"] = GroundingCascade(
         nli, settings=container.tuning.nli, assist=container.services["llm_assist"]
@@ -428,7 +439,7 @@ def _wire_retrieval(container: Container) -> None:
     indexer = Indexer(
         container.services["uow_factory"],
         container.search,
-        container.embedding,
+        container.dense_spaces,
         container.sparse,
         container.cache,
         batch_size=dense.batch_size,

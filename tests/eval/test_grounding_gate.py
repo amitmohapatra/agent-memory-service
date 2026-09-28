@@ -4,8 +4,9 @@ answer/evidence pairs in ``golden/grounding_claims.json``. Writes
 
 With the lexical stand-in the deterministic parts must be perfect (citation validation,
 decomposition, verbatim support, contradictions on numbers/negation, the unused scan) and
-the file says ``representative: false``. The DeBERTa run (``models`` marker, real weights)
-asserts the quality thresholds below and overwrites the file with ``representative: true``.
+the file says ``representative: false``. The frozen-head run (``models`` marker, the
+mDeBERTa ONNX graph) asserts the quality thresholds below and overwrites the file with
+``representative: true``.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import pytest
 from benchmark.common import RESULTS, provenance
 
 from memory_service.adapters.models.nli import LexicalNLI
-from memory_service.config.constants import NLIModel, NLISettings
+from memory_service.config.constants import FROZEN_MODELS, NLIModel, NLISettings
 from memory_service.modules.grounding.cascade import Evidence, GroundingCascade
 from memory_service.ports.models import NLIProvider
 
@@ -141,15 +142,21 @@ async def test_grounding_gate_with_lexical_stand_in() -> None:
     assert report["per_verdict"]["contradicted"]["precision"] == 1.0, report["per_verdict"]
 
 
+#: the FP32 mDeBERTa graph scored 36 of the 40 cases when it was selected
+#: (benchmark/results/multilingual_nli_mdeberta_fp32.json); the frozen head may not lose one
+GOLDEN_CORRECT_MIN = 36
+
+
 @pytest.mark.models
-async def test_grounding_gate_with_deberta() -> None:
-    from tests.support_models import requires_torch, requires_weights
+async def test_grounding_gate_with_frozen_nli() -> None:
+    from tests.support_models import requires_onnxruntime, requires_weights
 
-    requires_torch()
-    path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
-    from memory_service.adapters.models.nli import TransformersNLI
+    requires_onnxruntime()
+    weights = requires_weights(FROZEN_MODELS.nli.local_dir) / FROZEN_MODELS.nli.local_dir
+    from memory_service.adapters.models.onnx_nli import OnnxNLI
 
-    report = await run_gate(TransformersNLI(NLIModel(model_path=str(path))))
+    report = await run_gate(OnnxNLI(NLIModel(model_path=str(weights))))
+    assert sum(1 for r in report["rows"] if r["ok"]) >= GOLDEN_CORRECT_MIN, report["failures"]
     _write(report, None)
     assert report["representative"] is True
     bad = [

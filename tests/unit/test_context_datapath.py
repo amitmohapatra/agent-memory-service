@@ -468,6 +468,7 @@ def test_the_wiring_registers_the_builder_for_shutdown() -> None:
     from memory_service.adapters.wiring import _wire_retrieval
     from memory_service.application.container import Container
     from memory_service.config.settings import Settings
+    from memory_service.modules.rag.spaces import DenseSpaces
 
     container = Container(settings=Settings(_env_file=None), version="test")  # type: ignore[call-arg]
     container.services["uow_factory"] = _Factory()
@@ -479,7 +480,8 @@ def test_the_wiring_registers_the_builder_for_shutdown() -> None:
         def fingerprint(self) -> str:
             return "fp"
 
-    container.embedding = _Model()
+    container.dense_spaces = DenseSpaces.single(_Model())  # type: ignore[arg-type]
+    container.embedding = container.dense_spaces.primary
     container.sparse = _Model()
     _wire_retrieval(container)
 

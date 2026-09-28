@@ -33,7 +33,7 @@ vendor: ## Refresh the vendored copy of bifrost-sdk (generated; never edit it in
 
 .PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
-        load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
+        load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-locomo-source bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -133,6 +133,13 @@ BENCH_DB_DOCS ?= $(BENCH_DB_HOST)/memory_bench_docs
 BENCH_DB_CONV ?= $(BENCH_DB_HOST)/memory_bench_conv
 BENCH_DB_DEGEN ?= $(BENCH_DB_HOST)/memory_bench_degen
 BENCH_DB_GOLDEN ?= $(BENCH_DB_HOST)/memory_bench_golden
+#: Phase 7 (M2 + M4) owns its own databases, so an arm of this phase never competes with a
+#: corpus another phase left behind and the source harness's dedicated-name rule is satisfied
+#: by the default rather than by remembering to override it.
+BENCH_DB_P7_CONV ?= $(BENCH_DB_HOST)/p7_locomo
+BENCH_DB_P7_DOCS ?= $(BENCH_DB_HOST)/p7_retrieval
+#: arm A1 changes the write path, so it gets its own corpus and its own database (spec 2.9)
+BENCH_DB_P7_LLM ?= $(BENCH_DB_HOST)/p7_locomo_llm
 
 #: The same server as BENCH_DB_HOST, reached from the *host* rather than from inside a
 #: container: migrations run on the host with the project's own alembic, benchmarks run
@@ -158,7 +165,12 @@ BENCH_THREADS ?=
 BENCH_SEARCH ?= qdrant
 #: The encoder is frozen (src/memory_service/config/constants.py); `make bench-embedding`
 #: is where challengers are compared, never a flag on the product.
-BENCH_QDRANT_URL ?= http://host.docker.internal:6333
+#: The ISOLATED Qdrant (16333/16334), never the shared dev store on 6333. A benchmark
+#: ingests a corpus and deletes it again; the dev store on 6333 is serving a running API, so
+#: pointing a harness at it both pollutes those reads and measures against the pollution.
+#: The source harness refuses any other port; ``reset_store`` refuses any non-benchmark
+#: database. This default is what makes the refusals unnecessary rather than routine.
+BENCH_QDRANT_URL ?= http://host.docker.internal:16333
 #: The gateway, reached from inside the benchmark container. It holds the provider key;
 #: the service is only ever told a URL and a model name.
 BIFROST_URL ?= http://host.docker.internal:8091/v1
@@ -195,9 +207,20 @@ define bench-run
 	  -e MEMORY__DATABASE__URL="$(1)" \
 	  -e BENCH_SEARCH=$(BENCH_SEARCH) -e BENCH_EMBEDDING=frozen \
 	  -e MEMORY__SEARCH__QDRANT_URL=$(BENCH_QDRANT_URL) \
+	  -e MEMORY__SEARCH__QDRANT_GRPC_PORT=$(BENCH_QDRANT_GRPC_PORT) \
+	  -e BENCH_DENSE=$(BENCH_DENSE) \
 	  $(2) \
-	  --entrypoint sh memory-service-memory-api -c '$(3)'
+	  --entrypoint sh memory-service-memory-api -c '$(BENCH_PRELUDE) $(3)'
 endef
+
+#: The image predates the temporal normaliser, so the one pure-Python dependency it lacks is
+#: installed into the throwaway container the way `model-test` installs pytest; nothing is
+#: rebuilt and nothing persists. Set BENCH_PRELUDE= when the image carries it.
+BENCH_PRELUDE ?= uv pip install -q "dateparser>=1.2" &&
+#: gRPC port beside BENCH_QDRANT_URL (the isolated store publishes 16333/16334)
+BENCH_QDRANT_GRPC_PORT ?= 16334
+#: ensemble (both dense spaces, the shipped runtime) | english (the single-encoder arm)
+BENCH_DENSE ?= ensemble
 
 #: The judged configuration: the gateway answers and grades, at the judged depth
 #: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,
@@ -218,7 +241,8 @@ bench-db: ## Create and migrate the benchmark databases (idempotent, safe to re-
 	@# Benchmarks used to assume `memory_bench` already existed, so on any machine that had
 	@# not had it created by hand the first benchmark failed with a connection error that
 	@# said nothing about the cause. Each benchmark owns one database; see BENCH_DB_* above.
-	@for db in memory_bench_docs memory_bench_conv memory_bench_degen memory_bench_golden; do \
+	@for db in memory_bench_docs memory_bench_conv memory_bench_degen memory_bench_golden \
+	          p7_locomo p7_retrieval p7_locomo_llm; do \
 	  docker exec $(PG_CONTAINER) psql -U memory -d postgres -tAc \
 	    "SELECT 1 FROM pg_database WHERE datname='$$db'" | grep -q 1 \
 	    || docker exec $(PG_CONTAINER) createdb -U memory "$$db"; \
@@ -241,6 +265,9 @@ bench-locomo: bench-db ## Conversational memory accuracy on LoCoMo, real models 
 BENCH_EXTRA_ENV ?=
 
 LOCOMO_ARGS ?=
+#: The corpus a LoCoMo arm runs against. Phase 7: BENCH_DB_P7_CONV for A0, BENCH_DB_P7_LLM
+#: for A1 (its write path differs, so it cannot share A0's index).
+LOCOMO_DB ?= $(BENCH_DB_CONV)
 
 bench-external-prepare: ## Download BEIR SciFact into benchmark/data (git-ignored)
 	$(PY) python -m benchmark.prepare_external
@@ -253,7 +280,31 @@ bench-locomo-judged: bench-db ## LoCoMo scored the way LoCoMo scores it: generat
 	@# actual request rate, and --calls-per-minute means what it says.
 	@# The only configuration in which the adversarial category means anything. The gateway
 	@# holds the provider key; this container is given a URL and a model name, never a secret.
-	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV) $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
+	@# LOCOMO_DB selects the arm's corpus: Phase 7's A0 is BENCH_DB_P7_CONV and A1, which
+	@# changes the write path, is BENCH_DB_P7_LLM. Only a dedicated database is accepted.
+	$(call bench-run,$(LOCOMO_DB),$(BENCH_LLM_ENV) $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.locomo --judge $(LOCOMO_ARGS))
+
+bench-locomo-source: bench-db ## LoCoMo source-ID coverage, no LLM, per-arm rank dumps (inside the runtime image)
+	@# The ID-keyed source-recall harness (benchmark/native_source_retrieval.py): exact
+	@# annotated source turns at depths 10/20/50/100, one tenant per conversation with
+	@# --reuse-corpus, and every retriever's own ranking with --dump-arms for the offline
+	@# weight fit. Refuses any database not named memory_hi_*/p7_* and any Qdrant but the
+	@# isolated one on 16333.
+	$(call bench-run,$(BENCH_DB_P7_CONV),$(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.native_source_retrieval --data benchmark/data/locomo10.json $(SOURCE_ARGS))
+
+SOURCE_ARGS ?= --output benchmark/results/phase7/locomo_source.json --reuse-corpus --dump-arms
+
+bench-runtime-retrieval: bench-db ## SciFact and XQuAD through the runtime store path (named vectors, script-pruned prefetch)
+	@# The M2 gates: SciFact >= 0.7557/0.8926 and XQuAD mean same-language R@10 >= 0.98,
+	@# measured through what ships rather than an offline list fusion (benchmark/runtime_retrieval.py).
+	$(call bench-run,$(BENCH_DB_P7_DOCS),-e BENCH_GRAPH_ENRICHMENT=disabled $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.runtime_retrieval $(RUNTIME_ARGS))
+
+RUNTIME_ARGS ?= --suite scifact --output benchmark/results/phase7/runtime_scifact.json
+
+bench-budget: ## Read the accuracy key's usage (BENCH_BUDGET_KEY_ID); BUDGET_ARGS='guard --projected-usd 0.2' refuses an unaffordable arm
+	$(PY) python -m benchmark.budget $(BUDGET_ARGS)
+
+BUDGET_ARGS ?= read
 
 bench-locomo-rescore: ## Re-grade an existing judged LoCoMo result under another ruler or judge (no retrieval)
 	@# RESCORE_ARGS='benchmark/results/locomo_judged_v5.json --judge-ruler lenient'

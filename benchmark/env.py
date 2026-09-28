@@ -83,7 +83,11 @@ def default_embedding() -> Literal["frozen", "hash"]:
     encoder or die trying. The stand-in is selected by the absence of the weights, never by a
     quiet fallback inside the adapter: the adapter itself still refuses to run without them.
     """
-    return "frozen" if local_model_path(FROZEN_MODELS.dense.local_dir) is not None else "hash"
+    present = all(
+        local_model_path(model.local_dir) is not None
+        for model in (FROZEN_MODELS.dense, FROZEN_MODELS.dense_ml)
+    )
+    return "frozen" if present else "hash"
 
 
 @dataclass(frozen=True)
@@ -117,10 +121,14 @@ class BenchEnv:
     #: A dict never evicts, never fails and never races, so bundle-cache correctness under a
     #: real cache has never been measured by a harness either.
     cache: Literal["dragonfly", "memory"] = "memory"
-    #: ``deberta``: the frozen NLI head. ``lexical``: the deterministic stand-in whose reports
-    #: are labelled ``representative: false``. The head costs ~700 MB per process, which is
-    #: why it is not the default here.
-    nli: Literal["deberta", "lexical"] = "lexical"
+    #: ``frozen``: the frozen NLI head (mDeBERTa, FP32 ONNX). ``lexical``: the deterministic
+    #: stand-in whose reports are labelled ``representative: false``. The head costs ~1.1 GB
+    #: per process, which is why it is not the default here.
+    nli: Literal["frozen", "lexical"] = "lexical"
+    #: ``ensemble``: both dense spaces (English + multilingual), the shipped configuration.
+    #: ``english``: the English encoder alone, searched for every script - the arm every
+    #: number before the ensemble was measured with.
+    dense: Literal["ensemble", "english"] = "ensemble"
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -132,6 +140,7 @@ class BenchEnv:
             "authorization": _flag("BENCH_AUTHZ", cls.authorization),
             "cache": _flag("BENCH_CACHE", cls.cache),
             "nli": _flag("BENCH_NLI", cls.nli),
+            "dense": _flag("BENCH_DENSE", cls.dense),
         }
         allowed = {
             "search": ("qdrant", "memory"),
@@ -140,7 +149,8 @@ class BenchEnv:
             "embedding": ("frozen", "hash"),
             "authorization": ("openfga", "memory"),
             "cache": ("dragonfly", "memory"),
-            "nli": ("deberta", "lexical"),
+            "nli": ("frozen", "lexical"),
+            "dense": ("ensemble", "english"),
         }
         for name, value in values.items():
             if value not in allowed[name]:
@@ -153,7 +163,7 @@ class BenchEnv:
         An in-process cache and queue (a benchmark drains its own jobs synchronously, which
         only the recording queue supports), the in-memory authorization model and blob store
         (neither is what a benchmark measures), the lexical NLI (grounding is not scored by
-        these harnesses and the DeBERTa head costs 700 MB per process), local-mode Qdrant
+        these harnesses and the frozen head costs ~1.1 GB per process), local-mode Qdrant
         unless ``BENCH_SEARCH=qdrant``, and the depth ``BENCH_DEPTH`` names.
 
         Under the hash stand-in the document parser is the builtin one too: a host without
@@ -169,6 +179,7 @@ class BenchEnv:
             search="memory" if self.search == "memory" else None,
             graph_enrichment="disabled" if self.graph_enrichment == "disabled" else None,
             embedding="hash" if self.embedding == "hash" else None,
+            multilingual_dense="disabled" if self.dense == "english" else None,
             document_parser="builtin" if self.embedding == "hash" else None,
             retrieval=_DEPTH_RETRIEVAL.get(self.depth),
             context=_DEPTH_CONTEXT.get(self.depth),

@@ -15,7 +15,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType, Visibility
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.rag.indexer import KNOWLEDGE
-from memory_service.ports.search import PAYLOAD_FIELDS, SearchFilter
+from memory_service.ports.search import PAYLOAD_FIELDS, SearchFilter, VectorName
 
 pytestmark = pytest.mark.integration
 
@@ -59,7 +59,7 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
     indexer = container.services["indexer"]
     store = container.search
     collection = indexer.collection(KNOWLEDGE)
-    assert collection.startswith("knowledge_hash-v1")
+    assert collection.startswith("knowledge_dense_ml_hash-v1")
     async with uow_factory() as uow:
         chunks = await uow.documents.list_chunks("acme", doc_id)
         pending = await uow.documents.list_chunks("acme", doc_id, unindexed_only=True)
@@ -74,18 +74,20 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
     # dense, sparse and hybrid all find the EBITDA chunk with a tenant + kind filter
     q = "Adjusted EBITDA increased despite lower revenue"
     dense = await store.search_dense(
-        collection, await indexer.embedding.embed_query(q), flt, limit=5
+        collection, VectorName.DENSE_ML, await indexer.embedding.embed_query(q), flt, limit=5
     )
     sparse = await store.search_sparse(collection, indexer.sparse.encode_query(q), flt, limit=5)
     hybrid = await store.search_hybrid(
         collection,
-        dense=await indexer.embedding.embed_query(q),
+        dense={VectorName.DENSE_ML: await indexer.embedding.embed_query(q)},
         sparse=indexer.sparse.encode_query(q),
         flt=flt,
         limit=5,
         prefetch_limit=20,
     )
-    assert {h.retriever for h in dense} == {"dense"} and {h.retriever for h in sparse} == {"bm25"}
+    assert {h.retriever for h in dense} == {"dense_ml"} and {h.retriever for h in sparse} == {
+        "bm25"
+    }
     assert {h.retriever for h in hybrid} == {"fusion"}
     assert any("increased to EUR 98" in h.payload["text"] for h in sparse)
     assert any("increased to EUR 98" in h.payload["text"] for h in hybrid)
@@ -135,7 +137,7 @@ async def test_store_side_visibility_filtering(container, uow_factory) -> None:
     assert not vis.allows("acme", ["tenant:acme"])
     empty = await container.search.search_hybrid(
         engine.indexer.collection(KNOWLEDGE),
-        dense=await engine.indexer.embedding.embed_query(q),
+        dense={VectorName.DENSE_ML: await engine.indexer.embedding.embed_query(q)},
         sparse=engine.indexer.sparse.encode_query(q),
         flt=SearchFilter(tenant_id="acme", must_any={"visibility_keys": []}),
         limit=5,

@@ -1,35 +1,49 @@
-"""Indexer: canonical chunks/memories -> search records (dense + BM25 sparse + payload).
+"""Indexer: canonical chunks/memories -> search records (dense spaces + BM25 sparse + payload).
 
 The search index is rebuildable: ``rebuild_document`` re-indexes from PostgreSQL. Collection
-names embed the embedding fingerprint so a model change creates a new vector space instead
-of mixing spaces. Payload carries only security/filter fields and short display text.
+names embed the fingerprint of every dense space so a model change creates a new vector
+space instead of mixing spaces. Payload carries only security/filter fields and short display
+text; every record is tagged with the Unicode script of its text.
 """
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
+from memory_service.modules.ingestion.context_graph import canonical_entity
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.models import EmbeddingProvider, SparseEncoder
-from memory_service.ports.search import CollectionSpec, SearchFilter, SearchRecord, SearchStore
+from memory_service.ports.search import (
+    CollectionSpec,
+    SearchFilter,
+    SearchRecord,
+    SearchStore,
+    VectorName,
+)
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
+#: entity anchors a memory carries into the index; the query side extracts at most as many
+MAX_RECORD_ENTITIES = 12
 
 
 def memory_index_text(m: CanonicalMemory) -> str:
@@ -49,12 +63,24 @@ def memory_index_text(m: CanonicalMemory) -> str:
     return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
 
 
+def memory_entities(m: CanonicalMemory) -> list[str]:
+    """The entity anchors a memory is indexed under: its subject and the entities its
+    extraction named, in the canonical form the query side matches with."""
+    names = [m.subject or "", *m.system_metadata.get("entities", [])]
+    out: list[str] = []
+    for name in names:
+        canonical = canonical_entity(str(name))
+        if canonical and canonical not in out:
+            out.append(canonical)
+    return out[:MAX_RECORD_ENTITIES]
+
+
 class Indexer:
     def __init__(
         self,
         uow_factory: UnitOfWorkFactory,
         store: SearchStore,
-        embedding: EmbeddingProvider,
+        spaces: DenseSpaces,
         sparse: SparseEncoder,
         cache: CacheProvider | None = None,
         *,
@@ -64,7 +90,7 @@ class Indexer:
     ) -> None:
         self.uow_factory = uow_factory
         self.store = store
-        self.embedding = embedding
+        self.spaces = spaces
         self.sparse = sparse
         self.cache = cache
         self.batch_size = batch_size
@@ -72,8 +98,13 @@ class Indexer:
         self.assist = assist or LLMAssist.disabled()
 
     @property
+    def embedding(self) -> EmbeddingProvider:
+        """The one encoder that stands for a text where a single vector is wanted."""
+        return self.spaces.primary
+
+    @property
     def fingerprint(self) -> str:
-        return f"{self.embedding.fingerprint()}|{self.sparse.fingerprint()}"
+        return f"{self.spaces.fingerprint()}|{self.sparse.fingerprint()}"
 
     #: Qdrant accepts letters, digits, hyphen and underscore in a collection name. Anything
     #: else has to be folded, or a provider whose fingerprint contains a path or a colon
@@ -91,7 +122,7 @@ class Indexer:
             await self.store.ensure_collection(
                 CollectionSpec(
                     name=self.collection(base),
-                    dense_dim=self.embedding.dimension,
+                    dense=self.spaces.dimensions,
                     sparse=True,
                     sparse_idf=sparse_idf,
                     # Memories are small and every query reads them: holding their payloads
@@ -102,11 +133,21 @@ class Indexer:
                 )
             )
 
-    async def embed_cached(self, texts: Sequence[str], hashes: Sequence[str]) -> list[list[float]]:
-        """Embed with a content-hash cache keyed by the embedding fingerprint."""
+    async def embed_cached(
+        self, texts: Sequence[str], hashes: Sequence[str]
+    ) -> dict[VectorName, list[list[float]]]:
+        """Every space's vectors for ``texts``, the spaces encoded concurrently, each behind
+        a content-hash cache keyed by that space's fingerprint."""
+        vectors = await asyncio.gather(
+            *(self._embed_space(space, texts, hashes) for space in self.spaces.spaces)
+        )
+        return dict(zip(self.spaces.names, vectors, strict=True))
+
+    async def _embed_space(
+        self, space: DenseSpace, texts: Sequence[str], hashes: Sequence[str]
+    ) -> list[list[float]]:
         out: list[list[float] | None] = [None] * len(texts)
-        fingerprint = self.embedding.fingerprint()
-        keys = [f"emb:{fingerprint}:{h}" for h in hashes]
+        keys = [f"emb:{space.encoder.fingerprint()}:{h}" for h in hashes]
         if self.cache is not None:
             try:
                 cached = await self.cache.mget(keys)
@@ -118,7 +159,7 @@ class Indexer:
         missing = [i for i, v in enumerate(out) if v is None]
         for start in range(0, len(missing), self.batch_size):
             batch = missing[start : start + self.batch_size]
-            vectors = await self.embedding.embed_documents([texts[i] for i in batch])
+            vectors = await space.encoder.embed_documents([texts[i] for i in batch])
             for i, vec in zip(batch, vectors, strict=True):
                 out[i] = vec
         if self.cache is not None and missing:
@@ -244,7 +285,7 @@ class Indexer:
                 record_id=f"sum_{nid}",
                 collection=self.collection(KNOWLEDGE),
                 tenant_id=tenant_id,
-                dense=dense[i],
+                dense=_vectors_at(dense, i),
                 sparse=sparse[i],
                 payload={
                     "kind": "summary",
@@ -259,6 +300,7 @@ class Indexer:
                     "representation": by_id[nid].representation.value
                     if nid in by_id
                     else "SUMMARY",
+                    "script": detect_script(texts[i]).value,
                     "text": texts[i][:2000],
                     "text_hash": content_hash(texts[i]),
                 },
@@ -283,7 +325,7 @@ class Indexer:
                 record_id=c.chunk_id,
                 collection=self.collection(KNOWLEDGE),
                 tenant_id=c.tenant_id,
-                dense=dense[i],
+                dense=_vectors_at(dense, i),
                 sparse=sparse[i],
                 payload={
                     "kind": "chunk",
@@ -295,9 +337,10 @@ class Indexer:
                     "thread_id": thread_id,
                     "page": c.page,
                     "section_path": c.section_path,
+                    "script": detect_script(c.text).value,
                     "text": c.text[:2000],
                     "text_hash": c.text_hash,
-                    "entities": c.entities[:12],
+                    "entities": [canonical_entity(e) for e in c.entities[:MAX_RECORD_ENTITIES]],
                     "token_estimate": c.token_estimate,
                 },
             )
@@ -337,7 +380,7 @@ class Indexer:
                         record_id=m.memory_id,
                         collection=collection,
                         tenant_id=m.tenant_id,
-                        dense=dense[i],
+                        dense=_vectors_at(dense, i),
                         sparse=sparse[i],
                         payload={
                             "kind": "memory",
@@ -362,6 +405,11 @@ class Indexer:
                             "contradicts": list(m.temporal.contradicts),
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
+                            "script": detect_script(m.content).value,
+                            # anchors for the entity prefetch, matched inside the store
+                            "entities": memory_entities(m),
+                            # relative dates the text names, resolved against observed_at
+                            "dated_mentions": list(m.system_metadata.get("dated_mentions", [])),
                             "source_refs": [
                                 ref.model_dump(mode="json", exclude_none=True) for ref in m.evidence
                             ],
@@ -387,7 +435,7 @@ class Indexer:
 
     async def _dense_for_chunks(
         self, chunks: Sequence[Chunk], texts: list[str]
-    ) -> list[list[float]]:
+    ) -> dict[VectorName, list[list[float]]]:
         """Per-chunk embeddings.
 
         This used to branch into late chunking when the provider exposed ``embed_spans``. That
@@ -401,12 +449,14 @@ class Indexer:
         return await self.index_document(tenant_id, document_id, force=True)
 
     async def delete_document(self, tenant_id: str, document_id: str) -> None:
-        from memory_service.ports.search import SearchFilter
-
         await self.store.delete_by_filter(
             self.collection(KNOWLEDGE),
             SearchFilter(tenant_id=tenant_id, must={"document_id": document_id}),
         )
+
+
+def _vectors_at(dense: dict[VectorName, list[list[float]]], i: int) -> dict[VectorName, Any]:
+    return {space: vectors[i] for space, vectors in dense.items()}
 
 
 def _encode(vec: list[float]) -> bytes:

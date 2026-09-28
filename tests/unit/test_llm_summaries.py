@@ -224,7 +224,7 @@ async def test_indexer_and_builder_use_the_model(container, uow_factory) -> None
         indexer = Indexer(
             uow_factory,
             container.search,
-            container.embedding,
+            container.dense_spaces,
             container.sparse,
             None,
             assist=gw.assist(uses=["summaries"]),

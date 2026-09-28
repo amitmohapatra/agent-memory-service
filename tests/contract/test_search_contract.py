@@ -20,6 +20,7 @@ from memory_service.ports.search import (
     SearchFilter,
     SearchRecord,
     SparseVector,
+    VectorName,
 )
 
 pytestmark = pytest.mark.contract
@@ -46,7 +47,9 @@ async def store(request: pytest.FixtureRequest):
     if not await adapter.ping():
         pytest.skip(f"{request.param} qdrant not reachable — start the dev stack")
     collection = f"contract_{uuid.uuid4().hex[:10]}"
-    await adapter.ensure_collection(CollectionSpec(name=collection, dense_dim=DIM, sparse=True))
+    await adapter.ensure_collection(
+        CollectionSpec(name=collection, dense={VectorName.DENSE_ML: DIM}, sparse=True)
+    )
     adapter.contract_collection = collection  # type: ignore[attr-defined]
     try:
         yield adapter
@@ -64,7 +67,7 @@ def _record(store, rid: str, tenant: str, seed: float, **payload) -> SearchRecor
         record_id=rid,
         collection=store.contract_collection,
         tenant_id=tenant,
-        dense=_dense(seed),
+        dense={VectorName.DENSE_ML: _dense(seed)},
         sparse=SparseVector(indices=[1, 2], values=[0.5, 0.5]),
         payload={"tenant_id": tenant, **payload},
     )
@@ -82,7 +85,11 @@ async def test_dense_search_ranks_the_nearer_vector_first(store) -> None:
     near, far = uuid.uuid4().hex, uuid.uuid4().hex
     await store.upsert([_record(store, near, "acme", 0.9), _record(store, far, "acme", -0.9)])
     hits = await store.search_dense(
-        store.contract_collection, _dense(0.9), SearchFilter(tenant_id="acme"), limit=2
+        store.contract_collection,
+        VectorName.DENSE_ML,
+        _dense(0.9),
+        SearchFilter(tenant_id="acme"),
+        limit=2,
     )
     assert [h.record_id for h in hits][:1] == [near], "ranking must reflect distance"
 
@@ -92,7 +99,11 @@ async def test_a_filter_cannot_see_another_tenants_records(store) -> None:
     mine, theirs = uuid.uuid4().hex, uuid.uuid4().hex
     await store.upsert([_record(store, mine, "acme", 0.5), _record(store, theirs, "globex", 0.5)])
     hits = await store.search_dense(
-        store.contract_collection, _dense(0.5), SearchFilter(tenant_id="acme"), limit=10
+        store.contract_collection,
+        VectorName.DENSE_ML,
+        _dense(0.5),
+        SearchFilter(tenant_id="acme"),
+        limit=10,
     )
     assert theirs not in {h.record_id for h in hits}
     assert await store.count(store.contract_collection, SearchFilter(tenant_id="acme")) == 1
@@ -103,7 +114,7 @@ async def test_hybrid_returns_a_fused_ranking(store) -> None:
     await store.upsert([_record(store, rid, "acme", 0.1 * i) for i, rid in enumerate(ids)])
     hits = await store.search_hybrid(
         store.contract_collection,
-        dense=_dense(0.2),
+        dense={VectorName.DENSE_ML: _dense(0.2)},
         sparse=SparseVector(indices=[1, 2], values=[0.5, 0.5]),
         flt=SearchFilter(tenant_id="acme"),
         limit=3,

@@ -17,9 +17,10 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
+from memory_service.modules.rag.spaces import DenseSpaces
 from memory_service.modules.retrieval.engine import RetrievalEngine
 from memory_service.ports.models import RerankResult
-from memory_service.ports.search import SearchRecord
+from memory_service.ports.search import SearchRecord, VectorName
 from tests.support_llm import mocked_gateway
 
 CTX = MemoryExecutionContext(tenant_id="t", user_id="u1")
@@ -63,7 +64,7 @@ async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchSto
     store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = _SpyEmbedding()
     sparse = Bm25SparseEncoder()
-    indexer = Indexer(_NoUoW(), store, embedding, sparse, None)  # type: ignore[arg-type]
+    indexer = Indexer(_NoUoW(), store, DenseSpaces.single(embedding), sparse, None)  # type: ignore[arg-type]
     await indexer.ensure_collections()
     dense = await embedding.embed_documents(list(TEXTS.values()))
     sv = sparse.encode_documents(list(TEXTS.values()))
@@ -73,7 +74,7 @@ async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchSto
                 record_id=rid,
                 collection=indexer.collection(KNOWLEDGE),
                 tenant_id="t",
-                dense=dense[i],
+                dense={VectorName.DENSE_ML: dense[i]},
                 sparse=sv[i],
                 payload={
                     "kind": "chunk",

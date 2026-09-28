@@ -18,7 +18,6 @@ from pathlib import Path
 
 from benchmark.common import local_model_runtime
 from benchmark.harness import stats
-from memory_service.adapters.models.nli import TransformersNLI
 from memory_service.adapters.models.onnx_nli import OnnxNLI
 from memory_service.config.constants import NLIModel, NLISettings
 from memory_service.modules.grounding.cascade import Evidence, GroundingCascade
@@ -89,7 +88,7 @@ async def run(args) -> None:
     if any(row["label"] not in LABELS for row in records):
         raise ValueError("Unknown NLI label")
     spec = NLIModel.model_validate_json(args.spec.read_text())
-    model = OnnxNLI(spec) if spec.runtime == "onnx" else TransformersNLI(spec)
+    model = OnnxNLI(spec)
     result = {
         "spec": spec.model_dump(),
         "model_fingerprint": model.fingerprint(),

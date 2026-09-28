@@ -37,14 +37,16 @@ async def _warm_encoders(container: Container) -> None:
     report on with no service at all.
     """
     indexer = container.services.get("indexer")
-    for attribute in ("embedding", "sparse"):
-        encoder = getattr(indexer, attribute, None)
+    spaces = getattr(getattr(indexer, "spaces", None), "spaces", ())
+    encoders = [(str(space.name), space.encoder) for space in spaces]
+    encoders.append(("sparse", getattr(indexer, "sparse", None)))
+    for name, encoder in encoders:
         if encoder is None or not hasattr(encoder, "embed_query"):
             continue
         try:
             await encoder.embed_query("warm")
         except Exception as exc:  # startup must survive a cold model
-            log.warning("app.warmup_failed", encoder=attribute, error=str(exc))
+            log.warning("app.warmup_failed", encoder=name, error=str(exc))
 
 
 def create_app(

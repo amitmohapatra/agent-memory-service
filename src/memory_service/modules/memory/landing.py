@@ -12,12 +12,12 @@ from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.predicates import is_multi_valued
 from memory_service.modules.memory.derived import (
     BeliefService,
     EntitySummaryService,
     source_statement,
 )
-from memory_service.modules.memory.native import _SINGLE_VALUED
 from memory_service.ports.uow import UnitOfWork
 
 
@@ -51,7 +51,7 @@ class LandingReflection:
         sources = self._bounded_sources(memory.subject, sources)
         affected: set[str] = set()
         predicate = memory.predicate
-        if predicate and predicate not in _SINGLE_VALUED and not predicate.startswith("favourite_"):
+        if is_multi_valued(predicate):
             support = [m for m in sources if m.predicate == predicate]
             if len(support) >= self.cfg.belief_min_support:
                 belief, changed = await self.beliefs.upsert(

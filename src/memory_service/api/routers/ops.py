@@ -142,6 +142,11 @@ async def version(request: Request) -> VersionResponse:
             "tasks": _active(c.tasks, "procrastinate"),
             "authorization": _active(c.authorization, "openfga"),
             "embedding": _active(c.embedding, constants.FROZEN_MODELS.dense.id),
+            # The dense side is one vector per space, and ``embedding`` names only the
+            # primary. Which spaces are live is what separates the shipped ensemble from
+            # the single-encoder arm, so a benchmark artifact stamped from this endpoint
+            # can say which one it measured.
+            "dense_spaces": _spaces(c.dense_spaces),
             "reranker": _active(c.reranker, "none"),
             "llm": "bifrost" if s.models.llm.enabled else "disabled",
             "memory_intelligence": "native",
@@ -153,6 +158,13 @@ async def version(request: Request) -> VersionResponse:
         },
         degraded=_degraded(c),
     )
+
+
+def _spaces(spaces: Any) -> dict[str, str]:
+    """Every live dense space by its wire name — ``{}`` before the models are wired."""
+    if spaces is None:
+        return {}
+    return {str(space.name): _active(space.encoder, space.name) for space in spaces.spaces}
 
 
 def _active(provider: Any, configured: str) -> str:

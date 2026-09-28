@@ -64,7 +64,7 @@ def test_recall_and_context_over_http(client) -> None:
     assert "increased to EUR 98" in top["text"]
     assert top["citation"] == f"chunk_id:{top['item_id']}" and top["representation"] == "CHUNK"
     assert top["evidence"][0]["chunk_id"] == top["item_id"]
-    assert set(top["retrievers"]) <= {"fusion", "dense", "bm25", "exact"}
+    assert set(top["retrievers"]) <= {"fusion", "dense_en", "dense_ml", "bm25", "exact"}
 
     # exact identifier round-trip through the public API
     r = client.post(

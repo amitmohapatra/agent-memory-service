@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from benchmark import embedding, reranker
 
-from tests.conftest import PG_AVAILABLE
+from tests.conftest import DB_URL, PG_AVAILABLE
 
 
 def _row(recall: float, egr: float, **extra: object) -> dict[str, object]:
@@ -158,7 +158,10 @@ class TestBenchEnvEmbeddingDefault:
         from memory_service.config import constants
 
         if weights:
-            (root / constants.FROZEN_MODELS.dense.local_dir).mkdir(parents=True)
+            # both dense spaces: the shipped stack encodes every record twice, so "the
+            # weights are on disk" is only true when the multilingual set is there too
+            for model in (constants.FROZEN_MODELS.dense, constants.FROZEN_MODELS.dense_ml):
+                (root / model.local_dir).mkdir(parents=True)
         monkeypatch.setattr(constants, "MODEL_ROOTS", (root,))
         monkeypatch.delenv("BENCH_EMBEDDING", raising=False)
 
@@ -206,6 +209,12 @@ def test_embedding_benchmark_stand_in_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("BENCH_SEARCH", "memory")
+    # The harness resets the whole schema, and ``benchmark.retrieval._settings`` takes its
+    # database from ``MEMORY__DATABASE__URL`` - which the checked-in ``.env`` points at the
+    # shared ``memory`` database, loaded into the environment before this module is imported.
+    # So this test used to TRUNCATE the dev store on every `make unit`. Point it at the
+    # suite's own database, which the suite already migrates and owns.
+    monkeypatch.setenv("MEMORY__DATABASE__URL", DB_URL)
     out = tmp_path / "embedding.json"
     embedding.main(["--quick", "--stand-in", "--copies", "1", "--batches", "1", "--out", str(out)])
 

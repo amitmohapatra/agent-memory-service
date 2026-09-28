@@ -71,7 +71,7 @@ _REPORT_EXAMPLE: dict[str, Any] = {
     "contradicted": 0,
     "borderline": 0,
     "per_claim_hallucination_rate": 0.5,
-    "nli_provider": "nli-deberta-v3-base-mnli-fever-anli",
+    "nli_provider": "nli-onnx-9c4fa74cd6e43a6647ed8eeb",
     "representative": True,
     "judge_consulted": 0,
     "llm_tokens": 0,

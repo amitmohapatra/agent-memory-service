@@ -1,15 +1,17 @@
-"""NLI adapters: DeBERTa (transformers, CPU) and a deterministic lexical stand-in."""
+"""The shared NLI batching contract and a deterministic lexical stand-in.
+
+The only trained runtime is the ONNX session in ``onnx_nli.py`` (mDeBERTa, multilingual):
+one model, one runtime (ADR 0024). ``LexicalNLI`` is the arithmetic stand-in the hermetic
+suite and the grounding-free benchmarks select explicitly; it is never a silent fallback.
+"""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
 
-from memory_service.adapters.models._precision import cpu_dtype_kwargs
 from memory_service.adapters.models._runner import SerialRunner
 from memory_service.config.constants import NLIModel
-from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.grounding.lexical import conflicts, content_tokens, coverage
 from memory_service.ports.models import NLIScore, ProviderInfo
 
@@ -95,85 +97,3 @@ class BatchedNLI(ABC):
 
     @abstractmethod
     def fingerprint(self) -> str: ...
-
-
-class TransformersNLI(BatchedNLI):
-    """``AutoModelForSequenceClassification`` cross-encoder (DeBERTa-v3 MNLI/FEVER/ANLI) on
-    CPU, batched, and entered one caller at a time on its own thread. Label order is read
-    from the model config."""
-
-    info: ProviderInfo
-    representative = True
-
-    def __init__(self, spec: NLIModel, *, threads: int | None = None) -> None:
-        try:
-            import torch
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
-        except ImportError as exc:
-            raise DependencyUnavailable(
-                "transformers and torch are required for the NLI (install [models])"
-            ) from exc
-        source = spec.source
-        kwargs: dict[str, Any] = {"local_files_only": True} if source != spec.id else {}
-        try:
-            self._tokenizer = AutoTokenizer.from_pretrained(source, **kwargs)
-            self._model = AutoModelForSequenceClassification.from_pretrained(
-                source,
-                **kwargs,
-                **cpu_dtype_kwargs(),  # the NLI runs on CPU by design
-            )
-        except Exception as exc:
-            raise DependencyUnavailable(
-                f"nli model {source!r} could not be loaded ({type(exc).__name__}); "
-                "run `make models` or bake the weights under /models"
-            ) from exc
-        self._model.eval()
-        self._torch = torch
-        # Process-wide, and the same number the encoder sets: two models that each fan over
-        # every core are worse than two that each take two.
-        self.threads = threads or spec.threads
-        torch.set_num_threads(self.threads)
-        self._runner = SerialRunner("nli")
-        self.spec = spec
-        labels = {int(k): str(v).lower() for k, v in self._model.config.id2label.items()}
-        self._order = [
-            next(i for i, name in labels.items() if name.startswith(prefix))
-            for prefix in ("entail", "neutral", "contra")
-        ]
-        self.info = ProviderInfo(
-            name=spec.id,
-            license="MIT",
-            origin="huggingface/" + spec.id,
-            locality="local",
-        )
-
-    def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
-        """Every (premise, hypothesis) pair, batched by the spec's batch size.
-
-        The pairs need not share a hypothesis. Padding is per batch, so mixing claims costs
-        only what the longest row in each batch costs, and one answer's premises are of
-        similar length.
-        """
-        out: list[NLIScore] = []
-        size = max(1, self.spec.batch_size)
-        with self._torch.no_grad():
-            for start in range(0, len(pairs), size):
-                batch = list(pairs[start : start + size])
-                encoded = self._tokenizer(
-                    [premise for premise, _ in batch],
-                    [hypothesis for _, hypothesis in batch],
-                    truncation=True,
-                    max_length=self.spec.max_length,
-                    padding=True,
-                    return_tensors="pt",
-                )
-                probs = self._model(**encoded).logits.softmax(dim=-1)
-                for row in probs.tolist():
-                    e, n, c = (float(row[i]) for i in self._order)
-                    out.append(NLIScore(entailment=e, neutral=n, contradiction=c))
-        return out
-
-    def fingerprint(self) -> str:
-        source = self.spec.model_path or self.spec.id
-        graph = f"-{self.spec.graph_file.removesuffix('.onnx')}" if self.spec.graph_file else ""
-        return f"nli-{source.rstrip('/').split('/')[-1]}{graph}"

@@ -1,16 +1,44 @@
 """SearchStore port. Qdrant by default; rebuildable from canonical PostgreSQL data.
 
-The port speaks in terms of *records* with dense/sparse vectors and filterable payloads.
-Fusion (RRF) is performed by the store when it supports it natively; the fallback is a
-bounded client-side RRF over per-retriever candidate lists.
+The port speaks in terms of *records* with named dense vectors, a sparse vector and
+filterable payloads. A collection carries one dense vector per *space* (``VectorName``): the
+English specialist and the multilingual encoder each own a space, and a query searches the
+spaces its script calls for. Fusion (RRF) is performed by the store when it supports it
+natively; the fallback is a bounded client-side RRF over per-retriever candidate lists.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Any, Literal, Protocol, runtime_checkable
+from collections.abc import Mapping, Sequence
+from enum import StrEnum
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class VectorName(StrEnum):
+    """The named vectors a collection carries: the names on the wire."""
+
+    #: the English specialist encoder (Granite); searched for Latin-script queries only
+    DENSE_EN = "dense_en"
+    #: the multilingual encoder (Bekko); searched for every query
+    DENSE_ML = "dense_ml"
+    #: client-side BM25 term frequencies with the store's IDF modifier
+    BM25 = "bm25"
+
+
+class Retriever(StrEnum):
+    """Which arm produced a hit. The vector arms share their wire names."""
+
+    DENSE_EN = "dense_en"
+    DENSE_ML = "dense_ml"
+    BM25 = "bm25"
+    EXACT = "exact"
+    FUSION = "fusion"
+
+    @classmethod
+    def for_vector(cls, name: VectorName | str) -> Retriever:
+        return cls(str(name))
 
 
 class SparseVector(BaseModel):
@@ -30,7 +58,8 @@ class SearchRecord(BaseModel):
     record_id: str
     collection: str
     tenant_id: str
-    dense: list[float] | None = None
+    #: one vector per dense space the collection carries, keyed by its wire name
+    dense: dict[VectorName, list[float]] = Field(default_factory=dict)
     sparse: SparseVector | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -50,7 +79,18 @@ class SearchFilter(BaseModel):
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
 
 
-Retriever = Literal["dense", "sparse", "bm25", "exact", "fusion"]
+class AnchoredPrefetch(BaseModel):
+    """One more RRF list: a dense space searched again under a narrower filter.
+
+    Records that share an anchor with the query (its entities) enter the fusion as their
+    own arm, so a memory about the right person outranks a memory that merely sounds
+    alike. The vector is one the query already has; the cost is one more prefetch.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    vector: VectorName
+    must_any: dict[str, list[str]]
 
 
 class SearchHit(BaseModel):
@@ -63,10 +103,16 @@ class SearchHit(BaseModel):
 
 
 class CollectionSpec(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    #: ``extra="forbid"`` because this spec decides what a collection physically is. When
+    #: ``dense_dim: int`` became ``dense: dict[VectorName, int]``, two callers kept passing
+    #: the old name and pydantic dropped it in silence: they went on asking for a collection
+    #: with no dense vector at all and still read as if they had asked for a 384-wide one. A
+    #: field this port removes must fail loudly at the call site, not become a default.
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
-    dense_dim: int | None = None
+    #: the dense spaces and their widths
+    dense: dict[VectorName, int] = Field(default_factory=dict)
     sparse: bool = True
     sparse_idf: bool = Field(default=True, description="server-side IDF modifier (BM25)")
     on_disk: bool = False
@@ -84,7 +130,8 @@ class CollectionSpec(BaseModel):
 #: What is *not* here matters as much: a hit used to arrive with its whole payload, so the
 #: security metadata a filter had already applied inside the store (tenant_id aside) and the
 #: indexing bookkeeping travelled back over the wire and were parsed under the GIL for every
-#: candidate of every query.
+#: candidate of every query. ``script`` and ``entities`` are filter fields, indexed and
+#: matched inside the store, and never come back.
 #:
 #: Declared, because the plan said otherwise: ``contributors``, ``owner_principal``,
 #: ``visibility`` and ``status`` are projected, and the Phase 2 plan listed them among the
@@ -103,6 +150,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "confidence",
     "contradicts",
     "contributors",
+    "dated_mentions",
     "derived",
     "document_id",
     "kind",
@@ -142,7 +190,13 @@ class SearchStore(Protocol):
         ...
 
     async def search_dense(
-        self, collection: str, vector: Sequence[float], flt: SearchFilter, *, limit: int
+        self,
+        collection: str,
+        name: VectorName,
+        vector: Sequence[float],
+        flt: SearchFilter,
+        *,
+        limit: int,
     ) -> list[SearchHit]: ...
 
     async def search_sparse(
@@ -153,14 +207,17 @@ class SearchStore(Protocol):
         self,
         collection: str,
         *,
-        dense: Sequence[float] | None,
+        dense: Mapping[VectorName, Sequence[float]],
         sparse: SparseVector | None,
         flt: SearchFilter,
         limit: int,
         prefetch_limit: int,
         rrf_k: int = 1,
+        weights: Mapping[VectorName, float] | None = None,
+        anchors: Sequence[AnchoredPrefetch] = (),
     ) -> list[SearchHit]:
-        """Bounded hybrid fusion, scoring each arm as 1/(rrf_k + one-based rank)."""
+        """Bounded hybrid fusion over every dense space given plus the sparse arm, each arm
+        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0."""
         ...
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]: ...

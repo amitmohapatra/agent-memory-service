@@ -79,8 +79,11 @@ class Overrides:
     #: stand-in that loads no weights
     embedding: Literal["hash"] | None = None
     embedding_dimension: int = 64
-    #: a specific dense encoder in place of the frozen one (benchmark challengers only)
+    #: a specific dense encoder in place of the frozen English one (benchmark challengers only)
     dense_model: DenseModel | None = None
+    #: ``disabled``: the English encoder alone, searched for every script - the
+    #: single-encoder arm the ensemble is measured against
+    multilingual_dense: Literal["disabled"] | None = None
     #: ``lexical``: BM25-style overlap; ``cross_encoder``: the given model, loaded whatever
     #: ``retrieval.rerank`` says (the benchmark that measures it); ``disabled``: none
     reranker: Literal["lexical", "cross_encoder", "disabled"] | None = None
@@ -110,6 +113,7 @@ class Overrides:
             ("blob", self.blob),
             ("graph_store", self.graph_store),
             ("embedding", self.embedding or (self.dense_model and self.dense_model.id)),
+            ("multilingual_dense", self.multilingual_dense),
             ("reranker", self.reranker),
             ("nli", self.nli),
             ("document_parser", self.document_parser),
@@ -163,6 +167,8 @@ class Container:
     blob: Any = None
     tasks: Any = None
     authorization: Any = None
+    #: the dense spaces (``modules.rag.spaces.DenseSpaces``); ``embedding`` is their primary
+    dense_spaces: Any = None
     embedding: Any = None
     sparse: Any = None
     reranker: Any = None
@@ -229,8 +235,14 @@ class Container:
         """In-process models are not dependencies — there is nothing to ping — but each one
         owns a thread. The API builds one container per process and would not notice; the
         benchmarks build one per candidate, and the threads would accumulate across the run.
+
+        ``dense_spaces`` and not ``embedding``: the dense side is two encoders now, and
+        ``embedding`` is only the primary of them. Closing that one left the English
+        specialist's runner thread alive in every container — one leaked thread per arm of
+        an ablation, on the hosts where the thread budget is the thing being measured.
+        ``DenseSpaces.close()`` closes every space it holds, the primary included.
         """
-        for name in ("embedding", "reranker", "nli"):
+        for name in ("dense_spaces", "reranker", "nli"):
             model = getattr(self, name, None)
             closer = getattr(model, "close", None)
             if closer is None:

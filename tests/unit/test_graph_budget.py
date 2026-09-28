@@ -319,6 +319,7 @@ def test_the_wiring_drains_the_stage_at_shutdown() -> None:
     from memory_service.config.settings import Settings
     from memory_service.modules.authz.service import AuthorizationService
     from memory_service.modules.llm.assist import LLMAssist
+    from memory_service.modules.rag.spaces import DenseSpaces
 
     from memory_service.adapters.authz.memory_provider import (  # isort: skip
         MemoryAuthorizationProvider,
@@ -337,7 +338,8 @@ def test_the_wiring_drains_the_stage_at_shutdown() -> None:
     container.services["conversation"] = object()
     container.services["llm_assist"] = LLMAssist.disabled()
     container.services["authz"] = AuthorizationService(MemoryAuthorizationProvider(), None)
-    container.embedding = _Model()
+    container.dense_spaces = DenseSpaces.single(_Model())  # type: ignore[arg-type]
+    container.embedding = container.dense_spaces.primary
     container.sparse = _Model()
     _wire_retrieval(container)
     _wire_graph(container)

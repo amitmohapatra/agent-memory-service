@@ -68,15 +68,15 @@ def _hits(retriever: str, *ids: str) -> list[SearchHit]:
 
 
 def test_rrf_rewards_agreement_and_is_stable() -> None:
-    fused = rrf_fuse([_hits("dense", "a", "b", "c"), _hits("bm25", "b", "a", "d")], k=60)
+    fused = rrf_fuse([_hits("dense_ml", "a", "b", "c"), _hits("bm25", "b", "a", "d")], k=60)
     ids = [rid for rid, _, _, _ in fused]
     # a and b appear in both lists -> ahead of c and d
     assert set(ids[:2]) == {"a", "b"} and ids[2:] == ["c", "d"]
     a = next(f for f in fused if f[0] == "a")
     assert math.isclose(a[1], 1 / 61 + 1 / 62)
-    assert a[2] == ["dense", "bm25"]
+    assert a[2] == ["dense_ml", "bm25"]
     # ties broken by id -> deterministic
-    tie = rrf_fuse([_hits("dense", "z"), _hits("bm25", "y")])
+    tie = rrf_fuse([_hits("dense_ml", "z"), _hits("bm25", "y")])
     assert [t[0] for t in tie] == ["y", "z"]
 
 

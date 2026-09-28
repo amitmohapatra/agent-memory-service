@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from memory_service.config.constants import RETRIEVAL
-from memory_service.modules.retrieval.engine import Candidate
+from memory_service.domain.script import Script
+from memory_service.modules.retrieval.engine import Candidate, QueryVectors
 from tests.unit import test_llm_retrieval as base
 
 parts = base.parts
@@ -45,7 +46,11 @@ async def test_memory_search_depth_preserves_store_authorization_and_document_de
     engine.store.search_hybrid = AsyncMock(return_value=[])
     for kind in ("memory", "chunk"):
         await engine._hybrid(
-            base.QUERY, base.VISIBILITY, kind=kind, document_ids=None, encoded=(None, None)
+            base.QUERY,
+            base.VISIBILITY,
+            kind=kind,
+            document_ids=None,
+            encoded=QueryVectors(dense={}, sparse=None, script=Script.LATIN),
         )
         kwargs = engine.store.search_hybrid.call_args.kwargs
         assert kwargs["limit"] == kwargs["prefetch_limit"] == (8 if kind == "memory" else 4)

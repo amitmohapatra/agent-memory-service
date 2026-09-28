@@ -24,21 +24,25 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import random
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.engine import make_url
+
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_overrides, bench_retrieval
+from benchmark.corpus import CorpusKey, CorpusLedger, conversation_tenant, ensure_conversation
+from benchmark.env import BENCH, bench_overrides, bench_retrieval
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -721,18 +725,47 @@ class _Pacer:
         self._next = time.monotonic() + self.interval
 
 
-async def _answer(llm, bundle_text: str, question: str, *, reference_date: str = "") -> str:
+#: The reader protocol for abstain-with-evidence (D6 step 6). A reader that declined while
+#: the bundle names the very things the question is about is asked once more, with the
+#: pointer; a reader that declined on an empty context is not, and the adversarial
+#: category keeps its abstentions.
+REASK_SYSTEM = (
+    " The context DOES contain entries about the things named below. Re-read those entries "
+    "and answer from them; reply exactly 'I don't know' only if none of them answers the "
+    "question."
+)
+
+
+def _evidence_pointer(produced: str, rendered: str, question: str, status: str) -> str:
+    """The entities the question names that the rendered context also names, as a pointer
+    for one re-ask; empty when the reader did not decline, the bundle reported no evidence,
+    or the context never mentions what the question is about."""
+    from memory_service.modules.retrieval.engine import query_entities
+
+    if not _ABSTAIN.search(produced or "") or "INSUFFICIENT" in status:
+        return ""
+    lowered = rendered.casefold()
+    present = [entity for entity in query_entities(question) if entity in lowered]
+    return ", ".join(present)
+
+
+async def _answer(
+    llm, bundle_text: str, question: str, *, reference_date: str = "", pointer: str = ""
+) -> str:
     """One answer, grounded only in the bundle. ``reference_date`` is the last session's
-    date, so "last week" and "two years ago" resolve against the conversation, not today."""
+    date, so "last week" and "two years ago" resolve against the conversation, not today.
+    ``pointer`` names the entities the context mentions, for the one bounded re-ask."""
     from memory_service.ports.models import LLMMessage
 
     user = f"CONTEXT:\n{bundle_text}\n\n"
     if reference_date:
         user += f"REFERENCE DATE (the conversation's last session): {reference_date}\n\n"
+    if pointer:
+        user += f"THE CONTEXT MENTIONS: {pointer}\n\n"
     user += f"QUESTION: {question}"
     completion = await llm.complete(
         [
-            LLMMessage(role="system", content=ANSWER_SYSTEM),
+            LLMMessage(role="system", content=ANSWER_SYSTEM + (REASK_SYSTEM if pointer else "")),
             LLMMessage(role="user", content=user),
         ],
         # Generous on purpose: a model that reasons before it answers spends the output
@@ -780,6 +813,50 @@ async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "stric
     raise last if last else RuntimeError("unreachable")
 
 
+def _llm_ingestion(settings: Any) -> Any:
+    """Arm A1: let the ingestion path spend the model, and nothing else.
+
+    The only use added is ``contextual_extraction``, the source-span selector in
+    ``modules/memory/narrative.py``: the model picks sentence ranges from the turn and no
+    generated text is stored, so A1 and A0 differ in *which spans become memories*, not in
+    whether the corpus contains model prose. Every other use the arm does not name stays off,
+    the judge's own use is kept (it is the instrument, not the system under test), and
+    ``uses`` lands in the corpus ledger key, so A1 cannot silently reuse A0's index.
+    """
+    llm = settings.models.llm
+    if not llm.enabled:
+        raise SystemExit(
+            "--llm-ingestion needs a generative model: set models.llm.enabled=true and a "
+            "models.llm.model the gateway serves."
+        )
+    uses = sorted({*llm.uses, "contextual_extraction"})
+    return settings.model_copy(
+        update={
+            "models": settings.models.model_copy(
+                update={"llm": llm.model_copy(update={"uses": uses})}
+            )
+        }
+    )
+
+
+def _ingestion_settings(settings: Any, overrides: Any) -> dict[str, Any]:
+    """Everything that shapes the corpus at ingest, for the corpus ledger's key and the
+    result's provenance: which model uses may run at ingestion, consolidation, threading."""
+    llm = settings.models.llm
+    tuning = overrides.memory_intelligence
+    return {
+        "llm": {
+            "enabled": str(llm.enabled),
+            "model": llm.model,
+            "uses": sorted(llm.uses),
+            "fast_uses": sorted(llm.fast_uses),
+        },
+        "consolidation": bool(tuning and tuning.consolidation_enabled),
+        "threaded_ingest": THREADED_INGEST,
+        "graph_enrichment": BENCH.graph_enrichment,
+    }
+
+
 async def run(
     conversations: int | None,
     limit_questions: int | None,
@@ -790,16 +867,16 @@ async def run(
     judge: bool = False,
     calls_per_minute: float = 10.0,
     ruler: str = "strict",
+    reuse_corpus: bool = False,
+    reask: bool = False,
+    llm_ingestion: bool = False,
 ) -> dict:
     if not DATASET.is_file():
         raise SystemExit(f"{DATASET} is missing — run `make bench-locomo-prepare`")
-    data = (
-        json.loads(DATASET.read_text())[:conversations]
-        if conversations
-        else json.loads(DATASET.read_text())
-    )
+    raw = DATASET.read_bytes()
+    data = json.loads(raw)[:conversations] if conversations else json.loads(raw)
 
-    settings = _settings()
+    settings = _llm_ingestion(_settings()) if llm_ingestion else _settings()
     overrides = bench_overrides()
     if ablate:
         # An ablation answers "is this component earning its cost?" the only way that means
@@ -822,12 +899,24 @@ async def run(
     incidents: list[str] = []
     aborted: str | None = None
     started = time.perf_counter()
+    indexer = container.services["indexer"]
+    ledger = CorpusLedger(make_url(settings.database.url.get_secret_value()).database or "")
+    key = CorpusKey(
+        dataset_sha256=hashlib.sha256(raw).hexdigest(),
+        index_fingerprint=indexer.fingerprint,
+        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, overrides)),
+    )
+    reused_conversations = 0
     try:
+        if reuse_corpus and not ledger.matches(key):
+            # a fresh corpus: every conversation's tenant is cleared once, up front
+            for index in range(len(data)):
+                await reset_store(container, conversation_tenant(index))
         for index, conversation in enumerate(data):
-            await reset_store(container, TENANT)
             register_handlers(container)
+            tenant = conversation_tenant(index) if reuse_corpus else TENANT
             ctx = MemoryExecutionContext(
-                tenant_id=TENANT, user_id=f"locomo-{index}", workspace_id="ws"
+                tenant_id=tenant, user_id=f"locomo-{index}", workspace_id="ws"
             )
             # The turns are written under each speaker's own user id with TENANT visibility,
             # so the questioner reads them by being in the tenant and nothing has to be
@@ -836,7 +925,20 @@ async def run(
             # without the grant every search matched nothing and a whole judged run scored
             # 0.0 on 304 questions while reporting INSUFFICIENT evidence. WORKSPACE is no
             # longer an audience; the grant that made it work went with it.
-            turns = await _ingest_conversation(container, ctx, conversation["conversation"])
+            if reuse_corpus:
+                turns, _, reused = await ensure_conversation(
+                    container,
+                    ctx,
+                    conversation["conversation"],
+                    index=index,
+                    key=key,
+                    ledger=ledger,
+                    reuse=True,
+                )
+                reused_conversations += reused
+            else:
+                await reset_store(container, TENANT)
+                turns = await _ingest_conversation(container, ctx, conversation["conversation"])
             sessions = _sessions(conversation["conversation"])
             reference_date = (
                 conversation["conversation"].get(f"{sessions[-1][0]}_date_time", "")
@@ -918,11 +1020,24 @@ async def run(
                 judged: dict | None = None
                 if llm is not None:
                     produced: str | None = None
+                    reasked: dict[str, str] | None = None
                     try:
                         await pacer.wait()
                         produced = await _answer(
                             llm, rendered, question, reference_date=reference_date
                         )
+                        pointer = _evidence_pointer(produced, rendered, question, status)
+                        if reask and pointer:
+                            await pacer.wait()
+                            second = await _answer(
+                                llm,
+                                rendered,
+                                question,
+                                reference_date=reference_date,
+                                pointer=pointer,
+                            )
+                            reasked = {"first_answer": produced[:400], "pointer": pointer}
+                            produced = second
                         await pacer.wait()
                         verdict = await _judge(llm, question, answer, produced, ruler=ruler)
                     except Exception as exc:  # noqa: BLE001 - a judged run must say it failed
@@ -951,6 +1066,7 @@ async def run(
                     else:
                         judged = {
                             "produced": produced[:400],
+                            **({"reasked": reasked} if reasked else {}),
                             "correct": bool(verdict.get("correct")),
                             # the schema asks for it; keeping it makes a disputed verdict
                             # auditable without re-running the judge
@@ -1017,6 +1133,7 @@ async def run(
                         # that does almost nothing, and the widened patterns in router.py
                         # were never re-measured after the rates in their own comments.
                         "query_type": bundle.diagnostics.get("query_type"),
+                        "query_script": bundle.diagnostics.get("query_script"),
                         "query_signals": bundle.diagnostics.get("signals"),
                         "evidence_overlaps": [round(o, 4) for o in overlaps],
                         "evidence_ranks": evidence_ranks,
@@ -1208,6 +1325,17 @@ async def run(
         "total_seconds": round(time.perf_counter() - started, 1),
         "ablation": ablate or {},
         "embedding_provider": embedding,
+        "encoders": {
+            space.name.value: space.encoder.fingerprint() for space in container.dense_spaces.spaces
+        },
+        "spaces_fingerprint": container.dense_spaces.fingerprint(),
+        "dense_arm": BENCH.dense,
+        "ingestion": _ingestion_settings(settings, overrides),
+        "reuse_corpus": reuse_corpus,
+        "reused_conversations": reused_conversations,
+        "reask": reask,
+        "reasked": sum(1 for r in records if (r.get("judged") or {}).get("reasked")),
+        "query_scripts": dict(Counter(r.get("query_script") for r in records)),
         "representative": embedding != "hash",
         "provenance": provenance(),
     }
@@ -1342,6 +1470,24 @@ def main() -> int:
         "nothing. The only apples-to-apples way to compare with a published headline: run "
         "our answers through their rules.",
     )
+    parser.add_argument(
+        "--reuse-corpus",
+        action="store_true",
+        help="one tenant per conversation; skip ingestion when the corpus ledger vouches for "
+        "the store (benchmark/corpus.py), so arms that change only the query side share it",
+    )
+    parser.add_argument(
+        "--reask",
+        action="store_true",
+        help="the reader protocol for abstain-with-evidence: one bounded re-ask when the "
+        "reader declines while the context names what the question is about",
+    )
+    parser.add_argument(
+        "--llm-ingestion",
+        action="store_true",
+        help="arm A1: add contextual_extraction (the source-span selector) to the ingestion "
+        "path's model uses. Needs --judge's generative model; gets its own corpus.",
+    )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()
     if args.rejudge:
@@ -1363,6 +1509,9 @@ def main() -> int:
             judge=args.judge,
             calls_per_minute=args.calls_per_minute,
             ruler=args.judge_ruler,
+            reuse_corpus=args.reuse_corpus,
+            reask=args.reask,
+            llm_ingestion=args.llm_ingestion,
         )
     )
     write_result(args.out, result)

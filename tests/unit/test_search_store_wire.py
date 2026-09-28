@@ -33,6 +33,7 @@ from memory_service.ports.search import (
     CollectionSpec,
     SearchFilter,
     SparseVector,
+    VectorName,
 )
 
 pytestmark = pytest.mark.unit
@@ -276,11 +277,11 @@ def _retries(operation: str | None = None) -> float:
 async def test_every_read_projects_the_payload() -> None:
     client = FakeClient()
     store = _store(client)
-    await store.search_dense("c", [0.1] * 4, _flt(), limit=5)
+    await store.search_dense("c", VectorName.DENSE_ML, [0.1] * 4, _flt(), limit=5)
     await store.search_sparse("c", SparseVector(indices=[1], values=[1.0]), _flt(), limit=5)
     await store.search_hybrid(
         "c",
-        dense=[0.1] * 4,
+        dense={VectorName.DENSE_ML: [0.1] * 4},
         sparse=SparseVector(indices=[1], values=[1.0]),
         flt=_flt(),
         limit=5,
@@ -309,7 +310,7 @@ async def test_native_fusion_ties_have_stable_order_without_changing_scores(orde
     client = TiedClient()
     hits = await _store(client).search_hybrid(
         "c",
-        dense=[0.1] * 4,
+        dense={VectorName.DENSE_ML: [0.1] * 4},
         sparse=SparseVector(indices=[1], values=[1.0]),
         flt=_flt(),
         limit=3,
@@ -336,7 +337,7 @@ async def test_a_read_survives_one_connection_failure(error: Exception) -> None:
     is not. One retry, and the counter says it happened."""
     before = _retries()
     client = FakeClient(error=error, fail_times=1)
-    hits = await _store(client).search_dense("c", [0.1] * 4, _flt(), limit=5)
+    hits = await _store(client).search_dense("c", VectorName.DENSE_ML, [0.1] * 4, _flt(), limit=5)
     assert [h.record_id for h in hits] == ["r1"]
     assert len(client.calls) == 2, "the read was not retried exactly once"
     assert _retries() == before + 1
@@ -345,7 +346,7 @@ async def test_a_read_survives_one_connection_failure(error: Exception) -> None:
 async def test_a_second_failure_is_not_retried_again() -> None:
     client = FakeClient(error=httpx.ConnectError("down"), fail_times=5)
     with pytest.raises(httpx.ConnectError):
-        await _store(client).search_dense("c", [0.1] * 4, _flt(), limit=5)
+        await _store(client).search_dense("c", VectorName.DENSE_ML, [0.1] * 4, _flt(), limit=5)
     assert len(client.calls) == 2, "one retry, not a loop"
 
 
@@ -386,12 +387,17 @@ async def test_a_retried_scroll_page_asks_for_the_offset_it_was_on() -> None:
 async def test_a_one_armed_hybrid_is_counted_as_the_read_it_is() -> None:
     """A query with only a dense prefetch is a dense read; fusing needs two arms. Counted as
     "hybrid", the retry counter mixes three different reads under one operation."""
-    before = (_retries("dense"), _retries("hybrid"))
+    before = (_retries("dense_ml"), _retries("hybrid"))
     client = FakeClient(error=httpx.ConnectError("down"), fail_times=1)
     await _store(client).search_hybrid(
-        "c", dense=[0.1] * 4, sparse=None, flt=_flt(), limit=5, prefetch_limit=8
+        "c",
+        dense={VectorName.DENSE_ML: [0.1] * 4},
+        sparse=None,
+        flt=_flt(),
+        limit=5,
+        prefetch_limit=8,
     )
-    assert (_retries("dense"), _retries("hybrid")) == (before[0] + 1, before[1])
+    assert (_retries("dense_ml"), _retries("hybrid")) == (before[0] + 1, before[1])
 
 
 async def test_an_ordinary_error_is_not_retried() -> None:
@@ -399,7 +405,7 @@ async def test_an_ordinary_error_is_not_retried() -> None:
     and, for a hybrid query, a second DependencyUnavailable a beat later."""
     client = FakeClient(error=ValueError("bad vector dimension"), fail_times=1)
     with pytest.raises(ValueError):
-        await _store(client).search_dense("c", [0.1] * 4, _flt(), limit=5)
+        await _store(client).search_dense("c", VectorName.DENSE_ML, [0.1] * 4, _flt(), limit=5)
     assert len(client.calls) == 1
 
 
@@ -411,7 +417,9 @@ async def test_a_write_is_never_retried() -> None:
 
     client = FakeClient(error=httpx.RemoteProtocolError("Server disconnected"), fail_times=1)
     store = _store(client)
-    record = SearchRecord(record_id="r1", collection="c", tenant_id="acme", dense=[0.1] * 4)
+    record = SearchRecord(
+        record_id="r1", collection="c", tenant_id="acme", dense={VectorName.DENSE_ML: [0.1] * 4}
+    )
     with pytest.raises(DependencyUnavailable):
         await store.upsert([record])
     assert len(client.calls) == 1
@@ -424,7 +432,7 @@ async def test_the_hybrid_failure_is_still_a_dependency_error() -> None:
     with pytest.raises(DependencyUnavailable):
         await _store(client).search_hybrid(
             "c",
-            dense=[0.1] * 4,
+            dense={VectorName.DENSE_ML: [0.1] * 4},
             sparse=SparseVector(indices=[1], values=[1.0]),
             flt=_flt(),
             limit=5,
@@ -458,11 +466,12 @@ async def test_the_memories_collection_keeps_its_payload_in_memory() -> None:
     from memory_service.adapters.models.embeddings import HashEmbedding
     from memory_service.adapters.models.sparse import Bm25SparseEncoder
     from memory_service.modules.rag.indexer import Indexer
+    from memory_service.modules.rag.spaces import DenseSpaces
 
     indexer = Indexer(
         uow_factory=None,  # type: ignore[arg-type]
         store=_Recorder(),  # type: ignore[arg-type]
-        embedding=HashEmbedding(dimension=8),
+        spaces=DenseSpaces.single(HashEmbedding(dimension=8)),
         sparse=Bm25SparseEncoder(),
     )
     await indexer.ensure_collections()
@@ -501,7 +510,9 @@ async def test_a_collection_another_worker_created_first_is_not_a_failure() -> N
     DependencyUnavailable and never become ready, over the outcome it had asked for."""
     client = _RacingClient()
     store = _store(client)  # type: ignore[arg-type]
-    await store.ensure_collection(CollectionSpec(name="memories", dense_dim=4))
+    await store.ensure_collection(
+        CollectionSpec(name="memories", dense={VectorName.DENSE_EN: 4, VectorName.DENSE_ML: 4})
+    )
     assert client.indexed, "the loser still has to ensure the payload indexes exist"
 
 
@@ -509,5 +520,5 @@ async def test_a_create_that_leaves_no_collection_still_fails() -> None:
     client = _RacingClient(exists_after_create=False)
     with pytest.raises(DependencyUnavailable):
         await _store(client).ensure_collection(  # type: ignore[arg-type]
-            CollectionSpec(name="memories", dense_dim=4)
+            CollectionSpec(name="memories", dense={VectorName.DENSE_EN: 4, VectorName.DENSE_ML: 4})
         )

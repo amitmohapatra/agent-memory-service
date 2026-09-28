@@ -3,6 +3,13 @@
 Uses the existing ingestion helper and production context builder. Supplemental graph
 and derived evidence consume positions just like primary memories. Presence of a source
 ID proves provenance coverage, not that a retrieved fragment contains its full answer.
+
+Two additions for the accuracy programme. ``--reuse-corpus`` keeps each conversation in its
+own tenant and, through ``benchmark.corpus``, skips ingestion when the ledger says the store
+already holds this dataset under this index fingerprint and these ingestion settings - the
+arms that change only the query side share one corpus. ``--dump-arms`` records, per
+question, every retriever's own ranking and where each gold turn landed in it
+(``benchmark.arms``), which is what the offline weight fit reads.
 """
 
 from __future__ import annotations
@@ -15,14 +22,21 @@ import time
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
-
-from sqlalchemy.engine import make_url
+from typing import Any
 
 import memory_service
-from benchmark.common import provenance, reset_store
-from benchmark.env import bench_overrides, bench_retrieval
+from benchmark.arms import dump_arms
+from benchmark.common import dedicated_database, isolated_qdrant, provenance, reset_store
+from benchmark.corpus import CorpusKey, CorpusLedger, conversation_tenant, ensure_conversation
+from benchmark.env import BENCH, bench_overrides, bench_retrieval
 from benchmark.harness import stats
-from benchmark.locomo import CATEGORY_NAMES, TENANT, _evidence_ids, _ingest_conversation
+from benchmark.locomo import (
+    CATEGORY_NAMES,
+    TENANT,
+    THREADED_INGEST,
+    _evidence_ids,
+    _ingest_conversation,
+)
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -138,20 +152,36 @@ def summarize(rows: list[dict]) -> dict:
     }
 
 
+def _guard(settings: Any) -> str:
+    """The database this run owns, or a refusal: only a dedicated database on the isolated
+    Qdrant is ever reset by a harness.
+
+    Both rules now live in ``benchmark.common`` so every harness shares one vocabulary;
+    ``reset_store`` enforces the database rule again at the TRUNCATE itself.
+    """
+    database = dedicated_database(settings.database.url.get_secret_value())
+    isolated_qdrant(settings.search.qdrant_url)
+    return database
+
+
+def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, Any]:
+    """Everything that shapes the corpus at ingest, for the corpus ledger's key."""
+    llm = settings.models.llm
+    return {
+        "llm": {"enabled": str(llm.enabled), "model": llm.model, "uses": sorted(llm.uses)},
+        "consolidation": args.consolidation,
+        "threaded_ingest": THREADED_INGEST,
+        "graph_enrichment": BENCH.graph_enrichment,
+    }
+
+
 async def run(args) -> None:
     settings = _settings()
-    database = make_url(settings.database.url.get_secret_value()).database or ""
-    if not database.startswith("memory_hi_"):
-        raise ValueError("This harness only resets dedicated memory_hi_* databases")
-    if settings.search.qdrant_url != "http://localhost:16333":
-        raise ValueError("Use the isolated Qdrant on localhost:16333, never the shared server")
+    database = _guard(settings)
     settings.models.llm = LLMSettings(enabled=False)  # no .env can authorize model calls
-    spec = DenseModel.model_validate_json(args.spec.read_text())
     base_overrides = bench_overrides()
     overrides = replace(
         base_overrides,
-        embedding=None,
-        dense_model=spec,
         search=None,
         retrieval=bench_retrieval(base_overrides).model_copy(
             update={"semantic_graph": args.semantic_graph}
@@ -160,22 +190,39 @@ async def run(args) -> None:
             update={"consolidation_enabled": args.consolidation}
         ),
     )
+    if args.spec is not None:
+        spec = DenseModel.model_validate_json(args.spec.read_text())
+        overrides = replace(overrides, embedding=None, dense_model=spec)
     container = await build_container(settings, __version__, overrides=overrides)
     register_handlers(container)
     raw = args.data.read_bytes()
     dataset = json.loads(raw)
     if args.conversations:
         dataset = dataset[: args.conversations]
+    spaces = container.dense_spaces
+    indexer = container.services["indexer"]
+    key = CorpusKey(
+        dataset_sha256=hashlib.sha256(raw).hexdigest(),
+        index_fingerprint=indexer.fingerprint,
+        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, args)),
+    )
+    ledger = CorpusLedger(database)
     rows = []
     corpora = []
     result = {
         "provenance": provenance(llm={"enabled": False, "provider": "disabled"}),
         "source_manifest": source_manifest(),
-        "dataset_sha256": hashlib.sha256(raw).hexdigest(),
-        "spec": spec.model_dump(),
-        "encoder": container.embedding.fingerprint(),
+        "dataset_sha256": key.dataset_sha256,
+        "spec": args.spec and DenseModel.model_validate_json(args.spec.read_text()).model_dump(),
+        "encoders": {space.name.value: space.encoder.fingerprint() for space in spaces.spaces},
+        "spaces_fingerprint": spaces.fingerprint(),
+        "index_fingerprint": indexer.fingerprint,
+        "retrieval": container.tuning.retrieval.model_dump(mode="json"),
+        "context": container.tuning.context.model_dump(mode="json"),
+        "dense_arm": BENCH.dense,
         "consolidation": args.consolidation,
         "semantic_graph": args.semantic_graph,
+        "reuse_corpus": args.reuse_corpus,
         "paid_llm_calls": 0,
         "answer_accuracy": None,
         "expected_questions": sum(len(c["qa"]) for c in dataset),
@@ -188,24 +235,46 @@ async def run(args) -> None:
         ],
     }
     try:
+        if args.reuse_corpus and not ledger.matches(key):
+            # a fresh corpus: every conversation's tenant is cleared once, up front
+            for number in range(len(dataset)):
+                await reset_store(container, conversation_tenant(number))
         for number, conversation in enumerate(dataset):
-            await reset_store(container, TENANT)
+            tenant = conversation_tenant(number) if args.reuse_corpus else TENANT
             ctx = MemoryExecutionContext(
-                tenant_id=TENANT, user_id=f"locomo-{number}", workspace_id="ws"
+                tenant_id=tenant, user_id=f"locomo-{number}", workspace_id="ws"
             )
-            source_ids = {}
             print(f"ingesting conversation {number + 1}/{len(dataset)}", flush=True)
-            await _ingest_conversation(
-                container, ctx, conversation["conversation"], source_ids=source_ids
+            if args.reuse_corpus:
+                _, source_ids, reused = await ensure_conversation(
+                    container,
+                    ctx,
+                    conversation["conversation"],
+                    index=number,
+                    key=key,
+                    ledger=ledger,
+                    reuse=True,
+                )
+            else:
+                await reset_store(container, TENANT)
+                source_ids = {}
+                await _ingest_conversation(
+                    container, ctx, conversation["conversation"], source_ids=source_ids
+                )
+                reused = False
+            print(
+                f"{'reused' if reused else 'ingested'} conversation {number + 1}: {len(source_ids)} turns",
+                flush=True,
             )
-            print(f"ingested conversation {number + 1}: {len(source_ids)} turns", flush=True)
             async with container.services["uow_factory"]() as uow:
                 memories = await container.services["memory"].list_memories(uow, ctx, limit=20000)
             if len(memories) >= 20000:
                 raise ValueError("Corpus inventory reached its explicit evaluation bound")
-            represented = set().union(
-                *(observation_sources(memory.evidence, source_ids) for memory in memories)
-            )
+            memory_sources = {
+                memory.memory_id: observation_sources(memory.evidence, source_ids)
+                for memory in memories
+            }
+            represented = set().union(*memory_sources.values()) if memory_sources else set()
             annotated = [
                 set(_evidence_ids(question))
                 for question in conversation["qa"]
@@ -214,6 +283,8 @@ async def run(args) -> None:
             corpora.append(
                 {
                     "conversation": number,
+                    "tenant": tenant,
+                    "reused": reused,
                     "canonical_memories": len(memories),
                     "observed_turns": len(source_ids),
                     "directly_represented_turns": len(represented),
@@ -224,7 +295,7 @@ async def run(args) -> None:
             )
             del memories
             builder = container.services["context_builder"]
-            lineage = SourceLineage(container.services["uow_factory"], TENANT, source_ids)
+            lineage = SourceLineage(container.services["uow_factory"], tenant, source_ids)
             for question in conversation["qa"]:
                 started = time.perf_counter()
                 bundle = await builder.build(ctx, question["question"])
@@ -233,22 +304,32 @@ async def run(args) -> None:
                 sources = [sorted(observation_sources(group, source_ids)) for group in evidence]
                 lineage_sources = await lineage.resolve(evidence)
                 gold = _evidence_ids(question)
-                rows.append(
-                    {
-                        "conversation": number,
-                        "question": question["question"],
-                        "category": CATEGORY_NAMES[question["category"]],
-                        "gold": gold,
-                        "sources": sources,
-                        "coverage": coverage(sources, gold),
-                        "lineage_sources": lineage_sources,
-                        "lineage_coverage": coverage(lineage_sources, gold),
-                        "returned_memories": len(bundle.memories),
-                        "tokens": bundle.token_estimate,
-                        "latency_ms": elapsed,
-                        "cache_hit": bundle.cache_hit,
-                    }
-                )
+                row = {
+                    "conversation": number,
+                    "question": question["question"],
+                    "category": CATEGORY_NAMES[question["category"]],
+                    "query_script": bundle.diagnostics.get("query_script"),
+                    "gold": gold,
+                    "sources": sources,
+                    "coverage": coverage(sources, gold),
+                    "lineage_sources": lineage_sources,
+                    "lineage_coverage": coverage(lineage_sources, gold),
+                    "returned_memories": len(bundle.memories),
+                    "tokens": bundle.token_estimate,
+                    "latency_ms": elapsed,
+                    "cache_hit": bundle.cache_hit,
+                }
+                if args.dump_arms and gold and row["category"] != "adversarial":
+                    dump = await dump_arms(
+                        container,
+                        ctx,
+                        question["question"],
+                        bundle=bundle,
+                        gold=set(gold),
+                        sources=memory_sources,
+                    )
+                    row["arms"] = dump.as_dict()
+                rows.append(row)
             result.update(
                 {
                     "records": rows,
@@ -273,11 +354,23 @@ async def run(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, required=True)
-    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument(
+        "--spec", type=Path, default=None, help="a challenger DenseModel JSON for the English space"
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--conversations", type=int)
     parser.add_argument("--consolidation", action="store_true")
     parser.add_argument("--semantic-graph", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--reuse-corpus",
+        action="store_true",
+        help="one tenant per conversation; skip ingestion when the corpus ledger vouches for the store",
+    )
+    parser.add_argument(
+        "--dump-arms",
+        action="store_true",
+        help="record every retriever's own ranking and the gold turns' ranks in it, per question",
+    )
     asyncio.run(run(parser.parse_args()))
 
 

@@ -24,6 +24,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
+from memory_service.domain.script import detect_script
 from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
@@ -32,6 +33,7 @@ from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.memory.temporal import resolve_dated_mentions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import memory_decisions_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -146,6 +148,16 @@ def build_memory(
     expires = now + SHORT_TERM_TTL if candidate.lifetime is Lifetime.SHORT_TERM else None
     if candidate.valid_to and (expires is None or candidate.valid_to < expires):
         expires = candidate.valid_to
+    observed_at = (
+        candidate.evidence[0].observed_at
+        if candidate.evidence and candidate.evidence[0].observed_at
+        else now
+    )
+    # "last Tuesday" resolved against the day it was said, once, here - the renderer and
+    # the reader get the date beside the phrase instead of doing the arithmetic themselves
+    dated = resolve_dated_mentions(
+        candidate.content, base=observed_at, script=detect_script(candidate.content)
+    )
     return CanonicalMemory(
         tenant_id=ctx.tenant_id,
         scope=scope,
@@ -162,9 +174,7 @@ def build_memory(
         temporal=TemporalState(
             valid_from=candidate.valid_from,
             valid_to=candidate.valid_to,
-            observed_at=candidate.evidence[0].observed_at
-            if candidate.evidence and candidate.evidence[0].observed_at
-            else now,
+            observed_at=observed_at,
         ),
         evidence=list(candidate.evidence),
         confidence=candidate.confidence,
@@ -175,6 +185,7 @@ def build_memory(
             "entities": list(candidate.entities),
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
+            "dated_mentions": [mention.as_dict() for mention in dated],
         },
         created_at=now,
         updated_at=now,

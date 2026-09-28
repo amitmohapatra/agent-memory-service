@@ -1,12 +1,13 @@
 """NLI provider contract: index-aligned scores that sum to one, deterministic, and the
-DeBERTa adapter against real weights when ``BENCH_MODELS_DIR`` holds them."""
+frozen multilingual head (mDeBERTa, ONNX) against real weights when ``BENCH_MODELS_DIR``
+or ``./models`` holds them."""
 
 from __future__ import annotations
 
 import pytest
 
 from memory_service.adapters.models.nli import LexicalNLI
-from memory_service.config.constants import NLIModel
+from memory_service.config.constants import FROZEN_MODELS, NLIModel
 from memory_service.ports.models import NLIProvider
 
 pytestmark = pytest.mark.contract
@@ -44,22 +45,27 @@ async def test_lexical_nli_contract() -> None:
 
 
 @pytest.mark.models
-async def test_deberta_real_weights_contract() -> None:
-    """Runs only when the DeBERTa weights are present (BENCH_MODELS_DIR)."""
-    from tests.support_models import requires_torch, requires_weights
+async def test_frozen_nli_real_weights_contract() -> None:
+    """Runs only when the frozen graph is present (BENCH_MODELS_DIR or ./models)."""
+    from tests.support_models import requires_onnxruntime, requires_weights
 
-    requires_torch()
-    path = requires_weights("deberta-v3-base-mnli-fever-anli") / "deberta-v3-base-mnli-fever-anli"
-    from memory_service.adapters.models.nli import TransformersNLI
+    requires_onnxruntime()
+    weights = requires_weights(FROZEN_MODELS.nli.local_dir) / FROZEN_MODELS.nli.local_dir
+    from memory_service.adapters.models.onnx_nli import OnnxNLI
 
-    nli = TransformersNLI(NLIModel(model_path=str(path), batch_size=2))
+    nli = OnnxNLI(NLIModel(model_path=str(weights), batch_size=2))
     await _contract(nli)
     assert nli.representative is True
-    assert nli.fingerprint() == "nli-deberta-v3-base-mnli-fever-anli"
+    assert nli.fingerprint().startswith("nli-onnx-")
+    assert nli.info.license == "MIT" and "mDeBERTa" in nli.info.name
     for hypothesis, label in PAIRS:
         score = (await nli.entail([PREMISE], hypothesis))[0]
         top = max(("entailment", "neutral", "contradiction"), key=lambda k: getattr(score, k))
         assert top == label, (hypothesis, score)
+    # a Spanish premise supports an English claim: one model, every script
+    spanish = "El EBITDA ajustado aumentó a 98 millones de euros pese a la caída de ingresos."
+    cross = (await nli.entail([spanish], PAIRS[0][0]))[0]
+    assert cross.entailment > cross.contradiction
     # batching keeps the order
     many = await nli.entail([PREMISE] * 5 + ["Unrelated sentence."], PAIRS[0][0])
     assert [round(s.entailment, 4) for s in many[:5]] == [round(many[0].entailment, 4)] * 5

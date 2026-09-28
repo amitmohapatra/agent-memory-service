@@ -32,6 +32,7 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.domain.observation import Observation
+from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.narrative import (
@@ -257,13 +258,6 @@ _EVENT_HINT = re.compile(
 _QUESTION = re.compile(
     r"[?\uff1f\u061f]\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I
 )
-
-_SINGLE_VALUED_SLOTS = """
-name timezone time_zone role title team email location birthday manager company employer
-city country language pronouns phone department working_hours handle username works_at
-lives_in favourite
-"""
-_SINGLE_VALUED = frozenset(_SINGLE_VALUED_SLOTS.split())
 
 _LIFETIME_BY_TYPE = {
     MemoryType.PREFERENCE: Lifetime.LONG_TERM,
@@ -1123,9 +1117,7 @@ class NativeMemoryIntelligence:
                         score=0.98,
                         reason="same subject/predicate/object",
                     )
-                pred = candidate.predicate or ""
-                single = pred in _SINGLE_VALUED or pred.startswith("favourite_")
-                if m_obj and c_obj and m_obj != c_obj and single:
+                if m_obj and c_obj and m_obj != c_obj and is_single_valued(candidate.predicate):
                     if _other_principals_shared(mem, ctx) and not candidate.negates_prior:
                         # another agent's finding in a shared scope is not silently replaced:
                         # both stay, linked as contradicting, for a human or a later signal

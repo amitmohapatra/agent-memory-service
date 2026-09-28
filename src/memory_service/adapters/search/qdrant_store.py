@@ -1,9 +1,10 @@
 """Qdrant SearchStore (Apache-2.0).
 
-Collections carry a named dense vector (``dense``) and a named sparse vector (``bm25``) with
-Qdrant's server-side IDF modifier, so BM25 scoring happens in the store. Hybrid search uses
-``query_points`` with two prefetches fused by native RRF. Every query carries a tenant
-filter and a ``visibility_keys`` MatchAny filter that Qdrant applies before ranking.
+Collections carry one named dense vector per space (``dense_en``, ``dense_ml``) and a named
+sparse vector (``bm25``) with Qdrant's server-side IDF modifier, so BM25 scoring happens in
+the store. Hybrid search uses ``query_points`` with one prefetch per arm fused by native RRF,
+weighted when the fitted weights say so. Every query carries a tenant filter and a
+``visibility_keys`` MatchAny filter that Qdrant applies before ranking.
 
 A server is addressed over gRPC (``prefer_grpc``): the query path sends vectors and receives
 payloads on every request, and protobuf costs the event loop far less than REST JSON does.
@@ -16,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import random
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -33,18 +34,17 @@ from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.search import (
     PAYLOAD_FIELDS,
+    AnchoredPrefetch,
     CollectionSpec,
     Retriever,
     SearchFilter,
     SearchHit,
     SearchRecord,
     SparseVector,
+    VectorName,
 )
 
 log = get_logger(__name__)
-
-DENSE = "dense"
-SPARSE = "bm25"
 
 #: Only the fields a reader actually uses come back from a query (see ``PAYLOAD_FIELDS``).
 _PAYLOAD = models.PayloadSelectorInclude(include=list(PAYLOAD_FIELDS))
@@ -99,12 +99,15 @@ async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
 
 
 #: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
+#: ``script`` is the record's Unicode script; ``entities`` anchors the entity prefetch.
 _PAYLOAD_INDEXES = {
     "tenant_id": models.PayloadSchemaType.KEYWORD,
     "visibility_keys": models.PayloadSchemaType.KEYWORD,
     "kind": models.PayloadSchemaType.KEYWORD,
     "document_id": models.PayloadSchemaType.KEYWORD,
     "current": models.PayloadSchemaType.BOOL,
+    "script": models.PayloadSchemaType.KEYWORD,
+    "entities": models.PayloadSchemaType.KEYWORD,
 }
 
 
@@ -128,6 +131,99 @@ def _filter(flt: SearchFilter) -> models.Filter:
     if must_not:
         return models.Filter(must=must, must_not=must_not)
     return models.Filter(must=must)
+
+
+def _weight(weights: Mapping[VectorName, float] | None, name: VectorName) -> float:
+    return 1.0 if weights is None else float(weights.get(name, 1.0))
+
+
+def _fusion(rrf_k: int, weights: Sequence[float]) -> models.FusionQuery | models.RrfQuery:
+    """The wire form of RRF for our one-based rank convention.
+
+    The historical default (``k=1``, equal arms) keeps the historical wire query: explicit
+    RRF has equal scores but may pick different cutoff ties on the server. Any other
+    constant, or a fitted weight, is spelled out - Qdrant's ``k`` is zero-based, so ours is
+    translated by one, and a weight of 1.0 on every arm is not sent at all.
+    """
+    weighted = any(weight != 1.0 for weight in weights)
+    if rrf_k == 1 and not weighted:
+        return models.FusionQuery(fusion=models.Fusion.RRF)
+    return models.RrfQuery(rrf=models.Rrf(k=rrf_k + 1, weights=list(weights) if weighted else None))
+
+
+#: One fusion arm: the prefetch to send, the vector name it was built from, and its RRF
+#: weight. The name is carried rather than read back from ``Prefetch.using``, which is an
+#: optional string on the wire model - a label read out of it is a label that can be None.
+type _Arm = tuple[models.Prefetch, VectorName, float]
+
+
+def _anchor_filter(flt: SearchFilter, anchor: AnchoredPrefetch) -> models.Filter:
+    """The query filter with the anchor's condition added.
+
+    An anchor may only ADD. The base filter's ``must_any`` is what confines the query to the
+    caller's audience (``visibility_keys``), and a dict merge lets a colliding key replace it
+    instead of narrowing it: an anchor keyed ``visibility_keys`` would widen the arm to
+    whatever it listed, inside the store where that boundary is meant to be unconditional.
+    A collision is refused rather than silently resolved.
+    """
+    if collides := sorted(anchor.must_any.keys() & flt.must_any.keys()):
+        raise ValueError(
+            f"anchored prefetch would replace the query filter on {collides}: "
+            "an anchor may only add a condition"
+        )
+    return _filter(flt.model_copy(update={"must_any": {**flt.must_any, **anchor.must_any}}))
+
+
+def _arms(
+    *,
+    dense: Mapping[VectorName, Sequence[float]],
+    sparse: SparseVector | None,
+    flt: SearchFilter,
+    qf: models.Filter,
+    prefetch_limit: int,
+    weights: Mapping[VectorName, float] | None,
+    anchors: Sequence[AnchoredPrefetch],
+) -> list[_Arm]:
+    """Every arm of one hybrid query, in fusion order: the dense spaces, their anchored
+    companions, then BM25. An anchored arm is never weighted: it is the same vector as its
+    space, so a weight there would count that space twice."""
+    arms: list[_Arm] = [
+        (
+            models.Prefetch(query=list(vector), using=space.value, limit=prefetch_limit, filter=qf),
+            space,
+            _weight(weights, space),
+        )
+        for space, vector in dense.items()
+    ]
+    for anchor in anchors:
+        if anchor.vector not in dense:
+            raise ValueError(f"anchored prefetch on {anchor.vector} without its query vector")
+        arms.append(
+            (
+                models.Prefetch(
+                    query=list(dense[anchor.vector]),
+                    using=anchor.vector.value,
+                    limit=prefetch_limit,
+                    filter=_anchor_filter(flt, anchor),
+                ),
+                anchor.vector,
+                1.0,
+            )
+        )
+    if sparse is not None and sparse.indices:
+        arms.append(
+            (
+                models.Prefetch(
+                    query=models.SparseVector(indices=sparse.indices, values=sparse.values),
+                    using=VectorName.BM25.value,
+                    limit=prefetch_limit,
+                    filter=qf,
+                ),
+                VectorName.BM25,
+                _weight(weights, VectorName.BM25),
+            )
+        )
+    return arms
 
 
 class QdrantSearchStore:
@@ -173,14 +269,15 @@ class QdrantSearchStore:
         try:
             exists = await self._client.collection_exists(name)
             if not exists:
-                vectors: dict[str, Any] = {}
-                if spec.dense_dim:
-                    vectors[DENSE] = models.VectorParams(
-                        size=spec.dense_dim, distance=models.Distance.COSINE, on_disk=spec.on_disk
+                vectors = {
+                    space.value: models.VectorParams(
+                        size=width, distance=models.Distance.COSINE, on_disk=spec.on_disk
                     )
+                    for space, width in spec.dense.items()
+                }
                 sparse = (
                     {
-                        SPARSE: models.SparseVectorParams(
+                        VectorName.BM25.value: models.SparseVectorParams(
                             modifier=models.Modifier.IDF if spec.sparse_idf else None,
                             index=models.SparseIndexParams(on_disk=spec.on_disk),
                         )
@@ -258,11 +355,11 @@ class QdrantSearchStore:
             return
         by_collection: dict[str, list[models.PointStruct]] = {}
         for r in records:
-            vector: dict[str, Any] = {}
-            if r.dense is not None:
-                vector[DENSE] = list(r.dense)
+            vector: dict[str, Any] = {
+                space.value: list(values) for space, values in r.dense.items()
+            }
             if r.sparse is not None:
-                vector[SPARSE] = models.SparseVector(
+                vector[VectorName.BM25.value] = models.SparseVector(
                     indices=r.sparse.indices, values=r.sparse.values
                 )
             payload = {**r.payload, "record_id": r.record_id, "tenant_id": r.tenant_id}
@@ -325,21 +422,28 @@ class QdrantSearchStore:
         )
 
     async def search_dense(
-        self, collection: str, vector: Sequence[float], flt: SearchFilter, *, limit: int
+        self,
+        collection: str,
+        name: VectorName,
+        vector: Sequence[float],
+        flt: SearchFilter,
+        *,
+        limit: int,
     ) -> list[SearchHit]:
-        with span("search.dense"), stage_seconds.labels("retrieval.dense").time():
+        retriever = Retriever.for_vector(name)
+        with span("search.dense"), stage_seconds.labels(f"retrieval.{name.value}").time():
             res = await _read(
-                "dense",
+                retriever.value,
                 lambda: self._client.query_points(
                     collection_name=self._name(collection),
                     query=list(vector),
-                    using=DENSE,
+                    using=name.value,
                     query_filter=_filter(flt),
                     limit=limit,
                     with_payload=_PAYLOAD,
                 ),
             )
-        return [self._hit(p, "dense") for p in res.points]
+        return [self._hit(p, retriever) for p in res.points]
 
     async def search_sparse(
         self, collection: str, vector: SparseVector, flt: SearchFilter, *, limit: int
@@ -348,61 +452,58 @@ class QdrantSearchStore:
             return []
         with span("search.sparse"), stage_seconds.labels("retrieval.bm25").time():
             res = await _read(
-                "sparse",
+                Retriever.BM25.value,
                 lambda: self._client.query_points(
                     collection_name=self._name(collection),
                     query=models.SparseVector(indices=vector.indices, values=vector.values),
-                    using=SPARSE,
+                    using=VectorName.BM25.value,
                     query_filter=_filter(flt),
                     limit=limit,
                     with_payload=_PAYLOAD,
                 ),
             )
-        return [self._hit(p, "bm25") for p in res.points]
+        return [self._hit(p, Retriever.BM25) for p in res.points]
 
     async def search_hybrid(
         self,
         collection: str,
         *,
-        dense: Sequence[float] | None,
+        dense: Mapping[VectorName, Sequence[float]],
         sparse: SparseVector | None,
         flt: SearchFilter,
         limit: int,
         prefetch_limit: int,
         rrf_k: int = 1,
+        weights: Mapping[VectorName, float] | None = None,
+        anchors: Sequence[AnchoredPrefetch] = (),
     ) -> list[SearchHit]:
         if rrf_k < 0:
             raise ValueError("rrf_k must be nonnegative")
-        prefetch: list[models.Prefetch] = []
         qf = _filter(flt)
-        if dense is not None:
-            prefetch.append(
-                models.Prefetch(query=list(dense), using=DENSE, limit=prefetch_limit, filter=qf)
-            )
-        if sparse is not None and sparse.indices:
-            prefetch.append(
-                models.Prefetch(
-                    query=models.SparseVector(indices=sparse.indices, values=sparse.values),
-                    using=SPARSE,
-                    limit=prefetch_limit,
-                    filter=qf,
-                )
-            )
-        if not prefetch:
+        arms = _arms(
+            dense=dense,
+            sparse=sparse,
+            flt=flt,
+            qf=qf,
+            prefetch_limit=prefetch_limit,
+            weights=weights,
+            anchors=anchors,
+        )
+        if not arms:
             return []
-        if len(prefetch) == 1:
-            single = prefetch[0]
+        if len(arms) == 1:
+            single, name, _ = arms[0]
             # one arm is not a hybrid query, and counting its retries as one makes
             # memory_search_read_retries_total{operation="hybrid"} a number about two
             # different reads
-            retriever: Retriever = "dense" if single.using == DENSE else "bm25"
+            retriever = Retriever.for_vector(name)
             res = await _read(
-                retriever,
+                retriever.value,
                 lambda: self._client.query_points(
                     collection_name=self._name(collection),
                     query=single.query,
                     using=single.using,
-                    query_filter=qf,
+                    query_filter=single.filter,
                     limit=limit,
                     with_payload=_PAYLOAD,
                 ),
@@ -414,16 +515,8 @@ class QdrantSearchStore:
                     "hybrid",
                     lambda: self._client.query_points(
                         collection_name=self._name(collection),
-                        prefetch=prefetch,
-                        # Keep the historical wire query for the default. Explicit RRF
-                        # has equal scores but may pick different cutoff ties on the
-                        # server. Custom constants translate our one-based ranks to
-                        # Qdrant's zero-based convention.
-                        query=(
-                            models.FusionQuery(fusion=models.Fusion.RRF)
-                            if rrf_k == 1
-                            else models.RrfQuery(rrf=models.Rrf(k=rrf_k + 1))
-                        ),
+                        prefetch=[arm for arm, _, _ in arms],
+                        query=_fusion(rrf_k, [weight for _, _, weight in arms]),
                         query_filter=qf,
                         limit=limit,
                         with_payload=_PAYLOAD,
@@ -437,7 +530,7 @@ class QdrantSearchStore:
         # engine deduplicates/cuts the pool, or identical queries can pack different
         # evidence. This stabilizes the returned pool without another RPC or wider search;
         # it cannot stabilize membership when the server cuts through a tie at its limit.
-        hits = [self._hit(p, "fusion") for p in res.points]
+        hits = [self._hit(p, Retriever.FUSION) for p in res.points]
         hits.sort(key=lambda hit: (-hit.score, hit.record_id))
         return hits
 

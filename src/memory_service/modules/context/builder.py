@@ -173,6 +173,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 # weekday and the speaker once per line from this field and the subject,
                 # instead of a rank-ordered list with no time in it
                 "observed_at",
+                # the relative dates the text names, already resolved against observed_at
+                "dated_mentions",
             )
             and v not in (None, [], {})
         },

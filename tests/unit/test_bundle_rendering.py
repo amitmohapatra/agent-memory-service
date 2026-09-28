@@ -22,12 +22,23 @@ from memory_service.domain.enums import EvidenceStatus, QueryType, Representatio
 pytestmark = pytest.mark.unit
 
 
-def _memory(item_id: str, text: str, *, day: str | None = None, who: str | None = None):
+def _memory(
+    item_id: str,
+    text: str,
+    *,
+    day: str | None = None,
+    who: str | None = None,
+    predicate: str | None = None,
+    **extra: str,
+):
     attributes: dict[str, str] = {}
     if day:
         attributes["observed_at"] = f"{day}T09:30:00+00:00"
     if who:
         attributes["subject"] = f"user:{who}"
+    if predicate:
+        attributes["predicate"] = predicate
+    attributes.update(extra)
     return ContextItem(
         item_id=item_id,
         representation=Representation.MEMORY,
@@ -129,3 +140,133 @@ def test_no_most_relevant_block_when_it_would_be_the_whole_timeline() -> None:
     rendered = _bundle(memories).render()
     assert "## Most relevant" not in rendered and SHOWN_ABOVE not in rendered
     assert len(_section(rendered, "Memories")) == MOST_RELEVANT_MAX
+
+
+# --------------------------------------------------------------------------------------
+# Gathering the several values of one multi-valued slot (D6 step 4)
+# --------------------------------------------------------------------------------------
+
+
+def test_several_values_of_one_multi_valued_slot_render_as_one_dated_block() -> None:
+    # the fragmentation bucket: four separate lines read as four unrelated facts, and a
+    # question needing all of them is answered from whichever was read last
+    memories = [
+        _memory(
+            "mem_1",
+            "Jon ran the charity race.",
+            day="2023-05-02",
+            who="jon",
+            predicate="participated_in",
+        ),
+        _memory(
+            "mem_2",
+            "Jon joined the hackathon.",
+            day="2023-06-11",
+            who="jon",
+            predicate="participated_in",
+        ),
+    ]
+    timeline = _section(_bundle(memories).render(), "Memories")
+    assert len(timeline) == 3  # one heading line plus one statement per value
+    assert timeline[0] == (
+        "- [memory_id:mem_1; memory_id:mem_2] user:jon — participated in (source statements):"
+    )
+    assert timeline[1:] == [
+        "[observed 2023-05-02] Jon ran the charity race.",
+        "[observed 2023-06-11] Jon joined the hackathon.",
+    ]
+
+
+def test_a_single_valued_slot_is_never_gathered() -> None:
+    # the newest value is the answer and the older one is superseded history; printing them
+    # as a set of current values would say the person lives in two cities
+    memories = [
+        _memory("mem_1", "Jon lives in Berlin.", day="2023-05-02", who="jon", predicate="lives_in"),
+        _memory("mem_2", "Jon lives in Lisbon.", day="2023-06-11", who="jon", predicate="lives_in"),
+    ]
+    timeline = _section(_bundle(memories).render(), "Memories")
+    assert len(timeline) == 2
+    assert all(line.startswith("- [memory_id:mem_") for line in timeline)
+
+
+def test_one_value_alone_keeps_its_own_line() -> None:
+    memories = [
+        _memory(
+            "mem_1", "Jon ran the race.", day="2023-05-02", who="jon", predicate="participated_in"
+        ),
+        _memory("mem_2", "Jon likes rain.", day="2023-06-11", who="jon", predicate="likes"),
+    ]
+    timeline = _section(_bundle(memories).render(), "Memories")
+    assert timeline == [
+        "- [memory_id:mem_1] 2023-05-02 Tue jon: Jon ran the race.",
+        "- [memory_id:mem_2] 2023-06-11 Sun jon: Jon likes rain.",
+    ]
+
+
+def test_the_same_slot_on_two_subjects_stays_two_blocks() -> None:
+    memories = [
+        _memory("mem_1", "Jon ran.", day="2023-05-02", who="jon", predicate="participated_in"),
+        _memory("mem_2", "Mel ran.", day="2023-05-03", who="mel", predicate="participated_in"),
+        _memory("mem_3", "Jon swam.", day="2023-05-04", who="jon", predicate="participated_in"),
+    ]
+    rendered = _bundle(memories).render()
+    timeline = _section(rendered, "Memories")
+    # Jon's two are gathered at his oldest place; Mel's single value keeps its own line
+    assert timeline[0].startswith("- [memory_id:mem_1; memory_id:mem_3] user:jon")
+    assert "user:mel —" not in rendered
+    assert sum("Mel ran." in line for line in timeline) == 1
+
+
+def test_a_gathered_block_keeps_the_unverified_warning_of_any_member() -> None:
+    # an aggregate is no more trustworthy than its least trustworthy source
+    memories = [
+        _memory("mem_1", "Jon ran.", day="2023-05-02", who="jon", predicate="participated_in"),
+        _memory(
+            "mem_2",
+            "Jon swam.",
+            day="2023-05-04",
+            who="jon",
+            predicate="participated_in",
+            provider="llm",
+        ),
+    ]
+    timeline = _section(_bundle(memories).render(), "Memories")
+    assert "model-extracted, unverified" in timeline[0]
+
+
+def test_a_derived_memory_is_already_an_aggregate_and_is_not_gathered() -> None:
+    memories = [
+        _memory("mem_1", "Jon ran.", day="2023-05-02", who="jon", predicate="participated_in"),
+        _memory(
+            "mem_2",
+            "Jon — participated in …",
+            day="2023-05-04",
+            who="jon",
+            predicate="participated_in",
+            derived="true",
+        ),
+    ]
+    timeline = _section(_bundle(memories).render(), "Memories")
+    assert len(timeline) == 2
+    assert all(line.startswith("- [memory_id:mem_") for line in timeline)
+
+
+def test_a_promoted_memory_is_not_gathered_so_every_body_appears_once() -> None:
+    # enough memories that the "Most relevant" block exists; the promoted ones stand in the
+    # timeline as a pointer, and gathering them there would print their body a second time
+    memories = [
+        _memory(
+            f"mem_{i}",
+            f"body {i}.",
+            day=f"2023-05-{30 - i:02d}",
+            who="jon",
+            predicate="participated_in",
+        )
+        for i in range(MOST_RELEVANT_MAX + 2)
+    ]
+    rendered = _bundle(memories).render()
+    assert "## Most relevant" in rendered
+    timeline = _section(rendered, "Memories")
+    assert sum(SHOWN_ABOVE in line for line in timeline) == MOST_RELEVANT_MAX
+    # the two that were not promoted are gathered into one block; every body still once
+    assert sum(rendered.count(f"body {i}.") for i in range(len(memories))) == len(memories)

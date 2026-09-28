@@ -48,6 +48,7 @@ dependencies = [
   "rapidfuzz>=3",
   "opentelemetry-instrumentation-sqlalchemy>=0.65b0",
   "pyjwt[crypto]>=2.10",
+  "dateparser>=1.2",
 ]
 
 [project.optional-dependencies]
