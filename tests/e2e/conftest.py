@@ -12,6 +12,14 @@ from tests.conftest import PG_AVAILABLE, _test_overrides
 from tests.support_real import reset_real_backends
 
 TABLES = [
+    # the platform layer (tests/agent), first: no table below references them
+    "memory_reads",
+    "user_group_members",
+    "user_groups",
+    "workspace_members",
+    "workspaces",
+    "api_keys",
+    "tenants",
     "tool_invocations",
     "run_outcomes",
     "tools",

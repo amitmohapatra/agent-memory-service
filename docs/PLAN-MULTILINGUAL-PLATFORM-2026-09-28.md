@@ -64,10 +64,11 @@ rule extractor remains the model-free floor. Verbatim retention already covers e
   "one key reaches every tenant by changing a header" hole for shared deployments.
 - One bootstrap secret, `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY`, is the platform super-admin. That is the whole
   configuration a new deployment needs beyond store URLs.
-- Admin API: `POST/GET /v1/admin/tenants`, `POST /v1/admin/tenants/{id}/keys` (returned once), `DELETE /v1/admin/keys/{id}`.
-  Tenant-admin API: `POST /v1/workspaces`, `POST/DELETE /v1/workspaces/{id}/members` (users, agents, groups),
-  `POST /v1/keys` (scoped to the caller's tenant). Every write goes through the outbox; revocation bumps the
-  tenant revision so scope caches die immediately.
+- Platform API: `POST /v1/admin/tenants` (returns the tenant's first admin key once), `GET /v1/admin/tenants`,
+  `PATCH /v1/admin/tenants/{tenant_id}` (suspend, retention, quota). Tenant-admin API: `POST /v1/keys`,
+  `DELETE /v1/keys/{key_id}`, `POST /v1/workspaces`, `PUT /v1/workspaces/{workspace_id}/members/{principal}`
+  (users, agents, groups), `POST /v1/groups`, `GET /v1/reads`. Revocation deletes the tuples and bumps the
+  membership revision, so the next request is denied; a revoked key drops its cache entry on every instance.
 - Visibility gains **`WORKSPACE`** (team-shared data; key `workspace:<tenant>/<ws>`); membership grants are issued by the
   API above, so the audience is usable — the reason it was withdrawn no longer holds. Revocation deletes tuples.
 - Data lifecycle: per-tenant `retention_days` by record kind with a verifiable purge job; an append-only read audit
@@ -80,7 +81,7 @@ with precedence agent > workspace > tenant; no operator fallback in `api_key` mo
 rotation/revocation semantics, same `auto` discovery. A team registers one key at workspace level and every agent
 inherits it. SDK: `ctx.model_key.set/status/revoke` at any level the caller is authorised for.
 
-### D5 — HITL and continuous learning
+### D5 — HITL and continuous learning (planned, M3)
 `POST /v1/feedback` → `human_feedback` table: `target_kind ∈ {memory, answer, brief, procedure}, target_id, verdict ∈
 {confirm, reject, correct}, correction, reviewer, evidence`. Stored separately, never merged into content, listable and
 auditable. An outbox projector applies it through the existing machinery: `correct` → new revision superseding the
@@ -102,7 +103,7 @@ mining, brief refresh, bounded reflection. SDK: `ctx.feedback.confirm/reject/cor
 Rule kept: no delta is accepted unless the metric is shown sensitive to the exact change; fixed ladder 10/20/30/50;
 host load recorded; Mem0's ruler reported beside the strict one.
 
-### D7 — Parity without a second engine
+### D7 — Parity without a second engine (planned, M3–M5)
 Hindsight stays an optional extra (`memory-service[hindsight]`), not a core dependency: its SDK cannot carry a team key
 and its server is not deployed here. Parity is native: briefs (mental models/pages), feedback (fact edit/history),
 `POST /v1/webhooks` (outbox → signed per-tenant HTTP delivery), cursor pagination and filters on `/v1/memories`,
@@ -121,8 +122,8 @@ and any experimental flag not promoted by its arm. A provider value without a co
 
 | M | Deliverable | Gate |
 |---|---|---|
-| **M0** | Integration branch; `uv sync`; suite green on isolated DBs; worker-kill test rerun sequentially; model-provenance purge + test; `.env`/Makefile point at `gemini/gemini-3.8-flash` | offline suite green; provenance test green |
-| **M1** | Tenancy: `api_key` mode, bootstrap admin, tenants/keys/workspaces/members, `WORKSPACE` audience, revocation, retention, read audit, quotas; SDK; `tests/agent/` boundary suite via SDK only | zero leaks in the oracle + matrix suites incl. workspace and revocation; read-after-revoke and read-after-delete denied |
+| **M0** ✅ `aa9b5d5` | Integration branch; `uv sync`; suite green on isolated DBs; model-provenance purge + test; `.env`/Makefile point at `gemini/gemini-3.8-flash` | offline suite green except the pre-existing worker-kill requeue test; provenance test green |
+| **M1** ✅ built, hardened | Tenancy: `api_key` mode, bootstrap admin, tenants/keys/workspaces/groups, `WORKSPACE` audience with a team-write gate, revocation with verifier tombstones, retention (memories), read audit, per-tenant quotas via an in-process registry, OpenFGA model roll-forward; SDK admin API; `tests/agent/` suite via SDK only, in CI (ADR 0021; four /review fix cycles 2026-09-28) | zero leaks in the oracle + matrix suites incl. workspace and revocation; read-after-revoke denied; revoked key refused |
 | **M2** | Multilingual runtime: named vectors + concurrent encoders + script-aware prefetch; mDeBERTa freeze; script tag; `dateparser`; 12-language SDK suite; reindex tool | container gates: SciFact ≥ 0.7557/0.8926; XQuAD mean R@10 ≥ 0.98; LoCoMo source arms (Granite, ensemble); p99 < 300 ms |
 | **M3** | Team credentials (3 levels); LLM-assisted multilingual extraction; HITL feedback + projector; webhooks; pagination/filters | credential precedence and revocation tests; feedback projection visible on next `/context`; webhook delivery signed and retried |
 | **M4** | Accuracy steps 1–6; judged arms on Gemini 3.8-flash; the published table (strict, Mem0 ruler, category 5 separate, judge named) | each step's own gate; budget approved before any 2,000-call arm |

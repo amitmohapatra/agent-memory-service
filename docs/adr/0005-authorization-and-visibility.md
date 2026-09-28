@@ -43,7 +43,8 @@ and the exact "retrieve globally then filter in memory" anti-pattern the spec fo
   (the groups a request asserts were stored nowhere), WORK had no grant path so only its
   author ever read it, GLOBAL was TENANT under a name implying otherwise, and WORKSPACE
   needed a membership grant nothing in the service issued. An audience that cannot be used
-  is worse than one that does not exist, because the enum advertises it.
+  is worse than one that does not exist, because the enum advertises it. *Amended by ADR
+  0021: WORKSPACE is reinstated now that workspaces are teams with written membership.*
 - RUN is directional and carries no author key: `run:<mine>` flows down to the runs I spawn,
   `runup:<parent>` reports up to the run that spawned me, and neither reaches a sibling. It
   used to carry the author's principal, which made it an identity audience wearing a run's

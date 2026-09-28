@@ -14,10 +14,12 @@ from __future__ import annotations
 import contextlib
 import json
 from collections.abc import Mapping
+from typing import get_args
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.tenancy import MemberRole, parse_principal
 from memory_service.modules.authz.scope import ScopeResolver, object_id
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.observability.logging import get_logger
@@ -33,6 +35,9 @@ from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.repositories import RevisionRepository
 
 log = get_logger(__name__)
+
+#: The workspace relations a principal may hold directly; one at a time per principal.
+WORKSPACE_ROLES: tuple[MemberRole, ...] = get_args(MemberRole)
 
 
 class AuthorizationService:
@@ -140,6 +145,7 @@ class AuthorizationService:
         return VisibilitySpecification.from_scope(
             current_thread_id=ctx.thread_id,
             current_agent_run_id=ctx.agent_run_id,
+            current_workspace_id=ctx.workspace_id,
             scope=await self.scope(
                 ctx,
                 revisions=revisions,
@@ -294,6 +300,100 @@ class AuthorizationService:
         await self.provider.write(tuples)
         if revisions is not None:
             await self._bump_membership(tenant_id, revisions, user_id)
+
+    # -- teams: workspaces and groups -------------------------------------------
+    #
+    # Every grant below has a revoke, and both bump the membership revision, so a change is
+    # seen on the caller's next request rather than at the scope cache's expiry. This is the
+    # first place a tuple is ever deleted: until workspaces existed, nothing in the service
+    # removed a grant, so a removed user kept live access (PRODUCT_DECISIONS.md, §4).
+
+    @staticmethod
+    def _member_subject(tenant_id: str, principal: str) -> tuple[str, str]:
+        """FGA subject for a workspace principal, and the revision id its scopes hang on."""
+        kind, ident = parse_principal(principal)
+        if kind == "group":
+            return f"group:{object_id(tenant_id, ident)}#member", ""
+        return f"{kind}:{ident}", ident
+
+    async def grant_workspace(self, tenant_id: str, workspace_id: str) -> None:
+        obj = f"workspace:{object_id(tenant_id, workspace_id)}"
+        await self.provider.write(
+            [RelationTuple(user=f"tenant:{tenant_id}", relation="tenant", object=obj)]
+        )
+
+    async def set_workspace_member(
+        self,
+        tenant_id: str,
+        workspace_id: str,
+        principal: str,
+        role: MemberRole,
+        *,
+        previous: MemberRole | None = None,
+        revisions: RevisionRepository | None = None,
+    ) -> None:
+        """Exactly one role per principal: the role held before, when it differs, is deleted
+        in the same write (deleting a tuple that does not exist would fail the batch and
+        fall back to one write per tuple)."""
+        obj = f"workspace:{object_id(tenant_id, workspace_id)}"
+        subject, ident = self._member_subject(tenant_id, principal)
+        keep = RelationTuple(user=subject, relation=role, object=obj)
+        drop = (
+            [RelationTuple(user=subject, relation=previous, object=obj)]
+            if previous is not None and previous != role
+            else []
+        )
+        await self.provider.write([keep], drop)
+        await self._bump_membership(tenant_id, revisions, ident)
+
+    async def revoke_workspace_member(
+        self,
+        tenant_id: str,
+        workspace_id: str,
+        principal: str,
+        *,
+        revisions: RevisionRepository | None = None,
+    ) -> None:
+        obj = f"workspace:{object_id(tenant_id, workspace_id)}"
+        subject, ident = self._member_subject(tenant_id, principal)
+        await self.provider.write(
+            [], [RelationTuple(user=subject, relation=r, object=obj) for r in WORKSPACE_ROLES]
+        )
+        await self._bump_membership(tenant_id, revisions, ident)
+
+    async def grant_group(self, tenant_id: str, group_id: str) -> None:
+        obj = f"group:{object_id(tenant_id, group_id)}"
+        await self.provider.write(
+            [RelationTuple(user=f"tenant:{tenant_id}", relation="tenant", object=obj)]
+        )
+
+    async def set_group_member(
+        self,
+        tenant_id: str,
+        group_id: str,
+        user_id: str,
+        *,
+        revisions: RevisionRepository | None = None,
+    ) -> None:
+        obj = f"group:{object_id(tenant_id, group_id)}"
+        await self.provider.write(
+            [RelationTuple(user=f"user:{user_id}", relation="member", object=obj)]
+        )
+        await self._bump_membership(tenant_id, revisions, user_id)
+
+    async def revoke_group_member(
+        self,
+        tenant_id: str,
+        group_id: str,
+        user_id: str,
+        *,
+        revisions: RevisionRepository | None = None,
+    ) -> None:
+        obj = f"group:{object_id(tenant_id, group_id)}"
+        await self.provider.write(
+            [], [RelationTuple(user=f"user:{user_id}", relation="member", object=obj)]
+        )
+        await self._bump_membership(tenant_id, revisions, user_id)
 
     def describe(self) -> str:
         return json.dumps(

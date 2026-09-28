@@ -149,6 +149,18 @@ def register_handlers(container: Container) -> None:
     async def brief_schedule(payload: dict[str, Any]) -> None:
         await container.services["briefs"].schedule_due()
 
+    async def retention_sweep(payload: dict[str, Any]) -> None:
+        """Forget canonical memories past their tenant's retention (modules/tenancy)."""
+        await container.services["retention"].sweep()
+
+    async def read_audit_purge(payload: dict[str, Any]) -> None:
+        """Drop who-read-what rows past TASKS.read_audit_retention_days, one batch a run."""
+        n = await container.services["read_audit"].purge(
+            older_than_days=TASKS.read_audit_retention_days
+        )
+        if n:
+            log.info("read_audit.purged", count=n)
+
     async def memory_reflect(payload: dict[str, Any]) -> None:
         """Derive insights over each principal's recent memories (LLM use ``reflection``)."""
         reflection = container.services.get("reflection")
@@ -209,6 +221,12 @@ def register_handlers(container: Container) -> None:
 
     queue.register("brief.refresh", Queue.SUMMARY, brief_refresh, retries=0)
     queue.register_periodic("periodic.briefs", Queue.RECONCILE, brief_schedule, cron="* * * * *")
+    queue.register_periodic(
+        "periodic.retention", Queue.RECONCILE, retention_sweep, cron="37 3 * * *"
+    )
+    queue.register_periodic(
+        "periodic.read_audit_purge", Queue.RECONCILE, read_audit_purge, cron="7 * * * *"
+    )
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)

@@ -6,6 +6,7 @@ when a list overflows, ``truncated`` is set and retrieval falls back to per-obje
 
 from __future__ import annotations
 
+import asyncio
 from typing import Protocol
 
 from memory_service.domain.context import MemoryExecutionContext
@@ -31,6 +32,7 @@ class ScopeResolver:
         truncated = False
         threads: list[str] = []
         documents: list[str] = []
+        workspaces: list[str] = []
         agents: list[str] = []
 
         subjects = [principal]
@@ -38,14 +40,23 @@ class ScopeResolver:
         if ctx.is_agent and ctx.user_id:
             subjects.append(f"user:{ctx.user_id}")
 
-        for subject in subjects:
-            for relation, object_type, sink in (
-                ("can_read", "thread", threads),
-                ("can_read", "document", documents),
-            ):
-                found, over = await self._list(subject, relation, object_type)
-                truncated = truncated or over
-                sink.extend(x for x in found if x not in sink)
+        listings = [
+            ("can_read", "thread", threads),
+            ("can_read", "document", documents),
+            # viewer is the widest workspace relation: members and admins compute to it
+            ("viewer", "workspace", workspaces),
+        ]
+        # every listing is independent of the others: one round trip's latency, not six
+        results = await asyncio.gather(
+            *(
+                self._list(subject, relation, object_type)
+                for subject in subjects
+                for relation, object_type, _ in listings
+            )
+        )
+        for (found, over), (_, _, sink) in zip(results, listings * len(subjects), strict=True):
+            truncated = truncated or over
+            sink.extend(x for x in found if x not in sink)
         if ctx.is_agent and ctx.agent_id:
             agents.append(ctx.agent_id)
         # only objects belonging to this tenant are ever exposed: object ids are tenant-prefixed
@@ -62,6 +73,7 @@ class ScopeResolver:
             agent_ids=agents,
             run_ids=[r for r in (ctx.agent_run_id, ctx.parent_agent_run_id) if r],
             agent_group_ids=[ctx.agent_group_id] if ctx.agent_group_id else [],
+            workspace_ids=own(workspaces),
             user_id=ctx.user_id,
             truncated=truncated,
         )

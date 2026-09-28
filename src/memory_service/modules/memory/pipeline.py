@@ -82,6 +82,8 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
         level = ScopeLevel.AGENT_GROUP
     elif vis is Visibility.THREAD and ctx.thread_id:
         level = ScopeLevel.THREAD
+    elif vis is Visibility.WORKSPACE and ctx.workspace_id:
+        level = ScopeLevel.WORKSPACE
     elif vis is Visibility.TENANT:
         level = ScopeLevel.TENANT
     elif ctx.agent_id and vis is Visibility.PRIVATE:

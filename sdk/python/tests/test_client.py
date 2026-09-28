@@ -197,3 +197,20 @@ async def test_brief_sdk_preserves_scope_kind_and_async_status(client):
     assert get.calls.last.request.url.params["agent_id"] == "research"
     assert len(await ctx.briefs.list()) == 1
     await ctx.briefs.delete(created.brief_id)
+
+
+@respx.mock
+async def test_administer_names_the_tenant_and_a_keyed_bind_sends_no_tenant_header() -> None:
+    seen: list[str | None] = []
+
+    def capture(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("X-Memory-Tenant"))
+        return httpx.Response(200, json=[] if request.method == "GET" else {"results": []})
+
+    respx.get("http://memory.test/v1/keys").mock(side_effect=capture)
+    respx.post("http://memory.test/v1/recall").mock(side_effect=capture)
+    client = MemoryClient("http://memory.test", api_key="mk_k.s")
+    await client.administer("globex").keys.list()
+    await client.tenant.keys.list()
+    await client.bind(user_id="u1").recall("anything")
+    assert seen == ["globex", None, None]

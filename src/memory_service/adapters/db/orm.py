@@ -656,6 +656,13 @@ class MemoryRow(Base):
             "created_at",
             postgresql_where=text("indexed_at IS NULL AND deleted_at IS NULL"),
         ),
+        # the retention sweep: a tenant's live rows, oldest first (modules/tenancy/retention)
+        Index(
+            "ix_memories_tenant_created_live",
+            "tenant_id",
+            "created_at",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index(
             "ix_memories_expiring",
             "expires_at",
@@ -856,3 +863,109 @@ class RunOutcomeRow(Base):
     recorded_at: Mapped[datetime] = mapped_column(server_default=_now())
 
     __table_args__ = (Index("ix_run_outcomes_tenant_success", "tenant_id", "success"),)
+
+
+# ---------------------------------------------------------------------------
+# Platform layer: tenants, API keys, workspaces, groups, read audit
+# ---------------------------------------------------------------------------
+
+
+class TenantRow(Base):
+    __tablename__ = "tenants"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
+    retention_days: Mapped[int | None] = mapped_column(Integer)
+    rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+
+
+class ApiKeyRow(Base):
+    """Only the SHA-256 of a secret is stored; the token is shown once at issue time."""
+
+    __tablename__ = "api_keys"
+
+    key_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_api_keys_tenant", "tenant_id"),
+        # the registry's live-key scan, every minute on every instance
+        Index("ix_api_keys_live", "key_id", postgresql_where=text("revoked_at IS NULL")),
+    )
+
+
+class WorkspaceRow(Base):
+    __tablename__ = "workspaces"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class WorkspaceMemberRow(Base):
+    __tablename__ = "workspace_members"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    principal: Mapped[str] = mapped_column(String(512), primary_key=True)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)
+    added_by: Mapped[str] = mapped_column(String(512), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+
+    # memberships_of: which workspaces admitted this principal (deleting a group walks it)
+    __table_args__ = (Index("ix_workspace_members_principal", "tenant_id", "principal"),)
+
+
+class GroupRow(Base):
+    __tablename__ = "user_groups"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    group_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GroupMemberRow(Base):
+    __tablename__ = "user_group_members"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    group_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    added_by: Mapped[str] = mapped_column(String(512), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+
+
+class ReadAuditRow(Base):
+    """Append-only: who read which records. Written in batches off the request path."""
+
+    __tablename__ = "memory_reads"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    credential: Mapped[str] = mapped_column(String(512), nullable=False, server_default="")
+    principal: Mapped[str] = mapped_column(String(512), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    query_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    record_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
+
+    __table_args__ = (
+        Index("ix_memory_reads_tenant_at", "tenant_id", "at"),  # the listing
+        Index("ix_memory_reads_at", "at"),  # the purge
+    )

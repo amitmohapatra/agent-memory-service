@@ -64,6 +64,11 @@ cache_ops_total = Counter(
 authz_denials_total = Counter(
     "memory_authz_denials_total", "Authorization denials", ["relation"], registry=REGISTRY
 )
+read_audit_dropped_total = Counter(
+    "memory_read_audit_dropped_total",
+    "Read-audit entries lost: the queue was full or a flush failed",
+    registry=REGISTRY,
+)
 archive_bytes_total = Counter(
     "memory_archive_bytes_total", "Bytes archived", ["kind", "stage"], registry=REGISTRY
 )

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from memory_service.ports.authorization import AccessCheck
@@ -190,3 +192,107 @@ async def test_a_subject_type_the_model_does_not_define_is_an_empty_scope(
     await provider.write([R(user="user:u1", relation="owner", object="thread:acme/t1")])
     assert await provider.list_objects("user:u1", "can_read", "thread") == ["thread:acme/t1"]
     await provider.close()
+
+
+async def test_workspace_revocation_is_immediate_for_groups_and_their_users(
+    openfga_url: str, openfga_store: str
+) -> None:
+    """A user reads a workspace through a group; ending either link ends the access.
+
+    ``modules/tenancy`` removes a group from a workspace (tuple ``group:<t>/<g>#member`` on
+    ``workspace:<t>/<w>``) and removes a user from a group (``user:<u>`` member of
+    ``group:<t>/<g>``). The real OpenFGA must agree with the reference provider that each
+    removal alone is enough - ``viewer`` is the relation ``AuthorizedScope.workspace_ids``
+    resolves, so a stale answer here is a cross-team read.
+    """
+    from memory_service.adapters.authz.openfga_provider import OpenFGAAuthorizationProvider
+    from memory_service.config.settings import AuthorizationSettings
+    from memory_service.ports.authorization import RelationTuple as R
+
+    provider = OpenFGAAuthorizationProvider(
+        AuthorizationSettings(
+            provider="openfga", openfga_api_url=openfga_url, openfga_store_id=openfga_store
+        )
+    )
+    admitted = R(user="group:acme/counsel#member", relation="member", object="workspace:acme/legal")
+    in_group = R(user="user:lawyer1", relation="member", object="group:acme/counsel")
+    direct = R(user="agent:bot", relation="member", object="workspace:acme/legal")
+    await provider.write([admitted, in_group, direct])
+    assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == [
+        "workspace:acme/legal"
+    ], "a member reads as a viewer, through the group"
+    assert await provider.list_objects("agent:bot", "viewer", "workspace") == [
+        "workspace:acme/legal"
+    ]
+
+    await provider.write([], [admitted])  # the group leaves the workspace
+    assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == []
+    assert await provider.list_objects("agent:bot", "viewer", "workspace") == [
+        "workspace:acme/legal"
+    ], "unrelated grants survive a revocation"
+
+    await provider.write([admitted], [in_group])  # the group is back; the user has left it
+    assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == []
+    assert await provider.list_objects("user:lawyer1", "member", "group") == []
+
+    await provider.write([], [direct])
+    assert await provider.list_objects("agent:bot", "viewer", "workspace") == []
+    await provider.close()
+
+
+async def test_the_authorization_model_rolls_forward_like_a_schema(
+    openfga_url: str, openfga_store: str
+) -> None:
+    """An upgraded deployment must get the relations its code writes. The provider writes
+    this build's model when the store's latest one differs, and leaves it alone when it does
+    not - models are immutable and append-only, so writing is the safe direction."""
+    from memory_service.adapters.authz.openfga_provider import (
+        MODEL_PATH,
+        OpenFGAAuthorizationProvider,
+        _dsl_to_json,
+        model_shape,
+    )
+    from memory_service.config.settings import AuthorizationSettings
+    from memory_service.ports.authorization import RelationTuple as R
+
+    settings = AuthorizationSettings(
+        provider="openfga", openfga_api_url=openfga_url, openfga_store_id=openfga_store
+    )
+    current = _dsl_to_json(MODEL_PATH.read_text(encoding="utf-8"))
+    # the pre-0021 model: workspaces admitted users and groups, not agents
+    older = json.loads(json.dumps(current))
+    for td in older["type_definitions"]:
+        if td["type"] == "workspace":
+            for rel in ("member", "viewer"):
+                td["metadata"]["relations"][rel]["directly_related_user_types"] = [
+                    d
+                    for d in td["metadata"]["relations"][rel]["directly_related_user_types"]
+                    if d["type"] != "agent"
+                ]
+    assert model_shape(older) != model_shape(current)
+    seeded = OpenFGAAuthorizationProvider(settings, model_json=older)
+    old_id = await seeded._ensure_model(await seeded._get_client())  # noqa: SLF001
+    await seeded.close()
+
+    provider = OpenFGAAuthorizationProvider(settings)
+    client = await provider._get_client()  # noqa: SLF001
+    new_id = client.get_authorization_model_id()
+    assert new_id != old_id, "the store's model was older than this build's: rolled forward"
+    models = await client.read_authorization_models()
+    assert len(models.authorization_models) == 2
+    assert model_shape(models.authorization_models[0].to_dict()) == model_shape(current)
+    await provider.write([R(user="agent:bot", relation="member", object="workspace:acme/legal")])
+    assert await provider.list_objects("agent:bot", "viewer", "workspace") == [
+        "workspace:acme/legal"
+    ]
+    await provider.close()
+
+    again = OpenFGAAuthorizationProvider(settings)
+    assert (await again._get_client()).get_authorization_model_id() == new_id  # noqa: SLF001
+    assert (
+        len((await (await again._get_client()).read_authorization_models()).authorization_models)
+        == 2
+    ), (  # noqa: SLF001
+        "the same model is not written twice"
+    )
+    await again.close()

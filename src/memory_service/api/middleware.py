@@ -20,6 +20,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_service.domain.ids import is_valid_id, new_id
+from memory_service.domain.tenancy import bare_credential
 from memory_service.modules.llm.cost import start_llm_accounting
 from memory_service.observability.logging import bind_log_context, clear_log_context, get_logger
 from memory_service.observability.metrics import http_request_seconds, http_requests_total
@@ -156,17 +157,30 @@ class RateLimitMiddleware:
         self._warned_window = -1
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or self.per_minute <= 0 or scope["path"] in QUIET_PATHS:
+        if scope["type"] != "http" or scope["path"] in QUIET_PATHS:
             await self.app(scope, receive, send)
             return
-        cache = getattr(getattr(scope.get("app"), "state", None), "container", None)
-        cache = getattr(cache, "cache", None)
+        container = getattr(getattr(scope.get("app"), "state", None), "container", None)
+        cache = getattr(container, "cache", None)
         if cache is None:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
-        tenant = headers.get("x-memory-tenant") or "-"
-        api_key = headers.get("x-api-key") or headers.get("authorization") or "-"
+        api_key = bare_credential(headers.get("x-api-key") or headers.get("authorization") or "-")
+        # A tenant's own quota, when the platform set one: read from this process, never
+        # from a store, so the override costs the request nothing (modules/tenancy/registry.py).
+        # The tenant is the header's, or the one the caller's key names. A tenant quota
+        # applies even where the service default is off.
+        registry = getattr(container, "services", {}).get("tenant_registry")
+        if registry is not None:
+            tenant, per_minute = registry.quota_for(headers.get("x-memory-tenant"), api_key)
+        else:
+            tenant, per_minute = headers.get("x-memory-tenant") or "-", None
+        if per_minute is None:
+            per_minute = self.per_minute
+        if per_minute <= 0:
+            await self.app(scope, receive, send)
+            return
         window = int(time.time() // 60)
         key = f"ratelimit:{tenant}:{hash_key(api_key)}:{window}"
         try:
@@ -177,14 +191,14 @@ class RateLimitMiddleware:
                 log.warning("ratelimit.cache_unavailable", error=str(exc))
             await self.app(scope, receive, send)
             return
-        limit = self.per_minute + self.burst
+        limit = per_minute + self.burst
         if count > limit:
             retry_after = 60 - int(time.time() % 60)
             response = JSONResponse(
                 status_code=429,
                 headers={
                     "Retry-After": str(retry_after),
-                    "X-RateLimit-Limit": str(self.per_minute),
+                    "X-RateLimit-Limit": str(per_minute),
                     "X-RateLimit-Remaining": "0",
                 },
                 content={
@@ -193,7 +207,7 @@ class RateLimitMiddleware:
                         "message": "Too many requests for this tenant; retry after the window",
                         "retryable": True,
                         "trace_id": scope.get("state", {}).get("trace_id", ""),
-                        "details": {"limit_per_minute": self.per_minute, "window_seconds": 60},
+                        "details": {"limit_per_minute": per_minute, "window_seconds": 60},
                     }
                 },
             )
@@ -203,7 +217,7 @@ class RateLimitMiddleware:
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
                 response_headers = MutableHeaders(scope=message)
-                response_headers["X-RateLimit-Limit"] = str(self.per_minute)
+                response_headers["X-RateLimit-Limit"] = str(per_minute)
                 response_headers["X-RateLimit-Remaining"] = str(max(0, limit - count))
             await send(message)
 

@@ -46,6 +46,7 @@ class _Uow:
         (Visibility.USER, "user_id"),
         (Visibility.THREAD, "thread_id"),
         (Visibility.RUN, "agent_run_id"),
+        (Visibility.WORKSPACE, "workspace_id"),
     ],
 )
 async def test_unsatisfiable_visibility_is_rejected(visibility, missing):

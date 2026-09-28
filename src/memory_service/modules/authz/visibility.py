@@ -10,6 +10,7 @@ Key grammar (tenant is always part of the key):
     tenant:<t>                  everyone in the tenant
     user:<t>/<user>             that user, any thread, and every agent acting for them
     thread:<t>/<thread>         one conversation
+    workspace:<t>/<workspace>   every member of a workspace - a team's shared memory
     agroup:<t>/<agent_group>    cooperating agents sharing a group id, at any depth
     run:<t>/<run>               one agent run, and the run that spawned it
     principal:<t>/<principal>   PRIVATE to exactly one principal (user:<id> or agent:<id>)
@@ -18,11 +19,15 @@ Key grammar (tenant is always part of the key):
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
+from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import Scope
+from memory_service.domain.observation import ProcessingHints
 from memory_service.ports.authorization import AuthorizedScope
 from memory_service.ports.search import SearchFilter
 
@@ -37,6 +42,7 @@ def visibility_keys(
     scope: Scope | None = None,
     user_id: str | None = None,
     thread_id: str | None = None,
+    workspace_id: str | None = None,
     agent_group_id: str | None = None,
     agent_run_id: str | None = None,
     parent_agent_run_id: str | None = None,
@@ -56,6 +62,7 @@ def visibility_keys(
     if scope is not None:
         user_id = user_id or scope.user_id
         thread_id = thread_id or scope.thread_id
+        workspace_id = workspace_id or scope.workspace_id
         agent_group_id = agent_group_id or scope.agent_group_id
     t = tenant_id
     match visibility:
@@ -95,6 +102,10 @@ def visibility_keys(
             if not thread_id:
                 raise ValueError("THREAD visibility requires thread_id")
             return [f"thread:{t}/{thread_id}"]
+        case Visibility.WORKSPACE:
+            if not workspace_id:
+                raise ValueError("WORKSPACE visibility requires workspace_id")
+            return [f"workspace:{t}/{workspace_id}"]
         case Visibility.TENANT:
             return [f"tenant:{t}"]
     raise ValueError(f"unknown visibility {visibility}")  # pragma: no cover
@@ -155,6 +166,7 @@ class VisibilitySpecification(BaseModel):
         *,
         current_thread_id: str | None = None,
         current_agent_run_id: str | None = None,
+        current_workspace_id: str | None = None,
     ) -> VisibilitySpecification:
         """Audience keys this caller reads with.
 
@@ -184,6 +196,13 @@ class VisibilitySpecification(BaseModel):
         if current_thread_id is not None:
             threads = [th for th in threads if th == current_thread_id]
         keys.update(f"thread:{t}/{th}" for th in threads)
+        # A workspace is the team being worked IN, by the same rule as the thread: a member
+        # of several teams asking inside one of them reads that team's shared memory, and a
+        # request naming no workspace reads every team the caller belongs to.
+        workspaces = scope.workspace_ids
+        if current_workspace_id is not None:
+            workspaces = [w for w in workspaces if w == current_workspace_id]
+        keys.update(f"workspace:{t}/{w}" for w in workspaces)
         keys.update(f"agroup:{t}/{ag}" for ag in scope.agent_group_ids)
         keys.update(f"run:{t}/{r}" for r in scope.run_ids)
         if current_agent_run_id:
@@ -203,3 +222,48 @@ class VisibilitySpecification(BaseModel):
             must=dict(must),
             must_any={VISIBILITY_FIELD: sorted(self.keys)},
         )
+
+
+def validate_requested_visibility(
+    ctx: MemoryExecutionContext, hints: ProcessingHints | None
+) -> None:
+    """Reject a requested visibility this context cannot satisfy, at submission time.
+
+    Audience keys are built from the context's anchors, so a visibility whose anchor is
+    missing (AGENT_GROUP without an agent group, WORKSPACE without a workspace...) cannot be
+    expressed. Without this check the observation is acknowledged with a 202 and the failure
+    surfaces only when ``memory.process_observation`` runs — by which time the caller is long
+    gone and no memory was ever created. Validating here turns silent data loss into a 422
+    that names the missing anchor.
+
+    Checked against the anchors that SURVIVE, not the ones the request arrived with. The
+    memory is built later from ``context_from_observation``, which rebuilds the context out
+    of the observation row - so an anchor the request carries but the row does not is not an
+    anchor at all. ``group_ids`` is exactly that: it is asserted per-request in a header and
+    is absent from ``PROVENANCE_FIELDS``, so ``visibility=GROUP`` passed this check and then
+    failed in the job with "GROUP visibility requires group_id", 202 already returned and the
+    write lost - the precise failure the paragraph above says this function exists to stop.
+    Deriving the anchors from PROVENANCE_FIELDS keeps the two in step if either changes.
+    """
+    requested = getattr(hints, "visibility", None) if hints is not None else None
+    if requested is None:
+        return
+    persisted = set(MemoryExecutionContext.PROVENANCE_FIELDS)
+
+    def anchor(name: str) -> Any:
+        return getattr(ctx, name) if name in persisted else None
+
+    try:
+        visibility_keys(
+            ctx.tenant_id,
+            requested,
+            owner_principal=ctx.principal_id,
+            user_id=anchor("user_id"),
+            thread_id=anchor("thread_id"),
+            workspace_id=anchor("workspace_id"),
+            agent_group_id=anchor("agent_group_id"),
+            agent_run_id=anchor("agent_run_id"),
+            parent_agent_run_id=anchor("parent_agent_run_id"),
+        )
+    except ValueError as exc:
+        raise ValidationFailed(str(exc), details={"visibility": str(requested)}) from exc

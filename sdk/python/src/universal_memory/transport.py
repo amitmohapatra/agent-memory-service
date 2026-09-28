@@ -56,7 +56,9 @@ class Transport:
 
     @staticmethod
     def scope_headers(scope: Scope) -> dict[str, str]:
-        h = {HEADER_TENANT: scope.tenant_id}
+        h: dict[str, str] = {}
+        if scope.tenant_id:
+            h[HEADER_TENANT] = scope.tenant_id
         if scope.workspace_id:
             h[HEADER_WORKSPACE] = scope.workspace_id
         if scope.user_id:
@@ -93,8 +95,9 @@ class Transport:
         idempotency_key: str | None = None,
         files: Any | None = None,
         data: Any | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
-        headers: dict[str, str] = {}
+        headers = dict(headers or {})
         if scope is not None:
             headers.update(self.scope_headers(scope))
             if json is None and method.upper() in ("GET", "DELETE"):

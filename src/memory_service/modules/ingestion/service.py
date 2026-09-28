@@ -33,6 +33,7 @@ from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import archive_bytes_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -84,6 +85,44 @@ class IngestionService:
         self.assist = assist or LLMAssist.disabled()
 
     # -- accept -----------------------------------------------------------------
+    async def _audience(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, visibility: Visibility | None
+    ) -> tuple[Visibility, list[str], str | None]:
+        """The audience a document is stored with: the requested visibility (else the
+        thread's, else the user's, else the tenant's), its keys, and the team it is shared
+        with - only when the audience is WORKSPACE.
+
+        A WORKSPACE document is the team's: the team must exist and the caller be a member.
+        Under any other audience a team anchor still needs membership, and a bare anchor is
+        a label that grants nothing (modules/tenancy/gate.py).
+        """
+        vis = visibility or (
+            Visibility.THREAD
+            if ctx.thread_id
+            else Visibility.USER
+            if ctx.user_id
+            else Visibility.TENANT
+        )
+        team = await require_workspace_member(
+            uow, self.authz, ctx, team_only=vis is not Visibility.WORKSPACE
+        )
+        try:
+            keys = visibility_keys(
+                ctx.tenant_id,
+                vis,
+                owner_principal=ctx.principal_id,
+                user_id=ctx.user_id,
+                thread_id=ctx.thread_id,
+                workspace_id=ctx.workspace_id,
+                agent_group_id=ctx.agent_group_id,
+                agent_run_id=ctx.agent_run_id,
+                parent_agent_run_id=ctx.parent_agent_run_id,
+            )
+        except ValueError as exc:
+            raise ValidationFailed(str(exc), details={"visibility": vis.value}) from exc
+        shared = team.workspace_id if team is not None and vis is Visibility.WORKSPACE else None
+        return vis, keys, shared
+
     async def accept_file(
         self,
         uow: UnitOfWork,
@@ -132,23 +171,7 @@ class IngestionService:
             span("ingest.accept", tenant_id=ctx.tenant_id),
             stage_seconds.labels("ingest.accept").time(),
         ):
-            vis = visibility or (
-                Visibility.THREAD
-                if ctx.thread_id
-                else Visibility.USER
-                if ctx.user_id
-                else Visibility.TENANT
-            )
-            keys = visibility_keys(
-                ctx.tenant_id,
-                vis,
-                owner_principal=ctx.principal_id,
-                user_id=ctx.user_id,
-                thread_id=ctx.thread_id,
-                agent_group_id=ctx.agent_group_id,
-                agent_run_id=ctx.agent_run_id,
-                parent_agent_run_id=ctx.parent_agent_run_id,
-            )
+            vis, keys, shared_with_team = await self._audience(uow, ctx, visibility)
             document = Document(
                 tenant_id=ctx.tenant_id,
                 workspace_id=ctx.workspace_id,
@@ -176,7 +199,10 @@ class IngestionService:
                 ctx,
                 document.document_id,
                 thread_id=ctx.thread_id,
-                workspace_id=ctx.workspace_id,
+                # the team's members read it only when it was shared with the team; a
+                # narrower audience keeps the document to its ladder, and a bare anchor
+                # grants nothing
+                workspace_id=shared_with_team,
                 revisions=uow.revisions,
             )
             observation = Observation(

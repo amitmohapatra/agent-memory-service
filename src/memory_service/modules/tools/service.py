@@ -32,6 +32,7 @@ from memory_service.domain.tools import (
     stable_hash,
 )
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.modules.tools.patterns import best_match, task_pattern
 from memory_service.modules.tools.procedures import (
     Procedure,
@@ -146,6 +147,7 @@ class ToolMemoryService:
     ) -> ToolInvocation:
         """Persist one call. Idempotent on (run, step, tool, args_hash): a replayed graph step
         re-reads its row instead of inflating the statistics."""
+        await guard_workspace_visibility(uow, self.authz, ctx, visibility)
         descriptor = await uow.tools.by_name(ctx.tenant_id, tool)
         if descriptor is None:
             descriptor = await self.register(

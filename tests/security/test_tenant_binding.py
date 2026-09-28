@@ -43,6 +43,7 @@ class _Container:
 
         self.settings = Settings()
         self.settings.authentication.tenant_claim = claim
+        self.services: dict = {}  # no tenant registry: nothing is suspended
 
 
 def _principal(**claims: str) -> ServicePrincipal:

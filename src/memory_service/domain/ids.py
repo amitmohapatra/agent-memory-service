@@ -43,6 +43,9 @@ PREFIXES: Final[dict[str, str]] = {
     "import": "imp",
     "summary": "sum",
     "brief": "brf",
+    "tenant": "tnt",
+    "workspace": "wsp",
+    "group": "grp",
 }
 
 

@@ -34,7 +34,8 @@ from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.memory.service import MemoryService
 
 router = APIRouter()
-_WRITE_ERRORS = error_responses(401, 403, 409, 422, 503)
+#: 404: WORKSPACE visibility naming a workspace that is not a team (modules/tenancy/gate.py)
+_WRITE_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
 _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 _SCOPE: dict[str, Any] = {"thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"}

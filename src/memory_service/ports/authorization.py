@@ -52,6 +52,9 @@ class AuthorizedScope(BaseModel):
         default_factory=list, description="this agent run and its parent (lineage, one level up)"
     )
     agent_group_ids: list[str] = Field(default_factory=list)
+    workspace_ids: list[str] = Field(
+        default_factory=list, description="workspaces the principal may read (member or viewer)"
+    )
     user_id: str | None = None
     truncated: bool = False
 
@@ -65,6 +68,7 @@ class AuthorizedScope(BaseModel):
             ",".join(sorted(self.document_ids)),
             ",".join(sorted(self.agent_ids)),
             ",".join(sorted(self.agent_group_ids)),
+            ",".join(sorted(self.workspace_ids)),
             self.user_id or "",
             str(self.truncated),
         )

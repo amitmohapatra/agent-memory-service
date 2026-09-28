@@ -19,7 +19,7 @@ def memory_revision_keys(memory: CanonicalMemory) -> set[tuple[RevisionKind, str
     }
     for audience in memory.system_metadata.get("visibility_keys", []):
         kind, _, value = audience.partition(":")
-        if kind in {"tenant", "agroup", "run", "runup", "thread"}:
+        if kind in {"tenant", "agroup", "run", "runup", "thread", "workspace"}:
             # These audiences can cross owner/agent identities. Existing readers already
             # subscribe to TENANT; no scope-resolution round trip is needed on cache hits.
             keys.add((RevisionKind.TENANT, ""))

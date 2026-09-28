@@ -322,7 +322,8 @@ The visibility ladder, narrowest first:
 | `AGENT_GROUP` | a named crew of cooperating agents |
 | `USER` | the user, across all their threads |
 | `THREAD` | everyone in this conversation |
-| `WORKSPACE` / `TENANT` | the project / the whole tenant |
+| `WORKSPACE` | the members and viewers of a workspace - a team (see below) |
+| `TENANT` | the whole tenant |
 
 ### What the user sees
 
@@ -338,6 +339,61 @@ later signal can resolve it. Corroboration works the same way in reverse: when s
 independently record the same fact, its confidence rises and the contributors are recorded.
 
 ---
+
+## Use it with multiple teams
+
+One deployment serves several teams, each with its own customers. Switch authentication to
+`api_key` and give the deployment one secret — the platform key — and everything else is
+done through the API (executed end to end by `tests/agent/test_platform_lifecycle.py`):
+
+```python
+platform = MemoryClient(url, api_key=BOOTSTRAP_ADMIN_KEY)
+acme = await platform.admin.create_tenant("Acme", tenant_id="acme")   # admin key, shown once
+
+admin = MemoryClient(url, api_key=acme.admin_key.token)
+await admin.tenant.workspaces.create("Finance", workspace_id="finance")  # a team
+await admin.tenant.workspaces.set_member("finance", "user:u1")
+await admin.tenant.groups.create("Analysts", group_id="analysts")
+await admin.tenant.groups.add_user("analysts", "u2")
+await admin.tenant.workspaces.set_member("finance", "group:analysts")   # a group at once
+service = await admin.tenant.keys.issue("service", "finance-harness")   # what the harness holds
+
+harness = MemoryClient(url, api_key=service.token)                      # no tenant_id anywhere
+u1 = harness.bind(user_id="u1", workspace_id="finance")
+await u1.remember("Forecast review is Tuesdays at 10:00.", visibility="WORKSPACE")
+```
+
+What that buys, and what is enforced rather than promised:
+
+- **The tenant comes from the key.** A key names its tenant (and optionally one workspace);
+  a header may agree with it and may not contradict it. Another tenant's key naming `acme`
+  gets 403 — the "any tenant by changing a header" hole of shared deployments is closed.
+- **`WORKSPACE` is a team's shared audience.** Members and viewers read it; members write
+  it; the rest of the tenant does neither. Documents ingested and threads opened inside a
+  team are its members' work: only members may create them, members read the team's
+  documents, and a workspace admin may read and write its threads. A request inside a
+  workspace reads that team; one naming no workspace reads every team the caller is in —
+  the same rule threads follow. A workspace id that names no team stays what it was before
+  teams existed: a label that grants nothing.
+- **Removal is immediate.** Removing a member (or a user from a group, or a key) takes
+  effect on the next request, not when a cache expires. The author of a memory keeps it.
+  Suspending a tenant (`PATCH /v1/admin/tenants/{id}`) stops every one of its keys the same
+  way, with 403 rather than 401; resuming restores them. Deleting a workspace revokes the
+  keys bound to it; deleting a group removes it from every workspace.
+- **Secrets are shown once, and retries are safe.** Onboarding and key issuance honour
+  `Idempotency-Key` (`idempotency_key=` in the SDK): a retried request returns the same record
+  with `Idempotent-Replayed: true` and `token: null`, never a second copy of the secret.
+  Without it, every call is a new key. Deleted workspace and group ids are never reused
+  (409), so audit entries keep their meaning.
+- **Retention, quota, audit.** Per tenant: `retention_days` (a daily sweep forgets
+  canonical memories through the same soft delete a `DELETE` uses), `rate_limit_per_minute`
+  (429 with `Retry-After`), and `GET /v1/reads` — who read which records, under which scope.
+
+Roles are `admin` (manages one tenant's keys, workspaces and groups; always tenant-wide)
+and `service` (acts for its users and agents; may be pinned to one workspace). The platform
+key onboards tenants and never reads or writes memory, but it administers every tenant —
+it can issue a tenant's keys — so it is root: at least 32 characters in deployed
+environments, and unset once onboarding is done. ADR 0021 has the design.
 
 ## Tool memory
 

@@ -45,8 +45,8 @@ MODEL: dict[str, TypeDef] = {
         {
             "tenant": Relation(direct=("tenant",)),
             "admin": Relation(direct=("user",), ttu=(("tenant", "admin"),)),
-            "member": Relation(direct=("user", "group#member"), computed=("admin",)),
-            "viewer": Relation(direct=("user", "group#member"), computed=("member",)),
+            "member": Relation(direct=("user", "agent", "group#member"), computed=("admin",)),
+            "viewer": Relation(direct=("user", "agent", "group#member"), computed=("member",)),
         },
     ),
     "thread": TypeDef(
@@ -75,7 +75,7 @@ MODEL: dict[str, TypeDef] = {
             "viewer": Relation(direct=("user", "group#member", "agent")),
             "can_read": Relation(
                 computed=("owner", "viewer"),
-                ttu=(("thread", "can_read"), ("workspace", "member"), ("tenant", "admin")),
+                ttu=(("thread", "can_read"), ("workspace", "viewer"), ("tenant", "admin")),
             ),
             "can_write": Relation(computed=("owner",), ttu=(("workspace", "admin"),)),
         },

@@ -26,17 +26,24 @@ import httpx
 from universal_memory.errors import InsufficientEvidence
 from universal_memory.models import (
     AgentKeyStatus,
+    ApiKeyInfo,
     Brief,
     BriefInfo,
     BriefSpec,
     ContextBundle,
     ContextItem,
+    CreatedTenant,
     DocumentInfo,
     FileHandle,
     GraphAnswer,
     GroundingReport,
+    GroupInfo,
+    GroupMemberInfo,
+    IssuedKey,
     JobHandle,
+    KeyRole,
     Lifetime,
+    MemberRole,
     MemoryResult,
     MemoryType,
     MessageAck,
@@ -45,14 +52,18 @@ from universal_memory.models import (
     MessageRole,
     ObservationAck,
     ObservationKind,
+    ReadAuditRecord,
     RecallKind,
     Scope,
+    TenantInfo,
     ThreadInfo,
     ToolCall,
     ToolPlan,
     ToolResult,
     ToolStatus,
     Visibility,
+    WorkspaceInfo,
+    WorkspaceMemberInfo,
 )
 from universal_memory.transport import Transport
 
@@ -85,9 +96,19 @@ class MemoryClient:
             max_retries=max_retries,
             client=http_client,
         )
+        #: Platform administration (the bootstrap key): onboarding tenants.
+        self.admin = AdminAPI(self)
+        #: Administration of the key's own tenant: keys, workspaces, groups, the read audit.
+        self.tenant = TenantAPI(self)
+
+    def administer(self, tenant_id: str) -> TenantAPI:
+        """Tenant administration for a named tenant - the platform key's way in, and the
+        development key's. A tenant admin key needs no name: use :attr:`tenant`."""
+        return TenantAPI(self, tenant_id=tenant_id)
 
     def bind(self, **scope: Any) -> MemoryContext:
-        """Create a per-request context. Accepts every :class:`Scope` field."""
+        """Create a per-request context. Accepts every :class:`Scope` field; ``tenant_id``
+        may be omitted when the API key names the tenant."""
         return MemoryContext(self, Scope(**scope))
 
     async def health(self) -> dict[str, Any]:
@@ -496,7 +517,8 @@ class FilesAPI:
             f"|{sorted(metadata.items())}"
         )
         form_digest = hashlib.blake2b(fields.encode(), digest_size=6).hexdigest()
-        key = idempotency_key or f"file-{self._ctx.scope.tenant_id}-{digest}-{form_digest}"
+        tenant = self._ctx.scope.tenant_id or ""
+        key = idempotency_key or f"file-{tenant}-{digest}-{form_digest}"
         form = {"scope": self._ctx.scope.model_dump_json(exclude_none=True)}
         if message_id:
             form["message_id"] = message_id
@@ -562,7 +584,7 @@ def _default_key(prefix: str, scope: Scope, *parts: str) -> str:
     """Deterministic idempotency key from lineage + content so retries never duplicate."""
     h = hashlib.blake2b(digest_size=16)
     for p in (
-        scope.tenant_id,
+        scope.tenant_id or "",
         scope.thread_id or "",
         scope.session_id or "",
         scope.turn_id or "",
@@ -743,3 +765,198 @@ class RunsAPI:
             f"/v1/runs/{run_id}/outcome",
             json={"scope": self._ctx._scope_payload(), "success": success, "note": note},
         )
+
+
+# --- platform administration -----------------------------------------------------
+
+
+class AdminAPI:
+    """Onboarding, for the bootstrap key: ``POST /v1/admin/tenants`` and friends."""
+
+    def __init__(self, client: MemoryClient) -> None:
+        self._t = client.transport
+
+    async def create_tenant(
+        self,
+        name: str,
+        *,
+        tenant_id: str | None = None,
+        retention_days: int | None = None,
+        rate_limit_per_minute: int | None = None,
+        idempotency_key: str | None = None,
+    ) -> CreatedTenant:
+        """The tenant and its first admin key. The key's token is returned once: keep it.
+
+        Pass ``idempotency_key`` to make a retry safe: the replay carries the same tenant with
+        ``admin_key.token`` set to None (the secret is never shown twice).
+        """
+        payload = {
+            "name": name,
+            "tenant_id": tenant_id,
+            "retention_days": retention_days,
+            "rate_limit_per_minute": rate_limit_per_minute,
+        }
+        return CreatedTenant.model_validate(
+            await self._t.request(
+                "POST", "/v1/admin/tenants", json=payload, idempotency_key=idempotency_key
+            )
+        )
+
+    async def tenants(self, *, after: str = "", limit: int = 100) -> list[TenantInfo]:
+        data = await self._t.request(
+            "GET", "/v1/admin/tenants", params={"after": after, "limit": limit}
+        )
+        return [TenantInfo.model_validate(t) for t in data]
+
+    async def get_tenant(self, tenant_id: str) -> TenantInfo:
+        return TenantInfo.model_validate(
+            await self._t.request("GET", f"/v1/admin/tenants/{tenant_id}")
+        )
+
+    async def update_tenant(self, tenant_id: str, **changes: Any) -> TenantInfo:
+        """``name``, ``status``, ``retention_days`` / ``clear_retention``,
+        ``rate_limit_per_minute`` / ``clear_rate_limit``."""
+        return TenantInfo.model_validate(
+            await self._t.request("PATCH", f"/v1/admin/tenants/{tenant_id}", json=changes)
+        )
+
+
+class TenantAPI:
+    """Administration of one tenant: its keys, workspaces (teams), groups and read audit."""
+
+    def __init__(self, client: MemoryClient, *, tenant_id: str | None = None) -> None:
+        self._t = client.transport
+        self._headers = {"X-Memory-Tenant": tenant_id} if tenant_id else {}
+        self.keys = KeysAPI(self)
+        self.workspaces = WorkspacesAPI(self)
+        self.groups = GroupsAPI(self)
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        return await self._t.request(method, path, headers=self._headers, **kwargs)
+
+    async def reads(
+        self, *, after: Any = None, before: Any = None, limit: int = 100
+    ) -> list[ReadAuditRecord]:
+        """Who read which records, newest first. Page older entries with
+        ``before=<the last entry's at>``; ``after`` is a since-filter."""
+        params: dict[str, Any] = {"limit": limit}
+        for name, value in (("after", after), ("before", before)):
+            if value is not None:
+                params[name] = value.isoformat() if hasattr(value, "isoformat") else value
+        data = await self._request("GET", "/v1/reads", params=params)
+        return [ReadAuditRecord.model_validate(r) for r in data]
+
+
+class KeysAPI:
+    def __init__(self, tenant: TenantAPI) -> None:
+        self._tenant = tenant
+
+    async def issue(
+        self,
+        role: KeyRole,
+        name: str,
+        *,
+        workspace_id: str | None = None,
+        expires_in_days: int | None = None,
+        idempotency_key: str | None = None,
+    ) -> IssuedKey:
+        """A new key; its ``token`` is shown once. With ``idempotency_key`` a retry returns
+        the same key and ``token=None``; without it every call issues another key."""
+        payload = {
+            "role": role,
+            "name": name,
+            "workspace_id": workspace_id,
+            "expires_in_days": expires_in_days,
+        }
+        return IssuedKey.model_validate(
+            await self._tenant._request(
+                "POST", "/v1/keys", json=payload, idempotency_key=idempotency_key
+            )
+        )
+
+    async def list(self) -> list[ApiKeyInfo]:
+        return [
+            ApiKeyInfo.model_validate(k) for k in await self._tenant._request("GET", "/v1/keys")
+        ]
+
+    async def revoke(self, key_id: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/keys/{key_id}")
+
+
+class WorkspacesAPI:
+    def __init__(self, tenant: TenantAPI) -> None:
+        self._tenant = tenant
+
+    async def create(
+        self, name: str, *, workspace_id: str | None = None, idempotency_key: str | None = None
+    ) -> WorkspaceInfo:
+        payload = {"name": name, "workspace_id": workspace_id}
+        return WorkspaceInfo.model_validate(
+            await self._tenant._request(
+                "POST", "/v1/workspaces", json=payload, idempotency_key=idempotency_key
+            )
+        )
+
+    async def list(self) -> list[WorkspaceInfo]:
+        data = await self._tenant._request("GET", "/v1/workspaces")
+        return [WorkspaceInfo.model_validate(w) for w in data]
+
+    async def get(self, workspace_id: str) -> WorkspaceInfo:
+        return WorkspaceInfo.model_validate(
+            await self._tenant._request("GET", f"/v1/workspaces/{workspace_id}")
+        )
+
+    async def delete(self, workspace_id: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/workspaces/{workspace_id}")
+
+    async def set_member(
+        self, workspace_id: str, principal: str, *, role: MemberRole = "member"
+    ) -> WorkspaceMemberInfo:
+        """``principal`` is ``user:<id>``, ``agent:<id>`` or ``group:<id>``."""
+        return WorkspaceMemberInfo.model_validate(
+            await self._tenant._request(
+                "PUT", f"/v1/workspaces/{workspace_id}/members/{principal}", json={"role": role}
+            )
+        )
+
+    async def remove_member(self, workspace_id: str, principal: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/workspaces/{workspace_id}/members/{principal}")
+
+    async def members(self, workspace_id: str) -> list[WorkspaceMemberInfo]:
+        data = await self._tenant._request("GET", f"/v1/workspaces/{workspace_id}/members")
+        return [WorkspaceMemberInfo.model_validate(m) for m in data]
+
+
+class GroupsAPI:
+    def __init__(self, tenant: TenantAPI) -> None:
+        self._tenant = tenant
+
+    async def create(
+        self, name: str, *, group_id: str | None = None, idempotency_key: str | None = None
+    ) -> GroupInfo:
+        payload = {"name": name, "group_id": group_id}
+        return GroupInfo.model_validate(
+            await self._tenant._request(
+                "POST", "/v1/groups", json=payload, idempotency_key=idempotency_key
+            )
+        )
+
+    async def list(self) -> list[GroupInfo]:
+        return [
+            GroupInfo.model_validate(g) for g in await self._tenant._request("GET", "/v1/groups")
+        ]
+
+    async def delete(self, group_id: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/groups/{group_id}")
+
+    async def add_user(self, group_id: str, user_id: str) -> GroupMemberInfo:
+        return GroupMemberInfo.model_validate(
+            await self._tenant._request("PUT", f"/v1/groups/{group_id}/members/{user_id}")
+        )
+
+    async def remove_user(self, group_id: str, user_id: str) -> None:
+        await self._tenant._request("DELETE", f"/v1/groups/{group_id}/members/{user_id}")
+
+    async def members(self, group_id: str) -> list[GroupMemberInfo]:
+        data = await self._tenant._request("GET", f"/v1/groups/{group_id}/members")
+        return [GroupMemberInfo.model_validate(m) for m in data]

@@ -5,6 +5,10 @@ The upstream planner/gateway authenticates *end users*. The Memory Service authe
 
 - ``trusted_dev``: static API keys (development only; rejected in prod by Settings).
 - ``jwt``: RS256/ES256 via the issuer's JWKS.
+- ``api_key``: keys the service issued itself (``modules/tenancy``), verified against their
+  stored hashes, each naming the tenant - and optionally the workspace - it may act for. One
+  bootstrap secret is the platform operator, and it is the whole configuration a shared
+  deployment needs beyond the store URLs.
 
 ``gcp_iam`` and ``mtls`` were declared and never deployed: no compose target, deploy file
 or Makefile named either, and the HS256 shared-secret path that ``jwt`` also carried was a
@@ -17,11 +21,13 @@ import hashlib
 import hmac
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from memory_service.config.constants import HEADERS
 from memory_service.config.settings import AuthenticationSettings
 from memory_service.domain.errors import AuthenticationFailed, DependencyUnavailable
+from memory_service.domain.tenancy import PLATFORM_SCOPE, KeyRole, bare_credential
+from memory_service.modules.auth.keys import VerifiedKey
 
 
 @dataclass(frozen=True)
@@ -31,9 +37,30 @@ class ServicePrincipal:
     claims: dict[str, Any]
 
 
+class KeyVerifier(Protocol):
+    """``modules/auth/keys.py``; a Protocol so the authenticator needs no store to test."""
+
+    async def verify(self, token: str) -> VerifiedKey:
+        """The verified key, or AuthenticationFailed / AuthorizationFailed (suspended)."""
+        ...
+
+
+def _same_secret(presented: str, expected: str) -> bool:
+    """Constant-time equality for header-borne secrets.
+
+    ``hmac.compare_digest`` refuses non-ASCII ``str`` with a TypeError, and a header decodes
+    to whatever bytes a client sent, so comparing the raw text turned a garbage credential
+    into a 500 instead of a 401. Bytes compare for any input.
+    """
+    return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+
+
 class ServiceAuthenticator:
-    def __init__(self, settings: AuthenticationSettings) -> None:
+    def __init__(
+        self, settings: AuthenticationSettings, *, keys: KeyVerifier | None = None
+    ) -> None:
         self.settings = settings
+        self.keys = keys
 
     async def authenticate(self, headers: dict[str, str]) -> ServicePrincipal:
         mode = self.settings.mode
@@ -41,14 +68,42 @@ class ServiceAuthenticator:
             return self._trusted_dev(headers)
         if mode == "jwt":
             return await self._jwt(headers)
+        if mode == "api_key":
+            return await self._api_key(headers)
         raise AuthenticationFailed(f"unsupported authentication mode {mode}")  # pragma: no cover
+
+    # -- api_key ------------------------------------------------------------------
+    async def _api_key(self, headers: dict[str, str]) -> ServicePrincipal:
+        token = headers.get(HEADERS.api_key.lower())
+        if not token:
+            auth = headers.get("authorization", "")
+            token = bare_credential(auth) if auth[:7].lower() == "bearer " else ""
+        if not token:
+            raise AuthenticationFailed("Missing or invalid API key")
+        bootstrap = self.settings.bootstrap_admin_key
+        if bootstrap is not None and _same_secret(token, bootstrap.get_secret_value()):
+            return ServicePrincipal(
+                service_id=PLATFORM_SCOPE, mode="api_key", claims={"role": KeyRole.PLATFORM.value}
+            )
+        if self.keys is None:
+            raise DependencyUnavailable("api_key authentication requires the key store")
+        key = await self.keys.verify(token)
+        return ServicePrincipal(
+            service_id=f"key:{key.key_id}",
+            mode="api_key",
+            claims={
+                "role": key.role.value,
+                "tenant": key.tenant_id,
+                "workspace": key.workspace_id,
+                "key_id": key.key_id,
+            },
+        )
 
     # -- modes ------------------------------------------------------------------
     def _trusted_dev(self, headers: dict[str, str]) -> ServicePrincipal:
         key = headers.get(HEADERS.api_key.lower())
         if not key or not any(
-            hmac.compare_digest(key, k.get_secret_value())
-            for k in self.settings.trusted_dev_api_keys
+            _same_secret(key, k.get_secret_value()) for k in self.settings.trusted_dev_api_keys
         ):
             raise AuthenticationFailed("Missing or invalid API key")
         return ServicePrincipal(

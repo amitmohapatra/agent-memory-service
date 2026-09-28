@@ -106,7 +106,9 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # timeout/concurrency quota. Retrieval tuning stays frozen; LLM/use gates still apply.
     # Two more credential facts: the active envelope-key version and its secret keyring.
     # They permit tenant/agent-owned VKs without storing provider credentials in plaintext.
-    assert len(leaves) <= 49, f"{len(leaves)} env fields: {leaves}"
+    # 49 -> 50 for ``authentication.bootstrap_admin_key``: the one secret that onboards tenants
+    # in api_key mode. A deployment fact, and the only one a shared deployment adds.
+    assert len(leaves) <= 50, f"{len(leaves)} env fields: {leaves}"
     for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 
@@ -239,3 +241,22 @@ def test_a_slow_only_use_list_does_not_need_a_fast_model() -> None:
         },
     )
     assert settings.models.llm.wants("summaries")
+
+
+def test_a_short_bootstrap_key_is_refused_in_deployed_environments() -> None:
+    """The one credential that onboards tenants and can administer any of them; a short
+    operator-chosen value is guessable online. Laptops may use anything."""
+    import pytest
+    from pydantic import ValidationError
+
+    base = {
+        "service": {"environment": "prod"},
+        "authentication": {"mode": "api_key", "bootstrap_admin_key": "short"},
+        "blob": {"provider": "gcs"},
+    }
+    with pytest.raises(ValidationError, match="at least 32 characters"):
+        Settings(_env_file=None, **base)
+    ok = {**base, "authentication": {"mode": "api_key", "bootstrap_admin_key": "x" * 32}}
+    assert Settings(_env_file=None, **ok).authentication.mode == "api_key"
+    dev = {"authentication": {"mode": "api_key", "bootstrap_admin_key": "short"}}
+    assert Settings(_env_file=None, **dev).authentication.bootstrap_admin_key is not None

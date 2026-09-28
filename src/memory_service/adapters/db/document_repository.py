@@ -115,6 +115,14 @@ class SqlDocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
 
+    async def any_in_workspace(self, tenant_id: str, workspace_id: str) -> bool:
+        """Whether any document carries this workspace id: a team may not be created over
+        an anchor already in use (modules/tenancy/service.py)."""
+        stmt = select(DocumentRow.document_id).where(
+            DocumentRow.tenant_id == tenant_id, DocumentRow.workspace_id == workspace_id
+        )
+        return (await self.s.scalars(stmt.limit(1))).first() is not None
+
     async def add(
         self, document: Document, *, visibility_keys: Sequence[str], message_id: str | None = None
     ) -> None:

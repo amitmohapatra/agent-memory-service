@@ -432,6 +432,23 @@ class SqlMemoryRepository:
             .values(indexed_at=indexed_at, index_fingerprint=fingerprint)
         )
 
+    async def list_older_than(
+        self, tenant_id: str, *, before: datetime, limit: int = 500
+    ) -> list[CanonicalMemory]:
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.created_at < before,
+                    MemoryRow.deleted_at.is_(None),
+                )
+                .order_by(MemoryRow.created_at)
+                .limit(limit)
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
     async def expire_due(self, *, now: datetime, limit: int = 500) -> list[tuple[str, str]]:
         rows = (
             await self.s.scalars(

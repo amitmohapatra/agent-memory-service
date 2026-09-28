@@ -24,6 +24,13 @@ from memory_service.adapters.db.repositories import (
     SqlThreadRepository,
     SqlTurnRepository,
 )
+from memory_service.adapters.db.tenancy_repository import (
+    SqlApiKeyRepository,
+    SqlGroupRepository,
+    SqlReadAuditRepository,
+    SqlTenantRepository,
+    SqlWorkspaceRepository,
+)
 from memory_service.adapters.db.tool_repository import SqlToolRepository
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -116,6 +123,11 @@ class SqlUnitOfWork:
         self.tools = SqlToolRepository(s)
         self.credentials = SqlCredentialRepository(s)
         self.briefs = SqlBriefRepository(s)
+        self.tenants = SqlTenantRepository(s)
+        self.api_keys = SqlApiKeyRepository(s)
+        self.workspaces = SqlWorkspaceRepository(s)
+        self.groups = SqlGroupRepository(s)
+        self.read_audit = SqlReadAuditRepository(s)
         return self
 
     async def __aexit__(

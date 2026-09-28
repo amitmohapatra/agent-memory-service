@@ -36,15 +36,33 @@ async def run_idempotent(
     container: Container,
     ctx: MemoryExecutionContext,
     *,
-    key: str,
+    key: str | None,
     payload: Any,
     handler: Handler,
+    stored_body: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
 ) -> JSONResponse:
     """Execute ``handler`` inside a Unit of Work exactly once per (tenant, key, payload).
 
     ``handler`` returns ``(status, body, after_commit)``; the body is what later retries will
     receive verbatim. ``after_commit`` runs only after a successful commit.
+
+    ``key=None`` runs the handler once and records nothing: the route has no natural key for
+    the request (a create with a server-generated id, a key issued under a name two keys may
+    share) and the client sent no ``Idempotency-Key``, so two calls are two resources.
+
+    ``stored_body`` narrows what a replay may return: a secret that is shown once (an issued
+    key's token) goes out on the first response and is never written to the idempotency
+    table or the cache, so a retried request gets the record and ``Idempotent-Replayed``,
+    not a second look at the secret.
     """
+    uow_factory = container.services["uow_factory"]
+    if key is None:
+        async with uow_factory() as uow:
+            status, body, after_commit = await handler(uow)
+            await uow.commit()
+        if after_commit is not None:
+            await after_commit()
+        return JSONResponse(status_code=status, content=body)
     idem: IdempotencyService = container.services["idempotency"]
     request_hash = idem.request_hash(payload)
     cached = await idem.lookup_cached(ctx.tenant_id, key, request_hash)
@@ -53,7 +71,6 @@ async def run_idempotent(
             status_code=cached.status, content=cached.body, headers={"Idempotent-Replayed": "true"}
         )
 
-    uow_factory = container.services["uow_factory"]
     async with uow_factory() as uow:
         replay = await idem.begin(uow.idempotency, ctx.tenant_id, key, request_hash)
         if replay is not None:
@@ -63,9 +80,10 @@ async def run_idempotent(
                 headers={"Idempotent-Replayed": "true"},
             )
         status, body, after_commit = await handler(uow)
-        await idem.complete(uow.idempotency, ctx.tenant_id, key, status=status, body=body)
+        kept = stored_body(body) if stored_body is not None else body
+        await idem.complete(uow.idempotency, ctx.tenant_id, key, status=status, body=kept)
         await uow.commit()
-    await idem.warm_cache(ctx.tenant_id, key, request_hash, status=status, body=body)
+    await idem.warm_cache(ctx.tenant_id, key, request_hash, status=status, body=kept)
     if after_commit is not None:
         await after_commit()
     return JSONResponse(status_code=status, content=body)

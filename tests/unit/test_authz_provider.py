@@ -124,3 +124,68 @@ async def test_cycles_terminate() -> None:
         await p.check(AccessCheck(user="user:y", relation="viewer", object="workspace:acme/w"))
         is False
     )
+
+
+def test_model_shape_tells_wildcards_and_conditions_apart() -> None:
+    from memory_service.adapters.authz.openfga_provider import model_shape
+
+    plain = {
+        "schema_version": "1.1",
+        "type_definitions": [
+            {
+                "type": "doc",
+                "relations": {"viewer": {"this": {}}},
+                "metadata": {
+                    "relations": {"viewer": {"directly_related_user_types": [{"type": "user"}]}}
+                },
+            }
+        ],
+    }
+    wild = {
+        **plain,
+        "type_definitions": [
+            {
+                "type": "doc",
+                "relations": {"viewer": {"this": {}}},
+                "metadata": {
+                    "relations": {
+                        "viewer": {
+                            "directly_related_user_types": [{"type": "user", "wildcard": {}}]
+                        }
+                    }
+                },
+            }
+        ],
+    }
+    camel = {
+        "schemaVersion": "1.1",
+        "typeDefinitions": [
+            {
+                "type": "doc",
+                "relations": {"viewer": {"this": {}}},
+                "metadata": {
+                    "relations": {
+                        "viewer": {
+                            "directly_related_user_types": [
+                                {"type": "user", "relation": "", "condition": None}
+                            ]
+                        }
+                    }
+                },
+            }
+        ],
+    }
+    assert model_shape(plain) == model_shape(camel), "spelling differences are not differences"
+    assert model_shape(plain) != model_shape(wild)
+    assert model_shape(plain) != model_shape({**plain, "schema_version": "1.2"})
+
+
+def test_matching_model_id_reuses_any_model_in_the_history_with_the_same_meaning() -> None:
+    from memory_service.adapters.authz.openfga_provider import matching_model_id
+
+    a = {"schema_version": "1.1", "type_definitions": [{"type": "user"}]}
+    b = {"schema_version": "1.1", "type_definitions": [{"type": "user"}, {"type": "doc"}]}
+    history = [{**b, "id": "newer"}, {**a, "id": "older"}]
+    assert matching_model_id(history, a) == "older", "an older model with the meaning is reused"
+    assert matching_model_id(history, b) == "newer"
+    assert matching_model_id(history, {"schema_version": "1.1", "type_definitions": []}) is None

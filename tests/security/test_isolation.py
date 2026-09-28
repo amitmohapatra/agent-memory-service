@@ -119,6 +119,7 @@ def _spec(reader: dict) -> VisibilitySpecification:
         user_id=reader["user"],
         thread_ids=reader["threads"],
         agent_group_ids=reader["agent_groups"],
+        workspace_ids=reader.get("workspaces", []),
         run_ids=reader.get("runs", []),
     )
     reader["principal"] = principal
@@ -138,6 +139,7 @@ def _keys(obj: dict) -> list[str]:
         owner_principal=obj["owner"],
         user_id=obj["user"],
         thread_id=obj["thread"],
+        workspace_id=obj["workspace"],
         agent_group_id=obj["agent_group"],
         agent_run_id=obj.get("run", "run0"),
     )

@@ -123,7 +123,11 @@ class TaskSettings(BaseModel):
 
 
 class AuthenticationSettings(BaseModel):
-    mode: Literal["trusted_dev", "jwt"] = "trusted_dev"
+    mode: Literal["trusted_dev", "jwt", "api_key"] = "trusted_dev"
+    #: The platform operator in ``api_key`` mode: the one secret that may onboard tenants and
+    #: issue their first admin key. It acts for no tenant. Unset, nobody can onboard, which
+    #: is the safe state for a deployment that has finished onboarding.
+    bootstrap_admin_key: SecretStr | None = None
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     jwt_jwks_url: str | None = None
@@ -332,6 +336,14 @@ class Settings(BaseSettings):
                 raise ValueError(f"authentication.mode=trusted_dev is not allowed in {where}")
             if self.blob.provider == "filesystem":
                 raise ValueError(f"blob.provider must be gcs in {where}")
+            bootstrap = self.authentication.bootstrap_admin_key
+            if bootstrap is not None and len(bootstrap.get_secret_value()) < 32:
+                # The one credential that onboards tenants and can administer any of them;
+                # a short operator-chosen value is guessable online.
+                raise ValueError(
+                    f"authentication.bootstrap_admin_key must be at least 32 characters in "
+                    f"{where} (e.g. `openssl rand -base64 32`)"
+                )
         if self.models.llm.enabled and not self.models.llm.model:
             raise ValueError("llm.enabled=true requires models.llm.model")
         if self.models.llm.enabled is True and not self.models.llm.uses:

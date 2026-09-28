@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
@@ -16,12 +17,41 @@ from memory_service.api.schemas.context import (
     ConversationWindowBody,
     EvidenceReportBody,
 )
+from memory_service.application.container import Container
+from memory_service.domain.audit import ReadKind
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.grounding.cascade import attach
 from memory_service.modules.llm.policy import model_call_policy, model_identity
+
+
+def _audit(
+    request: Request,
+    container: Container,
+    ctx: MemoryExecutionContext,
+    kind: ReadKind,
+    query: str,
+    record_ids: Iterable[str],
+) -> None:
+    """Record a read for the audit trail. A side channel, never a dependency: a container
+    without the service (unit tests build partial ones) reads exactly as before. The entry
+    names the authenticated credential as well as the principal it acted for, because the
+    principal is asserted by the caller and the credential is not."""
+    audit = container.services.get("read_audit")
+    if audit is not None:
+        principal = getattr(request.state, "service_principal", None)
+        audit.record(
+            ctx,
+            kind,
+            query,
+            record_ids,
+            scope_fingerprint=ctx.scope_fingerprint(),
+            credential=principal.service_id if principal is not None else "",
+        )
+
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
@@ -266,6 +296,7 @@ async def recall(
         )
         wanted = set(body.kinds)
         items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
+        _audit(request, container, ctx, "recall", body.query, (i.item_id for i in items))
         evidence = result.diagnostics.get("evidence")
         return RecallResponse(
             query=body.query,
@@ -304,6 +335,9 @@ async def context(
             payload = await builder.build_api(
                 ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
             )
+            # The bundle is opaque bytes here on purpose (see above), so the audit records
+            # who asked what under which scope; the records served are in the bundle itself.
+            _audit(request, container, ctx, "context", body.query, ())
             return Response(content=payload, media_type="application/json")
         # Grounding needs the bundle itself, so this arm keeps the model round trip.
         cascade = container.services.get("grounding")
@@ -313,4 +347,6 @@ async def context(
             ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
         )
         bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
+        served = (i.item_id for i in (*bundle.memories, *bundle.knowledge))
+        _audit(request, container, ctx, "context", body.query, served)
         return ContextResponse.model_validate(bundle_to_api(bundle))

@@ -264,6 +264,9 @@ class TaskTuning:
     #: never purged. Measured before this existed: 734 rows for 788 ingested turns, growing
     #: with every write forever.
     outbox_retention_seconds: int = 24 * 3600
+    #: How long ``memory_reads`` keeps who-read-what. Long enough for an annual access
+    #: review with a quarter's slack; the table grows with every recall otherwise.
+    read_audit_retention_days: int = 400
 
 
 TASKS = TaskTuning()

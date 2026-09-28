@@ -111,6 +111,14 @@ class SqlThreadRepository:
         )
         await self.s.flush()
 
+    async def any_in_workspace(self, tenant_id: str, workspace_id: str) -> bool:
+        """Whether any thread carries this workspace id: a team may not be created over an
+        anchor already in use (modules/tenancy/service.py)."""
+        stmt = select(ThreadRow.thread_id).where(
+            ThreadRow.tenant_id == tenant_id, ThreadRow.workspace_id == workspace_id
+        )
+        return (await self.s.scalars(stmt.limit(1))).first() is not None
+
     async def get(self, tenant_id: str, thread_id: str) -> Thread | None:
         row = await self.s.get(ThreadRow, thread_id)
         if row is None or row.tenant_id != tenant_id or row.deleted_at is not None:

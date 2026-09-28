@@ -86,6 +86,7 @@ contract-test: vendor ## OpenAPI + provider contract tests
 
 e2e: vendor ## End-to-end API flows
 	$(PY) pytest tests/e2e -m "not docker and not models" -q
+	$(PY) pytest tests/agent -m "not docker and not models" -q
 
 model-test: ## Local-model contract tests against real weights, inside the runtime image
 	@# torch and onnxruntime publish no macOS x86_64 wheels, so on an Intel Mac the [models]

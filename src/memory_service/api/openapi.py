@@ -25,11 +25,14 @@ tenant / workspace / user / group / thread / agent *before* any model sees data.
 rather than pretending retrieval succeeded.
 
 ### Authentication
-The calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`
-(JWKS). The end-user identity and scope travel in trusted context headers
-(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which are
-only honored from an authenticated caller. Fine-grained authorization is evaluated by
-OpenFGA on every request.
+The calling *service* authenticates with `api_key` (keys the service issues:
+`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and
+optionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or
+`trusted_dev` (static key, laptops only). The end-user identity and scope travel in
+trusted context headers (`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which
+are only honored from an authenticated caller; in `api_key` mode the tenant comes from the
+key and a header may agree with it, never contradict it. Fine-grained authorization is
+evaluated by OpenFGA on every request.
 
 ### Standard headers
 | Header | Direction | Purpose |
@@ -63,7 +66,14 @@ TAGS: list[dict[str, Any]] = [
     {"name": "retrieval", "description": "Scope-filtered recall and ContextBundle assembly."},
     {"name": "memories", "description": "Canonical memory access and deletion."},
     {"name": "jobs", "description": "Background job status."},
-    {"name": "admin", "description": "Administrative and benchmark routes (separate auth)."},
+    {
+        "name": "admin",
+        "description": "Platform operator: onboarding tenants with the bootstrap key.",
+    },
+    {
+        "name": "tenancy",
+        "description": "Tenant administration: keys, workspaces (teams), groups, read audit.",
+    },
 ]
 
 
@@ -97,13 +107,15 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
             "type": "apiKey",
             "in": "header",
             "name": "X-API-Key",
-            "description": "trusted_dev mode only",
+            "description": "api_key mode: a key the service issued (mk_...); trusted_dev "
+            "mode: a configured development key",
         },
         "BearerAuth": {
             "type": "http",
             "scheme": "bearer",
             "bearerFormat": "JWT",
-            "description": "jwt mode",
+            "description": "jwt mode: a JWKS-verified token; api_key mode: an issued key "
+            "(mk_...) may be sent as a Bearer token too",
         },
     }
     schema["security"] = [{"ApiKeyAuth": []}, {"BearerAuth": []}]

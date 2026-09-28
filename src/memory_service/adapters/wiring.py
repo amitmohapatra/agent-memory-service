@@ -36,6 +36,7 @@ async def wire_all(container: Container) -> None:
     _wire_uow(container)
     await _wire_authorization(container)
     _wire_services(container)
+    await _prime_tenant_registry(container)
     _wire_llm(container)
     _wire_conversation(container)
     await _wire_blob(container)
@@ -146,21 +147,48 @@ async def _wire_authorization(container: Container) -> None:
     container.authorization = provider
 
 
+async def _prime_tenant_registry(container: Container) -> None:
+    """Load quotas and suspensions before the first request; the loop keeps them current."""
+    try:
+        await container.services["tenant_registry"].refresh()
+    except Exception as exc:  # the store may still be migrating; the loop retries
+        log.warning("tenant_registry.prime_failed", error=str(exc))
+
+
 def _wire_services(container: Container) -> None:
+    from memory_service.modules.audit.service import ReadAudit
     from memory_service.modules.auth.authentication import ServiceAuthenticator
+    from memory_service.modules.auth.keys import ApiKeyVerifier
     from memory_service.modules.authz.service import AuthorizationService
     from memory_service.modules.idempotency.service import IdempotencyService
+    from memory_service.modules.tenancy.registry import TenantRegistry
+    from memory_service.modules.tenancy.retention import RetentionService
+    from memory_service.modules.tenancy.service import TenancyService
 
     settings = container.settings
+    uow_factory = container.services["uow_factory"]
     container.services["idempotency"] = IdempotencyService(container.cache)
-    container.services["authenticator"] = ServiceAuthenticator(settings.authentication)
-    container.services["authz"] = AuthorizationService(
+    registry = TenantRegistry(uow_factory)
+    registry.start()
+    container.services["tenant_registry"] = registry
+    container.add_closer("tenant_registry", registry.close)
+    keys = ApiKeyVerifier(uow_factory, container.cache, known=registry.knows_key)
+    container.services["api_keys"] = keys
+    container.services["authenticator"] = ServiceAuthenticator(settings.authentication, keys=keys)
+    authz = AuthorizationService(
         container.authorization,
         container.cache,
         max_listed_objects=constants.AUTHORIZATION.max_listed_objects,
         cache_ttl_seconds=constants.CACHE.authz_ttl_seconds,
         decision_cache=constants.AUTHORIZATION.decision_cache,
     )
+    container.services["authz"] = authz
+    container.services["tenancy"] = TenancyService(authz)
+    container.services["retention"] = RetentionService(uow_factory)
+    audit = ReadAudit(uow_factory)
+    audit.start()
+    container.services["read_audit"] = audit
+    container.add_closer("read_audit", audit.close)
 
 
 def _wire_conversation(container: Container) -> None:

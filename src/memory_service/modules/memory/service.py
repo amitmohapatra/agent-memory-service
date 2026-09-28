@@ -8,16 +8,17 @@ from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
-from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
+from memory_service.domain.errors import NotFound, ScopeDenied
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.authz.visibility import visibility_keys
+from memory_service.modules.authz.visibility import validate_requested_visibility
 from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
 
@@ -26,48 +27,6 @@ from memory_service.ports.uow import UnitOfWork
 class ObservationAck:
     observation_id: str
     job_ids: list[str] = field(default_factory=list)
-
-
-def _validate_visibility(ctx: MemoryExecutionContext, hints: ProcessingHints | None) -> None:
-    """Reject a requested visibility this context cannot satisfy, at submission time.
-
-    Audience keys are built from the context's anchors, so a visibility whose anchor is
-    missing (AGENT_GROUP without an agent group, WORKSPACE without a workspace...) cannot be
-    expressed. Without this check the observation is acknowledged with a 202 and the failure
-    surfaces only when ``memory.process_observation`` runs — by which time the caller is long
-    gone and no memory was ever created. Validating here turns silent data loss into a 422
-    that names the missing anchor.
-
-    Checked against the anchors that SURVIVE, not the ones the request arrived with. The
-    memory is built later from ``context_from_observation``, which rebuilds the context out
-    of the observation row - so an anchor the request carries but the row does not is not an
-    anchor at all. ``group_ids`` is exactly that: it is asserted per-request in a header and
-    is absent from ``PROVENANCE_FIELDS``, so ``visibility=GROUP`` passed this check and then
-    failed in the job with "GROUP visibility requires group_id", 202 already returned and the
-    write lost - the precise failure the paragraph above says this function exists to stop.
-    Deriving the anchors from PROVENANCE_FIELDS keeps the two in step if either changes.
-    """
-    requested = getattr(hints, "visibility", None) if hints is not None else None
-    if requested is None:
-        return
-    persisted = set(MemoryExecutionContext.PROVENANCE_FIELDS)
-
-    def anchor(name: str) -> Any:
-        return getattr(ctx, name) if name in persisted else None
-
-    try:
-        visibility_keys(
-            ctx.tenant_id,
-            requested,
-            owner_principal=ctx.principal_id,
-            user_id=anchor("user_id"),
-            thread_id=anchor("thread_id"),
-            agent_group_id=anchor("agent_group_id"),
-            agent_run_id=anchor("agent_run_id"),
-            parent_agent_run_id=anchor("parent_agent_run_id"),
-        )
-    except ValueError as exc:
-        raise ValidationFailed(str(exc), details={"visibility": str(requested)}) from exc
 
 
 class MemoryService:
@@ -88,7 +47,11 @@ class MemoryService:
         source_id: str | None = None,
         tool_run_id: str | None = None,
     ) -> ObservationAck:
-        _validate_visibility(ctx, hints)
+        validate_requested_visibility(ctx, hints)
+        # A team's shared memory is written by its members. The anchor alone is a
+        # caller-supplied string; without this, anyone in the tenant could publish into any
+        # team and every member would read it.
+        await guard_workspace_visibility(uow, self.authz, ctx, getattr(hints, "visibility", None))
         # Agents write back whatever their tools produced. A NUL byte anywhere in that text
         # makes PostgreSQL reject the INSERT outright, so a single stray 0x00 in a tool result
         # turned a write into a 500 instead of a stored observation. The document path has
@@ -201,6 +164,15 @@ class MemoryService:
                     tenant_id=ctx.tenant_id,
                     workspace_id=ctx.workspace_id,
                     agent_group_id=ctx.agent_group_id,
+                )
+            )
+        if ctx.workspace_id:
+            # the team's shared memory; what the caller may read of it, ``spec`` decides
+            anchors.append(
+                Scope(
+                    level=ScopeLevel.WORKSPACE,
+                    tenant_id=ctx.tenant_id,
+                    workspace_id=ctx.workspace_id,
                 )
             )
         # Everyone in the tenant shares this one, so it is always an anchor. The WORKSPACE

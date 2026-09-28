@@ -28,6 +28,13 @@ from memory_service.ports.repositories import (
     TurnRepository,
 )
 from memory_service.ports.tasks import JobSpec
+from memory_service.ports.tenancy import (
+    ApiKeyRepository,
+    GroupRepository,
+    ReadAuditRepository,
+    TenantRepository,
+    WorkspaceRepository,
+)
 
 
 @runtime_checkable
@@ -47,6 +54,11 @@ class UnitOfWork(Protocol):
     documents: DocumentRepository
     memories: MemoryRepository
     tools: ToolRepository
+    tenants: TenantRepository
+    api_keys: ApiKeyRepository
+    workspaces: WorkspaceRepository
+    groups: GroupRepository
+    read_audit: ReadAuditRepository
 
     async def __aenter__(self) -> Self: ...
 

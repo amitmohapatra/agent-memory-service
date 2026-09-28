@@ -21,7 +21,8 @@ from memory_service.domain.enums import Visibility
 from memory_service.domain.tools import ToolSource, ToolStatus
 
 router = APIRouter()
-_ERRORS = error_responses(401, 403, 422, 503)
+#: 404: WORKSPACE visibility naming a workspace that is not a team (modules/tenancy/gate.py)
+_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 _TOOL_EXAMPLE: dict[str, Any] = {
     "name": "pricing.lookup_price",

@@ -56,6 +56,7 @@ class Visibility(StrEnum):
     AGENT_GROUP = "AGENT_GROUP"  # cooperating agents, at any depth, sharing a group id
     RUN = "RUN"  # this agent run and the run that spawned it: hand-off inside one execution
     THREAD = "THREAD"  # everyone participating in the thread
+    WORKSPACE = "WORKSPACE"  # every member of the workspace: a team's shared memory
     TENANT = "TENANT"  # everyone in the tenant
 
 
@@ -66,6 +67,7 @@ class ScopeLevel(StrEnum):
     AGENT_GROUP = "AGENT_GROUP"
     THREAD = "THREAD"
     USER = "USER"
+    WORKSPACE = "WORKSPACE"
     TENANT = "TENANT"
 
 

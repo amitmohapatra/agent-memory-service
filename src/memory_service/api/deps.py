@@ -4,14 +4,20 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.config.constants import HEADERS
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.errors import ScopeDenied, ValidationFailed
+from memory_service.domain.errors import (
+    AuthorizationFailed,
+    NotFound,
+    ScopeDenied,
+    ValidationFailed,
+)
+from memory_service.domain.tenancy import PLATFORM_SCOPE, KeyRole, is_valid_tenant_id
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
 from memory_service.observability.logging import bind_log_context
 from memory_service.observability.metrics import stage_seconds
@@ -73,14 +79,33 @@ def _header_scope(request: Request, container: Container) -> dict[str, Any]:
     }
 
 
+def _principal(request: Request) -> ServicePrincipal | None:
+    return getattr(request.state, "service_principal", None)
+
+
+def credential_claims(request: Request) -> dict[str, Any]:
+    principal = _principal(request)
+    return principal.claims if principal is not None else {}
+
+
+def credential_mode(request: Request) -> str | None:
+    principal = _principal(request)
+    return principal.mode if principal is not None else None
+
+
 def _require_tenant_matches_credential(
     request: Request, container: Container, tenant_id: str
 ) -> None:
     """Bind the asserted tenant to the credential asserting it, when configured to.
 
-    Authentication identifies the calling SERVICE - ``ServicePrincipal`` carries no tenant -
-    while the tenant arrives in a header, and nothing compared the two. Every boundary below
-    this point then works perfectly, on behalf of whichever tenant the caller claimed to be.
+    In ``api_key`` mode the binding is unconditional: a key names its tenant, so the header
+    is a claim to be checked against it, never the source of it. The platform key names no
+    tenant and is refused here - onboarding tenants and acting for one are different powers.
+
+    Outside ``api_key`` mode, authentication identifies the calling SERVICE - the principal
+    carries no tenant of its own - while the tenant arrives in a header, and nothing compared
+    the two. Every boundary below this point then works perfectly, on behalf of whichever
+    tenant the caller claimed to be.
     One credential reaches every tenant on the deployment by changing one header.
 
     That is sound where the tenant is a constant a gateway stamps, which is one deployment
@@ -91,6 +116,18 @@ def _require_tenant_matches_credential(
     rather than trusted, so switching a deployment to trusted_dev keys cannot quietly turn
     the check off.
     """
+    if credential_mode(request) == "api_key":
+        claims = credential_claims(request)
+        if claims.get("role") == KeyRole.PLATFORM.value:
+            raise ScopeDenied(
+                "the platform key onboards tenants; it does not act for one",
+                details={"field": HEADERS.tenant},
+            )
+        if claims.get("tenant") != tenant_id:
+            raise ScopeDenied(
+                "credential is not valid for this tenant", details={"field": HEADERS.tenant}
+            )
+        return
     claim = container.settings.authentication.tenant_claim
     if not claim:
         return
@@ -100,6 +137,50 @@ def _require_tenant_matches_credential(
             "credential is not valid for this tenant",
             details={"field": HEADERS.tenant},
         )
+
+
+def _credential_scope(
+    request: Request, container: Container, headers: dict[str, Any], body: ScopeBody
+) -> tuple[str, str | None]:
+    """The tenant and workspace this request acts in, bound to its credential.
+
+    A key carries its tenant, so a caller holding one need not repeat it; when it does, the
+    check still binds the two. A key bound to a workspace pins the workspace the same way.
+    """
+    claims = credential_claims(request) if credential_mode(request) == "api_key" else {}
+    tenant_id = headers["tenant_id"] or body.tenant_id or claims.get("tenant")
+    if not tenant_id:
+        raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
+    _require_tenant_matches_credential(request, container, tenant_id)
+    workspace_id = headers["workspace_id"] or body.workspace_id
+    bound_workspace = claims.get("workspace")
+    if bound_workspace:
+        if workspace_id not in (None, bound_workspace):
+            raise ScopeDenied(
+                "credential is bound to another workspace", details={"field": HEADERS.workspace}
+            )
+        workspace_id = bound_workspace
+    return str(tenant_id), workspace_id
+
+
+def _require_tenant_active(container: Container, tenant_id: str) -> None:
+    """A suspended tenant is not served, whatever credential kind the caller holds. The
+    verifier already refuses its keys; this covers ``jwt`` and ``trusted_dev`` callers from
+    the in-process registry, so it costs no store read."""
+    registry = container.services.get("tenant_registry")
+    if registry is not None and registry.is_suspended(tenant_id):
+        raise AuthorizationFailed("tenant is suspended", details={"tenant_id": tenant_id})
+
+
+def request_context(request: Request, tenant_id: str) -> MemoryExecutionContext:
+    """A bare execution context for administrative writes: the tenant acted on and the
+    request's correlation ids, nothing about users or threads."""
+    return MemoryExecutionContext(
+        tenant_id=tenant_id,
+        request_id=request.state.request_id,
+        correlation_id=request.state.correlation_id,
+        trace_id=request.state.trace_id,
+    )
 
 
 def build_context(
@@ -115,14 +196,12 @@ def build_context(
             raise ValidationFailed(
                 f"{field} in body does not match trusted header", details={"field": field}
             )
-    tenant_id = headers["tenant_id"] or body.tenant_id
-    if not tenant_id:
-        raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
-    _require_tenant_matches_credential(request, container, tenant_id)
+    tenant_id, workspace_id = _credential_scope(request, container, headers, body)
+    _require_tenant_active(container, tenant_id)
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
-            workspace_id=headers["workspace_id"] or body.workspace_id,
+            workspace_id=workspace_id,
             user_id=headers["user_id"] or body.user_id,
             thread_id=body.thread_id,
             session_id=body.session_id,
@@ -181,3 +260,92 @@ async def get_header_context(
 
 
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
+
+
+def is_platform(principal: ServicePrincipal) -> bool:
+    """The platform is the bootstrap secret and nothing else: minted only by ``api_key``
+    authentication, never by an issuer's token - whatever its ``sub`` or ``role`` say."""
+    return principal.mode == "api_key" and principal.service_id == PLATFORM_SCOPE
+
+
+def _has_role(principal: ServicePrincipal, roles: tuple[KeyRole, ...]) -> bool:
+    """Administration is an ``api_key``-mode power: keys carry the role the service gave
+    them. ``jwt`` is the per-customer deployment - the issuer's token is the calling service
+    and administers nothing here. ``trusted_dev`` keys are the laptop's and may do anything,
+    which is one of the reasons deployed environments refuse them."""
+    if principal.mode == "trusted_dev":
+        return True
+    if principal.mode != "api_key":
+        return False
+    role = principal.claims.get("role")
+    if role == KeyRole.PLATFORM.value:
+        return is_platform(principal) and KeyRole.PLATFORM in roles
+    return role in {r.value for r in roles}
+
+
+def require_role(*roles: KeyRole) -> Any:
+    async def dependency(principal: ServicePrincipalDep) -> ServicePrincipal:
+        if not _has_role(principal, roles):
+            raise AuthorizationFailed(
+                "this credential may not perform that administration",
+                details={"required_role": [r.value for r in roles]},
+            )
+        return principal
+
+    return Depends(dependency)
+
+
+#: The platform operator: onboards tenants, issues their admin keys, reads the audit trail.
+PlatformDep = Annotated[ServicePrincipal, require_role(KeyRole.PLATFORM)]
+#: A tenant's administrator (or the platform, for its own tenant-scoped calls).
+TenantAdminDep = Annotated[ServicePrincipal, require_role(KeyRole.ADMIN, KeyRole.PLATFORM)]
+
+
+def administered_tenant(request: Request, principal: ServicePrincipal, container: Container) -> str:
+    """The tenant an administrative call acts on: the key's own tenant, or - for a
+    credential that names none, the platform key and development keys - the header."""
+    claimed = principal.claims.get("tenant") if principal.mode == "api_key" else None
+    named = request.headers.get(HEADERS.tenant)
+    if named and not is_valid_tenant_id(named):
+        raise ValidationFailed("invalid tenant_id", details={"field": HEADERS.tenant})
+    if claimed and named and named != claimed:
+        # An admin key names its tenant; a header naming another one is a mistake or an
+        # attempt, and either deserves a refusal rather than silently acting on the claim.
+        raise ScopeDenied(
+            "credential is not valid for this tenant", details={"field": HEADERS.tenant}
+        )
+    tenant = claimed or named
+    if not tenant:
+        raise ValidationFailed("tenant_id is required (X-Memory-Tenant header)")
+    if not is_platform(principal):
+        # a suspended tenant's own administrators are suspended with it; the platform is
+        # who resumes it, so it is not stopped here
+        _require_tenant_active(container, str(tenant))
+    return str(tenant)
+
+
+async def get_administered_tenant(
+    request: Request,
+    principal: TenantAdminDep,
+    container: ContainerDep,
+    tenant_header: Annotated[
+        str | None,
+        Header(
+            alias=HEADERS.tenant,
+            description="The tenant to administer. Required for the platform key and "
+            "development keys; an admin key names its own tenant and this must agree with it.",
+        ),
+    ] = None,
+) -> str:
+    """``administered_tenant`` as a dependency, which also puts the header in the OpenAPI
+    document. The tenant must exist when the header alone names it: the platform's typo
+    must not create rows for a tenant nobody onboarded."""
+    tenant_id = administered_tenant(request, principal, container)
+    if principal.claims.get("tenant") != tenant_id:
+        async with container.services["uow_factory"]() as uow:
+            if await uow.tenants.get(tenant_id) is None:
+                raise NotFound("Tenant not found")
+    return tenant_id
+
+
+AdministeredTenantDep = Annotated[str, Depends(get_administered_tenant)]

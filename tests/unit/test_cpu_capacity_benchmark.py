@@ -61,8 +61,6 @@ async def test_invalid_arrival_rate_fails_before_starting_work(rate):
         pytest.fail("Invalid workload must not start inference")
 
     with pytest.raises(ValueError):
-        await fixed_arrivals(
-            must_not_run, rate=rate, requests=1, max_pending=1, deadline_seconds=1
-        )
+        await fixed_arrivals(must_not_run, rate=rate, requests=1, max_pending=1, deadline_seconds=1)
     with pytest.raises(ValueError):
         cpu_projection(0.01, rate=rate, cores=8)

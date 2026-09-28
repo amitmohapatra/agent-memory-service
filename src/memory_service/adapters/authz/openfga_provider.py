@@ -82,6 +82,8 @@ class OpenFGAAuthorizationProvider:
             if not config.authorization_model_id:
                 config.authorization_model_id = await self._ensure_model(client)
                 client.set_authorization_model_id(config.authorization_model_id)
+            else:
+                await self._check_pinned_model(client)
         except Exception as exc:
             # The client owns an aiohttp session. Without this, every failed attempt leaked
             # one — and since self._client is only set on success, a readiness probe polling
@@ -134,12 +136,41 @@ class OpenFGAAuthorizationProvider:
         return ids[0] if ids else None
 
     async def _ensure_model(self, client: OpenFgaClient) -> str:
+        """The store's latest model when it is this build's model; otherwise this build's
+        model is written and used. Models are immutable and append-only in OpenFGA, so this
+        is the authorization schema's ``alembic upgrade head``: an upgraded deployment gets
+        the relations its code writes (workspace membership for agents, say) instead of a
+        validation error on the first tuple the old model does not know."""
+        desired = self._model_json or _dsl_to_json(MODEL_PATH.read_text(encoding="utf-8"))
         models = await client.read_authorization_models()
-        if models.authorization_models:
-            return models.authorization_models[0].id
-        body = self._model_json or _dsl_to_json(MODEL_PATH.read_text(encoding="utf-8"))
-        written = await client.write_authorization_model(WriteAuthorizationModelRequest(**body))
+        # Any model in the history with this shape will do: a fleet running two builds
+        # must not append a model on every restart of either.
+        matching = matching_model_id(
+            [m.to_dict() | {"id": m.id} for m in models.authorization_models], desired
+        )
+        if matching is not None:
+            return matching
+        written = await client.write_authorization_model(WriteAuthorizationModelRequest(**desired))
+        log.info(
+            "openfga.model_written",
+            model_id=written.authorization_model_id,
+            replaced=models.authorization_models[0].id if models.authorization_models else None,
+        )
         return written.authorization_model_id
+
+    async def _check_pinned_model(self, client: OpenFgaClient) -> None:
+        """A pinned ``openfga_model_id`` must be this build's model, or every tuple the code
+        writes that the pinned model does not know fails at request time; better to fail at
+        start, where the operator is looking."""
+        desired = self._model_json or _dsl_to_json(MODEL_PATH.read_text(encoding="utf-8"))
+        pinned = await client.read_authorization_model()
+        model = pinned.authorization_model
+        if model is None or model_shape(model.to_dict()) != model_shape(desired):
+            raise DependencyUnavailable(
+                "the pinned OpenFGA model (authorization.openfga_model_id) is not this build's "
+                "model. Unpin it, start one instance of this build (it writes the model and "
+                "logs openfga.model_written with the new id), then pin that id."
+            )
 
     # -- port ------------------------------------------------------------------
     async def check(self, check: AccessCheck) -> bool:
@@ -315,6 +346,69 @@ def _already_satisfied(exc: Exception) -> bool:
     if code != _NO_CHANGE_CODE:
         return False
     return any(fragment in message for fragment in _NO_CHANGE_TEXT)
+
+
+def _normalised(value: object) -> object:
+    """Keys without case or underscores, empty fields gone: the SDK's ``to_dict`` and our
+    DSL conversion disagree on both (``computedUserset`` vs ``computed_userset``,
+    ``object: ""``, ``condition: None``) without meaning anything different."""
+    if isinstance(value, dict):
+        return {
+            k.replace("_", "").lower(): _normalised(v)
+            for k, v in value.items()
+            if v not in (None, "", {}, [])
+        }
+    if isinstance(value, list):
+        return [_normalised(v) for v in value]
+    return value
+
+
+def _subject_type(entry: dict) -> str:
+    """``user``, ``group#member``, ``user:*`` or ``user with cond``, as the DSL writes it."""
+    name = entry["type"]
+    if entry.get("relation"):
+        name += f"#{entry['relation']}"
+    if entry.get("wildcard") is not None:
+        name += ":*"
+    if entry.get("condition"):
+        name += f" with {entry['condition']}"
+    return name
+
+
+def _relations_shape(type_definition: dict) -> dict:
+    relations = type_definition.get("relations") or {}
+    meta = ((type_definition.get("metadata") or {}).get("relations")) or {}
+    return {
+        rel: {
+            "rewrite": _normalised(rewrite),
+            "direct": sorted(
+                _subject_type(d)
+                for d in ((meta.get(rel) or {}).get("directly_related_user_types") or [])
+            ),
+        }
+        for rel, rewrite in relations.items()
+    }
+
+
+def matching_model_id(models: list[dict], desired: dict) -> str | None:
+    """The id of the first model (newest first) whose meaning is ``desired``'s, or None."""
+    want = model_shape(desired)
+    for model in models:
+        if model_shape(model) == want:
+            return str(model["id"])
+    return None
+
+
+def model_shape(model: dict) -> dict:
+    """What an authorization model means, independent of how a client spelled it: two
+    models with the same schema version, types, relations, direct subject types, rewrites
+    and conditions are the same model."""
+    definitions = model.get("type_definitions") or model.get("typeDefinitions") or []
+    return {
+        "schema_version": model.get("schema_version") or model.get("schemaVersion"),
+        "conditions": _normalised(model.get("conditions") or {}),
+        "types": {td["type"]: _relations_shape(td) for td in definitions},
+    }
 
 
 def _dsl_to_json(dsl: str) -> dict:

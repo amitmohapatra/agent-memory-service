@@ -116,7 +116,8 @@ class DocumentResponse(BaseModel):
     summary="Ingest a file into RAG memory (multipart)",
     description=(
         "Fields: `file` (binary), `scope` (JSON object, same shape as message scope), optional "
-        "`message_id`, `title`, `visibility` (PRIVATE|USER|GROUP|THREAD|WORK|WORKSPACE|TENANT), "
+        "`message_id`, `title`, `visibility` "
+        "(PRIVATE|RUN|THREAD|AGENT_GROUP|USER|WORKSPACE|TENANT), "
         "`custom_metadata` (JSON). Identical bytes within a tenant are deduplicated by SHA-256."
     ),
     responses={
@@ -171,9 +172,9 @@ async def upload_file(
         Visibility | None,
         Form(
             description=(
-                "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, WORK, "
-                "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the thread, "
-                "else the user."
+                "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, "
+                "AGENT_GROUP, USER, WORKSPACE (the team named in X-Memory-Workspace; members "
+                "only), TENANT. Omit for the thread, else the user."
             )
         ),
     ] = None,

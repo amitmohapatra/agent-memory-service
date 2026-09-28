@@ -58,9 +58,10 @@ Visibility = Literal[
     "AGENT_GROUP",
     "RUN",
     "THREAD",
+    "WORKSPACE",
     "TENANT",
 ]
-ScopeLevel = Literal["AGENT", "AGENT_GROUP", "THREAD", "USER", "TENANT"]
+ScopeLevel = Literal["AGENT", "AGENT_GROUP", "THREAD", "USER", "WORKSPACE", "TENANT"]
 TemporalStatus = Literal[
     "CURRENT", "SUPERSEDED", "EXPIRED", "CONTRADICTED", "RETRACTED", "ARCHIVED"
 ]
@@ -131,11 +132,15 @@ CacheScope = Literal["run", "thread", "user", "tenant"]
 
 
 class Scope(BaseModel):
-    """Identity and lineage for one request. Built by ``MemoryClient.bind``."""
+    """Identity and lineage for one request. Built by ``MemoryClient.bind``.
+
+    ``tenant_id`` may be omitted when the client's API key names its tenant (``api_key``
+    mode); given, it must agree with the key.
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    tenant_id: str
+    tenant_id: str | None = None
     workspace_id: str | None = None
     user_id: str | None = None
     thread_id: str | None = None
@@ -591,3 +596,87 @@ class BriefInfo(BaseModel):
 class Brief(BriefInfo):
     status: Literal["pending", "ready", "stale"]
     output: BriefOutput | None = None
+
+
+# --- platform administration -----------------------------------------------------
+
+KeyRole = Literal["admin", "service"]
+MemberRole = Literal["admin", "member", "viewer"]
+TenantStatus = Literal["active", "suspended"]
+
+
+class TenantInfo(BaseModel):
+    tenant_id: str
+    name: str
+    status: TenantStatus
+    retention_days: int | None = None
+    rate_limit_per_minute: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ApiKeyInfo(BaseModel):
+    key_id: str
+    tenant_id: str
+    role: str
+    name: str
+    workspace_id: str | None = None
+    created_by: str
+    created_at: datetime
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+class IssuedKey(ApiKeyInfo):
+    """The record plus the secret, which the service shows exactly once.
+
+    ``token`` is None when the response was an idempotent replay (the same
+    ``Idempotency-Key`` sent twice): the key exists, but the secret is not shown again.
+    """
+
+    token: str | None = None
+
+
+class CreatedTenant(BaseModel):
+    tenant: TenantInfo
+    admin_key: IssuedKey
+
+
+class WorkspaceInfo(BaseModel):
+    workspace_id: str
+    tenant_id: str
+    name: str
+    created_at: datetime
+
+
+class WorkspaceMemberInfo(BaseModel):
+    workspace_id: str
+    principal: str
+    role: MemberRole
+    added_by: str
+    added_at: datetime
+
+
+class GroupInfo(BaseModel):
+    group_id: str
+    tenant_id: str
+    name: str
+    created_at: datetime
+
+
+class GroupMemberInfo(BaseModel):
+    group_id: str
+    user_id: str
+    added_by: str
+    added_at: datetime
+
+
+class ReadAuditRecord(BaseModel):
+    credential: str
+    principal: str
+    kind: Literal["recall", "context"]
+    query_hash: str
+    scope_fingerprint: str
+    record_ids: list[str]
+    at: datetime

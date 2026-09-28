@@ -66,6 +66,96 @@
         "title": "AgentKeyStatus",
         "type": "object"
       },
+      "ApiKeyResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "role": {
+            "$ref": "#/components/schemas/KeyRole",
+            "description": "admin or service; platform is never a stored key"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "key_id",
+          "tenant_id",
+          "role",
+          "name",
+          "workspace_id",
+          "created_by",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "last_used_at"
+        ],
+        "title": "ApiKeyResponse",
+        "type": "object"
+      },
       "ArchiveStatus": {
         "enum": [
           "STAGED",
@@ -191,7 +281,7 @@
                 "type": "null"
               }
             ],
-            "description": "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the thread, else the user."
+            "description": "Who may retrieve the document, narrowest first: PRIVATE, RUN, THREAD, AGENT_GROUP, USER, WORKSPACE (the team named in X-Memory-Workspace; members only), TENANT. Omit for the thread, else the user."
           }
         },
         "required": [
@@ -1027,6 +1117,40 @@
         "title": "ConversationWindowBody",
         "type": "object"
       },
+      "CreateGroupRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "group_id": "analysts",
+            "name": "Analysts"
+          }
+        ],
+        "properties": {
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "omit for a generated id",
+            "title": "Group Id"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateGroupRequest",
+        "type": "object"
+      },
       "CreateMessageRequest": {
         "additionalProperties": false,
         "examples": [
@@ -1161,6 +1285,66 @@
         "title": "CreateMessageRequest",
         "type": "object"
       },
+      "CreateTenantRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "name": "Acme Corp",
+            "tenant_id": "acme"
+          }
+        ],
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "requests per minute per credential of this tenant, replacing the service default; 0 disables the limiter for the tenant (to stop serving it, suspend it)",
+            "title": "Rate Limit Per Minute"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "forget canonical memories older than this many days",
+            "title": "Retention Days"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "omit for a generated id",
+            "title": "Tenant Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateTenantRequest",
+        "type": "object"
+      },
       "CreateThreadRequest": {
         "additionalProperties": false,
         "examples": [
@@ -1222,6 +1406,56 @@
           }
         },
         "title": "CreateThreadRequest",
+        "type": "object"
+      },
+      "CreateWorkspaceRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "name": "Finance",
+            "workspace_id": "finance"
+          }
+        ],
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "omit for a generated id",
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateWorkspaceRequest",
+        "type": "object"
+      },
+      "CreatedTenantResponse": {
+        "properties": {
+          "admin_key": {
+            "$ref": "#/components/schemas/IssuedKeyResponse"
+          },
+          "tenant": {
+            "$ref": "#/components/schemas/TenantResponse"
+          }
+        },
+        "required": [
+          "tenant",
+          "admin_key"
+        ],
+        "title": "CreatedTenantResponse",
         "type": "object"
       },
       "DeclaredTool": {
@@ -2263,6 +2497,224 @@
         "title": "GroundingReportBody",
         "type": "object"
       },
+      "GroupMemberResponse": {
+        "properties": {
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "user_id",
+          "added_by",
+          "added_at"
+        ],
+        "title": "GroupMemberResponse",
+        "type": "object"
+      },
+      "GroupResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "tenant_id",
+          "name",
+          "created_at"
+        ],
+        "title": "GroupResponse",
+        "type": "object"
+      },
+      "IssueKeyRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "name": "support-harness",
+            "role": "service"
+          }
+        ],
+        "properties": {
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 3660.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "description": "admin manages the tenant; service acts for its users (platform is configured, never issued)",
+            "enum": [
+              "admin",
+              "service"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "service keys only: pin the key to one workspace, so requests may name no other; the key still acts for the tenant's users within it",
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "role",
+          "name"
+        ],
+        "title": "IssueKeyRequest",
+        "type": "object"
+      },
+      "IssuedKeyResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "role": {
+            "$ref": "#/components/schemas/KeyRole",
+            "description": "admin or service; platform is never a stored key"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the secret, shown exactly once; store it now. Null when the response is an idempotent replay (Idempotent-Replayed: true): the secret is never shown twice",
+            "title": "Token"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "key_id",
+          "tenant_id",
+          "role",
+          "name",
+          "workspace_id",
+          "created_by",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "last_used_at",
+          "token"
+        ],
+        "title": "IssuedKeyResponse",
+        "type": "object"
+      },
       "JobResponse": {
         "examples": [
           {
@@ -2326,6 +2778,16 @@
           "CANCELLED"
         ],
         "title": "JobStatus",
+        "type": "string"
+      },
+      "KeyRole": {
+        "description": "What a key may do.\n\n``platform`` is the bootstrap operator: it onboards tenants and is never a row. ``admin``\nmanages one tenant's workspaces, groups and keys. ``service`` acts for that tenant's\nusers and agents - it is what a harness holds.",
+        "enum": [
+          "platform",
+          "admin",
+          "service"
+        ],
+        "title": "KeyRole",
         "type": "string"
       },
       "Lifetime": {
@@ -3318,6 +3780,60 @@
         "title": "QueryType",
         "type": "string"
       },
+      "ReadAuditResponse": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "credential": {
+            "description": "the authenticated caller: key:<id>, platform, dev:<hash> or a JWT subject",
+            "title": "Credential",
+            "type": "string"
+          },
+          "kind": {
+            "description": "recall lists the records served; context records the ask",
+            "enum": [
+              "recall",
+              "context"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "principal": {
+            "description": "who the caller acted for: user:<id> or agent:<id>",
+            "title": "Principal",
+            "type": "string"
+          },
+          "query_hash": {
+            "title": "Query Hash",
+            "type": "string"
+          },
+          "record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Record Ids",
+            "type": "array"
+          },
+          "scope_fingerprint": {
+            "title": "Scope Fingerprint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential",
+          "principal",
+          "kind",
+          "query_hash",
+          "scope_fingerprint",
+          "record_ids",
+          "at"
+        ],
+        "title": "ReadAuditResponse",
+        "type": "object"
+      },
       "ReadyResponse": {
         "properties": {
           "dependencies": {
@@ -4013,10 +4529,34 @@
           "AGENT_GROUP",
           "THREAD",
           "USER",
+          "WORKSPACE",
           "TENANT"
         ],
         "title": "ScopeLevel",
         "type": "string"
+      },
+      "SetMemberRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "role": "member"
+          }
+        ],
+        "properties": {
+          "role": {
+            "default": "member",
+            "description": "admin (users only) manages the workspace; member reads and writes its shared memory; viewer reads it",
+            "enum": [
+              "admin",
+              "member",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "title": "SetMemberRequest",
+        "type": "object"
       },
       "SubCallIn": {
         "additionalProperties": false,
@@ -4064,6 +4604,70 @@
         ],
         "title": "TemporalStatus",
         "type": "string"
+      },
+      "TenantResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit Per Minute"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "status": {
+            "description": "active serves requests; suspended stops every credential of the tenant on its next request (403 tenant is suspended), refuses new keys and is skipped by retention",
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "name",
+          "status",
+          "retention_days",
+          "rate_limit_per_minute",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TenantResponse",
+        "type": "object"
       },
       "ThreadResponse": {
         "examples": [
@@ -4191,6 +4795,77 @@
           "text"
         ],
         "title": "UnusedEvidenceBody",
+        "type": "object"
+      },
+      "UpdateTenantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "clear_rate_limit": {
+            "default": false,
+            "title": "Clear Rate Limit",
+            "type": "boolean"
+          },
+          "clear_retention": {
+            "default": false,
+            "title": "Clear Retention",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rate_limit_per_minute": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "requests per minute per credential of this tenant, replacing the service default; 0 disables the limiter for the tenant (to stop serving it, suspend it)",
+            "title": "Rate Limit Per Minute"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "suspended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "active serves requests; suspended stops every credential of the tenant on its next request (403 tenant is suspended), refuses new keys and is skipped by retention",
+            "title": "Status"
+          }
+        },
+        "title": "UpdateTenantRequest",
         "type": "object"
       },
       "VerifyItem": {
@@ -4634,29 +5309,99 @@
           "AGENT_GROUP",
           "RUN",
           "THREAD",
+          "WORKSPACE",
           "TENANT"
         ],
         "title": "Visibility",
         "type": "string"
+      },
+      "WorkspaceMemberResponse": {
+        "properties": {
+          "added_at": {
+            "format": "date-time",
+            "title": "Added At",
+            "type": "string"
+          },
+          "added_by": {
+            "title": "Added By",
+            "type": "string"
+          },
+          "principal": {
+            "title": "Principal",
+            "type": "string"
+          },
+          "role": {
+            "description": "admin, member or viewer; every role reads the workspace, admin and member write into it",
+            "enum": [
+              "admin",
+              "member",
+              "viewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "principal",
+          "role",
+          "added_by",
+          "added_at"
+        ],
+        "title": "WorkspaceMemberResponse",
+        "type": "object"
+      },
+      "WorkspaceResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "tenant_id",
+          "name",
+          "created_at"
+        ],
+        "title": "WorkspaceResponse",
+        "type": "object"
       }
     },
     "securitySchemes": {
       "ApiKeyAuth": {
-        "description": "trusted_dev mode only",
+        "description": "api_key mode: a key the service issued (mk_...); trusted_dev mode: a configured development key",
         "in": "header",
         "name": "X-API-Key",
         "type": "apiKey"
       },
       "BearerAuth": {
         "bearerFormat": "JWT",
-        "description": "jwt mode",
+        "description": "jwt mode: a JWKS-verified token; api_key mode: an issued key (mk_...) may be sent as a Bearer token too",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "info": {
-    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `trusted_dev` (API key, dev only) or `jwt`\n(JWKS). The end-user identity and scope travel in trusted context headers\n(`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which are\nonly honored from an authenticated caller. Fine-grained authorization is evaluated by\nOpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
+    "description": "\nEnterprise Multi-Agent Memory Service.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Memory-Tenant`, `X-Memory-Workspace`, `X-Memory-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `X-Request-ID` | both | Per-request id; generated when absent. |\n| `X-Correlation-ID` | both | Groups related requests (e.g. one user turn). |\n| `X-Trace-ID` | both | OpenTelemetry trace correlation. |\n\n### Errors\nAll errors use one envelope (`ErrorEnvelope`). `retryable=true` means the same request\nmay succeed later.\n\n### Versioning\nPublic routes live under `/v1`. Breaking changes ship under a new prefix; `/v1` remains\navailable for at least one release after deprecation.\n",
     "title": "Memory Service API",
     "version": "0.1.0"
   },
@@ -4736,6 +5481,742 @@
         "summary": "Prometheus metrics",
         "tags": [
           "operations"
+        ]
+      }
+    },
+    "/v1/admin/tenants": {
+      "get": {
+        "operationId": "list_tenants_v1_admin_tenants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "After",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TenantResponse"
+                  },
+                  "title": "Response List Tenants V1 Admin Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List tenants (cursor: the last tenant_id seen)",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Send `Idempotency-Key` to make a retry safe: it returns the same tenant and key record with `Idempotent-Replayed: true` and `admin_key.token: null`; the secret is never shown twice. Without the header, a repeated call with a generated id onboards another tenant, and one with a named id is a 409.",
+        "operationId": "create_tenant_v1_admin_tenants_post",
+        "parameters": [
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedTenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Onboard a tenant and receive its first admin key (shown once)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/tenants/{tenant_id}": {
+      "get": {
+        "operationId": "get_tenant_v1_admin_tenants__tenant_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Get a tenant",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Send `status` only to change it: any request naming a status makes every key of the tenant re-read the store for the next two minutes (that is what makes a suspension bite at once, and a retry after a failure safe).",
+        "operationId": "update_tenant_v1_admin_tenants__tenant_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Rename, suspend or resume a tenant; set its retention and request quota",
+        "tags": [
+          "admin"
         ]
       }
     },
@@ -7180,7 +8661,7 @@
     },
     "/v1/files": {
       "post": {
-        "description": "Fields: `file` (binary), `scope` (JSON object, same shape as message scope), optional `message_id`, `title`, `visibility` (PRIVATE|USER|GROUP|THREAD|WORK|WORKSPACE|TENANT), `custom_metadata` (JSON). Identical bytes within a tenant are deduplicated by SHA-256.",
+        "description": "Fields: `file` (binary), `scope` (JSON object, same shape as message scope), optional `message_id`, `title`, `visibility` (PRIVATE|RUN|THREAD|AGENT_GROUP|USER|WORKSPACE|TENANT), `custom_metadata` (JSON). Identical bytes within a tenant are deduplicated by SHA-256.",
         "operationId": "upload_file_v1_files_post",
         "parameters": [
           {
@@ -7258,6 +8739,7 @@
                       "AGENT_GROUP",
                       "RUN",
                       "THREAD",
+                      "WORKSPACE",
                       "TENANT"
                     ],
                     "example": "THREAD",
@@ -7528,6 +9010,1188 @@
         "summary": "Resolve entities and traverse the knowledge graph (bounded, visibility-filtered)",
         "tags": [
           "graph"
+        ]
+      }
+    },
+    "/v1/groups": {
+      "get": {
+        "operationId": "list_groups_v1_groups_get",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupResponse"
+                  },
+                  "title": "Response List Groups V1 Groups Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List groups",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "post": {
+        "operationId": "create_group_v1_groups_post",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Create a group of users a workspace can admit at once",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/groups/{group_id}": {
+      "delete": {
+        "operationId": "delete_group_v1_groups__group_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Delete a group",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/groups/{group_id}/members": {
+      "get": {
+        "operationId": "list_group_members_v1_groups__group_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupMemberResponse"
+                  },
+                  "title": "Response List Group Members V1 Groups  Group Id  Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List a group's users",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/groups/{group_id}/members/{user_id}": {
+      "delete": {
+        "operationId": "remove_group_user_v1_groups__group_id__members__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Remove a user from a group",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "put": {
+        "operationId": "add_group_user_v1_groups__group_id__members__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "group_id",
+            "required": true,
+            "schema": {
+              "title": "Group Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Add a user to a group",
+        "tags": [
+          "tenancy"
         ]
       }
     },
@@ -7811,6 +10475,585 @@
         "summary": "Background job status",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/v1/keys": {
+      "get": {
+        "operationId": "list_keys_v1_keys_get",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyResponse"
+                  },
+                  "title": "Response List Keys V1 Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List keys",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "post": {
+        "description": "Send `Idempotency-Key` to make a retry safe: it returns the same key record with `Idempotent-Replayed: true` and `token: null`; the secret is never shown twice. Without the header, every call issues a new key.",
+        "operationId": "issue_key_v1_keys_post",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedKeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Issue an admin or service key for this tenant (the secret is shown once)",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/keys/{key_id}": {
+      "delete": {
+        "operationId": "revoke_key_v1_keys__key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Revoke a key; it fails on its next request from any instance",
+        "tags": [
+          "tenancy"
         ]
       }
     },
@@ -9178,6 +12421,25 @@
             },
             "description": "Access denied"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -9239,6 +12501,242 @@
         "summary": "Submit an observation (durably acknowledged, processed asynchronously)",
         "tags": [
           "memory"
+        ]
+      }
+    },
+    "/v1/reads": {
+      "get": {
+        "operationId": "list_reads_v1_reads_get",
+        "parameters": [
+          {
+            "description": "only entries newer than this instant (a since-filter)",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "only entries newer than this instant (a since-filter)",
+              "title": "After"
+            }
+          },
+          {
+            "description": "only entries older than this instant: the cursor for the next page",
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "only entries older than this instant: the cursor for the next page",
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReadAuditResponse"
+                  },
+                  "title": "Response List Reads V1 Reads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Who read which records, newest first; page older entries with before=<last at>",
+        "tags": [
+          "tenancy"
         ]
       }
     },
@@ -9495,6 +12993,25 @@
               }
             },
             "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
           },
           "422": {
             "content": {
@@ -10680,6 +14197,25 @@
             },
             "description": "Access denied"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10840,6 +14376,25 @@
             },
             "description": "Access denied"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -10984,6 +14539,25 @@
               }
             },
             "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
           },
           "422": {
             "content": {
@@ -11194,6 +14768,1387 @@
         ]
       }
     },
+    "/v1/workspaces": {
+      "get": {
+        "operationId": "list_workspaces_v1_workspaces_get",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceResponse"
+                  },
+                  "title": "Response List Workspaces V1 Workspaces Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List workspaces",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "post": {
+        "operationId": "create_workspace_v1_workspaces_post",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Create a workspace: a team whose members share what they store in it",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/workspaces/{workspace_id}": {
+      "delete": {
+        "operationId": "delete_workspace_v1_workspaces__workspace_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Delete a workspace; every member loses its audience and every key bound to it is revoked at once",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "get": {
+        "operationId": "get_workspace_v1_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Get a workspace",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/workspaces/{workspace_id}/members": {
+      "get": {
+        "operationId": "list_members_v1_workspaces__workspace_id__members_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceMemberResponse"
+                  },
+                  "title": "Response List Members V1 Workspaces  Workspace Id  Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "List a workspace's members",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
+    "/v1/workspaces/{workspace_id}/members/{principal_ref}": {
+      "delete": {
+        "operationId": "remove_member_v1_workspaces__workspace_id__members__principal_ref__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "principal_ref",
+            "required": true,
+            "schema": {
+              "title": "Principal Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Remove a member; its next request no longer reads the workspace",
+        "tags": [
+          "tenancy"
+        ]
+      },
+      "put": {
+        "operationId": "set_member_v1_workspaces__workspace_id__members__principal_ref__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "principal_ref",
+            "required": true,
+            "schema": {
+              "title": "Principal Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Memory-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Memory-Tenant"
+            }
+          },
+          {
+            "description": "Client request id (generated when absent).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Trace id for OpenTelemetry correlation.",
+            "in": "header",
+            "name": "X-Trace-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Idempotency key for safe retries of persistent writes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "AUTHENTICATION",
+                    "details": {},
+                    "message": "Missing or invalid credentials",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "SCOPE_DENIED",
+                    "details": {},
+                    "message": "Access denied",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Access denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "details": {},
+                    "message": "Thread not found",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Thread not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "details": {},
+                    "message": "Idempotency key reused with a different payload",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "VALIDATION",
+                    "details": {},
+                    "message": "Request validation failed",
+                    "retryable": false,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request validation failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "DEPENDENCY_UNAVAILABLE",
+                    "details": {},
+                    "message": "PostgreSQL unavailable",
+                    "retryable": true,
+                    "trace_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable"
+          }
+        },
+        "summary": "Admit a user, agent or group (user:<id> | agent:<id> | group:<id>) with one role",
+        "tags": [
+          "tenancy"
+        ]
+      }
+    },
     "/version": {
       "get": {
         "operationId": "version_version_get",
@@ -11264,8 +16219,12 @@
       "name": "jobs"
     },
     {
-      "description": "Administrative and benchmark routes (separate auth).",
+      "description": "Platform operator: onboarding tenants with the bootstrap key.",
       "name": "admin"
+    },
+    {
+      "description": "Tenant administration: keys, workspaces (teams), groups, read audit.",
+      "name": "tenancy"
     }
   ]
 }

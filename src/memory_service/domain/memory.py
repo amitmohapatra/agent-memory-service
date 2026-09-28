@@ -50,6 +50,7 @@ class Scope(BaseModel):
             ScopeLevel.AGENT_GROUP: "agent_group_id",
             ScopeLevel.THREAD: "thread_id",
             ScopeLevel.USER: "user_id",
+            ScopeLevel.WORKSPACE: "workspace_id",
         }
         field = required.get(self.level)
         if field and getattr(self, field) is None:

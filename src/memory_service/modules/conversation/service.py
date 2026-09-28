@@ -25,6 +25,8 @@ from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.authz.visibility import validate_requested_visibility
+from memory_service.modules.tenancy.gate import guard_workspace_visibility, require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -96,9 +98,14 @@ class ConversationService:
             source_thread_id=source_thread_id,
             custom_metadata=custom_metadata or {},
         )
+        team = await require_workspace_member(uow, self.authz, ctx)
         await uow.threads.add(thread)
         await self.authz.grant_thread(
-            ctx, thread_id, workspace_id=ctx.workspace_id, revisions=uow.revisions
+            ctx,
+            thread_id,
+            # only a team's admins reach the thread through it; a bare anchor grants nothing
+            workspace_id=team.workspace_id if team is not None else None,
+            revisions=uow.revisions,
         )
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
         if ctx.user_id:
@@ -168,6 +175,11 @@ class ConversationService:
                 await self.create_thread(uow, ctx, thread_id=ctx.thread_id)
             else:
                 await self.authz.require(ctx, "can_write", "thread", ctx.thread_id)
+            # a message may carry a visibility hint; the same rule as a direct observation
+            validate_requested_visibility(ctx, hints)
+            await guard_workspace_visibility(
+                uow, self.authz, ctx, getattr(hints, "visibility", None)
+            )
 
             # imports: the same source message must not be stored twice
             if source_system and source_message_id:
