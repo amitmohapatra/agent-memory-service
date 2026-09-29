@@ -148,6 +148,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "attributes",
     "chunk_id",
     "confidence",
+    "connections",
     "contradicts",
     "contributors",
     "dated_mentions",

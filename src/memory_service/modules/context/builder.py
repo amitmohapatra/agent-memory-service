@@ -158,6 +158,9 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "object",
                 "attributes",
                 "contradicts",
+                # typed connections written by the background pass (supersedes / contradicts /
+                # relates): a caller that reads one memory can see what it was linked to
+                "connections",
                 "contributors",
                 "memory_type",
                 "category",

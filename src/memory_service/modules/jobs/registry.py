@@ -11,6 +11,7 @@ from memory_service.config.constants import TASKS, WEBHOOKS
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
+from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.webhooks.service import (
     TASK_WEBHOOK_DELIVER,
@@ -196,6 +197,12 @@ def register_handlers(container: Container) -> None:
         if reflection is not None:
             await reflection.reflect_all()
 
+    async def memory_connect(payload: dict[str, Any]) -> None:
+        """Connect memories nothing compared at ingest (LLM use ``memory_connections``)."""
+        connections = container.services.get("connections")
+        if connections is not None:
+            await connections.connect_all()
+
     async def memory_observe(payload: dict[str, Any]) -> None:
         """No-op for outbox rows written by a release that still enqueued it (see
         ``TASK_MEMORY_OBSERVE``). Remove together with the constant."""
@@ -296,6 +303,14 @@ def register_handlers(container: Container) -> None:
         queue.register(TASK_MEMORY_REFLECT, Queue.RECONCILE, memory_reflect, retries=0)
         queue.register_periodic(
             "periodic.memory_reflect", Queue.RECONCILE, memory_reflect, cron="53 */6 * * *"
+        )
+    if container.settings.models.llm.wants("memory_connections"):
+        # Not registered at all when the use is off, so a deployment without a model key
+        # cannot schedule work that would do nothing. Offset from reflection's hour so the
+        # two consolidation passes do not contend for the same worker.
+        queue.register(TASK_MEMORY_CONNECT, Queue.RECONCILE, memory_connect, retries=0)
+        queue.register_periodic(
+            "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
     queue.register(TASK_MEMORY_OBSERVE, Queue.RECONCILE, memory_observe, retries=0)

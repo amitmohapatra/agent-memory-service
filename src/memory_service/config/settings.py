@@ -192,6 +192,10 @@ LLMUse = Literal[
     "conflict_adjudication",
     "summaries",
     "reflection",
+    #: Typed connections between memories that already exist (supersedes / contradicts /
+    #: relates). Separate from ``reflection``, which writes a new insight instead of an edge,
+    #: so an operator can run one without the other.
+    "memory_connections",
     "briefs",
     "query_expansion",
     "chunk_context",

@@ -23,6 +23,7 @@ from memory_service.modules.context.summaries import abstractive_summaries, buil
 from memory_service.modules.ingestion.context_graph import canonical_entity
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.memory.connections import payload_edges
 from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -403,6 +404,10 @@ class Indexer:
                             "owner_principal": m.owner_principal,
                             "contributors": list(m.system_metadata.get("contributors", [])),
                             "contradicts": list(m.temporal.contradicts),
+                            # Only when there are any: an empty list on every memory point is
+                            # payload that is resident memory as soon as the collection keeps
+                            # its payload in RAM, for a field most memories never have.
+                            **({"connections": edges} if (edges := payload_edges(m)) else {}),
                             "confidence": m.confidence,
                             "observed_at": m.temporal.observed_at.isoformat(),
                             "script": detect_script(m.content).value,

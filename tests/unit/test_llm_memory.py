@@ -354,6 +354,7 @@ class _Memories:
     def __init__(self, recent) -> None:
         self.recent = list(recent)
         self.added = []
+        self.updated = []
         self.reflected = {}
 
     async def list_recent(self, *, since, limit=1000):
@@ -415,6 +416,12 @@ class _Memories:
         memory.system_metadata["visibility_keys"] = list(visibility_keys)
         self.added.append(memory)
         self.recent.insert(0, memory)
+
+    async def update(self, memory):
+        """Persist in place and bump the row revision, as the repository does."""
+        self.updated.append(memory.memory_id)
+        memory.revision += 1
+        self.recent = [memory if m.memory_id == memory.memory_id else m for m in self.recent]
 
 
 class _Revisions:

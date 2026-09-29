@@ -107,9 +107,9 @@ Provider SDK imports are banned under `src/` by Ruff and `tests/unit/test_archit
 Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMAssist` is
 the single entry point modules use: a use is consulted only when its flag is in
 `models.llm.uses` (ambiguous_extraction, ambiguous_worthiness, relation_extraction,
-entity_resolution, conflict_adjudication, summaries, reflection, query_expansion,
-chunk_context) and any failure returns `None`, so the module continues with its native
-result. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
+entity_resolution, conflict_adjudication, summaries, reflection, memory_connections,
+query_expansion, chunk_context) and any failure returns `None`, so the module continues with
+its native result. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;
 see [the capability audit](RESEARCH-RAG-2026-09-25.md).
 
