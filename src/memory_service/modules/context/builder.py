@@ -46,6 +46,13 @@ from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_calls_allowed
 from memory_service.modules.memory.ephemeral import EphemeralMemory
+from memory_service.modules.retrieval.decomposition import (
+    LLM_USE as DECOMPOSITION_USE,
+)
+from memory_service.modules.retrieval.decomposition import (
+    QueryDecomposer,
+    decompose_and_retrieve,
+)
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
     Candidate,
@@ -228,6 +235,10 @@ class ContextBuilder:
         )
         self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
+        #: Multi-hop decomposition. Inert unless the read allowed model calls (``use_llm`` on
+        #: POST /v1/context) and the operator enabled the use, so the default read path is
+        #: unchanged: one predicate, no model call.
+        self.decomposer = QueryDecomposer(self.assist)
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
         #: tenant -> the memory ids served since the last flush. A set, because a memory
@@ -349,7 +360,11 @@ class ContextBuilder:
     def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
-        if self.assist.wants("query_expansion") or self.assist.wants("summaries"):
+        if (
+            self.assist.wants("query_expansion")
+            or self.assist.wants("summaries")
+            or self.assist.wants(DECOMPOSITION_USE)
+        ):
             return None
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
@@ -434,7 +449,9 @@ class ContextBuilder:
             )
         tokens_before = self.assist.tokens_used()
         with timings.stage("retrieve"):
-            result = await self.engine.retrieve(
+            result = await decompose_and_retrieve(
+                self.engine,
+                self.decomposer,
                 ctx,
                 query,
                 document_ids=document_ids,
