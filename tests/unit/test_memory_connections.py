@@ -230,6 +230,44 @@ async def test_a_memory_stops_taking_edges_at_the_cap() -> None:
     assert uow.memories.updated == []
 
 
+async def test_an_edge_another_pass_added_while_the_model_worked_is_not_dropped() -> None:
+    """The endpoints are re-read under the lock: the edge list is one JSONB value, so writing
+    back the copy the pass started with would silently discard somebody else's arrow."""
+    newer, older = await _two_facts()
+    memories = _Memories([newer, older])
+    uow = _UoW(memories)
+    with mocked_gateway([_reply(kind="relates")]) as gateway:
+        service = ConnectionService(lambda: uow, assist=gateway.assist(uses=USES))
+        pairs = service.candidate_pairs([newer, older])
+
+        # While the model is being asked, another pass connects `newer` to a third memory.
+        concurrent = newer.model_copy(deep=True)
+        concurrent.system_metadata[FIELD] = [
+            {"kind": "relates", "memory_id": "mem-elsewhere", "why": "", "at": "", "by": "t"}
+        ]
+        memories.recent = [
+            concurrent if m.memory_id == newer.memory_id else m for m in memories.recent
+        ]
+
+        assert await service.connect(newer.tenant_id, pairs)
+
+    stored = next(m for m in memories.recent if m.memory_id == newer.memory_id)
+    assert {edge["memory_id"] for edge in edges_of(stored)} == {"mem-elsewhere", older.memory_id}
+
+
+async def test_an_endpoint_that_disappeared_while_the_model_worked_is_skipped() -> None:
+    newer, older = await _two_facts()
+    memories = _Memories([newer, older])
+    uow = _UoW(memories)
+    with mocked_gateway([_reply(kind="relates")]) as gateway:
+        service = ConnectionService(lambda: uow, assist=gateway.assist(uses=USES))
+        pairs = service.candidate_pairs([newer, older])
+        memories.recent = [m for m in memories.recent if m.memory_id != older.memory_id]
+
+        assert await service.connect(newer.tenant_id, pairs) == []
+    assert memories.updated == []
+
+
 async def test_connected_ids_sees_every_arrow_including_the_write_paths_own() -> None:
     newer, older = await _two_facts()
     newer.temporal = newer.temporal.model_copy(update={"contradicts": ["mem-a"]})

@@ -43,6 +43,7 @@ from itertools import islice
 from typing import Any, Final
 
 from memory_service.domain.enums import MemoryType
+from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
@@ -327,19 +328,14 @@ class ConnectionService:
         accepted = self._accepted(out, pairs)
         if not accepted:
             return []
-        touched: dict[str, CanonicalMemory] = {}
-        written: list[dict[str, Any]] = []
         async with self.uow_factory() as uow:
             await uow.serialize(f"connections:{tenant_id}:{pairs[0][0].scope.key()}")
-            for index, kind, why in accepted:
-                left, right = pairs[index]
-                left = touched.get(left.memory_id, left)
-                right = touched.get(right.memory_id, right)
-                if not self._link(left, right, kind, why, now=now):
-                    continue
-                touched[left.memory_id] = left
-                touched[right.memory_id] = right
-                written.append({"kind": kind, "left": left.memory_id, "right": right.memory_id})
+            # The pairs were read before the model was asked, and the edge list is one JSONB
+            # value: writing a stale copy back would drop an edge another pass added while
+            # this one was waiting on the model. Re-read the endpoints under the lock, so
+            # "already connected" is decided against what is actually stored.
+            fresh = await self._reread(uow, tenant_id, pairs, accepted)
+            touched, written = self._apply(pairs, accepted, fresh, now=now)
             for memory in touched.values():
                 memory.updated_at = now
                 await uow.memories.update(memory)
@@ -350,6 +346,52 @@ class ConnectionService:
         return written
 
     # ------------------------------------------------------------------ internals
+
+    def _apply(
+        self,
+        pairs: list[tuple[CanonicalMemory, CanonicalMemory]],
+        accepted: list[tuple[int, str, str]],
+        fresh: dict[str, CanonicalMemory],
+        *,
+        now: datetime,
+    ) -> tuple[dict[str, CanonicalMemory], list[dict[str, Any]]]:
+        """Write the accepted verdicts onto the stored endpoints, in pair order.
+
+        Returns the memories to persist, by id, and the edges written. An endpoint already
+        edited by an earlier verdict of this batch is carried forward so two edges on one
+        memory both survive.
+        """
+        touched: dict[str, CanonicalMemory] = {}
+        written: list[dict[str, Any]] = []
+        for index, kind, why in accepted:
+            first, second = pairs[index]
+            left = touched.get(first.memory_id) or fresh.get(first.memory_id)
+            right = touched.get(second.memory_id) or fresh.get(second.memory_id)
+            if left is None or right is None:
+                continue  # an endpoint was forgotten or retracted while the model worked
+            if not self._link(left, right, kind, why, now=now):
+                continue
+            touched[left.memory_id] = left
+            touched[right.memory_id] = right
+            written.append({"kind": kind, "left": left.memory_id, "right": right.memory_id})
+        return touched, written
+
+    @staticmethod
+    async def _reread(
+        uow: UnitOfWork,
+        tenant_id: str,
+        pairs: list[tuple[CanonicalMemory, CanonicalMemory]],
+        accepted: list[tuple[int, str, str]],
+    ) -> dict[str, CanonicalMemory]:
+        """The endpoints of the accepted pairs as they are stored right now, by id.
+
+        A memory that has since been deleted or retracted simply does not come back, and the
+        edge is skipped: ``_link`` needs both endpoints.
+        """
+        wanted = sorted(
+            {m.memory_id for index, _, _ in accepted for m in pairs[index]},
+        )
+        return {m.memory_id: m for m in await uow.memories.get_many(tenant_id, wanted)}
 
     @staticmethod
     def _prompt(pairs: list[tuple[CanonicalMemory, CanonicalMemory]]) -> str:
@@ -458,7 +500,11 @@ class ConnectionService:
                 task_name=TASK_MEMORY_INDEX,
                 queue=Queue.EMBEDDING,
                 payload={"tenant_id": tenant_id, "memory_ids": memory_ids},
-                idempotency_key=f"memidx:connect:{memory_ids[0]}",
+                # Keyed on the whole batch, not its first id: a later pass that touches the
+                # same memory in a different set would otherwise be deduplicated against a
+                # still-queued job that does not cover its new edges, and the payload a
+                # reader sees would never carry them.
+                idempotency_key=f"memidx:connect:{content_hash('|'.join(memory_ids))}",
                 tenant_id=tenant_id,
             )
         )

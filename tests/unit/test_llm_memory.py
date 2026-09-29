@@ -423,6 +423,10 @@ class _Memories:
         memory.revision += 1
         self.recent = [memory if m.memory_id == memory.memory_id else m for m in self.recent]
 
+    async def get_many(self, tenant_id, memory_ids):
+        wanted = set(memory_ids)
+        return [m for m in self.recent if m.tenant_id == tenant_id and m.memory_id in wanted]
+
 
 class _Revisions:
     def __init__(self) -> None:

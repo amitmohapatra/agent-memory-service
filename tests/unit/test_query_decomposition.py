@@ -198,3 +198,16 @@ def test_fusion_respects_the_limit_and_keeps_the_best_copy() -> None:
 def test_a_decomposer_refuses_an_unbounded_configuration() -> None:
     with pytest.raises(ValueError, match="bounded"):
         QueryDecomposer(max_sub_questions=0)
+
+
+def test_a_decomposing_deployment_cannot_share_cached_bundles_with_one_that_is_not() -> None:
+    """The bundle cache is keyed on the model profile, and the builder lists this use in it:
+    without that, a bundle fused from sub-questions could be served to a deployment that does
+    not decompose at all."""
+    from memory_service.modules.context.builder import CACHED_MODEL_USES
+
+    assert LLM_USE in CACHED_MODEL_USES
+    with mocked_gateway() as gateway:
+        decomposing = gateway.assist(uses=[LLM_USE]).cache_fingerprint(CACHED_MODEL_USES)
+        plain = gateway.assist(uses=["reflection"]).cache_fingerprint(CACHED_MODEL_USES)
+    assert decomposing and decomposing != plain

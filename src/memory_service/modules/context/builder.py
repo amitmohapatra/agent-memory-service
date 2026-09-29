@@ -19,6 +19,7 @@ from typing import Any
 import orjson
 
 from memory_service.config.constants import ContextSettings, RetrievalSettings
+from memory_service.config.settings import LLMUse
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextBundle,
@@ -74,6 +75,11 @@ def _cacheable(bundle: ContextBundle) -> bool:
     return not any(
         item.attributes.get("derived") or item.item_id.startswith("wm_") for item in bundle.memories
     )
+
+
+#: The model uses a cached bundle's content depends on. A deployment that decomposes questions
+#: assembles a different bundle from the same query, so it must not read another's cache.
+CACHED_MODEL_USES: tuple[LLMUse, ...] = ("summaries", "query_expansion", DECOMPOSITION_USE)
 
 
 _ROLLING_SYSTEM = (
@@ -264,7 +270,7 @@ class ContextBuilder:
         if self.engine.reranker is not None:
             parts.append(self.engine.reranker.fingerprint())
         # bundles built with model assistance must not be served to a deployment without it
-        model_profile = self.assist.cache_fingerprint(("summaries", "query_expansion"))
+        model_profile = self.assist.cache_fingerprint(CACHED_MODEL_USES)
         if model_profile:
             parts.append(model_profile)
         return stable_key(*parts)
