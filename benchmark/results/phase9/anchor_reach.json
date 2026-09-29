@@ -1,0 +1,227 @@
+{
+  "provenance": {
+    "timestamp": "2026-09-29T08:53:38.528511+00:00",
+    "git_commit": "3b9eef42178f9c7ae7372a1c8ce7137918138803",
+    "host_load": {
+      "loadavg_1m": 13.19,
+      "loadavg_5m": 14.3,
+      "loadavg_15m": 19.0,
+      "load_per_core": 3.3
+    },
+    "python": "3.12.14",
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": null,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "not-installed",
+      "torch": "not-installed",
+      "transformers": "not-installed",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "docling": "not-installed"
+    },
+    "models": {
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  },
+  "collection": "mem_memories_dense_en_onnx-granite-embedding-small-english-r2-model-d384_dense_ml_onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384__bm25-v2-unicode-k1_2-b0_75",
+  "tenant": "",
+  "dump": "benchmark/results/phase7/locomo_source_ensemble.json",
+  "answerable": 1540,
+  "would_anchor": 1442,
+  "would_anchor_by_category": {
+    "temporal": 303,
+    "open_domain": 91,
+    "multi_hop": 256,
+    "single_hop": 792
+  },
+  "answerable_by_category": {
+    "temporal": 321,
+    "open_domain": 96,
+    "multi_hop": 282,
+    "single_hop": 841
+  },
+  "anchors_per_question": {
+    "1": 1024,
+    "2": 352,
+    "3": 54,
+    "4": 11,
+    "6": 1
+  },
+  "distinct_anchors": 254,
+  "top_anchors": [
+    {
+      "anchor": "john",
+      "questions": 261,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 1153
+    },
+    {
+      "anchor": "nate",
+      "questions": 113,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 369
+    },
+    {
+      "anchor": "jolene",
+      "questions": 113,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 358
+    },
+    {
+      "anchor": "evan",
+      "questions": 113,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 293
+    },
+    {
+      "anchor": "joanna",
+      "questions": 106,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 359
+    },
+    {
+      "anchor": "calvin",
+      "questions": 87,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 346
+    },
+    {
+      "anchor": "james",
+      "questions": 80,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 388
+    },
+    {
+      "anchor": "melanie",
+      "questions": 72,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 239
+    },
+    {
+      "anchor": "deborah",
+      "questions": 72,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 345
+    },
+    {
+      "anchor": "audrey",
+      "questions": 71,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 383
+    },
+    {
+      "anchor": "caroline",
+      "questions": 66,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 237
+    },
+    {
+      "anchor": "dave",
+      "questions": 66,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 340
+    },
+    {
+      "anchor": "maria",
+      "questions": 65,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 370
+    },
+    {
+      "anchor": "andrew",
+      "questions": 52,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 371
+    },
+    {
+      "anchor": "gina",
+      "questions": 38,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 221
+    },
+    {
+      "anchor": "august",
+      "questions": 29,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "october",
+      "questions": 25,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "july",
+      "questions": 21,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "november",
+      "questions": 17,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "december",
+      "questions": 14,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "september",
+      "questions": 14,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "june",
+      "questions": 11,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "february",
+      "questions": 11,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "april",
+      "questions": 9,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    },
+    {
+      "anchor": "january",
+      "questions": 9,
+      "matched_as_asked": 0,
+      "matched_when_scoped": 0
+    }
+  ],
+  "anchors_matching_nothing": 25,
+  "anchors_matching_only_when_scoped": 15,
+  "limitations": [
+    "Counts are over every tenant in this collection, not per question.",
+    "An anchor that matches points can still fail to help; this only says whether the prefetch can return anything at all."
+  ]
+}
