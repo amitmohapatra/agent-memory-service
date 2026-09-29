@@ -329,8 +329,18 @@ async def test_native_fusion_ties_have_stable_order_without_changing_scores(orde
         httpx.ReadError("read error"),
         ResponseHandlingException(httpx.RemoteProtocolError("Server disconnected")),
         _FakeGrpcError(),
+        AttributeError("'NoneType' object has no attribute 'result'"),
+        AssertionError("Search returned None"),
     ],
-    ids=["connect", "remote_protocol", "read", "wrapped", "grpc_unavailable"],
+    ids=[
+        "connect",
+        "remote_protocol",
+        "read",
+        "wrapped",
+        "grpc_unavailable",
+        "empty_response",
+        "asserted_none",
+    ],
 )
 async def test_a_read_survives_one_connection_failure(error: Exception) -> None:
     """The failure that cost four of 304 judged questions: the connection is gone, the query
@@ -341,6 +351,37 @@ async def test_a_read_survives_one_connection_failure(error: Exception) -> None:
     assert [h.record_id for h in hits] == ["r1"]
     assert len(client.calls) == 2, "the read was not retried exactly once"
     assert _retries() == before + 1
+
+
+async def test_a_hybrid_read_with_no_response_says_so_instead_of_leaking_an_attribute_error() -> (
+    None
+):
+    """A read whose response never arrived used to surface as ``AttributeError: 'NoneType'
+    object has no attribute 'result'`` wrapped in DependencyUnavailable, which reads like a
+    bug in this adapter and says nothing about what happened. Two long benchmark runs died
+    on it; both would have survived the retry, and whoever read the log would have known why."""
+    client = FakeClient(error=AttributeError("'NoneType' object has no attribute 'result'"))
+    client.fail_times = 99
+    with pytest.raises(DependencyUnavailable, match="sent no response body"):
+        await _store(client).search_hybrid(
+            "c",
+            dense={VectorName.DENSE_EN: [0.1] * 4, VectorName.DENSE_ML: [0.2] * 4},
+            sparse=None,
+            flt=_flt(),
+            limit=5,
+            prefetch_limit=10,
+        )
+    assert len(client.calls) == 2, "the hybrid read was retried once before giving up"
+
+
+async def test_a_programming_error_in_a_read_is_not_mistaken_for_a_lost_response() -> None:
+    """The retry keys on the client having no response, not on AttributeError as a class:
+    a genuine attribute bug must still surface on the first call."""
+    client = FakeClient(error=AttributeError("'Store' object has no attribute 'collection'"))
+    client.fail_times = 99
+    with pytest.raises(AttributeError, match="no attribute 'collection'"):
+        await _store(client).search_dense("c", VectorName.DENSE_ML, [0.1] * 4, _flt(), limit=5)
+    assert len(client.calls) == 1, "not retried"
 
 
 async def test_a_second_failure_is_not_retried_again() -> None:

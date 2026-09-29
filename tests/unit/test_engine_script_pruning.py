@@ -129,11 +129,22 @@ async def test_a_cyrillic_query_never_pays_the_english_encode() -> None:
     assert {c.record_id for c in result.candidates} >= {"chk_moscow_chunk"}
 
 
+#: One encoder's delay in the concurrency test. Running both in sequence costs two of these,
+#: running them together costs one, so the bound sits between the two -- at 0.05 s the old
+#: bound of 0.12 s was *above* the 0.10 s serial floor, which made the test both weak (serial
+#: encoders could pass it) and flaky (a loaded host spends the 0.02 s margin on scheduling).
+ENCODE_DELAY = 0.4
+
+
 async def test_the_two_encoders_run_at_the_same_time() -> None:
-    engine, _, _, _ = await _parts(delay=0.05)
+    engine, _, _, _ = await _parts(delay=ENCODE_DELAY)
     started = time.perf_counter()
     await engine.retrieve(CTX, "Berlin office", kinds=("chunk",), visibility=VISIBILITY)
-    assert time.perf_counter() - started < 0.12, "the encoders ran one after the other"
+    elapsed = time.perf_counter() - started
+    assert elapsed < 1.6 * ENCODE_DELAY, (
+        f"the encoders ran one after the other: {elapsed:.3f}s for two "
+        f"{ENCODE_DELAY}s encodes, and running them together costs one"
+    )
 
 
 async def test_the_entity_prefetch_anchors_memories_on_the_query_entities() -> None:

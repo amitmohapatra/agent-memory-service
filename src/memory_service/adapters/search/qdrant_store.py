@@ -64,6 +64,26 @@ search_read_retries_total = Counter(
 _RETRY_PAUSE_SECONDS = (0.05, 0.10)
 _CONNECTION_ERRORS = (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError)
 
+#: The other way a read comes back with nothing: the client unwraps a response it never got
+#: and raises from inside its own code, ``'NoneType' object has no attribute 'result'`` (newer
+#: paths assert instead, "Search returned None"). It is not a bad query -- the same call
+#: answers before it and after it -- so it belongs with the connection failures rather than
+#: with programming errors. Two 45- and 80-minute benchmark runs died on it under load, each
+#: losing the whole run to one read, which is what a retry is for.
+_EMPTY_RESPONSE_SIGNS = ("object has no attribute 'result'", "returned None")
+
+
+def _is_empty_response(exc: BaseException) -> bool:
+    """Whether the client raised because it had no response to unwrap (see the note above)."""
+    if not isinstance(exc, AttributeError | AssertionError):
+        return False
+    return any(sign in str(exc) for sign in _EMPTY_RESPONSE_SIGNS)
+
+
+def _is_transient_read_error(exc: BaseException) -> bool:
+    """Whether this read can be reissued: the connection died, or no response arrived."""
+    return _is_connection_error(exc) or _is_empty_response(exc)
+
 
 def _is_connection_error(exc: BaseException) -> bool:
     """A broken connection, however this client happens to be wrapping it.
@@ -91,7 +111,7 @@ async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
     try:
         return await call()
     except Exception as exc:
-        if not _is_connection_error(exc):
+        if not _is_transient_read_error(exc):
             raise
         search_read_retries_total.labels(operation).inc()
         await asyncio.sleep(random.uniform(*_RETRY_PAUSE_SECONDS))  # noqa: S311 - jitter
@@ -523,9 +543,12 @@ class QdrantSearchStore:
                     ),
                 )
             except Exception as exc:
-                raise DependencyUnavailable(
-                    f"qdrant hybrid query failed: {type(exc).__name__}: {exc}"
-                ) from exc
+                detail = (
+                    "the search server sent no response body (retried once already)"
+                    if _is_empty_response(exc)
+                    else f"{type(exc).__name__}: {exc}"
+                )
+                raise DependencyUnavailable(f"qdrant hybrid query failed: {detail}") from exc
         # Native RRF leaves equal-score ordering unspecified. Resolve ties before the
         # engine deduplicates/cuts the pool, or identical queries can pack different
         # evidence. This stabilizes the returned pool without another RPC or wider search;
