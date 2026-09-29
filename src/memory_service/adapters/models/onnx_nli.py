@@ -56,7 +56,9 @@ class OnnxNLI(BatchedNLI):
         self._fingerprint = f"nli-onnx-{identity.hexdigest()[:24]}"
         self.info = ProviderInfo(
             name=spec.id,
-            license="see model card",
+            # the frozen spec carries the licence: it is the compliance record (D2), and a
+            # generic "see model card" here made the one provenance field that matters unusable
+            license=getattr(spec, "license", None) or "see model card",
             origin="huggingface/" + spec.id,
             locality="local",
         )

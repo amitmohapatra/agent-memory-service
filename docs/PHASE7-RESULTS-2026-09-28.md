@@ -42,7 +42,127 @@ for `gemini/gemini-3.8-flash`, which is what `.env` names. The gateway itself is
 through the same key in the same minute, so this is an upstream provider outage, not a defect
 in this branch. A failed call is unmeasured.
 
-## What was not run, and why
+## Measured (this section is generated from the artifacts, 2026-09-29)
+
+Host: 4 cores, 8 GB, Docker VM taking most of it; the D8 target assumes 8 vCPU.
+Every arm below ran with `paid_llm_calls: 0` -- these are retrieval numbers on the
+model-free floor, not answer accuracy.
+
+### SciFact through the runtime store path (M2 gate) -- MISSES
+
+| metric | threshold | measured (ensemble) | verdict |
+|---|---|---|---|
+| ndcg@10 | 0.7557 | 0.7533 | **misses by 0.0024** |
+| recall@10 | 0.8926 | 0.8926 | meets |
+
+English-only arm: nDCG@10 0.7415, recall@10 0.8912.
+5,183 documents, 300 queries, indexing 7302 s.
+Artifact: `benchmark/results/phase7/runtime_scifact.json`.
+
+### XQuAD, 12 languages (M2 gate) -- PASSES
+
+Batch a: mean same-language recall@10 0.9948 against 0.98, pass=True.
+Batch b: mean same-language recall@10 0.9963 against 0.98, pass=True.
+
+| language | english-only | ensemble | cross-language, english-only | cross-language, ensemble |
+|---|---|---|---|---|
+| ar | 0.9303 | 0.9916 | 0.0933 | 0.9462 |
+| de | 0.9815 | 0.9975 | 0.8008 | 0.9857 |
+| el | 0.9454 | 0.9941 | 0.2748 | 0.9496 |
+| es | 0.9891 | 0.9975 | 0.8697 | 0.9933 |
+| hi | 0.9723 | 0.9950 | 0.1328 | 0.9748 |
+| ro | 0.9790 | 0.9933 | 0.8202 | 0.9748 |
+| ru | 0.9235 | 0.9975 | 0.1555 | 0.9891 |
+| th | 0.9840 | 0.9958 | 0.1613 | 0.9664 |
+| tr | 0.9462 | 0.9899 | 0.6042 | 0.9370 |
+| vi | 0.9798 | 0.9992 | 0.5395 | 0.9378 |
+| zh | 0.9941 | 0.9992 | 0.1454 | 0.9866 |
+
+Mean over the 11 languages with both arms: english-only 0.9659, ensemble 0.9955.
+Cross-language is where a single English space fails outright, which is what the second
+vector space was added for. Artifacts: `runtime_xquad_a.json`, `runtime_xquad_b.json`.
+
+### LoCoMo source arms, exact annotated source-turn recall -- both complete
+
+1,986 questions each, 10 conversations, no LLM. `english` is the control (Granite only);
+`ensemble` is the shipped runtime (dense_en + dense_ml + bm25, script-pruned prefetch).
+
+| category | n | control @10 | ensemble @10 | delta | control @50 | ensemble @50 | delta |
+|---|---|---|---|---|---|---|---|
+| all_answerable | 1536 | 0.6015 | 0.6484 | +0.0469 | 0.7682 | 0.8113 | +0.0431 |
+| single_hop | 841 | 0.6740 | 0.7208 | +0.0468 | 0.8373 | 0.8751 | +0.0379 |
+| multi_hop | 282 | 0.3364 | 0.3977 | +0.0612 | 0.5774 | 0.6338 | +0.0564 |
+| temporal | 321 | 0.7105 | 0.7510 | +0.0405 | 0.8281 | 0.8741 | +0.0460 |
+| open_domain | 92 | 0.3699 | 0.3965 | +0.0265 | 0.5123 | 0.5532 | +0.0409 |
+
+| latency (ms) | p50 | p95 | p99 | max |
+|---|---|---|---|---|
+| control | 369.77 | 833.34 | 1622.52 | 5593.82 |
+| ensemble | 321.36 | 732.02 | 1523.17 | 4096.34 |
+
+The ensemble is both better and faster: script-aware pruning skips the English encode
+for non-Latin queries. Artifacts: `locomo_source_english.json`, `locomo_source_ensemble.json`.
+
+### Fast-path p99 (D8 target) -- FAILS
+
+Target p99 < 300 ms on 8 vCPU. Measured 1523.17 ms on 4 cores with other work on the
+host. Not met, and not claimed. The depth-halving gate in D6 step 2 is the intended route
+to it, and it is unrun.
+
+### The finding that shapes the next phase
+
+multi_hop recall is 0.3977 at depth 10 and 0.6338 at depth 50. The supporting turns are
+retrieved and ranked too low, so the honest ceiling for reordering at depth 10 is that
+depth-50 number. A cross-encoder is not the answer here: measured full scale
+(`benchmark/results/full_rerank_ettin17m.json`, 1,986 questions, ettin-17m) it costs p50
+649 ms, p95 1322 ms, p99 2018 ms. Its *quality* on this corpus is unestablished -- the
+on/off pair that suggested it hurts is 2 conversations, 120 questions, 16 multi-hop
+questions, which is noise, and that claim should not be repeated.
+
+### Grounding gate on the real weights -- FAILS, and the gate itself was broken
+
+This gate had never run: `MODEL_TESTS` named `tests/contract/test_advanced_adapters.py`,
+deleted in `24f229f`, so pytest exited 4 on a missing path and no real-weight test executed.
+Fixed in `c519d26`; what follows is its first honest result.
+
+| check | result |
+|---|---|
+| `test_nli_adapter.py` + `test_model_adapters.py` against the frozen weights | 6 passed, 2 failed |
+| the mDeBERTa golden (`tests/eval/golden/grounding_claims.json`) | 1 passed, 1 failed |
+
+Two of the three failures were defects in the adapters or the test, and are fixed:
+
+* **The licence was not reported.** Both the ONNX NLI adapter and the embedding adapters
+  answered `"see model card"`, or guessed `Apache-2.0` from the string `granite` in the id,
+  while the frozen specs already declare `license` (`DenseModel.license = "Apache-2.0"`,
+  `NLIModel.license = "MIT"`). The licence column *is* the provenance record under D2, so a
+  generic placeholder made the one field that matters unusable. The adapters now read the spec.
+* **A fingerprint assertion pinned a literal.** `ce-tiny-ce` no longer matches because the
+  fingerprint carries a 12-character digest of the whole spec, which is the better behaviour
+  (a tuning change produces a different fingerprint). The test now pins the shape.
+
+The third is a real quality finding and is **not** fixed, because fixing it would mean editing
+a golden set:
+
+* **mDeBERTa turns an unsupported citation into a contradiction.** Case `citation-03` answers
+  "Revenue decreased to EUR 400 million [1]" while citation [1] resolves to E3, the Nordwind
+  acquisition, not E2, the revenue sentence. The claim's content is true of E2 but the cited
+  evidence does not support it, so the golden expects `unsupported`. mDeBERTa returns
+  `contradicted`. E3 and the claim are unrelated, not opposed, so `contradicted` is wrong, and
+  it is wrong in the dangerous direction: a false contradiction is what retracts a correct
+  memory, whereas an abstention only declines to help. It also qualifies the NLIModel
+  docstring's claim that the FP32 graph scores "the same as the English DeBERTa it replaces":
+  on this golden it does not.
+
+## What was not run when this document was first written
+
+Everything below was run afterwards, on 2026-09-29, and its numbers are in the section above.
+The judged arms (B / A0 / A1 and the mini rerun) remain unrun; they are the only part that
+spends budget, and they are the first item of the next phase that needs it.
+
+### The original note
+
+
 
 The M2 container gates and the M4 judged arms require the `memory-service-memory-api` image
 with both real encoders loaded, over 5,183 SciFact documents, 14,280 XQuAD questions and ten

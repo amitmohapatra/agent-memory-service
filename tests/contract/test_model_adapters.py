@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -175,7 +176,9 @@ async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
         (r.index, round(r.score, 6)) for r in out
     ]
     assert await rr.rerank("q", [], top_k=3) == []
-    assert rr.fingerprint() == "ce-tiny-ce"
+    # the fingerprint carries a digest of the whole spec, so it changes when any tuning
+    # field does; pin the shape and the model, not a literal that a settings change breaks
+    assert re.fullmatch(r"ce-tiny-ce-[0-9a-f]{12}", rr.fingerprint())
 
 
 def _weights(name: str = "granite-embedding-small-english-r2") -> Path:

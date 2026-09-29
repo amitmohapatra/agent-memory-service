@@ -126,7 +126,7 @@ class SentenceTransformersEmbedding:
         self.info = ProviderInfo(
             name=spec.id,
             version=_st_version(),
-            license="Apache-2.0" if "granite" in spec.id.lower() else "see model card",
+            license=getattr(spec, "license", None) or "see model card",
             origin="huggingface/" + spec.id,
             locality="local",
         )
@@ -255,7 +255,7 @@ class OnnxEmbedding:
         self.info = ProviderInfo(
             name=spec.id,
             version=_ort_version(),
-            license="Apache-2.0" if "granite" in spec.id.lower() else "see model card",
+            license=getattr(spec, "license", None) or "see model card",
             origin="huggingface/" + spec.id,
             locality="local",
         )
