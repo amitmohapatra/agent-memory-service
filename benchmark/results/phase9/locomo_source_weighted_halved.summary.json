@@ -1,0 +1,614 @@
+{
+  "answer_accuracy": null,
+  "complete": true,
+  "completed_questions": 1986,
+  "consolidation": false,
+  "context": {
+    "access_flush_max_ids": 200,
+    "access_flush_seconds": 2.0,
+    "conversation_max_messages": 20,
+    "conversation_token_budget": 2000,
+    "graph_facts_max": 12,
+    "knowledge_max": 12,
+    "memories_max": 100,
+    "summaries_max": 4,
+    "token_budget": 8000
+  },
+  "corpora": [
+    {
+      "all_gold_sources_present": 150,
+      "annotated_answerable_questions": 150,
+      "canonical_memories": 559,
+      "conversation": 0,
+      "directly_represented_turns": 414,
+      "missing_source_ids": [
+        "D10:15",
+        "D15:18",
+        "D15:22",
+        "D15:27",
+        "D15:6"
+      ],
+      "observed_turns": 419,
+      "reused": true,
+      "tenant": "bench_conv_0"
+    },
+    {
+      "all_gold_sources_present": 81,
+      "annotated_answerable_questions": 81,
+      "canonical_memories": 447,
+      "conversation": 1,
+      "directly_represented_turns": 361,
+      "missing_source_ids": [
+        "D12:17",
+        "D13:14",
+        "D13:19",
+        "D15:4",
+        "D16:4",
+        "D17:21",
+        "D5:14",
+        "D7:1"
+      ],
+      "observed_turns": 369,
+      "reused": true,
+      "tenant": "bench_conv_1"
+    },
+    {
+      "all_gold_sources_present": 152,
+      "annotated_answerable_questions": 152,
+      "canonical_memories": 846,
+      "conversation": 2,
+      "directly_represented_turns": 661,
+      "missing_source_ids": [
+        "D21:11",
+        "D27:7"
+      ],
+      "observed_turns": 663,
+      "reused": true,
+      "tenant": "bench_conv_2"
+    },
+    {
+      "all_gold_sources_present": 196,
+      "annotated_answerable_questions": 199,
+      "canonical_memories": 770,
+      "conversation": 3,
+      "directly_represented_turns": 622,
+      "missing_source_ids": [
+        "D14:21",
+        "D23:25",
+        "D25:1",
+        "D26:10",
+        "D27:24",
+        "D28:24",
+        "D7:11"
+      ],
+      "observed_turns": 629,
+      "reused": true,
+      "tenant": "bench_conv_3"
+    },
+    {
+      "all_gold_sources_present": 178,
+      "annotated_answerable_questions": 178,
+      "canonical_memories": 869,
+      "conversation": 4,
+      "directly_represented_turns": 660,
+      "missing_source_ids": [
+        "D11:21",
+        "D12:16",
+        "D12:19",
+        "D14:15",
+        "D14:19",
+        "D15:28",
+        "D15:8",
+        "D17:15",
+        "D18:12",
+        "D1:10",
+        "D1:6",
+        "D20:18",
+        "D25:11",
+        "D25:13",
+        "D26:22",
+        "D26:5",
+        "D2:12",
+        "D3:10",
+        "D3:12",
+        "D3:20"
+      ],
+      "observed_turns": 680,
+      "reused": true,
+      "tenant": "bench_conv_4"
+    },
+    {
+      "all_gold_sources_present": 122,
+      "annotated_answerable_questions": 123,
+      "canonical_memories": 844,
+      "conversation": 5,
+      "directly_represented_turns": 669,
+      "missing_source_ids": [
+        "D18:20",
+        "D18:3",
+        "D20:33",
+        "D23:26",
+        "D26:4",
+        "D4:16"
+      ],
+      "observed_turns": 675,
+      "reused": true,
+      "tenant": "bench_conv_5"
+    },
+    {
+      "all_gold_sources_present": 148,
+      "annotated_answerable_questions": 150,
+      "canonical_memories": 830,
+      "conversation": 6,
+      "directly_represented_turns": 659,
+      "missing_source_ids": [
+        "D13:9",
+        "D14:16",
+        "D14:7",
+        "D14:9",
+        "D15:5",
+        "D16:12",
+        "D18:15",
+        "D1:11",
+        "D1:19",
+        "D1:32",
+        "D21:11",
+        "D21:14",
+        "D21:5",
+        "D23:7",
+        "D23:9",
+        "D24:16",
+        "D28:20",
+        "D28:29",
+        "D29:11",
+        "D31:12",
+        "D4:11",
+        "D4:7",
+        "D6:10",
+        "D6:16",
+        "D7:16",
+        "D7:9",
+        "D8:33",
+        "D8:9",
+        "D9:13",
+        "D9:20"
+      ],
+      "observed_turns": 689,
+      "reused": true,
+      "tenant": "bench_conv_6"
+    },
+    {
+      "all_gold_sources_present": 190,
+      "annotated_answerable_questions": 191,
+      "canonical_memories": 753,
+      "conversation": 7,
+      "directly_represented_turns": 611,
+      "missing_source_ids": [
+        "D10:3",
+        "D10:7",
+        "D13:10",
+        "D13:12",
+        "D13:18",
+        "D13:23",
+        "D13:4",
+        "D13:6",
+        "D13:8",
+        "D14:11",
+        "D14:14",
+        "D14:16",
+        "D14:9",
+        "D15:7",
+        "D17:9",
+        "D19:13",
+        "D19:14",
+        "D19:4",
+        "D1:12",
+        "D1:14",
+        "D1:4",
+        "D20:18",
+        "D20:24",
+        "D20:3",
+        "D20:5",
+        "D21:17",
+        "D21:5",
+        "D22:22",
+        "D22:28",
+        "D22:7",
+        "D23:21",
+        "D23:24",
+        "D23:28",
+        "D23:5",
+        "D24:13",
+        "D25:11",
+        "D25:14",
+        "D26:5",
+        "D27:4",
+        "D28:12",
+        "D28:25",
+        "D28:27",
+        "D29:13",
+        "D29:15",
+        "D29:17",
+        "D29:20",
+        "D29:29",
+        "D2:10",
+        "D2:12",
+        "D2:18",
+        "D2:27",
+        "D2:29",
+        "D2:6",
+        "D2:8",
+        "D30:9",
+        "D3:10",
+        "D3:5",
+        "D4:15",
+        "D4:17",
+        "D4:31",
+        "D4:37",
+        "D4:41",
+        "D4:8",
+        "D7:12",
+        "D7:17",
+        "D7:19",
+        "D8:13",
+        "D8:3",
+        "D8:7",
+        "D9:11"
+      ],
+      "observed_turns": 681,
+      "reused": true,
+      "tenant": "bench_conv_7"
+    },
+    {
+      "all_gold_sources_present": 155,
+      "annotated_answerable_questions": 156,
+      "canonical_memories": 629,
+      "conversation": 8,
+      "directly_represented_turns": 500,
+      "missing_source_ids": [
+        "D13:13",
+        "D1:10",
+        "D20:16",
+        "D22:21",
+        "D22:3",
+        "D24:13",
+        "D24:4",
+        "D5:12",
+        "D8:13"
+      ],
+      "observed_turns": 509,
+      "reused": true,
+      "tenant": "bench_conv_8"
+    },
+    {
+      "all_gold_sources_present": 154,
+      "annotated_answerable_questions": 156,
+      "canonical_memories": 737,
+      "conversation": 9,
+      "directly_represented_turns": 563,
+      "missing_source_ids": [
+        "D10:1",
+        "D25:14",
+        "D25:3",
+        "D28:19",
+        "D4:16"
+      ],
+      "observed_turns": 568,
+      "reused": true,
+      "tenant": "bench_conv_9"
+    }
+  ],
+  "dataset_sha256": "1b304c7c3d98ff9cef5efd02100a4dfa93fc9ee3babaceca752df9f9aa90b42d",
+  "dense_arm": "ensemble",
+  "encoders": {
+    "dense_en": "onnx-granite-embedding-small-english-r2-model-d384",
+    "dense_ml": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384"
+  },
+  "expected_questions": 1986,
+  "failed_questions": 0,
+  "failures": [],
+  "full_artifact": "benchmark/results/phase9/locomo_source_weighted_halved.json",
+  "index_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v2-unicode-k1.2-b0.75",
+  "latency_ms": {
+    "max": 14147.16,
+    "p50": 752.02,
+    "p95": 1926.58,
+    "p99": 2955.65,
+    "samples": 1986
+  },
+  "limitations": [
+    "Exact source-ID coverage; fragments count as source presence, not full answers.",
+    "Transitive source lineage is reported separately; ancestry does not prove answer support.",
+    "Not generated-answer accuracy or adversarial abstention accuracy.",
+    "Sequential context-builder latency; PostgreSQL and remote Qdrant included, HTTP excluded.",
+    "In-process authorization/cache and lexical NLI; not full production load latency."
+  ],
+  "lineage_summary": {
+    "all_answerable": {
+      "at": {
+        "10": {
+          "complete": 0.607421875,
+          "recall": 0.6657762784992552
+        },
+        "100": {
+          "complete": 0.7591145833333334,
+          "recall": 0.8214419544316264
+        },
+        "20": {
+          "complete": 0.66796875,
+          "recall": 0.7301804843373754
+        },
+        "50": {
+          "complete": 0.7565104166666666,
+          "recall": 0.8188483193213324
+        }
+      },
+      "questions": 1536
+    },
+    "multi_hop": {
+      "at": {
+        "10": {
+          "complete": 0.20212765957446807,
+          "recall": 0.41937842807103726
+        },
+        "100": {
+          "complete": 0.3971631205673759,
+          "recall": 0.6515290348157089
+        },
+        "20": {
+          "complete": 0.26595744680851063,
+          "recall": 0.5070248962186252
+        },
+        "50": {
+          "complete": 0.3900709219858156,
+          "recall": 0.6466531482908863
+        }
+      },
+      "questions": 282
+    },
+    "open_domain": {
+      "at": {
+        "10": {
+          "complete": 0.2608695652173913,
+          "recall": 0.38895993179880645
+        },
+        "100": {
+          "complete": 0.4782608695652174,
+          "recall": 0.5625397194450903
+        },
+        "20": {
+          "complete": 0.33695652173913043,
+          "recall": 0.46640800589010306
+        },
+        "50": {
+          "complete": 0.4782608695652174,
+          "recall": 0.5559220723862668
+        }
+      },
+      "questions": 92
+    },
+    "single_hop": {
+      "at": {
+        "10": {
+          "complete": 0.7253269916765755,
+          "recall": 0.7370194213238209
+        },
+        "100": {
+          "complete": 0.8715814506539834,
+          "recall": 0.8836702338485929
+        },
+        "20": {
+          "complete": 0.7907253269916765,
+          "recall": 0.8016250495441933
+        },
+        "50": {
+          "complete": 0.8703923900118906,
+          "recall": 0.8824811732065001
+        }
+      },
+      "questions": 841
+    },
+    "temporal": {
+      "at": {
+        "10": {
+          "complete": 0.7538940809968847,
+          "recall": 0.7749221183800623
+        },
+        "100": {
+          "complete": 0.8629283489096573,
+          "recall": 0.8818795430944963
+        },
+        "20": {
+          "complete": 0.794392523364486,
+          "recall": 0.8146417445482866
+        },
+        "50": {
+          "complete": 0.8598130841121495,
+          "recall": 0.8787642782969886
+        }
+      },
+      "questions": 321
+    }
+  },
+  "paid_llm_calls": 0,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "e21b4272790c63a8bf06e7fa0f589e7dfe692431",
+    "host_load": {
+      "load_per_core": 2.03,
+      "loadavg_15m": 5.25,
+      "loadavg_1m": 8.1,
+      "loadavg_5m": 5.89
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 6.8,
+    "models": {},
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-29T08:30:06.319514+00:00"
+  },
+  "records_in_full_artifact": 1986,
+  "retrieval": {
+    "abstain_when_insufficient": true,
+    "bm25": true,
+    "definition_expansion": true,
+    "dense": true,
+    "derived_source_k": 6,
+    "entity_prefetch": false,
+    "escalation_max_rounds": 2,
+    "evidence_verification": true,
+    "exact": true,
+    "expansion_budget_items": 8,
+    "final_k": 50,
+    "fused_k": 50,
+    "graph": true,
+    "hybrid_rrf_k": 1,
+    "hybrid_weights": {
+      "bm25": 2.0,
+      "dense_en": 0.5,
+      "dense_ml": 2.0
+    },
+    "max_chunks_per_document": 0,
+    "max_query_chars": 2048,
+    "memory_entity_search": false,
+    "memory_entity_search_timeout_ms": 200,
+    "memory_recall_k": 50,
+    "neighbor_expansion": true,
+    "parent_expansion": true,
+    "prefetch_k": 50,
+    "rerank": false,
+    "rerank_k": 20,
+    "rrf_k": 60,
+    "semantic_graph": true,
+    "source_turn_expansion": false,
+    "subject_evidence_check": true
+  },
+  "reuse_corpus": true,
+  "semantic_graph": true,
+  "spaces_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+  "spec": null,
+  "summary": {
+    "all_answerable": {
+      "at": {
+        "10": {
+          "complete": 0.607421875,
+          "recall": 0.6657762784992552
+        },
+        "100": {
+          "complete": 0.7591145833333334,
+          "recall": 0.8214419544316264
+        },
+        "20": {
+          "complete": 0.66796875,
+          "recall": 0.7301804843373754
+        },
+        "50": {
+          "complete": 0.7565104166666666,
+          "recall": 0.8188483193213324
+        }
+      },
+      "questions": 1536
+    },
+    "multi_hop": {
+      "at": {
+        "10": {
+          "complete": 0.20212765957446807,
+          "recall": 0.41937842807103726
+        },
+        "100": {
+          "complete": 0.3971631205673759,
+          "recall": 0.6515290348157089
+        },
+        "20": {
+          "complete": 0.26595744680851063,
+          "recall": 0.5070248962186252
+        },
+        "50": {
+          "complete": 0.3900709219858156,
+          "recall": 0.6466531482908863
+        }
+      },
+      "questions": 282
+    },
+    "open_domain": {
+      "at": {
+        "10": {
+          "complete": 0.2608695652173913,
+          "recall": 0.38895993179880645
+        },
+        "100": {
+          "complete": 0.4782608695652174,
+          "recall": 0.5625397194450903
+        },
+        "20": {
+          "complete": 0.33695652173913043,
+          "recall": 0.46640800589010306
+        },
+        "50": {
+          "complete": 0.4782608695652174,
+          "recall": 0.5559220723862668
+        }
+      },
+      "questions": 92
+    },
+    "single_hop": {
+      "at": {
+        "10": {
+          "complete": 0.7253269916765755,
+          "recall": 0.7370194213238209
+        },
+        "100": {
+          "complete": 0.8715814506539834,
+          "recall": 0.8836702338485929
+        },
+        "20": {
+          "complete": 0.7907253269916765,
+          "recall": 0.8016250495441933
+        },
+        "50": {
+          "complete": 0.8703923900118906,
+          "recall": 0.8824811732065001
+        }
+      },
+      "questions": 841
+    },
+    "temporal": {
+      "at": {
+        "10": {
+          "complete": 0.7538940809968847,
+          "recall": 0.7749221183800623
+        },
+        "100": {
+          "complete": 0.8629283489096573,
+          "recall": 0.8818795430944963
+        },
+        "20": {
+          "complete": 0.794392523364486,
+          "recall": 0.8146417445482866
+        },
+        "50": {
+          "complete": 0.8598130841121495,
+          "recall": 0.8787642782969886
+        }
+      },
+      "questions": 321
+    }
+  }
+}
