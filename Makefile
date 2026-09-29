@@ -33,7 +33,7 @@ vendor: ## Refresh the vendored copy of bifrost-sdk (generated; never edit it in
 
 .PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
-        load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-locomo-source bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
+        load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -303,6 +303,16 @@ bench-locomo-source: bench-db ## LoCoMo source-ID coverage, no LLM, per-arm rank
 	$(call bench-run,$(BENCH_DB_P7_CONV),$(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.native_source_retrieval --data benchmark/data/locomo10.json $(SOURCE_ARGS))
 
 SOURCE_ARGS ?= --output benchmark/results/phase7/locomo_source.json --reuse-corpus --dump-arms
+
+bench-rerank-offline: ## Does a cross-encoder rank better than the fused order? (over a finished dump)
+	@# No retrieval, no training, no query-time cost: the bundle each question already returned
+	@# is rescored by the cross-encoder and reordered, so the only thing that changes is the
+	@# order. The corpus is read for the candidates' text and never written, so this does not
+	@# depend on bench-db. The reranker weights are the ones baked under /models.
+	$(call bench-run,$(BENCH_DB_P7_CONV),$(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.rerank_offline $(RERANK_ARGS))
+
+RERANK_ARGS ?= --dump benchmark/results/phase7/locomo_source_ensemble.json \
+  --output benchmark/results/phase9/rerank_offline_ettin17m.json
 
 bench-runtime-retrieval: bench-db ## SciFact and XQuAD through the runtime store path (named vectors, script-pruned prefetch)
 	@# The M2 gates: SciFact >= 0.7557/0.8926 and XQuAD mean same-language R@10 >= 0.98,
