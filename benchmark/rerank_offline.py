@@ -81,7 +81,10 @@ def coverage(order: list[str], gold: set[str], carriers: dict[str, list[str]]) -
         for memory_id in order[:depth]:
             found.update(carriers.get(memory_id, ()))
         hit = gold & found
-        out[str(depth)] = {"recall": len(hit) / len(gold), "complete": hit == gold}
+        out[str(depth)] = {
+            "recall": len(hit) / len(gold) if gold else 0.0,
+            "complete": bool(gold) and hit == gold,
+        }
     return out
 
 
@@ -179,23 +182,30 @@ async def run(args: argparse.Namespace) -> None:
     for row in rows:
         wanted[conversation_tenant(row["conversation"])].update(row["fused"][: args.candidates])
     contents = await texts_for(settings.database.url.get_secret_value(), wanted)
-    spec = CrossEncoderModel.model_validate_json(args.spec.read_text()) if args.spec else args.model
+    spec = (
+        CrossEncoderModel.model_validate_json(args.spec.read_text()) if args.spec else DEFAULT_SPEC
+    )
     reranker = CrossEncoderReranker(spec)
     pairs = 0
     started = time.perf_counter()
     try:
         for row in rows:
-            candidates = [c for c in row["fused"][: args.candidates] if c in contents]
+            pool = row["fused"][: args.candidates]
+            candidates = [c for c in pool if c in contents]
             gold, carriers = set(row["gold"]), row["carriers"]
             scored = await reranker.rerank(
                 row["question"], [contents[c] for c in candidates], top_k=len(candidates)
             )
             pairs += len(candidates)
-            reranked = [candidates[result.index] for result in scored]
+            # A candidate with no text cannot be scored, but dropping it would hand the
+            # reranker a smaller pool than the fused order it is measured against. It keeps
+            # its place behind everything the reranker did score.
+            unscored = [c for c in pool if c not in contents]
+            reranked = [candidates[result.index] for result in scored] + unscored
             row["fused_coverage"] = coverage(row["fused"], gold, carriers)
             row["reranked_coverage"] = coverage(reranked, gold, carriers)
-            row["oracle_coverage"] = coverage(oracle_order(candidates, carriers), gold, carriers)
-            row["missing_texts"] = len(row["fused"][: args.candidates]) - len(candidates)
+            row["oracle_coverage"] = coverage(oracle_order(pool, carriers), gold, carriers)
+            row["missing_texts"] = len(pool) - len(candidates)
     finally:
         reranker.close()
     elapsed = time.perf_counter() - started
@@ -219,6 +229,8 @@ async def run(args: argparse.Namespace) -> None:
         "fused_matches_artifact": check_fused(fused, dump.get("summary")),
         "limitations": [
             "Reordering only: the candidate pool is the bundle the pipeline already returned.",
+            "At the deepest depth every order holds the same candidates, so they agree there "
+            "by construction; the comparison lives at the shallower depths.",
             "Exact source-ID coverage; a fragment counts as source presence, not a full answer.",
             "No query-time cost is measured here; pairs_per_second is the offline throughput.",
             "The oracle is the ceiling for THIS pool, not for retrieval.",
@@ -241,9 +253,7 @@ def main() -> None:
         help="how deep into the bundle the reranker may reorder (the shipped final cut is 50)",
     )
     parser.add_argument("--limit", type=int, default=0, help="score only the first N questions")
-    args = parser.parse_args()
-    args.model = DEFAULT_SPEC
-    asyncio.run(run(args))
+    asyncio.run(run(parser.parse_args()))
 
 
 if __name__ == "__main__":
