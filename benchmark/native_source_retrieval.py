@@ -20,7 +20,7 @@ import hashlib
 import json
 import time
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -164,6 +164,28 @@ def _guard(settings: Any) -> str:
     return database
 
 
+def refuse_silent_reingest(ledger: CorpusLedger, key: CorpusKey, *, allowed: bool) -> None:
+    """A reuse arm must not quietly become an ingest arm over somebody else's corpus.
+
+    ``--reuse-corpus`` skips ingestion when the ledger vouches for the store, and otherwise
+    TRUNCATEs every conversation's tenant and ingests from scratch - forty minutes on an idle
+    box, hours on a busy one, and the corpus that was there is gone with the arms that were
+    measured on it. When the ledger holds a DIFFERENT corpus that is a mismatch worth seeing
+    (a changed encoder, a changed ingestion setting, the wrong database) rather than an
+    instruction, so it is spelled out and ``--allow-reingest`` is what says otherwise. An
+    empty ledger is a fresh database and ingests without asking.
+    """
+    if allowed or ledger.data.get("key") is None:
+        return
+    held, wanted = ledger.data["key"], asdict(key)
+    differs = sorted(field for field, value in wanted.items() if held.get(field) != value)
+    raise SystemExit(
+        f"{ledger.path} holds a different corpus ({', '.join(differs)} differ), and reusing it "
+        "would TRUNCATE every conversation tenant and ingest from scratch. Point the arm at "
+        "the database that holds the corpus it needs, or pass --allow-reingest to rebuild it."
+    )
+
+
 def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Everything that shapes the corpus at ingest, for the corpus ledger's key."""
     llm = settings.models.llm
@@ -236,6 +258,7 @@ async def run(args) -> None:
     }
     try:
         if args.reuse_corpus and not ledger.matches(key):
+            refuse_silent_reingest(ledger, key, allowed=args.allow_reingest)
             # a fresh corpus: every conversation's tenant is cleared once, up front
             for number in range(len(dataset)):
                 await reset_store(container, conversation_tenant(number))
@@ -370,6 +393,11 @@ def main() -> None:
         "--dump-arms",
         action="store_true",
         help="record every retriever's own ranking and the gold turns' ranks in it, per question",
+    )
+    parser.add_argument(
+        "--allow-reingest",
+        action="store_true",
+        help="rebuild the corpus when the ledger holds a different one (TRUNCATEs every tenant)",
     )
     asyncio.run(run(parser.parse_args()))
 

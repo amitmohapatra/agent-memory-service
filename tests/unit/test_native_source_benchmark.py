@@ -86,3 +86,33 @@ async def test_unbounded_lineage_fails_explicitly_instead_of_inflating_results()
 
     with pytest.raises(ValueError, match="depth budget"):
         await SourceLineage(Store, "evaluation", {}).resolve([[ref("memory", "1")]])
+
+
+def test_a_reuse_arm_refuses_to_silently_rebuild_somebody_elses_corpus(tmp_path):
+    """Reusing a corpus and rebuilding one are hours apart, and the second one is destructive.
+
+    The ledger holding a DIFFERENT corpus is the interesting case: a changed encoder, a
+    changed ingestion setting, or the wrong database. Before, that silently TRUNCATEd every
+    conversation tenant and re-ingested; the arms measured on the corpus that was there
+    become unreproducible, and nothing in the output says so.
+    """
+    from dataclasses import asdict
+
+    from benchmark.corpus import CorpusKey, CorpusLedger
+    from benchmark.native_source_retrieval import refuse_silent_reingest
+
+    held = CorpusKey(dataset_sha256="d", index_fingerprint="old", ingestion_sha256="i")
+    wanted = CorpusKey(dataset_sha256="d", index_fingerprint="new", ingestion_sha256="i")
+    ledger = CorpusLedger("p9_locomo", root=tmp_path)
+
+    # an empty ledger is a fresh database: ingest without asking
+    refuse_silent_reingest(ledger, wanted, allowed=False)
+
+    ledger.begin(held)
+    with pytest.raises(SystemExit) as caught:
+        refuse_silent_reingest(ledger, wanted, allowed=False)
+    message = str(caught.value)
+    assert "index_fingerprint" in message, "the refusal names what differs"
+    assert "--allow-reingest" in message, "and how to say yes on purpose"
+    refuse_silent_reingest(ledger, wanted, allowed=True)
+    assert ledger.data["key"] == asdict(held), "a refusal leaves the ledger alone"
