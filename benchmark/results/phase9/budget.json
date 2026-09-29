@@ -1,0 +1,23 @@
+{
+  "phase_start_usage_usd": 0.006425549999999997,
+  "checkpoints": [
+    {
+      "label": "phase 9 track A start",
+      "when": "2026-09-29T06:45:05.616624+00:00",
+      "key_name": "memory-accuracy-usd10",
+      "max_limit_usd": 10.0,
+      "current_usage_usd": 0.006426,
+      "remaining_usd": 9.993574,
+      "phase_spent_usd": 0.0
+    },
+    {
+      "label": "phase 9 track A close",
+      "when": "2026-09-29T11:24:41.554780+00:00",
+      "key_name": "memory-accuracy-usd10",
+      "max_limit_usd": 10.0,
+      "current_usage_usd": 0.006426,
+      "remaining_usd": 9.993574,
+      "phase_spent_usd": 0.0
+    }
+  ]
+}
