@@ -288,7 +288,7 @@ bench-locomo-source: bench-db ## LoCoMo source-ID coverage, no LLM, per-arm rank
 	@# The ID-keyed source-recall harness (benchmark/native_source_retrieval.py): exact
 	@# annotated source turns at depths 10/20/50/100, one tenant per conversation with
 	@# --reuse-corpus, and every retriever's own ranking with --dump-arms for the offline
-	@# weight fit. Refuses any database not named memory_hi_*/p7_* and any Qdrant but the
+	@# weight fit. Refuses any database not named memory_hi_*/p7_*/p9_* and any Qdrant but the
 	@# isolated one on 16333.
 	$(call bench-run,$(BENCH_DB_P7_CONV),$(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.native_source_retrieval --data benchmark/data/locomo10.json $(SOURCE_ARGS))
 

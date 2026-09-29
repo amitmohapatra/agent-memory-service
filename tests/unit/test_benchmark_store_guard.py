@@ -28,7 +28,15 @@ HOST = DB_URL.rsplit("/", 1)[0]
 
 @pytest.mark.parametrize(
     "database",
-    ["memory_bench_conv", "memory_bench_docs", "memory_hi_locomo", "p7_locomo", "p7_retrieval"],
+    [
+        "memory_bench_conv",
+        "memory_bench_docs",
+        "memory_hi_locomo",
+        "p7_locomo",
+        "p7_retrieval",
+        "p9_locomo",
+        "p9_integration",
+    ],
 )
 def test_a_dedicated_benchmark_database_is_accepted(database: str) -> None:
     assert dedicated_database(f"{HOST}/{database}") == database

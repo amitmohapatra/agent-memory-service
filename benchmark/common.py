@@ -22,7 +22,14 @@ RESULTS = Path(__file__).resolve().parent / "results"
 #: truncates) qualify. ``memory`` and ``harness_live`` are deployed stores on the same server
 #: and are deliberately absent: ``memory`` is what an unset ``MEMORY__DATABASE__URL`` selects,
 #: and what the checked-in ``.env`` names, so it is the one an accident lands on.
-DEDICATED_DATABASES: tuple[str, ...] = ("memory_bench", "memory_hi_", "p7_", "p9b_", "memory_tests")
+DEDICATED_DATABASES: tuple[str, ...] = (
+    "memory_bench",
+    "memory_hi_",
+    "p7_",
+    "p9_",
+    "p9b_",
+    "memory_tests",
+)
 #: The isolated Qdrant. The shared dev store on 6333 serves a running API; a benchmark that
 #: ingested a corpus into it would both pollute those reads and be measured against them.
 ISOLATED_QDRANT_PORT = 16333
