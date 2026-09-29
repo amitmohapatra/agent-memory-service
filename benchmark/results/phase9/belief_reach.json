@@ -1,0 +1,122 @@
+{
+  "provenance": {
+    "timestamp": "2026-09-29T09:05:55.123508+00:00",
+    "git_commit": "1b3516952ff7077252151da556af558d7db766cb",
+    "host_load": {
+      "loadavg_1m": 31.62,
+      "loadavg_5m": 24.46,
+      "loadavg_15m": 20.97,
+      "load_per_core": 7.91
+    },
+    "python": "3.12.14",
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": null,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "not-installed",
+      "torch": "not-installed",
+      "transformers": "not-installed",
+      "fastembed": "not-installed",
+      "onnxruntime": "not-installed",
+      "docling": "not-installed"
+    },
+    "models": {
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  },
+  "database": "p7_locomo",
+  "dump": "benchmark/results/phase7/locomo_source_ensemble.json",
+  "dump_sha256": "630f8bce5418f56c4a387182d77b5996147917a0031d47051ff6a66ddfc77cae",
+  "corpus": {
+    "memory_types": {
+      "EPISODIC": 136,
+      "OBSERVATION": 5680,
+      "PREFERENCE": 487,
+      "PROCEDURAL": 1,
+      "SEMANTIC": 1221,
+      "TASK": 246,
+      "USER": 14
+    },
+    "derived_memories": 0,
+    "consolidation_enabled": false,
+    "belief_min_support": 2,
+    "slots": 1190,
+    "multi_valued_slots": 1174,
+    "slots_a_belief_would_be_minted_for": 198,
+    "memories_inside_those_slots": 6788,
+    "widest_slot": 334,
+    "widest_slot_predicate": "said",
+    "top_predicates": [
+      [
+        "is",
+        27
+      ],
+      [
+        "prefers",
+        20
+      ],
+      [
+        "said",
+        20
+      ],
+      [
+        "task",
+        20
+      ],
+      [
+        "was",
+        20
+      ],
+      [
+        "instruction",
+        20
+      ],
+      [
+        "have",
+        19
+      ],
+      [
+        "event",
+        19
+      ]
+    ]
+  },
+  "fragmentation_bucket": {
+    "questions": 353,
+    "by_category": {
+      "open_domain": 40,
+      "multi_hop": 243,
+      "temporal": 35,
+      "single_hop": 35
+    },
+    "still_incomplete_at_10": 276,
+    "still_incomplete_by_category": {
+      "open_domain": 38,
+      "multi_hop": 196,
+      "single_hop": 23,
+      "temporal": 19
+    },
+    "carriers_absent_from_the_corpus": 0
+  },
+  "limitations": [
+    "A belief's evidence is memory-typed, so it can only raise the lineage metric, never the direct source-turn metric the arms are read on.",
+    "The read-side aggregate render changes the rendered text, not which memories are in the bundle, so no source-ID arm can see its contribution."
+  ]
+}
