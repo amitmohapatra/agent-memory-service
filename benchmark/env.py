@@ -9,12 +9,14 @@ the product does not have. The Makefile passes exactly these variables and nothi
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from memory_service.application.container import Overrides
 from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL, local_model_path
+from memory_service.ports.search import VectorName
 
 #: Retrieval depth of the judged LoCoMo / LongMemEval runs - the values every judged result
 #: on disk was produced with (Makefile -e flags, before they became constants here). The
@@ -62,15 +64,90 @@ SWEEP_CONTEXT = CONTEXT.model_copy(
     update={"memories_max": SWEEP_MEMORIES_MAX, "token_budget": SWEEP_TOKEN_BUDGET}
 )
 
+#: D6 step 2 spends a fitted fusion on DEPTH: half the candidates per arm, half the fused
+#: list, half the memory recall - and the same final cut and render as the shipped arm, so
+#: every depth the source harness scores (@10/@20/@50) stays comparable to the run that
+#: measured the shipped depth. What halves is the work: the store's memory query is
+#: ``max(fused_k, derived_k(memory_recall_k))``, which is 200 shipped and 100 here.
+HALVED_RETRIEVAL = RETRIEVAL.model_copy(
+    update={
+        "prefetch_k": RETRIEVAL.prefetch_k // 2,
+        "fused_k": RETRIEVAL.fused_k // 2,
+        "memory_recall_k": RETRIEVAL.memory_recall_k // 2,
+    }
+)
+
 
 #: ``shipped`` is absent from both maps on purpose: it means "change nothing", and a None
 #: from ``.get`` is exactly what ``Overrides`` reads as "leave the frozen constant alone".
-_DEPTH_RETRIEVAL = {"judged": JUDGED_RETRIEVAL, "sweep": SWEEP_RETRIEVAL}
+#: ``halved`` is absent from the CONTEXT map for the same reason: it changes candidate depth,
+#: not what the render carries.
+_DEPTH_RETRIEVAL = {
+    "judged": JUDGED_RETRIEVAL,
+    "sweep": SWEEP_RETRIEVAL,
+    "halved": HALVED_RETRIEVAL,
+}
 _DEPTH_CONTEXT = {"judged": JUDGED_CONTEXT, "sweep": SWEEP_CONTEXT}
 
 
 def _flag(name: str, default: str) -> str:
     return (os.environ.get(name) or default).strip().lower()
+
+
+_TRUE = ("1", "true", "yes", "on")
+_FALSE = ("0", "false", "no", "off")
+#: ``BENCH_HYBRID_WEIGHTS=equal`` pins equal weights explicitly, for the same reason
+#: ``_switch`` is tri-state.
+EQUAL_WEIGHTS = "equal"
+
+
+def _switch(name: str) -> bool | None:
+    """A tri-state arm switch: unset leaves the constant alone, ``on``/``off`` pins it.
+
+    Unset and "off" are not the same thing. The day a constant is promoted, the control arm
+    still has to be able to SAY off - otherwise it quietly measures the new default and
+    reports it as the control, which is how a promotion stops being falsifiable.
+    """
+    raw = (os.environ.get(name) or "").strip().lower()
+    if not raw:
+        return None
+    if raw not in (*_TRUE, *_FALSE):
+        raise SystemExit(f"{name}={raw!r}: expected one of {(*_TRUE, *_FALSE)}")
+    return raw in _TRUE
+
+
+def _weights(raw: str) -> tuple[tuple[VectorName, float], ...] | None:
+    """``BENCH_HYBRID_WEIGHTS`` as arm/weight pairs, refusing anything it cannot weigh.
+
+    The fit (``benchmark.fit_rrf_weights``) writes a JSON object keyed by arm name, so the
+    arm is pasted from the fit rather than retyped. An unknown arm name is a typo that would
+    otherwise weigh nothing and be reported as a fitted run, so it is refused here. Unset is
+    ``None`` (leave the constant alone) and ``equal`` is the empty weighting, explicitly.
+    """
+    text = raw.strip()
+    if not text:
+        return None
+    if text.lower() == EQUAL_WEIGHTS:
+        return ()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"BENCH_HYBRID_WEIGHTS={text!r} is not JSON: {error}") from error
+    if not isinstance(parsed, dict) or not parsed:
+        raise SystemExit("BENCH_HYBRID_WEIGHTS must be a non-empty JSON object of arm -> weight")
+    out: list[tuple[VectorName, float]] = []
+    for name, weight in parsed.items():
+        try:
+            vector = VectorName(name)
+        except ValueError:
+            raise SystemExit(
+                f"BENCH_HYBRID_WEIGHTS names {name!r}: expected one of "
+                f"{tuple(v.value for v in VectorName)}"
+            ) from None
+        if not isinstance(weight, int | float) or isinstance(weight, bool) or float(weight) < 0:
+            raise SystemExit(f"BENCH_HYBRID_WEIGHTS[{name}]={weight!r}: expected a weight >= 0")
+        out.append((vector, float(weight)))
+    return tuple(sorted(out, key=lambda pair: pair[0].value))
 
 
 def default_embedding() -> Literal["frozen", "hash"]:
@@ -102,7 +179,8 @@ class BenchEnv:
     graph_enrichment: Literal["native", "disabled"] = "native"
     #: ``shipped``: the frozen constants. ``judged``: the judged depth above. ``sweep``:
     #: retrieve 200 so candidate completeness can be read at @50/@100/@200 from one run.
-    depth: Literal["shipped", "judged", "sweep"] = "shipped"
+    #: ``halved``: half the candidate depth, the shipped render (D6 step 2's own arm).
+    depth: Literal["shipped", "judged", "sweep", "halved"] = "shipped"
     #: ``hash`` replaces the frozen encoder with the deterministic stand-in; every result
     #: produced that way is labelled ``representative: false``. The default follows the
     #: weights (``default_embedding``): frozen when they are present, the stand-in when not.
@@ -129,6 +207,15 @@ class BenchEnv:
     #: ``english``: the English encoder alone, searched for every script - the arm every
     #: number before the ensemble was measured with.
     dense: Literal["ensemble", "english"] = "ensemble"
+    #: The store's RRF weight per hybrid arm, from ``BENCH_HYBRID_WEIGHTS`` as the JSON object
+    #: the offline fit prints (``{"bm25": 2.0, "dense_en": 1.0, "dense_ml": 0.5}``), or
+    #: ``equal`` for the empty weighting. ``None`` is unset: the frozen constant stands. This
+    #: is the ARM, not a promotion - ``RetrievalSettings.hybrid_weights`` stays ``None`` until
+    #: the arm run with these weights clears D6 step 2's gate.
+    hybrid_weights: tuple[tuple[VectorName, float], ...] | None = None
+    #: Entity -> memory routing as one more RRF list (``BENCH_ENTITY_PREFETCH``), D6 step 3's
+    #: arm. ``None`` is unset, the way every other switch here reads unset.
+    entity_prefetch: bool | None = None
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -142,10 +229,14 @@ class BenchEnv:
             "nli": _flag("BENCH_NLI", cls.nli),
             "dense": _flag("BENCH_DENSE", cls.dense),
         }
+        tuning: dict[str, Any] = {
+            "hybrid_weights": _weights(os.environ.get("BENCH_HYBRID_WEIGHTS") or ""),
+            "entity_prefetch": _switch("BENCH_ENTITY_PREFETCH"),
+        }
         allowed = {
             "search": ("qdrant", "memory"),
             "graph_enrichment": ("native", "disabled"),
-            "depth": ("shipped", "judged", "sweep"),
+            "depth": ("shipped", "judged", "sweep", "halved"),
             "embedding": ("frozen", "hash"),
             "authorization": ("openfga", "memory"),
             "cache": ("dragonfly", "memory"),
@@ -155,7 +246,24 @@ class BenchEnv:
         for name, value in values.items():
             if value not in allowed[name]:
                 raise SystemExit(f"BENCH_{name.upper()}={value!r}: expected one of {allowed[name]}")
-        return cls(**values)  # type: ignore[arg-type]
+        return cls(**values, **tuning)  # type: ignore[arg-type]
+
+    def _retrieval(self) -> Any:
+        """The retrieval tuning this arm runs with, or ``None`` for "change nothing".
+
+        ``None`` is what ``Overrides`` reads as "leave the frozen constant alone", so an arm
+        that sets no query-side switch is byte-identical to every run recorded before them.
+        """
+        tuning: dict[str, Any] = {}
+        if self.hybrid_weights is not None:
+            # the empty weighting IS equal weights, which the setting spells ``None``
+            tuning["hybrid_weights"] = dict(self.hybrid_weights) or None
+        if self.entity_prefetch is not None:
+            tuning["entity_prefetch"] = self.entity_prefetch
+        depth = _DEPTH_RETRIEVAL.get(self.depth)
+        if not tuning:
+            return depth
+        return (depth or RETRIEVAL).model_copy(update=tuning)
 
     def overrides(self, **changes: Any) -> Overrides:
         """The stand-ins every harness runs with.
@@ -169,6 +277,10 @@ class BenchEnv:
         Under the hash stand-in the document parser is the builtin one too: a host without
         the weights has no docling artifacts either, and the artifacts such a run produces
         are already non-representative.
+
+        The two query-side arms (``BENCH_HYBRID_WEIGHTS``, ``BENCH_ENTITY_PREFETCH``) are
+        applied on TOP of whatever depth is selected, so an arm is one measured change and
+        not a second one smuggled in with it.
         """
         base = Overrides(
             cache="memory" if self.cache == "memory" else None,
@@ -181,7 +293,7 @@ class BenchEnv:
             embedding="hash" if self.embedding == "hash" else None,
             multilingual_dense="disabled" if self.dense == "english" else None,
             document_parser="builtin" if self.embedding == "hash" else None,
-            retrieval=_DEPTH_RETRIEVAL.get(self.depth),
+            retrieval=self._retrieval(),
             context=_DEPTH_CONTEXT.get(self.depth),
         )
         return replace(base, **changes) if changes else base

@@ -222,6 +222,16 @@ BENCH_QDRANT_GRPC_PORT ?= 16334
 #: ensemble (both dense spaces, the shipped runtime) | english (the single-encoder arm)
 BENCH_DENSE ?= ensemble
 
+#: The query-side arms of D6, passed through BENCH_EXTRA_ENV so one arm is one change:
+#:
+#:   step 2, fitted weights at half the candidate depth (the fit prints the JSON):
+#:     BENCH_EXTRA_ENV='-e BENCH_DEPTH=halved -e BENCH_HYBRID_WEIGHTS={"bm25":2.0,...}'
+#:   step 3, entity -> memory routing as one more RRF list:
+#:     BENCH_EXTRA_ENV='-e BENCH_ENTITY_PREFETCH=on'
+#:
+#: Each is off by default, the way its constant is: `hybrid_weights` stays None and
+#: `entity_prefetch` stays False until the arm that measured it clears its own gate.
+
 #: The judged configuration: the gateway answers and grades, at the judged depth
 #: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,
 #: TIMEOUT, retries off - a provider counts *wire* requests, so max_retries=2 sends three per
