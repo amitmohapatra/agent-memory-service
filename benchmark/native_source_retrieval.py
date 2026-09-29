@@ -229,8 +229,14 @@ async def run(args) -> None:
         ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, args)),
     )
     ledger = CorpusLedger(database)
-    rows = []
-    corpora = []
+    rows: list[dict[str, Any]] = []
+    corpora: list[dict[str, Any]] = []
+    #: Questions whose read raised. A failed call is unmeasured, never wrong, so it leaves the
+    #: denominators rather than scoring zero - and it must not end the run either. One Qdrant
+    #: read that exceeded its 5 s deadline on a loaded host ended a 1,986-question arm on its
+    #: first question, which is hours of host time lost to one slow read. The count and the
+    #: reasons travel in the artifact, so a summary built on a degraded run is visible as one.
+    failures: list[dict[str, Any]] = []
     result = {
         "provenance": provenance(llm={"enabled": False, "provider": "disabled"}),
         "source_manifest": source_manifest(),
@@ -321,7 +327,17 @@ async def run(args) -> None:
             lineage = SourceLineage(container.services["uow_factory"], tenant, source_ids)
             for question in conversation["qa"]:
                 started = time.perf_counter()
-                bundle = await builder.build(ctx, question["question"])
+                try:
+                    bundle = await builder.build(ctx, question["question"])
+                except Exception as error:  # noqa: BLE001 - see the note on `failures`
+                    failures.append(
+                        {
+                            "conversation": number,
+                            "category": CATEGORY_NAMES[question["category"]],
+                            "error": f"{type(error).__name__}: {error}"[:300],
+                        }
+                    )
+                    continue
                 elapsed = (time.perf_counter() - started) * 1000
                 evidence = [item.evidence for item in bundle.memories]
                 sources = [sorted(observation_sources(group, source_ids)) for group in evidence]
@@ -363,12 +379,20 @@ async def run(args) -> None:
                     ),
                     "completed_questions": len(rows),
                     "complete": len(rows) == result["expected_questions"],
+                    "failed_questions": len(failures),
+                    "failures": failures[:50],
                     "latency_ms": stats([r["latency_ms"] for r in rows]),
                 }
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(result, indent=2) + "\n")
-            print(number + 1, len(rows), result["summary"]["all_answerable"], flush=True)
+            print(
+                number + 1,
+                len(rows),
+                f"failed={len(failures)}",
+                result["summary"]["all_answerable"],
+                flush=True,
+            )
             await builder.drain()
     finally:
         await container.close()
