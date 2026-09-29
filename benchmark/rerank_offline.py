@@ -88,6 +88,52 @@ def coverage(order: list[str], gold: set[str], carriers: dict[str, list[str]]) -
     return out
 
 
+def separation(scores: dict[str, float], carriers: dict[str, list[str]]) -> dict[str, float] | None:
+    """How far the cross-encoder puts gold carriers above everything else, in score units.
+
+    A reordering that loses to the order it replaced has two possible causes: the model ranks
+    this corpus badly, or the model is not producing ranking scores at all (a checkpoint whose
+    head is not a classification head still returns numbers). They look identical in a recall
+    table and are not the same finding, so the raw scores are summarized here: a separation
+    near zero, or a spread near zero, is a broken instrument rather than a weak teacher.
+    """
+    gold = [score for memory_id, score in scores.items() if carriers.get(memory_id)]
+    rest = [score for memory_id, score in scores.items() if not carriers.get(memory_id)]
+    if not gold or not rest:
+        return None
+    return {
+        "gold_mean": sum(gold) / len(gold),
+        "rest_mean": sum(rest) / len(rest),
+        "separation": sum(gold) / len(gold) - sum(rest) / len(rest),
+        "spread": max(scores.values()) - min(scores.values()),
+    }
+
+
+def sampled(
+    rows: list[dict[str, Any]], *, category: str | None, sample: int
+) -> list[dict[str, Any]]:
+    """The rows to score: one category, and/or a deterministic per-category sample of it.
+
+    Sampling is every ``stride``-th row of each category rather than a random draw, so the
+    sample is reproducible from the artifact alone and keeps each category's conversations
+    mixed. The per-category ``questions`` count travels with every number, because a delta on
+    40 questions and a delta on 282 are not the same claim.
+    """
+    if category:
+        rows = [row for row in rows if row["category"] == category]
+    if sample <= 0 or sample >= len(rows):
+        return rows
+    by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_category[row["category"]].append(row)
+    out: list[dict[str, Any]] = []
+    for group in by_category.values():
+        take = max(1, round(sample * len(group) / len(rows)))
+        stride = max(1, len(group) // take)
+        out.extend(group[::stride][:take])
+    return out
+
+
 def oracle_order(order: list[str], carriers: dict[str, list[str]]) -> list[str]:
     """The same candidates, every gold carrier first: the ceiling for any reordering.
 
@@ -175,7 +221,7 @@ async def run(args: argparse.Namespace) -> None:
     dedicated_database(settings.database.url.get_secret_value())
     raw = args.dump.read_bytes()
     dump = json.loads(raw)
-    rows = rows_of(dump)[: args.limit or None]
+    rows = sampled(rows_of(dump), category=args.category, sample=args.sample)
     if not rows:
         raise SystemExit(f"{args.dump} carries no bundle dumps; run the harness with --dump-arms")
     wanted: dict[str, set[str]] = defaultdict(set)
@@ -202,6 +248,7 @@ async def run(args: argparse.Namespace) -> None:
             # its place behind everything the reranker did score.
             unscored = [c for c in pool if c not in contents]
             reranked = [candidates[result.index] for result in scored] + unscored
+            row["separation"] = separation({candidates[r.index]: r.score for r in scored}, carriers)
             row["fused_coverage"] = coverage(row["fused"], gold, carriers)
             row["reranked_coverage"] = coverage(reranked, gold, carriers)
             row["oracle_coverage"] = coverage(oracle_order(pool, carriers), gold, carriers)
@@ -210,6 +257,8 @@ async def run(args: argparse.Namespace) -> None:
         reranker.close()
     elapsed = time.perf_counter() - started
     fused = summarize(rows, "fused_coverage")
+    separations = [row["separation"] for row in rows if row["separation"]]
+    complete_dump = not (args.category or args.sample)
     result = {
         "provenance": provenance(llm={"enabled": False, "provider": "disabled"}),
         "dump": str(args.dump),
@@ -218,6 +267,8 @@ async def run(args: argparse.Namespace) -> None:
         "index_fingerprint": dump.get("index_fingerprint"),
         "reranker": {**spec.model_dump(mode="json"), "fingerprint": reranker.fingerprint()},
         "candidates_per_question": args.candidates,
+        "category": args.category,
+        "sample": args.sample or None,
         "questions": len(rows),
         "pairs_scored": pairs,
         "scoring_seconds": round(elapsed, 2),
@@ -226,7 +277,28 @@ async def run(args: argparse.Namespace) -> None:
         "fused": fused,
         "reranked": summarize(rows, "reranked_coverage"),
         "oracle": summarize(rows, "oracle_coverage"),
-        "fused_matches_artifact": check_fused(fused, dump.get("summary")),
+        "score_separation": {
+            "questions": len(separations),
+            "gold_above_rest": round(
+                sum(s["separation"] > 0 for s in separations) / len(separations), 4
+            )
+            if separations
+            else None,
+            "mean_separation": round(
+                sum(s["separation"] for s in separations) / len(separations), 6
+            )
+            if separations
+            else None,
+            "mean_spread": round(sum(s["spread"] for s in separations) / len(separations), 6)
+            if separations
+            else None,
+        },
+        "fused_matches_artifact": check_fused(fused, dump.get("summary"))
+        if complete_dump
+        else {
+            "checked": False,
+            "reason": "a sampled run cannot be checked against the full summary",
+        },
         "limitations": [
             "Reordering only: the candidate pool is the bundle the pipeline already returned.",
             "At the deepest depth every order holds the same candidates, so they agree there "
@@ -252,7 +324,17 @@ def main() -> None:
         default=50,
         help="how deep into the bundle the reranker may reorder (the shipped final cut is 50)",
     )
-    parser.add_argument("--limit", type=int, default=0, help="score only the first N questions")
+    parser.add_argument(
+        "--sample",
+        type=int,
+        default=0,
+        help="score a deterministic per-category sample of about N questions (0 = every one)",
+    )
+    parser.add_argument(
+        "--category",
+        default=None,
+        help="score one category only, e.g. multi_hop (the bucket this phase is about)",
+    )
     asyncio.run(run(parser.parse_args()))
 
 
