@@ -56,20 +56,27 @@ def coverage(
 def score(
     questions: Sequence[dict[str, Any]], weights: Mapping[str, float], k: int
 ) -> dict[str, dict[str, float]]:
-    out: dict[str, dict[str, float]] = {}
-    for depth in DEPTHS:
-        recalls: list[float] = []
-        completes: list[bool] = []
-        for question in questions:
-            fused = fuse(question["arms"], weights, k)
-            recall, complete = coverage(fused, set(question["gold"]), question["carriers"], depth)
-            recalls.append(recall)
-            completes.append(complete)
-        out[str(depth)] = {
-            "recall": round(sum(recalls) / len(recalls), 4),
-            "complete": round(sum(completes) / len(completes), 4),
-        }
-    return out
+    """Every depth read off ONE fusion per question, which is what the depths are: prefixes.
+
+    The fused order does not depend on the depth it is cut at, so fusing once per question and
+    cutting it three times is the same arithmetic as fusing three times - and the fusion is
+    this fit's whole cost. Measured on the ensemble dump (1,536 questions, three arms), a
+    250-point grid at 5.6 s per weighting is 23 minutes of one core; on a contended host,
+    where this process got 12% of one, it was three hours.
+    """
+    totals = {depth: [0.0, 0] for depth in DEPTHS}
+    for question in questions:
+        fused = fuse(question["arms"], weights, k)
+        gold, carriers = set(question["gold"]), question["carriers"]
+        for depth in DEPTHS:
+            recall, complete = coverage(fused, gold, carriers, depth)
+            totals[depth][0] += recall
+            totals[depth][1] += complete
+    n = len(questions)
+    return {
+        str(depth): {"recall": round(total / n, 4), "complete": round(hits / n, 4)}
+        for depth, (total, hits) in totals.items()
+    }
 
 
 def questions_of(dump: dict[str, Any]) -> list[dict[str, Any]]:
