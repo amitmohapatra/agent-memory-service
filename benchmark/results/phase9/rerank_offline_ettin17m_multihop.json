@@ -1,0 +1,182 @@
+{
+  "provenance": {
+    "timestamp": "2026-09-29T10:28:35.431619+00:00",
+    "git_commit": "a24bec1a33bc2f0188f0ddf712361069275ae49a",
+    "host_load": {
+      "loadavg_1m": 6.16,
+      "loadavg_5m": 6.29,
+      "loadavg_15m": 6.32,
+      "load_per_core": 1.54
+    },
+    "python": "3.12.14",
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 6.8,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "docling": "2.127.0"
+    },
+    "models": {},
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  },
+  "dump": "benchmark/results/phase7/locomo_source_ensemble.json",
+  "dump_sha256": "630f8bce5418f56c4a387182d77b5996147917a0031d47051ff6a66ddfc77cae",
+  "dataset_sha256": "1b304c7c3d98ff9cef5efd02100a4dfa93fc9ee3babaceca752df9f9aa90b42d",
+  "index_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v2-unicode-k1.2-b0.75",
+  "reranker": {
+    "id": "jhu-clsp/ettin-reranker-17m",
+    "local_dir": "ettin-reranker-17m-v1",
+    "model_path": null,
+    "revision": null,
+    "backend": "torch",
+    "batch_size": 32,
+    "max_length": 512,
+    "fingerprint": "ce-ettin-reranker-17m-aaf0d8943587"
+  },
+  "candidates_per_question": 50,
+  "category": "multi_hop",
+  "sample": null,
+  "questions": 282,
+  "pairs_scored": 14100,
+  "scoring_seconds": 2104.14,
+  "pairs_per_second": 6.7,
+  "missing_texts": 0,
+  "fused": {
+    "all_answerable": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.3887,
+          "complete": 0.1809
+        },
+        "20": {
+          "recall": 0.482,
+          "complete": 0.2447
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    },
+    "multi_hop": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.3887,
+          "complete": 0.1809
+        },
+        "20": {
+          "recall": 0.482,
+          "complete": 0.2447
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    }
+  },
+  "reranked": {
+    "all_answerable": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.2512,
+          "complete": 0.0816
+        },
+        "20": {
+          "recall": 0.431,
+          "complete": 0.1879
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    },
+    "multi_hop": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.2512,
+          "complete": 0.0816
+        },
+        "20": {
+          "recall": 0.431,
+          "complete": 0.1879
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    }
+  },
+  "oracle": {
+    "all_answerable": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        },
+        "20": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    },
+    "multi_hop": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        },
+        "20": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        },
+        "50": {
+          "recall": 0.6219,
+          "complete": 0.3688
+        }
+      }
+    }
+  },
+  "score_separation": {
+    "questions": 246,
+    "gold_above_rest": 0.8902,
+    "mean_separation": 0.191696,
+    "mean_spread": 0.840907
+  },
+  "fused_matches_artifact": {
+    "checked": false,
+    "reason": "a sampled run cannot be checked against the full summary"
+  },
+  "limitations": [
+    "Reordering only: the candidate pool is the bundle the pipeline already returned.",
+    "At the deepest depth every order holds the same candidates, so they agree there by construction; the comparison lives at the shallower depths.",
+    "Exact source-ID coverage; a fragment counts as source presence, not a full answer.",
+    "No query-time cost is measured here; pairs_per_second is the offline throughput.",
+    "The oracle is the ceiling for THIS pool, not for retrieval."
+  ]
+}
