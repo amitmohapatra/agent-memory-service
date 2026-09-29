@@ -66,14 +66,32 @@ def memory_index_text(m: CanonicalMemory) -> str:
 
 def memory_entities(m: CanonicalMemory) -> list[str]:
     """The entity anchors a memory is indexed under: its subject and the entities its
-    extraction named, in the canonical form the query side matches with."""
+    extraction named, in the canonical form the query side matches with.
+
+    A subject arrives scoped -- ``user:john``, not ``john`` -- and that prefix is a scheme,
+    not part of the name, which is why :func:`render` strips it before a reader sees it. The
+    query side cannot reproduce it: it reads names out of a question, so it offers ``john``.
+    Indexing only the scoped form meant the two halves of the entity prefetch never met. A
+    diagnostic over the LoCoMo corpus put numbers on it: of the 25 most-asked anchors every
+    one matched zero points as the query spells it, while 15 matched hundreds the moment the
+    name was scoped -- ``john`` 0 against ``user:john`` 1,153. Both forms are indexed now, so
+    an anchor matches whichever half of the system produced it.
+    """
     names = [m.subject or "", *m.system_metadata.get("entities", [])]
     out: list[str] = []
     for name in names:
-        canonical = canonical_entity(str(name))
-        if canonical and canonical not in out:
-            out.append(canonical)
+        for variant in _name_variants(str(name)):
+            canonical = canonical_entity(variant)
+            if canonical and canonical not in out:
+                out.append(canonical)
     return out[:MAX_RECORD_ENTITIES]
+
+
+def _name_variants(name: str) -> list[str]:
+    """The name as stored, and the bare name when a scheme prefixes it. An opaque id carries
+    no scheme (``thr_...``, ``run_...`` have no colon) and yields one form."""
+    bare = name.split(":", 1)[-1].strip() if ":" in name else ""
+    return [name, bare] if bare and bare != name else [name]
 
 
 class Indexer:
