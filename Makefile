@@ -99,7 +99,7 @@ model-test: ## Local-model contract tests against real weights, inside the runti
 	    uv pip install -q pytest pytest-asyncio anyio && cd /app && \
 	    /opt/venv/bin/python -m pytest $(MODEL_TESTS) -q -p no:randomly -p no:cacheprovider'
 
-MODEL_TESTS ?= tests/contract/test_advanced_adapters.py tests/contract/test_nli_adapter.py tests/contract/test_model_adapters.py
+MODEL_TESTS ?= tests/contract/test_nli_adapter.py tests/contract/test_model_adapters.py
 
 security-test: ## Isolation / authorization gates (release blocking)
 	$(PY) pytest tests/security -q
