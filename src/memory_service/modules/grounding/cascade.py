@@ -422,7 +422,7 @@ class GroundingCascade:
         # the best-supporting premise decides; a contradiction only wins when nothing supports
         # the claim above the band (a second passage with other figures is not a refutation)
         supported = support >= threshold and support > scores[best_e].contradiction
-        if not supported and _contradicts(scores[best_c], threshold) and support <= high:
+        if not supported and _contradicts(scores[best_c], high) and support <= high:
             verdict = "contradicted"
             ids = [premises[best_c].item_id]
         elif cited:
@@ -495,7 +495,7 @@ class GroundingCascade:
         against = [
             e.item_id
             for e, s in zip(candidates, scores, strict=True)
-            if _contradicts(s, self.cfg.supported_threshold)
+            if _contradicts(s, self.cfg.borderline_band[1])
         ]
         if not against:
             return report
@@ -514,5 +514,30 @@ class GroundingCascade:
 _VERDICTS: tuple[ClaimVerdict, ...] = ("supported", "unsupported", "contradicted", "borderline")
 
 
-def _contradicts(score: NLIScore, threshold: float) -> bool:
-    return score.contradiction >= threshold and score.contradiction > score.entailment
+def _contradicts(score: NLIScore, decisive: float) -> bool:
+    """Whether the model *decided* that the premise refutes the claim.
+
+    ``decisive`` is the borderline band's upper edge, not ``supported_threshold``, and the
+    asymmetry is deliberate. A score inside the band is this cascade's own definition of
+    undecided: for support it buys a judge call, and for contradiction there is no judge to
+    ask, so the honest resolution is to claim nothing. The costs are not symmetric either --
+    a contradiction is what retracts a memory, while a missing support only declines to help
+    -- and the weaker bar was applied to the more expensive verdict.
+
+    Measured on the frozen mDeBERTa graph (`models/mdeberta-v3-base-xnli-...`, FP32), claim
+    "Revenue decreased to EUR 400 million":
+
+    | premise | entailment | neutral | contradiction |
+    |---|---|---|---|
+    | the same revenue sentence | 0.9939 | 0.0050 | 0.0010 |
+    | "Revenue increased to EUR 500 million" | 0.0022 | 0.0769 | 0.9209 |
+    | an unrelated acquisition sentence sharing "EUR ... million" | 0.0020 | 0.3937 | 0.6043 |
+    | an unrelated headcount sentence | 0.0002 | 0.9961 | 0.0037 |
+
+    The genuine refutation is decided (0.92, negligible neutral). The unrelated sentence that
+    happens to share a currency and a unit sits at 0.60 with 0.39 of neutral beside it: the
+    model is hedging, and at the old bar of 0.5 that hedge became a refutation. That is the
+    golden's ``citation-03``, where an acquisition sentence was reported as contradicting a
+    revenue figure.
+    """
+    return score.contradiction >= decisive and score.contradiction > score.entailment

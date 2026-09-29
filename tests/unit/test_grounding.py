@@ -19,6 +19,7 @@ from memory_service.domain.enums import EvidenceStatus, QueryType, Representatio
 from memory_service.modules.grounding.cascade import (
     Evidence,
     GroundingCascade,
+    _contradicts,
     attach,
     bundle_evidence,
     decompose,
@@ -26,6 +27,7 @@ from memory_service.modules.grounding.cascade import (
 )
 from memory_service.modules.grounding.lexical import conflicts, coverage
 from memory_service.modules.llm.cost import llm_tokens_used, start_llm_accounting
+from memory_service.ports.models import NLIScore
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.unit
@@ -189,6 +191,37 @@ async def test_contradiction_scan_over_unused_evidence() -> None:
         unused=[Evidence("chk_old", "Adjusted EBITDA increased to EUR 81 million in FY25.")],
     )
     assert kept.claims[0].verdict == "supported" and kept.claims[0].contradicted_by == ["chk_old"]
+
+
+@pytest.mark.parametrize(
+    ("name", "entailment", "neutral", "contradiction", "refutes"),
+    [
+        ("supports", 0.9939, 0.0050, 0.0010, False),
+        ("refutes the same figure", 0.0022, 0.0769, 0.9209, True),
+        ("unrelated, shares a currency and a unit", 0.0020, 0.3937, 0.6043, False),
+        ("unrelated entirely", 0.0002, 0.9961, 0.0037, False),
+    ],
+)
+def test_a_contradiction_must_be_decided_not_a_lean(
+    name: str, entailment: float, neutral: float, contradiction: float, refutes: bool
+) -> None:
+    """The four distributions the frozen mDeBERTa graph actually produces for the claim
+    "Revenue decreased to EUR 400 million" (measured 2026-09-29 against
+    ``models/mdeberta-v3-base-xnli-multilingual-nli-2mil7``, FP32).
+
+    The third row is the one that mattered: an acquisition sentence sharing only "EUR" and
+    "million" scores 0.60 contradiction with 0.39 of neutral beside it. Judged against
+    ``supported_threshold`` (0.5) that hedge became a refutation, and the golden's
+    ``citation-03`` reported an acquisition sentence as contradicting a revenue figure. A
+    contradiction retracts a memory, so it has to be decided -- above the borderline band,
+    which is this cascade's own definition of decided -- and not merely ahead of entailment.
+    """
+    score = NLIScore(entailment=entailment, neutral=neutral, contradiction=contradiction)
+    assert _contradicts(score, SETTINGS.borderline_band[1]) is refutes
+    if not refutes and contradiction >= SETTINGS.supported_threshold:
+        assert _contradicts(score, SETTINGS.supported_threshold) is True, (
+            "this row is the regression: the old bar called it a refutation"
+        )
 
 
 async def test_borderline_band_uses_the_judge_and_falls_back_to_borderline() -> None:
