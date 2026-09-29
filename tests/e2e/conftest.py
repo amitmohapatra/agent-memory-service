@@ -14,6 +14,17 @@ from tests.support_real import reset_real_backends
 TABLES = [
     # the platform layer (tests/agent), first: no table below references them
     "memory_reads",
+    # Deliveries before subscriptions, and both before tenants. None of these three has a
+    # foreign key to tenants, so TRUNCATE ... CASCADE never reached them and their rows
+    # outlived the test that wrote them: an agent test asserting "this tenant has one
+    # subscription" saw six, and every feedback listing carried the previous test's verdicts.
+    "webhook_deliveries",
+    "webhook_subscriptions",
+    "feedback",
+    "standing_briefs",
+    # Registered model keys: a tombstone keeps climbing its revision, so a test asserting
+    # "this agent registers its first key" saw revision 4 from a previous run's rows.
+    "agent_credentials",
     "user_group_members",
     "user_groups",
     "workspace_members",

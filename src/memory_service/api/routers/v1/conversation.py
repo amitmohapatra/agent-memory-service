@@ -14,7 +14,11 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.idempotent import (
+    default_idempotency_key,
+    derived_or_body,
+    run_idempotent,
+)
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
 from memory_service.api.schemas.conversation import (
     CreateMessageRequest,
@@ -100,10 +104,9 @@ async def create_thread(
 ) -> JSONResponse:
     ctx = build_context(request, container, body.scope)
     thread_id = body.thread_id or ctx.thread_id
-    key = request.state.idempotency_key or default_idempotency_key(
-        ctx, "thread", thread_id or "", body.title or ""
-    )
-    payload = body.model_dump(mode="json")
+    identity = ("thread", thread_id or "", body.title or "")
+    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
+    payload = derived_or_body(request, body, identity)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         thread = await _service(container).create_thread(
@@ -214,10 +217,9 @@ async def create_message(
     request: Request, body: CreateMessageRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> JSONResponse:
     ctx = build_context(request, container, body.scope)
-    key = request.state.idempotency_key or default_idempotency_key(
-        ctx, "message", body.role.value, body.kind.value, body.content
-    )
-    payload = body.model_dump(mode="json")
+    identity = ("message", body.role.value, body.kind.value, body.content)
+    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
+    payload = derived_or_body(request, body, identity)
     service = _service(container)
 
     async def handler(uow):  # type: ignore[no-untyped-def]

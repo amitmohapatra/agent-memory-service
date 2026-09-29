@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from fastapi import Request
@@ -30,6 +30,23 @@ def default_idempotency_key(ctx: MemoryExecutionContext, *parts: str) -> str:
         ctx.agent_run_id or "",
         *parts,
     )
+
+
+def derived_or_body(request: Request, body: Any, identity: Sequence[str]) -> Any:
+    """What a replay of this request is compared against: the whole body when the *client*
+    sent an Idempotency-Key, and only ``identity`` when the service derived one.
+
+    A client's key is a promise that two requests are the same, so a body that differs is a
+    mistake worth a 409. A derived key is a de-duplication convenience the caller never asked
+    for, and comparing it against the whole body contradicts the key itself: ``POST /v1/threads``
+    derives its key from (thread, title) and ``POST /v1/messages`` from (role, kind, content),
+    so a second call that differed only in ``custom_metadata`` hashed differently and was
+    refused with "Idempotency-Key reused with a different payload" - a conflict for a header
+    nobody sent, on routes that document the opposite ("retries with ... the same lineage +
+    content when the header is absent return the original acknowledgement"). Found by the
+    agent suite: an adapter reconnecting to a thread it had already created was answered 409.
+    """
+    return body.model_dump(mode="json") if request.state.idempotency_key else list(identity)
 
 
 async def run_idempotent(

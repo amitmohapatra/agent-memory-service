@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[3]
 OPENAPI = ROOT / "docs" / "openapi.json"
 CLIENT = ROOT / "sdk" / "python" / "src" / "trellis" / "memory" / "client.py"
 
-# ops routes are reached through MemoryClient.health()/version(); /metrics is for Prometheus.
+# ops routes are reached through MemoryClient.health()/alive()/version()/metrics().
 # Deprecated routes are one-release aliases (ADR 0022): the SDK speaks the canonical noun only.
-EXEMPT = {("GET", "/metrics")}
+EXEMPT: set[tuple[str, str]] = set()
 
 
 @pytest.mark.unit

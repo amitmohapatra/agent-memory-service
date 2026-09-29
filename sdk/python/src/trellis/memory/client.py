@@ -133,6 +133,16 @@ class MemoryClient:
     async def version(self) -> dict[str, Any]:
         return await self._transport.request("GET", "/version")
 
+    async def metrics(self) -> str:
+        """The Prometheus exposition of the worker that answered, as text.
+
+        The other three operator routes answer JSON; this one answers a text format a scrape
+        parses, which is why it is the one route that does not come back decoded. Returned as
+        text so a caller that wants a number (a smoke test asserting a counter moved, a health
+        page) does not have to reach around the SDK for it.
+        """
+        return await self._transport.request_text("GET", "/metrics")
+
     async def aclose(self) -> None:
         await self._transport.aclose()
 

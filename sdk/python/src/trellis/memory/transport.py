@@ -154,6 +154,20 @@ class Transport:
         )
         return _decoded(response)
 
+    async def request_text(
+        self,
+        method: str,
+        path: str,
+        *,
+        scope: Scope | None = None,
+        params: dict[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> str:
+        """The body of a successful response as text, for the routes that do not answer JSON
+        (``/metrics``). Errors still arrive as problem documents and raise the same way."""
+        response = await self._perform(method, path, scope=scope, params=params, headers=headers)
+        return response.text
+
     async def request_page(
         self,
         path: str,

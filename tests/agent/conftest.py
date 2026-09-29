@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from memory_service.api.app import create_app
+from tests.agent import coverage
 from tests.conftest import PG_AVAILABLE, _test_overrides
 from tests.e2e.conftest import TABLES
 from tests.support_real import reset_real_backends
@@ -58,6 +59,68 @@ def running(app) -> Iterator[TestClient]:
 def sdk(app, token: str):
     from trellis.memory import MemoryClient
 
-    transport = httpx.ASGITransport(app=app)
+    # Recording wrapper: every operation this client reaches is noted, which is how
+    # tests/agent/test_api_coverage.py can fail on a route no test drives. Nothing else in
+    # the suite is instrumented, so coverage is only ever earned through the SDK.
+    transport = coverage.RecordingTransport(httpx.ASGITransport(app=app))
     http = httpx.AsyncClient(transport=transport, base_url="http://memory.test")
     return MemoryClient("http://memory.test", api_key=token, http_client=http)
+
+
+# --------------------------------------------------------------------------- the coverage gate
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "covers(*operation_ids): this test drives these operations to a status under 400",
+    )
+    config.addinivalue_line(
+        "markers",
+        "covers_error(*operation_ids): this test drives these operations to an error status",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Record every claim at collection time, so the gate does not depend on test order."""
+    coverage.CLAIMED.clear()
+    coverage.CLAIMED_ERRORS.clear()
+    for item in items:
+        if "tests/agent/" not in item.nodeid and not item.nodeid.startswith("tests/agent"):
+            continue
+        for mark, claims in (
+            ("covers", coverage.CLAIMED),
+            ("covers_error", coverage.CLAIMED_ERRORS),
+        ):
+            for marker in item.iter_markers(mark):
+                for operation in marker.args:
+                    claims.setdefault(operation, []).append(item.nodeid)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo):
+    report = yield
+    setattr(item, f"report_{report.when}", report)
+    return report
+
+
+@pytest.fixture(autouse=True)
+def _verify_coverage_claims(request: pytest.FixtureRequest) -> Iterator[None]:
+    """A claim a test did not actually make is a failure: the gate is only as good as this."""
+    coverage.begin_test()
+    yield
+    report = getattr(request.node, "report_call", None)
+    if report is None or not report.passed:
+        return  # a failing test has one reason already; do not bury it under a second
+    unknown = set(coverage.operations())
+    for mark, errors in (("covers", False), ("covers_error", True)):
+        claimed = {op for m in request.node.iter_markers(mark) for op in m.args}
+        assert claimed <= unknown, f"{mark}: not operations in docs/openapi.json: " + str(
+            sorted(claimed - unknown)
+        )
+        missing = claimed - coverage.reached(errors=errors)
+        assert not missing, (
+            f"{mark} claims {sorted(missing)} but this test never reached "
+            f"{'an error status on' if errors else ''} them through the SDK; reached "
+            f"{sorted(coverage.reached(errors=errors))}"
+        )
