@@ -14,7 +14,6 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*`, `/v1/runs/{id}/outcome` |
 | [feedback.md](feedback.md) | how is a judgement on a run, an answer or a memory recorded, and what does it change? | `/v1/feedback` |
-| [webhooks.md](webhooks.md) | how does another service hear that something was remembered? | `/v1/webhooks/*` |
 | [tenancy.md](tenancy.md) | who may see what: workspaces, groups, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/groups/*`, `/v1/keys`, `/v1/model-key`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 
@@ -67,6 +66,6 @@ bundle = await ctx.context("what did we decide about the refund?")
 `record_tool`, `outcome`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`,
 `summary`, `verify`, and `ctx.chat` for the transcript. Everything else is under
 `ctx.advanced`: `documents`, `graph`, `tools` (catalog, approval suggestions),
-`model_keys`, `memories` (inventory), `job(id)`, and the client's `tenant`, `admin` and
-`webhooks`. Tenant administration is also `memory.administer(tenant_id)` (keys, workspaces,
-groups, webhooks, model keys, reads) and platform onboarding `memory.admin`.
+`model_keys`, `memories` (inventory), `job(id)`, and the client's `tenant` and `admin`.
+Tenant administration is also `memory.administer(tenant_id)` (keys, workspaces, model keys,
+reads) and platform onboarding `memory.admin`.

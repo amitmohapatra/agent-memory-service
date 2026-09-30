@@ -80,7 +80,7 @@ become a workspace (`in use as an anchor`), and a deleted workspace's id is neve
 | Role | May | Held by |
 | --- | --- | --- |
 | `platform` | onboard tenants and issue their first admin key; never a row in a tenant | the operator's bootstrap credential ([admin.md](admin.md)) |
-| `admin` | administer one tenant: keys, workspaces, groups, webhooks, model keys, the read audit | a tenant's own administrators |
+| `admin` | administer one tenant: keys, workspaces, model keys, the read audit | a tenant's own administrators |
 | `service` | act for that tenant's users and agents: read and write memory within the scope it is given | **a harness** |
 
 `POST /v1/keys` issues the `admin` and `service` roles; `platform` is not issuable through it.

@@ -40,7 +40,7 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 | `domain` | `MemoryExecutionContext`, `CanonicalMemory`, `Scope`, `Visibility`, `TemporalState`, `EvidenceRef`, conversation and document models, `ContextBundle`, errors | nothing |
 | `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
 | `application` | composition root (`Container`), use-case orchestration | domain, ports |
-| `modules/*` | feature slices: archive, audit, auth, authz, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, rag, retrieval, tenancy, tools, webhooks, working_memory (the hot thread cache) | domain, ports |
+| `modules/*` | feature slices: archive, audit, auth, authz, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, profile, rag, retrieval, tenancy, tools, agent_tools, working_memory (the hot thread cache) | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
 | `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application |
 

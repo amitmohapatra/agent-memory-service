@@ -50,7 +50,6 @@ the SDK call that makes it.
 | documents into retrievable knowledge | [api/documents.md](api/documents.md) |
 | tool memory and procedures | [api/tools.md](api/tools.md) |
 | feedback and what it changes | [api/feedback.md](api/feedback.md) |
-| outbound webhooks and their signatures | [api/webhooks.md](api/webhooks.md) |
 | workspaces, groups, keys, model keys, the read audit | [api/tenancy.md](api/tenancy.md) |
 | onboarding a tenant; health, readiness and `/version` | [api/admin.md](api/admin.md) |
 

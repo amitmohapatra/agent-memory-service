@@ -2,6 +2,8 @@
 
 Status: accepted (2026-09-28). Amends ADR 0012 (agent credentials), ADR 0021 (tenancy)
 and ADR 0022 (API conventions). Design of record: the platform design doc, phase 2.
+Partly superseded (2026-10, final overhaul, migration 0021): outbound webhooks, workspace
+model keys and the ANSWER/BRIEF feedback targets are removed; notifications live in agent-runs.
 
 ## Context
 

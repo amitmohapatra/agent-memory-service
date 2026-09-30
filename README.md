@@ -674,7 +674,7 @@ fallback).
 Each use has its own gate. Contextual extraction consults the model only for
 eligible inputs. Native paths remain available. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
-### Feedback, team model keys, pagination and webhooks (ADR 0023)
+### Feedback, model keys and pagination (ADR 0023)
 
 **Feedback.** `POST /v1/feedback` takes the `trellis.contracts.Feedback` record (target kind
 `run | memory | tool_call | procedure`, verdict `confirm | reject | correct |
@@ -706,13 +706,8 @@ level refuses instead of borrowing the next one.
 sibling returns `items` with `next_cursor`: `await ctx.advanced.memories.page()`,
 `async for m in ctx.advanced.memories.iter(): ...`, `await admin.keys.page(cursor=...)`.
 
-**Webhooks.** Tenant admins subscribe a public https URL to `memory.created`,
-`memory.superseded` and `memory.retracted` (the last two from the feedback projector),
-`feedback.received`, `feedback.projected` (and `webhook.test`) with `POST /v1/webhooks`;
-the signing secret is shown once and a delivery carries ids and verdicts, never content. Deliveries are
-signed (`X-Trellis-Signature: t=<unix>,v1=<hmac-sha256>`), retried with backoff, and listed
-under `GET /v1/webhooks/{id}/deliveries`. Receivers verify with
-`trellis.memory.webhooks.verify_signature(secret, header, raw_body)`.
+**Notifications.** The memory service sends none: run notifications (paused, escalated,
+finished) are tenant webhook subscriptions in agent-runs.
 
 ## Headers, tracing and errors
 
