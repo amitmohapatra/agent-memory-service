@@ -84,8 +84,9 @@ class ServiceSettings(BaseModel):
 
 class DatabaseSettings(BaseModel):
     #: Per *process*, not per service: with three API workers and a worker container the
-    #: pools add up, so 8+8 each keeps the total inside a default max_connections while
-    #: leaving every request the two or three checkouts it takes.
+    #: pools add up, so 8+8 each (plus the graph traversal's own 4+4,
+    #: ``GraphSettings.budgeted_pool_*``) keeps the total inside a default max_connections
+    #: while leaving every request the two or three checkouts it takes.
     url: SecretStr = SecretStr("postgresql+psycopg://memory:memory@localhost:5432/memory")
     pool_size: int = 8
     max_overflow: int = 8
@@ -251,7 +252,9 @@ class LLMSettings(BaseModel):
     #: False is a deployment-wide prohibition. True also permits keyless gateway calls.
     enabled: bool | Literal["auto"] = "auto"
     base_url: str = Field(
-        default="http://localhost:8090/v1", description="Bifrost OpenAI-compatible endpoint"
+        default="http://localhost:8091/v1",
+        description="Bifrost OpenAI-compatible endpoint (the local gateway publishes 8091; "
+        "8090 is agent-runs)",
     )
     api_key: SecretStr | None = Field(
         default=None,

@@ -367,33 +367,24 @@ class GraphSettings(BaseModel):
 
     max_visited: int = 200
     default_hops: int = 1
-    #: How long a query may wait for the retrieval-time traversal before answering without
-    #: graph facts.
+    #: The retrieval-time traversal's time budget, enforced by PostgreSQL: the budgeted
+    #: pool's connections carry it as their ``statement_timeout`` (see
+    #: ``adapters/graph/postgres_store.py``), so the server stops a traversal past it and
+    #: the query is answered without graph facts.
     #:
-    #: The traversal is started as soon as the scope is known, so on a slow encoder it costs
-    #: nothing - it finishes underneath. That is exactly why it needs a ceiling: the moment
-    #: the encoder gets faster (int8 ONNX), or the graph gets deep enough for a three-hop
-    #: walk to outrun it, an unbounded traversal becomes the tail of every entity, temporal
-    #: and multi-hop question. 150 ms is the band the roadmap derives for an 8 vCPU VM whose
-    #: encode is ~40 ms and whose p99 target is 300 ms.
-    #:
-    #: Expiry drops facts; it never cancels the traversal. See ``GraphStage.__call__``.
+    #: The traversal starts as soon as the scope is known and is one statement over
+    #: indexed, per-hop-limited CTEs, so on a healthy database it finishes underneath the
+    #: encoder. The budget is for the graph that is not healthy - a star-shaped entity whose
+    #: DISTINCT ON sorts every edge it has - and 150 ms is the band the roadmap derives for
+    #: an 8 vCPU VM whose encode is ~40 ms and whose p99 target is 300 ms. It is server time,
+    #: not a timer in the client: the client's timer measured its own scheduling as much as
+    #: the graph and dropped graph facts on any busy box (MEASUREMENTS.md, section 8).
     prefetch_budget_ms: int = Field(default=150, ge=1)
-    #: How many expired traversals may be finishing at once before the next one is cancelled
-    #: instead of parked.
-    #:
-    #: The budget bounds the wait, not the concurrency, and the condition that parks a
-    #: traversal - a graph slower than the budget - is exactly the condition that parks the
-    #: next one too. Each parked traversal holds a connection out of a pool of
-    #: ``pool_size + max_overflow`` (8 + 8 per process, see ``DatabaseSettings``) that the
-    #: read path checks out of, so an uncapped leak turns a latency problem into pool
-    #: exhaustion, which is worse than the tail the budget exists to cut. Past this many,
-    #: the aborted statement is the cheaper harm.
-    #:
-    #: This default is therefore **half the pool**, not the two fifths the figure here used
-    #: to imply - it read 10 + 10, which the settings have never been. The two numbers are
-    #: only safe as a pair, so moving either one means re-reading this.
-    max_parked_traversals: int = Field(default=8, ge=1)
+    #: The budgeted traversal's own pool, per process: one traversal per graph-routed read,
+    #: so this many run at once before one waits for a connection. Kept apart from the main
+    #: pool because the timeout is a property of the connection.
+    budgeted_pool_size: int = Field(default=4, ge=1)
+    budgeted_pool_overflow: int = Field(default=4, ge=0)
     #: ``GET /v1/graph/entities``: the most entities one search returns.
     entity_search_max: int = Field(default=100, ge=1)
     #: ``GET /v1/graph/entities/{id}``: current relations and history rows in a profile.

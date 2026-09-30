@@ -319,11 +319,23 @@ class GraphService:
         layers: Sequence[GraphLayer] | None = None,
         visibility: VisibilitySpecification | None = None,
         max_visited: int | None = None,
+        budgeted: bool = False,
     ) -> GraphAnswer:
+        """``budgeted`` is the retrieval-time traversal: names resolve lexically only (a model
+        call has no place under the graph budget) and the store stops the walk past it
+        (``GraphBudgetExceededError``)."""
         if visibility is None:
             visibility = await self._visibility(ctx)
         names = list(entities) + (query_terms(query) if query else [])
-        matched = await self.resolve(ctx, names, visibility)
+        matched = (
+            await self.store.find_entities(
+                ctx.tenant_id,
+                [canonical_entity(n) for n in names if n.strip()],
+                scope_keys=sorted(visibility.keys),
+            )
+            if budgeted
+            else await self.resolve(ctx, names, visibility)
+        )
         if not matched:
             return GraphAnswer(entities=[], relations=[], matched=[], visited=0)
         # prefer the most specific matches: longer canonical names first, bounded
@@ -338,6 +350,7 @@ class GraphService:
             as_of=as_of,
             valid_at=valid_at,
             layers=layers,
+            budgeted=budgeted,
         )
         return GraphAnswer(
             entities=hood.entities,

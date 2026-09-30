@@ -93,6 +93,44 @@ async def test_the_hop_limit_is_spent_on_new_edges(container) -> None:
     assert not any(e.entity_id.startswith("ent_x") for e in hood.entities)
 
 
+async def test_the_budgeted_traversal_is_bounded_by_the_server(container) -> None:
+    """The retrieval-time walk runs on connections whose statement_timeout is the graph
+    budget, and a walk the server stops surfaces as GraphBudgetExceededError."""
+    from sqlalchemy import text
+
+    from memory_service.adapters.graph.postgres_store import PostgresGraphStore
+    from memory_service.ports.intelligence import GraphBudgetExceededError
+
+    await _seed(container.graph_store)
+    store = PostgresGraphStore(container.database.engine)  # the shipped budget
+    starved = PostgresGraphStore(container.database.engine, budget_ms=1)
+    try:
+        async with store._budgeted() as s:
+            assert await s.scalar(text("SHOW statement_timeout")) == "150ms"
+        async with store.read() as s:
+            assert await s.scalar(text("SHOW statement_timeout")) == "15s"
+        same = await store.neighborhood("acme", ["ent_acme_corp"], scope_keys=MINE, budgeted=True)
+        plain = await store.neighborhood("acme", ["ent_acme_corp"], scope_keys=MINE)
+        assert same.relations and same == plain
+        async with starved._budgeted() as s:
+            with pytest.raises(Exception, match="statement timeout"):
+                await s.execute(text("SELECT pg_sleep(0.05)"))
+        from unittest.mock import patch
+
+        from memory_service.adapters.graph import postgres_store
+
+        slow = text("SELECT pg_sleep(0.05)")
+        with (
+            patch.object(postgres_store, "traversal_query", return_value=slow),
+            pytest.raises(GraphBudgetExceededError) as stopped,
+        ):
+            await starved.neighborhood("acme", ["ent_a"], scope_keys=MINE, budgeted=True)
+        assert stopped.value.budget_ms == 1
+    finally:
+        await store.close()
+        await starved.close()
+
+
 async def test_query_exposes_layers_and_knowledge_time(container, uow_factory) -> None:
     ctx = U1.model_copy(update={"thread_id": new_id("thread")})
     await _observe(container, uow_factory, ctx, "I work at ACME Corp.")

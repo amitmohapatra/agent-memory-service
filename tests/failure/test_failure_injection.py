@@ -262,10 +262,6 @@ async def test_search_rebuild_from_postgres_restores_identical_hits(
     await container.tasks.drain()
     await container.tasks.drain()
     engine = container.services["retrieval"]
-    # This tests rebuild fidelity, not the production wall-clock deadline. A loaded
-    # CI host must not randomly remove graph evidence from either side of the comparison.
-    # Expiry, cancellation and the frozen 150 ms default are tested in test_graph_budget.
-    monkeypatch.setattr(engine.post_stages["graph"], "budget_seconds", 5.0)
     q = "Why did Adjusted EBITDA increase despite lower revenue?"
     before = await engine.retrieve(U1, q)
     before_ids = [c.record_id for c in before.candidates]

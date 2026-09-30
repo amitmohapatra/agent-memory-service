@@ -582,7 +582,11 @@ def _wire_graph(container: Container) -> None:
     else:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
-        container.graph_store = PostgresGraphStore(container.database.engine)
+        store = PostgresGraphStore(
+            container.database.engine, budget_ms=container.tuning.graph.prefetch_budget_ms
+        )
+        container.graph_store = store
+        container.add_closer("graph_store", store.close)
     if stand_in.graph_enrichment == "disabled":
         container.graph_enrichment = None
         return
@@ -604,13 +608,8 @@ def _wire_graph(container: Container) -> None:
             graph,
             container.services["uow_factory"],
             max_facts=container.tuning.context.graph_facts_max,
-            budget_seconds=container.tuning.graph.prefetch_budget_ms / 1000,
-            max_parked=container.tuning.graph.max_parked_traversals,
         )
         engine.post_stages["graph"] = stage
-        # Traversals that outran their budget are still holding pooled connections; shutdown
-        # waits for them rather than exiting with statements open on the pool.
-        container.add_closer("graph_stage", stage.drain)
 
 
 def _wire_context_preservation(container: Container) -> None:

@@ -27,14 +27,16 @@ async def test_full_queue_counts_dropped_arrivals_and_keeps_work_bounded():
 
 
 async def test_errors_and_timeouts_are_not_successful_capacity():
+    """The deadline is far above any scheduling delay a busy host adds before the first call
+    starts (5 ms was not: the error was reported as a timeout under load), and the second
+    call sleeps far past it."""
+
     async def call(index):
         if index == 0:
             raise RuntimeError("fixture")
-        await asyncio.sleep(0.03)
+        await asyncio.sleep(30)
 
-    result = await fixed_arrivals(
-        call, rate=1000, requests=2, max_pending=2, deadline_seconds=0.005
-    )
+    result = await fixed_arrivals(call, rate=1000, requests=2, max_pending=2, deadline_seconds=0.5)
     assert [row["status"] for row in result["rows"]] == ["error", "timeout"]
     assert result["successful_requests"] == 0
     assert result["successful_latency_ms"] is None

@@ -1,6 +1,16 @@
 """PostgreSQL GraphStore: entities + temporal relations with audience-key filtering and a
 bounded, hop-by-hop traversal (one indexed query per hop, capped by ``max_visited``).
 
+Reads run on autocommit connections: a read-only statement needs no transaction, and a
+BEGIN before it and a ROLLBACK after it are two round trips for nothing.
+
+The retrieval-time traversal (``budgeted``) is one statement on a small pool of its own whose
+connections carry the graph budget as their ``statement_timeout``: the server stops a
+traversal that outruns it, which bounds the query path without a wall clock in the client.
+A client-side timer measured the client's scheduling as much as the graph - on a loaded box
+it dropped the graph from answers whose traversal had taken 90 ms of a 500 ms wait - and it
+could only stop waiting, not stop the statement, which then held a pooled connection.
+
 The graph is derived state (rebuildable from memories and chunks) but it lives next to the
 canonical rows so that a single database backup restores everything. It uses its own
 sessions rather than the caller's unit of work: enrichment runs inside index jobs and is
@@ -9,18 +19,24 @@ idempotent, so a partial write is repaired by the next run.
 
 from __future__ import annotations
 
+import functools
 import json
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Any
 
-import orjson
+from psycopg.errors import QueryCanceled
 from sqlalchemy import (
+    BindParameter,
+    DateTime,
+    Integer,
     Select,
     Text,
     and_,
+    bindparam,
     case,
     delete,
+    exists,
     func,
     literal,
     or_,
@@ -29,22 +45,44 @@ from sqlalchemy import (
     union_all,
     update,
 )
-from sqlalchemy.dialects.postgresql import JSONB, array, insert
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, array, insert
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import aliased
 
 from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
+from memory_service.config.constants import DATABASE, GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
 from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.intelligence import Entity, EntityFacts, GraphNeighborhood, Relation
+from memory_service.ports.intelligence import (
+    Entity,
+    EntityFacts,
+    GraphBudgetExceededError,
+    GraphNeighborhood,
+    Relation,
+)
 
 
-def _keys_clause(column: Any, keys: Sequence[str]) -> Any:
-    """``visibility_keys ?| ARRAY[...]`` — any-of match on the JSONB string array."""
-    return column.op("?|")(array([str(k) for k in keys], type_=Text))
+def _text_array(values: Iterable[str] | BindParameter[Any]) -> Any:
+    """One ``text[]`` parameter, whatever its length: the statement's text does not change
+    with the number of keys, so a prepared plan is reused. A bind parameter passes through
+    (the cached traversal statement)."""
+    if isinstance(values, BindParameter):
+        return values
+    return literal([str(v) for v in values], type_=ARRAY(Text))
+
+
+def _keys_clause(column: Any, keys: Sequence[str] | BindParameter[Any]) -> Any:
+    """``visibility_keys ?| $keys`` — any-of match on the JSONB string array."""
+    return column.op("?|")(_text_array(keys))
 
 
 def _entity(r: GraphEntityRow) -> Entity:
@@ -93,7 +131,9 @@ def _ev(evidence: Sequence[EvidenceRef]) -> list[dict[str, Any]]:
     return [json.loads(e.model_dump_json(exclude_none=True)) for e in evidence]
 
 
-def _time_conditions(as_of: datetime | None, valid_at: datetime | None) -> list[Any]:
+def _time_conditions(
+    as_of: datetime | BindParameter[Any] | None, valid_at: datetime | BindParameter[Any] | None
+) -> list[Any]:
     """See :func:`memory_service.modules.graph.invalidation.passes_time`."""
     if as_of is None and valid_at is None:
         return [GraphRelationRow.status == "CURRENT"]
@@ -129,34 +169,39 @@ _ASSERTION_FIELDS = (
     "valid_from",
     "valid_to",
 )
-RelationIdentity = tuple[Any, ...]
+IdSource = Sequence[str] | Select[Any]
 
 
-def relation_identity(row: GraphRelationRow) -> RelationIdentity:
-    return (
-        *(getattr(row, field) for field in _ASSERTION_FIELDS),
-        orjson.dumps(row.attributes or {}, option=orjson.OPT_SORT_KEYS),
-    )
+def _ids(source: IdSource) -> Any:
+    """Entity ids as a bound list or as a subquery of an earlier hop (for ``IN``)."""
+    return source if isinstance(source, Select) else list(source)
+
+
+#: a value of a hop, or the bind parameter the cached traversal fills it from
+Param = BindParameter[Any]
 
 
 def neighborhood_query(
-    tenant_id: str,
-    frontier: Sequence[str],
+    tenant_id: str | Param,
+    frontier: IdSource,
     *,
-    scope_keys: Sequence[str],
-    layers: Sequence[GraphLayer] | None,
-    as_of: datetime | None,
-    valid_at: datetime | None,
-    limit: int,
-    expanded: Sequence[str] = (),
-) -> Select[tuple[GraphRelationRow]]:
-    """One hop of the traversal: the best new edges out of ``frontier``, in a total order.
+    scope_keys: Sequence[str] | Param,
+    layers: Sequence[GraphLayer] | Param | None,
+    as_of: datetime | Param | None,
+    valid_at: datetime | Param | None,
+    limit: int | Any,
+    expanded: IdSource = (),
+    earlier: Sequence[Any] = (),
+) -> Select[Any]:
+    """One hop of the traversal: the best new edges out of ``frontier``, in a total order,
+    each with its ``rank`` in that order.
 
     Everything that would be dropped after the query is dropped *before* its limit, so the
     limit is spent only on edges the traversal keeps: an edge back to an entity an earlier
-    hop already expanded (``expanded``) was a candidate of that hop's query, and an edge to
-    a neighbour the caller cannot see is removed by the join on the neighbour's audience.
-    Filtering either after the LIMIT let them fill it and starve the edges that were new.
+    hop already expanded (``expanded``), an assertion an earlier hop already returned
+    (``earlier``, those hops' CTEs), and an edge to a neighbour the caller cannot see (the
+    join on the neighbour's audience). Filtering any of them after the LIMIT let them fill
+    it and starve the edges that were new.
 
     ORDER BY confidence alone is not an order here. Every MENTIONS edge is written at the
     same capped confidence, so over a busy entity the LIMIT returned whichever of the tied
@@ -165,7 +210,7 @@ def neighborhood_query(
     the corpus actually talks about, recency breaks what that leaves, and the relation id
     makes the order total and reproducible.
     """
-    ends = list(frontier)
+    ends = _ids(frontier)
     neighbour = case(
         (GraphRelationRow.subject_id.in_(ends), GraphRelationRow.object_id),
         else_=GraphRelationRow.subject_id,
@@ -176,10 +221,20 @@ def neighborhood_query(
         _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
         *_time_conditions(as_of, valid_at),
     ]
-    if layers:
-        conds.append(GraphRelationRow.layer.in_(list(layers)))
-    if expanded:
-        conds.append(neighbour.not_in(list(expanded)))
+    if isinstance(layers, BindParameter) or layers:
+        conds.append(GraphRelationRow.layer == func.any(_text_array(layers)))
+    if isinstance(expanded, Select) or expanded:
+        conds.append(neighbour.not_in(_ids(expanded)))
+    for hop in earlier:
+        conds.append(
+            ~exists().where(
+                *(
+                    hop.c[field].is_not_distinct_from(getattr(GraphRelationRow, field))
+                    for field in _ASSERTION_FIELDS
+                ),
+                hop.c.attributes == GraphRelationRow.attributes,
+            )
+        )
     # Deduplicate in SQL, before the limit - not in Python after it. A triple is written
     # once per memory that states it, and every 'mentions' edge carries the same capped
     # confidence, so the tie-break falls to the neighbour's mention_count and the busiest
@@ -191,8 +246,7 @@ def neighborhood_query(
     # survives for each assertion (confidence, neighbour mentions, then recency) and must
     # start with the DISTINCT ON columns because PostgreSQL requires it. The outer one
     # decides WHICH ASSERTIONS the limit keeps, by the same ranking the caller expects,
-    # so the limit takes the best assertions rather than the
-    # alphabetically first ones.
+    # so the limit takes the best assertions rather than the alphabetically first ones.
     ranked = func.coalesce(GraphEntityRow.mention_count, 0).label("neighbour_mentions")
     identity = (
         *(getattr(GraphRelationRow, field) for field in _ASSERTION_FIELDS),
@@ -218,44 +272,165 @@ def neighborhood_query(
         )
         .subquery()
     )
-    distinct_row = aliased(GraphRelationRow, inner)
-    return (
-        select(distinct_row)
-        .order_by(
-            inner.c.confidence.desc(),
-            inner.c.neighbour_mentions.desc(),
-            inner.c.observed_at.desc(),
-            inner.c.relation_id,
+    order = (
+        inner.c.confidence.desc(),
+        inner.c.neighbour_mentions.desc(),
+        inner.c.observed_at.desc(),
+        inner.c.relation_id,
+    )
+    rank = func.row_number().over(order_by=order).label("rank")
+    return select(inner, rank).order_by(*order).limit(limit)
+
+
+@functools.cache
+def traversal_query(
+    hops: int, *, layers: bool = False, as_of: bool = False, valid_at: bool = False
+) -> Select[Any]:
+    """The whole bounded traversal as one statement: ``hops`` chained hop CTEs.
+
+    Per hop ``k``: the frontier ``f_k`` (the seeds, then the entities hop ``k-1`` reached
+    first, in rank order, while fewer than ``max_visited`` are visited), the hop's best
+    ``3 * max_visited`` new assertions (``neighborhood_query``), and the visited set
+    ``v_k``. A hop runs only while the visited set is below the cap, as the loop it
+    replaces did. The rows are every hop's assertions whose two ends were both visited,
+    with both ends' entity rows and the visited count, in (hop, rank) order.
+
+    One round trip instead of one per hop plus a trailing read of the names. Built once
+    per shape (hop count, and whether layers, ``as_of`` and ``valid_at`` constrain it) with
+    every value a bind parameter (``traversal_params``): constructing it cost 34 ms of
+    Python per query on the dev box, and its text is what the server prepares.
+    """
+    tenant_id: Any = bindparam("tenant_id", type_=Text)
+    seeds = bindparam("seeds", type_=ARRAY(Text))
+    scope_keys = bindparam("keys", type_=ARRAY(Text))
+    max_visited: Any = bindparam("max_visited", type_=Integer)
+    visited = select(func.unnest(_text_array(seeds)).label("entity_id")).cte("v1")
+    frontier = visited
+    steps_visited = visited
+    limit = max_visited * 3
+    steps: list[Any] = []
+    for k in range(1, max(0, hops) + 1):
+        count = select(func.count()).select_from(visited).scalar_subquery()
+        step = (
+            neighborhood_query(
+                tenant_id,
+                select(frontier.c.entity_id),
+                scope_keys=scope_keys,
+                layers=bindparam("layers", type_=ARRAY(Text)) if layers else None,
+                as_of=bindparam("as_of", type_=DateTime(timezone=True)) if as_of else None,
+                valid_at=(
+                    bindparam("valid_at", type_=DateTime(timezone=True)) if valid_at else None
+                ),
+                limit=limit,
+                expanded=select(steps_visited.c.entity_id) if k > 1 else (),
+                earlier=steps,
+            )
+            .where(count < max_visited)
+            .cte(f"h{k}")
         )
-        .limit(limit)
+        steps.append(step)
+        ends = union_all(
+            select(step.c.subject_id.label("entity_id"), (step.c.rank * 2).label("ord")),
+            select(step.c.object_id.label("entity_id"), (step.c.rank * 2 + 1).label("ord")),
+        ).subquery()
+        first_seen = func.min(ends.c.ord)
+        frontier = (
+            select(ends.c.entity_id)
+            .where(ends.c.entity_id.not_in(select(visited.c.entity_id)))
+            .group_by(ends.c.entity_id)
+            .order_by(first_seen, ends.c.entity_id)
+            .limit(func.greatest(0, max_visited - count))
+            .cte(f"f{k + 1}")
+        )
+        steps_visited = visited
+        visited = union_all(select(visited.c.entity_id), select(frontier.c.entity_id)).cte(
+            f"v{k + 1}"
+        )
+    reached = union_all(
+        *(
+            select(step.c.relation_id, literal(k).label("hop"), step.c.rank)
+            for k, step in enumerate(steps, start=1)
+        )
+    ).subquery()
+    subject = aliased(GraphEntityRow)
+    obj = aliased(GraphEntityRow)
+    within = select(visited.c.entity_id)
+    return (
+        select(
+            GraphRelationRow,
+            subject,
+            obj,
+            select(func.count()).select_from(visited).scalar_subquery().label("visited"),
+        )
+        .join(reached, reached.c.relation_id == GraphRelationRow.relation_id)
+        .join(subject, subject.entity_id == GraphRelationRow.subject_id)
+        .join(obj, obj.entity_id == GraphRelationRow.object_id)
+        .where(GraphRelationRow.subject_id.in_(within), GraphRelationRow.object_id.in_(within))
+        .order_by(reached.c.hop, reached.c.rank)
     )
 
 
-def first_of_each_assertion(
-    rows: Iterable[GraphRelationRow], seen: set[RelationIdentity]
-) -> Iterator[GraphRelationRow]:
-    """Keep one support per qualified assertion across hops, preserving temporal context.
-
-    Each hop's query now deduplicates its own triples in SQL, before its limit, so this is
-    no longer what stops one talkative entity filling a page of results. What it still does
-    is carry ``seen`` between hops: hop two can legitimately reach a triple hop one already
-    returned, and a limit applied per hop cannot know that. The row kept is the first in
-    the query's order, which is the most confident and most recent of them.
-    """
-    for r in rows:
-        identity = relation_identity(r)
-        if identity in seen:
-            continue
-        seen.add(identity)
-        yield r
+def traversal_params(
+    tenant_id: str,
+    seeds: Sequence[str],
+    *,
+    scope_keys: Sequence[str],
+    max_visited: int,
+    layers: Sequence[GraphLayer] | None,
+    as_of: datetime | None,
+    valid_at: datetime | None,
+) -> dict[str, Any]:
+    """The values of one traversal, for the statement ``traversal_query`` built its shape."""
+    params: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "seeds": list(seeds),
+        "keys": [str(k) for k in scope_keys],
+        "max_visited": max_visited,
+    }
+    if layers:
+        params["layers"] = list(layers)
+    if as_of is not None:
+        params["as_of"] = as_of
+    if valid_at is not None:
+        params["valid_at"] = valid_at
+    return params
 
 
 class PostgresGraphStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, *, budget_ms: int = GRAPH.prefetch_budget_ms) -> None:
         self._sessions = async_sessionmaker(engine, expire_on_commit=False)
+        self._reads = async_sessionmaker(
+            engine.execution_options(isolation_level="AUTOCOMMIT"), expire_on_commit=False
+        )
+        self._budget_ms = budget_ms
+        self._budgeted_engine = create_async_engine(
+            engine.url,
+            isolation_level="AUTOCOMMIT",
+            pool_size=GRAPH.budgeted_pool_size,
+            max_overflow=GRAPH.budgeted_pool_overflow,
+            pool_timeout=DATABASE.pool_timeout_seconds,
+            pool_pre_ping=False,
+            pool_recycle=DATABASE.pool_recycle_seconds,
+            connect_args={
+                "options": f"-c statement_timeout={budget_ms}",
+                "connect_timeout": DATABASE.connect_timeout_seconds,
+                # The traversal's text depends only on the hop count, so it is prepared on
+                # first use and never planned again on that connection: planning counts
+                # against the statement timeout, and it was a third of the statement.
+                "prepare_threshold": 0,
+            },
+        )
+        self._budgeted = async_sessionmaker(self._budgeted_engine, expire_on_commit=False)
+
+    async def close(self) -> None:
+        await self._budgeted_engine.dispose()
 
     def session(self) -> AsyncSession:
         return self._sessions()
+
+    def read(self) -> AsyncSession:
+        """A session for reads only: autocommit, so no BEGIN or ROLLBACK round trip."""
+        return self._reads()
 
     # -- writes ---------------------------------------------------------------------
     async def upsert_entities(self, entities: Sequence[Entity]) -> None:
@@ -428,7 +603,7 @@ class PostgresGraphStore:
         if not names or not scope_keys:
             return []
         wanted = [n for n in names if n]
-        async with self.session() as s:
+        async with self.read() as s:
             rows = (
                 await s.scalars(
                     select(GraphEntityRow).where(
@@ -464,7 +639,7 @@ class PostgresGraphStore:
             conds.append(GraphEntityRow.canonical_name.startswith(prefix, autoescape=True))
         if entity_type:
             conds.append(GraphEntityRow.entity_type == entity_type)
-        async with self.session() as s:
+        async with self.read() as s:
             rows = (
                 await s.scalars(
                     select(GraphEntityRow)
@@ -510,7 +685,7 @@ class PostgresGraphStore:
             for end in ends
         ]
         ids = union_all(*branches).subquery()
-        async with self.session() as s:
+        async with self.read() as s:
             rows = (
                 await s.scalars(
                     select(GraphRelationRow)
@@ -528,7 +703,7 @@ class PostgresGraphStore:
             return []
         target = aliased(GraphEntityRow)
         out: list[EntityFacts] = []
-        async with self.session() as s:
+        async with self.read() as s:
             entities = (
                 await s.scalars(
                     select(GraphEntityRow)
@@ -586,7 +761,7 @@ class PostgresGraphStore:
     ) -> list[Entity]:
         if not entity_ids or not scope_keys:
             return []
-        async with self.session() as s:
+        async with self.read() as s:
             rows = (
                 await s.scalars(
                     select(GraphEntityRow).where(
@@ -609,60 +784,65 @@ class PostgresGraphStore:
         as_of: datetime | None = None,
         valid_at: datetime | None = None,
         layers: Sequence[GraphLayer] | None = None,
+        budgeted: bool = False,
     ) -> GraphNeighborhood:
-        if not entity_ids or not scope_keys:
+        """The bounded traversal in one statement (``traversal_query``); a start entity
+        with no visible relation is the one case that reads its row separately.
+        ``budgeted`` runs it where the server stops it past the graph budget."""
+        seeds = list(dict.fromkeys(entity_ids))[:max_visited]
+        if not seeds or not scope_keys:
             return GraphNeighborhood(entities=[], relations=[], visited=0)
-        visited: dict[str, None] = dict.fromkeys(entity_ids)
-        frontier = list(entity_ids)
-        expanded: list[str] = []  # entities whose edges an earlier hop already queried
-        relations: dict[str, GraphRelationRow] = {}  # rows; converted after the scope filter
-        seen: set[RelationIdentity] = set()
+        rows_by_id: dict[str, GraphEntityRow] = {}
+        relations: list[Relation] = []
+        visited = len(seeds)
+        sessions = self._budgeted if budgeted else self._reads
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
-            async with self.session() as s:
-                for _ in range(max(0, hops)):
-                    if not frontier or len(visited) >= max_visited:
-                        break
-                    rows = (
+            async with sessions() as s:
+                if hops > 0:
+                    statement = traversal_query(
+                        hops,
+                        layers=bool(layers),
+                        as_of=as_of is not None,
+                        valid_at=valid_at is not None,
+                    )
+                    params = traversal_params(
+                        tenant_id,
+                        seeds,
+                        scope_keys=scope_keys,
+                        max_visited=max_visited,
+                        layers=layers,
+                        as_of=as_of,
+                        valid_at=valid_at,
+                    )
+                    try:
+                        found = (await s.execute(statement, params)).all()
+                    except DBAPIError as exc:
+                        if isinstance(exc.orig, QueryCanceled):
+                            raise GraphBudgetExceededError(self._budget_ms) from exc
+                        raise
+                    for relation, subject, obj, reached in found:
+                        relations.append(_relation(relation))
+                        rows_by_id.setdefault(subject.entity_id, subject)
+                        rows_by_id.setdefault(obj.entity_id, obj)
+                        visited = reached
+                unread = [eid for eid in seeds if eid not in rows_by_id]
+                if unread:
+                    for row in (
                         await s.scalars(
-                            neighborhood_query(
-                                tenant_id,
-                                frontier,
-                                scope_keys=scope_keys,
-                                layers=layers,
-                                as_of=as_of,
-                                valid_at=valid_at,
-                                limit=max_visited * 3,
-                                expanded=expanded,
+                            select(GraphEntityRow).where(
+                                GraphEntityRow.tenant_id == tenant_id,
+                                GraphEntityRow.entity_id.in_(unread),
+                                _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
                             )
                         )
-                    ).all()
-                    next_frontier: list[str] = []
-                    for r in first_of_each_assertion(rows, seen):
-                        relations.setdefault(r.relation_id, r)
-                        for eid in (r.subject_id, r.object_id):
-                            if eid not in visited and len(visited) < max_visited:
-                                visited[eid] = None
-                                next_frontier.append(eid)
-                    expanded.extend(frontier)
-                    frontier = next_frontier
-                ents = (
-                    await s.scalars(
-                        select(GraphEntityRow).where(
-                            GraphEntityRow.tenant_id == tenant_id,
-                            GraphEntityRow.entity_id.in_(list(visited)),
-                            _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
-                        )
-                    )
-                ).all()
-        allowed = {e.entity_id for e in ents}
-        # converted only now: rows outside the scope were built into models and thrown away
-        rels = [
-            _relation(r)
-            for r in relations.values()
-            if r.subject_id in allowed and r.object_id in allowed
-        ]
+                    ).all():
+                        rows_by_id[row.entity_id] = row
+        seed_rows = [rows_by_id[eid] for eid in seeds if eid in rows_by_id]
+        reached_rows = [row for eid, row in rows_by_id.items() if eid not in set(seeds)]
         return GraphNeighborhood(
-            entities=[_entity(e) for e in ents], relations=rels, visited=len(visited)
+            entities=[_entity(e) for e in (*seed_rows, *reached_rows)],
+            relations=relations,
+            visited=visited,
         )
 
     async def relations_for_document(
@@ -682,12 +862,12 @@ class PostgresGraphStore:
         ]
         if not include_invalidated:
             conds.append(GraphRelationRow.status != "INVALIDATED")
-        async with self.session() as s:
+        async with self.read() as s:
             rows = (await s.scalars(select(GraphRelationRow).where(*conds))).all()
         return [_relation(r) for r in rows]
 
     async def count(self, tenant_id: str) -> tuple[int, int]:
-        async with self.session() as s:
+        async with self.read() as s:
             e = await s.scalar(
                 select(func.count())
                 .select_from(GraphEntityRow)

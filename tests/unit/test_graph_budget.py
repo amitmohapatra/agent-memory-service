@@ -1,14 +1,11 @@
-"""The graph traversal has a wall budget, and expiry drops facts without cancelling anything.
+"""The retrieval-time graph stage: facts from a bounded traversal, the evidence expansion
+behind them, and the graph budget - enforced by the database, never by a client timer.
 
-The traversal is started as soon as the scope is known, so today it finishes underneath a
-178 ms encoder and costs nothing. That is precisely why it needs a ceiling: the moment the
-encoder is int8 ONNX at ~40 ms, or the graph is deep enough for a three-hop walk to outrun
-it, an unbounded traversal is the tail of every entity, temporal and multi-hop question.
-
-The expiry must end *this query's wait*, not the traversal. ``asyncio.wait_for`` cancels what
-it waits on, and what it would cancel here is a statement holding a pooled connection: an
-aborted connection is charged to every later request on that pool, which is a far worse trade
-than one slow answer. So the wait is on a shield and the traversal is left to finish.
+A client timer measured the client's own scheduling as much as the graph: on a loaded box a
+traversal whose statement took 90 ms lost its facts after a "150 ms" wait that lasted 500.
+The traversal is one bounded statement whose connection carries the budget as its
+``statement_timeout``; the stage waits for its answer, and the store's
+``GraphBudgetExceededError`` is the one way it is cut short.
 """
 
 from __future__ import annotations
@@ -24,16 +21,11 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.graph.retrieval import (
-    GraphStage,
-    graph_budget_expired_total,
-    graph_parked_cancelled_total,
-    graph_parked_traversals,
-)
+from memory_service.modules.graph.retrieval import GraphStage, graph_budget_expired_total
 from memory_service.modules.graph.service import GraphAnswer
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import QueryRouter
-from memory_service.ports.intelligence import Entity, Relation
+from memory_service.ports.intelligence import Entity, GraphBudgetExceededError, Relation
 
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1")
 VISIBILITY = VisibilitySpecification(tenant_id="acme", keys=frozenset({"tenant:acme"}))
@@ -75,16 +67,22 @@ def _answer() -> GraphAnswer:
 
 
 class _Graph:
-    """A GraphService whose traversal takes as long as the test says."""
+    """A GraphService whose traversal takes as long as the test says, or is stopped at the
+    budget by its store."""
 
-    def __init__(self, delay: float) -> None:
+    def __init__(self, delay: float, *, exceeded: bool = False) -> None:
         self.delay = delay
+        self.exceeded = exceeded
         self.started = 0
         self.finished = 0
+        self.budgeted: list[bool] = []
 
     async def query(self, ctx: MemoryExecutionContext, **kwargs: Any) -> GraphAnswer:
         self.started += 1
+        self.budgeted.append(kwargs.get("budgeted", False))
         await asyncio.sleep(self.delay)
+        if self.exceeded:
+            raise GraphBudgetExceededError(150)
         self.finished += 1
         return _answer()
 
@@ -94,16 +92,13 @@ class _NoUoW:
         raise AssertionError("no unit of work expected")
 
 
-def _stage(delay: float, budget: float) -> tuple[GraphStage, _Graph]:
-    graph = _Graph(delay)
-    return (
-        GraphStage(graph, _NoUoW(), budget_seconds=budget, max_expansion_memories=0),  # type: ignore[arg-type]
-        graph,
-    )
+def _stage(delay: float = 0.0, *, exceeded: bool = False) -> tuple[GraphStage, _Graph]:
+    graph = _Graph(delay, exceeded=exceeded)
+    return GraphStage(graph, _NoUoW(), max_expansion_memories=0), graph  # type: ignore[arg-type]
 
 
-async def test_a_traversal_inside_the_budget_answers_with_its_facts() -> None:
-    stage, graph = _stage(delay=0.0, budget=0.5)
+async def test_a_prefetched_traversal_answers_with_its_facts() -> None:
+    stage, graph = _stage()
     routed = _routed()
     diagnostics: dict[str, Any] = {}
     task = stage.prefetch(CTX, routed, VISIBILITY)
@@ -112,12 +107,46 @@ async def test_a_traversal_inside_the_budget_answers_with_its_facts() -> None:
     assert [c.record_id for c in out] == ["rel_1"]
     assert diagnostics["graph"]["budget_expired"] is False
     assert diagnostics["graph"]["matched"] == ["acme"] and diagnostics["graph"]["visited"] == 7
-    assert graph.finished == 1
+    assert graph.finished == 1 and graph.budgeted == [True], "the stage's walk is budgeted"
+
+
+async def test_a_slow_client_does_not_cost_the_answer_its_graph_facts() -> None:
+    """No timer in the client: however long this process takes to get back to the
+    traversal, the facts it returned are used."""
+    stage, _ = _stage(delay=0.3)
+    routed = _routed()
+    diagnostics: dict[str, Any] = {}
+    task = stage.prefetch(CTX, routed, VISIBILITY)
+    out = await stage(CTX, routed, [], VISIBILITY, diagnostics, prefetched=task)
+    assert [c.record_id for c in out] == ["rel_1"]
+    assert diagnostics["graph"]["budget_expired"] is False
+
+
+async def test_a_traversal_the_database_stopped_answers_without_graph_facts() -> None:
+    stage, _ = _stage(exceeded=True)
+    routed = _routed()
+    diagnostics: dict[str, Any] = {}
+    before = graph_budget_expired_total._value.get()
+    existing = [Candidate(record_id="chk_1", kind="chunk", text="a passage", score=0.5)]
+
+    task = stage.prefetch(CTX, routed, VISIBILITY)
+    out = await stage(CTX, routed, existing, VISIBILITY, diagnostics, prefetched=task)
+
+    assert [c.record_id for c in out] == ["chk_1"], "the ranked evidence still reaches the caller"
+    assert diagnostics["graph"] == {"budget_expired": True, "budget_ms": 150}
+    assert graph_budget_expired_total._value.get() == before + 1
+
+
+async def test_a_stage_called_without_a_prefetch_runs_the_same_budgeted_walk() -> None:
+    stage, graph = _stage(exceeded=True)
+    diagnostics: dict[str, Any] = {}
+    assert await stage(CTX, _routed(), [], VISIBILITY, diagnostics) == []
+    assert diagnostics["graph"]["budget_expired"] is True and graph.budgeted == [True]
 
 
 @pytest.mark.parametrize("budget", [0, 2, 6])
 async def test_one_relation_cannot_overrun_the_evidence_expansion_budget(budget) -> None:
-    stage, graph = _stage(delay=0.0, budget=0.5)
+    stage, graph = _stage()
     stage.max_expansion_chunks = budget
     answer = _answer()
     answer.relations[0].evidence = [
@@ -137,7 +166,7 @@ async def test_one_relation_cannot_overrun_the_evidence_expansion_budget(budget)
 
 @pytest.mark.parametrize("budget", [0, 1, 6])
 async def test_memory_pointers_are_deduplicated_bounded_and_skip_ranked_hits(budget):
-    stage, graph = _stage(delay=0.0, budget=0.5)
+    stage, graph = _stage()
     stage.max_expansion_memories = budget
     answer = _answer()
     answer.relations[0].memory_id = "mem_direct"
@@ -166,65 +195,8 @@ async def test_memory_pointers_are_deduplicated_bounded_and_skip_ranked_hits(bud
         stage._expand_memories.assert_not_called()
 
 
-async def test_an_expired_budget_answers_without_graph_facts() -> None:
-    stage, _ = _stage(delay=0.2, budget=0.01)
-    routed = _routed()
-    diagnostics: dict[str, Any] = {}
-    before = graph_budget_expired_total._value.get()
-    existing = [Candidate(record_id="chk_1", kind="chunk", text="a passage", score=0.5)]
-
-    task = stage.prefetch(CTX, routed, VISIBILITY)
-    out = await stage(CTX, routed, existing, VISIBILITY, diagnostics, prefetched=task)
-
-    assert [c.record_id for c in out] == ["chk_1"], "the ranked evidence still reaches the caller"
-    assert diagnostics["graph"] == {"budget_expired": True, "budget_ms": 10}
-    assert graph_budget_expired_total._value.get() == before + 1
-    await stage.drain()
-
-
-async def test_an_expired_budget_never_cancels_the_traversal() -> None:
-    """The statement keeps its connection to the end. Cancelling it would abort a pooled
-    connection, which every later request on that pool pays for."""
-    stage, graph = _stage(delay=0.05, budget=0.001)
-    routed = _routed()
-    task = stage.prefetch(CTX, routed, VISIBILITY)
-    assert task is not None
-
-    await stage(CTX, routed, [], VISIBILITY, {}, prefetched=task)
-    assert not task.cancelled() and not task.done(), "the traversal was cut off mid-statement"
-    await stage.drain()
-    assert task.done() and not task.cancelled()
-    assert graph.finished == 1, "the traversal did not run to completion"
-
-
-async def test_a_traversal_that_fails_after_its_budget_is_not_an_unretrieved_exception() -> None:
-    class _Broken(_Graph):
-        async def query(self, ctx: MemoryExecutionContext, **kwargs: Any) -> GraphAnswer:
-            await asyncio.sleep(0.05)
-            raise RuntimeError("graph down")
-
-    stage = GraphStage(_Broken(0.05), _NoUoW(), budget_seconds=0.001)  # type: ignore[arg-type]
-    routed = _routed()
-    diagnostics: dict[str, Any] = {}
-    task = stage.prefetch(CTX, routed, VISIBILITY)
-    await stage(CTX, routed, [], VISIBILITY, diagnostics, prefetched=task)
-    assert diagnostics["graph"]["budget_expired"] is True
-    await stage.drain()
-    assert task is not None and task.exception() is not None
-
-
-async def test_the_budget_also_bounds_a_stage_called_without_a_prefetch() -> None:
-    """A caller that does not prefetch starts the traversal here; the wait is bounded the
-    same way, because the reason for the ceiling is the wait, not who started it."""
-    stage, _ = _stage(delay=0.2, budget=0.01)
-    diagnostics: dict[str, Any] = {}
-    out = await stage(CTX, _routed(), [], VISIBILITY, diagnostics)
-    assert out == [] and diagnostics["graph"]["budget_expired"] is True
-    await stage.drain()
-
-
 async def test_a_route_without_a_graph_costs_nothing() -> None:
-    stage, graph = _stage(delay=10.0, budget=0.01)
+    stage, graph = _stage(delay=10.0)
     routed = QueryRouter().routed(
         "summarise the report", QueryType.GLOBAL_SUMMARY, identifiers=[], signals={}
     )
@@ -235,115 +207,7 @@ async def test_a_route_without_a_graph_costs_nothing() -> None:
     assert graph.started == 0 and diagnostics == {}
 
 
-def test_the_default_budget_comes_from_the_frozen_constant() -> None:
-    from memory_service.config.constants import GRAPH
-
-    stage = GraphStage(_Graph(0.0), _NoUoW())  # type: ignore[arg-type]
-    assert stage.budget_seconds == pytest.approx(GRAPH.prefetch_budget_ms / 1000)
-
-
 def test_the_budget_is_frozen_at_150ms() -> None:
     from memory_service.config.constants import GRAPH
 
     assert GRAPH.prefetch_budget_ms == 150
-
-
-# ---------------------------------------------------------------------------
-# the leak is bounded, visible, and drained at shutdown
-# ---------------------------------------------------------------------------
-
-
-async def test_parked_traversals_are_capped() -> None:
-    """The budget bounds the wait, not the concurrency.
-
-    A graph slower than the budget expires *every* query, and each expiry parks a traversal
-    holding a pooled connection. Uncapped, the condition the budget exists for turns a latency
-    problem into exhaustion of the same pool the read path reads through - a worse failure than
-    the tail it cuts. Past the cap the cheaper harm is the aborted statement.
-    """
-    graph = _Graph(delay=5.0)
-    stage = GraphStage(graph, _NoUoW(), budget_seconds=0.001, max_parked=2)  # type: ignore[arg-type]
-    routed = _routed()
-    cancelled_before = graph_parked_cancelled_total._value.get()
-
-    tasks = [stage.prefetch(CTX, routed, VISIBILITY) for _ in range(5)]
-    for task in tasks:
-        await stage(CTX, routed, [], VISIBILITY, {}, prefetched=task)
-
-    assert len(stage._running) == 2, "the parked traversals are not bounded"
-    assert graph_parked_cancelled_total._value.get() == cancelled_before + 3
-    for task in tasks:  # the two still parked would outlive the test otherwise
-        assert task is not None
-        task.cancel()
-    await asyncio.gather(*[t for t in tasks if t is not None], return_exceptions=True)
-    assert stage._running == set()
-    assert graph.finished == 0, "a cancelled traversal does not run to completion"
-
-
-async def test_the_parked_traversals_are_a_gauge() -> None:
-    """``memory_graph_budget_expired_total`` says how often the budget expired; this says how
-    much of the connection pool that is costing right now."""
-    stage, _ = _stage(delay=0.05, budget=0.001)
-    routed = _routed()
-    task = stage.prefetch(CTX, routed, VISIBILITY)
-    await stage(CTX, routed, [], VISIBILITY, {}, prefetched=task)
-
-    assert graph_parked_traversals._value.get() == 1
-    await stage.drain()
-    assert graph_parked_traversals._value.get() == 0
-
-
-async def test_a_cancelled_request_does_not_leave_the_traversal_unowned() -> None:
-    """On a client disconnect the wait raises CancelledError, not TimeoutError. The shield
-    means the traversal survives the request, so it has to be disposed of deliberately:
-    before this it kept running with nothing holding a reference and nothing reading its
-    exception."""
-    stage, graph = _stage(delay=0.05, budget=10.0)
-    routed = _routed()
-    task = stage.prefetch(CTX, routed, VISIBILITY)
-
-    call = asyncio.ensure_future(stage(CTX, routed, [], VISIBILITY, {}, prefetched=task))
-    await asyncio.sleep(0)
-    call.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await call
-
-    assert len(stage._running) == 1, "the traversal was left running with nobody holding it"
-    await stage.drain()
-    assert graph.finished == 1 and stage._running == set()
-
-
-def test_the_wiring_drains_the_stage_at_shutdown() -> None:
-    from memory_service.adapters.wiring import _wire_graph, _wire_retrieval
-    from memory_service.application.container import Container, Overrides
-    from memory_service.config.settings import Settings
-    from memory_service.modules.authz.service import AuthorizationService
-    from memory_service.modules.llm.assist import LLMAssist
-    from memory_service.modules.rag.spaces import DenseSpaces
-
-    from memory_service.adapters.authz.memory_provider import (  # isort: skip
-        MemoryAuthorizationProvider,
-    )
-
-    class _Model:
-        def fingerprint(self) -> str:
-            return "fp"
-
-    container = Container(  # type: ignore[call-arg]
-        settings=Settings(_env_file=None),
-        version="test",
-        overrides=Overrides(graph_store="memory", graph_enrichment="native"),
-    )
-    container.services["uow_factory"] = _NoUoW()
-    container.services["conversation"] = object()
-    container.services["llm_assist"] = LLMAssist.disabled()
-    container.services["authz"] = AuthorizationService(MemoryAuthorizationProvider(), None)
-    container.dense_spaces = DenseSpaces.single(_Model())  # type: ignore[arg-type]
-    container.embedding = container.dense_spaces.primary
-    container.sparse = _Model()
-    _wire_retrieval(container)
-    _wire_graph(container)
-
-    stage = container.services["retrieval"].post_stages["graph"]
-    assert container.closers["graph_stage"] == stage.drain
-    assert stage.max_parked == container.tuning.graph.max_parked_traversals

@@ -201,6 +201,14 @@ class EntityFacts(BaseModel):
     summary_source: str = ""
 
 
+class GraphBudgetExceededError(Exception):
+    """A budgeted traversal outran the store's time budget and was stopped by the store."""
+
+    def __init__(self, budget_ms: int) -> None:
+        super().__init__(f"graph traversal stopped at its {budget_ms} ms budget")
+        self.budget_ms = budget_ms
+
+
 class GraphNeighborhood(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -269,12 +277,15 @@ class GraphStore(Protocol):
         as_of: datetime | None = None,
         valid_at: datetime | None = None,
         layers: Sequence[GraphLayer] | None = None,
+        budgeted: bool = False,
     ) -> GraphNeighborhood:
         """Bounded traversal: O(V+E) over at most ``max_visited`` nodes.
 
         ``as_of`` selects facts *true* at that instant (valid time); ``valid_at`` selects
         facts *asserted* by then and not yet invalidated (knowledge time); ``layers``
-        restricts the walk to those layers.
+        restricts the walk to those layers. ``budgeted`` (the retrieval-time traversal)
+        bounds the work by the store's time budget and raises ``GraphBudgetExceededError`` past
+        it.
         """
         ...
 

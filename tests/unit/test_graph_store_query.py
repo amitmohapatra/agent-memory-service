@@ -1,7 +1,7 @@
-"""Unit tests: the neighbourhood hop's SQL order and its triple dedupe.
+"""Unit tests: the neighbourhood hop's SQL order, its triple dedupe, and the one-statement
+traversal that chains the hops.
 
-Hermetic - the statement is compiled, never executed, and the dedupe is a pure function
-over rows. Traversal semantics (bounds, time, visibility) are covered against the in-memory
+Hermetic - the statements are compiled, never executed. Traversal semantics (bounds, time, visibility) are covered against the in-memory
 store in test_graph_native.py and against PostgreSQL in the integration suite.
 """
 
@@ -12,27 +12,15 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from memory_service.adapters.db.orm import GraphRelationRow
 from memory_service.adapters.graph.postgres_store import (
-    first_of_each_assertion,
     neighborhood_query,
-    relation_identity,
+    traversal_params,
+    traversal_query,
 )
 
 pytestmark = pytest.mark.unit
 
 NOW = datetime(2026, 9, 15, tzinfo=UTC)
-
-
-def _row(relation_id: str, subject: str, predicate: str, obj: str) -> GraphRelationRow:
-    return GraphRelationRow(
-        relation_id=relation_id,
-        tenant_id="acme",
-        subject_id=subject,
-        predicate=predicate,
-        object_id=obj,
-        observed_at=NOW,
-    )
 
 
 def _sql() -> str:
@@ -106,51 +94,69 @@ def test_edges_the_hop_would_drop_are_dropped_before_its_limit() -> None:
     assert "NOT IN" not in _sql(), "the first hop has nothing to exclude"
 
 
-def test_identical_triples_are_kept_once_across_hops() -> None:
-    seen = set()
-    first_hop = [
-        _row("rel_1", "ent_a", "mentions", "ent_b"),
-        _row("rel_2", "ent_a", "mentions", "ent_b"),  # same triple, a second memory said it
-        _row("rel_3", "ent_a", "knows", "ent_b"),
-    ]
-    assert [r.relation_id for r in first_of_each_assertion(first_hop, seen)] == ["rel_1", "rel_3"]
-    # the set carries over: the next hop cannot bring the same triple back
-    second_hop = [
-        _row("rel_4", "ent_a", "mentions", "ent_b"),
-        _row("rel_5", "ent_b", "mentions", "ent_c"),
-    ]
-    assert [r.relation_id for r in first_of_each_assertion(second_hop, seen)] == ["rel_5"]
-    assert seen == {
-        relation_identity(first_hop[0]),
-        relation_identity(first_hop[2]),
-        relation_identity(second_hop[1]),
+def _traversal(hops: int = 3) -> str:
+    stmt = traversal_query(hops)
+    return str(stmt.compile(dialect=postgresql.dialect()))
+
+
+def test_the_whole_traversal_is_one_statement_of_chained_hops() -> None:
+    sql = _traversal()
+    for cte in ("v1", "h1", "f2", "v2", "h2", "f3", "v3", "h3", "f4", "v4"):
+        assert f"{cte} AS" in sql, cte
+    assert "h4 AS" not in sql
+    # a hop runs only while the visited set is below the cap, and a frontier takes only
+    # what the cap leaves, in the order the previous hop ranked its edges
+    assert sql.count("< %(max_visited)s") == 3 and "greatest(" in sql
+    assert "min(anon_" in sql and "row_number() OVER" in sql
+    # the result keeps only edges whose two ends were visited, in (hop, rank) order
+    assert sql.rstrip().endswith("rank")
+
+
+def test_an_assertion_an_earlier_hop_returned_is_excluded_before_the_next_limit() -> None:
+    """Hop two can reach a triple hop one already returned; excluded inside the hop, the
+    limit is spent on edges that are new."""
+    hop2 = _traversal().split("h2 AS", 1)[1].split("f3 AS", 1)[0]
+    assert "NOT (EXISTS" in hop2 and "FROM h1" in hop2
+    for field in (
+        "subject_id",
+        "predicate",
+        "object_id",
+        "document_id",
+        "layer",
+        "valid_from",
+        "valid_to",
+    ):
+        assert f"h1.{field} IS NOT DISTINCT FROM graph_relations.{field}" in hop2, field
+    assert "h1.attributes = graph_relations.attributes" in hop2
+    hop3 = _traversal().split("h3 AS", 1)[1]
+    assert "FROM h1" in hop3 and "FROM h2" in hop3
+    assert "NOT (EXISTS" not in _traversal(hops=1), "the first hop has nothing earlier"
+
+
+def test_the_traversal_is_built_once_per_shape_and_bound_per_query() -> None:
+    """Its text depends on the shape only, so the server prepares it once per connection."""
+    assert traversal_query(3) is traversal_query(3)
+    assert traversal_query(3, as_of=True) is not traversal_query(3)
+    sql = str(traversal_query(1, layers=True, as_of=True).compile(dialect=postgresql.dialect()))
+    for name in ("tenant_id", "seeds", "keys", "max_visited", "layers", "as_of"):
+        assert f"%({name})s" in sql, name
+    params = traversal_params(
+        "acme",
+        ["ent_a"],
+        scope_keys=["k1", "k2"],
+        max_visited=40,
+        layers=["entity"],
+        as_of=NOW,
+        valid_at=None,
+    )
+    assert params == {
+        "tenant_id": "acme",
+        "seeds": ["ent_a"],
+        "keys": ["k1", "k2"],
+        "max_visited": 40,
+        "layers": ["entity"],
+        "as_of": NOW,
     }
-
-
-@pytest.mark.parametrize(
-    "change",
-    [
-        {"attributes": {"period": "FY26"}},
-        {"document_id": "doc_other"},
-        {"valid_from": NOW},
-        {"valid_to": NOW},
-        {"layer": "causal"},
-    ],
-)
-def test_shared_triple_does_not_erase_a_different_qualified_assertion(change):
-    first = _row("rel_1", "revenue", "has_value", "eur412")
-    second = _row("rel_2", "revenue", "has_value", "eur412")
-    for field, value in change.items():
-        setattr(second, field, value)
-    assert len(list(first_of_each_assertion([first, second], set()))) == 2
-
-
-def test_attribute_key_order_does_not_turn_duplicates_into_distinct_facts():
-    first = _row("rel_1", "a", "knows", "b")
-    second = _row("rel_2", "a", "knows", "b")
-    first.attributes = {"period": "FY26", "currency": "EUR"}
-    second.attributes = {"currency": "EUR", "period": "FY26"}
-    assert len(list(first_of_each_assertion([first, second], set()))) == 1
 
 
 def test_sql_preserves_qualifiers_and_validity_before_the_limit():

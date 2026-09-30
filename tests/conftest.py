@@ -26,6 +26,7 @@ if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
 
 from memory_service.api.app import create_app  # noqa: E402 - after the environment is cleaned
 from memory_service.application.container import Overrides  # noqa: E402
+from memory_service.config.constants import DATABASE, GRAPH  # noqa: E402
 from memory_service.config.settings import Settings, reset_settings_cache  # noqa: E402
 
 #: The suite gets a database of its own.
@@ -75,6 +76,15 @@ def _test_settings(**overrides: object) -> Settings:
 #: cannot be pointed at a dict-backed cache, a hash embedding or an in-memory queue by an env
 #: file, so the suite names them in code when it builds a container
 #: (``build_container(overrides=...)``).
+#: The graph budget is a production latency policy (150 ms of PostgreSQL time per
+#: retrieval-time traversal), and a busy test host's database misses it on a warm fixture:
+#: measured with the suite beside three other agents' stacks, a 10 ms traversal took 90-340
+#: ms. The suite asserts what the graph contributes, so it runs the traversal to the
+#: database's own statement timeout; the budget's behaviour is tested on its own terms
+#: (tests/integration/test_graph_entities.py stops a 1 ms-budget walk on the server,
+#: tests/unit/test_graph_budget.py covers the stage's answer without facts).
+UNHURRIED_GRAPH = GRAPH.model_copy(update={"prefetch_budget_ms": DATABASE.statement_timeout_ms})
+
 HERMETIC = Overrides(
     cache="memory",
     search="memory",
@@ -85,6 +95,7 @@ HERMETIC = Overrides(
     embedding_dimension=64,
     nli="lexical",
     document_parser="builtin",
+    graph=UNHURRIED_GRAPH,
 )
 
 

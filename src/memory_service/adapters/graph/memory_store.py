@@ -180,7 +180,9 @@ class MemoryGraphStore:
         as_of: datetime | None = None,
         valid_at: datetime | None = None,
         layers: Sequence[GraphLayer] | None = None,
+        budgeted: bool = False,
     ) -> GraphNeighborhood:
+        """In process there is nothing to budget: ``budgeted`` is accepted and ignored."""
         visited: dict[str, None] = dict.fromkeys(entity_ids)
         frontier = list(entity_ids)
         found: dict[str, Relation] = {}
