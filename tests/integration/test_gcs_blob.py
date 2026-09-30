@@ -73,7 +73,7 @@ async def gcs(make_settings, monkeypatch) -> AsyncIterator[Container]:
     try:
         yield c
     finally:
-        await c.aclose()
+        await c.close()
         for bucket in (chat, files):
             b = client.bucket(bucket)
             for blob in client.list_blobs(bucket):
