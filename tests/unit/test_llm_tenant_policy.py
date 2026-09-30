@@ -90,7 +90,7 @@ async def test_nothing_is_resolved_when_no_model_is_reachable() -> None:
     async with assist.bound(ModelIdentity("acme", "user:u1")) as access:
         assert access == DEFAULT_ACCESS and not assist.wants("summaries")
     assert policies.resolved == [], "a model-free deployment pays no lookup"
-    assert await assist.payable_tenants() == []
+    assert await assist.payable_tenants("summaries") == []
 
 
 @pytest.mark.parametrize(
@@ -110,14 +110,15 @@ async def test_a_read_follows_read_assist_unless_the_request_says(
 
 
 async def test_background_work_scans_only_tenants_something_can_pay_for() -> None:
-    cfg = llm_settings(enabled="auto", api_key=None)
+    cfg = llm_settings(enabled="auto", api_key=None, uses=["reflection"])
     policies = _Policies(DEFAULT_ACCESS, keyed=["acme", "globex"])
     assist = LLMAssist(BifrostLLM(cfg, transport=NO_BACKOFF), cfg, policies)  # type: ignore[arg-type]
-    assert await assist.payable_tenants() == ["acme", "globex"]
-    assert await assist.payable_tenants("globex") == ["globex"]
-    assert await assist.payable_tenants("initech") == []
-    operator, _ = _assist()
-    assert await operator.payable_tenants() == [None], "the operator pays: every tenant"
+    assert await assist.payable_tenants("reflection") == ["acme", "globex"]
+    assert await assist.payable_tenants("reflection", "globex") == ["globex"]
+    assert await assist.payable_tenants("reflection", "initech") == []
+    assert await assist.payable_tenants("summaries") == [], "the operator does not allow it"
+    operator, _ = _assist(uses=["reflection"])
+    assert await operator.payable_tenants("reflection") == [None], "the operator pays: all"
 
 
 async def test_a_job_counts_its_own_tokens_and_leaves_the_request_counter_alone() -> None:

@@ -212,7 +212,7 @@ class ConnectionService:
         now = now or datetime.now(UTC)
         written: list[dict[str, Any]] = []
         batches = 0
-        for tenant in await self.assist.payable_tenants(tenant_id):
+        for tenant in await self.assist.payable_tenants("memory_connections", tenant_id):
             async with self.uow_factory() as uow:
                 recent = await uow.memories.list_recent(
                     since=now - timedelta(seconds=self.window_seconds),

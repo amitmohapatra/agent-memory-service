@@ -19,7 +19,14 @@ class Lifetime(StrEnum):
 
 
 class MemoryType(StrEnum):
-    """What kind of intelligence a memory carries. Custom plugin types use ``CUSTOM``."""
+    """What kind of intelligence a memory carries.
+
+    Eight are the primary kinds a caller states or the pipeline extracts: SEMANTIC (a fact),
+    PREFERENCE, EPISODIC (something that happened), PROCEDURAL (how to do something), TASK,
+    USER (a profile attribute), TOOL and OUTCOME. OBSERVATION, BELIEF and ENTITY_SUMMARY are
+    derived by the service itself; the rest are accepted for imports whose type is already
+    known. Custom plugin types use ``CUSTOM``.
+    """
 
     WORKING = "WORKING"
     CONVERSATION = "CONVERSATION"

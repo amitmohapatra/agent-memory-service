@@ -84,11 +84,13 @@ class LLMAssist:
             with model_call_policy(access.read_assist if use_llm is None else use_llm):
                 yield
 
-    async def payable_tenants(self, only: str | None = None) -> list[str | None]:
-        """The tenants background model work may run for. ``[None]`` means every tenant
-        (the operator pays) and ``[only]`` that one; otherwise the tenants holding a live key
-        at some level, so a job never scans the memories of tenants nothing can pay for."""
-        if not self.available:
+    async def payable_tenants(self, use: LLMUse, only: str | None = None) -> list[str | None]:
+        """The tenants background ``use`` may run for. ``[None]`` means every tenant (the
+        operator pays) and ``[only]`` that one; otherwise the tenants holding a live key at
+        some level, so a job never scans the memories of tenants nothing can pay for. Empty
+        when the deployment does not allow ``use`` at all; each tenant's policy is still
+        decided per identity (``bound``)."""
+        if not (self.available and self.settings.wants(use)):
             return []
         if self.settings.operator_pays:
             return [only]

@@ -202,6 +202,7 @@ class ConversationService:
                     return AppendResult(ack, None)
 
             ctx = await self._lineage(uow, ctx, role)
+            assert ctx.thread_id and ctx.session_id and ctx.turn_id
             await self._ensure_session_and_turn(uow, ctx)
             if ctx.agent_run_id:
                 await self._ensure_agent_run(uow, ctx)

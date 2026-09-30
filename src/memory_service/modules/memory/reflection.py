@@ -107,7 +107,7 @@ class ReflectionService:
         now = now or datetime.now(UTC)
         created: list[str] = []
         batches = 0
-        for tenant in await self.assist.payable_tenants(tenant_id):
+        for tenant in await self.assist.payable_tenants("reflection", tenant_id):
             async with self.uow_factory() as uow:
                 recent = await uow.memories.reflection_pending(
                     limit=self.scan_limit, tenant_id=tenant

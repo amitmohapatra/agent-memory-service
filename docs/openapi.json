@@ -3937,7 +3937,7 @@
         "type": "object"
       },
       "MemoryType": {
-        "description": "What kind of intelligence a memory carries. Custom plugin types use ``CUSTOM``.",
+        "description": "What kind of intelligence a memory carries.\n\nEight are the primary kinds a caller states or the pipeline extracts: SEMANTIC (a fact),\nPREFERENCE, EPISODIC (something that happened), PROCEDURAL (how to do something), TASK,\nUSER (a profile attribute), TOOL and OUTCOME. OBSERVATION, BELIEF and ENTITY_SUMMARY are\nderived by the service itself; the rest are accepted for imports whose type is already\nknown. Custom plugin types use ``CUSTOM``.",
         "enum": [
           "WORKING",
           "CONVERSATION",
