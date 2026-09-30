@@ -1,5 +1,5 @@
 """HTTP read policy with actual retrieval and a mocked, never paid, Bifrost adapter: a read
-follows the tenant policy's read_assist unless it sets use_llm."""
+follows the tenant policy's read_assist."""
 
 import pytest
 
@@ -36,8 +36,8 @@ def _configure(client, configured) -> None:
     assist.policies = container.services["model_policies"]
 
 
-@pytest.mark.parametrize("route", ["context", "recall", "verify"])
-def test_a_read_follows_read_assist_and_an_opt_in_cannot_poison_the_native_cache(client, route):
+@pytest.mark.parametrize("route", ["context", "recall"])
+def test_a_read_follows_read_assist(client, route):
     with mocked_gateway(
         [{"query_type": "GENERAL_SEMANTIC", "terms": ["telescope"], "identifiers": []}]
     ) as gw:
@@ -45,34 +45,20 @@ def test_a_read_follows_read_assist_and_an_opt_in_cannot_poison_the_native_cache
         _configure(client, configured)
         _read_assist(client, False)
         payload = {"query": "astronomical instrumentation"}
-        if route == "verify":
-            payload["answer"] = "The observatory owns a telescope."
         try:
             native = client.post(f"/v1/{route}", headers=HEADERS, json=payload)
             assert native.status_code == 200, native.text
             assert gw.route.call_count == 0
-            assisted = client.post(
-                f"/v1/{route}", headers=HEADERS, json={**payload, "use_llm": True}
-            )
-            assert assisted.status_code == 200, assisted.text
-            assert gw.route.call_count == 1
             repeat = client.post(f"/v1/{route}", headers=HEADERS, json=payload)
             assert repeat.status_code == 200, repeat.text
-            assert gw.route.call_count == 1
-            # the policy flips: the same read, with nothing set, is now assisted
+            assert gw.route.call_count == 0
+            # the policy flips: the same kind of read, with nothing set, is now assisted
             _read_assist(client, True)
             followed = client.post(
                 f"/v1/{route}", headers=HEADERS, json={**payload, "query": "optical instruments"}
             )
             assert followed.status_code == 200, followed.text
-            assert gw.route.call_count == 2
-            refused = client.post(
-                f"/v1/{route}",
-                headers=HEADERS,
-                json={**payload, "query": "radio instruments", "use_llm": False},
-            )
-            assert refused.status_code == 200, refused.text
-            assert gw.route.call_count == 2, "an explicit use_llm=false overrides the policy"
+            assert gw.route.call_count == 1
         finally:
             client.portal.call(configured.provider.close)
 
@@ -91,16 +77,15 @@ def test_graph_entity_resolution_follows_the_read_policy(client):
         container.services["graph"].assist = assist
         _configure(client, assist)
         _read_assist(client, False)
-        payload = {"entities": ["earnings metric"]}
+        params = {"q": "earnings metric"}
         try:
-            response = client.post("/v1/graph/query", headers=HEADERS, json=payload)
+            response = client.get("/v1/graph/entities", headers=HEADERS, params=params)
             assert response.status_code == 200, response.text
             assert gw.route.call_count == 0
-            response = client.post(
-                "/v1/graph/query", headers=HEADERS, json={**payload, "use_llm": True}
-            )
+            _read_assist(client, True)
+            response = client.get("/v1/graph/entities", headers=HEADERS, params=params)
             assert response.status_code == 200, response.text
             assert gw.route.call_count == 1
-            assert response.json()["matched"][0]["canonical_name"] == "adjusted ebitda"
+            assert response.json()["entities"][0]["canonical_name"] == "adjusted ebitda"
         finally:
             client.portal.call(assist.provider.close)

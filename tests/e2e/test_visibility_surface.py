@@ -39,11 +39,11 @@ def _scope(**extra: str) -> dict[str, str]:
     }
 
 
-def _write(client, headers, content, visibility, scope=None, kind="MESSAGE") -> int:
-    body = {"scope": scope or _scope(), "kind": kind, "content": content}
-    if visibility:
-        body["hints"] = {"visibility": visibility}
-    return client.post("/v1/observations", headers=headers, json=body).status_code
+def _write(client, headers, content, visibility, scope=None) -> bool:
+    """Store ``content`` as a memory for exactly this audience."""
+    body = {"scope": scope or _scope(), "content": content, "visibility": visibility}
+    r = client.post("/v1/memories", headers=headers, json=body)
+    return r.status_code in (200, 201)
 
 
 def _read(client, headers, query, scope=None) -> set[str]:
@@ -53,7 +53,7 @@ def _read(client, headers, query, scope=None) -> set[str]:
         json={"scope": scope or _scope(), "query": query, "kinds": ["memory"]},
     )
     assert r.status_code == 200, r.text
-    return {i["text"] for i in r.json()["results"]}
+    return {i["text"] for i in r.json()["items"]}
 
 
 def _has(texts: set[str], needle: str) -> bool:
@@ -63,7 +63,7 @@ def _has(texts: set[str], needle: str) -> bool:
 # ---------------------------------------------------------------- USER
 def test_user_memory_follows_the_person_across_chats_and_agents(client) -> None:
     """The product's core value: an agent acting for someone knows what they know."""
-    assert _write(client, _h("alice"), "My timezone is Europe/Berlin.", "USER") == 202
+    assert _write(client, _h("alice"), "My timezone is Europe/Berlin.", "USER")
     q = "what is my timezone?"
 
     assert _has(_read(client, _h("alice"), q), "Europe/Berlin"), "alice, a different chat"
@@ -79,7 +79,7 @@ def test_thread_memory_stays_in_its_own_conversation(client) -> None:
     the previous one's turns, because the row carried its author's key and the author matched
     it from anywhere."""
     chat = _scope()
-    assert _write(client, _h("alice"), "We chose ClickHouse for this task.", "THREAD", chat) == 202
+    assert _write(client, _h("alice"), "We chose ClickHouse for this task.", "THREAD", chat)
     q = "what did we choose?"
 
     assert _has(_read(client, _h("alice"), q, chat), "ClickHouse"), "in its own chat"
@@ -89,7 +89,7 @@ def test_thread_memory_stays_in_its_own_conversation(client) -> None:
 
 # -------------------------------------------------------------- TENANT
 def test_tenant_memory_reaches_the_whole_team_and_no_further(client) -> None:
-    assert _write(client, _h("alice"), "The on-call rota moves to PagerDuty.", "TENANT") == 202
+    assert _write(client, _h("alice"), "The on-call rota moves to PagerDuty.", "TENANT")
     q = "where is the on-call rota?"
 
     assert _has(_read(client, _h("alice"), q), "PagerDuty")
@@ -105,7 +105,7 @@ def test_tenant_memory_reaches_the_whole_team_and_no_further(client) -> None:
 # ------------------------------------------------------------- PRIVATE
 def test_private_is_one_principal_and_not_even_its_user(client) -> None:
     run = _scope(agent_id="research", agent_run_id=new_id("agent_run"))
-    assert _write(client, _h("alice"), "Scratch: retry the flaky query.", "PRIVATE", run) == 202
+    assert _write(client, _h("alice"), "Scratch: retry the flaky query.", "PRIVATE", run)
     q = "what should be retried?"
 
     assert _has(_read(client, _h("alice"), q, _scope(agent_id="research")), "flaky query"), (
@@ -124,7 +124,7 @@ def test_private_is_the_durable_store_of_a_job_that_has_no_user(client) -> None:
     """A scheduled job has no user, so USER is not available to it. PRIVATE is, and it
     persists across executions - which is what makes stateful jobs possible at all."""
     job = _scope(agent_id="nightly", agent_run_id=new_id("agent_run"))
-    assert _write(client, _h(), "Last sync processed 412 rows.", "PRIVATE", job) == 202
+    assert _write(client, _h(), "Last sync processed 412 rows.", "PRIVATE", job)
     q = "what did the last sync process?"
 
     later = _scope(agent_id="nightly", agent_run_id=new_id("agent_run"))
@@ -141,7 +141,7 @@ def test_agent_group_lets_peers_co_work_at_any_depth(client) -> None:
     holding the same group id, however deep they sit and whoever they run for."""
     crew = "crew-alpha"
     scope = _scope(agent_id="peer_a", agent_run_id=new_id("agent_run"), agent_group_id=crew)
-    assert _write(client, _h("alice"), "Upstream deps are mapped.", "AGENT_GROUP", scope) == 202
+    assert _write(client, _h("alice"), "Upstream deps are mapped.", "AGENT_GROUP", scope)
     q = "are the upstream deps mapped?"
 
     peer = _scope(agent_id="peer_b", agent_run_id=new_id("agent_run"), agent_group_id=crew)
@@ -168,10 +168,10 @@ def test_run_hands_off_down_reports_up_and_never_sideways(client) -> None:
     """
     parent = new_id("agent_run")
     sup = _scope(agent_id="super", agent_run_id=parent)
-    assert _write(client, _h("alice"), "Plan: split revenue from cost.", "RUN", sup) == 202
+    assert _write(client, _h("alice"), "Plan: split revenue from cost.", "RUN", sup)
 
     child = _scope(agent_id="worker", agent_run_id=new_id("agent_run"), parent_agent_run_id=parent)
-    assert _write(client, _h("alice"), "Finding: schema drift in Q3.", "RUN", child) == 202
+    assert _write(client, _h("alice"), "Finding: schema drift in Q3.", "RUN", child)
 
     plan, finding = "split revenue", "schema drift"
     down = _read(client, _h("alice"), "plan or finding", child)
@@ -201,13 +201,8 @@ def test_a_withdrawn_audience_is_refused_at_the_door(client, withdrawn: str) -> 
     """Refused by the schema, not accepted and quietly dropped. Three of these used to be
     accepted with a 202 and then produce a memory nobody could read."""
     r = client.post(
-        "/v1/observations",
+        "/v1/memories",
         headers=_h("alice"),
-        json={
-            "scope": _scope(),
-            "kind": "MESSAGE",
-            "content": "x",
-            "hints": {"visibility": withdrawn},
-        },
+        json={"scope": _scope(), "content": "x", "visibility": withdrawn},
     )
     assert r.status_code == 422, f"{withdrawn} must not be accepted: {r.text}"

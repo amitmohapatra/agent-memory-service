@@ -10,8 +10,8 @@ Every relation belongs to exactly one layer, assigned deterministically from its
 - ``entity``     — everything else: typed facts between entities and values
 
 The retrieval stage walks the layers in a query-dependent order ("why" questions read the
-causal layer first, "when" questions the temporal one) and ``/v1/graph/query`` can restrict
-a traversal to a subset of layers.
+causal layer first, "when" questions the temporal one) and
+``GET /v1/graph/entities/{id}?layers=`` can restrict a traversal to a subset of layers.
 """
 
 from __future__ import annotations

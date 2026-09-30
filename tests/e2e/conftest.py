@@ -103,3 +103,28 @@ def sdk_client(app, *, api_key: str = "test-key"):
     transport = httpx.ASGITransport(app=app)
     http = httpx.AsyncClient(transport=transport, base_url="http://memory.test")
     return MemoryClient("http://memory.test", api_key=api_key, http_client=http)
+
+
+def message_body(body: dict) -> dict:
+    """``{"scope", role, content, ...}`` as the ``/v1/messages`` body: a one-message list."""
+    body = dict(body)
+    return {"scope": body.pop("scope"), "messages": [body]}
+
+
+class OneAck:
+    """A ``/v1/messages`` response for one message: ``json()`` is that message's ack."""
+
+    def __init__(self, response: httpx.Response) -> None:
+        self.response = response
+        self.status_code = response.status_code
+        self.headers = response.headers
+        self.text = response.text
+
+    def json(self):
+        data = self.response.json()
+        return data["messages"][0] if self.status_code == 202 else data
+
+
+def post_message(client, headers: dict, body: dict) -> OneAck:
+    """POST one message (``{"scope", role, content, ...}``) to ``/v1/messages``."""
+    return OneAck(client.post("/v1/messages", headers=headers, json=message_body(body)))

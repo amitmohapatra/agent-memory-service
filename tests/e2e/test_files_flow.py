@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
@@ -20,10 +20,8 @@ def test_upload_parse_and_status(client) -> None:
         "session_id": new_id("session"),
         "turn_id": new_id("turn"),
     }
-    msg = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": scope, "role": "USER", "content": "here is the report"},
+    msg = post_message(
+        client, H, {"scope": scope, "role": "USER", "content": "here is the report"}
     ).json()
     r = client.post(
         "/v1/documents",
@@ -77,9 +75,11 @@ async def test_sdk_attachments(app, client) -> None:
         session_id=new_id("session"),
         turn_id=new_id("turn"),
     )
-    ack = await ctx.chat.user(
-        "summarise this", attachments=[("notes.md", b"# Notes\n\nA short note.", "text/markdown")]
+    [ack] = await ctx.history.add([("USER", "summarise this")])
+    notes = await ctx.advanced.documents.add(
+        ("notes.md", b"# Notes\n\nA short note.", "text/markdown"), message_id=ack.message_id
     )
+    assert notes.document_id
     handle = await ctx.advanced.documents.add(
         io.BytesIO(b"# Two\n\nAnother.").getvalue(),
         filename="two.md",

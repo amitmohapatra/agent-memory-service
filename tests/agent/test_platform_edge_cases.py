@@ -5,7 +5,6 @@ a service key cannot administer; an admin key cannot name another tenant
 the platform key onboards and nothing else; no bootstrap secret, no platform
 a suspended tenant's keys stop on the next request and resume when the tenant does
 identifiers are never reused; deleting a workspace revokes the keys bound to it
-deleting a group removes it from every workspace it was admitted to
 revocation is idempotent; the audit is paginated and newest first
 """
 
@@ -133,34 +132,6 @@ async def test_identifiers_are_never_reused_and_bound_keys_die_with_their_worksp
     with pytest.raises(MemoryError) as missing:
         await admin.tenant.keys.issue("service", "x", workspace_id="finance")
     assert missing.value.status == 404
-
-
-async def test_deleting_a_group_removes_it_from_every_workspace(app, running) -> None:
-    acme = await sdk(app, BOOTSTRAP).admin.create_tenant("Acme", tenant_id="acme")
-    admin = sdk(app, acme.admin_key.token)
-    for ws in ("legal", "finance"):
-        await admin.tenant.workspaces.create(ws.title(), workspace_id=ws)
-    await admin.tenant.groups.create("Counsel", group_id="counsel")
-    for user in ("lawyer1", "lawyer2"):
-        await admin.tenant.groups.add_user("counsel", user)
-    await admin.tenant.workspaces.set_member("legal", "group:counsel")
-    await admin.tenant.workspaces.set_member("finance", "group:counsel", role="viewer")
-    service = await admin.tenant.keys.issue("service", "h")
-    reader = sdk(app, service.token).bind(user_id="lawyer1", workspace_id="legal")
-    await reader.remember("Retainer letters are renewed in March.", visibility="WORKSPACE")
-    colleague = sdk(app, service.token).bind(user_id="lawyer2", workspace_id="legal")
-    assert _mentions(await colleague.search("retainer letters"), "Retainer"), "through the group"
-    await admin.tenant.groups.delete("counsel")
-    assert not _mentions(await colleague.search("retainer letters"), "Retainer"), "gone with it"
-    for ws in ("legal", "finance"):
-        members = await admin.tenant.workspaces.members(ws)
-        assert all(m.principal != "group:counsel" for m in members), ws
-    with pytest.raises(MemoryError) as unknown_group:
-        await admin.tenant.workspaces.set_member("legal", "group:counsel")
-    assert unknown_group.value.status == 404
-    with pytest.raises(MemoryError) as bad_principal:
-        await admin.tenant.workspaces.set_member("legal", "robot:x")
-    assert bad_principal.value.status == 422
 
 
 async def test_revocation_is_idempotent_and_the_audit_pages_newest_first(app, running) -> None:
@@ -301,14 +272,12 @@ async def test_deleting_twice_converges_and_a_workspace_admin_must_be_a_user(app
     acme = await sdk(app, BOOTSTRAP).admin.create_tenant("Acme", tenant_id="acme")
     admin = sdk(app, acme.admin_key.token)
     await admin.tenant.workspaces.create("Finance", workspace_id="finance")
-    await admin.tenant.groups.create("Analysts", group_id="analysts")
     with pytest.raises(MemoryError) as not_a_user:
         await admin.tenant.workspaces.set_member("finance", "agent:bot", role="admin")
     assert not_a_user.value.status == 422
     await admin.tenant.workspaces.set_member("finance", "agent:bot", role="member")
     for _ in range(2):  # a retry after a lost 204 is not an error
         await admin.tenant.workspaces.delete("finance")
-        await admin.tenant.groups.delete("analysts")
     with pytest.raises(MemoryError) as never:
         await admin.tenant.workspaces.delete("never-existed")
     assert never.value.status == 404
@@ -344,11 +313,14 @@ async def test_only_members_write_into_a_team(app, running) -> None:
     assert _mentions(await reader.search("Q3 close"), "Q3 close")
     # threads: a non-member may not open one inside the team; anyone may under a bare anchor
     with pytest.raises(MemoryError) as thread:
-        await harness.bind(user_id="u3", workspace_id="finance").chat.create(title="plan")
+        await harness.bind(
+            user_id="u3", workspace_id="finance", thread_id="thr-plan"
+        ).history.update(title="plan")
     assert thread.value.status == 403
-    anchored = harness.bind(user_id="u3", workspace_id="anchor-only")
-    assert (await anchored.chat.create(title="ok")).thread_id
-    assert (await member.chat.create(title="ours")).thread_id
+    anchored = harness.bind(user_id="u3", workspace_id="anchor-only", thread_id="thr-ok")
+    assert (await anchored.history.update(title="ok")).thread_id
+    ours = harness.bind(user_id="u1", workspace_id="finance", thread_id="thr-ours")
+    assert (await ours.history.update(title="ours")).thread_id
 
 
 async def test_retention_forgets_only_live_rows_of_active_tenants(app, running) -> None:
@@ -376,26 +348,14 @@ async def test_retention_forgets_only_live_rows_of_active_tenants(app, running) 
 
 
 async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running) -> None:
-    """Observations were gated first; a message hint and a tool record mint the same
-    audience and must answer the same 403."""
+    """Memories were gated first; a tool record mints the same audience and must answer the
+    same 403."""
     acme = await sdk(app, BOOTSTRAP).admin.create_tenant("Acme", tenant_id="acme")
     admin = sdk(app, acme.admin_key.token)
     await admin.tenant.workspaces.create("Finance", workspace_id="finance")
     await admin.tenant.workspaces.set_member("finance", "user:u1")
     token = (await admin.tenant.keys.issue("service", "h")).token
     harness = sdk(app, token)
-    thread = await harness.bind(user_id="u3").chat.create(title="mine")  # own thread, no team
-    planted = running.post(
-        "/v1/messages",
-        headers={"X-API-Key": token, "X-Trellis-User": "u3", "X-Trellis-Workspace": "finance"},
-        json={
-            "scope": {"thread_id": thread.thread_id, "session_id": "ses_1", "turn_id": "trn_1"},
-            "role": "USER",
-            "content": "Planted through a message.",
-            "hints": {"visibility": "WORKSPACE"},
-        },
-    )
-    assert planted.status_code == 403, planted.text
     tool = running.post(
         "/v1/tools/invocations",
         headers={"X-API-Key": token, "X-Trellis-User": "u3", "X-Trellis-Workspace": "finance"},
@@ -409,21 +369,6 @@ async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running)
     )
     assert tool.status_code == 403, tool.text
     member = harness.bind(user_id="u1", workspace_id="finance")
-    ok = running.post(
-        "/v1/messages",
-        headers={"X-API-Key": token, "X-Trellis-User": "u1", "X-Trellis-Workspace": "finance"},
-        json={
-            "scope": {
-                "thread_id": (await member.chat.create(title="ours")).thread_id,
-                "session_id": "s",
-                "turn_id": "t",
-            },
-            "role": "USER",
-            "content": "Budget review moved to Thursday.",
-            "hints": {"visibility": "WORKSPACE"},
-        },
-    )
-    assert ok.status_code in (200, 201, 202), ok.text
     assert not _mentions(await member.search("planted"), "Planted")
 
 
@@ -573,7 +518,7 @@ async def test_odd_identifiers_and_control_characters_are_request_errors(app, ru
     h = _admin_headers(acme.admin_key.token)
     assert running.get("/v1/workspaces/not%20valid", headers=h).status_code == 422
     assert running.delete("/v1/keys/a%00b", headers=h).status_code == 422
-    assert running.delete("/v1/groups/x%20y", headers=h).status_code == 422
+    assert running.delete("/v1/workspaces/x%20y", headers=h).status_code == 422
     created = running.post(
         "/v1/workspaces", headers=h, json={"name": "Fin\u0000ance", "workspace_id": "fin"}
     )
@@ -617,7 +562,9 @@ async def test_an_id_already_used_as_an_anchor_cannot_become_a_team(app, running
     acme = await sdk(app, BOOTSTRAP).admin.create_tenant("Acme", tenant_id="acme")
     admin = sdk(app, acme.admin_key.token)
     harness = sdk(app, (await admin.tenant.keys.issue("service", "h")).token)
-    await harness.bind(user_id="u1", workspace_id="proj-x").chat.create(title="before teams")
+    await harness.bind(user_id="u1", workspace_id="proj-x", thread_id="thr-x").history.update(
+        title="before teams"
+    )
     with pytest.raises(MemoryError) as taken:
         await admin.tenant.workspaces.create("Project X", workspace_id="proj-x")
     assert taken.value.status == 409 and "anchor" in str(taken.value)

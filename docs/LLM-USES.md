@@ -41,7 +41,7 @@ with the model off (`docs/MEASUREMENTS.md`, section 8).
 | use | when it runs | tier | fallback |
 |---|---|---|---|
 | `query_expansion` | `/v1/context` or `/v1/recall` whose question no rule classified - which includes every question not in English, since the router's cue patterns are English and never route another language (`modules/retrieval/router.py`) | fast | the unexpanded hybrid search (every dense space, BM25, the graph by entity name) |
-| `entity_resolution` | `/v1/graph/query` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
+| `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
 | `grounding_judge` | `/v1/verify` and `/v1/context` with `answer`: claims the NLI cascade could not decide | strong | the claim stays undecided |
 
 Removed in 0.3.0: `query_decomposition`. A model call on the read path took 3.2-12.2 s

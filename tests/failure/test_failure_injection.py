@@ -348,7 +348,9 @@ async def test_cache_flush_over_the_api_never_hides_acknowledged_messages(app, c
 
         async def say(i: int) -> int:
             r = await c.post(
-                "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": f"m{i}"}
+                "/v1/messages",
+                headers=H,
+                json={"scope": scope, "messages": [{"role": "USER", "content": f"m{i}"}]},
             )
             return r.status_code
 
@@ -392,7 +394,7 @@ async def test_cache_flush_over_the_api_never_hides_acknowledged_messages(app, c
             r = await c.post(
                 "/v1/messages",
                 headers=H,
-                json={"scope": scope2, "role": "USER", "content": "first"},
+                json={"scope": scope2, "messages": [{"role": "USER", "content": "first"}]},
             )
             assert r.status_code == 202
         finally:
@@ -400,7 +402,7 @@ async def test_cache_flush_over_the_api_never_hides_acknowledged_messages(app, c
         r = await c.post(
             "/v1/messages",
             headers=H,
-            json={"scope": scope2, "role": "ASSISTANT", "content": "second"},
+            json={"scope": scope2, "messages": [{"role": "ASSISTANT", "content": "second"}]},
         )
         assert r.status_code == 202
         got = [

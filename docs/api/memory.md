@@ -1,24 +1,24 @@
-# Memory: statements and observations in, memories out
+# Memory: statements and events in, memories out
 
-Two ways in, deliberately different. An **observation** is evidence — something that happened —
+Two ways in, deliberately different. An **event** (a message with `role: "EVENT"`, or any turn of the transcript) is evidence — something that happened —
 and the service decides, asynchronously, what it teaches: what becomes a durable memory, how it
 relates to what is already held, and when it stops being true. A **statement** (`remember`) is
 the caller asserting a fact: it is stored verbatim as one memory before the call returns, with no
 extraction and no admission gate, and a correction to it is a new version (`update`), never an
 overwrite.
 
-## What one observation becomes
+## What one message becomes
 
 ```mermaid
 sequenceDiagram
   participant A as Your agent
-  participant API as POST /v1/observations
+  participant API as POST /v1/messages
   participant DB as PostgreSQL
   participant W as Worker
   participant V as Vector store
-  A->>API: {kind, content, scope, hints}  + Idempotency-Key
-  API->>DB: the observation row + its job, one transaction
-  API-->>A: 202 {observation_id, job_ids, deduplicated}
+  A->>API: {scope, messages: [{role, content}]}  + Idempotency-Key
+  API->>DB: the message rows + their jobs, one transaction
+  API-->>A: 202 {messages: [{message_id, job_ids, deduplicated}]}
   Note over API,A: acknowledged = durable, not yet retrievable
   W->>DB: extract candidates · dedupe · admission gate
   W->>DB: memories, with validity windows and audience
@@ -36,29 +36,24 @@ of evidence.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/observations` | submit an observation (durably acknowledged, processed asynchronously) | `ctx.observe(...)` |
+| `POST /v1/messages` | append messages; `role: "EVENT"` is something that happened (durably acknowledged, processed asynchronously) | `ctx.history.add([...])` |
 | `POST /v1/memories` | remember a statement verbatim, as one memory, now (deduplicated per owner and scope) | `ctx.remember(...)` |
 | `POST /v1/memories/{memory_id}/supersede` | replace a memory with a new version; the old one is closed, not deleted | `ctx.update(id, content, reason=...)` |
 | `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.list()`, `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
-| `POST /v1/graph/query` | resolve entities and traverse the knowledge graph (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.query(...)` |
 | `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.advanced.graph.entities(...)` |
-| `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence | `ctx.advanced.graph.entity(id)` |
+| `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence; `depth` hops of traversal (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.entity(id)` |
 | `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.advanced.job(job_id)` |
 
-`kind` is a closed vocabulary — `MESSAGE`, `FILE`, `AGENT_RESULT`, `TOOL_RESULT`, `DECISION`,
-`FEEDBACK`, `EVENT`, `IMPORT` — and anything else is refused rather than stored as a surprise.
+`role` is a closed vocabulary (`USER`, `ASSISTANT`, `SYSTEM`, `TOOL`, `EVENT`, …) and anything
+else is refused rather than stored as a surprise.
 
-## `observe` versus `remember`
+## An event versus `remember`
 
 ```python
 # "this happened": let the service classify, extract and decide, later
-await ctx.observe(
-    "Stock check for SKU-1 returned 95 units at EU-1.",
-    kind="EVENT",
-    sku="SKU-1",  # anything extra is custom metadata
-)
+await ctx.history.add([("EVENT", "Stock check for SKU-1 returned 95 units at EU-1.")])
 
 # "this is true": stored as said, now; the id comes back
 fact = await ctx.remember(
@@ -102,12 +97,13 @@ ranked. The ranked, query-driven view is `recall` ([context.md](context.md)).
 ## The knowledge graph
 
 ```python
-answer = await ctx.advanced.graph.query("who supplies SKU-1?", hops=2)
-for fact in answer.facts:
+[sku] = await ctx.advanced.graph.entities(query="SKU-1", limit=1)
+profile = await ctx.advanced.graph.entity(sku.entity_id, depth=2)
+for fact in profile.relations:
     print(fact.subject, fact.predicate, fact.object, fact.valid_from, fact.valid_to)
 ```
 
-Entities and relations are extracted from the same observations, deterministically, with validity
+Entities and relations are extracted from the same messages, deterministically, with validity
 windows — so "who approved this, and when" is answerable, and a fact that stopped being true is
 closed rather than deleted. Traversal is bounded (hops and fan-out) and filtered by the caller's
 audience before it walks; each hop's limit is spent only on new, visible edges.
@@ -138,7 +134,7 @@ facts change.
 ## Waiting, when you must
 
 ```python
-ack = await ctx.observe("Castor Supply raised lead time to 12 days.", kind="EVENT")
+[ack] = await ctx.history.add([("EVENT", "Castor Supply raised lead time to 12 days.")])
 for job_id in ack.job_ids:  # one write can queue more than one job
     job = await ctx.advanced.job(job_id)
     while job.status in ("PENDING", "RUNNING", "RETRYING"):
@@ -153,8 +149,8 @@ that sometimes you genuinely need to know.
 
 ## What this area does not do
 
-* it does not extract anything from a statement, or store an observation synchronously — an
-  observation's memories are not readable until its job has run;
+* it does not extract anything from a statement, or process a message synchronously — a
+  message's memories are not readable until its job has run;
 * it does not take the *identity* from the body. The body's `scope` carries lineage only —
   thread, session, turn, work, task, agent, agent run, parent run — while tenant, workspace and
   user come from the credential and the trusted headers, and a body value that disagrees with a

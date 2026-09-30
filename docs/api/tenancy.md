@@ -1,7 +1,7 @@
 # Tenancy: who may see what
 
 A tenant is the wall nothing crosses. Inside it, a **workspace** is a team that shares what it
-stores, a **group** is a set of users a workspace can admit at once, a **key** is a credential bound
+stores, a **key** is a credential bound
 to the tenant that issued it, and a **model key** is the Bifrost virtual key a read may spend
 against. The read audit says who actually read which records (ADR 0021, ADR 0023).
 
@@ -17,11 +17,9 @@ flowchart TB
   Q --> R["results"]
   R --> AU["read audit: credential · principal · kind · record_ids · query_hash"]
   subgraph membership
-    W["workspace member: user:… | agent:… | group:…"]
-    G["group members"]
+    W["workspace member: user:… | agent:…"]
   end
   W --> A
-  G --> W
 ```
 
 The filter is built **before** the search, not applied to its results: a store-side filter cannot
@@ -37,16 +35,12 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `POST /v1/workspaces` | create a workspace | `t.workspaces.create(name, workspace_id=…)` |
 | `GET /v1/workspaces` · `/{id}` | list, or read one | `t.workspaces.list()`, `.get(id)` |
 | `DELETE /v1/workspaces/{id}` | delete it; every member loses the audience and every key bound to it is revoked at once | `t.workspaces.delete(id)` |
-| `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>`, `agent:<id>` or `group:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
+| `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>` or `agent:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
 | `DELETE /v1/workspaces/{id}/members/{principal_ref}` | remove a member; its next request no longer reads the workspace | `t.workspaces.remove_member(id, principal)` |
 | `GET /v1/workspaces/{id}/members` | who is in it | `t.workspaces.members(id)` |
-| `POST /v1/groups` · `GET /v1/groups` · `DELETE /v1/groups/{id}` | a set of users a workspace can admit at once | `t.groups.create(...)`, `.list()`, `.delete(id)` |
-| `PUT` / `DELETE /v1/groups/{id}/members/{user_id}` · `GET /v1/groups/{id}/members` | group membership | `t.groups.add_user(...)`, `.remove_user(...)`, `.members(id)` |
 | `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
-| `GET` / `PUT` / `DELETE /v1/workspaces/{id}/model-key` | the workspace's key, used by its agents | `t.workspaces.model_key_status(id)`, `.advanced.model_keys.set(id, vk)`, `.advanced.model_keys.revoke(id)` |
 | `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` |
 | `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…)` |
-| `GET` / `PUT /v1/workspaces/{id}/model-key/policy` | the workspace's model policy, followed by its agents | `t.workspaces.model_policy(id)`, `.set_model_policy(id, uses, read_assist=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
 
@@ -59,9 +53,7 @@ await t.workspaces.create("supply-chain", workspace_id="supply-chain-ws")
 await t.workspaces.set_member("supply-chain-ws", "user:planner-7")
 await t.workspaces.set_member("supply-chain-ws", "agent:reorder-agent")
 
-group = await t.groups.create("planners")
-await t.groups.add_user(group.group_id, "planner-8")
-await t.workspaces.set_member("supply-chain-ws", f"group:{group.group_id}")
+await t.workspaces.set_member("supply-chain-ws", "user:planner-8")
 
 issued = await t.keys.issue("service", "reorder-agent", workspace_id="supply-chain-ws")
 print(issued.token)  # shown once: store it now
@@ -101,13 +93,13 @@ A read that is permitted to use an LLM spends *someone's* virtual key, and the s
 most specific level that has a row:
 
 ```
-the acting principal's key  →  its workspace's key  →  the tenant's key  →  (no row anywhere) the operator's
+the acting agent's key  →  the tenant's key  →  (no row anywhere) the operator's
 ```
 
 Two rules make that safe rather than merely convenient:
 
 * **a revocation at the resolved level refuses** — a revoked agent never silently borrows the
-  team's or the operator's key, because a tombstone raises instead of falling through;
+  tenant's or the operator's key, because a tombstone raises instead of falling through;
 * **the operator fallback applies only while no row exists at any level**, and a key registered
   mid-request fails that request closed rather than mixing keys.
 
@@ -123,17 +115,16 @@ print(await t.model_key_status())  # the tenant level, metadata only
 
 ## Model policies: what a key may be spent on
 
-A policy narrows what the model is used for, at the tenant or workspace level, and resolves the
-way keys do: the most specific level that has a row wins. With no row anywhere the default is
+A policy narrows what the model is used for, at the tenant level (`uses`, `read_assist`,
+`models: {use: model}`, `eval_sample`). With no row the default is
 every use, reads assisted. A use runs only when all three agree:
 
 ```
 the operator's allow-list (MEMORY__MODELS__LLM__USES)  ∩  the resolved policy's uses  ∧  a key that can pay
 ```
 
-`read_assist` decides whether a read (`/v1/context`, `/v1/recall`, `/v1/verify`,
-`/v1/graph/query`) consults the model when the request does not set `use_llm`; an explicit
-`use_llm` overrides it for that request only. Background work — extraction, reflection,
+`read_assist` decides whether a read (`/v1/context`, `/v1/recall`, `/v1/verify`, the graph
+routes) consults the model; a request cannot override the policy. Background work — extraction, reflection,
 connections, summaries — runs bound to the owner of the data, so the owner's key pays and the
 owner's policy decides; a periodic job scans only tenants that hold a live key (every tenant when
 the operator's key pays). Changing a policy invalidates the assisted read output built under it.

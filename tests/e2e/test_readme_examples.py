@@ -36,12 +36,18 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
     memory = sdk_client(app)
     ctx = _bind(memory)
 
-    await ctx.chat.user("Revenue was EUR 412 million in FY26.")
-    await ctx.chat.assistant("Noted — that's up 4% year on year.")
+    await ctx.history.add(
+        [
+            ("USER", "Revenue was EUR 412 million in FY26."),
+            ("ASSISTANT", "Noted — that's up 4% year on year."),
+        ]
+    )
     await ctx.remember("Prefers metric units", memory_type="PREFERENCE")
-    await ctx.observe("User cancelled the Pro plan", kind="EVENT")
+    await ctx.history.add([("EVENT", "User cancelled the Pro plan")])
 
-    bundle = await ctx.context("how did revenue develop?")
+    prompt = await ctx.context("how did revenue develop?")
+    assert prompt.rendered and prompt.bundle_id
+    bundle = await ctx.context("how did revenue develop?", format="full")
     # the attributes the README tells readers to inspect
     assert isinstance(bundle.rendered, str) and bundle.rendered
     for attr in ("conversation", "memories", "knowledge", "graph_facts", "evidence"):
@@ -51,7 +57,7 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
     assert await ctx.search("revenue") != []
     assert await ctx.advanced.memories.list() != []
 
-    gated = await ctx.context("what were FY26 restructuring savings?", require_evidence=True)
+    gated = await ctx.context("what were FY26 restructuring savings?", format="full")
     assert gated.evidence.status  # the README branches on this value
 
 
@@ -111,7 +117,7 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             step=1,
         )
         # only a run labelled successful validates a procedure
-        await run.outcome(success=True)
+        await run.feedback("run", run.scope.agent_run_id, "confirm", source="system")
 
     hints = await agent.tool_hints(TASK, available=[t["name"] for t in TOOLS])
     assert hints.plan is not None and hints.next == "pricing.lookup_price"

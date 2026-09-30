@@ -83,15 +83,13 @@ async def test_onboard_share_revoke(app, running) -> None:
     assert all(r.query_hash and not r.query_hash.startswith("when") for r in reads)
 
 
-async def test_groups_admit_users_at_once_and_a_bound_key_is_pinned(app, running) -> None:
+async def test_members_are_admitted_and_a_bound_key_is_pinned(app, running) -> None:
     platform = sdk(app, BOOTSTRAP)
     acme = await platform.admin.create_tenant("Acme", tenant_id="acme")
     admin = sdk(app, acme.admin_key.token)
     await admin.tenant.workspaces.create("Legal", workspace_id="legal")
-    await admin.tenant.groups.create("Counsel", group_id="counsel")
-    await admin.tenant.groups.add_user("counsel", "lawyer1")
-    await admin.tenant.groups.add_user("counsel", "lawyer2")
-    await admin.tenant.workspaces.set_member("legal", "group:counsel")
+    await admin.tenant.workspaces.set_member("legal", "user:lawyer1")
+    await admin.tenant.workspaces.set_member("legal", "user:lawyer2")
 
     pinned = await admin.tenant.keys.issue("service", "legal-bot", workspace_id="legal")
     bot = sdk(app, pinned.token)
@@ -104,7 +102,7 @@ async def test_groups_admit_users_at_once_and_a_bound_key_is_pinned(app, running
         await bot.bind(user_id="lawyer2", workspace_id="finance").search(ask)
     assert elsewhere.value.status == 403
 
-    # leaving the group is leaving the workspace; the author alone keeps its own memory
-    await admin.tenant.groups.remove_user("counsel", "lawyer2")
+    # leaving the workspace is losing its memory; the author alone keeps its own
+    await admin.tenant.workspaces.remove_member("legal", "user:lawyer2")
     assert not _mentions(await bot.bind(user_id="lawyer2").search(ask), "general counsel")
     assert _mentions(await bot.bind(user_id="lawyer1").search(ask), "general counsel")

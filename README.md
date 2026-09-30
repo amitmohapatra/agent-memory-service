@@ -20,10 +20,10 @@ ctx = memory.bind(
     thread_id="chat-42",
 )
 
-await ctx.chat.user("I'm in Berlin and I prefer short answers.")
+await ctx.history.add([("USER", "I'm in Berlin and I prefer short answers.")])
 bundle = await ctx.context("draft a reply about the Q3 numbers")  # everything relevant
 answer = await my_agent.run(bundle.rendered)  # your agent, your model
-await ctx.chat.assistant(answer)
+await ctx.history.add([("ASSISTANT", answer)])
 ```
 
 Next turn — in a different session, a week later — the agent already knows the timezone and
@@ -201,8 +201,8 @@ setting; `serve.py` prints which mode it is in, and any benchmark produced that 
 | mode | who decides what the model sees | the calls |
 |---|---|---|
 | **auto** (push) | the service, every turn | `ctx.context(task, tools=...)` → `rendered` goes into the prompt: the pinned profile, the thread's durable summary and the messages after it, the procedure learned for the task, tool hints, and the memories, passages and graph facts that clear the relevance floor, within `token_budget`. The agent harness does this for you with `memory="read_write"`. |
-| **react** (pull) | the agent, mid-run | `ctx.agent_tools()` lists nine tools (`memory_search`, `memory_remember`, `memory_update`, `memory_forget`, `history_search`, `profile_edit`, `procedures_search`, `tool_search`, `record_outcome`) with JSON schemas; `ctx.call_agent_tool(name, args)` runs one. Every call is logged as a pull, and what the agent keeps pulling for a kind of request is what the push starts including (prefetch learning). |
-| **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`, `record_tool`, `outcome`, `tool_hints`, `profile`, `summary`; everything else (documents, graph, admin, model keys) under `ctx.advanced`. |
+| **react** (pull) | the agent, mid-run | `ctx.agent_tools()` lists six tools (`memory_search` — `kinds` includes `message` for the transcript —, `memory_remember`, `memory_update`, `memory_forget`, `profile_edit`, `tool_search`) with JSON schemas; `ctx.call_agent_tool(name, args)` runs one. Every call is logged as a pull, and what the agent keeps pulling for a kind of request is what the push starts including (prefetch learning). |
+| **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `feedback`, `record_tool`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`; everything else (documents, graph, admin, model keys) under `ctx.advanced`. |
 
 The three mix: a harness pushes context and also hands the agent the pull tools.
 
@@ -232,16 +232,20 @@ ctx = memory.bind(
 `tenant_id` is the wall nothing crosses; everything else narrows visibility further.
 
 Thread, session and turn are **your** identifiers — pass the ones your app already has, and
-the service creates them on first use. `chat.*` needs a thread; without a session a message
+the service creates them on first use. `history.*` needs a thread (or a run id, whose thread it names); without a session a message
 joins the thread's own session, and without a turn a user message opens the thread's next turn
-and a reply joins it. For `remember`, `observe`, `recall` and `context` a tenant is enough. If you have
-no conversation to attach to, `await ctx.chat.create()` gives you a thread to start from.
+and a reply joins it. For `remember`, `search` and `context` a tenant is enough. To title a thread before its
+first message, `await ctx.history.update(title=...)`.
 
 ### Record the conversation
 
 ```python
-await ctx.chat.user("Revenue was EUR 412 million in FY26.")
-await ctx.chat.assistant("Noted — that's up 4% year on year.")
+await ctx.history.add(
+    [
+        ("USER", "Revenue was EUR 412 million in FY26."),
+        ("ASSISTANT", "Noted — that's up 4% year on year."),
+    ]
+)
 ```
 
 That is all. In the background the service stores the messages, archives them immutably,
@@ -282,13 +286,13 @@ When your app knows something rather than inferring it from chat:
 ```python
 fact = await ctx.remember("Prefers metric units", memory_type="PREFERENCE")
 await ctx.update(fact.memory_id, "Prefers imperial units", reason="user corrected it")
-await ctx.observe("User cancelled the Pro plan", kind="EVENT")
+await ctx.history.add([("EVENT", "User cancelled the Pro plan")])
 ```
 
 `remember` stores what you assert verbatim, as one memory, before it returns (`POST
 /v1/memories`; the same content in the same scope is the same memory). `update` replaces it
-with a new version and closes the old one, which stays readable in a temporal view. `observe`
-hands the service raw evidence and lets it decide, asynchronously, what is worth keeping.
+with a new version and closes the old one, which stays readable in a temporal view. An `EVENT`
+message hands the service raw evidence and lets it decide, asynchronously, what is worth keeping.
 
 ### Add documents
 
@@ -397,9 +401,7 @@ acme = await platform.admin.create_tenant("Acme", tenant_id="acme")  # admin key
 admin = MemoryClient(url, api_key=acme.admin_key.token)
 await admin.tenant.workspaces.create("Finance", workspace_id="finance")  # a team
 await admin.tenant.workspaces.set_member("finance", "user:u1")
-await admin.tenant.groups.create("Analysts", group_id="analysts")
-await admin.tenant.groups.add_user("analysts", "u2")
-await admin.tenant.workspaces.set_member("finance", "group:analysts")  # a group at once
+await admin.tenant.workspaces.set_member("finance", "user:u2")
 service = await admin.tenant.keys.issue("service", "finance-harness")  # what the harness holds
 
 harness = MemoryClient(url, api_key=service.token)  # no tenant_id anywhere
@@ -481,7 +483,8 @@ await ctx.record_tool(
     task="update quote Q-1183 with EMEA price for SKU-22",
     latency_ms=42,
 )
-await ctx.outcome(success=True)  # the bound run; only successful runs teach a procedure
+# only successful runs teach a procedure
+await ctx.feedback("run", ctx.scope.agent_run_id, "confirm", source="system")
 ```
 
 Recording is idempotent on (run, step, tool, arguments), so retries never double-count.
@@ -694,11 +697,10 @@ record = await ctx.feedback(
 page = await ctx.feedback.page_for("memory", memory.memory_id)  # .items, .next_cursor
 ```
 
-**Team model keys.** A model call resolves the most specific Bifrost key that exists: the
-agent's own, then the workspace's, then the tenant's, then the operator's. Tenant admins set
-the team levels with `PUT /v1/workspaces/{id}/model-key` and `PUT /v1/model-key`
-(`admin.workspaces.set_model_key(...)`, `admin.set_model_key(...)`); a revoked key at any
-level refuses instead of borrowing the next one.
+**Model keys.** A model call resolves the most specific Bifrost key that exists: the
+agent's own (`PUT /v1/agents/model-key`), then the tenant's (`PUT /v1/model-key`,
+`admin.set_model_key(...)`), then the operator's; a revoked key refuses instead of
+borrowing the next one.
 
 **Pagination.** Every list route takes `cursor` and `limit` and answers
 `Link: <...>; rel="next"` when a next page exists (envelope bodies also carry

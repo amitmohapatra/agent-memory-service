@@ -1,4 +1,4 @@
-"""End-to-end: /v1/graph/query over HTTP and the SDK, and graph facts inside /v1/context."""
+"""End-to-end: /v1/graph/entities over HTTP and the SDK, and graph facts inside /v1/context."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
@@ -26,10 +26,8 @@ def _scope() -> dict[str, str]:
 
 def test_graph_query_and_context_facts(client) -> None:
     scope = _scope()
-    msg = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": scope, "role": "USER", "content": "report attached"},
+    msg = post_message(
+        client, H, {"scope": scope, "role": "USER", "content": "report attached"}
     ).json()
     r = client.post(
         "/v1/documents",
@@ -39,52 +37,57 @@ def test_graph_query_and_context_facts(client) -> None:
     )
     assert r.status_code == 202, r.text
     doc_id = r.json()["document_id"]
-    r = client.post(
-        "/v1/graph/query",
-        headers=H,
-        json={"scope": scope, "entities": ["Adjusted EBITDA"], "hops": 2},
-    )
+    found = client.get("/v1/graph/entities", headers=H, params={"q": "Adjusted EBITDA"})
+    assert found.status_code == 200, found.text
+    matched = found.json()["entities"]
+    assert matched and matched[0]["canonical_name"] == "adjusted ebitda"
+    r = client.get(f"/v1/graph/entities/{matched[0]['entity_id']}", headers=H, params={"depth": 2})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert [m["canonical_name"] for m in body["matched"]] == ["adjusted ebitda"]
-    assert body["visited"] > 1 and body["facts"]
-    preds = {f["predicate"] for f in body["facts"]}
+    facts = body["relations"] + body["neighborhood"]["facts"]
+    assert body["neighborhood"]["visited"] > 1 and facts
+    preds = {f["predicate"] for f in facts}
     assert {"defined_in", "mentioned_in", "co_occurs_with"} <= preds
-    defined = next(f for f in body["facts"] if f["predicate"] == "defined_in")
+    defined = next(f for f in facts if f["predicate"] == "defined_in")
     assert defined["document_id"] == doc_id and defined["evidence"][0]["page"] == 1
     assert defined["status"] == "CURRENT" and defined["relation_id"].startswith("rel_")
     # free-text resolution
-    r = client.post(
-        "/v1/graph/query",
+    r = client.get(
+        "/v1/graph/entities",
         headers=H,
-        json={"scope": scope, "query": "what is linked to the restructuring programme?"},
+        params={"q": "what is linked to the restructuring programme?"},
     )
-    assert any(m["canonical_name"] == "restructuring programme" for m in r.json()["matched"])
+    assert any(e["canonical_name"] == "restructuring programme" for e in r.json()["entities"])
     # other user: nothing (thread-scoped document)
-    r = client.post(
-        "/v1/graph/query",
+    r = client.get(
+        "/v1/graph/entities",
         headers={**H, "X-Trellis-User": "u2"},
-        json={"scope": {}, "entities": ["Adjusted EBITDA"]},
+        params={"q": "Adjusted EBITDA"},
     )
-    assert r.status_code == 200 and r.json()["facts"] == [] and r.json()["matched"] == []
+    assert r.status_code == 200 and r.json()["entities"] == []
     # context bundle carries facts with relation citations and rendered "## Facts"
     bundle = client.post(
         "/v1/context",
         headers=H,
-        json={"scope": scope, "query": "Why did Adjusted EBITDA increase despite lower revenue?"},
+        json={
+            "scope": scope,
+            "query": "Why did Adjusted EBITDA increase despite lower revenue?",
+            "format": "full",
+        },
     ).json()
     assert bundle["graph_facts"] and bundle["graph_facts"][0]["citation"].startswith("relation_id:")
     assert "## Facts" in bundle["rendered"]
     pages = {k.get("page") for k in bundle["knowledge"]}
     assert {11, 14, 20} <= pages, pages
     # layer restriction: structural edges only
-    r = client.post(
-        "/v1/graph/query",
+    r = client.get(
+        f"/v1/graph/entities/{matched[0]['entity_id']}",
         headers=H,
-        json={"scope": scope, "entities": ["Adjusted EBITDA"], "layers": ["structural"]},
+        params={"depth": 2, "layers": ["structural"]},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["facts"] and {f["layer"] for f in r.json()["facts"]} == {"structural"}
+    hood = r.json()["neighborhood"]["facts"]
+    assert hood and {f["layer"] for f in hood} == {"structural"}
     # entity search and profile over HTTP, scoped by the same headers
     hits = client.get("/v1/graph/entities", headers=H, params={"q": "adjusted", "limit": 5})
     assert hits.status_code == 200, hits.text
@@ -98,28 +101,33 @@ def test_graph_query_and_context_facts(client) -> None:
     assert client.get("/v1/graph/entities", headers=other, params={"q": "adjusted"}).json() == {
         "entities": []
     }
-    assert (
-        client.post("/v1/graph/query", headers=H, json={"scope": scope, "hops": 9}).status_code
-        == 422
-    )
-    assert client.post("/v1/graph/query", json={"scope": scope}).status_code == 401
+    deep = client.get(f"/v1/graph/entities/{ebitda['entity_id']}", headers=H, params={"depth": 9})
+    assert deep.status_code == 422
+    assert client.get("/v1/graph/entities", params={"q": "adjusted"}).status_code == 401
 
 
 async def test_sdk_graph_temporal(app, client) -> None:
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **_scope())
-    await ctx.chat.user("kick-off")
-    await ctx.observe("I work at ACME Corp.")
-    answer = await ctx.advanced.graph.query(entities=["ACME Corp"])
-    fact = next(f for f in answer.facts if f.predicate == "works_at")
-    assert fact.subject == "user:u1" and fact.object.lower() == "acme corp" and fact.memory_id
-    await ctx.observe("I work at Globex now.")
-    now = await ctx.advanced.graph.query(entities=["ACME Corp", "Globex"])
-    current = [f for f in now.facts if f.predicate == "works_at"]
+    await ctx.history.add([("USER", "kick-off")])
+    await ctx.history.add([("USER", "I work at ACME Corp.")])
+    graph = ctx.advanced.graph
+    [acme] = [e for e in await graph.entities("ACME Corp") if e.canonical_name == "acme corp"]
+    answer = await graph.entity(acme.entity_id, depth=1)
+    fact = next(f for f in answer.relations if f.predicate == "works_at")
+    assert fact.object.lower() == "acme corp" and fact.memory_id
+    await ctx.history.add([("USER", "I work at Globex now.")])
+    [globex] = [e for e in await graph.entities("Globex") if e.canonical_name == "globex"]
+    current = [
+        f
+        for entity in (acme, globex)
+        for f in (await graph.entity(entity.entity_id)).relations
+        if f.predicate == "works_at"
+    ]
     assert len(current) == 1 and current[0].object.lower() == "globex"
-    past = await ctx.advanced.graph.query(
-        entities=["ACME Corp"], as_of=datetime.now(UTC) - timedelta(seconds=30)
+    past = await graph.entity(
+        acme.entity_id, depth=1, as_of=datetime.now(UTC) - timedelta(seconds=30)
     )
-    old = [f for f in past.facts if f.predicate == "works_at"]
+    old = [f for f in past.neighborhood.facts if f.predicate == "works_at"]
     assert old and old[0].status == "SUPERSEDED" and old[0].object.lower() == "acme corp"
     await memory.aclose()

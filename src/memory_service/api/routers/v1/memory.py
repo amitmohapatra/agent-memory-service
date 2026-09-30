@@ -97,7 +97,7 @@ class RememberRequest(BaseModel):
         if self.lifetime in (Lifetime.EPHEMERAL, Lifetime.ARCHIVAL):
             raise ValueError("lifetime must be SHORT_TERM or LONG_TERM")
         if self.memory_type is MemoryType.CUSTOM:
-            raise ValueError("CUSTOM memories are imported through /v1/observations")
+            raise ValueError("CUSTOM is not a type a caller states: use a typed memory_type")
         if self.valid_from and self.valid_to and self.valid_to <= self.valid_from:
             raise ValueError("valid_to must be after valid_from")
         return self

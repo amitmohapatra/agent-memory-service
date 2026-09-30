@@ -1,5 +1,5 @@
-"""End-to-end: upload -> /v1/context with an answer to verify -> /v1/verify by bundle id,
-items and query, over HTTP and the SDK; evidence never leaks across principals."""
+"""End-to-end: upload -> /v1/context -> /v1/verify by bundle id, over HTTP and the SDK;
+evidence never leaks across principals."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
@@ -28,10 +28,8 @@ def _scope() -> dict[str, str]:
 
 
 def _upload(client, scope: dict[str, str]) -> str:
-    msg = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": scope, "role": "USER", "content": "here is the FY26 report"},
+    msg = post_message(
+        client, H, {"scope": scope, "role": "USER", "content": "here is the FY26 report"}
     ).json()
     r = client.post(
         "/v1/documents",
@@ -47,64 +45,38 @@ def test_verify_over_http(client) -> None:
     scope = _scope()
     _upload(client, scope)
     # the bundle carries a handle and what was retrieved but not packed
-    r = client.post(
-        "/v1/context", headers=H, json={"scope": scope, "query": Q, "answer": f"{GOOD} {BAD}"}
-    )
+    r = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q, "format": "full"})
     assert r.status_code == 200, r.text
     bundle = r.json()
-    assert bundle["bundle_id"] and bundle["evidence"]["llm_tokens"] == 0
-    assert isinstance(bundle["evidence"]["unused"], list)
-    grounding = bundle["evidence"]["grounding"]
-    assert [c["verdict"] for c in grounding["claims"]] == ["supported", "contradicted"]
-    assert grounding["per_claim_hallucination_rate"] == 0.5
-    assert grounding["representative"] is False and grounding["nli_provider"] == "lexical-nli-v2"
-    assert grounding["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["item_id"]
-    assert "X-Trellis-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
-    # the plain bundle is unchanged (the report is attached to the response only)
-    plain = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q}).json()
-    assert plain["evidence"]["grounding"] is None and plain["bundle_id"] == bundle["bundle_id"]
+    assert bundle["bundle_id"] and isinstance(bundle["evidence"]["unused"], list)
+    prompt = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q}).json()
+    assert prompt["bundle_id"] == bundle["bundle_id"] and prompt["rendered"]
 
-    # by bundle id, while cached
+    # the answer is verified against the bundle it was given
     r = client.post(
+        "/v1/verify",
+        headers=H,
+        json={"scope": scope, "answer": f"{GOOD} {BAD}", "bundle_id": bundle["bundle_id"]},
+    )
+    assert r.status_code == 200, r.text
+    report = r.json()
+    assert [c["verdict"] for c in report["claims"]] == ["supported", "contradicted"]
+    assert report["per_claim_hallucination_rate"] == 0.5
+    assert report["representative"] is False and report["nli_provider"] == "lexical-nli-v2"
+    assert report["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["item_id"]
+    assert "X-Trellis-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
+    good = client.post(
         "/v1/verify",
         headers=H,
         json={"scope": scope, "answer": GOOD, "bundle_id": bundle["bundle_id"]},
     )
-    assert r.status_code == 200, r.text
-    assert r.json()["source"] == "bundle" and r.json()["per_claim_hallucination_rate"] == 0.0
-    assert r.json()["evidence_count"] == len(bundle["knowledge"]) + len(bundle["summaries"]) + len(
-        bundle["memories"]
-    ) + len(bundle["graph_facts"])
-    # by query: retrieval is re-run under the caller's scope
-    r = client.post("/v1/verify", headers=H, json={"scope": scope, "answer": BAD, "query": Q})
-    assert r.status_code == 200 and r.json()["source"] == "query"
-    assert r.json()["claims"][0]["verdict"] == "contradicted"
-    # by items: evidence the caller holds, with a citation that must match
-    items = [
-        {"item_id": k["item_id"], "text": k["text"], "citation": k["citation"]}
-        for k in bundle["knowledge"][:2]
-    ]
-    r = client.post(
-        "/v1/verify",
-        headers=H,
-        json={"scope": scope, "answer": f"{GOOD[:-1]} [1].", "items": items},
-    )
-    assert r.status_code == 200 and r.json()["source"] == "items"
-    assert r.json()["claims"][0]["verdict"] == "supported"
-    r = client.post(
-        "/v1/verify",
-        headers=H,
-        json={"scope": scope, "answer": f"{GOOD[:-1]} [9].", "items": items},
-    )
-    assert r.json()["claims"][0]["verdict"] == "unsupported"
-    assert r.json()["claims"][0]["method"] == "citation"
+    assert good.status_code == 200 and good.json()["per_claim_hallucination_rate"] == 0.0
 
-    # validation: exactly one evidence source; unknown bundle; problem details
+    # validation: a bundle is required; unknown bundle; problem details
     for payload in (
         {"scope": scope, "answer": GOOD},
-        {"scope": scope, "answer": GOOD, "query": Q, "items": items},
-        {"scope": scope, "answer": GOOD, "query": Q, "unused": items},
-        {"scope": scope, "answer": "", "query": Q},
+        {"scope": scope, "answer": "", "bundle_id": bundle["bundle_id"]},
+        {"scope": scope, "answer": GOOD, "bundle_id": bundle["bundle_id"], "query": Q},
     ):
         r = client.post("/v1/verify", headers=H, json=payload)
         assert r.status_code == 422 and r.json()["code"] == "VALIDATION", payload
@@ -112,19 +84,11 @@ def test_verify_over_http(client) -> None:
         "/v1/verify", headers=H, json={"scope": scope, "answer": GOOD, "bundle_id": "nope"}
     )
     assert r.status_code == 404 and r.json()["code"] == "NOT_FOUND"
-    assert (
-        client.post("/v1/verify", json={"scope": scope, "answer": GOOD, "query": Q}).status_code
-        == 401
+    unauthenticated = client.post(
+        "/v1/verify", json={"scope": scope, "answer": GOOD, "bundle_id": bundle["bundle_id"]}
     )
+    assert unauthenticated.status_code == 401
 
-    # another user cannot verify against this user's document: no evidence, nothing supported
-    other = client.post(
-        "/v1/verify",
-        headers={**H, "X-Trellis-User": "u2"},
-        json={"scope": {}, "answer": GOOD, "query": Q},
-    )
-    assert other.status_code == 200 and other.json()["evidence_count"] == 0
-    assert other.json()["claims"][0]["verdict"] == "unsupported"
     # nor by the bundle handle of the other tenant
     r = client.post(
         "/v1/verify",
@@ -139,56 +103,12 @@ async def test_verify_through_the_sdk(app, client) -> None:
     _upload(client, scope)
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **scope)
-    bundle = await ctx.context(Q)
+    bundle = await ctx.context(Q, format="full")
     assert bundle.bundle_id and bundle.grounding is None
-    report = await ctx.verify(f"{GOOD} {BAD}", bundle=bundle)
+    report = await ctx.verify(f"{GOOD} {BAD}", bundle_id=bundle.bundle_id)
     assert [c.verdict for c in report.claims] == ["supported", "contradicted"]
     assert report.per_claim_hallucination_rate == 0.5 and report.grounded is False
     assert report.claims[1].evidence_ids == [bundle.knowledge[0].item_id]
-    by_query = await ctx.verify(GOOD, query=Q)
-    assert by_query.grounded and by_query.evidence_count > 0
-    by_items = await ctx.verify(f"{GOOD[:-1]} [1].", items=bundle.knowledge[:1])
-    assert by_items.claims[0].verdict == "supported" and by_items.claims[0].citations == ["1"]
-    with pytest.raises(ValueError, match="bundle, items or a query"):
-        await ctx.verify(GOOD)
+    good = await ctx.verify(GOOD, bundle_id=bundle.bundle_id)
+    assert good.grounded and good.evidence_count > 0
     await memory.aclose()
-
-
-async def test_sdk_inline_verification_preserves_generated_provenance(app, client) -> None:
-    from trellis.memory.models import ContextItem
-
-    memory = sdk_client(app)
-    ctx = memory.bind(tenant_id="acme", user_id="u1")
-    claim = "The launch budget was 900 million dollars."
-    generated = ContextItem(
-        item_id="generated",
-        representation="MEMORY",
-        text=claim,
-        citation="memory:generated",
-        attributes={"category": "contextual_fact", "provider": "hindsight-preview"},
-    )
-    source = ContextItem(
-        item_id="source",
-        representation="MEMORY",
-        text="The team discussed the launch.",
-        citation="memory:source",
-    )
-    try:
-        bundle = (await ctx.context("launch budget")).model_copy(
-            update={"memories": [generated, source]}
-        )
-        for options in (
-            {"bundle": bundle},
-            {"items": [generated]},
-            {"items": [generated.verification_item()]},
-        ):
-            report = await ctx.verify(claim + " [1]", **options)
-            assert report.supported == 0
-        supported = bundle.model_copy(
-            update={"memories": [generated, source.model_copy(update={"text": claim})]}
-        )
-        report = await ctx.verify(claim + " [2]", bundle=supported)
-        assert report.supported == 1
-        assert report.claims[0].evidence_ids == ["source"]
-    finally:
-        await memory.aclose()

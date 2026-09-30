@@ -69,14 +69,14 @@ async def test_a_team_reads_back_its_own_language(
     admin = sdk(app, tenant.admin_key.token)
     service = await admin.tenant.keys.issue("service", f"harness-{language}")
     harness = sdk(app, service.token)
-    writer = harness.bind(user_id="writer")
-    ack = await writer.observe(statement, kind="MESSAGE")
-    assert ack.observation_id
+    writer = harness.bind(user_id="writer", thread_id=f"thr-{language}")
+    [ack] = await writer.history.add([("USER", statement)])
+    assert ack.message_id
 
     # the same-language question finds the statement first, and the bundle carries it
     recalled = await writer.search(question, kinds=["memory"])
     assert recalled and statement in _texts(recalled)[:1], _texts(recalled)[:3]
-    bundle = await writer.context(question)
+    bundle = await writer.context(question, format="full")
     assert statement in _texts(bundle.memories)
 
     # another tenant, another key: none of it
@@ -86,5 +86,5 @@ async def test_a_team_reads_back_its_own_language(
 
     # forgetting is forgetting
     memory = next(item for item in recalled if getattr(item, "text", "") == statement)
-    await writer.forget(memory.item_id)
+    await writer.forget(memory.id)
     assert statement not in _texts(await writer.search(question, kinds=["memory"]))

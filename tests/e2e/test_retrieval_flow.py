@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 
 pytestmark = pytest.mark.e2e
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
@@ -25,10 +25,8 @@ def _scope() -> dict[str, str]:
 
 
 def _upload(client, scope: dict[str, str]) -> str:
-    msg = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": scope, "role": "USER", "content": "here is the FY26 report"},
+    msg = post_message(
+        client, H, {"scope": scope, "role": "USER", "content": "here is the FY26 report"}
     ).json()
     r = client.post(
         "/v1/documents",
@@ -48,35 +46,41 @@ def test_recall_and_context_over_http(client) -> None:
     scope = _scope()
     doc_id = _upload(client, scope)
 
-    r = client.post("/v1/recall", headers=H, json={"scope": scope, "query": Q, "limit": 5})
+    r = client.post(
+        "/v1/recall", headers=H, json={"scope": scope, "query": Q, "limit": 5, "debug": True}
+    )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["query_type"] == "DOCUMENT_MULTI_HOP"
     assert body["diagnostics"]["fused_candidates"] > 0
-    assert 0 < len(body["results"]) <= 5
-    top = body["results"][0]
+    assert 0 < len(body["items"]) <= 5
+    top = body["items"][0]
     assert top["document_id"] == doc_id and top["page"] == 11
     assert "increased to EUR 98" in top["text"]
-    assert top["citation"] == f"chunk_id:{top['item_id']}" and top["representation"] == "CHUNK"
-    assert top["evidence"][0]["chunk_id"] == top["item_id"]
-    assert set(top["retrievers"]) <= {"fusion", "dense_en", "dense_ml", "bm25", "exact"}
+    assert top["citation"] == f"chunk_id:{top['id']}" and top["kind"] == "chunk"
+    assert top["debug"]["representation"] == "CHUNK"
+    assert set(top["debug"]["retrievers"]) <= {"fusion", "dense_en", "dense_ml", "bm25", "exact"}
 
     # exact identifier round-trip through the public API
     r = client.post(
-        "/v1/recall", headers=H, json={"scope": scope, "query": f"open {top['item_id']}"}
+        "/v1/recall",
+        headers=H,
+        json={"scope": scope, "query": f"open {top['id']}", "debug": True},
     )
     assert r.json()["query_type"] == "EXACT_IDENTIFIER"
-    assert [x["item_id"] for x in r.json()["results"]] == [top["item_id"]]
+    assert [x["id"] for x in r.json()["items"]] == [top["id"]]
 
     r = client.post(
-        "/v1/context", headers=H, json={"scope": scope, "query": Q, "token_budget": 3000}
+        "/v1/context",
+        headers=H,
+        json={"scope": scope, "query": Q, "token_budget": 3000, "format": "full"},
     )
     assert r.status_code == 200, r.text
     bundle = r.json()
     assert bundle["cache_hit"] is False and bundle["token_estimate"] <= 3000
     assert bundle["conversation"]["thread_id"] == scope["thread_id"]
     assert "here is the FY26 report" in bundle["conversation"]["rendered"]
-    assert bundle["knowledge"][0]["item_id"] == top["item_id"]
+    assert bundle["knowledge"][0]["item_id"] == top["id"]
     assert bundle["evidence"]["status"] == "COMPLETE"
     assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= {
         name.rsplit(":", 1)[0] for name in bundle["evidence"]["required_groups"]
@@ -89,7 +93,11 @@ def test_recall_and_context_over_http(client) -> None:
     r = client.post(
         "/v1/context",
         headers=H,
-        json={"scope": scope, "query": "Who won the 1998 football championship?"},
+        json={
+            "scope": scope,
+            "query": "Who won the 1998 football championship?",
+            "format": "full",
+        },
     )
     assert r.json()["evidence"]["status"] == "INSUFFICIENT"
     assert "## Evidence status\nINSUFFICIENT" in r.json()["rendered"]
@@ -98,7 +106,9 @@ def test_recall_and_context_over_http(client) -> None:
         and "increased to EUR 98" in bundle["rendered"]
     )
     again = client.post(
-        "/v1/context", headers=H, json={"scope": scope, "query": Q, "token_budget": 3000}
+        "/v1/context",
+        headers=H,
+        json={"scope": scope, "query": Q, "token_budget": 3000, "format": "full"},
     ).json()
     assert again["cache_hit"] is True
 
@@ -117,12 +127,12 @@ def test_recall_and_context_over_http(client) -> None:
     other = client.post(
         "/v1/recall", headers={**H, "X-Trellis-User": "u2"}, json={"scope": {}, "query": Q}
     )
-    assert other.status_code == 200 and other.json()["results"] == []
+    assert other.status_code == 200 and other.json()["items"] == []
     # another tenant: nothing
     stranger = client.post(
         "/v1/recall", headers={**H, "X-Trellis-Tenant": "globex"}, json={"scope": {}, "query": Q}
     )
-    assert stranger.status_code == 200 and stranger.json()["results"] == []
+    assert stranger.status_code == 200 and stranger.json()["items"] == []
 
 
 async def test_sdk_context_and_recall(app, client) -> None:
@@ -130,18 +140,13 @@ async def test_sdk_context_and_recall(app, client) -> None:
     doc_id = _upload(client, scope)
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **scope)
-    bundle = await ctx.context(Q, token_budget=4000)
+    bundle = await ctx.context(Q, token_budget=4000, format="full")
     assert bundle.query_type == "DOCUMENT_MULTI_HOP" and bundle.knowledge
     assert bundle.knowledge[0].document_id == doc_id and bundle.knowledge[0].page == 11
     assert bundle.evidence.status == "COMPLETE" and bundle.token_estimate <= 4000
     assert "increased to EUR 98" in bundle.rendered
     assert bundle.evidence.required_groups and not bundle.evidence.missing_groups
-    from trellis.memory import InsufficientEvidence
-
-    with pytest.raises(InsufficientEvidence) as exc:
-        await ctx.context("Who won the 1998 football championship?", require_evidence=True)
-    assert exc.value.code == "INSUFFICIENT_EVIDENCE"
-    lenient = await ctx.context("Who won the 1998 football championship?")
+    lenient = await ctx.context("Who won the 1998 football championship?", format="full")
     assert lenient.evidence.status == "INSUFFICIENT"
     items = await ctx.search("restructuring programme headcount", limit=3)
     assert 0 < len(items) <= 3 and items[0].citation.startswith("chunk_id:")

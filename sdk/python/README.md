@@ -9,10 +9,10 @@ memory = MemoryClient("http://memory-service:8080", api_key="dev-key")
 
 ctx = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")  # session/turn optional
 
-await ctx.chat.user("What changed in EBITDA?", attachments=["report.pdf"])
+await ctx.history.add([("USER", "What changed in EBITDA?")])
 bundle = await ctx.context("What changed in EBITDA?")
 answer = my_agent(bundle.rendered)
-await ctx.chat.assistant(answer)
+await ctx.history.add([("ASSISTANT", answer)])
 ```
 
 The SDK hides Qdrant, BM25, embeddings, RRF, GCS compaction, graph enrichment,
@@ -25,18 +25,16 @@ under `ctx.advanced`.
 
 | Verb | What it does |
 |---|---|
-| `context(query, token_budget=, tools=, since_revision=)` | the pushed context: memories, knowledge, profile, thread summary, procedures, tool hints; `rendered` is prompt-ready |
+| `context(query, token_budget=, tools=, window=)` | the pushed context: memories, knowledge, profile, thread summary, procedures, tool hints; `rendered` is prompt-ready, memories cited by bundle handle (`[m1]`) |
 | `remember(content, memory_type=, visibility=)` / `update(id, content, reason=)` / `forget(id)` | state, supersede or forget one memory |
 | `search(query, kinds=, limit=)` | ranked evidence without bundle assembly |
-| `history(limit=)` / `summary()` | the thread's latest messages / its durable summary |
-| `observe(content)` | raw evidence the service learns from, asynchronously |
+| `history(limit=)` / `history.add([...])` / `history.thread()` | the transcript: read it, append to it (`EVENT`: something that happened), the thread with its durable summary |
 | `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.list_for(kind, id)` reads it back |
-| `record_tool(tool, args, output=, status=)` / `outcome(success=)` | what a run did and whether it worked |
+| `record_tool(tool, args, output=, status=)` | what a run did; whether it worked is `feedback("run", run_id, verdict)` |
 | `tool_hints(task, available=, k=)` | which tool, the learned plan, the next step, prefilled and missing arguments |
 | `agent_tools()` / `call_agent_tool(name, args)` | the memory tools an agent calls itself (pull mode) |
-| `profile()` / `profile.set(block, text)` / `profile.edit(block, old, new)` | the pinned profile blocks |
+| `profile()` / `profile.edit(block, old, new, source_query=)` | the pinned profile blocks |
 | `verify(answer, bundle=)` | per-claim grounding of an answer |
-| `chat.user(...)` / `chat.assistant(...)` | the transcript |
 
 `ctx.advanced` holds `documents`, `graph`, `tools` (the catalog and approval
 suggestions), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the

@@ -27,8 +27,8 @@ Fourteen checks, each an assertion against the live service:
 | Operations | `health()`, `alive()`, `version()` |
 | Conversation | `chat.create` (idempotent), `chat.user/assistant/internal`, `history(include_internal)`, `chat.message(id)`, `chat.thread()`, `chat.delete_thread()`; scope isolation (other user → 403, other tenant → not found) |
 | Documents | `advanced.documents.add` (path / bytes, title, visibility), `advanced.documents.wait_ready`, `advanced.documents.document`, content dedup, `advanced.job()` |
-| Retrieval | `search` (citations, pages incl. definition + footnote, table rows), `context` (COMPLETE evidence, cache hit, token budget, `require_evidence` → `InsufficientEvidence`) |
+| Retrieval | `search` (citations, pages incl. definition + footnote, table rows), `context` (COMPLETE evidence, cache hit, token budget, `evidence.status` INSUFFICIENT) |
 | Memory | `observe` (idempotent replay), `remember` (PREFERENCE / SEMANTIC / EPHEMERAL), `advanced.memories.list()`, `advanced.memories.get`, supersede + reinforce + temporal history, `forget` everywhere (list, search, get) |
 | Agents | `agent()` run lineage (child reads parent's RUN memory; user, sibling and stranger do not), `AGENT_GROUP` sharing, corroboration (`contributors`), cross-agent conflict kept and flagged in the evidence report |
 | Graph | `advanced.graph.query` by entity / free text / alias (`ARR`), 2-hop questions, fact attributes (period, change, previous value), counterfactual kept apart, `as_of` temporal view |
-| Ergonomics | `async with ctx` + `current_context()`, `derive()` |
+| Ergonomics | `async with ctx` + `current_context()`, `agent()` |

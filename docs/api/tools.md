@@ -15,7 +15,7 @@ sequenceDiagram
   participant H as POST /v1/tools/hints
   participant X as Your executor
   participant I as POST /v1/tools/invocations
-  participant O as POST /v1/runs/{run_id}/outcome
+  participant O as POST /v1/feedback (target run)
   participant L as tools.learn (background)
   A->>C: what each tool is and does (once, idempotent)
   A->>H: {task, available, k}
@@ -25,12 +25,13 @@ sequenceDiagram
     X-->>A: output or error
     A->>I: record {tool, args, output, status, latency_ms, task, step}
   end
-  A->>O: {success: true|false, note}
+  A->>O: {target_kind: run, verdict: confirm|reject, source: system}
   O->>L: the run's calls are learned again
   L-->>H: a better plan and better arguments next time
 ```
 
-The outcome label is what makes this work: only a successful run validates a procedure, and a
+The run's verdict is what makes this work (the harness sends a `system` verdict from the
+run's final status; a judge or a person overrides it, human > judge > system): only a successful run validates a procedure, and a
 run nobody labelled counts as a (weak) success only a day later, if none of its calls failed.
 
 ## Routes
@@ -40,7 +41,7 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `PUT /v1/tools/catalog` | upsert catalog entries by name (idempotent) | `ctx.advanced.tools.put_catalog([...])` |
 | `GET /v1/tools?names=…` | the catalog visible in this scope, with statistics | `ctx.advanced.tools.catalog(names=…)` |
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
-| `POST /v1/runs/{run_id}/outcome` | label a run successful or not | `ctx.outcome(success=…, note=…)` |
+| `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
 | `POST /v1/tools/hints` | candidates, plan, next step, prefilled and missing arguments | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support | `ctx.advanced.tools.approval_suggestions()` |
 

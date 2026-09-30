@@ -59,7 +59,7 @@ for item in bundle.knowledge:
 a THREAD-visible document is readable by thread participants, so the thread must exist (the
 service creates it from the scope); a WORKSPACE-visible document needs a workspace row and
 membership ([tenancy.md](tenancy.md)). Attaching a document to a message is one call —
-`ctx.chat.user("see attached", attachments=[path])` — and the document inherits that message's
+`ctx.history.add([{"role": "USER", "content": "see attached", "attachments": [...]}])` — and the document inherits that message's
 thread.
 
 ## Idempotency

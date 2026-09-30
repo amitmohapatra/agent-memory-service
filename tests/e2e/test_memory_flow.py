@@ -1,4 +1,4 @@
-"""End-to-end memory intelligence: chat messages and explicit observations become memories
+"""End-to-end memory intelligence: chat messages and events become memories
 that show up in /v1/recall, /v1/context and the SDK; forget removes them everywhere."""
 
 from __future__ import annotations
@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 
 pytestmark = pytest.mark.e2e
 H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
@@ -20,43 +20,32 @@ def _scope() -> dict[str, str]:
     }
 
 
-def test_messages_and_observations_become_memories(client) -> None:
+def test_messages_and_events_become_memories(client) -> None:
     scope = _scope()
     # a chat message is an observation too (inline queue: processed before the response)
-    r = client.post(
-        "/v1/messages",
-        headers=H,
-        json={
+    r = post_message(
+        client,
+        H,
+        {
             "scope": scope,
             "role": "USER",
             "content": "My timezone is Europe/Berlin and I prefer concise answers.",
         },
     )
     assert r.status_code == 202, r.text
-    # an explicit observation with a decision
-    r = client.post(
-        "/v1/observations",
-        headers=H,
-        json={
-            "scope": scope,
-            "kind": "DECISION",
-            "content": "We decided to use PostgreSQL as the canonical store.",
-        },
-    )
+    # an event the service learns from: a decision
+    event = {
+        "scope": scope,
+        "role": "EVENT",
+        "content": "We decided to use PostgreSQL as the canonical store.",
+    }
+    r = post_message(client, H, event)
     assert r.status_code == 202, r.text
     ack = r.json()
-    assert ack["observation_id"].startswith("obs_") and ack["job_ids"]
+    assert ack["message_id"] and ack["job_ids"]
     # identical retry -> replayed acknowledgement, no second processing
-    again = client.post(
-        "/v1/observations",
-        headers=H,
-        json={
-            "scope": scope,
-            "kind": "DECISION",
-            "content": "We decided to use PostgreSQL as the canonical store.",
-        },
-    )
-    assert again.json()["observation_id"] == ack["observation_id"]
+    again = post_message(client, H, event)
+    assert again.json()["message_id"] == ack["message_id"]
     assert again.headers.get("Idempotent-Replayed") == "true"
 
     mems = client.get("/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}).json()[
@@ -94,15 +83,22 @@ def test_messages_and_observations_become_memories(client) -> None:
     r = client.post(
         "/v1/recall",
         headers=H,
-        json={"scope": scope, "query": "what is my timezone?", "kinds": ["memory"]},
+        json={
+            "scope": scope,
+            "query": "what is my timezone?",
+            "kinds": ["memory"],
+            "debug": True,
+        },
     )
     assert r.status_code == 200 and r.json()["query_type"] == "USER_MEMORY"
-    items = r.json()["results"]
-    assert items and items[0]["representation"] == "MEMORY"
-    assert items[0]["citation"] == f"memory_id:{items[0]['item_id']}"
+    items = r.json()["items"]
+    assert items and items[0]["kind"] == "memory"
+    assert items[0]["citation"] == f"memory_id:{items[0]['id']}"
     assert any("Europe/Berlin" in i["text"] for i in items)
     bundle = client.post(
-        "/v1/context", headers=H, json={"scope": scope, "query": "which store did we decide on?"}
+        "/v1/context",
+        headers=H,
+        json={"scope": scope, "query": "which store did we decide on?", "format": "full"},
     ).json()
     assert bundle["memories"] and "## Memories" in bundle["rendered"]
     assert any("PostgreSQL" in m["text"] for m in bundle["memories"])
@@ -121,8 +117,8 @@ def test_messages_and_observations_become_memories(client) -> None:
     # verbatim turn that both were read out of, which still contains the words. Asserting
     # the string was absent asserted that forgetting a fact also unsays the sentence it came
     # from, which is a different promise and not one this endpoint makes.
-    assert tz["memory_id"] not in {i["item_id"] for i in r.json()["results"]}
-    assert any("Europe/Berlin" in i["text"] for i in r.json()["results"]), (
+    assert tz["memory_id"] not in {i["id"] for i in r.json()["items"]}
+    assert any("Europe/Berlin" in i["text"] for i in r.json()["items"]), (
         "the verbatim turn is still there - forgetting the fact does not retract the message"
     )
     assert (
@@ -132,31 +128,31 @@ def test_messages_and_observations_become_memories(client) -> None:
         == 403
     )
     # validation
-    assert (
-        client.post("/v1/observations", headers=H, json={"scope": scope, "content": ""}).status_code
-        == 422
-    )
-    assert client.post("/v1/observations", json={"scope": scope, "content": "x"}).status_code == 401
+    empty = {"scope": scope, "role": "EVENT", "content": ""}
+    assert post_message(client, H, empty).status_code == 422
+    assert post_message(client, {}, {**empty, "content": "x"}).status_code == 401
 
 
 async def test_sdk_remember_recall_forget(app, client) -> None:
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **_scope())
-    ack = await ctx.observe("I work at ACME Corp and my favourite editor is neovim.")
-    assert ack.observation_id.startswith("obs_")
-    # remember() = observe with expert hints
+    [ack] = await ctx.history.add(
+        [("USER", "I work at ACME Corp and my favourite editor is neovim.")]
+    )
+    assert ack.message_id and ack.job_ids
+    # remember() stores what it is given, as given
     await ctx.remember("Always answer in British English.", memory_type="PREFERENCE")
     items = await ctx.search("favourite editor", kinds=["memory"], limit=5)
     assert items and any("neovim" in i.text for i in items)
     fav = next(i for i in items if "neovim" in i.text)
-    got = await ctx.advanced.memories.get(fav.item_id)
-    assert got.memory_id == fav.item_id and got.memory_type == "PREFERENCE"
+    got = await ctx.advanced.memories.get(fav.id)
+    assert got.memory_id == fav.id and got.memory_type == "PREFERENCE"
     assert got.visibility == "USER" and got.lifetime == "LONG_TERM"
-    await ctx.forget(fav.item_id)
+    await ctx.forget(fav.id)
     assert not any(
         "neovim" in i.text for i in await ctx.search("favourite editor", kinds=["memory"])
     )
-    bundle = await ctx.context("how should I phrase the answer?")
+    bundle = await ctx.context("how should I phrase the answer?", format="full")
     assert any("British English" in m.text for m in bundle.memories)
     await memory.aclose()
 
@@ -164,85 +160,27 @@ async def test_sdk_remember_recall_forget(app, client) -> None:
 async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     memory = sdk_client(app)
     user = memory.bind(tenant_id="acme", user_id="u1", agent_group_id="crew", **_scope())
-    await user.chat.user("Please prepare the FY26 brief.")
+    await user.history.add([("USER", "Please prepare the FY26 brief.")])
     planner = user.agent("planner")
     writer = planner.agent("writer")  # child run: reads the planner's hand-off context
-    await planner.observe("Plan: split the brief into revenue and cost.", kind="AGENT_RESULT")
+    await planner.remember("Plan: split the brief into revenue and cost.", visibility="RUN")
     q = "plan for the brief sections"
     assert any("Plan:" in i.text for i in await writer.search(q, kinds=["memory"]))
     assert not any("Plan:" in i.text for i in await user.search(q, kinds=["memory"]))
     assert not any(
         "Plan:" in i.text for i in await user.agent("intern").search(q, kinds=["memory"])
     )
-    # explicit sharing with the agent group; a second agent corroborates
+    # explicit sharing with the agent group: every agent of the group reads it
     fact = "Revenue was EUR 412 million in FY26."
-    # observations, not statements: corroboration and contradiction are what the pipeline
-    # learns from evidence (a stated memory is stored as said, and deduplicated per owner)
-    shared = {"memory_type": "SHARED", "visibility": "AGENT_GROUP"}
-    await planner.observe(fact, kind="EVENT", hints=shared)
-    await writer.observe(fact, kind="EVENT", hints=shared)
+    await planner.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
     auditor = user.agent("auditor")
     items = await auditor.search("FY26 revenue", kinds=["memory"])
     hit = next(i for i in items if "412" in i.text)
-    got = await auditor.advanced.memories.get(hit.item_id)
-    assert got.visibility == "AGENT_GROUP" and got.reinforcement_count == 2
+    got = await auditor.advanced.memories.get(hit.id)
+    assert got.visibility == "AGENT_GROUP"
     # Bound to the user the agent runs for: agent_id is unauthenticated request body.
     assert got.owner_principal == "agent:u1/planner"
-    assert got.contributors == ["agent:u1/writer"]
-    # a conflicting single-valued fact from another agent is kept, linked, never overwritten
-    await planner.observe("My manager is Dana.", kind="EVENT", hints=shared)
-    await auditor.observe("My manager is Lee.", kind="EVENT", hints=shared)
-    managers = [
-        i
-        for i in await writer.search("who is my manager?", kinds=["memory"])
-        if "manager" in i.text
-    ]
-    assert len(managers) == 2
-    linked = [await writer.advanced.memories.get(i.item_id) for i in managers]
-    assert any(m.contradicts for m in linked)
     await memory.aclose()
-
-
-def test_the_same_turn_sent_by_both_paths_is_one_memory_with_two_receipts(client) -> None:
-    """An integrator reported that enabling both write paths duplicates every turn.
-
-    PlanSmart sends ``record_messages: true`` AND ``observe_input/observe_output: true``, so
-    the same turn arrives at /v1/messages and at /v1/observations, and they asked us to
-    decide the contract: dedupe here, or tell callers to pick one flag.
-
-    Neither, because it already dedupes - and what they saw is the dedupe working. A listed
-    row carrying BOTH ``message`` and ``observation`` evidence is not two writes that leaked
-    through; it is one memory that knows it arrived twice, which is strictly better than
-    dropping either receipt. Reinforcement and corroboration read off that evidence, so a
-    version that kept only the first would under-count both.
-
-    Pinned for the near-duplicate too, which is the case a byte-hash would miss: a harness
-    that prefixes the turn with its role sends different bytes for the same fact.
-    """
-    scope = _scope()
-    text = "My timezone is Europe/Berlin."
-    assert (
-        client.post(
-            "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": text}
-        ).status_code
-        == 202
-    )
-    assert (
-        client.post(
-            "/v1/observations",
-            headers=H,
-            json={"scope": scope, "kind": "MESSAGE", "content": f"User: {text}"},
-        ).status_code
-        == 202
-    )
-
-    mems = client.get("/v1/memories", headers=H, params={"thread_id": scope["thread_id"]}).json()[
-        "memories"
-    ]
-    timezone = [m for m in mems if m["predicate"] == "timezone"]
-    assert len(timezone) == 1, f"one turn, one memory: {[m['content'] for m in timezone]}"
-    sources = {e["source_id"].split("_")[0] for e in timezone[0]["evidence"]}
-    assert sources == {"msg", "obs"}, "both receipts are kept on the one row"
 
 
 def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
@@ -261,27 +199,22 @@ def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
     globex = {**H, "X-Trellis-Tenant": "globex", "X-Trellis-User": "u1"}
     scope = _scope()
 
-    assert (
-        client.post(
-            "/v1/observations",
-            headers=acme,
-            json={
-                "scope": scope,
-                "kind": "DECISION",
-                "content": "We decided to acquire Initech for 40 million.",
-            },
-        ).status_code
-        == 202
-    )
+    decision = "We decided to acquire Initech for 40 million."
+    event = {"scope": scope, "role": "EVENT", "content": decision}
+    assert post_message(client, acme, event).status_code == 202
 
     q = {"scope": scope, "query": "what did we decide about acquiring?", "kinds": ["memory"]}
-    assert client.post("/v1/recall", headers=acme, json=q).json()["results"], "own tenant reads"
-    assert client.post("/v1/recall", headers=globex, json=q).json()["results"] == []
+    assert client.post("/v1/recall", headers=acme, json=q).json()["items"], "own tenant reads"
+    assert client.post("/v1/recall", headers=globex, json=q).json()["items"] == []
 
     listed = client.get("/v1/memories", headers=globex, params={"thread_id": scope["thread_id"]})
     assert listed.status_code == 200 and listed.json()["memories"] == []
 
-    g = {"scope": scope, "entities": ["Initech"], "hops": 2}
-    assert client.post("/v1/graph/query", headers=acme, json=g).json()["matched"], "own tenant"
-    theirs = client.post("/v1/graph/query", headers=globex, json=g).json()
-    assert theirs["matched"] == [] and theirs["facts"] == [] and theirs["visited"] == 0
+    g = {"q": "Initech", "thread_id": scope["thread_id"]}
+    ours = client.get("/v1/graph/entities", headers=acme, params=g).json()["entities"]
+    assert ours, "own tenant"
+    theirs = client.get("/v1/graph/entities", headers=globex, params=g).json()
+    assert theirs["entities"] == []
+    assert (
+        client.get(f"/v1/graph/entities/{ours[0]['entity_id']}", headers=globex).status_code == 404
+    )

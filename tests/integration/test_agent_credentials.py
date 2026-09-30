@@ -191,17 +191,17 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
         assist.provider, assist.settings = configured.provider, configured.settings
         assist.policies = container.services["model_policies"]
 
-        async def reads_unassisted() -> None:
+        async def reads_assisted() -> None:
             async with container.services["uow_factory"]() as uow:
                 await container.services["model_policies"].set(
                     uow,
                     tenant_identity(headers["X-Trellis-Tenant"]),
                     uses=["query_expansion"],
-                    read_assist=False,
+                    read_assist=True,
                 )
                 await uow.commit()
 
-        client.portal.call(reads_unassisted)
+        client.portal.call(reads_assisted)
         try:
             for index, key in enumerate(["vk-first-test", "vk-second-test"], start=1):
                 assert (
@@ -212,11 +212,9 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                     ).status_code
                     == 200
                 )
-                assert client.post("/v1/context", headers=headers, json=query).status_code == 200
-                assert gateway.route.call_count == index - 1
-                response = client.post(
-                    "/v1/context", headers=headers, json={**query, "use_llm": True}
-                )
+                # a new question each time: the assisted read is not served from the cache
+                asked = {**query, "query": f"{query['query']} {index}"}
+                response = client.post("/v1/context", headers=headers, json=asked)
                 assert response.status_code == 200, response.text
                 assert gateway.route.call_count == index
                 assert gateway.route.calls.last.request.headers["x-bf-vk"] == key
@@ -226,7 +224,7 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
             )
             assert (
                 client.post(
-                    "/v1/context", headers=headers, json={**query, "use_llm": True}
+                    "/v1/context", headers=headers, json={**query, "query": "radio telescopes"}
                 ).status_code
                 == 200
             )

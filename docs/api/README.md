@@ -7,14 +7,14 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 
 | Page | The question it answers | Routes |
 | --- | --- | --- |
-| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/observations`, `/v1/memories`, `/v1/graph/*`, `/v1/jobs/{id}` |
-| [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads`, `/v1/messages` |
+| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/messages` (events), `/v1/memories`, `/v1/graph/*`, `/v1/jobs/{id}` |
+| [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads/{id}`, `/v1/messages` |
 | [agent-tools.md](agent-tools.md) | what can an agent pull from memory itself, and what does that teach the push? | `/v1/agent-tools` |
-| [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}/summary` |
+| [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}` (its `summary`) |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
-| [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*`, `/v1/runs/{id}/outcome` |
-| [feedback.md](feedback.md) | how is a judgement on a run, an answer or a memory recorded, and what does it change? | `/v1/feedback` |
-| [tenancy.md](tenancy.md) | who may see what: workspaces, groups, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/groups/*`, `/v1/keys`, `/v1/model-key`, `/v1/agents/model-key`, `/v1/reads` |
+| [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |
+| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change? | `/v1/feedback` |
+| [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/model-key`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 
 ## What every call shares
@@ -62,9 +62,9 @@ bundle = await ctx.context("what did we decide about the refund?")
 ```
 
 `ctx` carries the scope for every call under it. The per-turn verbs are on it directly:
-`context`, `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`,
-`record_tool`, `outcome`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`,
-`summary`, `verify`, and `ctx.chat` for the transcript. Everything else is under
+`context`, `remember`, `update`, `forget`, `search`, `history` (the transcript: `add`,
+`thread`, `update`), `feedback`, `record_tool`, `tool_hints`, `agent_tools`,
+`call_agent_tool`, `profile`, `verify`. Everything else is under
 `ctx.advanced`: `documents`, `graph`, `tools` (catalog, approval suggestions),
 `model_keys`, `memories` (inventory), `job(id)`, and the client's `tenant` and `admin`.
 Tenant administration is also `memory.administer(tenant_id)` (keys, workspaces, model keys,

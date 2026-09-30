@@ -52,7 +52,7 @@ def test_rate_limit_per_tenant_with_a_problem_and_fail_open(limited) -> None:
 def test_body_size_limit_is_enforced_before_parsing(limited) -> None:
     client, _ = limited
     r = client.post(
-        "/v1/observations",
+        "/v1/messages",
         headers=H,
         content=b"x" * 4096,
     )

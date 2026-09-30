@@ -1,7 +1,7 @@
 """Knowledge-graph quality gate: every expected typed entity, alias and factual relation in
 ``golden/kg_facts.json`` is present after ingestion (fact recall = 1.00), no forbidden fact
 or noise entity exists (false facts = 0, noise = 0), and each golden question resolves to
-its expected fact through ``/v1/graph/query`` semantics. Writes
+its expected fact through ``/v1/graph/entities`` semantics. Writes
 ``benchmark/results/kg_gate.json`` for the release gate.
 
 The extractor is rule-based (no LLM), so this gate measures a deterministic pipeline: it is

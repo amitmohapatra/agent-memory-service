@@ -265,8 +265,9 @@ script, in order, with argument bindings.
 
 **Step 3 — the run gets an outcome.** A run is marked `success` when the final assistant
 message was recorded with evidence status COMPLETE and no tool error was left unresolved,
-or explicitly via `client.runs.outcome(run_id, success=True|False, note=...)` (a user
-thumbs-up, a test passing, a human review). Unlabelled runs count as weak positives only
+or explicitly by RUN feedback (`ctx.feedback("run", run_id, "confirm"|"reject")`: the
+harness's `system` verdict from the final status, a judge's, or a person's — human > judge >
+system). Unlabelled runs count as weak positives only
 after they are older than a configurable window with no correction.
 
 **Step 4 — chains are mined, deterministically.** Per run, consecutive records form a
@@ -278,7 +279,7 @@ placeholders — "update quote {quote_id} with {region} price for {sku}" — mat
 search over patterns), edges accumulate `support`, `success_rate`, `median_latency`,
 `median_cost`; edges that preceded failures accumulate `failure_modes` with the error class
 and, when a later step fixed it, the correction. Edges are stored in the graph store with
-`layer=procedural`, so `/v1/graph/query` can traverse them like any other relation.
+`layer=procedural`, so `GET /v1/graph/entities/{id}?depth=` can traverse them like any other relation.
 
 **Step 5 — procedures are validated and abstracted.** From the mined prefix tree, the
 highest-support successful path per task pattern becomes a procedure: ordered steps, each

@@ -39,13 +39,12 @@ handing you a bundle you might answer from anyway.
 | `POST /v1/context` | build a `ContextBundle` for this turn | `ctx.context(query, token_budget=…, tools=…, since_revision=…, require_evidence=…)` |
 | `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=["chunk", "memory", "summary"])` |
 | `POST /v1/verify` | verify an answer claim by claim against evidence | `ctx.verify(answer, bundle=…)` |
-| `POST /v1/threads` | create (or idempotently fetch) a thread | `ctx.chat.create(title=…)` |
-| `GET /v1/threads/{id}` | one thread | `ctx.chat.thread()` |
-| `DELETE /v1/threads/{id}` | soft-delete a thread | `ctx.chat.delete_thread()` |
-| `POST /v1/messages` | append a message | `ctx.chat.user(...)`, `.assistant(...)`, `.internal(...)` |
+| `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
+| `PATCH /v1/threads/{id}` | title and metadata (creates the thread when it does not exist yet) | `ctx.history.update(title=…, metadata=…)` |
+| `DELETE /v1/threads/{id}` | soft-delete a thread | `ctx.history.delete()` |
+| `POST /v1/messages` | append a batch of messages; `role: "EVENT"` is something that happened | `ctx.history.add([...])` |
 | `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
-| `GET /v1/messages/{id}` | one message | `ctx.chat.message(id)` |
-| `GET /v1/threads/{id}/summary` | the thread's durable summary | `ctx.summary()` |
+| `GET /v1/messages/{id}` | one message | `ctx.history.message(id)` |
 
 ## The bundle
 
@@ -118,15 +117,20 @@ uses before it is willing to spend anything on an LLM judge.
 ## Conversation
 
 ```python
-thread = await ctx.chat.create(title="Q3 planning")  # idempotent; messages also create one
-await ctx.chat.user("Revenue was EUR 412 million in FY26.")
-await ctx.chat.assistant("Noted — that's up 4% year on year.")
-await ctx.chat.internal("plan: check the FY25 figure", role="AGENT")  # kind=INTERNAL
+thread = await ctx.history.update(title="Q3 planning")  # optional; messages also create one
+await ctx.history.add(
+    [
+        ("USER", "Revenue was EUR 412 million in FY26."),
+        ("ASSISTANT", "Noted — that's up 4% year on year."),
+        {"role": "AGENT", "content": "plan: check the FY25 figure", "kind": "INTERNAL"},
+    ]
+)
 for message in await ctx.history(limit=20):
     print(message.role, message.content[:60])
 ```
 
-`chat.*` needs `thread_id`. `session_id` and `turn_id` are optional and are the application's
+`history.*` needs a `thread_id` (without one, an agent run's messages go to the thread
+named by its run id). `session_id` and `turn_id` are optional and are the application's
 own ids when given: a `turn_id` belongs to the session that created it, and a session belongs
 to a thread. Without them a message joins the thread's own session, a USER message opens the
 thread's next turn and any other message joins its latest turn; the acknowledgement returns the

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.ids import new_id
-from tests.e2e.conftest import sdk_client
+from tests.e2e.conftest import post_message, sdk_client
 from trellis.memory import AuthorizationError, NotFoundError, ValidationError
 
 pytestmark = pytest.mark.e2e
@@ -23,9 +23,7 @@ def _scope(**kw):
 
 def test_new_chat_next_turn_reopen(client, container) -> None:
     scope = _scope()
-    r = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "hello"}
-    )
+    r = post_message(client, H, {"scope": scope, "role": "USER", "content": "hello"})
     assert r.status_code == 202, r.text
     ack = r.json()
     assert (
@@ -34,16 +32,14 @@ def test_new_chat_next_turn_reopen(client, container) -> None:
     # jobs ran inline after commit
     job = client.get(f"/v1/jobs/{ack['job_ids'][0]}", headers=H).json()
     assert job["status"] == "SUCCEEDED" and job["task_name"] == "memory.process_observation"
-    r = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "ASSISTANT", "content": "hi!"}
-    )
+    r = post_message(client, H, {"scope": scope, "role": "ASSISTANT", "content": "hi!"})
     assert r.json()["sequence"] == 2
     # next question, same session, new turn
     scope2 = {**scope, "turn_id": new_id("turn")}
     assert (
-        client.post(
-            "/v1/messages", headers=H, json={"scope": scope2, "role": "USER", "content": "more"}
-        ).json()["sequence"]
+        post_message(client, H, {"scope": scope2, "role": "USER", "content": "more"}).json()[
+            "sequence"
+        ]
         == 3
     )
     # reopen later: same thread, new session, new turn
@@ -53,11 +49,9 @@ def test_new_chat_next_turn_reopen(client, container) -> None:
         "turn_id": new_id("turn"),
     }
     assert (
-        client.post(
-            "/v1/messages",
-            headers=H,
-            json={"scope": scope3, "role": "USER", "content": "back again"},
-        ).json()["sequence"]
+        post_message(client, H, {"scope": scope3, "role": "USER", "content": "back again"}).json()[
+            "sequence"
+        ]
         == 4
     )
     hist = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()
@@ -81,20 +75,18 @@ def test_new_chat_next_turn_reopen(client, container) -> None:
 def test_idempotent_retry_returns_same_ack(client) -> None:
     scope = _scope()
     body = {"scope": scope, "role": "USER", "content": "same"}
-    first = client.post("/v1/messages", headers={**H, "Idempotency-Key": "k-1"}, json=body)
-    second = client.post("/v1/messages", headers={**H, "Idempotency-Key": "k-1"}, json=body)
+    first = post_message(client, {**H, "Idempotency-Key": "k-1"}, body)
+    second = post_message(client, {**H, "Idempotency-Key": "k-1"}, body)
     assert first.status_code == 202 and second.status_code == 202
     assert first.json() == second.json() and second.headers.get("Idempotent-Replayed") == "true"
-    conflict = client.post(
-        "/v1/messages",
-        headers={**H, "Idempotency-Key": "k-1"},
-        json={**body, "content": "different"},
+    conflict = post_message(
+        client, {**H, "Idempotency-Key": "k-1"}, {**body, "content": "different"}
     )
     assert conflict.status_code == 409 and conflict.json()["code"] == "CONFLICT"
     # without a header the server derives the key from lineage + content: a network retry of
     # the same request never duplicates, while a distinct key is a distinct request
-    a = client.post("/v1/messages", headers=H, json={**body, "content": "retry me"})
-    b = client.post("/v1/messages", headers=H, json={**body, "content": "retry me"})
+    a = post_message(client, H, {**body, "content": "retry me"})
+    b = post_message(client, H, {**body, "content": "retry me"})
     assert a.json()["message_id"] == b.json()["message_id"]
     hist = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()
     assert [m["content"] for m in hist["messages"]] == ["same", "retry me"]
@@ -102,19 +94,17 @@ def test_idempotent_retry_returns_same_ack(client) -> None:
 
 def test_internal_messages_do_not_pollute_visible_history(client, container) -> None:
     scope = _scope()
-    client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "plan my trip"}
-    )
+    post_message(client, H, {"scope": scope, "role": "USER", "content": "plan my trip"})
     agent_scope = {
         **scope,
         "agent_id": "planner",
         "agent_run_id": new_id("agent_run"),
         "agent_group_id": "crew",
     }
-    r = client.post(
-        "/v1/messages",
-        headers=H,
-        json={
+    r = post_message(
+        client,
+        H,
+        {
             "scope": agent_scope,
             "role": "AGENT",
             "kind": "INTERNAL",
@@ -129,10 +119,10 @@ def test_internal_messages_do_not_pollute_visible_history(client, container) -> 
         "parent_agent_run_id": agent_scope["agent_run_id"],
     }
     assert (
-        client.post(
-            "/v1/messages",
-            headers=H,
-            json={
+        post_message(
+            client,
+            H,
+            {
                 "scope": child_scope,
                 "role": "TOOL",
                 "kind": "INTERNAL",
@@ -141,11 +131,7 @@ def test_internal_messages_do_not_pollute_visible_history(client, container) -> 
         ).status_code
         == 202
     )
-    client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": scope, "role": "ASSISTANT", "content": "Here is your trip"},
-    )
+    post_message(client, H, {"scope": scope, "role": "ASSISTANT", "content": "Here is your trip"})
     visible = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()["messages"]
     assert [m["role"] for m in visible] == ["USER", "ASSISTANT"]
     everything = client.get(
@@ -163,38 +149,30 @@ def test_internal_messages_do_not_pollute_visible_history(client, container) -> 
     assert {r.agent_id for r in runs} == {"planner", "flights"}
     assert {r.parent_agent_run_id for r in runs} == {None, agent_scope["agent_run_id"]}
     # visible AGENT role is rejected
-    bad = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "AGENT", "content": "x"}
-    )
+    bad = post_message(client, H, {"scope": scope, "role": "AGENT", "content": "x"})
     assert bad.status_code == 422
 
 
 def test_authorization_boundaries(client) -> None:
     scope = _scope()
-    client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "private"}
-    )
+    post_message(client, H, {"scope": scope, "role": "USER", "content": "private"})
     other_user = {**H, "X-Trellis-User": "u2"}
     assert client.get(f"/v1/threads/{scope['thread_id']}", headers=other_user).status_code == 403
     assert (
         client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=other_user).status_code
         == 403
     )
-    r = client.post(
-        "/v1/messages",
-        headers=other_user,
-        json={"scope": scope, "role": "USER", "content": "hijack"},
-    )
+    r = post_message(client, other_user, {"scope": scope, "role": "USER", "content": "hijack"})
     assert r.status_code == 403 and r.json()["code"] == "SCOPE_DENIED"
     other_tenant = {**H, "X-Trellis-Tenant": "globex"}
     assert client.get(f"/v1/threads/{scope['thread_id']}", headers=other_tenant).status_code == 404
     # agent acting for the owner may write internal messages to the thread
     agent_scope = {**scope, "agent_id": "helper", "agent_run_id": new_id("agent_run")}
     assert (
-        client.post(
-            "/v1/messages",
-            headers=H,
-            json={"scope": agent_scope, "role": "AGENT", "kind": "INTERNAL", "content": "note"},
+        post_message(
+            client,
+            H,
+            {"scope": agent_scope, "role": "AGENT", "kind": "INTERNAL", "content": "note"},
         ).status_code
         == 202
     )
@@ -202,44 +180,38 @@ def test_authorization_boundaries(client) -> None:
 
 def test_cache_outage_does_not_affect_correctness(client, container) -> None:
     scope = _scope()
-    client.post("/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "one"})
+    post_message(client, H, {"scope": scope, "role": "USER", "content": "one"})
     container.cache.available = False
-    r = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "ASSISTANT", "content": "two"}
-    )
+    r = post_message(client, H, {"scope": scope, "role": "ASSISTANT", "content": "two"})
     assert r.status_code == 202
     hist = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()
     assert [m["content"] for m in hist["messages"]] == ["one", "two"]
     container.cache.available = True
     # cache is repopulated lazily and stays consistent with the database
-    r = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "three"}
-    )
+    r = post_message(client, H, {"scope": scope, "role": "USER", "content": "three"})
     hist = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()
     assert [m["content"] for m in hist["messages"]] == ["one", "two", "three"]
 
 
 def test_validation_errors(client) -> None:
-    r = client.post("/v1/messages", headers=H, json={"scope": {}, "role": "USER", "content": "x"})
+    r = post_message(client, H, {"scope": {}, "role": "USER", "content": "x"})
     assert r.status_code == 422, "a message needs a thread"
-    r = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": _scope(), "role": "USER", "content": "x", "unknown": 1},
-    )
+    r = post_message(client, H, {"scope": _scope(), "role": "USER", "content": "x", "unknown": 1})
     assert r.status_code == 422 and r.json()["code"] == "VALIDATION"
     assert client.get("/v1/jobs/obx_999999", headers=H).status_code == 404
     assert client.get("/v1/jobs/nope", headers=H).status_code == 404
 
 
-def test_create_thread_endpoint_is_idempotent(client) -> None:
-    body = {"scope": {}, "thread_id": new_id("thread"), "title": "Q3"}
-    a = client.post("/v1/threads", headers={**H, "Idempotency-Key": "t-1"}, json=body)
-    b = client.post("/v1/threads", headers={**H, "Idempotency-Key": "t-1"}, json=body)
-    assert a.status_code == 201 and b.status_code == 201 and a.json() == b.json()
-    assert client.get(f"/v1/threads/{body['thread_id']}", headers=H).json()["title"] == "Q3"
-    assert client.delete(f"/v1/threads/{body['thread_id']}", headers=H).status_code == 204
-    assert client.get(f"/v1/threads/{body['thread_id']}", headers=H).status_code == 404
+def test_patching_a_thread_creates_it_and_converges(client) -> None:
+    thread_id = new_id("thread")
+    body = {"scope": {}, "title": "Q3"}
+    a = client.patch(f"/v1/threads/{thread_id}", headers=H, json=body)
+    b = client.patch(f"/v1/threads/{thread_id}", headers=H, json=body)
+    assert a.status_code == 200 and b.status_code == 200, (a.text, b.text)
+    assert a.json()["thread_id"] == b.json()["thread_id"] == thread_id
+    assert client.get(f"/v1/threads/{thread_id}", headers=H).json()["title"] == "Q3"
+    assert client.delete(f"/v1/threads/{thread_id}", headers=H).status_code == 204
+    assert client.get(f"/v1/threads/{thread_id}", headers=H).status_code == 404
 
 
 async def test_sdk_ninety_percent_path(app, client) -> None:
@@ -251,54 +223,50 @@ async def test_sdk_ninety_percent_path(app, client) -> None:
         session_id=new_id("session"),
         turn_id=new_id("turn"),
     )
-    ack = await ctx.chat.user("What changed in EBITDA?")
+    [ack] = await ctx.history.add([("USER", "What changed in EBITDA?")])
     assert ack.sequence == 1 and ack.job_ids
     job = await ctx.advanced.job(ack.job_ids[0])
     assert job.status == "SUCCEEDED"
-    await ctx.chat.assistant("EBITDA rose because of restructuring savings.")
+    await ctx.history.add([("ASSISTANT", "EBITDA rose because of restructuring savings.")])
     history = await ctx.history()
     assert [m.role for m in history] == ["USER", "ASSISTANT"]
-    thread = await ctx.chat.thread()
+    thread = await ctx.history.thread()
     assert thread.thread_id == ctx.scope.thread_id
     # child agent context records internal lineage without touching the visible chat
     agent = ctx.agent("research")
-    await agent.chat.internal("searched 3 filings")
+    await agent.history.add(
+        [{"role": "AGENT", "kind": "INTERNAL", "content": "searched 3 filings"}]
+    )
     assert len(await ctx.history()) == 2
     assert len(await ctx.history(include_internal=True)) == 3
     # another user is denied; a missing thread is NotFound
     other = memory.bind(tenant_id="acme", user_id="u2", thread_id=ctx.scope.thread_id)
     with pytest.raises(AuthorizationError):
-        await other.chat.thread()
+        await other.history.thread()
     missing = memory.bind(tenant_id="acme", user_id="u1", thread_id=new_id("thread"))
     with pytest.raises(NotFoundError):
-        await missing.chat.thread()
+        await missing.history.thread()
     with pytest.raises(ValidationError):
-        await memory.bind(tenant_id="acme", user_id="u1").chat.user("no lineage")
+        await memory.bind(tenant_id="acme", user_id="u1").history.add([("USER", "no lineage")])
     await memory.aclose()
 
 
 def test_a_message_with_only_a_thread_gets_its_session_and_turn(client) -> None:
     thread = new_id("thread")
     scope = {"thread_id": thread}
-    asked = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "ok"}
-    )
+    asked = post_message(client, H, {"scope": scope, "role": "USER", "content": "ok"})
     assert asked.status_code == 202, asked.text
-    answered = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "ASSISTANT", "content": "ok"}
-    )
+    answered = post_message(client, H, {"scope": scope, "role": "ASSISTANT", "content": "ok"})
     assert answered.json()["turn_id"] == asked.json()["turn_id"]
     assert answered.json()["session_id"] == asked.json()["session_id"]
     # the same content again, with no turn and no key, is a retry of the same message...
-    again = client.post(
-        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "ok"}
-    )
+    again = post_message(client, H, {"scope": scope, "role": "USER", "content": "ok"})
     assert again.json()["message_id"] == asked.json()["message_id"]
     # ...unless the client says when it happened
-    later = client.post(
-        "/v1/messages",
-        headers=H,
-        json={
+    later = post_message(
+        client,
+        H,
+        {
             "scope": scope,
             "role": "USER",
             "content": "ok",

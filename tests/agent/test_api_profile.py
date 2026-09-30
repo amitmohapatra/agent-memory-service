@@ -18,18 +18,16 @@ async def _tenant(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-@pytest.mark.covers(
-    "profile.get_profile", "profile.put_profile_block", "profile.edit_profile_block"
-)
+@pytest.mark.covers("profile.get_profile", "profile.edit_profile_block")
 async def test_an_agent_reads_sets_and_edits_its_pinned_blocks(app, running) -> None:
     _, harness = await _tenant(app)
     agent = harness.bind(user_id="u1").agent("buyer")
     assert await agent.profile() == []
 
-    user = await agent.profile.set("user", "name: Ann\ndelivery address: Hauptstr. 1")
-    persona = await agent.profile.set("agent.persona", "Terse. Always quotes the PO number.")
+    user = await agent.profile.edit("user", "name: Ann\ndelivery address: Hauptstr. 1")
+    persona = await agent.profile.edit("agent.persona", "Terse. Always quotes the PO number.")
     assert (user.version, persona.version) == (1, 1)
-    edited = await agent.profile.edit("user", "Hauptstr. 1", "Ringstr. 9")
+    edited = await agent.profile.edit("user", "Ringstr. 9", old="Hauptstr. 1")
     assert edited.text.endswith("Ringstr. 9") and edited.version == 2
     assert [b.block for b in await agent.profile()] == ["agent.persona", "user"]
 
@@ -39,31 +37,33 @@ async def test_an_agent_reads_sets_and_edits_its_pinned_blocks(app, running) -> 
     assert [b.block for b in await harness.bind(user_id="u2").profile()] == []
 
 
-@pytest.mark.covers_error("profile.edit_profile_block", "profile.put_profile_block")
+@pytest.mark.covers_error("profile.edit_profile_block")
 async def test_a_stale_edit_conflicts_and_a_block_outside_the_scope_is_refused(
     app, running
 ) -> None:
     _, harness = await _tenant(app)
     agent = harness.bind(user_id="u1").agent("buyer")
-    await agent.profile.set("user", "name: Ann")
+    await agent.profile.edit("user", "name: Ann")
     with pytest.raises(ConflictError):
-        await agent.profile.edit("user", "name: Bob", "name: Rob")
+        await agent.profile.edit("user", "name: Rob", old="name: Bob")
     with pytest.raises(ValidationError):
-        await harness.bind(user_id="u1").profile.set("agent", "no agent in this scope")
+        await harness.bind(user_id="u1").profile.edit("agent", "no agent in this scope")
     with pytest.raises(MemoryError) as unknown:
-        await agent.profile.set("tenant", "not a block")
+        await agent.profile.edit("tenant", "not a block")
     assert unknown.value.status == 422
 
 
-@pytest.mark.covers("threads.get_thread_summary")
+@pytest.mark.covers("threads.get_thread")
 async def test_a_thread_gains_a_durable_summary_every_twenty_messages(app, running) -> None:
     _, harness = await _tenant(app)
     chat = harness.bind(user_id="u1", thread_id="thr_long")
-    assert await chat.summary() is None
-    for i in range(20):
-        say = chat.chat.user if i % 2 == 0 else chat.chat.assistant
-        await say(f"Turn {i}: about the paper order.")
-    summary = await chat.summary()
+    await chat.history.add([("USER", "Turn 0: about the paper order.")])
+    assert (await chat.history.thread()).summary is None
+    for i in range(1, 20):
+        await chat.history.add(
+            [("USER" if i % 2 == 0 else "ASSISTANT", f"Turn {i}: about the paper order.")]
+        )
+    summary = (await chat.history.thread()).summary
     assert summary is not None and summary.covers_to_sequence == 20
     assert summary.version == 1 and summary.model == "extractive"
     assert summary.text.startswith("user: Turn 0: about the paper order.")

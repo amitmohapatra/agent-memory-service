@@ -16,15 +16,12 @@ that change nothing).
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `memory_search` | `query`, `kinds?` (memory, chunk, summary), `time_from?`, `time_to?`, `k?` (≤ 20) | `[{id, kind, text, observed_at}]` |
+| `memory_search` | `query`, `kinds?` (memory, chunk, summary, message — this conversation), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, citation, …}]` (the `/v1/recall` item) |
 | `memory_remember` | `content`, `kind` (the 8 primary kinds), `scope` (user, agent, run, thread, group, workspace) | `{id, deduplicated}` |
-| `memory_update` | `id`, `content?` or `invalidate: true`, `reason` | `{id, supersedes}` or `{id, invalidated}` |
-| `memory_forget` | `id`, `reason` | `{id, forgotten}` |
-| `history_search` | `query?`, `time_from?`, `time_to?`, `k?` | `[{id, role, text, sequence, observed_at}]` of this thread |
+| `memory_update` | `id` (or its bundle handle, `m3`), `content` | `{id, supersedes}` |
+| `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}` |
 | `profile_edit` | `block`, `old` (empty replaces the block), `new` | `{block, text, version}`; 409 when `old` is gone |
-| `procedures_search` | `task`, `k?` | `[{id, title, strategy, steps, success_rate, support}]` |
-| `tool_search` | `task`, `k?` | tool hints: candidates, plan, next, prefill, missing |
-| `record_outcome` | `success`, `note?` | `{run_id, success}` |
+| `tool_search` | `task` | `{next, plan: {title, steps}, prefill: {"tool.arg": value}, missing: [{arg, question}]}` |
 
 Descriptions and schemas are language-neutral: queries and content may be in any language.
 Bad arguments answer 422 naming the field (`args.<field>`); an unknown tool 404. Writes follow
