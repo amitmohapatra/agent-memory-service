@@ -75,7 +75,12 @@ bundle.evidence_items()  # the packed evidence as /v1/verify items, in citation 
 
 The pinned sections — profile, thread summary, procedures, tool hints, in that order — open
 `rendered` and may take at most half of `token_budget` (in that priority); ranked evidence fills
-the rest. They are one indexed read each and run concurrently with retrieval; none of them calls
+the rest - but only evidence that clears the encoder's relevance floor: every ranked memory,
+chunk and summary carries its dense similarity to the question as `relevance` (0..1), and one
+under the floor (0.20 for the shipped multilingual encoder) is not packed, so a question the
+store cannot answer comes back nearly empty instead of full of whatever ranked next
+(`diagnostics.below_relevance_floor` counts them). Exact identifier hits and expansion
+companions are exempt. They are one indexed read each and run concurrently with retrieval; none of them calls
 a model. Memories an agent's own pulls kept using for requests of the same pattern are
 pre-included ([agent-tools.md](agent-tools.md)). `revision` is the scope's revision: a request
 with `since_revision` lists only the items new or changed since then (`delta: true`); the

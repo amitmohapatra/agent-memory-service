@@ -1,4 +1,4 @@
-"""SDK 0.2.1: feedback, webhooks, team model keys and cursor paging map to the wire."""
+"""The SDK: feedback, webhooks, team model keys and cursor paging map to the wire."""
 
 from __future__ import annotations
 

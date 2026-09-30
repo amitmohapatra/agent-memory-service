@@ -22,8 +22,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 
 **Identity comes from the credential and the trusted headers, never from the body.** A key
 names its tenant; `X-Trellis-Tenant`, `X-Trellis-Workspace` and `X-Trellis-User` narrow the
-scope within it (their pre-Trellis spellings `X-Memory-*` are read as aliases until 0.3.0, and
-sending both with different values is refused). `X-API-Key` carries the key — a `mk_…` model key
+scope within it (one value each: a header sent twice with different values is refused). `X-API-Key` carries the key — a `mk_…` model key
 may also arrive as a Bearer token. A request body's `scope` may carry **lineage** (thread,
 session, turn, work, task, agent, agent run, parent run); if it also names a tenant, workspace or
 user that disagrees with the trusted header, the request is refused rather than resolved in

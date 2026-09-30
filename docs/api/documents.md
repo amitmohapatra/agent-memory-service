@@ -32,7 +32,6 @@ sequenceDiagram
 | --- | --- | --- |
 | `POST /v1/documents` | ingest a file into RAG memory (multipart) | `ctx.advanced.documents.add(file, …)` |
 | `GET /v1/documents/{document_id}` | status, versions, archive state | `ctx.advanced.documents.document(id)`, `ctx.advanced.documents.wait_ready(id)` |
-| `POST /v1/files` | deprecated alias of `POST /v1/documents` (ADR 0022; removed in 0.3.0) | — (the SDK speaks `ctx.advanced.documents.add`) |
 
 ## Ingesting
 

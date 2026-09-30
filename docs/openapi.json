@@ -4764,14 +4764,13 @@
                 "memory_connections",
                 "briefs",
                 "query_expansion",
-                "query_decomposition",
                 "chunk_context",
                 "grounding_judge",
                 "procedure_abstraction"
               ],
               "type": "string"
             },
-            "maxItems": 13,
+            "maxItems": 12,
             "title": "Uses",
             "type": "array"
           }
@@ -4822,7 +4821,6 @@
                 "memory_connections",
                 "briefs",
                 "query_expansion",
-                "query_decomposition",
                 "chunk_context",
                 "grounding_judge",
                 "procedure_abstraction"
@@ -7478,7 +7476,7 @@
           },
           "version": {
             "examples": [
-              "0.2.0"
+              "0.3.0"
             ],
             "title": "Version",
             "type": "string"
@@ -7943,7 +7941,7 @@
   "info": {
     "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nAn id starts with a letter or digit, continues with letters, digits and `._:-`, and is at\nmost 200 characters. A request carrying any scope or credential header more than once with\ndifferent values is refused (422) before the credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
     "title": "trellis-memory API",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "openapi": "3.1.0",
   "paths": {

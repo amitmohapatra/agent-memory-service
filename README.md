@@ -51,12 +51,15 @@ member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a f
 | | |
 |---|---|
 | [What you get](#what-you-get) | the five kinds of memory, and the guarantees |
+| [Three ways an agent uses it](#three-ways-an-agent-uses-it) | push, pull, or your own calls |
 | [Install and run](#install-and-run) | 5 minutes to a running service |
 | [Use it in one agent](#use-it-in-one-agent) | chat, facts, documents, context bundles |
 | [Use it with multiple agents](#use-it-with-multiple-agents) | who sees what, hand-offs, sharing |
 | [Tool memory](#tool-memory) | stop calling the wrong tool twice |
+| [What it learns](#what-it-learns) | feedback, procedures, prefetch, summaries |
+| [Any language](#any-language) | language on write, the model where the rules cannot read |
 | [Grounding](#grounding-did-the-answer-actually-follow-from-the-evidence) | verify an answer against its evidence |
-| [Framework integrations](#framework-integrations) | LangGraph, and the shape of the rest |
+| [Using it from a framework](#using-it-from-a-framework) | the harness, or plain HTTP |
 | [Configuration](#configuration) | the knobs that matter |
 | [How it works](#how-it-works) | architecture in one screen |
 | [Status](#status-read-this-before-you-trust-a-number) | what is proven and what is not |
@@ -190,6 +193,18 @@ fall back to a deterministic hash embedding when `models/` is absent, so they ex
 plumbing without a download. The stand-in is an `Overrides` field on the container, never a
 setting; `serve.py` prints which mode it is in, and any benchmark produced that way is labelled
 `representative: false`. Never read a retrieval number that carries that flag.
+
+---
+
+## Three ways an agent uses it
+
+| mode | who decides what the model sees | the calls |
+|---|---|---|
+| **auto** (push) | the service, every turn | `ctx.context(task, tools=...)` → `rendered` goes into the prompt: the pinned profile, the thread's durable summary and the messages after it, the procedure learned for the task, tool hints, and the memories, passages and graph facts that clear the relevance floor, within `token_budget`. The agent harness does this for you with `memory="read_write"`. |
+| **react** (pull) | the agent, mid-run | `ctx.agent_tools()` lists nine tools (`memory_search`, `memory_remember`, `memory_update`, `memory_forget`, `history_search`, `profile_edit`, `procedures_search`, `tool_search`, `record_outcome`) with JSON schemas; `ctx.call_agent_tool(name, args)` runs one. Every call is logged as a pull, and what the agent keeps pulling for a kind of request is what the push starts including (prefetch learning). |
+| **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`, `record_tool`, `outcome`, `tool_hints`, `profile`, `summary`; everything else (documents, graph, briefs, webhooks, admin, model keys) under `ctx.advanced`. |
+
+The three mix: a harness pushes context and also hands the agent the pull tools.
 
 ---
 
@@ -495,6 +510,42 @@ rules (`ctx.advanced.tools.approval_suggestions()`) that nothing applies automat
 
 ---
 
+## What it learns
+
+Background jobs, never on a request's path, each with a deterministic version that runs
+without a model and a model version that runs when the tenant's key and policy allow it
+([`docs/LLM-USES.md`](docs/LLM-USES.md)):
+
+- **Feedback.** Verdicts on answers, memories, tool calls and runs adjust the confidence of the
+  memories an answer cited, label run outcomes and feed tool statistics; a memory's standing
+  moves its ranking within a bounded ±15%.
+- **Procedures.** Tool runs with outcomes are mined into one stored procedure per task pattern,
+  admitted at ≥ 2 supporting runs and ≥ 60% success, updated by delta; `tool_hints` and the
+  push offer it as a plan with argument bindings.
+- **Approval suggestions.** Approve / reject / edit decisions per tool and argument shape become
+  suggested rules after 5 decisions (`GET /v1/tools/approval-suggestions`); never applied by
+  the service.
+- **Prefetch.** A memory the agent pulled for a kind of request at least 3 times and used at
+  least half the time is included in the next push for that kind of request (at most 5).
+- **Thread summaries and the profile.** Every 20 messages a thread's durable summary is rolled
+  forward (so the summary plus the 20-message window always cover the thread); the `user`
+  profile block is kept from USER and PREFERENCE memories.
+- **Reflection and connections.** Periodic, cited insights over a principal's memories and typed
+  links between memories (supersedes / contradicts / relates).
+
+## Any language
+
+Every observation, memory and chunk carries its language (`lang`, detected without a model).
+The extraction rules and the query router's cue patterns are English; a message in another
+language is kept verbatim (retrievable through the multilingual dense space every query
+searches) and, when a key can pay, read by the model into typed facts in its own language,
+with the knowledge graph's entities and relations read the same way. A question in another
+language is never routed by English cues. Tested with Japanese, Hindi, German, Spanish and
+Chinese fixtures; see [`docs/MULTILINGUAL-RUNTIME.md`](docs/MULTILINGUAL-RUNTIME.md) for the
+encoders.
+
+---
+
 ## Grounding: did the answer actually follow from the evidence?
 
 ```python
@@ -521,9 +572,9 @@ There is no LangGraph adapter in this repository, and that is the design. A memo
 that ships adapters knows the names of its consumers — the dependency points the wrong way,
 and the service image ends up carrying framework packages it never imports. Framework
 adapters belong in the layer that drives the framework: in this platform that is
-[`agent-harness`](https://github.com/amitmohapatra/agent-harness), whose
-`universal-agent-harness-langgraph` package already wraps LangGraph nodes and threads a
-`MemoryClient` through them.
+[`agent-harness`](https://github.com/amitmohapatra/agent-harness) (`trellis-harness`), which
+attaches to a LangGraph graph, an OpenAI Agents agent, Claude Agent SDK options or a plain
+callable, pushes `/v1/context` into the run and adds the pull tools (`memory="read_write"`).
 
 ### Plain HTTP
 
@@ -675,13 +726,13 @@ them on every operation, ADR 0022 explains them):
 | Header | Purpose |
 |---|---|
 | `X-API-Key` (or `Authorization: Bearer`) | The calling service's credential. |
-| `X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User` | Who the request acts for. In `api_key` mode the tenant comes from the key. The pre-0.2 spellings `X-Memory-*` are read until 0.3.0; a request carrying both spellings, or either more than once, with different values is refused before the credential is read, so a gateway that stamps these headers must strip both spellings. |
+| `X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User` | Who the request acts for. In `api_key` mode the tenant comes from the key. A request carrying one of them more than once with different values is refused before the credential is read. |
 | `traceparent` | W3C Trace Context. Sent when the agent is tracing; the response carries the trace the request ran under, and `X-Trace-ID` repeats its 32-hex trace id. |
 | `X-Request-ID` | One id per call, kept across the SDK's retries; echoed when it is an id (a letter or digit, then letters, digits and `._:-`, at most 200 characters), else replaced. |
 | `X-Correlation-ID` | An opaque id of yours (a letter or digit, then letters, digits and `._:-`, at most 200 characters), echoed. A `correlation_id` in the body scope wins over the header. `bind(trace_id=...)` with a non-W3C value lands here. |
 | `X-Trace-ID` | Response: the 32-hex trace id the request ran under, the same one `traceparent` carries. |
 | `Idempotency-Key` | Makes a write safe to retry. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
-| `X-Trellis-LLM-Tokens` | Response: LLM tokens the request spent, when it spent any (also sent as `X-Memory-LLM-Tokens` until 0.3.0). |
+| `X-Trellis-LLM-Tokens` | Response: LLM tokens the request spent, when it spent any |
 
 Every error is an RFC 9457 problem (`application/problem+json`):
 
@@ -725,9 +776,11 @@ conversation and files are archived immutably to object storage with checksums.
 transaction (a transactional outbox). Only then do you get a `2xx`. A worker that dies
 mid-job is detected and its work requeued; replay is safe because every write is idempotent.
 
-**How retrieval works.** Authorized scope → exact lookup → a rules-based router → BM25 +
-dense retrieval fused with RRF → context expansion over the
-document graph → evidence verification → abstain if still insufficient.
+**How retrieval works.** Authorized scope → exact lookup → a rules-based router (English cues;
+any other language is routed as a general question) → BM25 + two dense spaces fused with
+RRF, the graph traversal running underneath in one budgeted statement → context expansion
+over the document graph → evidence verification → abstain if still insufficient. The push
+then packs, within the token budget, what clears the encoder's relevance floor.
 
 More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · design decisions in [docs/adr/](docs/adr/).
 
@@ -735,33 +788,22 @@ More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · design decisions in [docs/adr/]
 
 ## Status: read this before you trust a number
 
-This service is **not production-ready**, and the reason is specific.
+Pre-1.0: the API changed in place in 0.2.0 and again in 0.3.0 (the aliases removed), and it
+has no external users yet.
 
-Everything was built and gated in a sandbox with **no model weights, no real Qdrant /
-Dragonfly / OpenFGA servers, and no LLM**. The logic gates are real and passing:
+What is measured, with the real encoders, PostgreSQL and Qdrant, on a 2015 4-core laptop
+(no AVX2) shared with other workloads - every number and its caveats is in
+[`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md):
 
-| Gate | Status |
+| | |
 |---|---|
-| Acknowledged data loss | **0** over a chaos run with killed workers and outages |
-| Unauthorized retrieval | **0** across tenant, user, agent and run boundaries |
-| Knowledge-graph fact recall / false facts | **1.00 / 0** |
-| False-merge rate | **0.00** |
-| Tool memory (suggestion, next-step, plan validity) | **1.00 / 1.00 / 1.00**, zero violations |
+| `/v1/context` p50 / p95, model off | ~0.3 s / ~0.4-0.6 s on that laptop; the 300 ms p95 target is set for an 8 vCPU VM and has not been measured there |
+| context packing | 10 off-topic questions: 30.8 → 1.5 memories and 76 → 23 KB per response with the relevance floor; every evidence memory of 135 LoCoMo questions still packed |
+| LoCoMo source recall, SciFact nDCG@10, XQuAD R@10 | [`docs/PHASE7-RESULTS-2026-09-28.md`](docs/PHASE7-RESULTS-2026-09-28.md), [`docs/PHASE9-RESULTS-2026-09-29.md`](docs/PHASE9-RESULTS-2026-09-29.md) |
+| acknowledged data loss, unauthorized retrieval | 0 and 0 in the failure and security suites |
 
-But every **retrieval-quality** number was measured with a deterministic hash embedding
-standing in for a real model, and every latency number in-process without a network hop.
-Those figures bound the service's own logic; they say nothing about production performance.
-
-Making them real means running `make validate` with the real weights in `models/`, the real
-servers, and a network hop — everything needed is in the repository and that work is in
-progress. Until then, treat retrieval quality and latency as **unmeasured**.
-
-**Also in progress:** the framework-side tool hooks — the tool-memory service, API, SDK and
-gate are done; the adapter-side wrappers that call them live in the consuming framework and
-are not. The grounding cascade runs with a deterministic lexical
-stand-in for the NLI model on this machine, so its verdicts are labelled
-`representative: false` until the DeBERTa weights are loaded.
-[docs/FINAL_REPORT.md](docs/FINAL_REPORT.md) is the honest per-gate account.
+Not measured: generated-answer accuracy with the current write path, and anything at the
+target VM's scale.
 
 ---
 

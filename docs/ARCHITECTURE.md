@@ -77,14 +77,18 @@ and canonical/search drift.
 ## Retrieval pipeline
 
 ```
-query -> rule-based route -> overlap encoder with authorized scope + graph prefetch
+query -> language + rule-based route (English cues only for English; any other language
+         is GENERAL_SEMANTIC) -> overlap encoder with authorized scope + graph prefetch
+         (one statement, stopped by PostgreSQL at the 150 ms graph budget)
       -> exact lookup or dense/BM25 search -> native RRF + stable ties -> dedup -> bounded cut
       -> graph facts/evidence -> document companion expansion
       -> request-local evidence verification / bounded companion escalation
-      -> ContextBuilder packs provenance and evidence groups under the token budget
-         (concurrently with retrieval: profile blocks, the thread summary, procedures and
-          prefetched memories - one indexed read each; the pinned sections take at most
-          half the budget; tool hints when asked)
+      -> dense similarity of each ranked item to the question (one read per collection)
+      -> ContextBuilder packs provenance and evidence groups under the token budget, skipping
+         ranked items under the encoder's relevance floor
+         (concurrently with retrieval: profile blocks, the thread summary, procedures,
+          prefetched memories and the thread's recent messages - one indexed read each; the
+          pinned sections take at most half the budget; tool hints when asked)
 ```
 
 Memories are re-scored by standing (confidence and reinforcement, which feedback moves) with
@@ -101,7 +105,13 @@ message every 20 ------> summary.refresh: the thread's durable summary (rolling)
 USER/PREFERENCE memory -> profile.refresh: the user's pinned block
 agent-tool pulls ------> prefetch (every 5 min): what the push pre-includes per pattern
 catalog upsert --------> tools.index: the tools search collection
+observation (any lang) -> memory.process: English rules; other languages (Observation.lang)
+                            -> contextual_extraction facts in that language (tenant model)
+memory / document -----> graph.enrich: native entities and edges; relation_extraction reads
+                            text the entity rules cannot (tenant model)
 ```
+
+Where each model use runs, its tier and its fallback: [LLM-USES.md](LLM-USES.md).
 
 The request path reads only what these jobs precompute (indexed, bounded).
 

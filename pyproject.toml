@@ -1,6 +1,6 @@
 [project]
 name = "trellis-memory-service"
-version = "0.2.0"
+version = "0.3.0"
 description = "trellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG."
 readme = "README.md"
 requires-python = ">=3.12"

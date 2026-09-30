@@ -5430,7 +5430,7 @@ wheels = [
 
 [[package]]
 name = "trellis-memory"
-version = "0.2.1"
+version = "0.3.0"
 source = { editable = "sdk/python" }
 dependencies = [
     { name = "httpx" },
@@ -5464,7 +5464,7 @@ provides-extras = ["otel", "dev"]
 
 [[package]]
 name = "trellis-memory-service"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
