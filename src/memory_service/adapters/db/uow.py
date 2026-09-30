@@ -18,6 +18,7 @@ from memory_service.adapters.db.profile_repository import (
     SqlProfileRepository,
     SqlThreadSummaryRepository,
 )
+from memory_service.adapters.db.pull_repository import SqlPullRepository
 from memory_service.adapters.db.repositories import (
     SqlAgentRunRepository,
     SqlArchiveRepository,
@@ -134,6 +135,7 @@ class SqlUnitOfWork:
         self.procedures = SqlProcedureRepository(s)
         self.profiles = SqlProfileRepository(s)
         self.summaries = SqlThreadSummaryRepository(s)
+        self.pulls = SqlPullRepository(s)
         self.credentials = SqlCredentialRepository(s)
         self.llm_policies = SqlLLMPolicyRepository(s)
         self.llm_usage = SqlLLMUsageRepository(s)

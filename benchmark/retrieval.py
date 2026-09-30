@@ -43,7 +43,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 GOLDEN = ROOT / "tests" / "eval" / "golden" / "acme_fy26.json"
 TABLES = (
-    "tool_invocations, run_outcomes, tools, tool_stats, approval_patterns, procedures, profile_blocks, thread_summaries, graph_relations, graph_entities, memories, context_edges, chunks, document_nodes, document_versions, file_staging, documents, "
+    "tool_invocations, run_outcomes, tools, tool_stats, approval_patterns, procedures, profile_blocks, thread_summaries, agent_tool_pulls, prefetch_stats, graph_relations, graph_entities, memories, context_edges, chunks, document_nodes, document_versions, file_staging, documents, "
     "archive_segments, job_outbox, idempotency_keys, revisions, observations, "
     "agent_runs, message_attachments, messages, turns, sessions, threads"
 )

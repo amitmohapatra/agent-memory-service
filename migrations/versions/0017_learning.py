@@ -11,6 +11,9 @@
   cursor, behind a partial index on the calls not learned yet.
 - profile_blocks: pinned text per (scope, block); thread_summaries: a thread's durable
   summary, one row per version (the primary key reads the newest).
+- agent_tool_pulls: every memory agent-tool call (what was asked, returned, then used);
+  prefetch_stats: per (principal, request pattern, item) pulls and uses, what the context
+  pre-includes from.
 """
 
 import sqlalchemy as sa
@@ -151,7 +154,51 @@ def _profile_and_summaries() -> None:
     )
 
 
+def _pulls() -> None:
+    op.create_table(
+        "agent_tool_pulls",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("pull_id", sa.String(200), primary_key=True),
+        sa.Column("scope_key", sa.String(600), nullable=False),
+        sa.Column("run_id", sa.String(200), nullable=True),
+        sa.Column("pattern", sa.Text(), nullable=False, server_default=""),
+        sa.Column("tool", sa.String(60), nullable=False),
+        sa.Column("args", postgresql.JSONB(), nullable=False, server_default=_JSON_OBJECT),
+        sa.Column("result_ids", postgresql.JSONB(), nullable=False, server_default=_JSON_LIST),
+        sa.Column("used_ids", postgresql.JSONB(), nullable=False, server_default=_JSON_LIST),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column("learned_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.create_index("ix_agent_tool_pulls_run", "agent_tool_pulls", ["tenant_id", "run_id"])
+    op.create_index(
+        "ix_agent_tool_pulls_unlearned",
+        "agent_tool_pulls",
+        ["created_at"],
+        postgresql_where=sa.text("learned_at IS NULL"),
+    )
+    op.create_table(
+        "prefetch_stats",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("scope_key", sa.String(600), primary_key=True),
+        sa.Column("pattern", sa.Text(), primary_key=True),
+        sa.Column("item_id", sa.String(200), primary_key=True),
+        sa.Column("pulls", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("uses", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+    )
+    op.create_index(
+        "ix_prefetch_stats_pattern",
+        "prefetch_stats",
+        ["tenant_id", "scope_key", "pattern", "uses"],
+    )
+
+
 def upgrade() -> None:
+    _pulls()
     _profile_and_summaries()
     _catalog()
     _counters()
@@ -167,6 +214,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_table("prefetch_stats")
+    op.drop_table("agent_tool_pulls")
     op.drop_table("thread_summaries")
     op.drop_table("profile_blocks")
     op.drop_index("ix_tool_invocations_unlearned", table_name="tool_invocations")

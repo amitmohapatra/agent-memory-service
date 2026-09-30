@@ -545,6 +545,7 @@ def _wire_memory(container: Container) -> None:
 
 def _wire_tools(container: Container) -> None:
     """Tool memory: the catalog and call records, tool search, hints and the learning job."""
+    from memory_service.modules.agent_tools.service import AgentTools
     from memory_service.modules.tools.hints import ToolHintsService
     from memory_service.modules.tools.index import ToolIndex
     from memory_service.modules.tools.learning import ToolLearning
@@ -562,6 +563,7 @@ def _wire_tools(container: Container) -> None:
     container.services["tool_learning"] = ToolLearning(
         uow_factory, container.services["llm_assist"], container.graph_store
     )
+    container.services["agent_tools"] = AgentTools(uow_factory, container.services)
 
 
 def _wire_graph(container: Container) -> None:

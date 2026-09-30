@@ -917,6 +917,51 @@ class ThreadSummaryRow(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
 
 
+class AgentPullRow(Base):
+    """One call of a memory agent tool: what was asked, what came back, what was used."""
+
+    __tablename__ = "agent_tool_pulls"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    pull_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(200))
+    pattern: Mapped[str] = mapped_column(Text, default="", server_default="")
+    tool: Mapped[str] = mapped_column(String(60), nullable=False)
+    args: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    result_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    used_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    learned_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        Index("ix_agent_tool_pulls_run", "tenant_id", "run_id"),
+        Index(
+            "ix_agent_tool_pulls_unlearned",
+            "created_at",
+            postgresql_where=text("learned_at IS NULL"),
+        ),
+    )
+
+
+class PrefetchStatRow(Base):
+    """How often an item a pull returned for a request pattern was then used."""
+
+    __tablename__ = "prefetch_stats"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(600), primary_key=True)
+    pattern: Mapped[str] = mapped_column(Text, primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    pulls: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    uses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        Index("ix_prefetch_stats_pattern", "tenant_id", "scope_key", "pattern", "uses"),
+    )
+
+
 class ToolInvocationRow(Base):
     __tablename__ = "tool_invocations"
 

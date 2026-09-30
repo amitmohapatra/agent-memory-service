@@ -195,4 +195,14 @@ async def verify(
             bundle = await builder.build(ctx, str(body.query), document_ids=body.document_ids)
             evidence, unused = bundle_evidence(bundle)
         report = await cascade.verify(body.answer, evidence, unused=unused)
+        # what a run's verified answer rests on is what its memory pulls were good for
+        await container.services["agent_tools"].used(
+            ctx,
+            [
+                i
+                for claim in report.claims
+                if claim.verdict == "supported"
+                for i in claim.evidence_ids
+            ],
+        )
         return VerifyResponse(source=source, **report.model_dump(mode="json"))

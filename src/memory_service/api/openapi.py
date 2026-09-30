@@ -133,6 +133,12 @@ TAGS: list[dict[str, Any]] = [
         "(candidates, learned plan, next step, prefilled arguments) and approval suggestions.",
     },
     {
+        "name": "agent_tools",
+        "description": "The memory tools an agent calls itself (search, remember, update, "
+        "forget, history, profile edit, procedures, tools, outcome); every call is a pull the "
+        "pushed context learns from.",
+    },
+    {
         "name": "agents",
         "description": "An agent's own model credential (a Bifrost virtual key): status, "
         "set and revoke.",

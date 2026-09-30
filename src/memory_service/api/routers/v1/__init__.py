@@ -8,6 +8,7 @@ from fastapi import APIRouter
 def routers() -> list[APIRouter]:
     from memory_service.api.routers.v1 import (
         admin,
+        agent_tools,
         briefs,
         conversation,
         feedback,
@@ -37,5 +38,6 @@ def routers() -> list[APIRouter]:
         profile.router,
         graph.router,
         tools.router,
+        agent_tools.router,
         feedback.router,
     ]

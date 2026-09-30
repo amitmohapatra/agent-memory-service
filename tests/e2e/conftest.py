@@ -39,6 +39,8 @@ TABLES = [
     "procedures",
     "profile_blocks",
     "thread_summaries",
+    "agent_tool_pulls",
+    "prefetch_stats",
     "run_outcomes",
     "tools",
     "graph_relations",

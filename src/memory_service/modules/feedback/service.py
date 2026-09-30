@@ -50,7 +50,7 @@ from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.native import normalized_hash
-from memory_service.modules.memory.revisions import bump_memory_revisions, supersede
+from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
 from memory_service.modules.memory.service import MemoryService
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
@@ -333,6 +333,8 @@ class FeedbackService:
         answered is labelled too, unless it already carries an explicit label."""
         affirmed = record.verdict in AFFIRMING_VERDICTS
         adjusted = await self._adjust_cited(uow, record, affirmed=affirmed, now=now)
+        if affirmed and record.agent_run_id:
+            await uow.pulls.mark_used(record.tenant_id, record.agent_run_id, adjusted)
         run_id = await self._label_run(
             uow, record, record.agent_run_id, success=affirmed, source="feedback", now=now
         )
@@ -493,22 +495,10 @@ class FeedbackService:
     async def _retract(
         self, uow: UnitOfWork, memory: CanonicalMemory, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        memory.temporal = memory.temporal.model_copy(
-            update={"status": TemporalStatus.RETRACTED, "valid_to": memory.temporal.valid_to or now}
+        await retract(
+            uow, memory, now=now, events=self.events, data={"feedback_id": record.feedback_id}
         )
-        memory.updated_at = now
-        await uow.memories.update(memory)
         await self._reindex(uow, memory)
-        await self.events.publish(
-            uow,
-            Event(
-                type=WebhookEvent.MEMORY_RETRACTED,
-                tenant_id=memory.tenant_id,
-                workspace_id=memory.scope.workspace_id,
-                occurred_at=now,
-                data={"memory_id": memory.memory_id, "feedback_id": record.feedback_id},
-            ),
-        )
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_RETRACTED, memory_id=memory.memory_id, projected_at=now
         )

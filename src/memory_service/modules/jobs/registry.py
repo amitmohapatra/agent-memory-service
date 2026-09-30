@@ -256,6 +256,10 @@ def register_handlers(container: Container) -> None:
         """Keep a user's pinned ``user`` block from their USER and PREFERENCE memories."""
         await container.services["profile"].refresh_user(payload["tenant_id"], payload["user_id"])
 
+    async def prefetch_learn(payload: dict[str, Any]) -> None:
+        """Fold settled agent-tool pulls into what the context pre-includes."""
+        await container.services["agent_tools"].learn_prefetch()
+
     async def tools_index(payload: dict[str, Any]) -> None:
         """Embed changed catalog entries for tool search."""
         await container.services["tool_index"].index(payload["tenant_id"], payload["tool_ids"])
@@ -372,6 +376,9 @@ def register_handlers(container: Container) -> None:
     queue.register(TASK_SUMMARY_REFRESH, Queue.SUMMARY, summary_refresh, retries=3)
     queue.register(TASK_PROFILE_REFRESH, Queue.SUMMARY, profile_refresh, retries=3)
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
+    queue.register_periodic(
+        "periodic.prefetch_learn", Queue.RECONCILE, prefetch_learn, cron="*/5 * * * *"
+    )
     queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
     queue.register_periodic(
         "periodic.tools_learn", Queue.RECONCILE, tools_learn, cron="*/5 * * * *"
