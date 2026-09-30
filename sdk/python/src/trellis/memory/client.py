@@ -224,7 +224,7 @@ class MemoryContext:
         format: Literal["prompt", "full"] = "prompt",
         debug: bool = False,
     ) -> PromptContext | ContextBundle:
-        """The context for this turn: the pinned profile, the thread's summary and recent
+        """The context for this turn: the pinned profile, the thread's summary, its recent
         messages (unless ``window=False``: the framework keeps its own history), and the
         memories, documents and facts that answer ``query``, rendered for a prompt within
         ``token_budget``. Items are cited by handle ([m1], [d2]...), which ``update``,

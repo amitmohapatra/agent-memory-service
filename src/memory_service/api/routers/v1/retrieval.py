@@ -150,8 +150,9 @@ class ContextRequest(BaseModel):
     )
     window: bool = Field(
         default=True,
-        description="carry the thread's recent messages and its summary; false when the "
-        "framework keeps its own history (a LangGraph checkpointer, an OpenAI session)",
+        description="carry the thread's recent messages; false when the framework keeps its "
+        "own history (a LangGraph checkpointer, an OpenAI session). The thread's summary "
+        "comes either way",
     )
     format: Literal["prompt", "full"] = Field(
         default="prompt",

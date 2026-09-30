@@ -460,7 +460,6 @@ class ContextBuilder:
                     ctx,
                     query,
                     visibility,
-                    summary=window,
                     procedures=tools is not None and tools.any,
                 )
             )

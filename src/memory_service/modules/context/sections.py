@@ -138,14 +138,14 @@ class ContextSections:
         query: str,
         visibility: VisibilitySpecification,
         *,
-        summary: bool,
         procedures: bool,
     ) -> Pinned:
-        """Everything but the tool hints, concurrently: the thread summary only when the
-        context carries the conversation, the procedures only for an agent with tools."""
+        """Everything but the tool hints, concurrently: the procedures only for an agent with
+        tools. The thread summary comes with or without the window: a framework that keeps
+        its own history keeps the recent messages, not what was said before them."""
         found_profile, found_summary, found_procedures, prefetched = await asyncio.gather(
             self._profile(ctx),
-            self._summary(ctx) if summary else _none(),
+            self._summary(ctx),
             self.services["tool_hints"].procedures(
                 ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES
             )
@@ -217,10 +217,6 @@ class ContextSections:
             and m.deleted_at is None
             and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
         ]
-
-
-async def _none() -> None:
-    return None
 
 
 async def _empty() -> list[StoredProcedure]:
