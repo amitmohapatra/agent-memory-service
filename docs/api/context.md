@@ -104,9 +104,13 @@ for message in await ctx.chat.history(limit=20):
     print(message.role, message.content[:60])
 ```
 
-`chat.*` needs `thread_id`, and a message needs a turn: `session_id` and `turn_id` are the
-application's own ids, a `turn_id` belongs to the session that created it, and a session belongs
-to a thread. `remember`, `observe`, `recall` and `context` need none of that — a tenant is enough.
+`chat.*` needs `thread_id`. `session_id` and `turn_id` are optional and are the application's
+own ids when given: a `turn_id` belongs to the session that created it, and a session belongs
+to a thread. Without them a message joins the thread's own session, a USER message opens the
+thread's next turn and any other message joins its latest turn; the acknowledgement returns the
+ids used. Without a turn the SDK sends a fresh idempotency key per call, so two identical
+messages ("ok") are two messages. `remember`, `observe`, `recall` and `context` need none of
+that — a tenant is enough.
 Internal messages stay out of the window unless `include_internal=True`.
 
 ## Briefs: a standing question, kept warm

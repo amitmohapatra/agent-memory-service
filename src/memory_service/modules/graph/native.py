@@ -309,8 +309,11 @@ class NativeGraphEnrichment:
             )
         # The transcript header of a forwarded chat line ("[8 May, 2023] Melanie: ...") is
         # not content: left in, its capitalised speaker mints a THING entity that a question
-        # naming Melanie resolves to in preference to her own principal node.
-        for name in extract_entities(strip_turn_prefix(memory.content), max_entities=8):
+        # naming Melanie resolves to in preference to her own principal node. Entities the
+        # writer declared (a stated memory's ``entities``) come first.
+        named = extract_entities(strip_turn_prefix(memory.content), max_entities=8)
+        declared = [str(e) for e in memory.system_metadata.get("entities") or []]
+        for name in dict.fromkeys([*declared, *named]):
             if not _usable_entity(name):
                 continue
             e = ent(name)

@@ -8,8 +8,6 @@ Works with any framework (LangGraph today, plain Python anywhere) because the co
 nothing about your agent library.
 
 ```python
-import uuid
-
 from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://localhost:8080", api_key="dev-key")
@@ -17,11 +15,9 @@ memory = MemoryClient("http://localhost:8080", api_key="dev-key")
 ctx = memory.bind(
     tenant_id="acme",
     user_id="u1",
-    # your own ids: the service creates them on first use. A turn belongs to a session,
-    # a session to a thread — and each turn id must be new.
+    # your own id: the service creates the thread on first use (and its session and turns,
+    # unless you pass session_id / turn_id of your own)
     thread_id="chat-42",
-    session_id="s-2026-09-28",
-    turn_id=f"t-{uuid.uuid4().hex[:8]}",
 )
 
 await ctx.chat.user("I'm in Berlin and I prefer short answers.")
@@ -213,16 +209,17 @@ ctx = memory.bind(
     workspace_id=request.workspace,  # a project or app
     user_id=request.user_id,  # who this is for
     thread_id=request.thread_id,  # the conversation
-    session_id=request.session_id,  # a continuous stretch of it
-    turn_id=request.turn_id,  # this exchange
+    session_id=request.session_id,  # optional: a continuous stretch of it
+    turn_id=request.turn_id,  # optional: this exchange
 )
 ```
 
 `tenant_id` is the wall nothing crosses; everything else narrows visibility further.
 
 Thread, session and turn are **your** identifiers — pass the ones your app already has, and
-the service creates them on first use. They are required for `chat.*` (a message has to belong
-to a turn); for `remember`, `observe`, `recall` and `context` a tenant is enough. If you have
+the service creates them on first use. `chat.*` needs a thread; without a session a message
+joins the thread's own session, and without a turn a user message opens the thread's next turn
+and a reply joins it. For `remember`, `observe`, `recall` and `context` a tenant is enough. If you have
 no conversation to attach to, `await ctx.chat.create()` gives you a thread to start from.
 
 ### Record the conversation
@@ -268,12 +265,15 @@ see the [SDK examples](sdk/python/README.md) and
 When your app knows something rather than inferring it from chat:
 
 ```python
-await ctx.remember("Prefers metric units", memory_type="PREFERENCE")
+fact = await ctx.remember("Prefers metric units", memory_type="PREFERENCE")
+await ctx.update(fact.memory_id, "Prefers imperial units", reason="user corrected it")
 await ctx.observe("User cancelled the Pro plan", kind="EVENT")
 ```
 
-`remember` stores a fact you assert. `observe` hands the service a raw event and lets it
-decide what, if anything, is worth keeping.
+`remember` stores what you assert verbatim, as one memory, before it returns (`POST
+/v1/memories`; the same content in the same scope is the same memory). `update` replaces it
+with a new version and closes the old one, which stays readable in a temporal view. `observe`
+hands the service raw evidence and lets it decide, asynchronously, what is worth keeping.
 
 ### Add documents
 

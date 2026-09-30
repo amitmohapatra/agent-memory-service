@@ -247,6 +247,25 @@ class ObservationAck(BaseModel):
     deduplicated: bool = False
 
 
+class RememberAck(BaseModel):
+    """``remember``: the memory stored now (or the one that already held the same content)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    memory_id: str
+    deduplicated: bool = False
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class SupersedeAck(BaseModel):
+    """``update``: the new, current version and the one it replaced."""
+
+    model_config = ConfigDict(frozen=True)
+
+    memory_id: str
+    supersedes: str
+
+
 class FileHandle(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 

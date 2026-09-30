@@ -509,7 +509,9 @@ def _wire_memory(container: Container) -> None:
         events=container.services.get("webhooks"),
         assist=container.services["llm_assist"],
     )
-    container.services["memory"] = MemoryService(container.services["authz"])
+    container.services["memory"] = MemoryService(
+        container.services["authz"], events=container.services.get("webhooks")
+    )
     if "webhooks" in container.services:
         container.services["feedback"] = FeedbackService(
             container.services["uow_factory"],

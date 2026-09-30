@@ -176,8 +176,11 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     )
     # explicit sharing with the agent group; a second agent corroborates
     fact = "Revenue was EUR 412 million in FY26."
-    await planner.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
-    await writer.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
+    # observations, not statements: corroboration and contradiction are what the pipeline
+    # learns from evidence (a stated memory is stored as said, and deduplicated per owner)
+    shared = {"memory_type": "SHARED", "visibility": "AGENT_GROUP"}
+    await planner.observe(fact, kind="EVENT", hints=shared)
+    await writer.observe(fact, kind="EVENT", hints=shared)
     auditor = user.agent("auditor")
     items = await auditor.recall("FY26 revenue", kinds=["memory"])
     hit = next(i for i in items if "412" in i.text)
@@ -187,8 +190,8 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     assert got.owner_principal == "agent:u1/planner"
     assert got.contributors == ["agent:u1/writer"]
     # a conflicting single-valued fact from another agent is kept, linked, never overwritten
-    await planner.remember("My manager is Dana.", memory_type="SHARED", visibility="AGENT_GROUP")
-    await auditor.remember("My manager is Lee.", memory_type="SHARED", visibility="AGENT_GROUP")
+    await planner.observe("My manager is Dana.", kind="EVENT", hints=shared)
+    await auditor.observe("My manager is Lee.", kind="EVENT", hints=shared)
     managers = [
         i
         for i in await writer.recall("who is my manager?", kinds=["memory"])

@@ -216,11 +216,19 @@ async def tour() -> int:
         ack = await user.observe("I work at ACME Corp and my favourite editor is neovim.")
         replay = await user.observe("I work at ACME Corp and my favourite editor is neovim.")
         assert replay.observation_id == ack.observation_id, "idempotent replay"
-        await user.remember("Always answer in British English.", memory_type="PREFERENCE")
-        await user.remember(
-            "We decided to use PostgreSQL as the canonical store.", memory_type="SEMANTIC"
+        # evidence with hints: the service extracts the triple (prefers, decided) from it
+        await user.observe("Always answer in British English.", hints={"memory_type": "PREFERENCE"})
+        await user.observe(
+            "We decided to use PostgreSQL as the canonical store.",
+            hints={"memory_type": "SEMANTIC"},
         )
-        await user.remember("Scratch: the draft lives in /tmp/brief.md", lifetime="EPHEMERAL")
+        await user.observe(
+            "Scratch: the draft lives in /tmp/brief.md", hints={"lifetime": "EPHEMERAL"}
+        )
+        # a statement: stored verbatim, now, and replaced by a new version on update
+        stated = await user.remember("The brief is due on Friday.", memory_type="TASK")
+        moved = await user.update(stated.memory_id, "The brief is due on Monday.", reason="moved")
+        assert (await user.get_memory(stated.memory_id)).superseded_by == moved.memory_id
         await asyncio.sleep(0.5)
         mems = await user.memories()
         preds = {m.predicate: m for m in mems if m.predicate}
@@ -303,14 +311,11 @@ async def tour() -> int:
         assert planner_mems and planner_mems[0].visibility == "RUN"
         # explicit sharing + corroboration + conflict
         fact = "Revenue was EUR 412 million in FY26."
-        await planner.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
-        await writer.remember(fact, memory_type="SHARED", visibility="AGENT_GROUP")
-        await planner.remember(
-            "My manager is Dana.", memory_type="SHARED", visibility="AGENT_GROUP"
-        )
-        await reviewer.remember(
-            "My manager is Lee.", memory_type="SHARED", visibility="AGENT_GROUP"
-        )
+        shared_hints = {"memory_type": "SHARED", "visibility": "AGENT_GROUP"}
+        await planner.observe(fact, hints=shared_hints)
+        await writer.observe(fact, hints=shared_hints)
+        await planner.observe("My manager is Dana.", hints=shared_hints)
+        await reviewer.observe("My manager is Lee.", hints=shared_hints)
         await asyncio.sleep(0.5)
         auditor = crew.agent("auditor")
         shared = await auditor.recall("FY26 revenue manager", kinds=["memory"])

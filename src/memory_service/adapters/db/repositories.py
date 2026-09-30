@@ -216,6 +216,15 @@ class SqlTurnRepository:
     async def next_sequence(self, tenant_id: str, thread_id: str) -> int:
         return await _next_sequence(self.s, TurnRow, tenant_id, thread_id)
 
+    async def latest(self, tenant_id: str, thread_id: str) -> Turn | None:
+        turn_id = await self.s.scalar(
+            select(TurnRow.turn_id)
+            .where(TurnRow.thread_id == thread_id, TurnRow.tenant_id == tenant_id)
+            .order_by(TurnRow.sequence.desc())
+            .limit(1)
+        )
+        return await self.get(tenant_id, turn_id) if turn_id is not None else None
+
 
 def _row_to_message(r: MessageRow, attachments: Sequence[MessageAttachmentRow] = ()) -> Message:
     return Message(

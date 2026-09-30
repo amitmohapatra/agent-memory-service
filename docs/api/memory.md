@@ -1,10 +1,11 @@
-# Memory: observations in, memories out
+# Memory: statements and observations in, memories out
 
-You do not write memories. You write **observations** — things that happened, or things you know
-— and the service decides what becomes a durable memory, how it relates to what it already holds,
-and when it stops being true. That asymmetry is the whole design: a caller that could write
-memories directly would also own deduplication, contradiction and decay, and every caller would
-own them differently.
+Two ways in, deliberately different. An **observation** is evidence — something that happened —
+and the service decides, asynchronously, what it teaches: what becomes a durable memory, how it
+relates to what is already held, and when it stops being true. A **statement** (`remember`) is
+the caller asserting a fact: it is stored verbatim as one memory before the call returns, with no
+extraction and no admission gate, and a correction to it is a new version (`update`), never an
+overwrite.
 
 ## What one observation becomes
 
@@ -35,7 +36,9 @@ of evidence.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/observations` | submit an observation (durably acknowledged, processed asynchronously) | `ctx.observe(...)`, `ctx.remember(...)` |
+| `POST /v1/observations` | submit an observation (durably acknowledged, processed asynchronously) | `ctx.observe(...)` |
+| `POST /v1/memories` | remember a statement verbatim, as one memory, now (deduplicated per owner and scope) | `ctx.remember(...)` |
+| `POST /v1/memories/{memory_id}/supersede` | replace a memory with a new version; the old one is closed, not deleted | `ctx.update(id, content, reason=...)` |
 | `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.memories()`, `ctx.memories_page()`, `ctx.iter_memories()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.get_memory(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
@@ -50,24 +53,33 @@ of evidence.
 ## `observe` versus `remember`
 
 ```python
-# "this happened": let the service classify, extract and decide
+# "this happened": let the service classify, extract and decide, later
 await ctx.observe(
     "Stock check for SKU-1 returned 95 units at EU-1.",
     kind="EVENT",
     sku="SKU-1",  # anything extra is custom metadata
 )
 
-# "I know this": state the type, the lifetime and the audience yourself
-await ctx.remember(
+# "this is true": stored as said, now; the id comes back
+fact = await ctx.remember(
     "The planner prefers weekly digests over per-event alerts.",
-    memory_type="PREFERENCE",  # SEMANTIC · EPISODIC · PROCEDURAL · PREFERENCE · DECISION · OUTCOME · FAILURE · SHARED
-    lifetime="LONG_TERM",  # EPHEMERAL · SHORT_TERM · LONG_TERM · ARCHIVAL
+    memory_type="PREFERENCE",  # SEMANTIC · PREFERENCE · EPISODIC · PROCEDURAL · TASK · USER · TOOL · OUTCOME
+    lifetime="LONG_TERM",  # SHORT_TERM · LONG_TERM
     visibility="USER",  # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORK · WORKSPACE · TENANT
+    entities=["weekly digest"],  # linked in the graph and anchored in search
 )
+print(fact.memory_id, fact.deduplicated)
+
+# a correction is a new version: the old one gets valid_to and superseded_by
+new = await ctx.update(fact.memory_id, "The planner prefers daily digests.", reason="changed")
 ```
 
-`remember` is `observe` with hints; both are idempotent on the key the SDK derives from the scope
-and the content, so a retried turn writes one row.
+Both are idempotent on the key the SDK derives from the scope and the content, so a retried turn
+writes one row. `remember` also deduplicates on the content itself: the same statement in the
+same scope by the same owner is the memory already stored (`deduplicated=True`). Its index and
+graph work are queued with it, so it is readable at once (`get_memory`) and searchable once the
+job lands. `update` needs the memory's owner (or the user an agent acts for, or a tenant admin),
+and a memory already superseded answers 409.
 
 ## The inventory, and forgetting
 
@@ -139,8 +151,8 @@ that sometimes you genuinely need to know.
 
 ## What this area does not do
 
-* it does not let you write a memory directly — see the first paragraph;
-* it does not promise read-after-write;
+* it does not extract anything from a statement, or store an observation synchronously — an
+  observation's memories are not readable until its job has run;
 * it does not take the *identity* from the body. The body's `scope` carries lineage only —
   thread, session, turn, work, task, agent, agent run, parent run — while tenant, workspace and
   user come from the credential and the trusted headers, and a body value that disagrees with a

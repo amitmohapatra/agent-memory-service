@@ -335,6 +335,26 @@ class SqlMemoryRepository:
         memory.revision = r.revision
         await self._invalidate_dependents(memory.tenant_id, [memory.memory_id])
 
+    async def current_with_hash(
+        self, tenant_id: str, *, scope_key: str, owner_principal: str, normalized_hash: str
+    ) -> CanonicalMemory | None:
+        row = (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.normalized_hash == normalized_hash,
+                    MemoryRow.scope_key == scope_key,
+                    MemoryRow.owner_principal == owner_principal,
+                    MemoryRow.deleted_at.is_(None),
+                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                )
+                .order_by(MemoryRow.created_at, MemoryRow.memory_id)
+                .limit(1)
+            )
+        ).first()
+        return _to_domain(row) if row is not None else None
+
     async def candidates(
         self,
         tenant_id: str,

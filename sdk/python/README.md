@@ -7,9 +7,7 @@ from trellis.memory import MemoryClient
 
 memory = MemoryClient("http://memory-service:8080", api_key="dev-key")
 
-ctx = memory.bind(
-    tenant_id="acme", user_id="u1", thread_id="thr_1", session_id="ses_1", turn_id="trn_1"
-)
+ctx = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")  # session/turn optional
 
 await ctx.chat.user("What changed in EBITDA?", attachments=["report.pdf"])
 bundle = await ctx.context("What changed in EBITDA?")

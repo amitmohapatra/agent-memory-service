@@ -220,12 +220,8 @@ def test_cache_outage_does_not_affect_correctness(client, container) -> None:
 
 
 def test_validation_errors(client) -> None:
-    r = client.post(
-        "/v1/messages",
-        headers=H,
-        json={"scope": {"thread_id": new_id("thread")}, "role": "USER", "content": "x"},
-    )
-    assert r.status_code == 422
+    r = client.post("/v1/messages", headers=H, json={"scope": {}, "role": "USER", "content": "x"})
+    assert r.status_code == 422, "a message needs a thread"
     r = client.post(
         "/v1/messages",
         headers=H,
@@ -279,3 +275,46 @@ async def test_sdk_ninety_percent_path(app, client) -> None:
     with pytest.raises(ValidationError):
         await memory.bind(tenant_id="acme", user_id="u1").chat.user("no lineage")
     await memory.aclose()
+
+
+def test_a_message_with_only_a_thread_gets_its_session_and_turn(client) -> None:
+    thread = new_id("thread")
+    scope = {"thread_id": thread}
+    asked = client.post(
+        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "ok"}
+    )
+    assert asked.status_code == 202, asked.text
+    answered = client.post(
+        "/v1/messages", headers=H, json={"scope": scope, "role": "ASSISTANT", "content": "ok"}
+    )
+    assert answered.json()["turn_id"] == asked.json()["turn_id"]
+    assert answered.json()["session_id"] == asked.json()["session_id"]
+    # the same content again, with no turn and no key, is a retry of the same message...
+    again = client.post(
+        "/v1/messages", headers=H, json={"scope": scope, "role": "USER", "content": "ok"}
+    )
+    assert again.json()["message_id"] == asked.json()["message_id"]
+    # ...unless the client says when it happened
+    later = client.post(
+        "/v1/messages",
+        headers=H,
+        json={
+            "scope": scope,
+            "role": "USER",
+            "content": "ok",
+            "occurred_at": "2026-09-30T10:00:00Z",
+        },
+    )
+    assert later.json()["message_id"] != asked.json()["message_id"]
+    assert later.json()["turn_id"] != asked.json()["turn_id"], "a question opens a new turn"
+
+
+def test_remember_refuses_what_it_cannot_store(client) -> None:
+    for body in (
+        {"content": "x", "lifetime": "EPHEMERAL"},
+        {"content": "x", "memory_type": "CUSTOM"},
+        {"content": "x", "valid_from": "2026-09-30T00:00:00Z", "valid_to": "2026-09-01T00:00:00Z"},
+        {"content": ""},
+    ):
+        r = client.post("/v1/memories", headers=H, json={"scope": {}, **body})
+        assert r.status_code == 422, (body, r.text)

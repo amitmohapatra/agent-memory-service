@@ -1,4 +1,5 @@
-"""Public /v1 routes for memory intelligence: observations in, canonical memories out."""
+"""Public /v1 routes for memory: observations in (learned from asynchronously), stated
+memories in (stored now), canonical memories out, superseded or forgotten on request."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -79,6 +80,94 @@ class ObservationRequest(BaseModel):
 class ObservationAckResponse(BaseModel):
     observation_id: str
     job_ids: list[str] = Field(default_factory=list)
+
+
+_REMEMBER_EXAMPLE: dict[str, Any] = {
+    "scope": {},
+    "content": "Prefers metric units.",
+    "memory_type": "PREFERENCE",
+    "visibility": "USER",
+}
+
+
+class RememberRequest(BaseModel):
+    """'This is true': stored verbatim as one memory, now. Nothing is extracted from it."""
+
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_REMEMBER_EXAMPLE]})
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    content: str = Field(..., min_length=1, max_length=8_000)
+    memory_type: MemoryType = Field(
+        default=MemoryType.SEMANTIC,
+        description=(
+            "The kind of memory: SEMANTIC (a fact), PREFERENCE, EPISODIC (something that "
+            "happened), PROCEDURAL (how to do something), TASK, USER (a profile attribute), "
+            "TOOL or OUTCOME are the ones a caller normally states."
+        ),
+    )
+    lifetime: Lifetime = Field(
+        default=Lifetime.LONG_TERM,
+        description="SHORT_TERM (the current thread or session) or LONG_TERM (durable); "
+        "EPHEMERAL and ARCHIVAL are not stored through this route.",
+    )
+    visibility: Visibility | None = Field(
+        default=None,
+        description="Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, "
+        "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the scope's own.",
+    )
+    subject: str | None = Field(
+        default=None,
+        max_length=300,
+        description="The entity the memory is about; defaults to the user for USER and "
+        "PREFERENCE memories",
+    )
+    entities: list[str] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Entities the memory names: linked in the graph and anchored in search",
+    )
+    valid_from: datetime | None = Field(default=None, description="When it became true")
+    valid_to: datetime | None = Field(default=None, description="When it stops being true")
+    custom_metadata: CustomMetadata = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _storable(self) -> RememberRequest:
+        if self.lifetime in (Lifetime.EPHEMERAL, Lifetime.ARCHIVAL):
+            raise ValueError("lifetime must be SHORT_TERM or LONG_TERM")
+        if self.memory_type is MemoryType.CUSTOM:
+            raise ValueError("CUSTOM memories are imported through /v1/observations")
+        if self.valid_from and self.valid_to and self.valid_to <= self.valid_from:
+            raise ValueError("valid_to must be after valid_from")
+        return self
+
+
+class RememberResponse(BaseModel):
+    memory_id: str
+    deduplicated: bool = Field(
+        description="true: the same content was already a current memory in this scope, "
+        "and that memory's id is returned"
+    )
+    job_ids: list[str] = Field(
+        default_factory=list, description="the index and graph job queued for it"
+    )
+
+
+class SupersedeRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [{"content": "Prefers imperial units.", "reason": "user corrected it"}]
+        },
+    )
+
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    content: str = Field(..., min_length=1, max_length=8_000)
+    reason: str = Field(..., min_length=1, max_length=500, description="why it changed")
+
+
+class SupersedeResponse(BaseModel):
+    memory_id: str = Field(description="the new, current version")
+    supersedes: str = Field(description="the version it replaced, now SUPERSEDED")
 
 
 class MemoryResponse(BaseModel):
@@ -242,6 +331,76 @@ async def submit_observation(
             tool_run_id=body.tool_run_id,
         )
         return 202, {"observation_id": ack.observation_id, "job_ids": ack.job_ids}, None
+
+    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+
+
+@router.post(
+    "/memories",
+    response_model=RememberResponse,
+    status_code=201,
+    tags=["memory"],
+    summary="Remember a statement verbatim as one memory (stored now, indexed asynchronously)",
+    responses={
+        **_WRITE_ERRORS,
+        200: {"model": RememberResponse, "description": "Replayed (Idempotency-Key seen before)"},
+    },
+)
+async def remember(
+    request: Request, body: RememberRequest, container: ContainerDep, _: ServicePrincipalDep
+) -> JSONResponse:
+    ctx = build_context(request, container, body.scope)
+    identity = ("remember", body.memory_type.value, body.content)
+    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
+    payload = derived_or_body(request, body, identity)
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        if ctx.thread_id:
+            # the thread is implied, as it is for an observation (see submit_observation)
+            await container.services["conversation"].create_thread(uow, ctx)
+        ack = await _service(container).remember(
+            uow,
+            ctx,
+            content=body.content,
+            memory_type=body.memory_type,
+            lifetime=body.lifetime,
+            visibility=body.visibility,
+            subject=body.subject,
+            entities=body.entities,
+            valid_from=body.valid_from,
+            valid_to=body.valid_to,
+            custom_metadata=body.custom_metadata,
+        )
+        return 201, RememberResponse(**ack.__dict__).model_dump(mode="json"), None
+
+    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+
+
+@router.post(
+    "/memories/{memory_id}/supersede",
+    response_model=SupersedeResponse,
+    tags=["memory"],
+    summary="Replace a memory with a new version; the old one is closed, not deleted",
+    responses=_WRITE_ERRORS,
+)
+async def supersede_memory(
+    request: Request,
+    memory_id: str,
+    body: SupersedeRequest,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+) -> JSONResponse:
+    ctx = build_context(request, container, body.scope)
+    identity = ("supersede", memory_id, body.content)
+    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
+    payload = derived_or_body(request, body, identity)
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        new = await _service(container).supersede(
+            uow, ctx, memory_id, content=body.content, reason=body.reason
+        )
+        out = SupersedeResponse(memory_id=new.memory_id, supersedes=memory_id)
+        return 200, out.model_dump(mode="json"), None
 
     return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
 

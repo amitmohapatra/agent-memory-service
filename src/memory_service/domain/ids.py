@@ -20,7 +20,6 @@ PREFIXES: Final[dict[str, str]] = {
     "session": "ses",
     "turn": "trn",
     "message": "msg",
-    "message_version": "msv",
     "attachment": "att",
     "agent_run": "run",
     "observation": "obs",
@@ -77,3 +76,13 @@ def stable_key(*parts: str) -> str:
     """Deterministic short key from parts (used for cache keys and idempotency defaults)."""
     joined = "\x1f".join(parts)
     return hashlib.blake2b(joined.encode("utf-8"), digest_size=16).hexdigest()
+
+
+def thread_session_id(tenant_id: str, thread_id: str) -> str:
+    """The session a message without one belongs to: one per thread, the same every time."""
+    return f"{PREFIXES['session']}_{stable_key(tenant_id, thread_id)}"
+
+
+def thread_turn_id(tenant_id: str, thread_id: str, sequence: int) -> str:
+    """The turn at ``sequence`` in a thread, for messages that name none."""
+    return f"{PREFIXES['turn']}_{stable_key(tenant_id, thread_id, str(sequence))}"

@@ -197,7 +197,10 @@ class CreateMessageRequest(BaseModel):
 
     scope: ScopeBody = Field(
         ...,
-        description="Lineage: thread/session/turn (+ agent fields for internal messages)",
+        description="Lineage: the thread (required), and optionally the session and turn "
+        "(+ agent fields for internal messages). Without a session the message joins the "
+        "thread's own session; without a turn a USER message opens the thread's next turn and "
+        "any other joins its latest. The acknowledgement returns the ids used.",
         examples=[_SCOPE_EXAMPLE],
     )
     role: MessageRole = Field(

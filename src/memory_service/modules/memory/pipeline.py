@@ -193,6 +193,40 @@ def build_memory(
     )
 
 
+def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: datetime) -> None:
+    """Bi-temporal replacement: ``replacement`` holds from its valid_from (now unless dated),
+    and ``target`` is closed at that instant and points at it. Neither row is deleted."""
+    replacement.temporal = replacement.temporal.model_copy(
+        update={
+            "supersedes": target.memory_id,
+            "valid_from": replacement.temporal.valid_from or now,
+        }
+    )
+    target.temporal = target.temporal.model_copy(
+        update={
+            "status": TemporalStatus.SUPERSEDED,
+            "superseded_by": replacement.memory_id,
+            "valid_to": target.temporal.valid_to or replacement.temporal.valid_from or now,
+        }
+    )
+    target.updated_at = now
+
+
+def created_event(memory: CanonicalMemory) -> Event:
+    """``memory.created``: identity only; a receiver reads content through the API."""
+    return Event(
+        type=WebhookEvent.MEMORY_CREATED,
+        tenant_id=memory.tenant_id,
+        workspace_id=memory.scope.workspace_id,
+        data={
+            "memory_id": memory.memory_id,
+            "memory_type": memory.memory_type.value,
+            "scope_level": memory.scope.level.value,
+            "owner_principal": memory.owner_principal,
+        },
+    )
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -408,20 +442,7 @@ class ObservationPipeline:
         """One ``memory.created`` event per new memory, in the writing transaction."""
         assert self.events is not None
         for memory in await uow.memories.get_many(ctx.tenant_id, sorted(created)):
-            await self.events.publish(
-                uow,
-                Event(
-                    type=WebhookEvent.MEMORY_CREATED,
-                    tenant_id=ctx.tenant_id,
-                    workspace_id=memory.scope.workspace_id,
-                    data={  # identity only: a receiver reads content through the API
-                        "memory_id": memory.memory_id,
-                        "memory_type": memory.memory_type.value,
-                        "scope_level": memory.scope.level.value,
-                        "owner_principal": memory.owner_principal,
-                    },
-                ),
-            )
+            await self.events.publish(uow, created_event(memory))
 
     async def _serialize_sources(
         self,
@@ -517,26 +538,11 @@ class ObservationPipeline:
                 return {target.memory_id}
             case DedupDecision.SUPERSEDE | DedupDecision.UPDATE if target is not None:
                 memory = self._new_memory(cand, ctx, now=now, admission=admission)
-                # the correction holds from now (unless the candidate is explicitly dated),
-                # so a temporal view before it returns the old value, not both
-                memory.temporal = memory.temporal.model_copy(
-                    update={
-                        "supersedes": target.memory_id,
-                        "valid_from": memory.temporal.valid_from or now,
-                    }
-                )
                 memory.reinforcement_count = 1
+                supersede(target, memory, now=now)
                 await uow.memories.add(
                     memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
                 )
-                target.temporal = target.temporal.model_copy(
-                    update={
-                        "status": TemporalStatus.SUPERSEDED,
-                        "superseded_by": memory.memory_id,
-                        "valid_to": target.temporal.valid_to or memory.temporal.valid_from or now,
-                    }
-                )
-                target.updated_at = now
                 await uow.memories.update(target)
                 return {memory.memory_id, target.memory_id}
             case DedupDecision.CONTRADICT if target is not None:

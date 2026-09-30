@@ -217,7 +217,11 @@ async def create_message(
     request: Request, body: CreateMessageRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> JSONResponse:
     ctx = build_context(request, container, body.scope)
-    identity = ("message", body.role.value, body.kind.value, body.content)
+    identity: tuple[str, ...] = ("message", body.role.value, body.kind.value, body.content)
+    if ctx.turn_id is None and body.occurred_at is not None:
+        # without a turn the derived key is thread + content; a timestamp tells two identical
+        # messages apart (the SDK sends a key of its own instead)
+        identity = (*identity, body.occurred_at.isoformat())
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
     payload = derived_or_body(request, body, identity)
     service = _service(container)

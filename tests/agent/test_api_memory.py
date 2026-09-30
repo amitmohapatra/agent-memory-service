@@ -28,6 +28,8 @@ async def _tenant(app, tenant_id: str = "acme"):
 
 @pytest.mark.covers(
     "memory.submit_observation",
+    "memory.remember",
+    "memory.supersede_memory",
     "memory.list_memories",
     "memory.get_memory",
     "memory.forget_memory",
@@ -38,25 +40,36 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     agent = harness.bind(user_id="u1").agent("onboarding-bot")
 
     ack = await agent.remember(FACT, visibility="USER")
-    assert ack.observation_id
+    assert ack.memory_id and not ack.deduplicated
     assert ack.job_ids, "the write is acknowledged with the work it queued"
 
     # The job behind the write is readable by the tenant that dispatched it, and only by it.
     job = await agent.job(ack.job_ids[0])
     assert job.job_id and job.status in ("PENDING", "RUNNING", "SUCCEEDED")
 
-    # Replay: the same content under the same key is one observation, not two (the SDK derives
+    # Replay: the same content under the same key is one memory, not two (the SDK derives
     # the idempotency key from scope + content, so a retried turn is safe by default).
     replay = await agent.remember(FACT, visibility="USER")
-    assert replay.observation_id == ack.observation_id
+    assert replay.memory_id == ack.memory_id
 
-    inventory = await agent.memories()
-    assert any(FACT in m.content for m in inventory), inventory
-    stored = next(m for m in inventory if FACT in m.content)
+    # The statement is the memory, stored before the call returned: nothing to wait for.
+    one = await agent.get_memory(ack.memory_id)
+    assert one.content == FACT and one.visibility == "USER"
+    stored = next(m for m in await agent.memories() if m.memory_id == ack.memory_id)
 
-    one = await agent.get_memory(stored.memory_id)
-    assert one.memory_id == stored.memory_id and one.content == stored.content
-    assert one.visibility == "USER"
+    # Observations are evidence for the service to learn from, asynchronously.
+    observed = await agent.observe("Priya prefers written status updates.", kind="EVENT")
+    assert observed.observation_id
+
+    # A correction is a new version; the old one is closed, not deleted.
+    updated = await agent.update(ack.memory_id, SECOND, reason="the team moved its review")
+    assert updated.supersedes == ack.memory_id
+    old = await agent.get_memory(ack.memory_id)
+    assert old.temporal_status == "SUPERSEDED" and old.superseded_by == updated.memory_id
+    with pytest.raises(MemoryError) as twice:
+        await agent.update(ack.memory_id, "again", reason="stale")
+    assert twice.value.status == 409
+    stored = await agent.get_memory(updated.memory_id)
 
     await agent.forget(stored.memory_id)
     with pytest.raises(MemoryError) as gone:

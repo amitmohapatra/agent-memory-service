@@ -2,6 +2,15 @@
 
 Written 2026-09-22 from a seven-lens audit of this repository (hot path, ingestion, configuration and API surface, models, dead code and tests, load and wire) and of the 2026 memory-framework landscape read from primary sources (Mnemis, EverMemOS, Mem0, Zep, Letta, Hindsight, Omi, Nemori, Mastra, LoCoMo-Refined, the Penfield answer-key audit). Every claim below names a file:line or a source; every phase has a gate that is a command and a number. Nothing is credited without its gate.
 
+> **Status (2026-09-30, the platform overhaul).** This roadmap is a dated plan; where it and the
+> code disagree, the code and README win. Done since it was written: the reranker is removed
+> (the offline scorer lives in `benchmark/cross_encoder.py`); the `ambiguous_extraction` /
+> `ambiguous_worthiness` uses, the observer and its `memory.observe` job, source-turn expansion,
+> `WorkingMemory`, and the write-only `message_versions` / `turn_run_links` tables are deleted.
+> Superseded decision: "LLM uses at ingest default to none" - model use is now decided per tenant
+> (`PUT /v1/model-key/policy`): the operator allow-list defaults to every use, and a use runs
+> only where the tenant's policy allows it and a registered key (or the operator's) pays.
+
 ## Targets, honestly assessed
 
 STATE OF RECORD (HEAD 104fd01, working tree clean; the 'uncommitted' changes named in the task are all committed). LoCoMo v2 = 0.6738 strict / 0.755 lenient on 304 questions from 2 of 10 conversations (233 answerable + 71 adversarial), deepseek-flash as answerer AND judge, 6 judge fallbacks (benchmark/results/locomo_judged_v2.json caveats[0]); evidence_recall 0.9871 (max-over-turns); query p50 280.8 / p95 651.6 ms measured IN-PROCESS around builder.build (benchmark/locomo.py:509-510) with cache/authz/tasks = memory providers and NLI=lexical (Makefile:230-239) on a 4-core no-AVX2 Docker VM (docs/MEASUREMENTS.md:9,147-150). v3 (per-clause LLM ingest on) is worse on both axes (0.6609, p50 572.4 ms) and is not a baseline. No artifact records HTTP p99 with real models; nothing has been measured on AVX2 hardware or on the ONNX backend; 20 rps has never been attempted (load_test.json = 3 users, 15 s, 22 requests, 1.9 rps, hash embeddings).

@@ -84,6 +84,10 @@ class TurnRepository(Protocol):
         """Next 1-based turn sequence for the thread (row-locked to avoid gaps/dupes)."""
         ...
 
+    async def latest(self, tenant_id: str, thread_id: str) -> Turn | None:
+        """The thread's highest-sequence turn (one indexed read)."""
+        ...
+
 
 @runtime_checkable
 class MessageRepository(Protocol):
@@ -315,6 +319,13 @@ class MemoryRepository(Protocol):
     ``forget`` soft-deletes and later purge is an operator task."""
 
     async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None: ...
+    async def current_with_hash(
+        self, tenant_id: str, *, scope_key: str, owner_principal: str, normalized_hash: str
+    ) -> CanonicalMemory | None:
+        """The owner's live CURRENT memory with this normalized content in this scope, if
+        any: an indexed lookup (tenant, normalized hash)."""
+        ...
+
     async def current_derived(self, tenant_id: str, slot: str) -> CanonicalMemory | None:
         """Indexed lookup of the unique live derived slot; caller serializes slot writes."""
         ...

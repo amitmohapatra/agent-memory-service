@@ -2,6 +2,10 @@
 
 Dynamic IDs: clients (ChatGPT-style UI, SDK, LangGraph adapter) mint thread/session/turn ids
 and the service creates the rows on first sight, inside the same transaction as the message.
+Only the thread is required. A message without a session belongs to the thread's own session
+(``thread_session_id``); one without a turn opens the thread's next turn when it is a USER
+message and joins the thread's latest turn otherwise, so a question and everything said while
+answering it share a turn. Both derivations are deterministic.
 
 Hot path (synchronous, one transaction):
     authorize -> upsert thread/session/turn -> message row (+attachments)
@@ -20,7 +24,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.conversation import AgentRun, Attachment, Message, Session, Thread, Turn
 from memory_service.domain.enums import MessageKind, MessageRole, ObservationKind
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
-from memory_service.domain.ids import content_hash, new_id
+from memory_service.domain.ids import content_hash, new_id, thread_session_id, thread_turn_id
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
@@ -149,8 +153,8 @@ class ConversationService:
         hints: ProcessingHints | None = None,
         parent_message_id: str | None = None,
     ) -> AppendResult:
-        if not ctx.thread_id or not ctx.session_id or not ctx.turn_id:
-            raise ValidationFailed("thread_id, session_id and turn_id are required for messages")
+        if not ctx.thread_id:
+            raise ValidationFailed("thread_id is required for messages")
         # Same reason as MemoryService.submit_observation: a message is agent-authored text
         # going into a PostgreSQL `text` column, and a NUL byte in it fails the INSERT.
         content = sanitise(content)
@@ -197,6 +201,7 @@ class ConversationService:
                     )
                     return AppendResult(ack, None)
 
+            ctx = await self._lineage(uow, ctx, role)
             await self._ensure_session_and_turn(uow, ctx)
             if ctx.agent_run_id:
                 await self._ensure_agent_run(uow, ctx)
@@ -340,6 +345,30 @@ class ConversationService:
         return message
 
     # -- helpers ----------------------------------------------------------------
+    @staticmethod
+    async def _lineage(
+        uow: UnitOfWork, ctx: MemoryExecutionContext, role: MessageRole
+    ) -> MemoryExecutionContext:
+        """Fill in a session and turn the caller did not name (see the module docstring).
+        Runs under the thread lock, so the next sequence is this message's to take."""
+        if ctx.session_id and ctx.turn_id:
+            return ctx
+        assert ctx.thread_id
+        session_id = ctx.session_id or thread_session_id(ctx.tenant_id, ctx.thread_id)
+        turn_id = ctx.turn_id
+        if turn_id is None:
+            latest = (
+                None
+                if role is MessageRole.USER
+                else await uow.turns.latest(ctx.tenant_id, ctx.thread_id)
+            )
+            if latest is not None and latest.session_id == session_id:
+                turn_id = latest.turn_id
+            else:
+                sequence = await uow.turns.next_sequence(ctx.tenant_id, ctx.thread_id)
+                turn_id = thread_turn_id(ctx.tenant_id, ctx.thread_id, sequence)
+        return ctx.model_copy(update={"session_id": session_id, "turn_id": turn_id})
+
     async def _ensure_session_and_turn(self, uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
         assert ctx.thread_id and ctx.session_id and ctx.turn_id
         session = await uow.sessions.get(ctx.tenant_id, ctx.session_id)

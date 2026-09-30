@@ -606,3 +606,67 @@ async def test_graph_query_sends_layers_and_knowledge_time(client: MemoryClient)
     )
     body = json.loads(route.calls.last.request.content)
     assert body["layers"] == ["causal"] and body["valid_at"].startswith("2026-09-01")
+
+
+@respx.mock
+async def test_remember_states_a_memory_and_update_supersedes_it(client: MemoryClient) -> None:
+    remember = respx.post("http://memory.test/v1/memories").respond(
+        201, json={"memory_id": "mem_1", "deduplicated": False, "job_ids": ["obx_1"]}
+    )
+    update = respx.post("http://memory.test/v1/memories/mem_1/supersede").respond(
+        200, json={"memory_id": "mem_2", "supersedes": "mem_1"}
+    )
+    ctx = client.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")
+    ack = await ctx.remember(
+        "Prefers metric units.",
+        memory_type="PREFERENCE",
+        visibility="USER",
+        entities=["metric system"],
+        source="settings-page",
+    )
+    assert ack.memory_id == "mem_1" and not ack.deduplicated
+    body = json.loads(remember.calls.last.request.content)
+    assert body["content"] == "Prefers metric units." and body["memory_type"] == "PREFERENCE"
+    assert body["visibility"] == "USER" and body["entities"] == ["metric system"]
+    assert body["custom_metadata"] == {"source": "settings-page"}
+    assert "hints" not in body, "a statement is not an observation with hints"
+    first_key = remember.calls.last.request.headers["Idempotency-Key"]
+    await ctx.remember("Prefers metric units.", memory_type="PREFERENCE", visibility="USER")
+    assert remember.calls.last.request.headers["Idempotency-Key"] == first_key
+
+    moved = await ctx.update("mem_1", "Prefers imperial units.", reason="corrected")
+    assert (moved.memory_id, moved.supersedes) == ("mem_2", "mem_1")
+    sent = json.loads(update.calls.last.request.content)
+    assert sent["content"] == "Prefers imperial units." and sent["reason"] == "corrected"
+    assert sent["scope"]["thread_id"] == "thr_1"
+
+
+@respx.mock
+async def test_a_message_without_a_turn_is_not_deduplicated_by_content(
+    client: MemoryClient,
+) -> None:
+    route = respx.post("http://memory.test/v1/messages").respond(
+        202,
+        json={
+            "message_id": "msg_1",
+            "thread_id": "thr_1",
+            "session_id": "ses_derived",
+            "turn_id": "trn_derived",
+            "sequence": 1,
+        },
+    )
+    loose = client.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")
+    ack = await loose.chat.user("ok")
+    assert ack.turn_id == "trn_derived", "the service's derived ids come back"
+    await loose.chat.user("ok")
+    keys = [call.request.headers["Idempotency-Key"] for call in route.calls]
+    assert keys[0] != keys[1], "two identical messages without a turn are two messages"
+    assert "session_id" not in json.loads(route.calls.last.request.content)["scope"]
+
+    turned = client.bind(tenant_id="acme", user_id="u1", thread_id="thr_1", turn_id="trn_1")
+    await turned.chat.user("ok")
+    await turned.chat.user("ok")
+    assert (
+        route.calls[-1].request.headers["Idempotency-Key"]
+        == (route.calls[-2].request.headers["Idempotency-Key"])
+    ), "with a turn, lineage + content is the message's identity"

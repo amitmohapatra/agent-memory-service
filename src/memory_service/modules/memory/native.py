@@ -362,6 +362,35 @@ def _user_subject(ctx: MemoryExecutionContext) -> str:
     return f"user:{ctx.user_id}" if ctx.user_id else ctx.principal_id
 
 
+def default_visibility(mt: MemoryType, ctx: MemoryExecutionContext) -> Visibility:
+    """Who may read a memory of this type when the writer did not say."""
+    if mt in (MemoryType.USER, MemoryType.PREFERENCE):
+        visibility = Visibility.USER if ctx.user_id else Visibility.PRIVATE
+    elif mt in (MemoryType.AGENT, MemoryType.TOOL, MemoryType.WORKING):
+        # hand-off context flows down the run tree (child runs read it); nothing else does
+        visibility = Visibility.RUN if ctx.agent_run_id else Visibility.PRIVATE
+    elif mt is MemoryType.SHARED:
+        visibility = (
+            Visibility.AGENT_GROUP
+            if ctx.agent_group_id
+            else Visibility.THREAD
+            if ctx.thread_id
+            else Visibility.TENANT
+        )
+    elif ctx.thread_id:
+        visibility = Visibility.THREAD
+    elif ctx.user_id:
+        visibility = Visibility.USER
+    else:
+        visibility = Visibility.TENANT
+    if ctx.is_agent and mt not in (MemoryType.USER, MemoryType.PREFERENCE):
+        # an agent's own working notes stay private unless the type is explicitly shared
+        visibility = (
+            Visibility.PRIVATE if mt in (MemoryType.TASK, MemoryType.EPISODIC) else visibility
+        )
+    return visibility
+
+
 class NativeMemoryIntelligence:
     """Rule-based provider. ``embedding`` (optional) adds a dense-similarity dedup signal."""
 
@@ -860,30 +889,7 @@ class NativeMemoryIntelligence:
             # genuinely standing instruction earns its keep by being restated.
             lifetime = Lifetime.SHORT_TERM
         importance = _IMPORTANCE_BY_TYPE.get(mt, candidate.importance)
-        if mt in (MemoryType.USER, MemoryType.PREFERENCE):
-            visibility = Visibility.USER if ctx.user_id else Visibility.PRIVATE
-        elif mt in (MemoryType.AGENT, MemoryType.TOOL, MemoryType.WORKING):
-            # hand-off context flows down the run tree (child runs read it); nothing else does
-            visibility = Visibility.RUN if ctx.agent_run_id else Visibility.PRIVATE
-        elif mt is MemoryType.SHARED:
-            visibility = (
-                Visibility.AGENT_GROUP
-                if ctx.agent_group_id
-                else Visibility.THREAD
-                if ctx.thread_id
-                else Visibility.TENANT
-            )
-        elif ctx.thread_id:
-            visibility = Visibility.THREAD
-        elif ctx.user_id:
-            visibility = Visibility.USER
-        else:
-            visibility = Visibility.TENANT
-        if ctx.is_agent and mt not in (MemoryType.USER, MemoryType.PREFERENCE):
-            # an agent's own working notes stay private unless the type is explicitly shared
-            visibility = (
-                Visibility.PRIVATE if mt in (MemoryType.TASK, MemoryType.EPISODIC) else visibility
-            )
+        visibility = default_visibility(mt, ctx)
         return candidate.model_copy(
             update={
                 "lifetime": lifetime,

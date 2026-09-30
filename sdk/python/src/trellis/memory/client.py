@@ -1,7 +1,7 @@
 """The 90% path::
 
     memory = MemoryClient("http://memory-service:8080", api_key="...")
-    ctx = memory.bind(tenant_id=..., user_id=..., thread_id=..., session_id=..., turn_id=...)
+    ctx = memory.bind(tenant_id=..., user_id=..., thread_id=...)  # session/turn optional
     await ctx.chat.user(message, attachments=files)
     bundle = await ctx.context(message)
     ...
@@ -67,7 +67,9 @@ from trellis.memory.models import (
     Page,
     ReadAuditRecord,
     RecallKind,
+    RememberAck,
     Scope,
+    SupersedeAck,
     TenantInfo,
     ThreadInfo,
     ToolCall,
@@ -272,7 +274,6 @@ class MemoryContext:
         data = await self._request("POST", "/v1/observations", json=payload, idempotency_key=key)
         return ObservationAck.model_validate(data)
 
-    # -- advanced -------------------------------------------------------
     async def remember(
         self,
         content: str,
@@ -280,12 +281,48 @@ class MemoryContext:
         memory_type: MemoryType = "SEMANTIC",
         lifetime: Lifetime = "LONG_TERM",
         visibility: Visibility | None = None,
+        subject: str | None = None,
+        entities: Sequence[str] = (),
+        valid_from: datetime | None = None,
+        valid_to: datetime | None = None,
+        idempotency_key: str | None = None,
         **metadata: Any,
-    ) -> ObservationAck:
-        hints: dict[str, Any] = {"memory_type": memory_type, "lifetime": lifetime}
-        if visibility:
-            hints["visibility"] = visibility
-        return await self.observe(content, kind="EVENT", hints=hints, **metadata)
+    ) -> RememberAck:
+        """Store ``content`` verbatim as one memory, now (``observe`` is for evidence the
+        service learns from). The same content in the same scope returns the memory already
+        stored, with ``deduplicated=True``."""
+        payload: dict[str, Any] = {
+            "scope": self._scope_payload(),
+            "content": content,
+            "memory_type": memory_type,
+            "lifetime": lifetime,
+            "entities": list(entities),
+            "custom_metadata": metadata,
+        }
+        for name, value in (("visibility", visibility), ("subject", subject)):
+            if value is not None:
+                payload[name] = value
+        for name, when in (("valid_from", valid_from), ("valid_to", valid_to)):
+            if when is not None:
+                payload[name] = when.isoformat()
+        key = idempotency_key or _default_key("mem", self.scope, memory_type, content)
+        data = await self._request("POST", "/v1/memories", json=payload, idempotency_key=key)
+        return RememberAck.model_validate(data)
+
+    async def update(
+        self, memory_id: str, content: str, *, reason: str, idempotency_key: str | None = None
+    ) -> SupersedeAck:
+        """Replace a memory with a new version: the new one is current from now, the old one
+        is closed (``SUPERSEDED``) and still readable in a temporal view."""
+        data = await self._request(
+            "POST",
+            f"/v1/memories/{memory_id}/supersede",
+            json={"scope": self._scope_payload(), "content": content, "reason": reason},
+            idempotency_key=idempotency_key or _default_key("sup", self.scope, memory_id, content),
+        )
+        return SupersedeAck.model_validate(data)
+
+    # -- advanced -------------------------------------------------------
 
     async def recall(
         self,
@@ -678,7 +715,15 @@ class ChatAPI:
             "scope": self._ctx._scope_payload(),
             "custom_metadata": metadata,
         }
-        key = idempotency_key or _default_key("msg", self._ctx.scope, role, kind, content)
+        scope = self._ctx.scope
+        # A turn makes lineage + content a message's identity. Without one, two identical
+        # messages in a thread ("ok") are two messages: a fresh key per call, which the
+        # transport reuses across its own retries of that call.
+        key = idempotency_key or (
+            _default_key("msg", scope, role, kind, content)
+            if scope.turn_id
+            else f"msg-{uuid.uuid4().hex}"
+        )
         data = await self._ctx._request("POST", "/v1/messages", json=payload, idempotency_key=key)
         return MessageAck.model_validate(data)
 
