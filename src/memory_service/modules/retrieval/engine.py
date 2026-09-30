@@ -18,6 +18,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
+from memory_service.domain.learning import standing_factor
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
@@ -576,7 +577,7 @@ class RetrievalEngine:
                 for rid, s, _, p in fused
             ]
             retrievers_of = {rid: names for rid, _, names, _ in fused}
-        return [
+        candidates = [
             Candidate(
                 record_id=h.record_id,
                 kind=str(h.payload.get("kind") or kind),
@@ -587,6 +588,7 @@ class RetrievalEngine:
             )
             for h in hits
         ]
+        return by_standing(candidates) if kind == "memory" else candidates
 
     async def _entity_search(
         self,
@@ -813,6 +815,15 @@ class RetrievalEngine:
             weights=self.cfg.hybrid_weights,
             anchors=self._anchors(query, vectors, kind=kind),
         )
+
+
+def by_standing(candidates: list[Candidate]) -> list[Candidate]:
+    """Memories re-scored by their standing - confidence and reinforcement, which feedback and
+    restatement move - within a bounded factor, and re-sorted (stable: ties keep the fused
+    order). A memory's standing reorders near-ties; it never outweighs relevance."""
+    for c in candidates:
+        c.score *= standing_factor(c.payload.get("confidence"), c.payload.get("reinforcement"))
+    return sorted(candidates, key=lambda c: -c.score)
 
 
 def diverse_head(candidates: list[Candidate], *, limit: int, per_document: int) -> list[Candidate]:

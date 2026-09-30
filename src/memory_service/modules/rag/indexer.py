@@ -429,6 +429,7 @@ class Indexer:
                             # its payload in RAM, for a field most memories never have.
                             **({"connections": edges} if (edges := payload_edges(m)) else {}),
                             "confidence": m.confidence,
+                            "reinforcement": m.reinforcement_count,
                             "observed_at": m.temporal.observed_at.isoformat(),
                             "script": detect_script(m.content).value,
                             # anchors for the entity prefetch, matched inside the store

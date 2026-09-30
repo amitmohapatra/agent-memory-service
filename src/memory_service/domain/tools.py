@@ -184,7 +184,8 @@ class RunOutcome(BaseModel):
     run_id: str
     success: bool
     note: str | None = None
-    source: Literal["explicit", "evidence", "window"] = "explicit"
+    #: explicit: the run said so; feedback: a verdict on the run or an answer implied it
+    source: Literal["explicit", "feedback"] = "explicit"
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

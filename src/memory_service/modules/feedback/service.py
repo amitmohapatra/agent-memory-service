@@ -1,17 +1,24 @@
 """Feedback: store a judgement, decide who may see it, and learn from it off the request path.
 
 The projector runs as the ``feedback.project`` job enqueued in the transaction that stored
-the record, so a verdict is never lost and never slows the request that carried it. On a
-memory it reuses the revision machinery: an affirming verdict reinforces, a rejection
-retracts, a correction writes a new memory that supersedes the old one. Every projection
-bumps the memory revisions, so a cached bundle that showed the old memory stops being served.
+the record, so a verdict is never lost and never slows the request that carried it.
+
+- memory: an affirming verdict reinforces, a rejection retracts, a correction writes a new
+  memory that supersedes the old one;
+- answer: the memories the answer cited (its evidence references) gain or lose confidence,
+  and the run that answered is labelled unless it already carries an explicit label;
+- run: the verdict is the run's explicit outcome.
+
+Every projection that touches a memory re-indexes it (the index carries the confidence and
+reinforcement retrieval ranks by) and bumps its revisions, so a cached bundle that showed the
+old standing stops being served.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
@@ -26,7 +33,13 @@ from memory_service.domain.feedback import (
     FeedbackVerdict,
     ProjectionAction,
 )
+from memory_service.domain.learning import (
+    ANSWER_CONFIDENCE_STEP,
+    ANSWER_MEMORIES_MAX,
+    CONFIDENCE_FLOOR,
+)
 from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.tools import RunOutcome
 from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
@@ -89,6 +102,10 @@ class FeedbackService:
                 )
         if feedback.target_kind is FeedbackTargetKind.MEMORY:
             await self._authorize_memory_verdict(uow, ctx, feedback)
+        for memory_id in feedback.cited_memory_ids(ANSWER_MEMORIES_MAX):
+            # an answer verdict moves the confidence of what it cites: only what the
+            # reviewer may read (404 / 403 otherwise)
+            await self.memory.get_memory(uow, ctx, memory_id)
         existing = await uow.feedback.get(ctx.tenant_id, feedback.feedback_id)
         if existing is not None:
             return existing, False
@@ -261,12 +278,22 @@ class FeedbackService:
     async def _project(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        if record.target_kind is not FeedbackTargetKind.MEMORY:
+        handler = {
+            FeedbackTargetKind.MEMORY: self._project_memory,
+            FeedbackTargetKind.ANSWER: self._project_answer,
+            FeedbackTargetKind.RUN: self._project_run,
+        }.get(record.target_kind)
+        if handler is None:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
                 reason=f"{record.target_kind.value} feedback is recorded, not projected",
                 projected_at=now,
             )
+        return await handler(uow, record, now=now)
+
+    async def _project_memory(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
         memory = await uow.memories.get(record.tenant_id, record.target_id)
         if memory is None or memory.deleted_at is not None:
             return FeedbackProjection(
@@ -290,6 +317,102 @@ class FeedbackService:
             return await self._correct(uow, memory, record, now=now)
         raise AssertionError(f"unhandled verdict {record.verdict}")  # pragma: no cover
 
+    async def _project_answer(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """An answer judged right raises the confidence of every memory it cited and
+        reinforces them; judged wrong (rejected or corrected), lowers it. The run that
+        answered is labelled too, unless it already carries an explicit label."""
+        affirmed = record.verdict in AFFIRMING_VERDICTS
+        adjusted = await self._adjust_cited(uow, record, affirmed=affirmed, now=now)
+        run_id = await self._label_run(
+            uow, record, record.agent_run_id, success=affirmed, source="feedback", now=now
+        )
+        action = (
+            ProjectionAction.MEMORIES_ADJUSTED
+            if adjusted
+            else ProjectionAction.RUN_LABELLED
+            if run_id
+            else ProjectionAction.NONE
+        )
+        return FeedbackProjection(
+            action=action,
+            memory_ids=adjusted,
+            run_id=run_id,
+            reason=None if action is not ProjectionAction.NONE else "nothing cited, no run",
+            projected_at=now,
+        )
+
+    async def _project_run(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """A verdict on a run is its explicit outcome: confirmed or approved succeeded,
+        rejected or corrected did not. The last word wins, as with ``outcome``."""
+        run_id = await self._label_run(
+            uow,
+            record,
+            record.target_id,
+            success=record.verdict in AFFIRMING_VERDICTS,
+            source="explicit",
+            now=now,
+        )
+        return FeedbackProjection(
+            action=ProjectionAction.RUN_LABELLED, run_id=run_id, projected_at=now
+        )
+
+    async def _adjust_cited(
+        self, uow: UnitOfWork, record: Feedback, *, affirmed: bool, now: datetime
+    ) -> list[str]:
+        ids = record.cited_memory_ids(ANSWER_MEMORIES_MAX)
+        if not ids:
+            return []
+        await uow.serialize(*(f"memory:{record.tenant_id}:{i}" for i in sorted(ids)))
+        memories = [
+            m
+            for m in await uow.memories.get_many(record.tenant_id, ids)
+            if m.deleted_at is None and m.temporal.status is TemporalStatus.CURRENT
+        ]
+        step = ANSWER_CONFIDENCE_STEP if affirmed else -ANSWER_CONFIDENCE_STEP
+        for memory in memories:
+            memory.confidence = min(1.0, max(CONFIDENCE_FLOOR, memory.confidence + step))
+            memory.reinforcement_count += 1 if affirmed else 0
+            memory.updated_at = now
+            await uow.memories.update(memory)
+        if memories:
+            await self._reindex(uow, *memories)
+        return sorted(m.memory_id for m in memories)
+
+    async def _label_run(
+        self,
+        uow: UnitOfWork,
+        record: Feedback,
+        run_id: str | None,
+        *,
+        success: bool,
+        source: Literal["explicit", "feedback"],
+        now: datetime,
+    ) -> str | None:
+        """Set the run's outcome. A verdict that only implies one (``feedback``) never
+        overrides a label the run or a reviewer gave it explicitly."""
+        if not run_id:
+            return None
+        if source == "feedback":
+            existing = await uow.tools.outcome(record.tenant_id, run_id)
+            if existing is not None and existing.source == "explicit":
+                return None
+        note = f"feedback {record.feedback_id}: {record.verdict.value}"
+        await uow.tools.set_outcome(
+            RunOutcome(
+                tenant_id=record.tenant_id,
+                run_id=run_id,
+                success=success,
+                note=note,
+                source=source,
+                recorded_at=now,
+            )
+        )
+        return run_id
+
     async def _reinforce(
         self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
     ) -> FeedbackProjection:
@@ -297,7 +420,9 @@ class FeedbackService:
         memory.confidence = min(1.0, memory.confidence + REINFORCEMENT_STEP)
         memory.updated_at = now
         await uow.memories.update(memory)
-        await bump_memory_revisions(uow, [memory])
+        # re-indexed, not only invalidated: the index carries confidence and reinforcement,
+        # which retrieval ranks by
+        await self._reindex(uow, memory)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_REINFORCED, memory_id=memory.memory_id, projected_at=now
         )

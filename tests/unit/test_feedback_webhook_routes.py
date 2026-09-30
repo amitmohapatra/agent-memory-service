@@ -95,8 +95,9 @@ def test_feedback_is_stored_once_per_id_and_bound_to_the_headers(app_client: Tes
     assert listed.json()["next_cursor"] is None and "link" not in listed.headers
     one = app_client.get("/v1/feedback/fb_route_1", headers=USER)
     assert one.status_code == 200 and one.json()["verdict"] == "confirm"
-    # after the inline projector ran, a run target is recorded, not projected
-    assert one.json()["projection"]["action"] == "none"
+    # after the inline projector ran, a verdict on a run is the run's explicit outcome
+    projection = one.json()["projection"]
+    assert projection["action"] == "run_labelled" and projection["run_id"] == "run_1"
 
 
 def test_feedback_claiming_another_identity_is_refused(app_client: TestClient) -> None:

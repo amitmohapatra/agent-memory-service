@@ -163,6 +163,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "page",
     "predicate",
     "record_id",
+    "reinforcement",
     "section_path",
     "source_refs",
     "source_observed_to",

@@ -80,6 +80,8 @@ def test_the_vocabularies_are_the_contracts_vocabularies() -> None:
         "memory_reinforced",
         "memory_retracted",
         "memory_superseded",
+        "memories_adjusted",
+        "run_labelled",
     }
 
 

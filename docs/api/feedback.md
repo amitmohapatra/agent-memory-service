@@ -1,8 +1,9 @@
 # Feedback: a judgement, and what it changes
 
 Feedback is not a rating column. A verdict on a **memory** changes that memory — it is reinforced,
-retracted, or superseded by a correction — and a verdict on a run, an answer, a tool call, a brief
-or a procedure is the record learning reads later. Human verdicts, judge verdicts and interrupt
+retracted, or superseded by a correction; a verdict on an **answer** moves the confidence of the
+memories it cited and labels the run that answered; a verdict on a **run** is its explicit
+outcome. A brief verdict is recorded for people to read. Human verdicts, judge verdicts and interrupt
 decisions land in one table with one shape, so nothing downstream has to know which it was reading
 (ADR 0023).
 
@@ -23,15 +24,25 @@ sequenceDiagram
     P->>M: confirm/approve → reinforce (reinforcement_count + 1)
     P->>M: reject → retract
     P->>M: correct/edit → write the correction, supersede the old memory
-  else target is a run, answer, tool call, brief or procedure
-    P->>DB: recorded only: nothing about a memory changes
+  else target is an answer
+    P->>M: each cited memory (evidence_refs): confidence ± 0.05, reinforced when affirmed
+    P->>DB: label the answering run (unless it carries an explicit outcome)
+  else target is a run
+    P->>DB: the run's explicit outcome (confirm/approve = success)
+  else target is a brief
+    P->>DB: recorded only
   end
-  P->>DB: projection {action, memory_id, superseded_by, reason, projected_at}
+  P->>DB: projection {action, memory_id, memory_ids, run_id, superseded_by, reason, projected_at}
   R->>F: GET /v1/feedback/{id} — with the projection, once it has run
 ```
 
 The projection is a separate, later fact, which is why `GET` is worth doing: a `POST` answers
 before the projector runs, so the record you get back has `projection: null`.
+
+An answer's `evidence_refs` name what it cited (`{"source_type": "memory", "source_id":
+"mem_…"}`); each must be a memory the reviewer may read, or the `POST` is refused. Memory
+standing — confidence and reinforcement — is part of the retrieval ranking: a bounded factor
+(at most ±15%) on the fused score, so it reorders near-ties and never outweighs relevance.
 
 ## Routes
 

@@ -54,6 +54,10 @@ class ProjectionAction(StrEnum):
     MEMORY_REINFORCED = "memory_reinforced"
     MEMORY_RETRACTED = "memory_retracted"
     MEMORY_SUPERSEDED = "memory_superseded"
+    #: an answer verdict moved the confidence of the memories the answer cited
+    MEMORIES_ADJUSTED = "memories_adjusted"
+    #: a run verdict (or an answer verdict, when the run had no label) labelled the run
+    RUN_LABELLED = "run_labelled"
 
 
 #: Verdicts that carry a replacement: the projector writes a corrected memory for them.
@@ -84,6 +88,10 @@ class FeedbackProjection(BaseModel):
 
     action: ProjectionAction
     memory_id: str | None = Field(default=None, description="the memory the verdict landed on")
+    memory_ids: list[str] = Field(
+        default_factory=list, description="the cited memories an answer verdict adjusted"
+    )
+    run_id: str | None = Field(default=None, description="the run whose outcome was labelled")
     superseded_by: str | None = Field(
         default=None, description="the corrected memory, for MEMORY_SUPERSEDED"
     )
@@ -134,6 +142,16 @@ class Feedback(BaseModel):
         if isinstance(value, bool):
             raise ValueError("score must be a number between 0 and 1")
         return value
+
+    def cited_memory_ids(self, limit: int) -> list[str]:
+        """The memories the judged target cited, in the order the reviewer named them: the
+        evidence references that point at a memory (its source type, or its id prefix)."""
+        ids = [
+            ref.source_id
+            for ref in self.evidence_refs
+            if ref.source_type == "memory" or ref.source_id.startswith("mem_")
+        ]
+        return list(dict.fromkeys(ids))[:limit]
 
     @model_validator(mode="after")
     def _correction_when_correcting(self) -> Feedback:
