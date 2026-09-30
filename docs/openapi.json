@@ -745,7 +745,12 @@
       "CatalogTool": {
         "properties": {
           "annotations": {
-            "$ref": "#/components/schemas/ToolAnnotations"
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "the MCP annotations that were given (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)",
+            "title": "Annotations",
+            "type": "object"
           },
           "approve_when": {
             "anyOf": [
@@ -14170,7 +14175,7 @@
             }
           }
         },
-        "summary": "Record a judgement on a run, answer, memory, tool call, brief or procedure",
+        "summary": "Record a judgement on a run, memory, tool call or procedure",
         "tags": [
           "feedback"
         ]
@@ -37192,7 +37197,7 @@
       "name": "documents"
     },
     {
-      "description": "Human, judge and interrupt judgements on runs, answers, memories, tool calls, briefs and procedures, projected into what they judge (memory standing, run outcomes, tool statistics and approval patterns, procedures).",
+      "description": "Human, judge and interrupt judgements on runs (and the answers they gave), memories, tool calls and procedures, projected into what they judge (memory standing, run outcomes, tool statistics and approval patterns, procedures).",
       "name": "feedback"
     },
     {

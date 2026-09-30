@@ -91,9 +91,9 @@ TAGS: list[dict[str, Any]] = [
     },
     {
         "name": "feedback",
-        "description": "Human, judge and interrupt judgements on runs, answers, memories, tool "
-        "calls, briefs and procedures, projected into what they judge (memory standing, run "
-        "outcomes, tool statistics and approval patterns, procedures).",
+        "description": "Human, judge and interrupt judgements on runs (and the answers they gave), "
+        "memories, tool calls and procedures, projected into what they judge (memory "
+        "standing, run outcomes, tool statistics and approval patterns, procedures).",
     },
     {
         "name": "retrieval",

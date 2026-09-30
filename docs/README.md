@@ -46,7 +46,7 @@ the SDK call that makes it.
 | Area | Page |
 |---|---|
 | observations, memories, the knowledge graph, jobs | [api/memory.md](api/memory.md) |
-| context bundles, recall, verify, conversation, briefs | [api/context.md](api/context.md) |
+| context bundles, recall, verify, conversation | [api/context.md](api/context.md) |
 | documents into retrievable knowledge | [api/documents.md](api/documents.md) |
 | tool memory and procedures | [api/tools.md](api/tools.md) |
 | feedback and what it changes | [api/feedback.md](api/feedback.md) |

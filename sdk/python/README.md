@@ -38,7 +38,7 @@ under `ctx.advanced`.
 | `verify(answer, bundle=)` | per-claim grounding of an answer |
 | `chat.user(...)` / `chat.assistant(...)` | the transcript |
 
-`ctx.advanced` holds `documents`, `graph`, `briefs`, `tools` (the catalog and approval
+`ctx.advanced` holds `documents`, `graph`, `tools` (the catalog and approval
 suggestions), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the
 client's `tenant`, `admin` and `webhooks` administration objects.
 
@@ -60,34 +60,14 @@ Ingestion model uses and read model uses are independent. Context, search, verif
 query follow the model policy's `read_assist` when `use_llm` is omitted; `True`/`False`
 override it for one read, and permit only the uses the operator and the policy enable.
 
-## Standing questions and knowledge pages
+## Standing questions
+
+A profile block can carry a standing question; the background job keeps its answer current and
+every bundle pins it:
 
 ```python
-from trellis.memory import BriefSpec
-
-brief = await agent.advanced.briefs.create(
-    BriefSpec(
-        title="Project decisions",
-        question="Which project decisions are current?",
-        kind="knowledge_page",
-        use_llm=False,
-    )
-)
-current = await agent.advanced.briefs.get(brief.brief_id)
-if current.status == "ready":
-    print(current.output.text)
+await agent.profile.edit("user.decisions", source_query="Which project decisions are current?")
 ```
-
-Both `mental_model` and `knowledge_page` use a background refresh and a stored-content read.
-Native refresh returns cited excerpts. Assisted refresh requires the `briefs` model use and
-marks generated output; reading either kind makes no model call. Unchanged evidence and
-synthesis configuration avoid repeat generation. Source or permission changes hide stale
-output until refreshed. A brief is bound to the exact execution scope: omit run/thread/session
-IDs when it should persist across runs of the same agent. Pages are maintained briefs, not
-a full wiki with folders and history.
-
-See the [implementation and validation handoff](../../docs/AGENT-CAPABILITIES-HANDOFF-20260927.md)
-for configuration, isolation guarantees and measured limits.
 
 ## Closed sets are typed
 

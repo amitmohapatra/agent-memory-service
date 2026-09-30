@@ -1,11 +1,9 @@
 # Feedback: a judgement, and what it changes
 
 Feedback is not a rating column. A verdict on a **memory** changes that memory — it is reinforced,
-retracted, or superseded by a correction; a verdict on an **answer** moves the confidence of the
-memories it cited and labels the run that answered; a verdict on a **run** is its explicit
-outcome; a verdict on a **tool call** counts toward the tool's statistics and its approval
-pattern; rejecting a **procedure** stops it being offered. A brief verdict is recorded for
-people to read. Human verdicts, judge verdicts and interrupt
+retracted, or superseded by a correction; a verdict on a **run** is its explicit outcome, and moves the
+confidence of the memories its answer cited (`evidence_refs`); a verdict on a **tool call** counts toward the tool's statistics and its approval
+pattern; rejecting a **procedure** stops it being offered. Human verdicts, judge verdicts and interrupt
 decisions land in one table with one shape, so nothing downstream has to know which it was reading
 (ADR 0023).
 
@@ -26,17 +24,13 @@ sequenceDiagram
     P->>M: confirm/approve → reinforce (reinforcement_count + 1)
     P->>M: reject → retract
     P->>M: correct/edit → write the correction, supersede the old memory
-  else target is an answer
-    P->>M: each cited memory (evidence_refs): confidence ± 0.05, reinforced when affirmed
-    P->>DB: label the answering run (unless it carries an explicit outcome)
   else target is a run
     P->>DB: the run's explicit outcome (confirm/approve = success)
+    P->>M: each cited memory (evidence_refs): confidence ± 0.05, reinforced when affirmed
   else target is a tool call
     P->>DB: tool statistics + approval pattern (agent, tool, argument shape); reject labels the run
   else target is a procedure
     P->>DB: reject → the procedure is no longer offered (until its steps change)
-  else target is a brief
-    P->>DB: recorded only
   end
   P->>DB: projection {action, memory_id, memory_ids, run_id, superseded_by, reason, projected_at}
   R->>F: GET /v1/feedback/{id} — with the projection, once it has run
@@ -54,7 +48,7 @@ standing — confidence and reinforcement — is part of the retrieval ranking: 
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/feedback` | record a judgement on a run, answer, memory, tool call, brief or procedure | `ctx.feedback(...)` |
+| `POST /v1/feedback` | record a judgement on a run, memory, tool call or procedure | `ctx.feedback(...)` |
 | `GET /v1/feedback/{feedback_id}` | one record, with its projection once it has run | `ctx.feedback.get(id)` |
 | `GET /v1/feedback?target_kind=…&target_id=…` | the feedback on one target, newest first (cursor paged) | `ctx.feedback.list_for(...)`, `ctx.feedback.page_for(...)` |
 
@@ -62,7 +56,7 @@ standing — confidence and reinforcement — is part of the retrieval ranking: 
 
 | Field | Values |
 | --- | --- |
-| `target_kind` | `run` · `answer` · `memory` · `tool_call` · `brief` · `procedure` |
+| `target_kind` | `run` · `memory` · `tool_call` · `procedure` |
 | `verdict` | `confirm` · `reject` · `correct` · `approve` · `edit` |
 | `source` | `human` · `judge` · `interrupt` |
 

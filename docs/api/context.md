@@ -4,7 +4,7 @@ One call assembles everything relevant to this turn, ranked, deduplicated, insid
 with an evidence report saying what it could *not* find. That is the call an agent should be
 making — `POST /v1/context`. The rest of this area exists for when you need a part of it: the
 ranked items alone (`recall`), the conversation alone (`threads`/`messages`), a standing question
-kept warm (`briefs`), or a check on the answer you produced (`verify`).
+kept warm (a profile block with a `source_query`), or a check on the answer you produced (`verify`).
 
 ## One turn
 
@@ -46,7 +46,6 @@ handing you a bundle you might answer from anyway.
 | `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
 | `GET /v1/messages/{id}` | one message | `ctx.chat.message(id)` |
 | `GET /v1/threads/{id}/summary` | the thread's durable summary | `ctx.summary()` |
-| `POST/PUT/GET/DELETE /v1/briefs…` | standing questions and knowledge pages | `ctx.advanced.briefs.*` |
 
 ## The bundle
 
@@ -136,24 +135,17 @@ messages ("ok") are two messages. `remember`, `observe`, `recall` and `context` 
 that — a tenant is enough.
 Internal messages stay out of the window unless `include_internal=True`.
 
-## Briefs: a standing question, kept warm
+## A standing question, kept warm
 
 ```python
-from trellis.memory import BriefSpec
-
-brief = await ctx.advanced.briefs.create(
-    BriefSpec(
-        kind="mental_model",  # or "knowledge_page"
-        title="Supply risk for SKU-1",
-        question="What threatens SKU-1 availability this quarter?",
-        refresh_seconds=3600,  # 60 … 86400
-        use_llm=False,  # synthesis stays deterministic unless permitted
-    )
+block = await ctx.profile.edit(
+    "user.suppliers", source_query="Which suppliers does this team buy from, and on what terms?"
 )
-fresh = await ctx.advanced.briefs.get(brief.brief_id)  # a read: never generates, may be stale
-print(fresh.status, fresh.output.text if fresh.output else None)
 ```
 
-A brief is a definition plus its stored output. **Reading one never generates text** — it returns
-what is stored with `status` `pending`, `ready` or `stale`, and a refresh is queued by the write
-path. That is what makes a brief cheap to read on every turn.
+A profile block with a `source_query` is that question's answer. The `profile.query` job builds a
+context for it in the scope that set it and writes the answer into the block (by the tenant's
+model under the `summaries` use when a key is registered, the best evidence line by line
+otherwise) — when the question is set and hourly after. Reading it is reading the profile: it is
+pinned into every bundle and never generates text on the read path. `source_query=None` clears
+the question and keeps the last answer.

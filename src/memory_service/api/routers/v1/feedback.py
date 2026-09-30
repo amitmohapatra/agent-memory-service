@@ -45,7 +45,7 @@ def _service(container) -> FeedbackService:  # type: ignore[no-untyped-def]
             "description": "The record an earlier submission stored under this feedback_id",
         },
     },
-    summary="Record a judgement on a run, answer, memory, tool call, brief or procedure",
+    summary="Record a judgement on a run, memory, tool call or procedure",
     description=(
         "The body is the `trellis.contracts.Feedback` record. Identity fields come from the "
         "trusted headers; a body value that disagrees is refused. A memory target must be "

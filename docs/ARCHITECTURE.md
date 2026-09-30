@@ -40,7 +40,7 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 | `domain` | `MemoryExecutionContext`, `CanonicalMemory`, `Scope`, `Visibility`, `TemporalState`, `EvidenceRef`, conversation and document models, `ContextBundle`, errors | nothing |
 | `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
 | `application` | composition root (`Container`), use-case orchestration | domain, ports |
-| `modules/*` | feature slices: archive, audit, auth, authz, briefs, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, rag, retrieval, tenancy, tools, webhooks, working_memory (the hot thread cache) | domain, ports |
+| `modules/*` | feature slices: archive, audit, auth, authz, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, rag, retrieval, tenancy, tools, webhooks, working_memory (the hot thread cache) | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
 | `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application |
 
@@ -142,7 +142,7 @@ the single entry point modules use. A request or job first binds the identity th
 work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hierarchies); a use
 is then consulted only when the operator allow-list `models.llm.uses` and the resolved tenant
 policy both allow it and a key can pay (contextual_extraction, relation_extraction,
-entity_resolution, conflict_adjudication, summaries, reflection, memory_connections, briefs,
+entity_resolution, conflict_adjudication, summaries, reflection, memory_connections,
 query_expansion, chunk_context, grounding_judge, procedure_abstraction; see `docs/LLM-USES.md`).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in

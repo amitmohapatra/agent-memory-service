@@ -35,7 +35,6 @@ with the model off (`docs/MEASUREMENTS.md`, section 8).
 | `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
 | `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
 | `procedure_abstraction` | the tool-learning job, for a procedure that clears support and success-rate gates | strong | title and strategy text distilled from successes and failures | the miner's own rendering |
-| `briefs` | a standing brief's refresh | strong | the brief's text with source ids | none (the brief reports no model) |
 
 ## Reads (only when the read is assisted)
 

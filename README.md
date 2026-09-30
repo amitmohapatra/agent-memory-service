@@ -202,7 +202,7 @@ setting; `serve.py` prints which mode it is in, and any benchmark produced that 
 |---|---|---|
 | **auto** (push) | the service, every turn | `ctx.context(task, tools=...)` → `rendered` goes into the prompt: the pinned profile, the thread's durable summary and the messages after it, the procedure learned for the task, tool hints, and the memories, passages and graph facts that clear the relevance floor, within `token_budget`. The agent harness does this for you with `memory="read_write"`. |
 | **react** (pull) | the agent, mid-run | `ctx.agent_tools()` lists nine tools (`memory_search`, `memory_remember`, `memory_update`, `memory_forget`, `history_search`, `profile_edit`, `procedures_search`, `tool_search`, `record_outcome`) with JSON schemas; `ctx.call_agent_tool(name, args)` runs one. Every call is logged as a pull, and what the agent keeps pulling for a kind of request is what the push starts including (prefetch learning). |
-| **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`, `record_tool`, `outcome`, `tool_hints`, `profile`, `summary`; everything else (documents, graph, briefs, webhooks, admin, model keys) under `ctx.advanced`. |
+| **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`, `record_tool`, `outcome`, `tool_hints`, `profile`, `summary`; everything else (documents, graph, admin, model keys) under `ctx.advanced`. |
 
 The three mix: a harness pushes context and also hands the agent the pull tools.
 
@@ -270,9 +270,8 @@ Need just the search results? `await ctx.search("...")` returns ranked items.
 
 A read consults the model only when the tenant's model policy allows it (`read_assist`, on by
 default once a key is registered) or when the request says so: `use_llm=True` or `use_llm=False`
-overrides the policy for that call. Agent-owned virtual keys and persistent
-standing questions/pages are exposed through `ctx.advanced.model_keys.set(...)` and
-`ctx.advanced.briefs`;
+overrides the policy for that call. Agent-owned virtual keys are exposed through `ctx.advanced.model_keys.set(...)`; a
+standing question is a profile block with a `source_query`;
 see the [SDK examples](sdk/python/README.md) and
 [capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
 
@@ -668,20 +667,17 @@ same client the agent harness uses, so neither service can learn a lesson the ot
 
 Available uses: `contextual_extraction`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `memory_connections`,
-`briefs`, `query_expansion`, `chunk_context`, `grounding_judge`, `procedure_abstraction`
+`query_expansion`, `chunk_context`, `grounding_judge`, `procedure_abstraction`
 (each described in [`docs/LLM-USES.md`](docs/LLM-USES.md): when it runs, its tier, its
 fallback).
 
 Each use has its own gate. Contextual extraction consults the model only for
-eligible inputs; assisted brief refresh generates only when evidence or synthesis
-configuration changes. Native paths remain available. An explicitly assisted brief fails
-refresh if no valid cited model result is available; it does not silently substitute native
-text. Model-free operation is a supported mode, not a claim of equal answer accuracy.
+eligible inputs. Native paths remain available. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
 ### Feedback, team model keys, pagination and webhooks (ADR 0023)
 
 **Feedback.** `POST /v1/feedback` takes the `trellis.contracts.Feedback` record (target kind
-`run | answer | memory | tool_call | brief | procedure`, verdict `confirm | reject | correct |
+`run | memory | tool_call | procedure`, verdict `confirm | reject | correct |
 approve | edit`, source `human | judge | interrupt`). Identity fields come from the trusted
 headers; a body that disagrees is refused. A memory target must be readable; `reject`,
 `correct` and `edit` also need its owner or a tenant admin. The record is stored and

@@ -8,7 +8,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | Page | The question it answers | Routes |
 | --- | --- | --- |
 | [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/observations`, `/v1/memories`, `/v1/graph/*`, `/v1/jobs/{id}` |
-| [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads`, `/v1/messages`, `/v1/briefs` |
+| [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads`, `/v1/messages` |
 | [agent-tools.md](agent-tools.md) | what can an agent pull from memory itself, and what does that teach the push? | `/v1/agent-tools` |
 | [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}/summary` |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
@@ -66,7 +66,7 @@ bundle = await ctx.context("what did we decide about the refund?")
 `context`, `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`,
 `record_tool`, `outcome`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`,
 `summary`, `verify`, and `ctx.chat` for the transcript. Everything else is under
-`ctx.advanced`: `documents`, `graph`, `briefs`, `tools` (catalog, approval suggestions),
+`ctx.advanced`: `documents`, `graph`, `tools` (catalog, approval suggestions),
 `model_keys`, `memories` (inventory), `job(id)`, and the client's `tenant`, `admin` and
 `webhooks`. Tenant administration is also `memory.administer(tenant_id)` (keys, workspaces,
 groups, webhooks, model keys, reads) and platform onboarding `memory.admin`.
