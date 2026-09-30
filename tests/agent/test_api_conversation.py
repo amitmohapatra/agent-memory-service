@@ -73,9 +73,9 @@ async def test_an_adapter_records_a_whole_turn_and_then_deletes_the_thread(app, 
     assert one.role == "ASSISTANT" and one.content == "Thursday at 15:00."
     assert one.kind == "VISIBLE"
 
-    visible = await chat.chat.history()
+    visible = await chat.history()
     assert [m.message_id for m in visible] == [asked.message_id, answered.message_id]
-    everything = await chat.chat.history(include_internal=True)
+    everything = await chat.history(include_internal=True)
     assert thought.message_id in {m.message_id for m in everything}
 
     assert (await chat.chat.thread()).thread_id == thread.thread_id
@@ -84,7 +84,7 @@ async def test_an_adapter_records_a_whole_turn_and_then_deletes_the_thread(app, 
     # A soft-deleted thread is gone to every reader, not an empty one: the listing answers
     # "not found", which is what stops an adapter from carrying on writing into it.
     with pytest.raises(MemoryError) as deleted:
-        await chat.chat.history()
+        await chat.history()
     assert deleted.value.status == 404
 
 
@@ -95,17 +95,17 @@ async def test_an_agent_attaches_a_document_and_waits_for_it_to_be_retrievable(
     harness = await _harness(app)
     chat = harness.bind(user_id="u1", thread_id="thr-attachments")
 
-    handle = await chat.documents.add(
+    handle = await chat.advanced.documents.add(
         (("release-notes.txt", NOTES, "text/plain")), title="Release notes", source="drive"
     )
     assert handle.document_id and handle.size_bytes == len(NOTES)
     assert handle.checksum and not handle.deduplicated
 
     # The same bytes under the same name are the same document, not a second copy.
-    replay = await chat.documents.add(("release-notes.txt", NOTES, "text/plain"))
+    replay = await chat.advanced.documents.add(("release-notes.txt", NOTES, "text/plain"))
     assert replay.document_id == handle.document_id
 
-    document = await chat.documents.wait_ready(handle.document_id, max_wait=30.0)
+    document = await chat.advanced.documents.wait_ready(handle.document_id, max_wait=30.0)
     assert document.document_id == handle.document_id
     assert document.status in ("READY", "PARSING", "INDEXING", "PENDING"), document.status
     assert document.filename == "release-notes.txt" and document.media_type == "text/plain"
@@ -129,7 +129,7 @@ async def test_the_deprecated_upload_alias_still_answers_and_says_it_is_deprecat
     )
 
     assert body["document_id"] and body["filename"] == "legacy.txt"
-    assert (await chat.documents.document(body["document_id"])).filename == "legacy.txt"
+    assert (await chat.advanced.documents.document(body["document_id"])).filename == "legacy.txt"
 
     headers = coverage.headers_of("files.upload_file")
     assert headers["deprecation"] == "@1790553600"
@@ -154,7 +154,7 @@ async def test_another_tenant_reaches_none_of_this_conversation(app, running) ->
         user_id="u1", thread_id="thr-private", session_id="ses-private", turn_id="trn-1"
     )
     ack = await mine.chat.user("The board pack is in the finance drive.")
-    handle = await mine.documents.add(("board.txt", NOTES, "text/plain"))
+    handle = await mine.advanced.documents.add(("board.txt", NOTES, "text/plain"))
 
     theirs = other.bind(
         user_id="u1", thread_id="thr-private", session_id="ses-private", turn_id="trn-1"
@@ -162,9 +162,9 @@ async def test_another_tenant_reaches_none_of_this_conversation(app, running) ->
     for call in (
         theirs.chat.thread(),
         theirs.chat.message(ack.message_id),
-        theirs.documents.document(handle.document_id),
+        theirs.advanced.documents.document(handle.document_id),
         theirs.chat.delete_thread("thr-private"),
-        theirs.chat.history(limit=5),
+        theirs.history(limit=5),
     ):
         with pytest.raises(MemoryError) as refused:
             await call
@@ -185,7 +185,7 @@ async def test_another_tenant_reaches_none_of_this_conversation(app, running) ->
         await claiming.chat.create(title="mine now")
     assert thread.value.status == 403
     with pytest.raises(MemoryError) as upload:
-        await claiming.documents.add(("x.txt", b"x", "text/plain"))
+        await claiming.advanced.documents.add(("x.txt", b"x", "text/plain"))
     assert upload.value.status == 403
     with pytest.raises(MemoryError) as alias:
         await other.transport.request(

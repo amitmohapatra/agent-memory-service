@@ -37,13 +37,13 @@ handing you a bundle you might answer from anyway.
 | Route | Purpose | SDK |
 | --- | --- | --- |
 | `POST /v1/context` | build a `ContextBundle` for this turn | `ctx.context(query, token_budget=…, require_evidence=…)` |
-| `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.recall(query, limit=…, kinds=["chunk", "memory", "summary"])` |
+| `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=["chunk", "memory", "summary"])` |
 | `POST /v1/verify` | verify an answer claim by claim against evidence | `ctx.verify(answer, bundle=…)` |
 | `POST /v1/threads` | create (or idempotently fetch) a thread | `ctx.chat.create(title=…)` |
 | `GET /v1/threads/{id}` | one thread | `ctx.chat.thread()` |
 | `DELETE /v1/threads/{id}` | soft-delete a thread | `ctx.chat.delete_thread()` |
 | `POST /v1/messages` | append a message | `ctx.chat.user(...)`, `.assistant(...)`, `.internal(...)` |
-| `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.chat.history(limit=…, include_internal=…)` |
+| `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
 | `GET /v1/messages/{id}` | one message | `ctx.chat.message(id)` |
 | `POST/PUT/GET/DELETE /v1/briefs…` | standing questions and knowledge pages | `ctx.briefs.*` |
 
@@ -100,7 +100,7 @@ thread = await ctx.chat.create(title="Q3 planning")  # idempotent; messages also
 await ctx.chat.user("Revenue was EUR 412 million in FY26.")
 await ctx.chat.assistant("Noted — that's up 4% year on year.")
 await ctx.chat.internal("plan: check the FY25 figure", role="AGENT")  # kind=INTERNAL
-for message in await ctx.chat.history(limit=20):
+for message in await ctx.history(limit=20):
     print(message.role, message.content[:60])
 ```
 
@@ -118,7 +118,7 @@ Internal messages stay out of the window unless `include_internal=True`.
 ```python
 from trellis.memory import BriefSpec
 
-brief = await ctx.briefs.create(
+brief = await ctx.advanced.briefs.create(
     BriefSpec(
         kind="mental_model",  # or "knowledge_page"
         title="Supply risk for SKU-1",
@@ -127,7 +127,7 @@ brief = await ctx.briefs.create(
         use_llm=False,  # synthesis stays deterministic unless permitted
     )
 )
-fresh = await ctx.briefs.get(brief.brief_id)  # a read: never generates, may be stale
+fresh = await ctx.advanced.briefs.get(brief.brief_id)  # a read: never generates, may be stale
 print(fresh.status, fresh.output.text if fresh.output else None)
 ```
 

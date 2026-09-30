@@ -251,12 +251,12 @@ bundle.graph_facts  # entity relations
 bundle.evidence  # what was found, what was missing, and the status
 ```
 
-Need just the search results? `await ctx.recall("...")` returns ranked items.
+Need just the search results? `await ctx.search("...")` returns ranked items.
 
 A read consults the model only when the tenant's model policy allows it (`read_assist`, on by
 default once a key is registered) or when the request says so: `use_llm=True` or `use_llm=False`
 overrides the policy for that call. Agent-owned virtual keys and persistent
-standing questions/pages are exposed through `ctx.set_model_key(...)` and `ctx.briefs`;
+standing questions/pages are exposed through `ctx.advanced.model_keys.set(...)` and `ctx.briefs`;
 see the [SDK examples](sdk/python/README.md) and
 [capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
 
@@ -278,8 +278,8 @@ hands the service raw evidence and lets it decide, asynchronously, what is worth
 ### Add documents
 
 ```python
-doc = await ctx.documents.add(open("fy26.pdf", "rb"), title="FY26 annual report")
-await ctx.documents.wait_ready(doc.document_id)
+doc = await ctx.advanced.documents.add(open("fy26.pdf", "rb"), title="FY26 annual report")
+await ctx.advanced.documents.wait_ready(doc.document_id)
 ```
 
 The file is parsed into sections, tables and footnotes with page numbers preserved. After
@@ -435,7 +435,7 @@ runs you label successful.
 ### Record what your agent did
 
 ```python
-await ctx.tools.record(
+await ctx.record_tool(
     "pricing.lookup_price",
     args={"sku": "SKU-22", "region": "EMEA"},
     output={"price": 1200, "currency": "EUR", "quote_id": "Q-1183"},
@@ -454,7 +454,7 @@ opaque id and nothing will ever match.
 ### Read back what worked
 
 ```python
-plan = await ctx.tools.plan(task, available_tools=tools)
+plan = await ctx.advanced.tools.plan(task, available_tools=tools)
 # plan.steps      the tool sequence, in order
 # plan.support    how many successful runs back it
 # plan.success_rate
@@ -473,22 +473,10 @@ catalogue, and caching tool output replays stale results — `stock_level(SKU-1)
 yesterday's number is the exact failure the rest of this service exists to prevent. What the
 model *cannot* know is what worked here before, which is the one thing this keeps.
 
-### The loop in one call
-
-```python
-result = await ctx.tools.execute(
-    ToolCall(tool="pricing.lookup_price", args={"sku": "SKU-22"}, task=task),
-    executor=my_tool_runner,  # your function, or a call out to an MCP gateway
-)
-```
-
-Your executor, then an idempotent record. Failures are recorded with their error class, so
-the next run gets the correction.
-
 ### Tell it whether the run worked
 
 ```python
-await ctx.runs.outcome(run_id, success=True)
+await ctx.outcome(success=True)  # the bound run; run_id= names another
 ```
 
 Only successful runs turn into procedures. This is the single most valuable signal you can
@@ -641,7 +629,7 @@ back with `GET /v1/feedback/{id}` or list a target's feedback with
 `GET /v1/feedback?target_kind=memory&target_id=mem_...`.
 
 ```python
-record = await ctx.feedback.submit(
+record = await ctx.feedback(
     "memory", memory.memory_id, "correct", correction="The renewal is in March, not May."
 )
 page = await ctx.feedback.page_for("memory", memory.memory_id)  # .items, .next_cursor
@@ -656,8 +644,8 @@ level refuses instead of borrowing the next one.
 **Pagination.** Every list route takes `cursor` and `limit` and answers
 `Link: <...>; rel="next"` when a next page exists (envelope bodies also carry
 `next_cursor`). In the SDK every `list()` returns one page as a list and its `page()`
-sibling returns `items` with `next_cursor`: `await ctx.memories_page()`,
-`async for m in ctx.iter_memories(): ...`, `await admin.keys.page(cursor=...)`.
+sibling returns `items` with `next_cursor`: `await ctx.advanced.memories.page()`,
+`async for m in ctx.advanced.memories.iter(): ...`, `await admin.keys.page(cursor=...)`.
 
 **Webhooks.** Tenant admins subscribe a public https URL to `memory.created`,
 `memory.superseded` and `memory.retracted` (the last two from the feedback projector),

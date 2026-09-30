@@ -43,8 +43,8 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `POST /v1/groups` · `GET /v1/groups` · `DELETE /v1/groups/{id}` | a set of users a workspace can admit at once | `t.groups.create(...)`, `.list()`, `.delete(id)` |
 | `PUT` / `DELETE /v1/groups/{id}/members/{user_id}` · `GET /v1/groups/{id}/members` | group membership | `t.groups.add_user(...)`, `.remove_user(...)`, `.members(id)` |
 | `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
-| `GET` / `PUT` / `DELETE /v1/workspaces/{id}/model-key` | the workspace's key, used by its agents | `t.workspaces.model_key_status(id)`, `.set_model_key(id, vk)`, `.revoke_model_key(id)` |
-| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.model_key_status()`, `ctx.set_model_key(vk)`, `ctx.revoke_model_key()` |
+| `GET` / `PUT` / `DELETE /v1/workspaces/{id}/model-key` | the workspace's key, used by its agents | `t.workspaces.model_key_status(id)`, `.advanced.model_keys.set(id, vk)`, `.advanced.model_keys.revoke(id)` |
+| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` |
 | `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…)` |
 | `GET` / `PUT /v1/workspaces/{id}/model-key/policy` | the workspace's model policy, followed by its agents | `t.workspaces.model_policy(id)`, `.set_model_policy(id, uses, read_assist=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
@@ -116,7 +116,7 @@ Each key is stored encrypted, and a read returns **metadata only** — `register
 read output built with it.
 
 ```python
-status = await ctx.set_model_key("vk-…")  # the acting agent's own key
+status = await ctx.advanced.model_keys.set("vk-…")  # the acting agent's own key
 print(status.registered, status.revision)
 print(await t.model_key_status())  # the tenant level, metadata only
 ```

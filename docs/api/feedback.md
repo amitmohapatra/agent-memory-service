@@ -37,7 +37,7 @@ before the projector runs, so the record you get back has `projection: null`.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/feedback` | record a judgement on a run, answer, memory, tool call, brief or procedure | `ctx.feedback.submit(...)` |
+| `POST /v1/feedback` | record a judgement on a run, answer, memory, tool call, brief or procedure | `ctx.feedback(...)` |
 | `GET /v1/feedback/{feedback_id}` | one record, with its projection once it has run | `ctx.feedback.get(id)` |
 | `GET /v1/feedback?target_kind=…&target_id=…` | the feedback on one target, newest first (cursor paged) | `ctx.feedback.list_for(...)`, `ctx.feedback.page_for(...)` |
 
@@ -57,7 +57,7 @@ lets "what did people actually let this agent do?" be answered later.
 
 ```python
 # a person corrects a memory
-await ctx.feedback.submit(
+await ctx.feedback(
     "memory",
     memory_id,
     "correct",
@@ -67,7 +67,7 @@ await ctx.feedback.submit(
 )
 
 # an online judge scores a run
-await ctx.feedback.submit(
+await ctx.feedback(
     "run",
     run_id,
     "confirm",

@@ -253,18 +253,18 @@ async def test_sdk_ninety_percent_path(app, client) -> None:
     )
     ack = await ctx.chat.user("What changed in EBITDA?")
     assert ack.sequence == 1 and ack.job_ids
-    job = await ctx.job(ack.job_ids[0])
+    job = await ctx.advanced.job(ack.job_ids[0])
     assert job.status == "SUCCEEDED"
     await ctx.chat.assistant("EBITDA rose because of restructuring savings.")
-    history = await ctx.chat.history()
+    history = await ctx.history()
     assert [m.role for m in history] == ["USER", "ASSISTANT"]
     thread = await ctx.chat.thread()
     assert thread.thread_id == ctx.scope.thread_id
     # child agent context records internal lineage without touching the visible chat
     agent = ctx.agent("research")
     await agent.chat.internal("searched 3 filings")
-    assert len(await ctx.chat.history()) == 2
-    assert len(await ctx.chat.history(include_internal=True)) == 3
+    assert len(await ctx.history()) == 2
+    assert len(await ctx.history(include_internal=True)) == 3
     # another user is denied; a missing thread is NotFound
     other = memory.bind(tenant_id="acme", user_id="u2", thread_id=ctx.scope.thread_id)
     with pytest.raises(AuthorizationError):

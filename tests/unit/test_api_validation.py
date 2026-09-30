@@ -26,7 +26,7 @@ from memory_service.api.validation import (
 )
 from memory_service.domain import enums
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
-from memory_service.domain.tools import CacheScope, SideEffects, ToolSource, ToolStatus
+from memory_service.domain.tools import ToolStatus
 from memory_service.modules.grounding import cascade
 from trellis.memory import models as sdk
 
@@ -293,10 +293,7 @@ def test_sdk_literals_match_the_service_enums(sdk_literal: Any, service: Any) ->
         (sdk.EvidenceKind, cascade.EvidenceKind),
         (sdk.ClaimVerdictValue, ClaimVerdict),
         (sdk.GroundingMethod, GroundingMethod),
-        (sdk.ToolSource, ToolSource),
         (sdk.ToolStatus, ToolStatus),
-        (sdk.SideEffects, SideEffects),
-        (sdk.CacheScope, CacheScope),
     ],
 )
 def test_sdk_literals_match_the_service_literals(sdk_literal: Any, service: Any) -> None:

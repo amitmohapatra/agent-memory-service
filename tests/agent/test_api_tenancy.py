@@ -171,7 +171,7 @@ async def test_a_tenant_admin_issues_lists_and_revokes_keys(app, running) -> Non
 
     await admin.tenant.keys.revoke(issued.key_id)
     with pytest.raises(MemoryError) as dead:
-        await sdk(app, issued.token).bind(user_id="u1").recall("anything")
+        await sdk(app, issued.token).bind(user_id="u1").search("anything")
     assert dead.value.status == 401
 
 
@@ -183,7 +183,7 @@ async def test_the_read_audit_names_who_read_and_never_the_query(app, running) -
     service = await admin.tenant.keys.issue("service", "harness")
     harness = sdk(app, service.token)
     await harness.bind(user_id="u1").remember("The budget review is on Monday.", visibility="USER")
-    await harness.bind(user_id="u1").recall("when is the budget review")
+    await harness.bind(user_id="u1").search("when is the budget review")
 
     reads = await admin.tenant.reads()
     assert reads, "a recall is an audited read"

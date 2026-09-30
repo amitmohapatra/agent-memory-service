@@ -39,13 +39,13 @@ of evidence.
 | `POST /v1/observations` | submit an observation (durably acknowledged, processed asynchronously) | `ctx.observe(...)` |
 | `POST /v1/memories` | remember a statement verbatim, as one memory, now (deduplicated per owner and scope) | `ctx.remember(...)` |
 | `POST /v1/memories/{memory_id}/supersede` | replace a memory with a new version; the old one is closed, not deleted | `ctx.update(id, content, reason=...)` |
-| `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.memories()`, `ctx.memories_page()`, `ctx.iter_memories()` |
-| `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.get_memory(id)` |
+| `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.list()`, `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
+| `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
-| `POST /v1/graph/query` | resolve entities and traverse the knowledge graph (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.graph.query(...)` |
-| `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.graph.entities(...)` |
-| `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence | `ctx.graph.entity(id)` |
-| `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.job(job_id)` |
+| `POST /v1/graph/query` | resolve entities and traverse the knowledge graph (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.query(...)` |
+| `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.advanced.graph.entities(...)` |
+| `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence | `ctx.advanced.graph.entity(id)` |
+| `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.advanced.job(job_id)` |
 
 `kind` is a closed vocabulary — `MESSAGE`, `FILE`, `AGENT_RESULT`, `TOOL_RESULT`, `DECISION`,
 `FEEDBACK`, `EVENT`, `IMPORT` — and anything else is refused rather than stored as a surprise.
@@ -84,13 +84,13 @@ and a memory already superseded answers 409.
 ## The inventory, and forgetting
 
 ```python
-page = await ctx.memories_page(limit=50)
+page = await ctx.advanced.memories.page(limit=50)
 for memory in page.items:
     print(memory.memory_id, memory.memory_type, memory.content[:60])
 if page.next_cursor:
-    page = await ctx.memories_page(limit=50, cursor=page.next_cursor)
+    page = await ctx.advanced.memories.page(limit=50, cursor=page.next_cursor)
 
-async for memory in ctx.iter_memories(limit=200):  # the cursor, walked for you
+async for memory in ctx.advanced.memories.iter(limit=200):  # the cursor, walked for you
     ...
 
 await ctx.forget(memory.memory_id)  # soft delete + index removal; idempotent
@@ -102,7 +102,7 @@ ranked. The ranked, query-driven view is `recall` ([context.md](context.md)).
 ## The knowledge graph
 
 ```python
-answer = await ctx.graph.query("who supplies SKU-1?", hops=2)
+answer = await ctx.advanced.graph.query("who supplies SKU-1?", hops=2)
 for fact in answer.facts:
     print(fact.subject, fact.predicate, fact.object, fact.valid_from, fact.valid_to)
 ```
@@ -118,9 +118,9 @@ held then comes back), `valid_at` what had been *asserted* by then and not yet i
 `structural` relations.
 
 ```python
-[acme] = await ctx.graph.entities("acme", entity_type="ORG", limit=1)
+[acme] = await ctx.advanced.graph.entities("acme", entity_type="ORG", limit=1)
 print(acme.summary)  # "Acme Corp (ORG): acquired Westfalen; operates in Germany"
-profile = await ctx.graph.entity(acme.entity_id)
+profile = await ctx.advanced.graph.entity(acme.entity_id)
 for value in profile.current:  # the newest current value of each predicate
     print(value.predicate, value.value)
 for fact in profile.history:  # superseded, retracted and invalidated facts
@@ -138,10 +138,10 @@ facts change.
 ```python
 ack = await ctx.observe("Castor Supply raised lead time to 12 days.", kind="EVENT")
 for job_id in ack.job_ids:  # one write can queue more than one job
-    job = await ctx.job(job_id)
+    job = await ctx.advanced.job(job_id)
     while job.status in ("PENDING", "RUNNING", "RETRYING"):
         await asyncio.sleep(0.2)
-        job = await ctx.job(job_id)
+        job = await ctx.advanced.job(job_id)
     print(job_id, job.status, job.attempts, job.last_error)
 ```
 

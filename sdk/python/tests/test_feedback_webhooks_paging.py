@@ -52,7 +52,7 @@ async def test_feedback_submit_sends_the_contracts_record_bound_to_the_context(
     async with client.bind(
         tenant_id="acme", user_id="u1", workspace_id="fin", agent_id="ref"
     ) as ctx:
-        record = await ctx.feedback.submit(
+        record = await ctx.feedback(
             "memory",
             "mem_1",
             "correct",
@@ -137,15 +137,18 @@ async def test_memories_iterate_every_page(client: MemoryClient) -> None:
 
     respx.get(f"{BASE}/v1/memories").mock(side_effect=handler)
     async with client.bind(tenant_id="acme", user_id="u1") as ctx:
-        page = await ctx.memories_page(limit=2)
+        page = await ctx.advanced.memories.page(limit=2)
         assert [m.memory_id for m in page.items] == ["mem_1", "mem_2"] and page.next_cursor == "p2"
-        assert [m.memory_id async for m in ctx.iter_memories(page_size=2)] == [
+        assert [m.memory_id async for m in ctx.advanced.memories.iter(page_size=2)] == [
             "mem_1",
             "mem_2",
             "mem_3",
         ]
         assert all(isinstance(m, MemoryResult) for m in page.items)
-        assert [m.memory_id for m in await ctx.memories(limit=2)] == ["mem_1", "mem_2"]
+        assert [m.memory_id for m in await ctx.advanced.memories.list(limit=2)] == [
+            "mem_1",
+            "mem_2",
+        ]
 
 
 @respx.mock
@@ -202,7 +205,7 @@ async def test_bare_list_routes_page_through_the_link_header(client: MemoryClien
         headers={"Link": f'<{BASE}/v1/briefs?limit=1&cursor=b-next>; rel="next"'},
     )
     async with client.bind(tenant_id="acme", user_id="u1") as ctx:
-        page = await ctx.briefs.page(limit=1, cursor="b-prev")
+        page = await ctx.advanced.briefs.page(limit=1, cursor="b-prev")
         assert page.items[0].brief_id == "brf_1" and page.next_cursor == "b-next"
         assert briefs.calls.last.request.url.params["cursor"] == "b-prev"
     tenants = respx.get(f"{BASE}/v1/admin/tenants").respond(

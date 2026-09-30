@@ -86,7 +86,7 @@ async def test_roles_and_tenants_are_enforced_on_administration(app, running) ->
     assert running.post("/v1/workspaces", headers=PLATFORM, json={"name": "x"}).status_code == 422
     # ...and it never acts as a memory client
     with pytest.raises(MemoryError) as no_memory:
-        await platform.bind(tenant_id="globex", user_id="u1").recall("anything")
+        await platform.bind(tenant_id="globex", user_id="u1").search("anything")
     assert no_memory.value.status == 403
     # tenants are separate even for the platform's own listing of keys
     listed = running.get("/v1/keys", headers={**PLATFORM, "X-Trellis-Tenant": "acme"}).json()
@@ -99,16 +99,16 @@ async def test_suspension_stops_every_key_on_its_next_request(app, running) -> N
     service = await sdk(app, acme.admin_key.token).tenant.keys.issue("service", "h")
     harness = sdk(app, service.token).bind(user_id="u1")
     await harness.remember("The budget review is on Friday.")
-    assert _mentions(await harness.recall("budget review"), "budget review")  # warms the cache
+    assert _mentions(await harness.search("budget review"), "budget review")  # warms the cache
     await platform.admin.update_tenant("acme", status="suspended")
     with pytest.raises(MemoryError) as stopped:
-        await harness.recall("budget review")
+        await harness.search("budget review")
     assert stopped.value.status == 403
     with pytest.raises(MemoryError) as no_new_keys:
         await sdk(app, acme.admin_key.token).tenant.keys.issue("service", "again")
     assert no_new_keys.value.status == 403, "the admin key is suspended too"
     await platform.admin.update_tenant("acme", status="active")
-    assert _mentions(await harness.recall("budget review"), "budget review")
+    assert _mentions(await harness.search("budget review"), "budget review")
 
 
 async def test_identifiers_are_never_reused_and_bound_keys_die_with_their_workspace(
@@ -124,7 +124,7 @@ async def test_identifiers_are_never_reused_and_bound_keys_die_with_their_worksp
     await sdk(app, bound.token).bind(user_id="u1").remember("Q3 close is on the 5th.")
     await admin.tenant.workspaces.delete("finance")
     with pytest.raises(MemoryError) as gone:
-        await sdk(app, bound.token).bind(user_id="u1").recall("Q3 close")
+        await sdk(app, bound.token).bind(user_id="u1").search("Q3 close")
     assert gone.value.status == 401, "a key bound to a deleted workspace is revoked"
     with pytest.raises(MemoryError) as reused:
         await admin.tenant.workspaces.create("Finance v2", workspace_id="finance")
@@ -149,9 +149,9 @@ async def test_deleting_a_group_removes_it_from_every_workspace(app, running) ->
     reader = sdk(app, service.token).bind(user_id="lawyer1", workspace_id="legal")
     await reader.remember("Retainer letters are renewed in March.", visibility="WORKSPACE")
     colleague = sdk(app, service.token).bind(user_id="lawyer2", workspace_id="legal")
-    assert _mentions(await colleague.recall("retainer letters"), "Retainer"), "through the group"
+    assert _mentions(await colleague.search("retainer letters"), "Retainer"), "through the group"
     await admin.tenant.groups.delete("counsel")
-    assert not _mentions(await colleague.recall("retainer letters"), "Retainer"), "gone with it"
+    assert not _mentions(await colleague.search("retainer letters"), "Retainer"), "gone with it"
     for ws in ("legal", "finance"):
         members = await admin.tenant.workspaces.members(ws)
         assert all(m.principal != "group:counsel" for m in members), ws
@@ -169,7 +169,7 @@ async def test_revocation_is_idempotent_and_the_audit_pages_newest_first(app, ru
     service = await admin.tenant.keys.issue("service", "h")
     ctx = sdk(app, service.token).bind(user_id="u1")
     for i in range(3):
-        await ctx.recall(f"question {i}")
+        await ctx.search(f"question {i}")
     reads = await admin.tenant.reads(limit=2)
     assert len(reads) == 2 and reads[0].at >= reads[1].at
     assert {r.credential for r in reads} == {f"key:{service.key_id}"}, "who: the key"
@@ -183,7 +183,7 @@ async def test_revocation_is_idempotent_and_the_audit_pages_newest_first(app, ru
     await admin.tenant.keys.revoke(service.key_id)  # already revoked: still 204
     await admin.tenant.keys.revoke("nonexistent-key-id")  # unknown: still 204, leaks nothing
     with pytest.raises(MemoryError) as refused:
-        await ctx.recall("question")
+        await ctx.search("question")
     assert refused.value.status == 401
 
 
@@ -340,8 +340,8 @@ async def test_only_members_write_into_a_team(app, running) -> None:
     member = harness.bind(user_id="u1", workspace_id="finance")
     await member.remember("Q3 close is on the 5th.", visibility="WORKSPACE")
     reader = harness.bind(user_id="v1", workspace_id="finance")
-    assert not _mentions(await reader.recall("planted"), "Planted")
-    assert _mentions(await reader.recall("Q3 close"), "Q3 close")
+    assert not _mentions(await reader.search("planted"), "Planted")
+    assert _mentions(await reader.search("Q3 close"), "Q3 close")
     # threads: a non-member may not open one inside the team; anyone may under a bare anchor
     with pytest.raises(MemoryError) as thread:
         await harness.bind(user_id="u3", workspace_id="finance").chat.create(title="plan")
@@ -372,7 +372,7 @@ async def test_retention_forgets_only_live_rows_of_active_tenants(app, running) 
     assert await retention.sweep() == 1
     assert await retention.sweep() == 0, "forgotten rows are not swept again"
     reader = sdk(app, key.token).bind(user_id="u1")
-    assert not _mentions(await reader.recall("old fact"), "old fact")
+    assert not _mentions(await reader.search("old fact"), "old fact")
 
 
 async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running) -> None:
@@ -424,7 +424,7 @@ async def test_every_path_that_mints_a_workspace_audience_is_gated(app, running)
         },
     )
     assert ok.status_code in (200, 201, 202), ok.text
-    assert not _mentions(await member.recall("planted"), "Planted")
+    assert not _mentions(await member.search("planted"), "Planted")
 
 
 async def test_only_members_ingest_documents_into_a_team(app, running) -> None:
@@ -437,11 +437,13 @@ async def test_only_members_ingest_documents_into_a_team(app, running) -> None:
     doc = ("plan.md", b"# Planted\n", "text/markdown")
     for user in ("u3", "v1"):
         with pytest.raises(MemoryError) as refused:
-            await harness.bind(user_id=user, workspace_id="finance").documents.add(doc)
+            await harness.bind(user_id=user, workspace_id="finance").advanced.documents.add(doc)
         assert refused.value.status == 403, user
-    assert (await harness.bind(user_id="u1", workspace_id="finance").documents.add(doc)).document_id
     assert (
-        await harness.bind(user_id="u3", workspace_id="anchor-only").documents.add(doc)
+        await harness.bind(user_id="u1", workspace_id="finance").advanced.documents.add(doc)
+    ).document_id
+    assert (
+        await harness.bind(user_id="u3", workspace_id="anchor-only").advanced.documents.add(doc)
     ).document_id
 
 
@@ -451,9 +453,9 @@ async def test_an_admin_cannot_revoke_another_tenant_s_key(app, running) -> None
     globex = await platform.admin.create_tenant("Globex", tenant_id="globex")
     gkey = await sdk(app, globex.admin_key.token).tenant.keys.issue("service", "h")
     reader = sdk(app, gkey.token).bind(user_id="u1")
-    await reader.recall("warm the verifier cache")
+    await reader.search("warm the verifier cache")
     await sdk(app, acme.admin_key.token).tenant.keys.revoke(gkey.key_id)  # 204, and a no-op
-    await reader.recall("still served")
+    await reader.search("still served")
     listed = await sdk(app, globex.admin_key.token).tenant.keys.list()
     assert next(k for k in listed if k.key_id == gkey.key_id).revoked_at is None
 
@@ -498,7 +500,7 @@ async def test_the_read_audit_is_purged_past_its_retention(app, running) -> None
     key = await admin.tenant.keys.issue("service", "h")
     ctx = sdk(app, key.token).bind(user_id="u1")
     for i in range(3):
-        await ctx.recall(f"question {i}")
+        await ctx.search(f"question {i}")
     assert len(await admin.tenant.reads()) == 3
     container = app.state.container
 
@@ -634,9 +636,9 @@ async def test_listing_memories_inside_a_team_includes_the_team_s(app, running) 
     await harness.bind(user_id="u1", workspace_id="finance").remember(
         "The close calendar is published on the first Monday.", visibility="WORKSPACE"
     )
-    listed = await harness.bind(user_id="u2", workspace_id="finance").memories()
+    listed = await harness.bind(user_id="u2", workspace_id="finance").advanced.memories.list()
     assert any("close calendar" in m.content for m in listed), "a member lists the team's memory"
-    outside = await harness.bind(user_id="u3", workspace_id="finance").memories()
+    outside = await harness.bind(user_id="u3", workspace_id="finance").advanced.memories.list()
     assert not any("close calendar" in m.content for m in outside)
 
 

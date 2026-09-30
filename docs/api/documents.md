@@ -30,21 +30,21 @@ sequenceDiagram
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/documents` | ingest a file into RAG memory (multipart) | `ctx.documents.add(file, …)` |
-| `GET /v1/documents/{document_id}` | status, versions, archive state | `ctx.documents.document(id)`, `ctx.documents.wait_ready(id)` |
+| `POST /v1/documents` | ingest a file into RAG memory (multipart) | `ctx.advanced.documents.add(file, …)` |
+| `GET /v1/documents/{document_id}` | status, versions, archive state | `ctx.advanced.documents.document(id)`, `ctx.advanced.documents.wait_ready(id)` |
 | `POST /v1/files` | deprecated alias of `POST /v1/documents` (ADR 0022; removed in 0.3.0) | `ctx.files` is the deprecated spelling of `ctx.documents` |
 
 ## Ingesting
 
 ```python
-handle = await ctx.documents.add(
+handle = await ctx.advanced.documents.add(
     "reports/fy26.pdf",  # bytes, a path, or (filename, bytes, media_type)
     title="FY26 annual report",
     visibility="WORKSPACE",  # default: the thread, else the user
     quarter="FY26",  # anything extra is custom metadata
 )
 
-info = await ctx.documents.wait_ready(handle.document_id, max_wait=60, interval=0.5)
+info = await ctx.advanced.documents.wait_ready(handle.document_id, max_wait=60, interval=0.5)
 print(info.status, info.archive_status)  # STAGED · READY · FAILED
 ```
 

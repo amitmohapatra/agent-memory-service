@@ -74,7 +74,7 @@ async def test_a_team_reads_back_its_own_language(
     assert ack.observation_id
 
     # the same-language question finds the statement first, and the bundle carries it
-    recalled = await writer.recall(question, kinds=["memory"])
+    recalled = await writer.search(question, kinds=["memory"])
     assert recalled and statement in _texts(recalled)[:1], _texts(recalled)[:3]
     bundle = await writer.context(question)
     assert statement in _texts(bundle.memories)
@@ -82,9 +82,9 @@ async def test_a_team_reads_back_its_own_language(
     # another tenant, another key: none of it
     other = await platform.admin.create_tenant(f"Other {language}", tenant_id=f"other-{language}")
     stranger = sdk(app, other.admin_key.token).bind(user_id="writer")
-    assert statement not in _texts(await stranger.recall(question, kinds=["memory"]))
+    assert statement not in _texts(await stranger.search(question, kinds=["memory"]))
 
     # forgetting is forgetting
     memory = next(item for item in recalled if getattr(item, "text", "") == statement)
     await writer.forget(memory.item_id)
-    assert statement not in _texts(await writer.recall(question, kinds=["memory"]))
+    assert statement not in _texts(await writer.search(question, kinds=["memory"]))

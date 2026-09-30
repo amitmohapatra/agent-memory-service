@@ -143,10 +143,10 @@ async def test_sdk_context_and_recall(app, client) -> None:
     assert exc.value.code == "INSUFFICIENT_EVIDENCE"
     lenient = await ctx.context("Who won the 1998 football championship?")
     assert lenient.evidence.status == "INSUFFICIENT"
-    items = await ctx.recall("restructuring programme headcount", limit=3)
+    items = await ctx.search("restructuring programme headcount", limit=3)
     assert 0 < len(items) <= 3 and items[0].citation.startswith("chunk_id:")
     assert any("headcount" in i.text for i in items)
     # a child agent inherits the user's access to the thread-scoped document
     agent = ctx.agent("analyst", agent_run_id=new_id("agent_run"))
-    assert (await agent.recall("Adjusted EBITDA", limit=2))[0].document_id == doc_id
+    assert (await agent.search("Adjusted EBITDA", limit=2))[0].document_id == doc_id
     await memory.aclose()

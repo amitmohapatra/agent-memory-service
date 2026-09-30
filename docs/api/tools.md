@@ -34,16 +34,16 @@ promoted.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.tools.record(...)` |
-| `POST /v1/tools/plan` | the best-known validated chain for a task, as an ordered plan with bindings | `ctx.tools.plan(task, available_tools=…)` |
-| `GET /v1/tools/procedures` | procedures mined for a task pattern | `ctx.tools.procedures(task)` |
-| `POST /v1/runs/{run_id}/outcome` | label a run successful or not | `ctx.runs.outcome(run_id, success=…, note=…)` |
+| `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
+| `POST /v1/tools/plan` | the best-known validated chain for a task, as an ordered plan with bindings | `ctx.advanced.tools.plan(task, available_tools=…)` |
+| `GET /v1/tools/procedures` | procedures mined for a task pattern | `ctx.advanced.tools.procedures(task)` |
+| `POST /v1/runs/{run_id}/outcome` | label a run successful or not | `ctx.outcome(run_id=run_id, success=…, note=…)` |
 | `POST /v1/tools/record` | deprecated alias of `POST /v1/tools/invocations` | — |
 
 ## Recording a call
 
 ```python
-result = await ctx.tools.record(
+result = await ctx.record_tool(
     "stock_level",
     {"sku": "SKU-1"},
     output={"on_hand": 95},
@@ -61,33 +61,10 @@ result = await ctx.tools.record(
 `step` is what makes a chain a chain. `visibility` defaults to `PRIVATE`: tool arguments and
 outputs are the most likely place for customer data, so they are not shared by default.
 
-## Letting the SDK do the bookkeeping
-
-```python
-from trellis.memory import ToolCall
-
-
-async def executor(tool: str, args: dict) -> dict:
-    return await my_tools[tool](**args)  # local, a framework node, or a POST to a gateway
-
-
-result = await ctx.tools.execute(
-    ToolCall(tool="stock_level", args={"sku": "SKU-1"}, task="check stock", step=1),
-    executor,
-)
-```
-
-`execute` runs your executor and records the invocation either way — including the failure, with
-its `error_class`. There is deliberately **no output cache** in front of it: replaying a previous
-result for identical arguments is the staleness bug in another costume, and `stock_level(SKU-1)`
-returning yesterday's 95 units is precisely the failure the rest of this system exists to avoid. A
-tool that is genuinely deterministic should be cached by its own caller, which is the only place
-that knows.
-
 ## Asking what to call
 
 ```python
-plan = await ctx.tools.plan(
+plan = await ctx.advanced.tools.plan(
     "reprice a quote",
     available_tools=[{"name": "reprice", "description": "…", "parameters": {...}}],
 )
@@ -96,7 +73,7 @@ print(plan.steps)  # the tool sequence, in order, with argument bindings
 print(plan.support)  # how many successful runs back it
 print(plan.success_rate)  # and how often they succeeded
 
-for procedure in await ctx.tools.procedures("reprice a quote"):
+for procedure in await ctx.advanced.tools.procedures("reprice a quote"):
     print(procedure)
 ```
 
@@ -107,7 +84,7 @@ does not have. A plan with nothing behind it comes back `valid=False` with a `re
 
 * it does not execute anything, ever;
 * it does not promise a plan: a task nobody has completed successfully has no validated chain;
-* it does not learn from a run you never labelled — `ctx.runs.outcome(...)` is not optional if you
+* it does not learn from a run you never labelled — `ctx.outcome(...)` is not optional if you
   want procedures;
 * it does not make tool outputs searchable knowledge by default: `visibility="PRIVATE"` keeps them
   to the agent that recorded them.

@@ -80,7 +80,7 @@ async def test_sdk_attachments(app, client) -> None:
     ack = await ctx.chat.user(
         "summarise this", attachments=[("notes.md", b"# Notes\n\nA short note.", "text/markdown")]
     )
-    handle = await ctx.documents.add(
+    handle = await ctx.advanced.documents.add(
         io.BytesIO(b"# Two\n\nAnother.").getvalue(),
         filename="two.md",
         media_type="text/markdown",

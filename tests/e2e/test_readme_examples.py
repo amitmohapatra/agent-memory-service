@@ -10,7 +10,6 @@ from __future__ import annotations
 import pytest
 
 from tests.e2e.conftest import sdk_client
-from trellis.memory import ToolCall
 
 pytestmark = pytest.mark.e2e
 
@@ -49,8 +48,8 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
         assert hasattr(bundle, attr), attr
     assert bundle.evidence.status in {"COMPLETE", "PARTIAL", "INSUFFICIENT_EVIDENCE"}
 
-    assert await ctx.recall("revenue") != []
-    assert await ctx.memories() != []
+    assert await ctx.search("revenue") != []
+    assert await ctx.advanced.memories.list() != []
 
     gated = await ctx.context("what were FY26 restructuring savings?", require_evidence=True)
     assert gated.evidence.status  # the README branches on this value
@@ -67,7 +66,7 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
     child = researcher.agent("fact-checker")
 
     async def sees(scope) -> bool:
-        return any(NOTE in (i.text or "") for i in await scope.recall(NOTE, kinds=["memory"]))
+        return any(NOTE in (i.text or "") for i in await scope.search(NOTE, kinds=["memory"]))
 
     assert await sees(researcher), "the owning run must see its own note"
     assert await sees(child), "a spawned child must receive the hand-off"
@@ -80,7 +79,7 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
     # sharing is only meaningful if the crew can actually read it: the sibling that saw
     # nothing of the RUN note must see this one
     async def sees_shared(scope) -> bool:
-        return any(shared in (i.text or "") for i in await scope.recall(shared, kinds=["memory"]))
+        return any(shared in (i.text or "") for i in await scope.search(shared, kinds=["memory"]))
 
     assert await sees_shared(writer), "an AGENT_GROUP memory must reach the crew"
 
@@ -96,7 +95,7 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
 
     for i in range(3):
         run = ctx.agent("ops", agent_run_id=f"run_readme_{i}")
-        await run.tools.record(
+        await run.record_tool(
             "pricing.lookup_price",
             args={"sku": f"SKU-{i}", "region": "EMEA"},
             output={"price": 1200, "currency": "EUR", "quote_id": f"Q-{i}"},
@@ -104,7 +103,7 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             step=0,
             latency_ms=42,
         )
-        await run.tools.record(
+        await run.record_tool(
             "crm.update_quote",
             args={"quote_id": f"Q-{i}", "amount": 1200},
             output={"ok": True},
@@ -112,24 +111,13 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             step=1,
         )
         # only a run labelled successful validates a procedure
-        await run.runs.outcome(f"run_readme_{i}", success=True)
+        await run.outcome(run_id=f"run_readme_{i}", success=True)
 
-    plan = await agent.tools.plan(TASK, available_tools=TOOLS)
-    assert plan.valid and plan.render() and plan.render_script()
-    steps = [s["tool"] for s in plan.steps]
+    plan = await agent.advanced.tools.plan(TASK, available_tools=TOOLS)
+    assert plan["valid"] and plan["rendered"] and plan["script"]
+    steps = [s["tool"] for s in plan["steps"]]
     assert steps == ["pricing.lookup_price", "crm.update_quote"], steps
-    assert plan.support == 3 and plan.success_rate == 1.0
+    assert plan["support"] == 3 and plan["success_rate"] == 1.0
     # the headline claim: an argument is bound from an earlier step's output
-    binding = next(b for b in plan.steps[1]["bindings"] if b["argument"] == "quote_id")
+    binding = next(b for b in plan["steps"][1]["bindings"] if b["argument"] == "quote_id")
     assert binding["source_step"] == 0 and binding["source_field"]
-
-    ran: list[str] = []
-
-    async def runner(name: str, args: dict) -> dict:
-        ran.append(name)
-        return {"ok": True}
-
-    result = await agent.tools.execute(
-        ToolCall(tool="crm.update_quote", args={"quote_id": "Q-X"}, task=TASK), runner
-    )
-    assert ran == ["crm.update_quote"] and result.recorded

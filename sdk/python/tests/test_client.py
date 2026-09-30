@@ -6,22 +6,18 @@ import httpx
 import pytest
 import respx
 from opentelemetry.sdk.trace import TracerProvider
-from packaging.version import Version
 from pydantic import ValidationError
 
-import trellis.memory
 from trellis.memory import (
     AuthorizationError,
     DependencyUnavailableError,
     DocumentsAPI,
-    FilesAPI,
     MemoryClient,
     MemoryContext,
     MemoryError,
     TimeoutError,
     current_context,
 )
-from trellis.memory import client as client_module
 from trellis.memory import transport as transport_module
 
 
@@ -52,11 +48,13 @@ async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(cli
         200, json={**status, "revoked": True, "revision": 2}
     )
     ctx = client.bind(tenant_id="acme", user_id="alice").agent("research")
-    assert (await ctx.set_model_key("vk-sdk-test", idempotency_key="rotate-1")).revision == 1
+    assert (
+        await ctx.advanced.model_keys.set("vk-sdk-test", idempotency_key="rotate-1")
+    ).revision == 1
     assert put.calls.last.request.headers["Idempotency-Key"] == "rotate-1"
-    assert (await ctx.model_key_status()).registered
+    assert (await ctx.advanced.model_keys.status()).registered
     assert get.calls.last.request.url.params["agent_id"] == "research"
-    assert (await ctx.revoke_model_key()).revoked
+    assert (await ctx.advanced.model_keys.revoke()).revoked
     assert delete.calls.last.request.url.params["agent_id"] == "research"
 
 
@@ -160,7 +158,7 @@ async def test_retries_exhausted_raise(client: MemoryClient) -> None:
     )
     ctx = client.bind(tenant_id="acme")
     with pytest.raises(DependencyUnavailableError):
-        await ctx.job("job_1")
+        await ctx.advanced.job("job_1")
 
 
 @respx.mock
@@ -202,15 +200,15 @@ async def test_brief_sdk_preserves_scope_kind_and_async_status(client):
     respx.get("http://memory.test/v1/briefs").respond(200, json=[pending])
     respx.delete("http://memory.test/v1/briefs/brf_example").respond(200, json={"deleted": True})
     ctx = client.bind(tenant_id="acme", user_id="alice", agent_id="research")
-    created = await ctx.briefs.create(spec, idempotency_key="brief-1")
+    created = await ctx.advanced.briefs.create(spec, idempotency_key="brief-1")
     assert created.status == "pending" and created.spec.kind == "knowledge_page"
     assert post.calls.last.request.headers["Idempotency-Key"] == "brief-1"
-    assert (await ctx.briefs.update(created.brief_id, spec)).status == "pending"
+    assert (await ctx.advanced.briefs.update(created.brief_id, spec)).status == "pending"
     assert put.call_count == 1
-    assert (await ctx.briefs.get(created.brief_id)).output is None
+    assert (await ctx.advanced.briefs.get(created.brief_id)).output is None
     assert get.calls.last.request.url.params["agent_id"] == "research"
-    assert len(await ctx.briefs.list()) == 1
-    await ctx.briefs.delete(created.brief_id)
+    assert len(await ctx.advanced.briefs.list()) == 1
+    await ctx.advanced.briefs.delete(created.brief_id)
 
 
 @respx.mock
@@ -226,7 +224,7 @@ async def test_administer_names_the_tenant_and_a_keyed_bind_sends_no_tenant_head
     client = MemoryClient("http://memory.test", api_key="mk_k.s")
     await client.administer("globex").keys.list()
     await client.tenant.keys.list()
-    await client.bind(user_id="u1").recall("anything")
+    await client.bind(user_id="u1").search("anything")
     assert seen == ["globex", None, None]
 
 
@@ -272,7 +270,7 @@ async def test_every_call_carries_a_request_id_kept_across_its_retries(
             httpx.Response(200, json={"job_id": "job_1", "status": "SUCCEEDED"}),
         ]
     )
-    await client.bind(tenant_id="acme").job("job_1")
+    await client.bind(tenant_id="acme").advanced.job("job_1")
     ids = [call.request.headers["X-Request-ID"] for call in route.calls]
     assert len(ids) == 2 and ids[0] == ids[1] and re.fullmatch(r"[0-9a-f]{32}", ids[0])
     version = respx.get("http://memory.test/version").mock(
@@ -287,19 +285,19 @@ async def test_traceparent_is_built_from_a_w3c_scope_trace_id(client: MemoryClie
     route = respx.post("http://memory.test/v1/recall").mock(
         return_value=httpx.Response(200, json={"results": []})
     )
-    await client.bind(tenant_id="acme", trace_id=TRACE.upper()).recall("q")
+    await client.bind(tenant_id="acme", trace_id=TRACE.upper()).search("q")
     headers = route.calls.last.request.headers
     match = TRACEPARENT.match(headers["traceparent"])
     assert match and match.group(1) == TRACE and match.group(3) == "01"
     assert "X-Trace-ID" not in headers  # a response header; traceparent is the request's
     # an opaque id is not a trace the service would continue: it travels as the correlation id
-    await client.bind(tenant_id="acme", trace_id="opaque-id").recall("q")
+    await client.bind(tenant_id="acme", trace_id="opaque-id").search("q")
     headers = route.calls.last.request.headers
     assert "traceparent" not in headers and "X-Trace-ID" not in headers
     assert headers["X-Correlation-ID"] == "opaque-id"
-    await client.bind(tenant_id="acme", trace_id="opaque-id", correlation_id="corr-1").recall("q")
+    await client.bind(tenant_id="acme", trace_id="opaque-id", correlation_id="corr-1").search("q")
     assert route.calls.last.request.headers["X-Correlation-ID"] == "corr-1"
-    await client.bind(tenant_id="acme").recall("q")
+    await client.bind(tenant_id="acme").search("q")
     assert "traceparent" not in route.calls.last.request.headers
 
 
@@ -310,7 +308,7 @@ async def test_the_active_opentelemetry_span_wins_over_the_scope(client: MemoryC
     )
     tracer = TracerProvider().get_tracer("agent")
     with tracer.start_as_current_span("turn") as span:
-        await client.bind(tenant_id="acme", trace_id=TRACE).recall("q")
+        await client.bind(tenant_id="acme", trace_id=TRACE).search("q")
     context = span.get_span_context()
     match = TRACEPARENT.match(route.calls.last.request.headers["traceparent"])
     assert match and match.group(1) == format(context.trace_id, "032x") != TRACE
@@ -327,13 +325,13 @@ async def test_without_the_otel_extra_the_scope_trace_id_is_used(
     )
     tracer = TracerProvider().get_tracer("agent")
     with tracer.start_as_current_span("turn"):
-        await client.bind(tenant_id="acme", trace_id=TRACE).recall("q")
+        await client.bind(tenant_id="acme", trace_id=TRACE).search("q")
     match = TRACEPARENT.match(route.calls.last.request.headers["traceparent"])
     assert match and match.group(1) == TRACE
 
 
 @respx.mock
-async def test_documents_is_the_noun_and_files_its_deprecated_alias(client: MemoryClient) -> None:
+async def test_everything_past_the_verbs_is_under_advanced(client: MemoryClient) -> None:
     route = respx.post("http://memory.test/v1/documents").mock(
         return_value=httpx.Response(
             202,
@@ -341,11 +339,11 @@ async def test_documents_is_the_noun_and_files_its_deprecated_alias(client: Memo
         )
     )
     ctx = client.bind(tenant_id="acme", user_id="u1")
-    assert isinstance(ctx.documents, DocumentsAPI) and FilesAPI is DocumentsAPI
-    with pytest.warns(DeprecationWarning, match="documents"):
-        alias = ctx.files
-    assert alias is ctx.documents
-    handle = await ctx.documents.add(b"hello", filename="a.md", media_type="text/markdown")
+    assert isinstance(ctx.advanced.documents, DocumentsAPI)
+    assert not hasattr(ctx, "documents") and not hasattr(ctx, "files")
+    assert ctx.advanced.tenant is client.tenant and ctx.advanced.admin is client.admin
+    assert ctx.advanced.webhooks is client.tenant.webhooks
+    handle = await ctx.advanced.documents.add(b"hello", filename="a.md", media_type="text/markdown")
     assert handle.document_id == "doc_1" and route.called
 
 
@@ -356,7 +354,7 @@ async def test_tool_records_go_to_the_invocations_route(client: MemoryClient) ->
             202, json={"invocation_id": "tiv_1", "step": 0, "args_hash": "h", "recorded": True}
         )
     )
-    result = await client.bind(tenant_id="acme", agent_id="bot").tools.record("search", {"q": "x"})
+    result = await client.bind(tenant_id="acme", agent_id="bot").record_tool("search", {"q": "x"})
     assert result.invocation_id == "tiv_1" and route.called
 
 
@@ -375,7 +373,7 @@ async def test_an_unrecognised_error_body_still_raises_a_typed_error(
 ) -> None:
     respx.get("http://memory.test/v1/jobs/job_1").mock(return_value=response)
     with pytest.raises(MemoryError) as exc:
-        await client.bind(tenant_id="acme").job("job_1")
+        await client.bind(tenant_id="acme").advanced.job("job_1")
     assert exc.value.code == "INTERNAL" and exc.value.status == response.status_code
     assert exc.value.retryable is False and exc.value.message == f"HTTP {response.status_code}"
 
@@ -391,7 +389,7 @@ async def test_a_plain_rfc_9457_problem_keeps_its_words(client: MemoryClient) ->
         )
     )
     with pytest.raises(MemoryError) as exc:
-        await client.bind(tenant_id="acme").job("job_1")
+        await client.bind(tenant_id="acme").advanced.job("job_1")
     assert exc.value.code == "INTERNAL" and exc.value.message == "Service Unavailable"
     assert exc.value.retryable is True  # from the status, so the read was retried
 
@@ -404,7 +402,7 @@ async def test_a_trace_id_the_service_would_reject_travels_as_correlation(
     route = respx.post("http://memory.test/v1/recall").mock(
         return_value=httpx.Response(200, json={"results": []})
     )
-    await client.bind(tenant_id="acme", trace_id=trace_id).recall("q")
+    await client.bind(tenant_id="acme", trace_id=trace_id).search("q")
     headers = route.calls.last.request.headers
     assert "traceparent" not in headers and "X-Trace-ID" not in headers
     assert headers["X-Correlation-ID"] == trace_id
@@ -433,7 +431,7 @@ async def test_a_gateway_body_keeps_its_message_and_request_id(client: MemoryCli
         return_value=httpx.Response(403, json={"message": "Forbidden", "request_id": "gw-1"})
     )
     with pytest.raises(MemoryError) as exc:
-        await client.bind(tenant_id="acme").job("job_1")
+        await client.bind(tenant_id="acme").advanced.job("job_1")
     assert exc.value.message == "Forbidden" and exc.value.request_id == "gw-1"
     assert exc.value.code == "INTERNAL" and exc.value.status == 403
 
@@ -459,7 +457,7 @@ async def test_a_gateway_s_untyped_members_are_not_trusted(client: MemoryClient)
         )
     )
     with pytest.raises(MemoryError) as exc:
-        await client.bind(tenant_id="acme").job("job_1")
+        await client.bind(tenant_id="acme").advanced.job("job_1")
     # the status says retryable, the string does not count either way: the read was retried
     assert exc.value.retryable is True and route.call_count == 3
     assert exc.value.details == {} and exc.value.request_id is None
@@ -467,7 +465,7 @@ async def test_a_gateway_s_untyped_members_are_not_trusted(client: MemoryClient)
         return_value=httpx.Response(403, json={"message": "no", "retryable": "true"})
     )
     with pytest.raises(MemoryError) as exc:
-        await client.bind(tenant_id="acme").job("job_2")
+        await client.bind(tenant_id="acme").advanced.job("job_2")
     assert exc.value.retryable is False
 
 
@@ -476,7 +474,7 @@ async def test_the_body_scope_carries_no_trace_id(client: MemoryClient) -> None:
     route = respx.post("http://memory.test/v1/recall").mock(
         return_value=httpx.Response(200, json={"results": []})
     )
-    await client.bind(tenant_id="acme", trace_id=TRACE, correlation_id="corr-1").recall("q")
+    await client.bind(tenant_id="acme", trace_id=TRACE, correlation_id="corr-1").search("q")
     import json
 
     sent = json.loads(route.calls.last.request.content)
@@ -516,7 +514,7 @@ async def test_a_timeout_on_a_read_is_retried(client: MemoryClient) -> None:
         side_effect=httpx.ReadTimeout("slow")
     )
     with pytest.raises(TimeoutError):
-        await client.bind(tenant_id="acme").job("job_1")
+        await client.bind(tenant_id="acme").advanced.job("job_1")
     assert route.call_count == 3
 
 
@@ -529,7 +527,7 @@ async def test_the_upload_form_scope_carries_no_trace_id(client: MemoryClient) -
         )
     )
     ctx = client.bind(tenant_id="acme", user_id="u1", trace_id=TRACE, correlation_id="corr-1")
-    await ctx.documents.add(b"hello", filename="a.md", media_type="text/markdown")
+    await ctx.advanced.documents.add(b"hello", filename="a.md", media_type="text/markdown")
     body = route.calls.last.request.content.decode(errors="replace")
     assert "corr-1" in body and TRACE not in body.split("traceparent")[0]
     assert '"trace_id"' not in body
@@ -544,10 +542,6 @@ def test_an_id_that_is_not_an_id_is_refused_when_the_scope_is_built(client: Memo
     with pytest.raises(ValidationError, match="not an id"):
         client.bind(tenant_id="acme", user_id="-starts-with-a-dash")
     assert client.bind(tenant_id="acme", correlation_id="turn-42").scope.correlation_id == "turn-42"
-
-
-def test_the_sdk_deprecation_window_is_still_open() -> None:
-    assert Version(trellis.memory.__version__) < Version(client_module.ALIASES_REMOVED_IN)
 
 
 @respx.mock
@@ -590,10 +584,10 @@ async def test_graph_entity_search_and_profile(client: MemoryClient) -> None:
         },
     )
     ctx = client.bind(tenant_id="acme", user_id="u1")
-    [found] = await ctx.graph.entities("Ac", entity_type="ORG", limit=5)
+    [found] = await ctx.advanced.graph.entities("Ac", entity_type="ORG", limit=5)
     assert found.summary.startswith("Acme") and found.entity_id == "ent_acme"
     assert dict(search.calls.last.request.url.params) == {"q": "Ac", "type": "ORG", "limit": "5"}
-    profile = await ctx.graph.entity("ent_acme")
+    profile = await ctx.advanced.graph.entity("ent_acme")
     assert profile.current[0].value == "France" and profile.history[0].status == "SUPERSEDED"
 
 
@@ -601,7 +595,7 @@ async def test_graph_entity_search_and_profile(client: MemoryClient) -> None:
 async def test_graph_query_sends_layers_and_knowledge_time(client: MemoryClient) -> None:
     route = respx.post("http://memory.test/v1/graph/query").respond(200, json={"facts": []})
     ctx = client.bind(tenant_id="acme", user_id="u1")
-    await ctx.graph.query(
+    await ctx.advanced.graph.query(
         entities=["Acme"], layers=["causal"], valid_at=datetime(2026, 9, 1, tzinfo=UTC)
     )
     body = json.loads(route.calls.last.request.content)

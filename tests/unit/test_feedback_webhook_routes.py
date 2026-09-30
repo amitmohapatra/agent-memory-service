@@ -376,7 +376,7 @@ async def test_the_sdk_body_is_what_the_service_accepts(app_client: TestClient) 
             tenant_id=TENANT, user_id="alice", workspace_id="fin", agent_id="ref", thread_id="thr_1"
         ) as ctx,
     ):
-        record = await ctx.feedback.submit(
+        record = await ctx.feedback(
             "run",
             "run_sdk",
             "confirm",

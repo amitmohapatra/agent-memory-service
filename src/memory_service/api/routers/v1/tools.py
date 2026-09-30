@@ -107,7 +107,8 @@ class RecordRequest(BaseModel):
     status: ToolStatus = Field(
         default="ok",
         description="How the call ended: ok, error (the tool raised; name it in error_class), "
-        "timeout, or rejected (the agent or a policy refused to run it).",
+        "timeout, rejected (the agent or a policy refused to run it), or cancelled (the run "
+        "stopped before the call finished).",
     )
     error_class: str | None = None
     latency_ms: float | None = Field(default=None, ge=0.0)

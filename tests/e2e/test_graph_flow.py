@@ -110,14 +110,14 @@ async def test_sdk_graph_temporal(app, client) -> None:
     ctx = memory.bind(tenant_id="acme", user_id="u1", **_scope())
     await ctx.chat.user("kick-off")
     await ctx.observe("I work at ACME Corp.")
-    answer = await ctx.graph.query(entities=["ACME Corp"])
+    answer = await ctx.advanced.graph.query(entities=["ACME Corp"])
     fact = next(f for f in answer.facts if f.predicate == "works_at")
     assert fact.subject == "user:u1" and fact.object.lower() == "acme corp" and fact.memory_id
     await ctx.observe("I work at Globex now.")
-    now = await ctx.graph.query(entities=["ACME Corp", "Globex"])
+    now = await ctx.advanced.graph.query(entities=["ACME Corp", "Globex"])
     current = [f for f in now.facts if f.predicate == "works_at"]
     assert len(current) == 1 and current[0].object.lower() == "globex"
-    past = await ctx.graph.query(
+    past = await ctx.advanced.graph.query(
         entities=["ACME Corp"], as_of=datetime.now(UTC) - timedelta(seconds=30)
     )
     old = [f for f in past.facts if f.predicate == "works_at"]

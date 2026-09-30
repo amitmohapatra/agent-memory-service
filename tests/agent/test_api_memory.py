@@ -44,7 +44,7 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     assert ack.job_ids, "the write is acknowledged with the work it queued"
 
     # The job behind the write is readable by the tenant that dispatched it, and only by it.
-    job = await agent.job(ack.job_ids[0])
+    job = await agent.advanced.job(ack.job_ids[0])
     assert job.job_id and job.status in ("PENDING", "RUNNING", "SUCCEEDED")
 
     # Replay: the same content under the same key is one memory, not two (the SDK derives
@@ -53,9 +53,9 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     assert replay.memory_id == ack.memory_id
 
     # The statement is the memory, stored before the call returned: nothing to wait for.
-    one = await agent.get_memory(ack.memory_id)
+    one = await agent.advanced.memories.get(ack.memory_id)
     assert one.content == FACT and one.visibility == "USER"
-    stored = next(m for m in await agent.memories() if m.memory_id == ack.memory_id)
+    stored = next(m for m in await agent.advanced.memories.list() if m.memory_id == ack.memory_id)
 
     # Observations are evidence for the service to learn from, asynchronously.
     observed = await agent.observe("Priya prefers written status updates.", kind="EVENT")
@@ -64,18 +64,18 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     # A correction is a new version; the old one is closed, not deleted.
     updated = await agent.update(ack.memory_id, SECOND, reason="the team moved its review")
     assert updated.supersedes == ack.memory_id
-    old = await agent.get_memory(ack.memory_id)
+    old = await agent.advanced.memories.get(ack.memory_id)
     assert old.temporal_status == "SUPERSEDED" and old.superseded_by == updated.memory_id
     with pytest.raises(MemoryError) as twice:
         await agent.update(ack.memory_id, "again", reason="stale")
     assert twice.value.status == 409
-    stored = await agent.get_memory(updated.memory_id)
+    stored = await agent.advanced.memories.get(updated.memory_id)
 
     await agent.forget(stored.memory_id)
     with pytest.raises(MemoryError) as gone:
-        await agent.get_memory(stored.memory_id)
+        await agent.advanced.memories.get(stored.memory_id)
     assert gone.value.status == 404
-    assert not any(m.memory_id == stored.memory_id for m in await agent.memories())
+    assert not any(m.memory_id == stored.memory_id for m in await agent.advanced.memories.list())
 
 
 @pytest.mark.covers("retrieval.context", "retrieval.recall", "retrieval.verify")
@@ -90,7 +90,7 @@ async def test_an_agent_asks_for_context_then_has_its_answer_verified(app, runni
     assert bundle.rendered, "the bundle is ready to prompt with, not a pile of rows"
     assert any("Priya" in item.text for item in bundle.memories), bundle.memories
 
-    ranked = await agent.recall("release review", limit=5)
+    ranked = await agent.search("release review", limit=5)
     assert ranked and any("Thursday" in item.text for item in ranked)
     assert len(ranked) <= 5
 
@@ -108,7 +108,9 @@ async def test_an_agent_traverses_what_the_writes_made_of_the_entities(app, runn
     agent = harness.bind(user_id="u1").agent("graph-bot")
     await agent.remember(FACT, visibility="USER")
 
-    answer = await agent.graph.query("who does Priya Raman report to", hops=1, layers=["entity"])
+    answer = await agent.advanced.graph.query(
+        "who does Priya Raman report to", hops=1, layers=["entity"]
+    )
 
     # The graph is built off the write path; what matters to the contract is that a query
     # answers in the bundle's shape and stays inside this scope's visibility.
@@ -116,12 +118,12 @@ async def test_an_agent_traverses_what_the_writes_made_of_the_entities(app, runn
     assert all(fact.subject and fact.layer == "entity" for fact in answer.facts)
 
     # Entities the write produced can be searched by name and opened as a profile.
-    found = await agent.graph.entities("priya", limit=5)
+    found = await agent.advanced.graph.entities("priya", limit=5)
     assert found and all(e.canonical_name.startswith("priya") for e in found), found
-    profile = await agent.graph.entity(found[0].entity_id)
+    profile = await agent.advanced.graph.entity(found[0].entity_id)
     assert profile.entity.entity_id == found[0].entity_id
     with pytest.raises(MemoryError) as missing:
-        await agent.graph.entity("ent_never_written")
+        await agent.advanced.graph.entity("ent_never_written")
     assert missing.value.status == 404
 
 
@@ -131,18 +133,18 @@ async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app
     _, globex = await _tenant(app, "globex")
     mine = acme.bind(user_id="u1")
     await mine.remember(FACT, visibility="USER")
-    stored = next(m for m in await mine.memories() if FACT in m.content)
+    stored = next(m for m in await mine.advanced.memories.list() if FACT in m.content)
 
     # Another tenant's key cannot name this tenant, whatever it claims in the header.
     with pytest.raises(MemoryError) as cross:
-        await globex.bind(tenant_id="acme", user_id="u1").recall("payments")
+        await globex.bind(tenant_id="acme", user_id="u1").search("payments")
     assert cross.value.status == 403
 
     # ... and cannot read the memory by id either: not found, never someone else's content.
     with pytest.raises(MemoryError) as hidden:
-        await globex.bind(user_id="u1").get_memory(stored.memory_id)
+        await globex.bind(user_id="u1").advanced.memories.get(stored.memory_id)
     assert hidden.value.status == 404
 
     with pytest.raises(MemoryError) as listed:
-        await globex.bind(tenant_id="acme", user_id="u1").memories()
+        await globex.bind(tenant_id="acme", user_id="u1").advanced.memories.list()
     assert listed.value.status == 403

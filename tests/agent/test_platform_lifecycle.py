@@ -32,7 +32,7 @@ async def test_onboard_share_revoke(app, running) -> None:
     acme = await platform.admin.create_tenant("Acme", tenant_id="acme")
     assert acme.admin_key.token.startswith("mk_") and acme.tenant.status == "active"
     with pytest.raises(MemoryError) as denied:
-        await platform.bind(tenant_id="acme", user_id="u1").recall(QUERY)
+        await platform.bind(tenant_id="acme", user_id="u1").search(QUERY)
     assert denied.value.status == 403
 
     # -- the tenant admin builds a team and hands its harness a service key -------------
@@ -52,28 +52,28 @@ async def test_onboard_share_revoke(app, running) -> None:
     await u1.remember(FACT, visibility="WORKSPACE")
 
     u2 = harness.bind(user_id="u2", workspace_id="finance")
-    assert _mentions(await u2.recall(QUERY)), "a team member reads what the team stored"
+    assert _mentions(await u2.search(QUERY)), "a team member reads what the team stored"
     u3 = harness.bind(user_id="u3", workspace_id="finance")
-    assert not _mentions(await u3.recall(QUERY)), "a non-member reads nothing of it"
+    assert not _mentions(await u3.search(QUERY)), "a non-member reads nothing of it"
     outside = harness.bind(user_id="u2")  # a member, asking outside any workspace
-    assert _mentions(await outside.recall(QUERY)), "no workspace named: every team I am in"
+    assert _mentions(await outside.search(QUERY)), "no workspace named: every team I am in"
 
     # -- another tenant's key cannot reach this tenant, whatever it claims ---------------
     globex = await platform.admin.create_tenant("Globex", tenant_id="globex")
     gkey = await sdk(app, globex.admin_key.token).tenant.keys.issue("service", "h")
     with pytest.raises(MemoryError) as cross:
-        await sdk(app, gkey.token).bind(tenant_id="acme", user_id="u1").recall(QUERY)
+        await sdk(app, gkey.token).bind(tenant_id="acme", user_id="u1").search(QUERY)
     assert cross.value.status == 403
-    assert not _mentions(await sdk(app, gkey.token).bind(user_id="u1").recall(QUERY))
+    assert not _mentions(await sdk(app, gkey.token).bind(user_id="u1").search(QUERY))
 
     # -- revocation is immediate --------------------------------------------------------
     await admin.tenant.workspaces.remove_member("finance", "user:u2")
-    assert not _mentions(await u2.recall(QUERY)), "removed on this request, not at a TTL"
-    assert _mentions(await u1.recall(QUERY)), "the author keeps reading its own memory"
+    assert not _mentions(await u2.search(QUERY)), "removed on this request, not at a TTL"
+    assert _mentions(await u1.search(QUERY)), "the author keeps reading its own memory"
 
     await admin.tenant.keys.revoke(service.key_id)
     with pytest.raises(MemoryError) as revoked:
-        await u1.recall(QUERY)
+        await u1.search(QUERY)
     assert revoked.value.status == 401
 
     # -- the audit knows who read -------------------------------------------------------
@@ -99,12 +99,12 @@ async def test_groups_admit_users_at_once_and_a_bound_key_is_pinned(app, running
         "Outside counsel invoices are approved by the general counsel.", visibility="WORKSPACE"
     )
     ask = "who approves invoices"
-    assert _mentions(await bot.bind(user_id="lawyer2").recall(ask), "general counsel")
+    assert _mentions(await bot.bind(user_id="lawyer2").search(ask), "general counsel")
     with pytest.raises(MemoryError) as elsewhere:
-        await bot.bind(user_id="lawyer2", workspace_id="finance").recall(ask)
+        await bot.bind(user_id="lawyer2", workspace_id="finance").search(ask)
     assert elsewhere.value.status == 403
 
     # leaving the group is leaving the workspace; the author alone keeps its own memory
     await admin.tenant.groups.remove_user("counsel", "lawyer2")
-    assert not _mentions(await bot.bind(user_id="lawyer2").recall(ask), "general counsel")
-    assert _mentions(await bot.bind(user_id="lawyer1").recall(ask), "general counsel")
+    assert not _mentions(await bot.bind(user_id="lawyer2").search(ask), "general counsel")
+    assert _mentions(await bot.bind(user_id="lawyer1").search(ask), "general counsel")

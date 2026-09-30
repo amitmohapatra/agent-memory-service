@@ -61,8 +61,11 @@ ctx = memory.bind(tenant_id="acme", user_id="u1", thread_id=thread_id, session_i
 bundle = await ctx.context("what did we decide about the refund?")
 ```
 
-`ctx` carries the scope for every call under it: `ctx.chat`, `ctx.documents`, `ctx.graph`,
-`ctx.tools`, `ctx.runs`, `ctx.feedback`, `ctx.briefs`, plus `context`, `recall`, `observe`,
-`remember`, `memories`, `forget` and `verify` directly. Tenant administration is
-`memory.administer(tenant_id)` (keys, workspaces, groups, webhooks, model keys, reads) and
-platform onboarding is `memory.admin`.
+`ctx` carries the scope for every call under it. The per-turn verbs are on it directly:
+`context`, `remember`, `update`, `forget`, `search`, `history`, `observe`, `feedback`,
+`record_tool`, `outcome`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`,
+`summary`, `verify`, and `ctx.chat` for the transcript. Everything else is under
+`ctx.advanced`: `documents`, `graph`, `briefs`, `tools` (catalog, approval suggestions),
+`model_keys`, `memories` (inventory), `job(id)`, and the client's `tenant`, `admin` and
+`webhooks`. Tenant administration is also `memory.administer(tenant_id)` (keys, workspaces,
+groups, webhooks, model keys, reads) and platform onboarding `memory.admin`.

@@ -104,8 +104,8 @@ async def tour() -> int:
         b = await user.chat.assistant("Noted: Europe/Berlin, concise answers.")
         planner = user.agent("planner")
         await planner.chat.internal("Thinking: split the brief into revenue and cost.")
-        visible = await user.chat.history()
-        everything = await user.chat.history(include_internal=True)
+        visible = await user.history()
+        everything = await user.history(include_internal=True)
         assert [m.role for m in visible] == ["USER", "ASSISTANT"]
         assert len(everything) == 3 and everything[2].kind == "INTERNAL"
         one = await user.chat.message(b.message_id)
@@ -123,7 +123,7 @@ async def tour() -> int:
     async def isolation() -> str:
         stranger = memory.bind(tenant_id=tenant, user_id="mallory", thread_id=user.scope.thread_id)
         try:
-            await stranger.chat.history()
+            await stranger.history()
             raise AssertionError("another user read the thread")
         except AuthorizationError:
             pass
@@ -145,26 +145,26 @@ async def tour() -> int:
 
     async def ingest() -> str:
         salt = f"\n\n<!-- tour {RUN} -->\n".encode()
-        handle = await user.documents.add(
+        handle = await user.advanced.documents.add(
             FIXTURES / "acme_fy26_annual_report.md", title="ACME FY26 Annual Report"
         )
-        handle2 = await user.documents.add(
+        handle2 = await user.advanced.documents.add(
             (FIXTURES / "globex_fy26_annual_report.md").read_bytes() + salt,
             filename="globex_fy26_annual_report.md",
             media_type="text/markdown",
             title="GLOBEX FY26 Annual Report",
         )
-        doc = await user.documents.wait_ready(handle.document_id)
-        doc2 = await user.documents.wait_ready(handle2.document_id)
+        doc = await user.advanced.documents.wait_ready(handle.document_id)
+        doc2 = await user.advanced.documents.wait_ready(handle2.document_id)
         assert doc.status == "READY" and doc2.status == "READY", (doc.status, doc2.status)
         assert doc.archive_status == "ARCHIVED"
-        dup = await user.documents.add(
+        dup = await user.advanced.documents.add(
             FIXTURES / "acme_fy26_annual_report.md", title="duplicate upload"
         )
         assert dup.document_id == handle.document_id and dup.deduplicated
         doc_id["acme"], doc_id["globex"] = handle.document_id, handle2.document_id
         if handle.job_ids:
-            job = await user.job(handle.job_ids[0])
+            job = await user.advanced.job(handle.job_ids[0])
             assert job.status in ("SUCCEEDED", "PENDING", "RUNNING")
         return f"acme={handle.document_id} globex={handle2.document_id} (same bytes -> dedup)"
 
@@ -174,11 +174,11 @@ async def tour() -> int:
     print("\n## Retrieval (recall, context, evidence)")
 
     async def recall() -> str:
-        items = await user.recall("Why did Adjusted EBITDA increase despite lower revenue?")
+        items = await user.search("Why did Adjusted EBITDA increase despite lower revenue?")
         pages = {i.page for i in items if i.document_id == doc_id["acme"]}
         assert {1, 11, 14, 20} <= pages, pages
         assert all(i.citation for i in items) and items[0].evidence
-        table = await user.recall("Legacy Services revenue FY25 vs FY26", limit=5)
+        table = await user.search("Legacy Services revenue FY25 vs FY26", limit=5)
         assert any("| Legacy Services | 153 | 111 |" in i.text for i in table)
         return (
             f"{len(items)} items, pages {sorted(p for p in pages if p)} incl. definition, footnote"
@@ -228,9 +228,9 @@ async def tour() -> int:
         # a statement: stored verbatim, now, and replaced by a new version on update
         stated = await user.remember("The brief is due on Friday.", memory_type="TASK")
         moved = await user.update(stated.memory_id, "The brief is due on Monday.", reason="moved")
-        assert (await user.get_memory(stated.memory_id)).superseded_by == moved.memory_id
+        assert (await user.advanced.memories.get(stated.memory_id)).superseded_by == moved.memory_id
         await asyncio.sleep(0.5)
-        mems = await user.memories()
+        mems = await user.advanced.memories.list()
         preds = {m.predicate: m for m in mems if m.predicate}
         assert {"timezone", "prefers", "works_at", "favourite_editor", "decided"} <= set(preds), (
             set(preds)
@@ -239,7 +239,7 @@ async def tour() -> int:
         assert tz.memory_type == "USER" and tz.visibility == "USER" and tz.object == "europe/berlin"
         assert tz.evidence and tz.evidence[0].source_type == "message"
         assert not any("Scratch" in m.content for m in mems), "EPHEMERAL never persists"
-        got = await user.get_memory(tz.memory_id)
+        got = await user.advanced.memories.get(tz.memory_id)
         assert got.memory_id == tz.memory_id and got.confidence > 0
         mem_ids["timezone"] = tz.memory_id
         mem_ids["editor"] = preds["favourite_editor"].memory_id
@@ -259,14 +259,14 @@ async def tour() -> int:
         await user.observe("Actually, my timezone is now America/New_York.")
         await user.observe("My timezone is America/New_York.")  # same fact again -> reinforce
         await asyncio.sleep(0.5)
-        mems = await user.memories()
+        mems = await user.advanced.memories.list()
         tz = [m for m in mems if m.predicate == "timezone"]
         assert len(tz) == 1 and tz[0].object == "america/new_york", [m.content for m in tz]
         assert tz[0].reinforcement_count >= 2
-        history = await user.memories(include_superseded=True)
+        history = await user.advanced.memories.list(include_superseded=True)
         old = next(m for m in history if m.memory_id == mem_ids["timezone"])
         assert old.temporal_status == "SUPERSEDED" and old.superseded_by == tz[0].memory_id
-        items = await user.recall("what is my timezone", kinds=["memory"])
+        items = await user.search("what is my timezone", kinds=["memory"])
         assert any("New_York" in i.text for i in items) and not any(
             "Berlin" in i.text for i in items
         )
@@ -277,12 +277,12 @@ async def tour() -> int:
     async def forget() -> str:
         await user.forget(mem_ids["editor"])
         await user.forget(mem_ids["editor"])  # idempotent
-        mems = await user.memories()
+        mems = await user.advanced.memories.list()
         assert not any(m.memory_id == mem_ids["editor"] for m in mems)
-        items = await user.recall("favourite editor", kinds=["memory"])
+        items = await user.search("favourite editor", kinds=["memory"])
         assert not any("neovim" in i.text for i in items)
         try:
-            await user.get_memory(mem_ids["editor"])
+            await user.advanced.memories.get(mem_ids["editor"])
             raise AssertionError("forgotten memory still readable")
         except (NotFoundError, AuthorizationError):
             pass
@@ -301,13 +301,13 @@ async def tour() -> int:
         await planner.observe("Plan: split the brief into revenue and cost.", kind="AGENT_RESULT")
         await asyncio.sleep(0.3)
         q = "plan for the brief sections"
-        seen_by_child = await writer.recall(q, kinds=["memory"])
-        seen_by_user = await crew.recall(q, kinds=["memory"])
-        seen_by_stranger = await crew.agent("intern").recall(q, kinds=["memory"])
+        seen_by_child = await writer.search(q, kinds=["memory"])
+        seen_by_user = await crew.search(q, kinds=["memory"])
+        seen_by_stranger = await crew.agent("intern").search(q, kinds=["memory"])
         assert any("Plan:" in i.text for i in seen_by_child)
         assert not any("Plan:" in i.text for i in seen_by_user)
         assert not any("Plan:" in i.text for i in seen_by_stranger)
-        planner_mems = await planner.memories()
+        planner_mems = await planner.advanced.memories.list()
         assert planner_mems and planner_mems[0].visibility == "RUN"
         # explicit sharing + corroboration + conflict
         fact = "Revenue was EUR 412 million in FY26."
@@ -318,8 +318,8 @@ async def tour() -> int:
         await reviewer.observe("My manager is Lee.", hints=shared_hints)
         await asyncio.sleep(0.5)
         auditor = crew.agent("auditor")
-        shared = await auditor.recall("FY26 revenue manager", kinds=["memory"])
-        details = [await auditor.get_memory(i.item_id) for i in shared]
+        shared = await auditor.search("FY26 revenue manager", kinds=["memory"])
+        details = [await auditor.advanced.memories.get(i.item_id) for i in shared]
         revenue = next(m for m in details if "412" in m.content)
         assert revenue.reinforcement_count == 2 and revenue.contributors == ["agent:writer"]
         managers = [m for m in details if m.predicate == "manager"]
@@ -337,7 +337,7 @@ async def tour() -> int:
     print("\n## Knowledge graph")
 
     async def graph() -> str:
-        answer = await user.graph.query(entities=["Adjusted EBITDA"], hops=1)
+        answer = await user.advanced.graph.query(entities=["Adjusted EBITDA"], hops=1)
         assert answer.matched and answer.matched[0].entity_type == "METRIC", answer.matched
         facts = {(f.predicate, f.object): f for f in answer.facts}
         value = facts[("has_value", "EUR 98 million")]
@@ -346,20 +346,22 @@ async def tour() -> int:
         assert ("would_have_value", "EUR 91 million") in facts, sorted(facts)
         assert ("excludes", "Litigation settlement") in facts, sorted(facts)
         assert value.evidence[0].page == 11, value.evidence
-        alias = await user.graph.query(entities=["ARR"])
+        alias = await user.advanced.graph.query(entities=["ARR"])
         assert alias.matched[0].canonical_name == "recurring revenue", alias.matched
-        free = await user.graph.query(query="Who approved the restructuring programme?")
+        free = await user.advanced.graph.query(query="Who approved the restructuring programme?")
         approved = [(f.predicate, f.object) for f in free.facts if f.predicate == "approved_by"]
         assert ("approved_by", "The Board") in approved, approved
-        deal = await user.graph.query(query="How much did GLOBEX pay for Initech?", hops=2)
+        deal = await user.advanced.graph.query(query="How much did GLOBEX pay for Initech?", hops=2)
         prices = [(f.predicate, f.object) for f in deal.facts if f.predicate == "consideration"]
         assert ("consideration", "USD 210 million") in prices, prices
         # memory-derived facts are temporal (valid time): the current view has only the
         # corrected timezone; a view dated before the correction returns the old value
-        mem_facts = await user.graph.query(entities=["user:amit"], hops=1)
+        mem_facts = await user.advanced.graph.query(entities=["user:amit"], hops=1)
         tz = [(f.object, f.status) for f in mem_facts.facts if f.predicate == "timezone"]
         assert tz == [("america/new_york", "CURRENT")], tz
-        past = await user.graph.query(entities=["user:amit"], hops=1, as_of=before_correction)
+        past = await user.advanced.graph.query(
+            entities=["user:amit"], hops=1, as_of=before_correction
+        )
         old = [(f.object, f.status) for f in past.facts if f.predicate == "timezone"]
         assert old == [("europe/berlin", "SUPERSEDED")], old
         return (

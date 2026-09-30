@@ -55,10 +55,10 @@ async def _harness(app, tenant_id: str = "acme"):
 
 async def _one_successful_run(agent) -> str:
     """Record the two calls of a run and label the run successful, as an adapter would."""
-    first = await agent.tools.record(
+    first = await agent.record_tool(
         LOOKUP, {"sku": "SKU-22", "region": "EMEA"}, output={"price": 1200}, task=TASK, step=0
     )
-    second = await agent.tools.record(
+    second = await agent.record_tool(
         UPDATE,
         {"quote": "Q-1183", "price": 1200},
         output={"ok": True},
@@ -67,8 +67,8 @@ async def _one_successful_run(agent) -> str:
         latency_ms=42.0,
     )
     assert first.step == 0 and second.step == 1
-    outcome = await agent.runs.outcome(agent.scope.agent_run_id, success=True, note="accepted")
-    assert outcome["success"] is True
+    outcome = await agent.outcome(success=True, note="accepted")
+    assert outcome.success is True
     return str(agent.scope.agent_run_id)
 
 
@@ -77,31 +77,29 @@ async def test_an_agent_records_its_calls_and_labels_the_run(app, running) -> No
     _, harness = await _harness(app)
     agent = harness.bind(user_id="u1").agent("quote-bot")
 
-    recorded = await agent.tools.record(
+    recorded = await agent.record_tool(
         LOOKUP, {"sku": "SKU-22", "region": "EMEA"}, output={"price": 1200}, task=TASK, step=0
     )
     assert recorded.invocation_id and recorded.args_hash and recorded.recorded is True
 
     # Idempotent on run + step + tool + arguments: a retried record is the same invocation,
     # and says so, which is what lets an adapter retry a failed HTTP call blindly.
-    again = await agent.tools.record(
+    again = await agent.record_tool(
         LOOKUP, {"sku": "SKU-22", "region": "EMEA"}, output={"price": 1200}, task=TASK, step=0
     )
     assert again.invocation_id == recorded.invocation_id and again.recorded is False
 
-    outcome = await agent.runs.outcome(agent.scope.agent_run_id, success=True, note="accepted")
-    assert outcome == {
-        "run_id": agent.scope.agent_run_id,
-        "success": True,
-        "source": "explicit",
-    }
+    outcome = await agent.outcome(success=True, note="accepted")
+    assert (outcome.run_id, outcome.success, outcome.source) == (
+        agent.scope.agent_run_id,
+        True,
+        "explicit",
+    )
 
     # The label is the run's, and the last word wins: a run corrected to a failure stops
     # validating anything mined from it.
-    corrected = await agent.runs.outcome(
-        agent.scope.agent_run_id, success=False, note="rolled back"
-    )
-    assert corrected["success"] is False
+    corrected = await agent.outcome(success=False, note="rolled back")
+    assert corrected.success is False
 
 
 @pytest.mark.covers("tools.plan_tools", "tools.list_procedures", "tools.record_invocation")
@@ -110,29 +108,29 @@ async def test_a_labelled_run_becomes_a_plan_that_only_names_declared_tools(app,
     user = harness.bind(user_id="u1")
 
     # Nothing recorded yet: the plan says so rather than inventing a chain.
-    cold = await user.agent("quote-bot").tools.plan(TASK, available_tools=DECLARED)
-    assert cold.valid is False and cold.reason == "no validated procedure yet"
-    assert cold.steps == [] and cold.task_pattern
+    cold = await user.agent("quote-bot").advanced.tools.plan(TASK, available_tools=DECLARED)
+    assert cold["valid"] is False and cold["reason"] == "no validated procedure yet"
+    assert cold["steps"] == [] and cold["task_pattern"]
 
     agent = user.agent("quote-bot")
     run_id = await _one_successful_run(agent)
 
-    procedures = await agent.tools.procedures(TASK)
+    procedures = await agent.advanced.tools.procedures(TASK)
     assert procedures, "a successful run with steps is a procedure"
     assert [step["tool"] for step in procedures[0]["steps"]] == [LOOKUP, UPDATE]
 
-    plan = await agent.tools.plan(TASK, available_tools=DECLARED)
-    assert plan.valid is True and plan.problems == []
-    assert [step["tool"] for step in plan.steps] == [LOOKUP, UPDATE]
-    assert plan.support >= 1 and plan.success_rate == 1.0
-    assert run_id in plan.run_ids
-    assert plan.script and plan.rendered
+    plan = await agent.advanced.tools.plan(TASK, available_tools=DECLARED)
+    assert plan["valid"] is True and plan["problems"] == []
+    assert [step["tool"] for step in plan["steps"]] == [LOOKUP, UPDATE]
+    assert plan["support"] >= 1 and plan["success_rate"] == 1.0
+    assert run_id in plan["run_ids"]
+    assert plan["script"] and plan["rendered"]
 
     # A caller that does not hold the second tool is told so, and is never handed a step it
     # cannot execute.
-    partial = await agent.tools.plan(TASK, available_tools=DECLARED[:1])
-    assert partial.valid is False and partial.steps == []
-    assert UPDATE in (partial.reason or "")
+    partial = await agent.advanced.tools.plan(TASK, available_tools=DECLARED[:1])
+    assert partial["valid"] is False and partial["steps"] == []
+    assert UPDATE in (partial["reason"] or "")
 
 
 @pytest.mark.covers("tools.record_tool")
@@ -167,25 +165,25 @@ async def test_an_agent_registers_rotates_and_revokes_its_own_model_key(app, run
     _, harness = await _harness(app)
     agent = harness.bind(user_id="u1").agent("keyed-bot")
 
-    fresh = await agent.model_key_status()
+    fresh = await agent.advanced.model_keys.status()
     assert (fresh.registered, fresh.revoked, fresh.revision) == (False, False, 0)
 
-    registered = await agent.set_model_key("vk-agent-first")
+    registered = await agent.advanced.model_keys.set("vk-agent-first")
     assert registered.registered is True and registered.revoked is False
     assert registered.revision == 1 and registered.updated_at is not None
 
-    rotated = await agent.set_model_key("vk-agent-second")
+    rotated = await agent.advanced.model_keys.set("vk-agent-second")
     assert rotated.revision == 2 and rotated.registered is True
 
-    status = await agent.model_key_status()
+    status = await agent.advanced.model_keys.status()
     assert status.revision == 2 and status.registered is True
     assert "vk-agent" not in str(status.model_dump()), "a status never carries the secret"
 
-    revoked = await agent.revoke_model_key()
+    revoked = await agent.advanced.model_keys.revoke()
     assert revoked.revoked is True and revoked.revision == 3
     # Revocation is a tombstone, not a delete: the revision keeps climbing so a cached key
     # can be told it is stale.
-    assert (await agent.model_key_status()).revoked is True
+    assert (await agent.advanced.model_keys.status()).revoked is True
 
 
 @pytest.mark.covers_error(
@@ -203,19 +201,19 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     _, globex = await _harness(app, "globex")
     mine = acme.bind(user_id="u1").agent("quote-bot")
     await _one_successful_run(mine)
-    await mine.set_model_key("vk-acme-only")
+    await mine.advanced.model_keys.set("vk-acme-only")
 
     claiming = globex.bind(tenant_id="acme", user_id="u1").agent(
         "quote-bot", agent_run_id=mine.scope.agent_run_id
     )
     for call in (
-        claiming.tools.record(LOOKUP, {"sku": "X"}, task=TASK, step=0),
-        claiming.tools.plan(TASK, available_tools=DECLARED),
-        claiming.tools.procedures(TASK),
-        claiming.runs.outcome(str(mine.scope.agent_run_id), success=False),
-        claiming.set_model_key("vk-stolen"),
-        claiming.model_key_status(),
-        claiming.revoke_model_key(),
+        claiming.record_tool(LOOKUP, {"sku": "X"}, task=TASK, step=0),
+        claiming.advanced.tools.plan(TASK, available_tools=DECLARED),
+        claiming.advanced.tools.procedures(TASK),
+        claiming.outcome(run_id=str(mine.scope.agent_run_id), success=False),
+        claiming.advanced.model_keys.set("vk-stolen"),
+        claiming.advanced.model_keys.status(),
+        claiming.advanced.model_keys.revoke(),
     ):
         with pytest.raises(MemoryError) as refused:
             await call
@@ -239,4 +237,4 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     assert alias.value.status == 403
 
     # And the procedure stays the owner's: the same task, mined under its own tenant, is empty.
-    assert await globex.bind(user_id="u1").agent("quote-bot").tools.procedures(TASK) == []
+    assert await globex.bind(user_id="u1").agent("quote-bot").advanced.tools.procedures(TASK) == []

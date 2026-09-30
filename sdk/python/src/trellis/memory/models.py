@@ -159,10 +159,8 @@ EvidenceKind = Literal[
 ]
 ClaimVerdictValue = Literal["supported", "unsupported", "contradicted", "borderline"]
 GroundingMethod = Literal["citation", "nli", "judge"]
-ToolSource = Literal["bifrost-mcp", "langgraph", "adk", "crewai", "mcp", "manual"]
-ToolStatus = Literal["ok", "error", "timeout", "rejected"]
-SideEffects = Literal["none", "read", "write", "external", "unknown"]
-CacheScope = Literal["run", "thread", "user", "tenant"]
+ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
+SideEffects = Literal["read", "write", "irreversible"]
 
 
 #: the service's id grammar (domain/ids.py ID_PATTERN)
@@ -366,7 +364,6 @@ class ConversationWindow(BaseModel):
     thread_id: str | None = None
     message_ids: list[str] = Field(default_factory=list)
     rendered: str = ""
-    summary: str | None = None
 
 
 class ClaimVerdict(BaseModel):
@@ -449,6 +446,15 @@ class ContextBundle(BaseModel):
     token_estimate: int
     rendered: str = ""
     cache_hit: bool = False
+    #: the scope revision this bundle was built at: pass it back as ``since_revision``
+    revision: int = 0
+    #: true when only what changed since ``since_revision`` is listed
+    delta: bool = False
+    profile: list[ProfileBlock] = Field(default_factory=list)
+    thread_summary: ThreadSummary | None = None
+    procedures: list[ProcedureView] = Field(default_factory=list)
+    #: present when the request asked for ``tools``
+    tools: ToolHints | None = None
 
     @property
     def insufficient(self) -> bool:
@@ -515,7 +521,7 @@ class GraphEntity(BaseModel):
     summary: str = ""
 
 
-GraphLayer = Literal["entity", "temporal", "causal", "structural"]
+GraphLayer = Literal["entity", "temporal", "causal", "structural", "procedural"]
 RelationStatus = Literal["CURRENT", "SUPERSEDED", "RETRACTED", "INVALIDATED"]
 
 
@@ -572,32 +578,7 @@ class EntityProfile(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
-# --------------------------------------------------------------------------- tool memory
-
-
-class ToolPolicyModel(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    deterministic: bool = False
-    side_effects: SideEffects = "unknown"
-    cacheable: bool = False
-    cache_ttl_seconds: int = 300
-    cache_scope: CacheScope = "run"
-    cost_hint: float | None = None
-    redact: list[str] = Field(default_factory=list)
-
-
-class Tool(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    tool_id: str
-    name: str
-    version: int = 1
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    source: ToolSource = "manual"
-    policy: ToolPolicyModel = Field(default_factory=ToolPolicyModel)
-    stats: dict[str, Any] | None = None
+# --------------------------------------------------------------------------- tools
 
 
 class ToolCall(BaseModel):
@@ -612,77 +593,181 @@ class ToolCall(BaseModel):
 
 
 class ToolResult(BaseModel):
+    """``record_tool``: the stored invocation (``recorded=False`` when it was a retry)."""
+
     model_config = ConfigDict(extra="allow")
 
-    invocation_id: str | None = None
+    invocation_id: str
     step: int = 0
     args_hash: str = ""
     recorded: bool = True
-    cached: bool = False
-    age_seconds: float | None = None
-    output: Any = None
-    output_summary: str | None = None
-    output_fields: dict[str, Any] = Field(default_factory=dict)
 
 
-class ToolSuggestion(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class RunOutcome(BaseModel):
+    """``outcome``: whether the run achieved its task, and who said so."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    run_id: str
+    success: bool
+    source: str
+
+
+class ToolStats(BaseModel):
+    """What the service has seen a tool do (calls, success, latency, approvals)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    calls: int = 0
+    successes: int = 0
+    failures: int = 0
+    success_rate: float | None = None
+    avg_latency_ms: float | None = None
+    approvals: int = 0
+    rejections: int = 0
+    edits: int = 0
+    last_used_at: datetime | None = None
+
+
+class CatalogTool(BaseModel):
+    """One catalog entry: what a tool is and does (``GET /v1/tools``)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tool_id: str
+    name: str
+    version: int = 1
+    description: str = ""
+    input_schema: dict[str, Any] = Field(default_factory=dict)
+    required: list[str] = Field(default_factory=list)
+    argument_entity_types: dict[str, str] = Field(default_factory=dict)
+    side_effects: SideEffects | None = None
+    source: str = "manual"
+    server: str | None = None
+    examples: list[dict[str, Any]] = Field(default_factory=list)
+    schema_hash: str = ""
+    workspace_id: str | None = None
+    stats: ToolStats = Field(default_factory=ToolStats)
+
+
+class ApprovalSuggestion(BaseModel):
+    """A rule the approvals given so far support; the service never applies it."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
 
     tool: str
-    confidence: float = 0.0
-    argument_template: dict[str, Any] = Field(default_factory=dict)
-    supporting_procedures: list[str] = Field(default_factory=list)
-    supporting_invocations: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    evidence_status: str = "NONE"
-
-    def render(self) -> str:
-        args = ", ".join(f"{k}={v!r}" for k, v in self.argument_template.items())
-        line = f"{self.tool}({args})  [confidence {self.confidence:.2f}]"
-        if self.warnings:
-            line += "\n  warning: " + "; ".join(self.warnings)
-        return line
+    arg_shape: str
+    suggestion: Literal["auto_approve", "always_ask"]
+    approvals: int
+    rejections: int
+    edits: int
+    support: int
+    approve_rate: float
+    agent_id: str | None = None
 
 
-class NextSteps(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class ToolCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
 
-    suggestions: list[ToolSuggestion] = Field(default_factory=list)
-    stop: bool = False
-    matched_procedure: str | None = None
-    matched_prefix_length: int = 0
-
-    def render(self) -> str:
-        if self.stop:
-            return "nothing further to call"
-        return "\n".join(s.render() for s in self.suggestions) or "no suggestion"
+    name: str
+    score: float
+    success_rate: float | None = None
+    why: str = ""
 
 
-class ToolPlan(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class ToolPlanHint(BaseModel):
+    """The stored procedure that fits the task, as the steps to follow."""
 
-    task_pattern: str = ""
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    procedure_id: str = ""
+    title: str = ""
     steps: list[dict[str, Any]] = Field(default_factory=list)
-    valid: bool = False
-    reason: str | None = None
-    problems: list[str] = Field(default_factory=list)
-    support: int = 0
     success_rate: float = 0.0
-    script: str | None = None
-    rendered: str | None = None
-    run_ids: list[str] = Field(default_factory=list)
-    invocation_ids: list[str] = Field(default_factory=list)
+    support: int = 0
 
-    def render(self) -> str:
-        if self.rendered:
-            return self.rendered
-        if not self.valid:
-            return f"no validated plan ({self.reason or 'unknown'})"
-        return "\n".join(f"{i + 1}. {s.get('tool')}" for i, s in enumerate(self.steps))
 
-    def render_script(self) -> str:
-        """Starlark form for Bifrost code mode."""
-        return self.script or ""
+class Prefill(BaseModel):
+    """A value for one argument of the next tool, and where it came from."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tool: str
+    value: Any = None
+    source: Literal["procedure", "graph", "profile", "memory", "task"]
+    evidence_id: str | None = None
+
+
+class MissingArgument(BaseModel):
+    """A required argument nothing could fill: ask the user ``question``."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tool: str
+    arg: str
+    entity_type: str | None = None
+    question: str
+
+
+class ToolHints(BaseModel):
+    """Which tool to call for a task, the learned plan, the next step and its arguments."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    candidates: list[ToolCandidate] = Field(default_factory=list)
+    plan: ToolPlanHint | None = None
+    next: str | None = None
+    prefill: dict[str, Prefill] = Field(default_factory=dict)
+    missing: list[MissingArgument] = Field(default_factory=list)
+
+
+class AgentTool(BaseModel):
+    """One of the memory tools an agent may call (``call_agent_tool``)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+
+
+# --------------------------------------------------------------------------- profile, summary
+
+
+class ProfileBlock(BaseModel):
+    """A pinned block of text: ``user``, ``agent``, ``workspace`` or ``<level>.<name>``."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    block: str
+    text: str
+    version: int
+    updated_at: datetime | None = None
+
+
+class ThreadSummary(BaseModel):
+    """The durable summary of a thread, up to ``covers_to_sequence``."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    text: str
+    covers_to_sequence: int
+    version: int
+    thread_id: str | None = None
+    model: str | None = None
+    created_at: datetime | None = None
+
+
+class ProcedureView(BaseModel):
+    """A procedure learned for the task: its steps and how well it has worked."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    title: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    success_rate: float = 0.0
+    support: int = 0
 
 
 class BriefSpec(BaseModel):
@@ -821,7 +906,16 @@ class Page[T](BaseModel):
 FeedbackTargetKind = Literal["run", "answer", "memory", "tool_call", "brief", "procedure"]
 FeedbackVerdict = Literal["confirm", "reject", "correct", "approve", "edit"]
 FeedbackSource = Literal["human", "judge", "interrupt"]
-ProjectionAction = Literal["none", "memory_reinforced", "memory_retracted", "memory_superseded"]
+ProjectionAction = Literal[
+    "none",
+    "memory_reinforced",
+    "memory_retracted",
+    "memory_superseded",
+    "memories_adjusted",
+    "run_labelled",
+    "tool_call_counted",
+    "procedure_retired",
+]
 
 
 class FeedbackProjection(BaseModel):
@@ -831,6 +925,8 @@ class FeedbackProjection(BaseModel):
 
     action: ProjectionAction
     memory_id: str | None = None
+    memory_ids: list[str] = Field(default_factory=list)
+    run_id: str | None = None
     superseded_by: str | None = None
     reason: str | None = None
     projected_at: datetime

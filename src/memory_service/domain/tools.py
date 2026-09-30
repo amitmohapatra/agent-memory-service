@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from memory_service.domain.ids import new_id
 
 ToolSource = Literal["bifrost-mcp", "langgraph", "adk", "crewai", "mcp", "manual"]
-ToolStatus = Literal["ok", "error", "timeout", "rejected"]
+ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
 SideEffects = Literal["none", "read", "write", "external", "unknown"]
 CacheScope = Literal["run", "thread", "user", "tenant"]
 

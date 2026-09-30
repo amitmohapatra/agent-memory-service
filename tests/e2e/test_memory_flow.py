@@ -146,15 +146,15 @@ async def test_sdk_remember_recall_forget(app, client) -> None:
     assert ack.observation_id.startswith("obs_")
     # remember() = observe with expert hints
     await ctx.remember("Always answer in British English.", memory_type="PREFERENCE")
-    items = await ctx.recall("favourite editor", kinds=["memory"], limit=5)
+    items = await ctx.search("favourite editor", kinds=["memory"], limit=5)
     assert items and any("neovim" in i.text for i in items)
     fav = next(i for i in items if "neovim" in i.text)
-    got = await ctx.get_memory(fav.item_id)
+    got = await ctx.advanced.memories.get(fav.item_id)
     assert got.memory_id == fav.item_id and got.memory_type == "PREFERENCE"
     assert got.visibility == "USER" and got.lifetime == "LONG_TERM"
     await ctx.forget(fav.item_id)
     assert not any(
-        "neovim" in i.text for i in await ctx.recall("favourite editor", kinds=["memory"])
+        "neovim" in i.text for i in await ctx.search("favourite editor", kinds=["memory"])
     )
     bundle = await ctx.context("how should I phrase the answer?")
     assert any("British English" in m.text for m in bundle.memories)
@@ -169,10 +169,10 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     writer = planner.agent("writer")  # child run: reads the planner's hand-off context
     await planner.observe("Plan: split the brief into revenue and cost.", kind="AGENT_RESULT")
     q = "plan for the brief sections"
-    assert any("Plan:" in i.text for i in await writer.recall(q, kinds=["memory"]))
-    assert not any("Plan:" in i.text for i in await user.recall(q, kinds=["memory"]))
+    assert any("Plan:" in i.text for i in await writer.search(q, kinds=["memory"]))
+    assert not any("Plan:" in i.text for i in await user.search(q, kinds=["memory"]))
     assert not any(
-        "Plan:" in i.text for i in await user.agent("intern").recall(q, kinds=["memory"])
+        "Plan:" in i.text for i in await user.agent("intern").search(q, kinds=["memory"])
     )
     # explicit sharing with the agent group; a second agent corroborates
     fact = "Revenue was EUR 412 million in FY26."
@@ -182,9 +182,9 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     await planner.observe(fact, kind="EVENT", hints=shared)
     await writer.observe(fact, kind="EVENT", hints=shared)
     auditor = user.agent("auditor")
-    items = await auditor.recall("FY26 revenue", kinds=["memory"])
+    items = await auditor.search("FY26 revenue", kinds=["memory"])
     hit = next(i for i in items if "412" in i.text)
-    got = await auditor.get_memory(hit.item_id)
+    got = await auditor.advanced.memories.get(hit.item_id)
     assert got.visibility == "AGENT_GROUP" and got.reinforcement_count == 2
     # Bound to the user the agent runs for: agent_id is unauthenticated request body.
     assert got.owner_principal == "agent:u1/planner"
@@ -194,11 +194,11 @@ async def test_sdk_agent_handoff_and_shared_findings(app, client) -> None:
     await auditor.observe("My manager is Lee.", kind="EVENT", hints=shared)
     managers = [
         i
-        for i in await writer.recall("who is my manager?", kinds=["memory"])
+        for i in await writer.search("who is my manager?", kinds=["memory"])
         if "manager" in i.text
     ]
     assert len(managers) == 2
-    linked = [await writer.get_memory(i.item_id) for i in managers]
+    linked = [await writer.advanced.memories.get(i.item_id) for i in managers]
     assert any(m.contradicts for m in linked)
     await memory.aclose()
 
