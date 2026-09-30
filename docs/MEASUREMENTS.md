@@ -386,8 +386,10 @@ conversation 0 recorded through `/v1/messages`, 2 salted copies of each golden d
 | `before` (pass-2 tree, c337b91) | 222 / 441 | 279 / 482 | 344 / 509 | 24 / 113 | 99,971 |
 | `floor0` (this pass, floor off) | 259 / 347 | 326 / 624 | 378 / 629 | 28 / 62 | 84,946 |
 | `after` (this pass, floor 0.20) | 262 / 374 | 324 / 407 | 354 / 467 | 25 / 52 | 74,712 |
+| `final` (the committed tree, flags decided) | 247 / 397 | 314 / 495 | 356 / 544 | 26 / 300 | 74,128 |
 
-Milliseconds. The runs are 20-40 minutes apart on a box whose load moved underneath them:
+Milliseconds. `final` also packs the ten off-topic questions into 2.1 memories and 26 KB. The
+runs are 20-40 minutes apart on a box whose load moved underneath them:
 the stages this pass did not touch moved as much as the totals (encode 94 → 110 ms mean,
 search 107 → 116), so the end-to-end rows do not isolate a change. The stages do:
 
