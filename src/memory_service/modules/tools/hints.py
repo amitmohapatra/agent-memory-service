@@ -35,6 +35,7 @@ from memory_service.domain.tools import (
     ToolStats,
 )
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
+from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.index import ToolIndex
 from memory_service.modules.tools.patterns import similarity, task_pattern, task_slots
 from memory_service.ports.intelligence import GraphStore
@@ -216,12 +217,13 @@ class ToolHintsService:
         scope_keys: Sequence[str],
         memories: Sequence[Any] = (),
         profile: Sequence[Any] = (),
+        vectors: QueryVectors | None = None,
     ) -> ToolHints:
         procedures = await self.procedures(ctx, task, scope_keys, k=3)
         plan = next(
             (p for p in procedures if available is None or set(p.tools) <= set(available)), None
         )
-        found = await self.index.search(ctx.tenant_id, ctx.workspace_id, task)
+        found = await self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors)
         names = sorted({n for n, _ in found} | set(plan.tools if plan else ()))
         async with self.uow_factory() as uow:
             entries = {

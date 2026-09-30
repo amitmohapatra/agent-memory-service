@@ -14,6 +14,7 @@ from typing import Final
 from memory_service.domain.ids import content_hash
 from memory_service.domain.tools import ToolDescriptor
 from memory_service.modules.rag.indexer import Indexer
+from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.observability.logging import get_logger
 from memory_service.ports.search import CollectionSpec, SearchFilter, SearchRecord, SearchStore
 from memory_service.ports.uow import UnitOfWorkFactory
@@ -96,12 +97,22 @@ class ToolIndex:
         ]
 
     async def search(
-        self, tenant_id: str, workspace_id: str | None, task: str, *, limit: int = SEARCH_LIMIT
+        self,
+        tenant_id: str,
+        workspace_id: str | None,
+        task: str,
+        *,
+        vectors: QueryVectors | None = None,
+        limit: int = SEARCH_LIMIT,
     ) -> list[tuple[str, float]]:
-        """``(tool name, relevance 0..1)``, best first, one per name."""
+        """``(tool name, relevance 0..1)``, best first, one per name. ``vectors`` are the
+        task's, when a retrieval already encoded it (the pushed context): no second encode."""
         await self.ensure()
-        dense = await self.indexer.spaces.embed_query(task)
-        sparse = self.indexer.sparse.encode_query(task)
+        if vectors is not None and vectors.dense:
+            dense, sparse = vectors.dense, vectors.sparse
+        else:
+            dense = await self.indexer.spaces.embed_query(task)
+            sparse = self.indexer.sparse.encode_query(task)
         hits = await self.store.search_hybrid(
             self.collection,
             dense=dense,

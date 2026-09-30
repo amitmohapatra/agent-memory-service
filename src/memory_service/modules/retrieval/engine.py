@@ -107,6 +107,8 @@ class RetrievalResult:
     visibility: VisibilitySpecification
     diagnostics: dict[str, Any] = field(default_factory=dict)
     query_embedding: list[float] | None = None
+    #: every vector the query was encoded into, for a search over another collection (tools)
+    query_vectors: QueryVectors | None = None
 
 
 def is_derived(candidate: Candidate) -> bool:
@@ -471,6 +473,7 @@ class RetrievalEngine:
             query_embedding=(
                 encoded.dense.get(self.indexer.spaces.primary_space.name) if encoded else None
             ),
+            query_vectors=encoded,
         )
 
     async def _expand_derived_sources(

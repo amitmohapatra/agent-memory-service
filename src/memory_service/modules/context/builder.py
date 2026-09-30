@@ -549,6 +549,7 @@ class ContextBuilder:
                         candidate_to_item(c) for c in result.candidates if c.kind == "memory"
                     ],
                     profile=pinned.profile,
+                    vectors=result.query_vectors,
                 )
 
     async def _semantic_lookup(

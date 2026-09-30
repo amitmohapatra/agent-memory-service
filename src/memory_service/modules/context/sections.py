@@ -27,7 +27,7 @@ from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
-from memory_service.modules.retrieval.engine import Candidate, memory_candidate
+from memory_service.modules.retrieval.engine import Candidate, QueryVectors, memory_candidate
 from memory_service.ports.uow import UnitOfWorkFactory
 
 #: Procedures a context carries.
@@ -131,6 +131,7 @@ class ContextSections:
         *,
         memories: Sequence[ContextItem],
         profile: Sequence[ProfileBlockView],
+        vectors: QueryVectors | None,
     ) -> ToolHints:
         return await self.services["tool_hints"].hints(
             ctx,
@@ -140,6 +141,7 @@ class ContextSections:
             scope_keys=list(visibility.keys),
             memories=memories,
             profile=profile,
+            vectors=vectors,
         )
 
     async def _profile(self, ctx: MemoryExecutionContext) -> list[ProfileBlockView]:
