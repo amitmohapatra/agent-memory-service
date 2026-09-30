@@ -363,3 +363,162 @@ target-VM measurement, not this one.
 `--export-onnx` traces the ModernBERT checkpoint with the TorchScript exporter at opset 17
 with eager attention; the dynamo exporter and SDPA attention are tried in that order if it
 fails, and if none traces, nothing is written. The fp32 graph is 191 MB, the int8 graph 48.
+
+## 8. The read path, the relevance floor and the kept flags — 2026-09-30 (overhaul pass 3)
+
+**Environment.** The same 2015 i5 (4 cores in the Docker VM, no AVX2), shared with three
+other agents' stacks the whole time (VM load average 3-45 during these runs; each artifact
+records its own). Real encoders (granite `dense_en` + bekko `dense_ml`, ONNX), BM25, real
+PostgreSQL, the isolated Qdrant server, Dragonfly for the latency runs, in-process
+authorization and lexical NLI, the model off. Every run is in-process ASGI (no network hop).
+On this box one query's two encodes take ~100 ms and its two hybrid searches ~110 ms before
+anything this pass touched runs, so the 300 ms p95 target (set for an 8 vCPU VM) is not
+reachable here and is not claimed; what is claimed is the stage split.
+
+### 8.1 `/v1/context` and `/v1/recall`, model off
+
+`make bench-context-latency` (`benchmark/context_latency.py`): 300 turns of LoCoMo
+conversation 0 recorded through `/v1/messages`, 2 salted copies of each golden document, an
+8-tool catalog; 60 requests per series, every one a cache miss.
+
+| run | recall p50 / p95 | context p50 / p95 | context+tools p50 / p95 | cached p50 / p95 | context bytes p50 |
+|---|---|---|---|---|---|
+| `before` (pass-2 tree, c337b91) | 222 / 441 | 279 / 482 | 344 / 509 | 24 / 113 | 99,971 |
+| `floor0` (this pass, floor off) | 259 / 347 | 326 / 624 | 378 / 629 | 28 / 62 | 84,946 |
+| `after` (this pass, floor 0.20) | 262 / 374 | 324 / 407 | 354 / 467 | 25 / 52 | 74,712 |
+
+Milliseconds. The runs are 20-40 minutes apart on a box whose load moved underneath them:
+the stages this pass did not touch moved as much as the totals (encode 94 → 110 ms mean,
+search 107 → 116), so the end-to-end rows do not isolate a change. The stages do:
+
+| stage (mean ms) | before | after | why |
+|---|---|---|---|
+| graph traversal | 13.0 | 9.9 | one statement instead of up to nine round trips (8.3) |
+| window (read after retrieval) | 36.8 | - | the recent messages are read under retrieval |
+| similarity (new, after retrieval) | - | 17.6 | the floor's one read per collection |
+| tools section | 41.0 | 37.7 | procedures and catalog search concurrently |
+
+Net on the critical path after retrieval: 50 ms (scope + window) → 29 ms (scope +
+similarity).
+
+**Where the rest goes.** Timed against the isolated Qdrant directly, one hybrid query over
+the memory collection with its full payload returns 221 KB and takes 34-320 ms end to end;
+the same query returning ids only is 29 KB and 11-18 ms. The payload - text, source refs,
+attributes of 200 candidates, of which the context packs ~33 - is the next hot spot: a
+two-phase read (ranking fields first, the payload of the kept cut second) is the change,
+not made in this pass.
+
+### 8.2 The relevance floor
+
+A fusion score only orders, so a context filled its budget with whatever ranked next. The
+`floor0` run replays floors over one floor-free pass: every packed memory of the 135 LoCoMo
+questions whose evidence is among the 300 turns, labelled by whether it is an evidence turn,
+plus ten questions nothing in the corpus answers (`OFF_TOPIC`).
+
+| floor (bekko cosine) | evidence memories kept | other memories kept | questions keeping evidence | off-topic memories packed |
+|---|---|---|---|---|
+| 0.00 | 100% | 100% | 100% | 30.8 |
+| 0.15 | 100% | 98.8% | 100% | 6.3 |
+| **0.20** | **100%** | **97.7%** | **100%** | **0.9** |
+| 0.25 | 98.5% | 96.4% | 98.2% | 0.1 |
+| 0.30 | 98.5% | 94.1% | 98.2% | 0.0 |
+| 0.40 | 90.8% | 77.4% | 92.0% | 0.0 |
+
+The encoder's cosines for on-topic but irrelevant memories sit well above 0.2, so the floor
+does not trim a relevant question's context much (32.9 → 32.2 memories); what it removes is
+the context of a question the store cannot answer: 30.8 → 1.5 memories and 76 KB → 23 KB per
+response in the `after` run. 0.20 is shipped (`DenseModel.relevance_floor` of `dense_ml`:
+a cosine is only comparable within one encoder, so the floor is the encoder's; the hash
+stand-in has none). On the full LoCoMo source harness (8.4, control) with the floor on,
+recall@50/@100 is 0.8110 / 0.8704 against 0.8113 / 0.8685 for the phase-7 ensemble artifact.
+
+### 8.3 The graph stage: faster and not decided by a client timer
+
+Three tests were flaky because graph facts vanished under load. Instrumented: the
+traversal's SQL executed in < 1 ms server-side, but the stage made up to nine sequential
+round trips, and a client-side 150 ms `wait_for` measured the client's own scheduling as
+much as the graph - on a loaded box a traversal whose statements took 90 ms lost its facts
+after a "150 ms" wait that lasted 370-590 ms. Now: one statement (chained per-hop CTEs,
+prepared on first use; its Python construction alone had cost 34 ms per query before it was
+built once per shape), on autocommit connections, and the budget is the connection's
+`statement_timeout`, so PostgreSQL stops a slow walk and nothing is parked on the pool. With
+the production budget the three tests then passed 6/6 consecutive runs at VM load 4-8; with
+six CPU hogs added (load 26+) the server itself passed 150 ms and they failed, which is the
+budget's job, so the hermetic suite runs the walk to the database's own statement timeout
+(`tests/conftest.py:UNHURRIED_GRAPH`) and the budget is tested on the server with a 1 ms
+budget against `pg_sleep` - after which they passed 2/2 at load 68-83. With the
+production budget the control arm of 8.4 still saw 159 of 1,986 traversals stopped at
+150 ms on this box - the budget doing its job, recorded rather than hidden.
+
+### 8.4 The kept flags
+
+`make bench-locomo-source` over all 1,986 LoCoMo questions (1,536 answerable), the phase-7
+corpus reused for every query-side arm (`--adopt-corpus`: its ingestion key changed only in
+the model-use list, inert with the model off; the artifact records the key it held), the
+relevance floor on in all arms. Recall / complete-source coverage at depth:
+
+| arm | all @10 | all @50 | all @100 | multi-hop @10 | multi-hop @50 | multi-hop @100 |
+|---|---|---|---|---|---|---|
+| control | 0.6508 / 0.5938 | 0.8110 / 0.7480 | 0.8704 / 0.8112 | 0.3997 / 0.1844 | 0.6337 / 0.3723 | 0.7235 / 0.4787 |
+| `entity_prefetch` on | 0.6512 / 0.5944 | 0.8110 / 0.7480 | 0.8704 / 0.8112 | 0.3997 / 0.1844 | 0.6337 / 0.3723 | 0.7235 / 0.4787 |
+| `memory_entity_search` on | 0.6568 / 0.5990 | 0.8167 / 0.7533 | 0.8742 / 0.8164 | 0.4249 / 0.2128 | 0.6588 / 0.3972 | 0.7437 / 0.5071 |
+
+(`benchmark/results/overhaul/locomo_source_*.summary.json`; the 18 MB per-question records
+are not committed.)
+
+- **`entity_prefetch`: removed.** Indistinguishable from the control at every depth now that
+  its two halves meet (phase 9 found it a no-op before the fix). It cost one more prefetch
+  arm and an indexed payload field on every memory and chunk; both are gone.
+- **`memory_entity_search`: on.** +2.5 / +2.8 points of complete multi-hop coverage at @50 /
+  @100, +0.6 / +0.6 / +0.4 recall at @10 / @50 / @100, no depth worse - consistent with the
+  earlier paired validation on conversations 3-9 (docs/ENTITY-TOPIC-RETRIEVAL-2026-09-26.md).
+  Its cost, paired per question against the arm run just before it: the 250 questions with
+  an English multi-hop cue pay +122 ms at the median (p95 484 → 699 ms on this box), the
+  all-question p95 moves 503 → 547 ms. That is a judgment against the 300 ms target, taken
+  because it is the largest multi-hop gain measured in this repository and its work is
+  bounded by its own timeout; `BENCH_MEMORY_ENTITY_SEARCH=off` is the control arm that can
+  take it back.
+- **`query_decomposition`: removed.** Five multi-hop questions through the local gateway
+  (gemini-3.8-flash): 6.4, 8.3, 3.9, 12.2 (a failed call) and 3.2 s; one of the five came
+  back decomposed. A model call on the read path cannot fit a 300 ms budget at any quality
+  (`benchmark/results/overhaul/query_decomposition_latency.json`).
+- **`consolidation`: removed.** See 8.6.
+
+### 8.5 The learning constants, reviewed
+
+| constant | value | evidence | decision |
+|---|---|---|---|
+| `SUMMARY_EVERY` | 20 | 290 windows of 20 LoCoMo turns: p50 637, p95 848, max 986 tokens against the 2,000-token conversation budget, whose window is also 20 messages | kept: summary + window cover the thread with no gap and the window budget never binds |
+| `PINNED_SHARE` | 0.5 | at their maxima the pinned sections are ~3.8k tokens (profile 3 × 4,000 chars, summary 2,000 chars, 3 procedures, hints) - inside half the default 8,000 budget | kept; at small budgets the priority order decides |
+| `PROCEDURE_MIN_SUPPORT` / `_MIN_SUCCESS_RATE` | 2 / 0.6 | no labelled multi-run traffic exists yet | kept, unmeasured |
+| prefetch (`PREFETCH_MIN_PULLS`, `_MIN_RATE`, `_MAX`, settle) | 3, 0.5, 5, 10 min | no agent-tool pull traffic exists yet | kept, unmeasured |
+| `APPROVAL_MIN_SUPPORT`, approve/reject rates | 5, 0.95 / 0.5 | no approval traffic | kept, unmeasured |
+| standing factor | ±15% | no feedback traffic; bounded so it only reorders near-ties | kept, unmeasured |
+
+The unmeasured ones need traffic the benchmarks do not generate (labelled runs, pulls,
+verdicts); they are named here so the first deployment that has it knows what to measure.
+
+### 8.6 Consolidation (on-landing beliefs and entity summaries)
+
+The flag changes the write path, so it cannot share the phase-7 corpus: LoCoMo conversations
+0 and 1 (304 questions, 231 answerable) were ingested twice from one snapshot of this tree,
+each arm into its own database and its own tenants (`BENCH_CORPUS_TENANT_PREFIX`).
+
+| arm | memories (conv 0 / 1) | all @10 | all @50 | all @100 | multi-hop @50 | multi-hop @100 | tokens p50 |
+|---|---|---|---|---|---|---|---|
+| off | 591 / 489 | 0.6696 / 0.6147 | 0.8279 / 0.7749 | 0.8882 / 0.8442 | 0.6376 / 0.3953 | 0.7519 / 0.5581 | 3,239 |
+| on | 711 / 632 | 0.6696 / 0.6147 | 0.8279 / 0.7749 | 0.8889 / 0.8442 | 0.6376 / 0.3953 | 0.7558 / 0.5581 | 3,726 |
+
+Identical at every depth up to 50; one multi-hop question gained a source at @100. It mints
+263 beliefs and entity summaries over the two conversations, adds 15% to the packed tokens
+and +86 ms to the median read, paired per question (the derived memories are validated
+against their sources on every read). **Removed**, with `LandingReflection`, the belief and
+entity-summary services, the pipeline's per-subject serialization it needed and the
+`belief_reach` diagnostic; the background ReflectionService (model insights with citations)
+is unaffected.
+
+**A retraction on the way.** The first control arm for this table showed consolidation
++3.6 points at @50. Its conversation-1 tenant held 898 memories with 488 distinct contents:
+a first attempt killed mid-ingest was still writing into the same database, so the control
+retrieved against duplicates. The clean rerun (`p7_locomo_ctl3`) is the row above; the
+contaminated one was discarded.
