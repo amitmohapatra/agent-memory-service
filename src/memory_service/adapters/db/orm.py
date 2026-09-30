@@ -541,7 +541,7 @@ class ChunkRow(Base):
     token_estimate: Mapped[int] = mapped_column(Integer, default=0)
     entities: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
     indexed_at: Mapped[datetime | None]
-    index_fingerprint: Mapped[str | None] = mapped_column(String(100))
+    index_fingerprint: Mapped[str | None] = mapped_column(String(200))
     lang: Mapped[str | None] = mapped_column(String(8))
 
     __table_args__ = (

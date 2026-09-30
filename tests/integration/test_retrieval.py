@@ -65,6 +65,19 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
         pending = await uow.documents.list_chunks("acme", doc_id, unindexed_only=True)
     assert chunks and not pending, "every chunk is marked indexed after the job"
     assert all(c.index_fingerprint == indexer.fingerprint for c in chunks)
+    # the shipped ensemble's receipt (~150 characters) fits the column the stand-in's does
+    ensemble = (
+        "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-"
+        "embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v2-unicode-k1.2-b0.75"
+    )
+    async with uow_factory() as uow:
+        await uow.documents.mark_chunks_indexed(
+            [chunks[0].chunk_id], fingerprint=ensemble, indexed_at=chunks[0].indexed_at
+        )
+        await uow.commit()
+    async with uow_factory() as uow:
+        marked = await uow.documents.get_chunks("acme", [chunks[0].chunk_id])
+    assert marked[0].index_fingerprint == ensemble
     flt = SearchFilter(tenant_id="acme", must={"kind": "chunk"})
     assert await store.count(collection, flt) == len(chunks)
     # summaries (M9) live in the same collection under kind="summary"
