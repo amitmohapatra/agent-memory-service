@@ -124,3 +124,5 @@ async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
     assert await agent_tools.prefetched(_agent(), "supplier for order 99") == [stored["id"]]
     other = MemoryExecutionContext(tenant_id="acme", user_id="bob", agent_id="buyer")
     assert await agent_tools.prefetched(other, "supplier for order 99") == []
+    bundle = await container.services["context_builder"].build(_agent(), "supplier for order 99")
+    assert stored["id"] in [m.item_id for m in bundle.memories]

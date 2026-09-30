@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import re
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -36,12 +35,13 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
-from memory_service.modules.context.summaries import (
-    SOURCE_CHARS,
-    SUMMARY_SCHEMA,
-    accept_abstractive,
+from memory_service.modules.context.sections import (
+    ContextSections,
+    Pinned,
+    ToolsRequest,
+    within_budget,
 )
+from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
@@ -79,15 +79,9 @@ def _cacheable(bundle: ContextBundle) -> bool:
 
 #: The model uses a cached bundle's content depends on. A deployment that decomposes questions
 #: assembles a different bundle from the same query, so it must not read another's cache.
-CACHED_MODEL_USES: tuple[LLMUse, ...] = ("summaries", "query_expansion", DECOMPOSITION_USE)
-
-
-_ROLLING_SYSTEM = (
-    "You summarise the earlier part of a conversation that no longer fits the context "
-    "window. Write at most {max_chars} characters capturing what the user asked for, the "
-    "facts and decisions stated, and anything still open. Use only the conversation; no "
-    'preamble. Return JSON only: {{"summary": "..."}}.'
-)
+CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion", DECOMPOSITION_USE)
+#: How long the record of what a bundle served is kept for a later delta request.
+SERVED_TTL_SECONDS = 3600
 
 
 #: Fusion scores are rank aggregates, not probabilities: they are mapped into a low band
@@ -190,6 +184,11 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     )
 
 
+def _at(served_key: str, revision: int | None) -> str | None:
+    """The record of what was served at ``revision``, when a delta is asked for."""
+    return f"{served_key}:{revision}" if revision is not None else None
+
+
 @dataclass(frozen=True)
 class _Lookup:
     """What one database read and one cache read say about a query, before any work."""
@@ -205,6 +204,12 @@ class _Lookup:
     bundle: bytes | None
     semantic_key: str | None = None
     semantic: bytes | None = None
+    #: the scope revision: the sum of the counters the bundle depends on (monotonic)
+    revision: int = 0
+    #: where what this request served at a revision is recorded, for a later delta
+    served_key: str = ""
+    #: the record of what was served at ``since_revision``, when a delta was asked for
+    served: bytes | None = None
 
 
 class ContextBuilder:
@@ -220,8 +225,10 @@ class ContextBuilder:
         cache_ttl_seconds: int = 300,
         working: EphemeralMemory | None = None,
         assist: LLMAssist | None = None,
+        sections: ContextSections | None = None,
     ) -> None:
         self.uow_factory = uow_factory
+        self.sections = sections
         self.engine = engine
         self.conversation = conversation
         self.cache = cache
@@ -267,6 +274,8 @@ class ContextBuilder:
         query: str,
         budget: int,
         document_ids: Sequence[str] | None,
+        tools: ToolsRequest | None = None,
+        since_revision: int | None = None,
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
 
@@ -299,21 +308,22 @@ class ContextBuilder:
             self.assist.cache_fingerprint(CACHED_MODEL_USES),
             str(budget),
             ",".join(document_ids or []),
+            tools.fingerprint() if tools else "",
         )
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
-        semantic = self._semantic_key(namespace, ctx, query)
+        semantic = self._semantic_key(namespace, ctx, query) if tools is None else None
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
-        scope_raw: bytes | None = None
-        bundle_raw: bytes | None = None
-        semantic_raw: bytes | None = None
+        request = stable_key(query, str(budget), ",".join(document_ids or []))
+        served_key = self._served_key(ctx, request, tools)
+        keys = [scope_key, cache_key, semantic, _at(served_key, since_revision)]
+        values: list[bytes | None] = [None] * len(keys)
         if self.cache is not None:
             with contextlib.suppress(CacheUnavailable):
-                values = await self.cache.mget(
-                    [scope_key, cache_key] + ([semantic] if semantic else [])
-                )
-                scope_raw, bundle_raw = values[:2]
-                semantic_raw = values[2] if semantic else None
+                wanted = [k for k in keys if k]
+                found = iter(await self.cache.mget(wanted))
+                values = [next(found) if k else None for k in keys]
+        scope_raw, bundle_raw, semantic_raw, served_raw = values
         return _Lookup(
             bundle_id=bundle_id,
             cache_key=cache_key,
@@ -323,7 +333,15 @@ class ContextBuilder:
             bundle=bundle_raw,
             semantic_key=semantic,
             semantic=semantic_raw,
+            revision=sum(revisions.values()),
+            served_key=served_key,
+            served=served_raw,
         )
+
+    @staticmethod
+    def _served_key(ctx: MemoryExecutionContext, request: str, tools: ToolsRequest | None) -> str:
+        suffix = tools.fingerprint() if tools else ""
+        return f"ctxserved:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{request}:{suffix}"
 
     async def _revisions(self, ctx: MemoryExecutionContext) -> dict[str, int]:
         """One shared dependency set for automatic lookup and explicit bundle replay."""
@@ -356,11 +374,7 @@ class ContextBuilder:
     def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
-        if (
-            self.assist.wants("query_expansion")
-            or self.assist.wants("summaries")
-            or self.assist.wants(DECOMPOSITION_USE)
-        ):
+        if self.assist.wants("query_expansion") or self.assist.wants(DECOMPOSITION_USE):
             return None
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
@@ -374,6 +388,7 @@ class ContextBuilder:
         *,
         token_budget: int | None = None,
         document_ids: Sequence[str] | None = None,
+        tools: ToolsRequest | None = None,
     ) -> ContextBundle:
         budget = token_budget or self.cfg.token_budget
         with (
@@ -382,13 +397,13 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids)
+                found = await self._lookup(ctx, query, budget, document_ids, tools)
             if found.bundle is not None:
                 bundle = ContextBundle.model_validate_json(found.bundle)
                 return bundle.model_copy(update={"cache_hit": True})
-            bundle = await self._fresh(ctx, query, budget, document_ids, found, timings)
+            bundle = await self._fresh(ctx, query, budget, document_ids, tools, found, timings)
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        self._after_build(ctx, bundle, found.cache_key, api=None)
+        self._after_build(ctx, bundle, found, api=None)
         return bundle
 
     async def build_api(
@@ -398,6 +413,8 @@ class ContextBuilder:
         *,
         token_budget: int | None = None,
         document_ids: Sequence[str] | None = None,
+        tools: ToolsRequest | None = None,
+        since_revision: int | None = None,
     ) -> bytes:
         """The bundle as the API sends it, serialised exactly once.
 
@@ -408,7 +425,7 @@ class ContextBuilder:
         cache hit costs. The cache stores the API dict, so a hit is the stored bytes and
         nothing else; a miss serialises once and hands the same object to the background
         write. Callers that need the ContextBundle itself - grounding, the benchmarks - use
-        ``build``.
+        ``build``. A delta (``since_revision``) is the one case that re-reads the dict.
         """
         budget = token_budget or self.cfg.token_budget
         with (
@@ -417,14 +434,19 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids)
+                found = await self._lookup(ctx, query, budget, document_ids, tools, since_revision)
             if found.bundle is not None:
-                return found.bundle
-            bundle = await self._fresh(ctx, query, budget, document_ids, found, timings)
+                return (
+                    _delta(found.bundle, found.served)
+                    if since_revision is not None
+                    else (found.bundle)
+                )
+            bundle = await self._fresh(ctx, query, budget, document_ids, tools, found, timings)
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         api = bundle_to_api(bundle)
-        self._after_build(ctx, bundle, found.cache_key, api=api)
-        return orjson.dumps(api)
+        self._after_build(ctx, bundle, found, api=api)
+        payload = orjson.dumps(api)
+        return _delta(payload, found.served) if since_revision is not None else payload
 
     async def _fresh(
         self,
@@ -432,6 +454,7 @@ class ContextBuilder:
         query: str,
         budget: int,
         document_ids: Sequence[str] | None,
+        tools: ToolsRequest | None,
         found: _Lookup,
         timings: Timings,
     ) -> ContextBundle:
@@ -444,6 +467,12 @@ class ContextBuilder:
                 ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
             )
         tokens_before = self.assist.tokens_used()
+        # the pinned sections are independent of retrieval: they run under it
+        sections = (
+            asyncio.ensure_future(self.sections.gather(ctx, query, visibility))
+            if self.sections is not None
+            else None
+        )
         with timings.stage("retrieve"):
             result = await decompose_and_retrieve(
                 self.engine,
@@ -454,10 +483,43 @@ class ContextBuilder:
                 visibility=visibility,
                 query_embedding=(query, embedding) if embedding is not None else None,
             )
+        with timings.stage("sections"):
+            pinned = await sections if sections is not None else Pinned()
         with timings.stage("window"):
-            window = await self._conversation_window(ctx, result)
+            window = await self._conversation_window(ctx, result, after=pinned.covered_to)
+        await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
+        pinned, pinned_tokens = within_budget(pinned, budget)
+        bundle = self._assemble(query, result, window, budget - pinned_tokens, found.revision_fp)
+        self._remember_semantic(found, result, bundle)
+        spent = self.assist.tokens_used() - tokens_before
+        return bundle.model_copy(
+            update={
+                "bundle_id": found.bundle_id,
+                "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
+                "token_budget": budget,
+                "token_estimate": bundle.token_estimate + pinned_tokens,
+                "revision": found.revision,
+                "profile": pinned.profile,
+                "thread_summary": pinned.thread_summary,
+                "procedures": pinned.procedures,
+                "tools": pinned.tools,
+            }
+        )
+
+    async def _add_extras(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        tools: ToolsRequest | None,
+        visibility: Any,
+        result: RetrievalResult,
+        pinned: Pinned,
+        timings: Timings,
+    ) -> None:
+        """Working memory and prefetched memories ahead of the ranked ones, and the tool
+        hints (which read the memories in hand and the profile)."""
         if self.working is not None and result.routed.needs_memories:
             for i, item in enumerate(await self.working.recall(ctx)):
                 result.candidates.insert(
@@ -471,15 +533,23 @@ class ContextBuilder:
                         payload={"memory_type": item.get("memory_type", "WORKING")},
                     ),
                 )
-        bundle = self._assemble(query, result, window, budget, found.revision_fp)
-        self._remember_semantic(found, result, bundle)
-        spent = self.assist.tokens_used() - tokens_before
-        return bundle.model_copy(
-            update={
-                "bundle_id": found.bundle_id,
-                "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
-            }
-        )
+        present = {c.record_id for c in result.candidates}
+        fresh = [c for c in pinned.prefetched if c.record_id not in present]
+        result.candidates[:0] = fresh
+        if fresh:
+            result.diagnostics["prefetched"] = [c.record_id for c in fresh]
+        if tools is not None and self.sections is not None:
+            with timings.stage("tools"):
+                pinned.tools = await self.sections.tools(
+                    ctx,
+                    query,
+                    tools,
+                    visibility,
+                    memories=[
+                        candidate_to_item(c) for c in result.candidates if c.kind == "memory"
+                    ],
+                    profile=pinned.profile,
+                )
 
     async def _semantic_lookup(
         self, found: _Lookup, query: str
@@ -519,14 +589,29 @@ class ContextBuilder:
         self,
         ctx: MemoryExecutionContext,
         bundle: ContextBundle,
-        cache_key: str,
+        found: _Lookup,
         *,
         api: dict[str, Any] | None,
     ) -> None:
-        """The bookkeeping a built bundle leaves behind, none of it on the request path."""
+        """The bookkeeping a built bundle leaves behind, none of it on the request path: the
+        served-access counts, the cached bundle, and the record of what was served at this
+        revision (what a later delta request compares against)."""
         self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
-        if self.cache is not None and _cacheable(bundle):
-            self._track(self._store(self.cache, cache_key, bundle, api))
+        if self.cache is None:
+            return
+        if _cacheable(bundle):
+            self._track(self._store(self.cache, found.cache_key, bundle, api))
+        self._track(self._store_served(self.cache, found, bundle))
+
+    async def _store_served(
+        self, cache: CacheProvider, found: _Lookup, bundle: ContextBundle
+    ) -> None:
+        with contextlib.suppress(CacheUnavailable):
+            await cache.set(
+                f"{found.served_key}:{found.revision}",
+                orjson.dumps(served(bundle)),
+                ttl_seconds=SERVED_TTL_SECONDS,
+            )
 
     async def _store(
         self,
@@ -670,8 +755,10 @@ class ContextBuilder:
         return f"ctx:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{bundle_id}"
 
     async def _conversation_window(
-        self, ctx: MemoryExecutionContext, result: RetrievalResult
+        self, ctx: MemoryExecutionContext, result: RetrievalResult, *, after: int
     ) -> ConversationWindow:
+        """The thread's most recent messages after its durable summary (which covers
+        everything up to ``after``) that fit the conversation budget."""
         if not ctx.thread_id or not result.routed.needs_conversation:
             return ConversationWindow(thread_id=ctx.thread_id)
         async with self.uow_factory() as uow:
@@ -681,15 +768,11 @@ class ContextBuilder:
             messages = await self.conversation.list_messages(
                 uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
             )
-        window = render_window(ctx.thread_id, messages, self.cfg.conversation_token_budget)
-        included = set(window.message_ids)
-        older = [m for m in messages if m.message_id not in included]
-        if older:
-            summary = rolling_summary(older)
-            if self.assist.wants("summaries"):
-                summary = await abstractive_rolling_summary(self.assist, older, summary)
-            window = window.model_copy(update={"summary": summary})
-        return window
+        return render_window(
+            ctx.thread_id,
+            [m for m in messages if m.sequence > after],
+            self.cfg.conversation_token_budget,
+        )
 
     def _assemble(
         self,
@@ -887,50 +970,6 @@ class ContextBuilder:
         )
 
 
-def rolling_summary(messages: Sequence[Message], *, max_chars: int = 600) -> str:
-    """Deterministic digest of turns that fell out of the window: role + first sentence."""
-    parts: list[str] = []
-    used = 0
-    for m in messages:
-        if m.kind is not MessageKind.VISIBLE or not m.content.strip():
-            continue
-        first = re.split(r"(?<=[.!?])\s+", m.content.strip(), maxsplit=1)[0][:160]
-        line = f"{m.role.value.lower()}: {first}"
-        if used + len(line) > max_chars:
-            parts.append("…")
-            break
-        parts.append(line)
-        used += len(line) + 1
-    return "\n".join(parts)
-
-
-async def abstractive_rolling_summary(
-    assist: LLMAssist,
-    messages: Sequence[Message],
-    extractive: str,
-    *,
-    max_chars: int = 600,
-) -> str:
-    """Model-written digest of the turns that fell out of the window, given the deterministic
-    digest and the (bounded, most recent) source turns; the deterministic digest otherwise."""
-    if not assist.wants("summaries"):
-        return extractive
-    lines = [
-        f"{m.role.value.lower()}: {' '.join(m.content.split())}"
-        for m in messages
-        if m.kind is MessageKind.VISIBLE and m.content.strip()
-    ]
-    source = "\n".join(lines)[-SOURCE_CHARS:]
-    result = await assist.structured(
-        "summaries",
-        system=_ROLLING_SYSTEM.format(max_chars=max_chars),
-        user=f"Deterministic digest:\n{extractive}\n\nEarlier conversation:\n{source}",
-        schema=SUMMARY_SCHEMA,
-        max_tokens=max(128, max_chars // 2),
-    )
-    return accept_abstractive(result, max_chars=max_chars) or extractive
-
-
 def render_window(
     thread_id: str, messages: Sequence[Message], token_budget: int
 ) -> ConversationWindow:
@@ -953,6 +992,35 @@ def render_window(
         rendered=rendered,
         token_estimate=used,
     )
+
+
+_SERVED_LISTS = ("memories", "knowledge", "graph_facts", "summaries")
+
+
+def served(bundle: ContextBundle) -> dict[str, str]:
+    """What a bundle served: item id -> the hash of its text."""
+    return {
+        item.item_id: stable_key(item.text)
+        for name in _SERVED_LISTS
+        for item in getattr(bundle, name)
+    }
+
+
+def _delta(payload: bytes, before: bytes | None) -> bytes:
+    """The bundle with only the items new or changed since the revision whose served record
+    is ``before``; the whole bundle (``delta`` false) when that record is gone."""
+    if before is None:
+        return payload
+    seen: dict[str, str] = orjson.loads(before)
+    data: dict[str, Any] = orjson.loads(payload)
+    for name in _SERVED_LISTS:
+        data[name] = [
+            item
+            for item in data.get(name, [])
+            if seen.get(item["item_id"]) != stable_key(item["text"])
+        ]
+    data["delta"] = True
+    return orjson.dumps(data)
 
 
 def bundle_to_api(bundle: ContextBundle) -> dict[str, Any]:

@@ -21,10 +21,13 @@ from memory_service.api.validation import UseLLM
 from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import ProcedureView, ProfileBlockView, ThreadSummaryView
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.tools import ToolHints
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
+from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.grounding.cascade import attach
 
 
@@ -199,6 +202,16 @@ class ContextRequest(BaseModel):
         "bundle and the report is attached as evidence.grounding",
         examples=[None],
     )
+    since_revision: int | None = Field(
+        default=None,
+        ge=0,
+        description="a previous bundle's revision: list only the items new or changed since "
+        "(delta=true); the whole bundle when that revision's record has expired",
+    )
+    tools: ToolsRequest | None = Field(
+        default=None,
+        description="add tool hints for these callable tools (available: null means any)",
+    )
 
 
 class ContextResponse(BaseModel):
@@ -216,7 +229,6 @@ class ContextResponse(BaseModel):
                         "message_ids": ["msg_1"],
                         "rendered": "USER: …",
                         "token_estimate": 120,
-                        "summary": None,
                     },
                     "memories": [],
                     "knowledge": [],
@@ -266,6 +278,20 @@ class ContextResponse(BaseModel):
     built_at: datetime
     diagnostics: dict[str, Any] = Field(default_factory=dict)
     rendered: str
+    revision: int = Field(
+        default=0, description="the scope revision this bundle was built at (since_revision)"
+    )
+    delta: bool = Field(default=False, description="only what changed since since_revision")
+    profile: list[ProfileBlockView] = Field(
+        default_factory=list, description="the pinned profile blocks of the user, agent, workspace"
+    )
+    thread_summary: ThreadSummaryView | None = Field(
+        default=None, description="the thread's durable summary; the window follows it"
+    )
+    procedures: list[ProcedureView] = Field(
+        default_factory=list, description="procedures learned for this task"
+    )
+    tools: ToolHints | None = Field(default=None, description="tool hints, when asked for")
 
 
 @router.post(
@@ -327,7 +353,12 @@ async def context(
             # one dump. Parsing the cached bundle only to dump it, validate it and dump it again
             # was most of what a 30-80 KB hit cost.
             payload = await builder.build_api(
-                ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
+                ctx,
+                body.query,
+                token_budget=body.token_budget,
+                document_ids=body.document_ids,
+                tools=body.tools,
+                since_revision=body.since_revision,
             )
             # The bundle is opaque bytes here on purpose (see above), so the audit records
             # who asked what under which scope; the records served are in the bundle itself.
@@ -338,7 +369,11 @@ async def context(
         if cascade is None:
             raise ProviderNotConfigured("the NLI classifier is disabled in this process")
         bundle = await builder.build(
-            ctx, body.query, token_budget=body.token_budget, document_ids=body.document_ids
+            ctx,
+            body.query,
+            token_budget=body.token_budget,
+            document_ids=body.document_ids,
+            tools=body.tools,
         )
         bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
         served = (i.item_id for i in (*bundle.memories, *bundle.knowledge))

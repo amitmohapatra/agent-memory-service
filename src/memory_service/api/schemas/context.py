@@ -84,7 +84,6 @@ class ConversationWindowBody(BaseModel):
     message_ids: list[str] = Field(default_factory=list)
     rendered: str = ""
     token_estimate: int = 0
-    summary: str | None = Field(default=None, description="rolling summary of older messages")
 
 
 class UnusedEvidenceBody(BaseModel):

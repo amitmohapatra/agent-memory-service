@@ -162,9 +162,15 @@ def _plan_hint(plan: StoredProcedure | None) -> PlanHint | None:
     )
 
 
-def _arguments(entry: ToolDescriptor) -> list[str]:
+def _arguments(entry: ToolDescriptor, plan: StoredProcedure | None) -> list[str]:
+    """The tool's arguments: required first, then its schema's, then any the learned plan
+    binds for it (a tool recorded but never catalogued has only those)."""
     properties = list(((entry.input_schema or {}).get("properties") or {}).keys())
-    return list(dict.fromkeys([*entry.required, *properties]))
+    bound: list[str] = []
+    if plan is not None and entry.name in plan.tools:
+        ordinal = plan.tools.index(entry.name)
+        bound = [str(b["argument"]) for b in plan.bindings if b.get("step") == ordinal]
+    return list(dict.fromkeys([*entry.required, *properties, *bound]))
 
 
 @dataclass
@@ -253,7 +259,7 @@ class ToolHintsService:
         job.slots = task_slots(job.task)
         prefill: dict[str, Prefill] = {}
         missing: list[MissingArgument] = []
-        for arg in _arguments(job.tool):
+        for arg in _arguments(job.tool, job.plan):
             found = await self._resolve(job, arg)
             if found is not None:
                 prefill[arg] = found

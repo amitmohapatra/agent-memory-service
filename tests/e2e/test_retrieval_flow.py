@@ -82,7 +82,7 @@ def test_recall_and_context_over_http(client) -> None:
         name.rsplit(":", 1)[0] for name in bundle["evidence"]["required_groups"]
     }
     assert bundle["summaries"] and "## Summaries" in bundle["rendered"]
-    assert bundle["conversation"]["summary"] is None  # everything fits the window
+    assert bundle["thread_summary"] is None  # a short thread has no durable summary yet
     # recall exposes the same report; an unrelated question is INSUFFICIENT
     r = client.post("/v1/recall", headers=H, json={"scope": scope, "query": Q})
     assert r.json()["evidence"]["status"] == "COMPLETE"

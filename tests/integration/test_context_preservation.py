@@ -12,6 +12,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType
 from memory_service.domain.ids import new_id
 from memory_service.modules.context.expansion import ExpansionStage, chunk_candidate
+from memory_service.modules.conversation.summary import SUMMARY_EVERY
 from memory_service.modules.jobs.registry import register_handlers
 
 pytestmark = pytest.mark.integration
@@ -159,7 +160,7 @@ async def test_bundle_report_reflects_budget(container, uow_factory) -> None:
     assert not ({k.page for k in small.knowledge} & seed_pages) or small.evidence.missing_groups
 
 
-async def test_global_summary_and_conversation_rolling_summary(container, uow_factory) -> None:
+async def test_global_summary_and_the_durable_thread_summary(container, uow_factory) -> None:
     await _ingest(container, uow_factory)
     engine = container.services["retrieval"]
     res = await engine.retrieve(U1, "give me a summary of the main points of the report")
@@ -168,22 +169,25 @@ async def test_global_summary_and_conversation_rolling_summary(container, uow_fa
     assert summaries and any(c.text.startswith("ACME FY26:") for c in summaries)
     exact = await engine.retrieve(U1, f"show {summaries[0].record_id}")
     assert [c.record_id for c in exact.candidates] == [summaries[0].record_id]
-    # conversation: older turns are digested into window.summary
+    # conversation: the thread's durable summary covers the older turns; the window follows it
     thread = new_id("thread")
     ctx = U1.model_copy(
         update={"thread_id": thread, "session_id": new_id("session"), "turn_id": new_id("turn")}
     )
     conv = container.services["conversation"]
     async with uow_factory() as uow:
-        for i in range(8):
+        for i in range(SUMMARY_EVERY + 2):
             await conv.append_message(
-                uow, ctx, role=MessageRole.USER, content=f"Turn {i}: " + "detail " * 60
+                uow, ctx, role=MessageRole.USER, content=f"Turn {i}: a short detail."
             )
         await uow.commit()
+    await container.tasks.drain()  # summary.refresh: everything committed by then
     small_window = container.tuning.context.model_copy(update={"conversation_token_budget": 200})
     builder = container.services["context_builder"]
     builder.cfg = small_window
     bundle = await builder.build(ctx, "what did I say earlier in this thread?")
-    assert bundle.conversation.summary and bundle.conversation.summary.startswith("user: Turn 0")
-    assert len(bundle.conversation.message_ids) < 8
+    assert bundle.thread_summary is not None
+    assert bundle.thread_summary.text.startswith("user: Turn 0")
+    assert bundle.thread_summary.covers_to_sequence == SUMMARY_EVERY + 2
+    assert bundle.conversation.message_ids == [], "only the turns after the summary"
     assert "## Conversation summary" in bundle.render()

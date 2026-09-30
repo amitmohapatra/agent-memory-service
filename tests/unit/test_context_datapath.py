@@ -161,7 +161,7 @@ def _builder(
     [
         {"model": "test/new-strong"},
         {"fast_model": "test/new-fast"},
-        {"fast_uses": ["summaries"]},
+        {"fast_uses": []},
         {"base_url": "http://another-gateway.test/v1"},
         {"api_key": "rotated-operator-key"},
         {"max_tokens": 777},
@@ -174,9 +174,11 @@ async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(c
 
     cache = MemoryCache()
     provider = SimpleNamespace(enabled=True)
-    first = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
-    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"])))
-    changed = _builder(cache, assist=LLMAssist(provider, llm_settings(["summaries"], **change)))
+    first = _builder(cache, assist=LLMAssist(provider, llm_settings(["query_expansion"])))
+    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings(["query_expansion"])))
+    changed = _builder(
+        cache, assist=LLMAssist(provider, llm_settings(["query_expansion"], **change))
+    )
     try:
         await first.build_api(CTX, QUERY)
         await first.drain()

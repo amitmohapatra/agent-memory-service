@@ -1495,6 +1495,19 @@
               }
             ]
           },
+          "since_revision": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a previous bundle's revision: list only the items new or changed since (delta=true); the whole bundle when that revision's record has expired",
+            "title": "Since Revision"
+          },
           "token_budget": {
             "anyOf": [
               {
@@ -1510,6 +1523,17 @@
               6000
             ],
             "title": "Token Budget"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolsRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "add tool hints for these callable tools (available: null means any)"
           },
           "use_llm": {
             "anyOf": [
@@ -1588,6 +1612,12 @@
           "conversation": {
             "$ref": "#/components/schemas/ConversationWindowBody"
           },
+          "delta": {
+            "default": false,
+            "description": "only what changed since since_revision",
+            "title": "Delta",
+            "type": "boolean"
+          },
           "diagnostics": {
             "additionalProperties": true,
             "title": "Diagnostics",
@@ -1617,6 +1647,22 @@
             "title": "Memories",
             "type": "array"
           },
+          "procedures": {
+            "description": "procedures learned for this task",
+            "items": {
+              "$ref": "#/components/schemas/ProcedureView"
+            },
+            "title": "Procedures",
+            "type": "array"
+          },
+          "profile": {
+            "description": "the pinned profile blocks of the user, agent, workspace",
+            "items": {
+              "$ref": "#/components/schemas/ProfileBlockView"
+            },
+            "title": "Profile",
+            "type": "array"
+          },
           "query": {
             "title": "Query",
             "type": "string"
@@ -1628,6 +1674,12 @@
           "rendered": {
             "title": "Rendered",
             "type": "string"
+          },
+          "revision": {
+            "default": 0,
+            "description": "the scope revision this bundle was built at (since_revision)",
+            "title": "Revision",
+            "type": "integer"
           },
           "revision_fingerprint": {
             "default": "",
@@ -1642,6 +1694,17 @@
             "title": "Summaries",
             "type": "array"
           },
+          "thread_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadSummaryView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the thread's durable summary; the window follows it"
+          },
           "token_budget": {
             "title": "Token Budget",
             "type": "integer"
@@ -1649,6 +1712,17 @@
           "token_estimate": {
             "title": "Token Estimate",
             "type": "integer"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolHints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "tool hints, when asked for"
           }
         },
         "required": [
@@ -1683,18 +1757,6 @@
             "default": "",
             "title": "Rendered",
             "type": "string"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "rolling summary of older messages",
-            "title": "Summary"
           },
           "thread_id": {
             "anyOf": [
@@ -5259,6 +5321,43 @@
         "title": "Problem",
         "type": "object"
       },
+      "ProcedureView": {
+        "description": "A procedure learned for the task.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "success_rate": {
+            "default": 0.0,
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "support": {
+            "default": 0,
+            "title": "Support",
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ProcedureView",
+        "type": "object"
+      },
       "ProcessingHintsIn": {
         "additionalProperties": false,
         "description": "Expert-only overrides; omit for the default 'the service decides' behaviour.\n\nEvery field here is a *hint*: the service classifies observations on its own, and the\nright call for almost every caller is to send none of them. They exist for the cases\nwhere the caller genuinely knows something the extractor cannot infer \u2014 an import whose\nprovenance is already known, a note that must not outlive the run.\n\nSetting one wrongly is worse than leaving it unset: a hint overrides the classifier, so a\n``memory_type`` that does not match the content makes the memory unreachable by the\nqueries that should find it.",
@@ -5394,6 +5493,30 @@
           "updated_at"
         ],
         "title": "ProfileBlockBody",
+        "type": "object"
+      },
+      "ProfileBlockView": {
+        "description": "A pinned profile block as the context carries it.",
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block",
+          "text",
+          "version"
+        ],
+        "title": "ProfileBlockView",
         "type": "object"
       },
       "ProfileResponse": {
@@ -6679,6 +6802,30 @@
         "title": "ThreadSummaryResponse",
         "type": "object"
       },
+      "ThreadSummaryView": {
+        "description": "The thread's durable summary: every message up to ``covers_to_sequence``.",
+        "properties": {
+          "covers_to_sequence": {
+            "title": "Covers To Sequence",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "text",
+          "covers_to_sequence",
+          "version"
+        ],
+        "title": "ThreadSummaryView",
+        "type": "object"
+      },
       "ToolCandidate": {
         "properties": {
           "name": {
@@ -6830,6 +6977,36 @@
           }
         },
         "title": "ToolStatsBody",
+        "type": "object"
+      },
+      "ToolsRequest": {
+        "additionalProperties": false,
+        "description": "``tools`` of a context request: hints for these callable tools (None: any).",
+        "properties": {
+          "available": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
+          },
+          "k": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "K",
+            "type": "integer"
+          }
+        },
+        "title": "ToolsRequest",
         "type": "object"
       },
       "UnusedEvidenceBody": {

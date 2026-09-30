@@ -425,6 +425,7 @@ def _wire_nli(container: Container) -> None:
 
 def _wire_retrieval(container: Container) -> None:
     from memory_service.modules.context.builder import ContextBuilder
+    from memory_service.modules.context.sections import ContextSections
     from memory_service.modules.memory.ephemeral import EphemeralMemory
     from memory_service.modules.rag.indexer import Indexer
     from memory_service.modules.retrieval.engine import RetrievalEngine
@@ -465,6 +466,7 @@ def _wire_retrieval(container: Container) -> None:
         cache_ttl_seconds=constants.CACHE.context_bundle_ttl_seconds,
         working=working,
         assist=container.services["llm_assist"],
+        sections=ContextSections(container.services["uow_factory"], container.services),
     )
     container.services["context_builder"] = builder
     from memory_service.modules.briefs.service import BriefService

@@ -19,6 +19,7 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import aggregate_statement, unverified_representation
 from memory_service.domain.predicates import is_multi_valued
+from memory_service.domain.tools import ToolHints
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
@@ -63,13 +64,46 @@ class ContextItem(BaseModel):
 
 
 class ConversationWindow(BaseModel):
+    """The thread's messages after its durable summary, the most recent that fit."""
+
     model_config = ConfigDict(frozen=True)
 
     thread_id: str | None = None
     message_ids: list[str] = Field(default_factory=list)
     rendered: str = ""
     token_estimate: int = 0
-    summary: str | None = Field(default=None, description="rolling summary of older messages")
+
+
+class ProfileBlockView(BaseModel):
+    """A pinned profile block as the context carries it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    block: str
+    text: str
+    version: int
+
+
+class ThreadSummaryView(BaseModel):
+    """The thread's durable summary: every message up to ``covers_to_sequence``."""
+
+    model_config = ConfigDict(frozen=True)
+
+    text: str
+    covers_to_sequence: int
+    version: int
+
+
+class ProcedureView(BaseModel):
+    """A procedure learned for the task."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    title: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    success_rate: float = 0.0
+    support: int = 0
 
 
 class UnusedEvidence(BaseModel):
@@ -397,12 +431,18 @@ class ContextBundle(BaseModel):
     )
     built_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     diagnostics: dict[str, Any] = Field(default_factory=dict)
+    #: the scope revision the bundle was built at (``since_revision`` for a delta)
+    revision: int = 0
+    #: true when only what changed since ``since_revision`` is listed
+    delta: bool = False
+    profile: list[ProfileBlockView] = Field(default_factory=list)
+    thread_summary: ThreadSummaryView | None = None
+    procedures: list[ProcedureView] = Field(default_factory=list)
+    tools: ToolHints | None = None
 
     def render(self) -> str:
         """Plain-text rendering suitable for a system prompt. Applications may ignore it."""
-        parts: list[str] = []
-        if self.conversation.summary:
-            parts.append(f"## Conversation summary\n{self.conversation.summary}")
+        parts = pinned_sections(self)
         if self.conversation.rendered:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         if self.memories:
@@ -448,3 +488,48 @@ class ContextBundle(BaseModel):
         if self.evidence.status is not EvidenceStatus.COMPLETE:
             parts.append(f"## Evidence status\n{self.evidence.status}")
         return "\n\n".join(parts)
+
+
+def _profile_section(bundle: ContextBundle) -> str | None:
+    if not bundle.profile:
+        return None
+    return "## Profile\n" + "\n".join(f"### {b.block}\n{b.text}" for b in bundle.profile)
+
+
+def _procedures_section(bundle: ContextBundle) -> str | None:
+    if not bundle.procedures:
+        return None
+    lines = []
+    for p in bundle.procedures:
+        steps = " -> ".join(str(step.get("tool")) for step in p.steps)
+        lines.append(
+            f"- [procedure_id:{p.id}] {p.title}: {steps} "
+            f"(worked {p.success_rate:.0%} of {p.support} runs)"
+        )
+    return "## Procedures that worked for this task\n" + "\n".join(lines)
+
+
+def _tools_section(bundle: ContextBundle) -> str | None:
+    hints = bundle.tools
+    if hints is None or not (hints.candidates or hints.next):
+        return None
+    lines = [f"- next: {hints.next}"] if hints.next else []
+    lines += [f"- {c.name}: {c.why}" if c.why else f"- {c.name}" for c in hints.candidates]
+    lines += [f"- {arg} = {p.value!r} ({p.source})" for arg, p in hints.prefill.items()]
+    lines += [f"- missing {m.arg}: {m.question}" for m in hints.missing]
+    return "## Tools\n" + "\n".join(lines)
+
+
+def pinned_sections(bundle: ContextBundle) -> list[str]:
+    """What every prompt starts from: the profile, the thread summary, the procedures and
+    the tool hints, in that order."""
+    summary = (
+        f"## Conversation summary\n{bundle.thread_summary.text}" if bundle.thread_summary else None
+    )
+    sections = (
+        _profile_section(bundle),
+        summary,
+        _procedures_section(bundle),
+        _tools_section(bundle),
+    )
+    return [s for s in sections if s]

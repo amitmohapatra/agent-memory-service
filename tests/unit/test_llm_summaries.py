@@ -1,6 +1,6 @@
-"""``summaries``: abstractive document/section summaries at index time and an abstractive
-rolling conversation summary in the ContextBuilder, each bounded and falling back to the
-extractive text whenever the model cannot help."""
+"""``summaries``: abstractive document/section summaries at index time, bounded and falling
+back to the extractive text whenever the model cannot help. (The thread summary is the
+``summary.refresh`` job's: tests/integration/test_profile_and_summary.py.)"""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from memory_service.domain.conversation import Message
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import MessageKind, MessageRole, Representation
 from memory_service.domain.ids import content_hash, new_id
-from memory_service.modules.context.builder import abstractive_rolling_summary, rolling_summary
 from memory_service.modules.context.summaries import (
     SOURCE_CHARS,
     abstractive_summaries,
@@ -163,45 +162,10 @@ async def test_document_summaries_bounds_nodes_source_and_length() -> None:
     assert doc_id in out
 
 
-async def test_rolling_summary_is_rewritten_or_kept() -> None:
-    older = [
-        _msg("Let's review the FY26 numbers. There is a lot to cover."),
-        _msg("Sure, starting with revenue.", role=MessageRole.ASSISTANT),
-        _msg("internal reasoning", kind=MessageKind.INTERNAL),
-    ]
-    extractive = rolling_summary(older)
-    with mocked_gateway(
-        ['{"summary": "The user asked to review FY26, starting with revenue."}']
-    ) as gw:
-        out = await abstractive_rolling_summary(gw.assist(uses=["summaries"]), older, extractive)
-        user = gw.prompts()[0]["messages"][1]["content"]
-    assert out == "The user asked to review FY26, starting with revenue."
-    assert user.startswith(f"Deterministic digest:\n{extractive}\n\nEarlier conversation:\n")
-    assert "user: Let's review the FY26 numbers. There is a lot to cover." in user
-    assert "internal reasoning" not in user
-    with mocked_gateway(failing=True) as gw:
-        assert (
-            await abstractive_rolling_summary(gw.assist(uses=["summaries"]), older, extractive)
-            == extractive
-        )
-        assert gw.route.call_count >= 1
-    with mocked_gateway(['{"summary": "nope"}']) as gw:
-        assert (
-            await abstractive_rolling_summary(gw.assist(uses=["reflection"]), older, extractive)
-            == extractive
-        )
-        assert gw.route.call_count == 0
-    huge = [_msg(f"Turn {i}: " + "detail " * 200) for i in range(20)]
-    with mocked_gateway(['{"summary": "' + "y" * 901 + '"}']) as gw:
-        digest = rolling_summary(huge)
-        assert (
-            await abstractive_rolling_summary(gw.assist(uses=["summaries"]), huge, digest) == digest
-        )
-        source = gw.prompts()[0]["messages"][1]["content"].split("Earlier conversation:\n", 1)[1]
-        assert len(source) == SOURCE_CHARS and source.rstrip().endswith("detail")
-
-
-async def test_indexer_and_builder_use_the_model(container, uow_factory) -> None:  # noqa: F811
+async def test_the_indexer_uses_the_model_and_the_context_never_does(
+    container,  # noqa: F811
+    uow_factory,  # noqa: F811
+) -> None:
     register_handlers(container)
     ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
     async with uow_factory() as uow:
@@ -255,6 +219,7 @@ async def test_indexer_and_builder_use_the_model(container, uow_factory) -> None
     with mocked_gateway(['{"summary": "Eight turns of detail about the review."}']) as gw:
         builder.assist = gw.assist(uses=["summaries"])
         bundle = await builder.build(tctx, "what did I say earlier in this thread?")
-        assert gw.route.call_count == 1
-    assert bundle.conversation.summary == "Eight turns of detail about the review."
-    assert len(bundle.conversation.message_ids) < 8
+        # the durable summary is written in the background, never on the read path
+        assert gw.route.call_count == 0
+    assert bundle.thread_summary is None
+    assert 0 < len(bundle.conversation.message_ids) < 8

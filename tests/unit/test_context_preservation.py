@@ -9,10 +9,10 @@ from memory_service.domain.conversation import Message
 from memory_service.domain.documents import Chunk, ContextEdge, DocumentNode
 from memory_service.domain.enums import ContextGraphEdge, MessageKind, MessageRole, Representation
 from memory_service.domain.ids import content_hash, new_id
-from memory_service.modules.context.builder import rolling_summary
 from memory_service.modules.context.evidence import _conflicting_memories, content_terms, overlaps
 from memory_service.modules.context.expansion import edges_to_groups
 from memory_service.modules.context.summaries import build_summaries, sentences, summarize
+from memory_service.modules.conversation.summary import digest
 from memory_service.modules.retrieval.engine import Candidate
 
 pytestmark = pytest.mark.unit
@@ -150,19 +150,17 @@ def _msg(content: str, role=MessageRole.USER, kind=MessageKind.VISIBLE) -> Messa
     )
 
 
-def test_rolling_summary_digests_older_turns() -> None:
+def test_the_extractive_summary_digests_visible_turns() -> None:
     older = [
         _msg("Let's review the FY26 numbers. There is a lot to cover."),
         _msg("Sure, starting with revenue.", role=MessageRole.ASSISTANT),
         _msg("internal reasoning", kind=MessageKind.INTERNAL),
     ]
-    s = rolling_summary(older)
-    assert s.splitlines() == [
+    assert digest(older) == [
         "user: Let's review the FY26 numbers.",
         "assistant: Sure, starting with revenue.",
     ]
-    long = rolling_summary([_msg("x" * 200)] * 10, max_chars=300)
-    assert long.endswith("…") and len(long) <= 320
+    assert all(len(line) <= 170 for line in digest([_msg("x" * 200)] * 3))
 
 
 def test_abstention_rule_and_required_groups() -> None:

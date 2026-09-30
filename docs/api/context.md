@@ -36,7 +36,7 @@ handing you a bundle you might answer from anyway.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/context` | build a `ContextBundle` for this turn | `ctx.context(query, token_budget=…, require_evidence=…)` |
+| `POST /v1/context` | build a `ContextBundle` for this turn | `ctx.context(query, token_budget=…, tools=…, since_revision=…, require_evidence=…)` |
 | `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=["chunk", "memory", "summary"])` |
 | `POST /v1/verify` | verify an answer claim by claim against evidence | `ctx.verify(answer, bundle=…)` |
 | `POST /v1/threads` | create (or idempotently fetch) a thread | `ctx.chat.create(title=…)` |
@@ -45,19 +45,27 @@ handing you a bundle you might answer from anyway.
 | `POST /v1/messages` | append a message | `ctx.chat.user(...)`, `.assistant(...)`, `.internal(...)` |
 | `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
 | `GET /v1/messages/{id}` | one message | `ctx.chat.message(id)` |
-| `POST/PUT/GET/DELETE /v1/briefs…` | standing questions and knowledge pages | `ctx.briefs.*` |
+| `GET /v1/threads/{id}/summary` | the thread's durable summary | `ctx.summary()` |
+| `POST/PUT/GET/DELETE /v1/briefs…` | standing questions and knowledge pages | `ctx.advanced.briefs.*` |
 
 ## The bundle
 
 ```python
-bundle = await ctx.context("how did revenue develop?", token_budget=4000)
+bundle = await ctx.context(
+    "how did revenue develop?", token_budget=4000, tools={"available": tool_names, "k": 8}
+)
 
 bundle.rendered  # prompt-ready text, with citation markers
-bundle.conversation  # ConversationWindow: thread_id, message_ids, rendered, summary
+bundle.profile  # pinned blocks of the user, agent and workspace   (profile.md)
+bundle.thread_summary  # the thread's durable summary: text, covers_to_sequence, version
+bundle.conversation  # ConversationWindow: the messages after the summary that fit
+bundle.procedures  # procedures learned for this task: id, title, steps, success_rate
+bundle.tools  # tool hints (only when asked): candidates, plan, next, prefill, missing
 bundle.memories  # durable facts and preferences      (ContextItem)
 bundle.knowledge  # document passages, with document, page and evidence
 bundle.graph_facts  # entity relations
-bundle.summaries  # rolling summaries
+bundle.summaries  # document and section summaries
+bundle.revision, bundle.delta  # the scope revision; pass it back as since_revision
 bundle.evidence.status  # COMPLETE | INCOMPLETE | INSUFFICIENT
 bundle.evidence.missing_groups
 bundle.token_estimate, bundle.token_budget, bundle.cache_hit
@@ -65,18 +73,28 @@ bundle.insufficient  # the status, as a boolean
 bundle.evidence_items()  # the packed evidence as /v1/verify items, in citation order
 ```
 
+The pinned sections — profile, thread summary, procedures, tool hints, in that order — open
+`rendered` and may take at most half of `token_budget` (in that priority); ranked evidence fills
+the rest. They are one indexed read each and run concurrently with retrieval; none of them calls
+a model. Memories an agent's own pulls kept using for requests of the same pattern are
+pre-included ([agent-tools.md](agent-tools.md)). `revision` is the scope's revision: a request
+with `since_revision` lists only the items new or changed since then (`delta: true`); the
+pinned sections always come whole, and when the record of that revision has expired (an hour)
+the whole bundle comes back with `delta: false`. The cache key includes the `tools` request.
+
 `rendered` presents memory as evidence to weigh with ids to cite — not as instructions to follow.
 That framing is deliberate: a retrieved passage is data, and an agent that treats it as a command
 is one prompt-injection away from a problem.
 
-## Reads never call a model unless you say so
+## Reads call a model only when the policy or the request says so
 
-Every read takes `use_llm` and it defaults to **False**, independently of whatever ingestion is
-configured to do. `use_llm=True` permits the configured read helpers (query expansion, a
-grounding judge in the borderline band, brief synthesis) and needs a model key the caller is
-entitled to ([tenancy.md](tenancy.md)); the response header `X-Trellis-LLM-Tokens` says what the
-request spent. With no key and no permission, the deterministic path answers — which is the
-normal case.
+Every read takes `use_llm`. Omitted, the resolved model policy's `read_assist` decides;
+`true`/`false` override it for one request. Either way only the read helpers the operator and
+the policy allow run (query expansion, question decomposition, a grounding judge in the
+borderline band) and only when a model key can pay ([tenancy.md](tenancy.md)); the response
+header `X-Trellis-LLM-Tokens` says what the request spent. The pinned sections never call a
+model: summaries, profiles and procedure titles are written in the background. With no key,
+the deterministic path answers.
 
 ## Verifying an answer
 
