@@ -423,8 +423,8 @@ class MemoryRepository(Protocol):
         include_derived: bool = True,
         include_verbatim: bool = False,
     ) -> list[CanonicalMemory]:
-        """CURRENT memories about ``subject`` in one scope, newest first (landing reflection,
-        beliefs and entity summaries); bounded by ``limit``."""
+        """CURRENT memories about ``subject`` in one scope, newest first (reflection and
+        connections); bounded by ``limit``."""
         ...
 
     async def bump_access(self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime) -> int:

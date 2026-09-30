@@ -102,9 +102,6 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     )
 
     container = await build_container(settings, __version__, overrides=stand_ins)
-    assert (container.services["observation_pipeline"].landing is not None) == (
-        container.tuning.memory_intelligence.consolidation_enabled
-    )
     try:
         async with container.database.engine.begin() as conn:
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))

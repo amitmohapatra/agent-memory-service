@@ -40,7 +40,7 @@ from benchmark.locomo import (
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
-from memory_service.config.constants import MEMORY_INTELLIGENCE, DenseModel
+from memory_service.config.constants import DenseModel
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.evidence import EvidenceRef
@@ -191,7 +191,6 @@ def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, An
     llm = settings.models.llm
     return {
         "llm": {"enabled": str(llm.enabled), "model": llm.model, "uses": sorted(llm.uses)},
-        "consolidation": args.consolidation,
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
     }
@@ -207,9 +206,6 @@ async def run(args) -> None:
         search=None,
         retrieval=bench_retrieval(base_overrides).model_copy(
             update={"semantic_graph": args.semantic_graph}
-        ),
-        memory_intelligence=MEMORY_INTELLIGENCE.model_copy(
-            update={"consolidation_enabled": args.consolidation}
         ),
     )
     if args.spec is not None:
@@ -248,7 +244,6 @@ async def run(args) -> None:
         "retrieval": container.tuning.retrieval.model_dump(mode="json"),
         "context": container.tuning.context.model_dump(mode="json"),
         "dense_arm": BENCH.dense,
-        "consolidation": args.consolidation,
         "semantic_graph": args.semantic_graph,
         "reuse_corpus": args.reuse_corpus,
         "paid_llm_calls": 0,
@@ -408,7 +403,6 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--conversations", type=int)
-    parser.add_argument("--consolidation", action="store_true")
     parser.add_argument("--semantic-graph", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--reuse-corpus",

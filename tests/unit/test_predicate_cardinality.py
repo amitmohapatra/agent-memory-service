@@ -92,29 +92,3 @@ def test_aggregate_statement_collapses_duplicates_and_keeps_order() -> None:
         "[observed 2023-05-02] the Tate",
         "[observed 2023-01-09] Kew",
     ]
-
-
-async def test_the_belief_and_the_renderer_build_the_same_block() -> None:
-    """The write path's belief content and the read path's gathered line are one function.
-
-    If these ever drift, a reader sees two layouts for the same fact depending on whether
-    consolidation happened to have run.
-    """
-    from datetime import UTC, datetime
-
-    from memory_service.modules.memory.derived import BeliefService
-    from tests.unit.test_llm_memory import _sources
-
-    facts = await _sources("Alice ran the charity race.", "Alice joined the hackathon.")
-    for fact, day in zip(
-        facts, (datetime(2023, 5, 2, tzinfo=UTC), datetime(2023, 6, 11, tzinfo=UTC)), strict=True
-    ):
-        fact.temporal = fact.temporal.model_copy(update={"observed_at": day})
-    derived = BeliefService.derive_content("user:alice", "participated_in", facts)
-    rendered = aggregate_statement(
-        "user:alice",
-        "participated_in",
-        [(f.temporal.observed_at.date().isoformat(), f.content) for f in facts],
-    )
-    assert derived == rendered
-    assert "participated in (source statements):" in derived

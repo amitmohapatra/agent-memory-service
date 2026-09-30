@@ -616,8 +616,8 @@ class NativeMemoryIntelligence:
         platitude was kept and the fact was lost: "Unconditional love is so important" was
         stored while "camping at the beach", in the same turn, was not.
 
-        Deliberately an OBSERVATION. That type is in DERIVED_MEMORY_TYPES, which landing.py
-        excludes from supersession and reflection, so a verbatim turn can never be mistaken
+        Deliberately an OBSERVATION. That type is in DERIVED_MEMORY_TYPES, which is
+        excluded from supersession and reflection, so a verbatim turn can never be mistaken
         for an asserted fact or merged with one. Any other memory type here would quietly
         feed raw chatter into the consolidation machinery.
         """

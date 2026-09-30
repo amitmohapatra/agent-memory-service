@@ -1,29 +1,40 @@
-"""Source lifecycle, audience isolation and replay on real PostgreSQL."""
+"""Derived memories on real PostgreSQL: source lifecycle, audience isolation, expansion,
+and the reflection that writes them."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
 
-from memory_service.config.constants import MemoryIntelligenceSettings
-from memory_service.domain.enums import MemoryType, ObservationKind, TemporalStatus, Visibility
+from memory_service.domain.enums import MemoryType, TemporalStatus, Visibility
 from memory_service.domain.errors import ValidationFailed
-from memory_service.domain.observation import ProcessingHints
-from memory_service.modules.memory.derived import EntitySummaryService
-from memory_service.modules.memory.landing import LandingReflection
+from memory_service.modules.memory.derived import _derived
 from memory_service.modules.memory.reflection import ReflectionService
-from tests.integration.test_memory import U1, U2, _memories, _observe
+from tests.integration.test_memory import U1, _memories, _observe
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
 
 
-def enable(container):
-    container.services["observation_pipeline"].landing = LandingReflection(
-        MemoryIntelligenceSettings(consolidation_enabled=True)
+async def derive(uow, base, subject: str):
+    """A derived memory over ``base``, written the way reflection writes one."""
+    memory, keys = _derived(
+        U1,
+        memory_type=MemoryType.SEMANTIC,
+        scope=base[0].scope,
+        sources=base,
+        content=f"What the sources say about {subject}.",
+        subject=subject,
+        predicate="insight:" + subject,
+        confidence=0.6,
+        importance=0.6,
+        now=datetime.now(UTC),
+        category="reflection",
+        extra={"source_memory_ids": sorted(m.memory_id for m in base)},
     )
+    memory.system_metadata["visibility_keys"] = keys
+    await uow.memories.add(memory, visibility_keys=keys)
+    return memory
 
 
 async def sources(container, uow_factory):
@@ -36,84 +47,15 @@ async def sources(container, uow_factory):
     ]
 
 
-async def test_landing_replay_reinforcement_and_source_forget(container, uow_factory):
-    enable(container)
-    base = await sources(container, uow_factory)
-    before = await _memories(uow_factory, U1, container)
-    derived = [m for m in before if m.system_metadata.get("source_revisions")]
-    assert {m.memory_type for m in derived} == {MemoryType.BELIEF, MemoryType.ENTITY_SUMMARY}
-    assert all(
-        set(m.system_metadata["source_revisions"]) == {s.memory_id for s in base} for m in derived
-    )
-    landing = container.services["observation_pipeline"].landing
-    async with uow_factory() as uow:
-        assert await landing.on_landed(uow, U1, base[0], now=datetime.now(UTC)) == set()
-        await uow.commit()
-    await _observe(container, uow_factory, U1, base[0].content)
-    current = await _memories(uow_factory, U1, container)
-    assert len(current) == len(before)
-    refreshed = [m for m in current if m.system_metadata.get("source_revisions")]
-    assert {m.memory_id for m in refreshed}.isdisjoint(m.memory_id for m in derived)
-    assert next(m for m in current if m.memory_id == base[0].memory_id).reinforcement_count == 2
-    engine = container.services["retrieval"]
-    assert (await engine.retrieve(U2, "concise answers", kinds=("memory",))).candidates == []
-    async with uow_factory() as uow:
-        await container.services["memory"].forget(uow, U1, base[0].memory_id)
-        await uow.commit()
-    # Deliberately leave stale vector entries in place: canonical validation must hide them.
-    result = await engine.retrieve(U1, "concise bullet answers", kinds=("memory",))
-    assert {m.memory_id for m in refreshed}.isdisjoint(c.record_id for c in result.candidates)
-    async with uow_factory() as uow:
-        assert await uow.memories.get_many("acme", [m.memory_id for m in refreshed]) == []
-    async with container.database.engine.connect() as conn:
-        rows = (
-            (
-                await conn.execute(
-                    text("SELECT payload FROM job_outbox WHERE task_name = 'memory.index'")
-                )
-            )
-            .scalars()
-            .all()
-        )
-    assert any({m.memory_id for m in refreshed} <= set(r["memory_ids"]) for r in rows)
-
-
-async def test_landing_does_not_mix_private_and_shared_sources(container, uow_factory):
-    enable(container)
-    await _observe(
-        container,
-        uow_factory,
-        U1,
-        "I prefer tea over coffee.",
-        hints=ProcessingHints(visibility=Visibility.USER),
-    )
-    await _observe(
-        container,
-        uow_factory,
-        U1,
-        "I prefer private medical reminders.",
-        hints=ProcessingHints(visibility=Visibility.PRIVATE),
-    )
-    memories = await _memories(uow_factory, U1, container)
-    assert not any(m.system_metadata.get("source_revisions") for m in memories)
-    with mocked_gateway([]) as gw:
-        reflection = ReflectionService(uow_factory, assist=gw.assist(uses=["reflection"]))
-        assert await reflection.reflect("acme", "user:u1", memories) == []
-        assert gw.route.call_count == 0
-
-
 async def test_changed_source_rejected_and_derived_invalidated_recursively(container, uow_factory):
     base = await sources(container, uow_factory)
-    service = EntitySummaryService()
     now = datetime.now(UTC)
     async with uow_factory() as uow:
-        child, _ = await service.rebuild(
-            uow, U1, scope=base[0].scope, subject="profile", facts=base, now=now
-        )
+        child = await derive(uow, base, "profile")
+        await uow.commit()
+    async with uow_factory() as uow:
         child = await uow.memories.get("acme", child.memory_id)
-        grandchild, _ = await service.rebuild(
-            uow, U1, scope=base[0].scope, subject="overview", facts=[child], now=now
-        )
+        grandchild = await derive(uow, [child, base[1]], "overview")
         await uow.commit()
     async with uow_factory() as uow:
         await uow.memories.set_status("acme", base[0].memory_id, TemporalStatus.SUPERSEDED, now=now)
@@ -121,9 +63,7 @@ async def test_changed_source_rejected_and_derived_invalidated_recursively(conta
     async with uow_factory() as uow:
         assert await uow.memories.get_many("acme", [child.memory_id, grandchild.memory_id]) == []
         with pytest.raises(ValidationFailed):
-            await service.rebuild(
-                uow, U1, scope=base[0].scope, subject="stale snapshot", facts=base, now=now
-            )
+            await derive(uow, base, "stale snapshot")
 
 
 async def test_derived_expiry_and_rollback(container, uow_factory):
@@ -132,9 +72,7 @@ async def test_derived_expiry_and_rollback(container, uow_factory):
     async with uow_factory() as uow:
         base[0].system_metadata["expires_at"] = (now + timedelta(hours=1)).isoformat()
         await uow.memories.update(base[0])
-        child, _ = await EntitySummaryService().rebuild(
-            uow, U1, scope=base[0].scope, subject="profile", facts=base, now=now
-        )
+        child = await derive(uow, base, "profile")
         await uow.commit()
     async with uow_factory() as uow:
         await uow.memories.forget("acme", base[0].memory_id)
@@ -145,26 +83,6 @@ async def test_derived_expiry_and_rollback(container, uow_factory):
         await uow.commit()
     async with uow_factory() as uow:
         assert await uow.memories.get("acme", child.memory_id) is None
-
-
-async def test_concurrent_admission_has_one_live_summary(container, uow_factory):
-    enable(container)
-    pipeline = container.services["observation_pipeline"]
-    ids = []
-    async with uow_factory() as uow:
-        for content in ["I prefer concise answers.", "I prefer bullet points."]:
-            ack = await container.services["memory"].submit_observation(
-                uow, U1, kind=ObservationKind.MESSAGE, content=content
-            )
-            ids.append(ack.observation_id)
-        await uow.commit()
-    await asyncio.wait_for(
-        asyncio.gather(*(pipeline.run({"tenant_id": "acme", "observation_id": i}) for i in ids)),
-        timeout=10,
-    )
-    memories = await _memories(uow_factory, U1, container)
-    summaries = [m for m in memories if m.memory_type is MemoryType.ENTITY_SUMMARY]
-    assert len(summaries) == 1 and len(summaries[0].evidence) == 2
 
 
 async def test_reflection_requires_two_sources_and_rejects_unseen_citations(container, uow_factory):
@@ -186,11 +104,11 @@ async def test_reflection_requires_two_sources_and_rejects_unseen_citations(cont
         assert gw.route.call_count == 1
 
 
-async def test_retrieval_expands_summary_to_original_sources(container, uow_factory):
-    enable(container)
+async def test_retrieval_expands_a_derived_memory_to_its_sources(container, uow_factory):
     base = await sources(container, uow_factory)
-    memories = await _memories(uow_factory, U1, container)
-    summary = next(m for m in memories if m.memory_type is MemoryType.ENTITY_SUMMARY)
+    async with uow_factory() as uow:
+        summary = await derive(uow, base, "profile")
+        await uow.commit()
     engine = container.services["retrieval"]
     result = await engine.retrieve(U1, f"show {summary.memory_id}", kinds=("memory",))
     assert {m.memory_id for m in base} <= {c.record_id for c in result.candidates}

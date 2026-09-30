@@ -4,11 +4,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import MemoryType
 from memory_service.modules.context.builder import candidate_to_item
-from memory_service.modules.memory.derived import BeliefService, EntitySummaryService, _derived
-from memory_service.modules.memory.landing import LandingReflection
+from memory_service.modules.memory.derived import _derived
 from memory_service.modules.retrieval.engine import memory_candidate
 from tests.unit.test_bundle_rendering import _bundle
 from tests.unit.test_llm_memory import CTX, _sources
@@ -53,20 +51,3 @@ async def test_source_clock_survives_synthesis_and_context_projection(kind):
     rendered = _bundle([item]).render()
     assert "sources through 2023-06-09 Fri" in rendered
     assert "2026-09-27" not in rendered
-
-
-async def test_each_relative_statement_keeps_its_date_and_rendering_counts_against_budget():
-    facts = await _sources("I prefer concise answers.", "I prefer bullet points.")
-    old, recent = datetime(2023, 5, 8, tzinfo=UTC), datetime(2023, 6, 9, tzinfo=UTC)
-    for memory, stamp in zip(facts, (old, recent), strict=True):
-        memory.temporal = memory.temporal.model_copy(update={"observed_at": stamp})
-    for content in (
-        BeliefService.derive_content("user:u1", "prefers", facts),
-        EntitySummaryService.derive_content("user:u1", facts),
-    ):
-        assert f"[observed 2023-05-08] {facts[0].content}" in content
-        assert f"[observed 2023-06-09] {facts[1].content}" in content
-    cfg = MemoryIntelligenceSettings(consolidation_enabled=True, consolidation_max_chars=256)
-    bounded = LandingReflection(cfg)._bounded_sources("user:u1", facts * 50)
-    assert len(bounded) < len(facts * 50)
-    assert len(EntitySummaryService.derive_content("user:u1", bounded)) <= 256

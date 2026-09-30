@@ -9,7 +9,7 @@ settings that shape the corpus, and per conversation the observation-id -> turn-
 scoring needs. An arm that asks for ``--reuse-corpus`` gets the corpus back when the ledger
 says it is the same one and the store still holds it; anything else ingests afresh.
 
-Arms that change the write path (LLM-assisted extraction, consolidation) get their own
+Arms that change the write path (LLM-assisted extraction) get their own
 database, so their ledger never matches another arm's.
 """
 

@@ -1,11 +1,9 @@
 """How many values a predicate may hold at once.
 
-One closed vocabulary, one rule, three readers: consolidation supersedes a *single-valued*
-slot when a new value arrives (``modules.memory.native``), belief derivation only aggregates
-*multi-valued* ones (``modules.memory.landing``), and the renderer groups the multi-valued
-ones into a single dated line (``domain.context_bundle``). The rule lived twice as a private
-in the write path; the renderer is in the domain and cannot import the write path, so the
-vocabulary belongs here.
+One closed vocabulary, one rule, two readers: consolidation supersedes a *single-valued*
+slot when a new value arrives (``modules.memory.native``), and the renderer groups the
+multi-valued ones into a single dated line (``domain.context_bundle``). The renderer is in the
+domain and cannot import the write path, so the vocabulary belongs here.
 
 A slot is single-valued when a person has exactly one of it at a time: you live in one city
 and hold one job title, so a new value replaces the old. ``likes``, ``visited`` or

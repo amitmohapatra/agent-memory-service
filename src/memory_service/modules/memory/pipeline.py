@@ -9,7 +9,7 @@ job is retried from the durable observation either way).
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
@@ -46,9 +46,6 @@ from memory_service.ports.intelligence import (
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 from memory_service.ports.webhooks import EventPublisher
-
-if TYPE_CHECKING:
-    from memory_service.modules.memory.landing import LandingReflection
 
 log = get_logger(__name__)
 
@@ -236,7 +233,6 @@ class ObservationPipeline:
         settings: MemoryIntelligenceSettings,
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
-        landing: LandingReflection | None = None,
         events: EventPublisher | None = None,
         assist: LLMAssist | None = None,
     ) -> None:
@@ -245,7 +241,6 @@ class ObservationPipeline:
         self.cfg = settings
         self.working = working
         self.gate = gate
-        self.landing = landing
         self.events = events
         #: binds each observation's model work to its owner (key, policy, usage)
         self.assist = assist or LLMAssist.disabled()
@@ -354,8 +349,6 @@ class ObservationPipeline:
         affected: set[str] = set()
         created: set[str] = set()
         now = datetime.now(UTC)
-        await self._serialize_sources(uow, ctx, candidates)
-        landed_ids: set[str] = set()
         for cand in candidates:
             if cand.lifetime is Lifetime.EPHEMERAL:
                 if self.working is not None:
@@ -405,36 +398,9 @@ class ObservationPipeline:
             outcomes.append(outcome)
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
-            landed_ids |= ids
             if outcome.decision is DedupDecision.CREATE:
                 created |= ids
-        if self.landing is not None:
-            affected |= await self._reland(uow, ctx, landed_ids, now=now)
         return affected, created
-
-    async def _reland(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, landed_ids: set[str], *, now: datetime
-    ) -> set[str]:
-        """Rebuild the landing representation after all writes, once per group, including
-        reinforced sources whose revision changes invalidate the previous derived one."""
-        assert self.landing is not None
-        affected: set[str] = set()
-        groups: set[tuple] = set()
-        for memory_id in sorted(landed_ids):
-            landed = await uow.memories.get(ctx.tenant_id, memory_id)
-            if landed is None or landed.temporal.status is not TemporalStatus.CURRENT:
-                continue
-            group = (
-                landed.scope.key(),
-                landed.subject,
-                landed.predicate,
-                landed.owner_principal,
-                tuple(sorted(landed.system_metadata.get("visibility_keys", []))),
-            )
-            if group not in groups:
-                affected |= await self.landing.on_landed(uow, ctx, landed, now=now)
-                groups.add(group)
-        return affected
 
     async def _announce(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, created: set[str]
@@ -443,25 +409,6 @@ class ObservationPipeline:
         assert self.events is not None
         for memory in await uow.memories.get_many(ctx.tenant_id, sorted(created)):
             await self.events.publish(uow, created_event(memory))
-
-    async def _serialize_sources(
-        self,
-        uow: UnitOfWork,
-        ctx: MemoryExecutionContext,
-        candidates: list[MemoryCandidate],
-    ) -> None:
-        if self.landing is not None:
-            # Lock before source writes in a stable order to avoid waiting for this
-            # consolidation lock while holding a source row another writer needs.
-            keys = sorted(
-                {
-                    f"derived-source:{ctx.tenant_id}:{scope_for(c, ctx).key()}:{c.subject}"
-                    for c in candidates
-                    if c.subject and c.lifetime is not Lifetime.EPHEMERAL
-                }
-            )
-            if keys:
-                await uow.serialize(*keys)
 
     @staticmethod
     def _new_memory(

@@ -844,11 +844,10 @@ def _llm_ingestion(settings: Any) -> Any:
     )
 
 
-def _ingestion_settings(settings: Any, overrides: Any) -> dict[str, Any]:
+def _ingestion_settings(settings: Any) -> dict[str, Any]:
     """Everything that shapes the corpus at ingest, for the corpus ledger's key and the
-    result's provenance: which model uses may run at ingestion, consolidation, threading."""
+    result's provenance: which model uses may run at ingestion, and threading."""
     llm = settings.models.llm
-    tuning = overrides.memory_intelligence
     return {
         "llm": {
             "enabled": str(llm.enabled),
@@ -856,7 +855,6 @@ def _ingestion_settings(settings: Any, overrides: Any) -> dict[str, Any]:
             "uses": sorted(llm.uses),
             "fast_uses": sorted(llm.fast_uses),
         },
-        "consolidation": bool(tuning and tuning.consolidation_enabled),
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
     }
@@ -909,7 +907,7 @@ async def run(
     key = CorpusKey(
         dataset_sha256=hashlib.sha256(raw).hexdigest(),
         index_fingerprint=indexer.fingerprint,
-        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, overrides)),
+        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings)),
     )
     reused_conversations = 0
     try:
@@ -1335,7 +1333,7 @@ async def run(
         },
         "spaces_fingerprint": container.dense_spaces.fingerprint(),
         "dense_arm": BENCH.dense,
-        "ingestion": _ingestion_settings(settings, overrides),
+        "ingestion": _ingestion_settings(settings),
         "reuse_corpus": reuse_corpus,
         "reused_conversations": reused_conversations,
         "reask": reask,

@@ -158,11 +158,10 @@ def _subject_key(memory: CanonicalMemory) -> str:
 
 
 def _connectable(memory: CanonicalMemory) -> bool:
-    """Asserted facts only, and the same exclusions the write path applies (``landing._eligible``).
+    """Asserted facts only, and the same exclusions reflection applies.
 
-    A derived memory is already a consolidation of others - a belief aggregates one
-    (subject, predicate) and an entity summary aggregates a subject, both through
-    ``BeliefService``, which is where same-subject aggregation belongs. A verbatim turn is the
+    A derived memory is already a view over others (a reflection insight cites its
+    sources). A verbatim turn is the
     raw message kept for retrieval, not a fact anybody asserted. A model rewrite has source
     association but no verified entailment. Connecting any of those would be connecting a
     derived view to its own inputs.

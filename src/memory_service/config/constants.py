@@ -456,7 +456,7 @@ class MemoryIntelligenceSettings(BaseModel):
     #: raises it to 0.685.
     #:
     #: The verbatim copy is an OBSERVATION, which is in DERIVED_MEMORY_TYPES, so it is
-    #: excluded from supersession and reflection (landing.py:63, :77) and cannot disturb the
+    #: excluded from supersession and reflection and cannot disturb the
     #: fact machinery or the false-merge gate. It augments the rule output; it never
     #: replaces it. Applies to user-authored messages, including messages inside threads:
     #: archival storage alone does not make older turns searchable. Agent working chatter
@@ -464,12 +464,6 @@ class MemoryIntelligenceSettings(BaseModel):
     keep_verbatim_turns: bool = True
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)
-    # landing reflection and derived memories
-    consolidation_enabled: bool = False
-    consolidation_max_chars: int = Field(default=1800, ge=256, le=2000)
-    consolidation_max_sources: int = Field(default=64, ge=2, le=128)
-    belief_min_support: int = Field(default=2, ge=2)
-    entity_summary_min_facts: int = Field(default=2, ge=1)
     # forgetting: importance x recency x access decay
     forgetting_half_life_days: float = Field(default=30.0, gt=0.0)
     forgetting_archive_threshold: float = Field(default=0.05, ge=0.0, le=1.0)

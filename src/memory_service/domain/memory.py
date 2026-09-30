@@ -192,10 +192,8 @@ def dated_statement(day: str, text: str) -> str:
 def aggregate_statement(subject: str, predicate: str, dated: Sequence[tuple[str, str]]) -> str:
     """The several current values of one multi-valued slot, as one block.
 
-    The shape a belief carries (``modules.memory.derived.BeliefService.derive_content``) and
-    the shape the renderer groups a bundle into (``domain.context_bundle``) are the same
-    text, built here once: a reader must not have to learn two layouts for the same fact,
-    and a write-path belief and a read-side grouping of the same memories must not disagree.
+    The shape the renderer groups a bundle into (``domain.context_bundle``): one heading,
+    every value dated under it.
 
     ``dated`` is ``(day, text)`` oldest first; duplicates collapse, order is preserved.
     """

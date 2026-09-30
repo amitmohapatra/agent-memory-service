@@ -485,7 +485,6 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.feedback.service import FeedbackService
     from memory_service.modules.memory.connections import ConnectionService
     from memory_service.modules.memory.forgetting import ForgettingService
-    from memory_service.modules.memory.landing import LandingReflection
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
@@ -517,7 +516,6 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
-        landing=LandingReflection(cfg) if cfg.consolidation_enabled else None,
         events=container.services.get("webhooks"),
         assist=container.services["llm_assist"],
     )

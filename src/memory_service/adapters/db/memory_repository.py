@@ -39,7 +39,7 @@ from memory_service.domain.memory import (
 
 
 def _asserted_source_filter() -> ColumnElement[bool]:
-    """The same source-trust boundary for incremental and on-landing consolidation."""
+    """The source-trust boundary reflection and connections read through."""
     return and_(
         MemoryRow.derived_slot.is_(None),
         func.coalesce(MemoryRow.system_metadata["category"].astext, "").not_in(

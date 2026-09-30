@@ -6,7 +6,7 @@ import pytest
 
 from memory_service.domain.ids import new_id
 from memory_service.modules.memory.reflection import ReflectionService
-from tests.integration.test_consolidation import sources
+from tests.integration.test_derived_memories import sources
 from tests.integration.test_memory import U1, _memories, _observe
 from tests.support_llm import mocked_gateway
 
