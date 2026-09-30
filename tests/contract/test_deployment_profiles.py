@@ -97,7 +97,6 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
         stand_ins,
         authorization="memory",
         embedding="hash",
-        reranker="lexical",
         nli="lexical",
         document_parser="builtin",
     )

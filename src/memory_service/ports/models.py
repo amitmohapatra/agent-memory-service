@@ -1,4 +1,4 @@
-"""Model provider ports: embeddings, reranking, sparse encoding, NLI, generative LLM.
+"""Model provider ports: embeddings, sparse encoding, NLI, generative LLM.
 
 All providers carry a :class:`ProviderInfo` (name, version, license, origin, locality,
 data residency) so the provider policy can allow/deny them by configuration.
@@ -62,26 +62,6 @@ class SparseEncoder(Protocol):
     def encode_documents(self, texts: Sequence[str]) -> list[SparseVector]: ...
 
     def encode_query(self, text: str) -> SparseVector: ...
-
-    def fingerprint(self) -> str: ...
-
-
-class RerankResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    index: int
-    score: float
-
-
-@runtime_checkable
-class Reranker(Protocol):
-    info: ProviderInfo
-
-    async def rerank(
-        self, query: str, documents: Sequence[str], *, top_k: int
-    ) -> list[RerankResult]:
-        """Return the ``top_k`` best documents, best first. Bounded: len(documents) <= K."""
-        ...
 
     def fingerprint(self) -> str: ...
 

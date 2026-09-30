@@ -21,7 +21,7 @@ from memory_service.domain.memory import aggregate_statement, unverified_represe
 from memory_service.domain.predicates import is_multi_valued
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
-ScoreKind = Literal["cross_encoder", "fusion", "exact"]
+ScoreKind = Literal["fusion", "exact"]
 
 
 class ContextItem(BaseModel):
@@ -38,13 +38,12 @@ class ContextItem(BaseModel):
     #: Comparable across every item in the bundle, 0..1, higher is better. This is the field
     #: to threshold and to show a user.
     relevance: float = Field(default=0.0, ge=0.0, le=1.0)
-    #: Where ``score`` came from: a cross-encoder probability, a fusion rank score, or an
-    #: exact identifier hit.
+    #: Where ``score`` came from: a fusion rank score or an exact identifier hit.
     score_kind: ScoreKind = Field(
         default="fusion",
         description=(
-            "fusion is rank aggregation; cross_encoder is neural reranking; "
-            "exact is an identifier match. Use relevance to compare across kinds."
+            "fusion is rank aggregation; exact is an identifier match."
+            " Use relevance to compare across kinds."
         ),
     )
     retrievers: list[str] = Field(default_factory=list)
@@ -74,7 +73,7 @@ class ConversationWindow(BaseModel):
 
 
 class UnusedEvidence(BaseModel):
-    """Retrieved but not packed (reranked out or over budget): the grounding cascade scans
+    """Retrieved but not packed (ranked out or over budget): the grounding cascade scans
     these for contradictions with the answer."""
 
     model_config = ConfigDict(frozen=True)

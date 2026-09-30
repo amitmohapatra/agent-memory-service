@@ -185,8 +185,6 @@ class EmbeddingSettings(BaseModel):
 
 LLMUse = Literal[
     "contextual_extraction",
-    "ambiguous_extraction",
-    "ambiguous_worthiness",
     "relation_extraction",
     "entity_resolution",
     "conflict_adjudication",
@@ -264,7 +262,6 @@ class LLMSettings(BaseModel):
     )
     fast_uses: list[LLMUse] = Field(
         default_factory=lambda: [
-            "ambiguous_worthiness",
             "contextual_extraction",
             "query_expansion",
             "chunk_context",

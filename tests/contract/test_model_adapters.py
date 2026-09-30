@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from memory_service.config.constants import CrossEncoderModel, DenseModel
+from memory_service.config.constants import DenseModel
 from memory_service.domain.errors import DependencyUnavailable
 
 pytestmark = pytest.mark.contract
@@ -159,7 +159,7 @@ def test_the_fingerprint_names_the_onnx_graph_when_one_is_frozen() -> None:
 
 
 async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
-    from memory_service.adapters.models.rerankers import CrossEncoderReranker
+    from benchmark.cross_encoder import CrossEncoderModel, CrossEncoderReranker
 
     rr = CrossEncoderReranker(
         CrossEncoderModel(id="tiny/tiny-ce", model_path=str(tiny_cross_encoder))

@@ -27,7 +27,7 @@ contract. Nothing in the guide claims a number that is not in one of those files
 | 1 | [Why a memory service](guide/01-why-a-memory-service.md) | the problem, and why a vector database is not the answer |
 | 2 | Concepts *(not written yet)* | memories, observations, scopes, principals — the vocabulary |
 | 3 | Time *(not written yet)* | how a fact stops being true without being deleted |
-| 4 | Retrieval *(not written yet)* | four retrievers, one ranking, and why reranking is off |
+| 4 | Retrieval *(not written yet)* | four retrievers, one ranking, and why there is no reranker |
 | 5 | The knowledge graph *(not written yet)* | the questions vector search cannot answer |
 | 6 | Trust *(not written yet)* | grounding, contradiction, and memory poisoning |
 | 7 | Authorization *(not written yet)* | seven visibility levels, and who an agent really is |

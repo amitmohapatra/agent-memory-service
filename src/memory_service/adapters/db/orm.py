@@ -107,7 +107,6 @@ class SessionRow(Base):
     user_id: Mapped[str | None] = mapped_column(String(200))
     client: Mapped[str | None] = mapped_column(String(50))
     started_at: Mapped[datetime] = mapped_column(server_default=_now())
-    ended_at: Mapped[datetime | None]
     custom_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
@@ -124,7 +123,6 @@ class TurnRow(Base):
     tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[datetime] = mapped_column(server_default=_now())
-    completed_at: Mapped[datetime | None]
     custom_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
@@ -182,19 +180,6 @@ class MessageRow(Base):
     )
 
 
-class MessageVersionRow(Base):
-    __tablename__ = "message_versions"
-
-    message_version_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    message_id: Mapped[str] = mapped_column(ForeignKey("messages.message_id", ondelete="CASCADE"))
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[str | None] = mapped_column(Text)
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=_now())
-
-    __table_args__ = (UniqueConstraint("message_id", "version", name="uq_message_versions"),)
-
-
 class MessageAttachmentRow(Base):
     __tablename__ = "message_attachments"
 
@@ -234,13 +219,6 @@ class AgentRunRow(Base):
         Index("ix_agent_runs_turn", "tenant_id", "turn_id"),
         Index("ix_agent_runs_parent", "parent_agent_run_id"),
     )
-
-
-class TurnRunLinkRow(Base):
-    __tablename__ = "turn_run_links"
-
-    turn_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    agent_run_id: Mapped[str] = mapped_column(String(200), primary_key=True)
 
 
 # --------------------------------------------------------------------------
@@ -735,6 +713,7 @@ class GraphEntityRow(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "scope_key", "canonical_name", name="uq_graph_entity"),
         Index("ix_graph_entities_tenant_name", "tenant_id", "canonical_name"),
+
         Index("ix_graph_entities_keys", "visibility_keys", postgresql_using="gin"),
     )
 

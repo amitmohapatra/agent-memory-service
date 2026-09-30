@@ -44,9 +44,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from benchmark.common import dedicated_database, provenance
 from benchmark.corpus import conversation_tenant
+from benchmark.cross_encoder import CrossEncoderModel, CrossEncoderReranker
 from benchmark.retrieval import _settings
-from memory_service.adapters.models.rerankers import CrossEncoderReranker
-from memory_service.config.constants import CrossEncoderModel
 
 #: the depths the source harness scores, so a delta here lands in the same table as the arms
 DEPTHS = (10, 20, 50)

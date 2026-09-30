@@ -17,14 +17,12 @@ from memory_service.adapters.db.orm import (
     IdempotencyRow,
     MessageAttachmentRow,
     MessageRow,
-    MessageVersionRow,
     ObservationRow,
     OutboxRow,
     RevisionRow,
     SessionRow,
     ThreadRow,
     TurnRow,
-    TurnRunLinkRow,
 )
 from memory_service.domain.conversation import (
     AgentRun,
@@ -35,7 +33,6 @@ from memory_service.domain.conversation import (
     Turn,
 )
 from memory_service.domain.enums import ArchiveStatus, MessageKind, MessageRole, ObservationKind
-from memory_service.domain.ids import new_id
 from memory_service.domain.observation import Observation, ProcessingHints
 from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.repositories import ArchiveSegment, IdempotencyRecord, OutboxEntry
@@ -164,7 +161,6 @@ class SqlSessionRepository:
                 user_id=session.user_id,
                 client=session.client,
                 started_at=session.started_at,
-                ended_at=session.ended_at,
                 custom_metadata=session.custom_metadata,
             )
         )
@@ -181,15 +177,7 @@ class SqlSessionRepository:
             user_id=r.user_id,
             client=r.client,
             started_at=r.started_at,
-            ended_at=r.ended_at,
             custom_metadata=r.custom_metadata or {},
-        )
-
-    async def end(self, tenant_id: str, session_id: str) -> None:
-        await self.s.execute(
-            update(SessionRow)
-            .where(SessionRow.session_id == session_id, SessionRow.tenant_id == tenant_id)
-            .values(ended_at=func.now())
         )
 
 
@@ -206,7 +194,6 @@ class SqlTurnRepository:
                 tenant_id=turn.tenant_id,
                 sequence=turn.sequence,
                 started_at=turn.started_at,
-                completed_at=turn.completed_at,
                 custom_metadata=turn.custom_metadata,
             )
         )
@@ -223,26 +210,11 @@ class SqlTurnRepository:
             tenant_id=r.tenant_id,
             sequence=r.sequence,
             started_at=r.started_at,
-            completed_at=r.completed_at,
             custom_metadata=r.custom_metadata or {},
         )
 
     async def next_sequence(self, tenant_id: str, thread_id: str) -> int:
         return await _next_sequence(self.s, TurnRow, tenant_id, thread_id)
-
-    async def complete(self, tenant_id: str, turn_id: str) -> None:
-        await self.s.execute(
-            update(TurnRow)
-            .where(TurnRow.turn_id == turn_id, TurnRow.tenant_id == tenant_id)
-            .values(completed_at=func.now())
-        )
-
-    async def link_run(self, turn_id: str, agent_run_id: str) -> None:
-        await self.s.execute(
-            pg_insert(TurnRunLinkRow)
-            .values(turn_id=turn_id, agent_run_id=agent_run_id)
-            .on_conflict_do_nothing()
-        )
 
 
 def _row_to_message(r: MessageRow, attachments: Sequence[MessageAttachmentRow] = ()) -> Message:
@@ -327,18 +299,6 @@ class SqlMessageRepository:
                     checksum=att.checksum,
                 )
             )
-        await self.s.flush()
-
-    async def add_version(self, message: Message) -> None:
-        self.s.add(
-            MessageVersionRow(
-                message_version_id=new_id("message_version"),
-                message_id=message.message_id,
-                version=message.version,
-                content=message.content,
-                content_hash=message.content_hash,
-            )
-        )
         await self.s.flush()
 
     async def get(self, tenant_id: str, message_id: str) -> Message | None:

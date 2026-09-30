@@ -36,8 +36,7 @@ dependencies = [
   "httpx>=0.28",
   # The gateway client, shared with the agent harness so its retry and rate-limit
   # handling has one implementation rather than two that drift.
-  "bifrost-sdk>=0.1",
-  "hindsight-client==0.10.1",
+  "bifrost-sdk>=0.2",
   "python-multipart>=0.0.20",
   "prometheus-client>=0.26",
   "opentelemetry-api>=1.44",
@@ -45,7 +44,6 @@ dependencies = [
   "opentelemetry-instrumentation-fastapi>=0.65b0",
   "opentelemetry-exporter-otlp-proto-http>=1.44",
   "python-ulid>=3",
-  "rapidfuzz>=3",
   "opentelemetry-instrumentation-sqlalchemy>=0.65b0",
   "pyjwt[crypto]>=2.10",
   "dateparser>=1.2",
@@ -55,16 +53,18 @@ dependencies = [
 # Google Cloud production adapters
 gcp = ["google-cloud-storage>=3.14", "google-auth>=2"]
 # Document parsing + document KG extraction
-docling = ["docling>=2.127", "docling-graph>=1.9"]
+docling = ["docling>=2.127"]
 # Local CPU embedding / reranking runtimes
-models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "fastembed>=0.8", "onnx>=1.17", "onnxruntime>=1.30", "optimum>=2.3"]
+models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "onnx>=1.17", "onnxruntime>=1.30"]
 # Evaluation frameworks
-eval = ["deepeval>=4.2", "ragas>=0.4", "datasets>=3", "nltk>=3.9"]
+eval = ["datasets>=3", "nltk>=3.9"]
 # Load testing
 load = ["locust>=2.46"]
+# Hindsight extraction preview (contextual_extraction with an operator key); imported lazily
+hindsight = ["hindsight-client==0.10.1"]
 # Everything except dev tooling
 all = [
-  "trellis-memory-service[gcp,docling,models,eval,load]",
+  "trellis-memory-service[gcp,docling,models,eval,load,hindsight]",
 ]
 
 [dependency-groups]

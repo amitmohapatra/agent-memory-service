@@ -21,7 +21,7 @@ and worker processes sharing PostgreSQL.
                                                                 v
                                                             adapters
                        PostgreSQL · Qdrant · Dragonfly · OpenFGA · Procrastinate · GCS/filesystem ·
-                       Docling · ONNX/sentence-transformers/fastembed · native memory/graph intelligence
+                       Docling · ONNX/sentence-transformers · native memory/graph intelligence
                        Bifrost (the only LLM path: one HTTP adapter, no provider SDK anywhere)
 ```
 
@@ -38,19 +38,19 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 | Layer | Contains | Depends on |
 |---|---|---|
 | `domain` | `MemoryExecutionContext`, `CanonicalMemory`, `Scope`, `Visibility`, `TemporalState`, `EvidenceRef`, conversation and document models, `ContextBundle`, errors | nothing |
-| `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `Reranker`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
+| `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
 | `application` | composition root (`Container`), use-case orchestration | domain, ports |
-| `modules/*` | feature slices: conversation, working_memory, ingestion, classification, extraction, dedup, consolidation, temporal, metadata, rag, document_context, graph, retrieval, context, summarization, reflection, lifecycle, archive, evaluation, imports | domain, ports |
+| `modules/*` | feature slices: archive, audit, auth, authz, briefs, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, rag, retrieval, tenancy, tools, webhooks, working_memory (the hot thread cache) | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
 | `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application |
 
 ## Data placement
 
 ```
-HOT      Dragonfly      recent thread, working memory, caches (never source of truth)
+HOT      Dragonfly      recent thread, ephemeral memories, caches (never source of truth)
 WARM     PostgreSQL     threads/sessions/turns/messages, observations, canonical memories,
                         evidence refs, documents/nodes/chunks metadata, jobs, revisions,
-                        archive manifests, eval metadata
+                        archive manifests, graph, tools, feedback, model keys and policies
 SEARCH   Qdrant         BM25 sparse + dense — rebuildable
 ARCHIVE  GCS            raw chat segments (JSONL+zstd), raw files, imports, old versions
 ```
@@ -77,7 +77,7 @@ and canonical/search drift.
 ```
 query -> rule-based route -> overlap encoder with authorized scope + graph prefetch
       -> exact lookup or dense/BM25 search -> native RRF + stable ties -> dedup -> bounded cut
-      -> optional rerank -> graph facts/evidence -> document companion expansion
+      -> graph facts/evidence -> document companion expansion
       -> request-local evidence verification / bounded companion escalation
       -> ContextBuilder packs provenance and evidence groups under the token budget
 ```
@@ -106,7 +106,7 @@ Provider SDK imports are banned under `src/` by Ruff and `tests/unit/test_archit
 
 Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMAssist` is
 the single entry point modules use: a use is consulted only when its flag is in
-`models.llm.uses` (ambiguous_extraction, ambiguous_worthiness, relation_extraction,
+`models.llm.uses` (contextual_extraction, relation_extraction,
 entity_resolution, conflict_adjudication, summaries, reflection, memory_connections,
 query_expansion, query_decomposition, chunk_context) and any failure returns `None`, so the
 module continues with its native result. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong

@@ -57,14 +57,13 @@ def stand_ins(*, weights: bool) -> Overrides:
     """The stores this launcher never talks to, plus the model stand-ins when the weights
     are absent. The in-memory authorization model replaces OpenFGA, local-mode Qdrant the
     server, inline jobs the worker, the builtin parser docling; with no weights the hash
-    encoder (labelled non-representative), the lexical reranker and the lexical NLI."""
+    encoder (labelled non-representative) and the lexical NLI."""
     return Overrides(
         search="memory",
         tasks="inline",
         authorization="memory",
         document_parser="builtin",
         embedding=None if weights else "hash",
-        reranker=None if weights else "lexical",
         nli=None if weights else "lexical",
     )
 

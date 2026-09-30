@@ -38,14 +38,14 @@ sequenceDiagram
 
 ```python
 handle = await ctx.documents.add(
-    "reports/fy26.pdf",          # bytes, a path, or (filename, bytes, media_type)
+    "reports/fy26.pdf",  # bytes, a path, or (filename, bytes, media_type)
     title="FY26 annual report",
-    visibility="WORKSPACE",      # default: the thread, else the user
-    quarter="FY26",              # anything extra is custom metadata
+    visibility="WORKSPACE",  # default: the thread, else the user
+    quarter="FY26",  # anything extra is custom metadata
 )
 
 info = await ctx.documents.wait_ready(handle.document_id, max_wait=60, interval=0.5)
-print(info.status, info.archive_status)   # STAGED · READY · FAILED
+print(info.status, info.archive_status)  # STAGED · READY · FAILED
 ```
 
 Then it simply appears where an agent already looks:

@@ -4,7 +4,7 @@ Dynamic IDs: clients (ChatGPT-style UI, SDK, LangGraph adapter) mint thread/sess
 and the service creates the rows on first sight, inside the same transaction as the message.
 
 Hot path (synchronous, one transaction):
-    authorize -> upsert thread/session/turn -> message row (+version, attachments)
+    authorize -> upsert thread/session/turn -> message row (+attachments)
     -> observation row -> outbox jobs (memory + archive) -> revisions -> COMMIT
 Everything expensive (extraction, embedding, graph, archive, summaries) is asynchronous.
 """
@@ -225,7 +225,6 @@ class ConversationService:
                 custom_metadata=custom_metadata or {},
             )
             await uow.messages.add(message)
-            await uow.messages.add_version(message)
 
             observation = Observation(
                 **ctx.provenance(),
@@ -390,5 +389,3 @@ class ConversationService:
                     trace_id=ctx.trace_id,
                 )
             )
-        if ctx.turn_id:
-            await uow.turns.link_run(ctx.turn_id, ctx.agent_run_id)

@@ -134,25 +134,6 @@ class NLIModel(BaseModel):
         return self.model_path or local_model_path(self.local_dir) or self.id
 
 
-class CrossEncoderModel(BaseModel):
-    """A reranker. The shipped set has none (see ``FrozenModels.reranker``); the class exists
-    for the benchmark challengers under ``benchmark/``."""
-
-    model_config = ConfigDict(frozen=True)
-
-    id: str = "cross-encoder/ms-marco-MiniLM-L6-v2"
-    local_dir: str = "ms-marco-MiniLM-L6-v2"
-    model_path: str | None = None
-    revision: str | None = None
-    backend: Literal["torch", "onnx"] = "torch"
-    batch_size: int = 16
-    max_length: int = Field(default=512, ge=32, le=2048)
-
-    @property
-    def source(self) -> str:
-        return self.model_path or local_model_path(self.local_dir) or self.id
-
-
 class FrozenModels(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -175,10 +156,6 @@ class FrozenModels(BaseModel):
     )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()
-    #: Off on measured evidence: SciFact-1000 nDCG@10 79.33 vs 84.51 without it (paired sign
-    #: test p = 0.012) at 21x the latency. ``RetrievalSettings.rerank`` is the switch; with
-    #: no model here it has nothing to load.
-    reranker: CrossEncoderModel | None = None
 
 
 FROZEN_MODELS = FrozenModels()
@@ -551,12 +528,11 @@ class RetrievalSettings(BaseModel):
 
     #: Longest query text that is retrieved on. Anything beyond this is cut.
     #:
-    #: A query is not free: it is embedded, run through the sparse encoder, and then paired
-    #: with every reranked candidate — and a cross-encoder pair is as expensive as its longest
-    #: side. Measured on the degenerate-input benchmark, a 2,000-character wall of noise cost
-    #: 20 seconds against 1 second for an ordinary question, on the same corpus. Nothing is
-    #: lost by cutting: the embedding models truncate at 512 tokens regardless, so the text
-    #: past this point never reached the model — it was only ever paid for.
+    #: A query is not free: it is embedded and run through the sparse encoder. Measured on
+    #: the degenerate-input benchmark, a 2,000-character wall of noise cost 20 seconds against
+    #: 1 second for an ordinary question, on the same corpus. Nothing is lost by cutting: the
+    #: embedding models truncate at 512 tokens regardless, so the text past this point never
+    #: reached the model — it was only ever paid for.
     max_query_chars: int = Field(
         default=2048, ge=64, description="query text beyond this is truncated before retrieval"
     )
@@ -586,23 +562,6 @@ class RetrievalSettings(BaseModel):
         default=derived_k(FINAL_K), description="per-retriever candidates before fusion"
     )
     fused_k: int = Field(default=derived_k(FINAL_K), description="candidates after fusion")
-    #: Cross-encoder reranking. **Off on measured evidence.**
-    #:
-    #: BeIR/SciFact, 1,000 documents, 70 paired queries, clean vector store, real models:
-    #:
-    #:              recall@10   nDCG@10   p50
-    #:   rerank on     97.14%    79.33%   11,151 ms
-    #:   rerank off    98.57%    84.51%      533 ms
-    #:
-    #: Paired, the reranker rescued *zero* queries the first stage missed and lost one. nDCG
-    #: better on 4 queries, worse on 16, identical on 50 — exact sign test p = 0.012, mean
-    #: delta -0.0518 with a 95% interval of [-0.0917, -0.0120] that excludes zero. It is
-    #: significantly worse here, not merely not better. At 11.2 s per query against 0.53 s,
-    #: 20 RPS needs ~161 cores with it and ~8 without. ``FROZEN_MODELS.reranker`` is None:
-    #: turning this on loads nothing until a model is frozen there, on a new measurement.
-    rerank: bool = False
-    #: candidates handed to the reranker when one is wired (benchmark 15-25)
-    rerank_k: int = 20
     #: The one depth knob: what a caller receives. ``prefetch_k`` and ``fused_k`` follow it.
     final_k: int = Field(default=FINAL_K, ge=1)
     # Wider recall for memory-only ranked pools. Full LoCoMo source recall improved from
@@ -615,9 +574,8 @@ class RetrievalSettings(BaseModel):
     memory_entity_search: bool = False
     memory_entity_search_timeout_ms: int = Field(default=200, ge=1, le=500)
     parent_expansion: bool = True
-    #: Experimental: replace a fact with its containing source turn already in the pool.
+    #: Source memories fetched to validate the derived memories in one result pool.
     derived_source_k: int = Field(default=6, ge=0, le=16)
-    source_turn_expansion: bool = False
     # Soft diversity cap before the primary cut. Zero preserves score order. Overflow
     # fills spare slots; exact hits, selected single documents and companions are exempt.
     max_chunks_per_document: int = Field(default=0, ge=0, le=50)

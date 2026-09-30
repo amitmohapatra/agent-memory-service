@@ -15,7 +15,7 @@ parts = base.parts
 
 @pytest.mark.parametrize("constant", [0, 1, 60])
 async def test_native_scores_match_client_fusion(parts, constant):
-    indexer, embedding, _, store = parts
+    indexer, embedding, store = parts
     collection = indexer.collection(KNOWLEDGE)
     dense = await embedding.embed_query(base.QUERY)
     sparse = indexer.sparse.encode_query(base.QUERY)

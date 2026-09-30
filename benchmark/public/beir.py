@@ -127,12 +127,10 @@ async def run_strategy(
             "retrieval": {
                 "prefetch_k": container.tuning.retrieval.prefetch_k,
                 "fused_k": container.tuning.retrieval.fused_k,
-                "rerank": container.tuning.retrieval.rerank,
             },
             "providers": {
                 "embedding": embedding_fp,
                 "sparse": container.sparse.fingerprint(),
-                "reranker": engine.reranker.fingerprint() if engine.reranker else None,
                 "late_interaction": container.late_interaction.fingerprint()
                 if container.late_interaction
                 else None,

@@ -135,9 +135,7 @@ async def test_failed_or_empty_contextual_attempt_does_not_fan_out(failed):
     with mocked_gateway([{"units": []}], failing=failed) as gateway:
         assisted = NativeMemoryIntelligence(
             MemoryIntelligenceSettings(),
-            assist=gateway.assist(
-                uses=["contextual_extraction", "ambiguous_extraction", "ambiguous_worthiness"]
-            ),
+            assist=gateway.assist(uses=["contextual_extraction"]),
         )
         observation = _obs(MESSAGE)
         native = NativeMemoryIntelligence(MemoryIntelligenceSettings())

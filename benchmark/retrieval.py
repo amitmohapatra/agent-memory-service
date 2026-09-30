@@ -44,8 +44,8 @@ FIXTURES = ROOT / "tests" / "fixtures"
 GOLDEN = ROOT / "tests" / "eval" / "golden" / "acme_fy26.json"
 TABLES = (
     "tool_invocations, run_outcomes, tools, graph_relations, graph_entities, memories, context_edges, chunks, document_nodes, document_versions, file_staging, documents, "
-    "archive_segments, job_outbox, idempotency_keys, revisions, observations, turn_run_links, "
-    "agent_runs, message_attachments, message_versions, messages, turns, sessions, threads"
+    "archive_segments, job_outbox, idempotency_keys, revisions, observations, "
+    "agent_runs, message_attachments, messages, turns, sessions, threads"
 )
 
 
@@ -237,7 +237,6 @@ async def run(copies: int, queries: int, *, ablate: dict[str, bool] | None = Non
             "providers": {
                 "embedding": indexer.embedding.fingerprint(),
                 "sparse": indexer.sparse.fingerprint(),
-                "reranker": engine.reranker.fingerprint() if engine.reranker else None,
                 "search": type(container.search).__name__,
                 "representative": not indexer.embedding.fingerprint().startswith("hash-"),
             },

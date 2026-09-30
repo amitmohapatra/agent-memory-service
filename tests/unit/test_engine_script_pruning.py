@@ -105,7 +105,6 @@ async def _parts(delay: float = 0.0, **settings):
         None,  # type: ignore[arg-type]
         store,
         indexer,
-        None,
         settings=RetrievalSettings(graph=False, **settings),
     )
     return engine, english, multilingual, store

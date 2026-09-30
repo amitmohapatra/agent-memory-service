@@ -1,15 +1,12 @@
-"""Hot thread cache and working memory in Dragonfly. Never the source of truth.
+"""Hot thread cache in Dragonfly. Never the source of truth.
 
 - ``hot:thread:{tenant}:{thread}``       bounded list of recent visible messages
 - ``hot:thread:{tenant}:{thread}:rev``   thread revision the list is current for
-- ``wm:{tenant}:{scope}:{key}``                  ephemeral working-memory values (TTL)
 """
 
 from __future__ import annotations
 
 import contextlib
-import json
-from typing import Any
 
 from memory_service.domain.conversation import Message
 from memory_service.observability.logging import get_logger
@@ -112,34 +109,3 @@ class HotThreadCache:
         with contextlib.suppress(CacheUnavailable):
             await self.cache.delete(self.key(tenant_id, thread_id))
             await self.cache.delete(self.rev_key(tenant_id, thread_id))
-
-
-class WorkingMemory:
-    """Ephemeral per-scope key/value state (Lifetime.EPHEMERAL)."""
-
-    def __init__(self, cache: CacheProvider | None, *, ttl_seconds: int = 1800) -> None:
-        self.cache = cache
-        self.ttl = ttl_seconds
-
-    @staticmethod
-    def key(tenant_id: str, scope_key: str, name: str) -> str:
-        return f"wm:{tenant_id}:{scope_key}:{name}"
-
-    async def set(self, tenant_id: str, scope_key: str, name: str, value: Any) -> None:
-        if self.cache is None:
-            return
-        with contextlib.suppress(CacheUnavailable):
-            await self.cache.set(
-                self.key(tenant_id, scope_key, name),
-                json.dumps(value, default=str).encode(),
-                ttl_seconds=self.ttl,
-            )
-
-    async def get(self, tenant_id: str, scope_key: str, name: str) -> Any | None:
-        if self.cache is None:
-            return None
-        try:
-            raw = await self.cache.get(self.key(tenant_id, scope_key, name))
-        except CacheUnavailable:
-            return None
-        return json.loads(raw) if raw is not None else None

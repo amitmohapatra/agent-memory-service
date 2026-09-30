@@ -306,7 +306,6 @@ async def run(
         "candidates": rows,
         "verdict": pick_default(rows, embedding_cost),
         "providers": {
-            "reranker": "none",
             "search": BENCH.search,
             "representative": bool(ran) and all(row["representative"] for row in ran),
         },

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from memory_service.config.settings import HindsightSettings
+from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.llm.cost import record_llm_tokens
 from memory_service.modules.memory.narrative import MAX_INPUT_CHARS, MAX_UNIT_CHARS, MAX_UNITS
 from memory_service.observability.logging import get_logger
@@ -30,7 +31,12 @@ class HindsightExtractor:
 
     def __init__(self, settings: HindsightSettings, *, client: Hindsight | None = None) -> None:
         if client is None:
-            from hindsight_client import Hindsight
+            try:
+                from hindsight_client import Hindsight
+            except ImportError as exc:
+                raise DependencyUnavailable(
+                    "Hindsight extraction needs the [hindsight] extra"
+                ) from exc
 
             client = Hindsight(
                 base_url=settings.base_url,

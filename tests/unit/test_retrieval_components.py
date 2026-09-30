@@ -7,7 +7,6 @@ import math
 import pytest
 
 from memory_service.adapters.models.embeddings import HashEmbedding
-from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder, term_id, tokenize
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import MessageKind, MessageRole, QueryType
@@ -89,7 +88,7 @@ def test_dedup_merges_retrievers_and_keeps_best_score() -> None:
     assert out[0].score == 0.9 and out[0].retrievers == ["bm25", "dense"]
 
 
-# --- sparse / dense / rerank ------------------------------------------------------------
+# --- sparse / dense ------------------------------------------------------------
 
 
 def test_tokenizer_stems_and_drops_stopwords() -> None:
@@ -125,15 +124,6 @@ async def test_hash_embedding_is_deterministic_unit_norm() -> None:
     assert dot > dot_other
     assert emb.fingerprint() == "hash-v1-d64" and emb.dimension == 64
     assert emb.info.locality == "local"
-
-
-async def test_lexical_reranker_orders_by_overlap() -> None:
-    rr = LexicalReranker()
-    docs = ["nothing relevant here", "Adjusted EBITDA increased despite lower revenue", "EBITDA"]
-    out = await rr.rerank("why did adjusted ebitda increase", docs, top_k=2)
-    assert [r.index for r in out] == [1, 2]
-    assert out[0].score >= out[1].score
-    assert rr.fingerprint().startswith("lexical")
 
 
 # --- context window ----------------------------------------------------------------------

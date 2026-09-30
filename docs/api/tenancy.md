@@ -61,7 +61,7 @@ await t.groups.add_user(group.group_id, "planner-8")
 await t.workspaces.set_member("supply-chain-ws", f"group:{group.group_id}")
 
 issued = await t.keys.issue("service", "reorder-agent", workspace_id="supply-chain-ws")
-print(issued.token)          # shown once: store it now
+print(issued.token)  # shown once: store it now
 ```
 
 Only now will a `visibility="WORKSPACE"` write be readable by that team. A workspace-visible write
@@ -113,9 +113,9 @@ Each key is stored encrypted, and a read returns **metadata only** — `register
 read output built with it.
 
 ```python
-status = await ctx.set_model_key("vk-…")     # the acting agent's own key
+status = await ctx.set_model_key("vk-…")  # the acting agent's own key
 print(status.registered, status.revision)
-print(await t.model_key_status())            # the tenant level, metadata only
+print(await t.model_key_status())  # the tenant level, metadata only
 ```
 
 ## The read audit

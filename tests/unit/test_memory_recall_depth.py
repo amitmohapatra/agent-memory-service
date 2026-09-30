@@ -23,7 +23,7 @@ parts = base.parts
 )
 async def test_wider_recall_is_only_for_memory_only_pools(parts, kinds, explicit, expected):
     engine = base._engine(parts)
-    engine.cfg = engine.cfg.model_copy(update={"final_k": 2, "memory_recall_k": 4, "rerank": False})
+    engine.cfg = engine.cfg.model_copy(update={"final_k": 2, "memory_recall_k": 4})
 
     async def search(*args, kind, **kwargs):
         return [

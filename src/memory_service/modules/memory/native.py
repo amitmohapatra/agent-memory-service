@@ -7,9 +7,10 @@ release gate for this module is the *false-merge rate*, so every merge/supersede
 needs positive evidence (identical normalized text, identical subject+predicate, or an
 explicit replacement signal), and disagreeing numbers or negation always block a merge.
 
-An optional ``LLMAssist`` refines only the ambiguous decisions (low-confidence extractions,
-sentences no rule matched, the grey band of consolidation) and every consultation falls back
-to the native result; with assist disabled the module behaves exactly as without it.
+An optional ``LLMAssist`` extracts facts from the sentences no rule matched
+(``contextual_extraction``) and adjudicates the grey band of consolidation
+(``conflict_adjudication``); every consultation falls back to the native result, and with
+assist disabled the module behaves exactly as without it.
 """
 
 from __future__ import annotations
@@ -291,48 +292,8 @@ _IMPORTANCE_BY_TYPE = {
 
 # --------------------------------------------------------------------------- llm assist
 
-_AMBIGUOUS_CONFIDENCE = 0.7
-_ASSIST_MAX_SENTENCES = 8  # model consultations per observation and use
 _ASSIST_MAX_CHARS = 2000
 _ASSIST_MIN_SIMILARITY = 0.5
-_MEMORY_TYPES = [t.value for t in MemoryType if t is not MemoryType.CUSTOM]
-
-_EXTRACTION_SYSTEM = (
-    "You refine a tentative memory extracted from one sentence by rules. Keep the meaning, "
-    "write the content as one compact factual statement, and pick the memory_type: USER "
-    "(stable attribute of the user), PREFERENCE (how the user wants things), SEMANTIC (a fact "
-    "or decision), PROCEDURAL (how to do something), EPISODIC (something that happened), TASK "
-    "(something to do). subject/predicate/object describe the fact as a triple when it has "
-    "one. Never invent details that are not in the sentence."
-)
-_EXTRACTION_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": ["memory_type", "content"],
-    "properties": {
-        "memory_type": {"type": "string", "enum": _MEMORY_TYPES},
-        "content": {"type": "string"},
-        "subject": {"type": "string"},
-        "predicate": {"type": "string"},
-        "object": {"type": "string"},
-    },
-}
-_WORTHINESS_SYSTEM = (
-    "Decide whether one sentence from a conversation is worth remembering as a durable memory "
-    "about the user, the agent or their work: a stable attribute, a preference, a decision, "
-    "a fact about their project, how something is done, or a notable event. Small talk, "
-    "questions, transient chatter and generic statements are not worthy. When worthy, give "
-    "the memory_type (USER, PREFERENCE, SEMANTIC, PROCEDURAL, EPISODIC or TASK) and the "
-    "content as one compact statement in the third person that keeps every detail."
-)
-_WORTHINESS_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": ["worthy"],
-    "properties": {
-        "worthy": {"type": "boolean"},
-        "memory_type": {"type": "string", "enum": _MEMORY_TYPES},
-        "content": {"type": "string"},
-    },
-}
 _ADJUDICATION_SYSTEM = (
     "Compare a NEW memory with an EXISTING one and answer with a verdict: 'same' when both "
     "state the same fact (paraphrase, no new information); 'update' when the new one gives a "
@@ -347,17 +308,6 @@ _ADJUDICATION_SCHEMA: dict[str, Any] = {
         "verdict": {"type": "string", "enum": ["same", "update", "contradict", "different"]}
     },
 }
-
-
-def _bounded(value: object, limit: int) -> str | None:
-    if not isinstance(value, str):
-        return None
-    text = re.sub(r"\s+", " ", value).strip()
-    return text[:limit] if text else None
-
-
-def _memory_type(value: object) -> MemoryType | None:
-    return MemoryType(value) if isinstance(value, str) and value in _MEMORY_TYPES else None
 
 
 _OBJECT_TAIL = re.compile(
@@ -496,25 +446,9 @@ class NativeMemoryIntelligence:
         seen: set[str] = set()
         sentences = split_sentences(text)
         contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
-        # A contextual attempt consumes this message's assist budget, including on failure.
-        # Do not multiply calls by falling through into sentence-by-sentence consultation.
-        refine_left = worth_left = _ASSIST_MAX_SENTENCES
-        if contextual is not None:
-            refine_left = worth_left = 0
         for sentence in sentences:
             for clause in split_clauses(sentence):
                 cand = self._from_sentence(clause, ctx, evidence, kind=kind)
-                if cand is None:
-                    if worth_left > 0 and self._worth_asking(clause):
-                        worth_left -= 1
-                        cand = await self._assist_worthiness(clause, ctx, evidence)
-                elif (
-                    cand.confidence <= _AMBIGUOUS_CONFIDENCE
-                    and refine_left > 0
-                    and self.assist.wants("ambiguous_extraction")
-                ):
-                    refine_left -= 1
-                    cand = await self._assist_extraction(clause, cand, ctx)
                 if cand is None:
                     continue
                 key = normalized_hash(cand.content)
@@ -523,7 +457,7 @@ class NativeMemoryIntelligence:
                 seen.add(key)
                 out.append(cand)
         original_key = normalized_hash(text) if self.cfg.keep_verbatim_turns else None
-        for cand in contextual or []:
+        for cand in contextual:
             key = normalized_hash(cand.content)
             if key in seen or key == original_key:
                 continue
@@ -540,14 +474,14 @@ class NativeMemoryIntelligence:
         ctx: MemoryExecutionContext,
         evidence: list[EvidenceRef],
         sentences: list[str],
-    ) -> list[MemoryCandidate] | None:
-        """None means no attempt; an empty list still consumes the message's call budget."""
+    ) -> list[MemoryCandidate]:
+        """Model-extracted facts for the sentences no rule matched (empty when not wanted)."""
         if (
             observation.kind is not ObservationKind.MESSAGE
             or observation.agent_authored
             or not self.assist.wants("contextual_extraction")
         ):
-            return None
+            return []
         eligible = {
             index
             for index, sentence in enumerate(sentences)
@@ -559,7 +493,7 @@ class NativeMemoryIntelligence:
             )
         }
         if not eligible_for_contextual_extraction(sentences, eligible):
-            return None
+            return []
         units, provider, category, confidence = await self._contextual_units(
             observation, ctx, sentences, eligible
         )
@@ -659,89 +593,6 @@ class NativeMemoryIntelligence:
             importance=0.25,
             confidence=0.99,  # nobody is guessing what was said
             category="verbatim_turn",
-        )
-
-    def _worth_asking(self, s: str) -> bool:
-        return (
-            self.assist.wants("ambiguous_worthiness")
-            and not _QUESTION.search(s)
-            and not ACKNOWLEDGEMENT.match(s)
-        )
-
-    async def _assist_extraction(
-        self, s: str, cand: MemoryCandidate, ctx: MemoryExecutionContext
-    ) -> MemoryCandidate:
-        """Let the model refine a weak rule match; the native candidate stays unless the
-        answer validates. Evidence and temporal fields are never taken from the model."""
-        out = await self.assist.structured(
-            "ambiguous_extraction",
-            system=_EXTRACTION_SYSTEM,
-            user=(
-                f"Sentence: {s[:_ASSIST_MAX_CHARS]}\n"
-                f"Speaker: {ctx.principal_id}\n"
-                f"Rule guess: memory_type={cand.memory_type.value} subject={cand.subject or '-'} "
-                f"predicate={cand.predicate or '-'} object={cand.object or '-'}"
-            ),
-            schema=_EXTRACTION_SCHEMA,
-            max_tokens=1024,
-        )
-        if out is None:
-            return cand
-        mt = _memory_type(out.get("memory_type"))
-        content = _bounded(out.get("content"), 2000)
-        if mt is None or content is None:
-            return cand
-        update: dict[str, Any] = {"content": content, "memory_type": mt, "provider": "llm"}
-        if mt is not cand.memory_type:
-            update["lifetime"] = _LIFETIME_BY_TYPE.get(mt, cand.lifetime)
-            update["importance"] = _IMPORTANCE_BY_TYPE.get(mt, cand.importance)
-            update["category"] = mt.value.lower()
-        if subject := _bounded(out.get("subject"), 300):
-            update["subject"] = subject.lower()
-        if predicate := _bounded(out.get("predicate"), 100):
-            update["predicate"] = predicate.lower().replace(" ", "_")
-        if obj := _bounded(out.get("object"), 300):
-            update["object"] = _clean_object(obj)
-        return cand.model_copy(update=update)
-
-    async def _assist_worthiness(
-        self, s: str, ctx: MemoryExecutionContext, evidence: list[EvidenceRef]
-    ) -> MemoryCandidate | None:
-        """No rule matched: the fast model may still find a durable memory in the sentence.
-        Anything short of a validated 'worthy' answer keeps the native verdict (drop)."""
-        out = await self.assist.structured(
-            "ambiguous_worthiness",
-            system=_WORTHINESS_SYSTEM,
-            user=f"Sentence: {s[:_ASSIST_MAX_CHARS]}\nSpeaker: {ctx.principal_id}",
-            schema=_WORTHINESS_SCHEMA,
-            # Sized for a model that reasons before it writes: at 200, deepseek-flash
-            # spent the whole budget thinking and 12% of calls came back empty (measured
-            # on LoCoMo ingest). The answer itself is still one short JSON object.
-            max_tokens=1024,
-        )
-        if out is None or out.get("worthy") is not True:
-            return None
-        mt = _memory_type(out.get("memory_type"))
-        content = _bounded(out.get("content"), 1000)
-        if mt is None or content is None:
-            return None
-        vf_m, vt_m = _VALID_FROM.search(s), _VALID_TO.search(s)
-        user = _user_subject(ctx)
-        return MemoryCandidate(
-            content=content,
-            memory_type=mt,
-            lifetime=_LIFETIME_BY_TYPE.get(mt, Lifetime.LONG_TERM),
-            subject=user
-            if mt in (MemoryType.USER, MemoryType.PREFERENCE) or not ctx.thread_id
-            else f"thread:{ctx.thread_id}",
-            evidence=evidence,
-            importance=_IMPORTANCE_BY_TYPE.get(mt, 0.5),
-            confidence=0.6,
-            category="assisted",
-            provider="llm",
-            negates_prior=bool(_REPLACEMENT.search(s)),
-            valid_from=parse_date(vf_m.group(1)) if vf_m else None,
-            valid_to=parse_date(vt_m.group(1)) if vt_m else None,
         )
 
     def _decision(

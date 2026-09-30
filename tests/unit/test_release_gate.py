@@ -24,7 +24,6 @@ GOOD = {
         "critical_evidence_group_recall": 1.0,
         "representative": False,
         "embedding": "hash-v1-d64",
-        "reranker": "lexical-v1",
     },
     "memory_gate.json": {"false_merge_rate": 0.0},
     "kg_gate.json": {

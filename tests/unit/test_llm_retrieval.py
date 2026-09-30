@@ -1,14 +1,11 @@
 """``query_expansion``: the model is consulted only when no routing rule fired; its terms widen
-the hybrid search while reranking keeps the original query; any failure leaves routing as is."""
+the hybrid search while the routed query stays the original; any failure leaves routing as is."""
 
 from __future__ import annotations
-
-from collections.abc import Sequence
 
 import pytest
 
 from memory_service.adapters.models.embeddings import HashEmbedding
-from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 from memory_service.config.constants import RetrievalSettings
@@ -19,7 +16,6 @@ from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
 from memory_service.modules.rag.spaces import DenseSpaces
 from memory_service.modules.retrieval.engine import RetrievalEngine
-from memory_service.ports.models import RerankResult
 from memory_service.ports.search import SearchRecord, VectorName
 from tests.support_llm import mocked_gateway
 
@@ -42,25 +38,13 @@ class _SpyEmbedding(HashEmbedding):
         return await super().embed_query(text)
 
 
-class _SpyReranker(LexicalReranker):
-    def __init__(self) -> None:
-        super().__init__()
-        self.queries: list[str] = []
-
-    async def rerank(
-        self, query: str, documents: Sequence[str], *, top_k: int
-    ) -> list[RerankResult]:
-        self.queries.append(query)
-        return await super().rerank(query, documents, top_k=top_k)
-
-
 class _NoUoW:
     def __call__(self):  # pragma: no cover - visibility is passed in, ids never match
         raise AssertionError("no unit of work expected")
 
 
 @pytest.fixture
-async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchStore]:
+async def parts() -> tuple[Indexer, _SpyEmbedding, QdrantSearchStore]:
     store = QdrantSearchStore(SearchSettings(), local_path=":memory:")
     embedding = _SpyEmbedding()
     sparse = Bm25SparseEncoder()
@@ -87,28 +71,23 @@ async def parts() -> tuple[Indexer, _SpyEmbedding, _SpyReranker, QdrantSearchSto
         ]
     )
     embedding.queries.clear()
-    return indexer, embedding, _SpyReranker(), store
+    return indexer, embedding, store
 
 
 def _engine(parts, assist=None) -> RetrievalEngine:
-    indexer, _, reranker, store = parts
+    indexer, _, store = parts
     return RetrievalEngine(
         _NoUoW(),  # type: ignore[arg-type]
         None,  # type: ignore[arg-type]
         store,
         indexer,
-        reranker,
-        # rerank is off by default now (it measured significantly worse on SciFact — see
-        # RetrievalSettings.rerank); these tests are *about* reranking behaviour, so they
-        # switch it on explicitly rather than depending on what the default happens to be.
-        settings=RetrievalSettings(graph=False, rerank=True),
-        rerank_k=5,
+        settings=RetrievalSettings(graph=False),
         assist=assist,
     )
 
 
-async def test_expansion_reroutes_and_widens_search_but_reranks_the_original(parts) -> None:
-    _, embedding, reranker, _ = parts
+async def test_expansion_reroutes_and_widens_search_but_keeps_the_original_query(parts) -> None:
+    _, embedding, _ = parts
     reply = {
         "query_type": "ENTITY_RELATION",
         "terms": ["headcount", "restructuring", "plant", "factory"],
@@ -125,19 +104,18 @@ async def test_expansion_reroutes_and_widens_search_but_reranks_the_original(par
     assert res.diagnostics["query_type"] == "ENTITY_RELATION"
     assert res.diagnostics["query_expansion"] == ["headcount", "restructuring", "plant"]
     assert embedding.queries == [f"{QUERY} headcount restructuring plant"]
-    assert reranker.queries == [QUERY]
     assert {c.record_id for c in res.candidates} >= {"chk_restructuring"}
 
 
 async def test_gateway_failure_keeps_native_routing(parts) -> None:
-    _, embedding, reranker, _ = parts
+    _, embedding, _ = parts
     with mocked_gateway(failing=True) as gw:
         engine = _engine(parts, gw.assist(uses=["query_expansion"]))
         res = await engine.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
         assert gw.route.call_count >= 1
     assert res.routed.query_type is QueryType.GENERAL_SEMANTIC
     assert "query_expansion" not in res.diagnostics
-    assert embedding.queries == [QUERY] and reranker.queries == [QUERY]
+    assert embedding.queries == [QUERY]
     assert res.candidates
 
 
@@ -146,9 +124,9 @@ def _without_timings(diagnostics: dict) -> dict:
 
 
 async def test_flag_off_or_rule_fired_never_calls_the_model(parts) -> None:
-    _, embedding, _, _ = parts
+    _, embedding, _ = parts
     with mocked_gateway(['{"query_type": "DECISION", "terms": ["x"], "identifiers": []}']) as gw:
-        off = _engine(parts, gw.assist(uses=["ambiguous_worthiness"]))
+        off = _engine(parts, gw.assist(uses=["grounding_judge"]))
         res = await off.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
         assert res.routed.query_type is QueryType.GENERAL_SEMANTIC
         on = _engine(parts, gw.assist(uses=["query_expansion"]))
@@ -168,7 +146,7 @@ async def test_flag_off_or_rule_fired_never_calls_the_model(parts) -> None:
 
 
 async def test_bounds_terms_capped_and_query_truncated_and_exact_needs_ids(parts) -> None:
-    _, embedding, _, _ = parts
+    _, embedding, _ = parts
     reply = {
         "query_type": "EXACT_IDENTIFIER",
         "terms": [f"term{i}" for i in range(12)] + ["  term0 ", ""],

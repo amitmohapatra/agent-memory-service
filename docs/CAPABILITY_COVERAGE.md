@@ -55,7 +55,7 @@ checked against the source, and the verdict says which mechanism provides it.
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
 | Rank fusion across retrievers | `hybrid_rrf_k` controls native dense/sparse fusion; default preserves legacy `FusionQuery`; `rrf_k=60` controls outer strategy fusion | on | Inner 60 reduced measured recall; see `ACCURACY-EXPERIMENTS-2026-09-26.md` |
 | Wider conversational recall | bounded `memory_recall_k`, respecting explicit caller limits, document selection and the context budget | opt-in, default off | Depth 100 improved paired answers modestly but regressed development abstention; not a general 85% result |
-| Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so `rerank` is now off by default too |
+| Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so reranking was removed |
 | Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |
 | Referent resolution at answer time | `PARENT`, `PREVIOUS`, `NEXT` expansion | on | — |
 | Term definitions | `DEFINED_BY` expansion | on | — |

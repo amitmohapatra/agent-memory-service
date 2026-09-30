@@ -90,29 +90,22 @@ _ROLLING_SYSTEM = (
 )
 
 
-#: Un-reranked items were never judged and ranked below everything that was, so their
-#: relevance is mapped into a band strictly beneath the reranked floor. Order is preserved;
-#: the number stops claiming a confidence nobody measured.
-_TAIL_CEILING = 0.05
+#: Fusion scores are rank aggregates, not probabilities: they are mapped into a low band
+#: beneath an exact identifier hit. Order is preserved; the number does not claim a
+#: confidence nobody measured.
+_FUSION_CEILING = 0.05
 
 
 def _relevance(c: Candidate) -> tuple[float, ScoreKind, float]:
     """The raw ranking number, what produced it, and a comparable 0..1 relevance.
 
-    One field used to carry three incompatible scales: a cross-encoder logit (-11..+11) for
-    items the reranker judged, an RRF fusion score (~0.001..0.25) for everything past
-    ``candidate_k``, and a hardcoded 1.0 for exact identifier hits. In one measured response
-    rank 27 scored +0.067 while rank 1 scored -4.14, so any client that sorted or thresholded
-    on it got the ranking exactly backwards.
+    The raw number has two incompatible scales - an RRF fusion score (~0.001..0.25) and a
+    hardcoded 1.0 for exact identifier hits - so clients compare ``relevance`` instead.
     """
-    if c.rerank_score is not None:
-        # a calibrated P(relevant): the cross-encoder applies its sigmoid
-        value = min(max(float(c.rerank_score), 0.0), 1.0)
-        return float(c.rerank_score), "cross_encoder", value
     if "exact" in (c.retrievers or []):
         return float(c.score), "exact", 1.0
     # RRF scores are sums of 1/(k+rank): bounded and monotone in rank, but not a probability
-    return float(c.score), "fusion", min(float(c.score), 1.0) * _TAIL_CEILING
+    return float(c.score), "fusion", min(float(c.score), 1.0) * _FUSION_CEILING
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -267,8 +260,6 @@ class ContextBuilder:
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
         ]
-        if self.engine.reranker is not None:
-            parts.append(self.engine.reranker.fingerprint())
         # bundles built with model assistance must not be served to a deployment without it
         model_profile = self.assist.cache_fingerprint(CACHED_MODEL_USES)
         if model_profile:

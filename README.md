@@ -38,7 +38,7 @@ That is verified rather than illustrative: those calls were run against a servic
 `context` (a 1,313-character rendered bundle over 9 memories and 1 document passage, evidence
 status `INSUFFICIENT` for that query), then `chat.assistant`, `remember`, `recall`, `history` and
 `memories`. The service was running its stand-in providers (`embedding=hash-embedding`,
-`reranker=lexical`, `nli` non-representative, `llm=disabled`, per `GET /version`), so that run
+`nli` non-representative, `llm=disabled`, per `GET /version`), so that run
 says the wire and the scope rules work and says **nothing** about retrieval quality — for quality,
 read [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) and
 [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md).
@@ -147,12 +147,12 @@ download catalogue is derived from it, so the code and the weights cannot drift 
 |---|---|---|---|
 | Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
 | Sparse | BM25 (client term frequencies, Qdrant server-side IDF) | — | no weights |
-| Reranker | none | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency |
+| Reranker | none (removed) | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency, and no reranker beat the fused order on LoCoMo; the offline scorer lives in `benchmark/cross_encoder.py` |
 | Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
 
 The benchmark challengers (Granite R2 base, Granite reranker, SPLADE, GLiNER2, the former
 reranker) are listed in `benchmark/challengers.txt`; `make models-all` fetches them, and only
-`make bench-embedding` / `make bench-reranker` ever load one. **No Chinese-origin model or
+`make bench-embedding` / `make bench-rerank-offline` ever load one. **No Chinese-origin model or
 derivative runs anywhere in the stack** - not as a default, a challenger, an operator setting
 or a gateway model. The rule is `src/memory_service/domain/provenance.py`, and
 `tests/unit/test_model_provenance.py` asserts it on every surface that names a model.
@@ -567,7 +567,8 @@ The service runs without one. Native model calls go through
 [Bifrost](https://github.com/maximhq/bifrost), an external gateway you run yourself. The
 operator key comes from deployment secrets; agent-owned virtual keys are encrypted in the
 native database. Provider keys stay in Bifrost. Agent requests exclude MCP clients/tools.
-The pinned Hindsight SDK provides extraction preview for eligible non-agent ingestion;
+The pinned Hindsight SDK (the optional `[hindsight]` extra) provides extraction preview for
+eligible non-agent ingestion;
 that server owns its model configuration. Agent extraction stays on the Bifrost path because
 the SDK cannot carry a per-request model virtual key. Source storage and authorization stay
 native. See the [integration boundary](docs/HINDSIGHT-CAPABILITY-STATUS-20260927.md).
@@ -609,11 +610,11 @@ are passed straight to the shared [`bifrost-sdk`](https://github.com/amitmohapat
 client, which owns the transport, the retries, the rate-limit parsing and the breaker — the
 same client the agent harness uses, so neither service can learn a lesson the other misses.
 
-Available uses: `contextual_extraction`, `ambiguous_extraction`, `ambiguous_worthiness`, `relation_extraction`,
+Available uses: `contextual_extraction`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,
 `chunk_context`, `grounding_judge`, `briefs`.
 
-Each use has its own gate. Ambiguous/contextual extraction consults the model only for
+Each use has its own gate. Contextual extraction consults the model only for
 eligible inputs; assisted brief refresh generates only when evidence or synthesis
 configuration changes. Native paths remain available. An explicitly assisted brief fails
 refresh if no valid cited model result is available; it does not silently substitute native
@@ -718,7 +719,7 @@ transaction (a transactional outbox). Only then do you get a `2xx`. A worker tha
 mid-job is detected and its work requeued; replay is safe because every write is idempotent.
 
 **How retrieval works.** Authorized scope → exact lookup → a rules-based router → BM25 +
-dense retrieval fused with RRF → bounded cross-encoder rerank → context expansion over the
+dense retrieval fused with RRF → context expansion over the
 document graph → evidence verification → abstain if still insufficient.
 
 More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · design decisions in [docs/adr/](docs/adr/).

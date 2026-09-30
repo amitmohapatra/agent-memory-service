@@ -87,10 +87,10 @@ provides — and `tests/eval/test_capability_coverage.py` demonstrates each capa
 surviving without its flag. Those tests are the justification; they still run, and the
 fixture now asserts none of the seven names has reappeared in `RetrievalSettings`.
 
-**`retrieval.rerank` is also off by default**, but on measurement rather than redundancy:
-significantly *worse* on BeIR/SciFact (p = 0.012) at 21x the latency. The flag is kept, since
-the finding indicts one out-of-domain cross-encoder rather than reranking as a technique. See
-[MEASUREMENTS.md](MEASUREMENTS.md) §3e.
+**Reranking was removed**, on measurement rather than redundancy: significantly *worse* on
+BeIR/SciFact (p = 0.012) at 21x the latency, and no cross-encoder beat the fused order on
+LoCoMo (PHASE9-RESULTS). The offline scorer stays under `benchmark/` for a future challenger.
+See [MEASUREMENTS.md](MEASUREMENTS.md) §3e.
 
 **Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` were alternatives
 to `native`, which is what runs. Each was an import, a wiring branch, a contract test that
@@ -128,14 +128,13 @@ other tenant's queries — observed directly in this repository when a benchmark
 the API.
 
 **The accuracy baseline itself.** On a corpus nobody here wrote, with a stated number and a
-regression ratchet. Until it exists, no decision in §3 can be evaluated, `reranker.candidate_k`
-cannot be tuned, and "100% accurate" cannot be claimed or disproven.
+regression ratchet. Until it exists, no decision in §3 can be evaluated and "100% accurate"
+cannot be claimed or disproven.
 
 ## 5. Cost and memory, in the order that matters
 
-1. **`reranker.candidate_k` (20)** — one request costs 1 embedding and 20 cross-encoder pairs.
-   The reranker is ~87% of per-request model cost. This is the tuning dial; it needs §4's
-   baseline to tune against.
+1. **The dense encoders** — with the reranker removed, a request costs one or two query
+   embeddings; the encoders are the per-request model cost.
 2. **A separate model tier** — built, then removed (ADR 0019 is superseded): on a single
    8 vCPU VM it only added an HTTP hop to every query.
 3. **`on_disk_payload`** — vectors in RAM, payload on disk. The difference between a small and

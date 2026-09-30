@@ -47,7 +47,7 @@ http_request_seconds = Histogram(
 )
 stage_seconds = Histogram(
     "memory_stage_seconds",
-    "Latency of internal stages (auth, authz, db, cache, retrieval.*, rerank, context, archive)",
+    "Latency of internal stages (auth, authz, db, cache, retrieval.*, context, archive)",
     ["stage"],
     buckets=_LATENCY_BUCKETS,
     registry=REGISTRY,

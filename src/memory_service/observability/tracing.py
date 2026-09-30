@@ -1,4 +1,4 @@
-"""OpenTelemetry setup. Spans cover API, auth, authz, DB, cache, retrieval, rerank, context,
+"""OpenTelemetry setup. Spans cover API, auth, authz, DB, cache, retrieval, context,
 ingestion stages, archive, graph and eval. Exporter is configuration (none|console|otlp)."""
 
 from __future__ import annotations

@@ -17,7 +17,6 @@ from memory_service.config import constants
 from memory_service.config.constants import (
     ArchiveSettings,
     ContextSettings,
-    CrossEncoderModel,
     DenseModel,
     DocumentSettings,
     GraphSettings,
@@ -84,10 +83,6 @@ class Overrides:
     #: ``disabled``: the English encoder alone, searched for every script - the
     #: single-encoder arm the ensemble is measured against
     multilingual_dense: Literal["disabled"] | None = None
-    #: ``lexical``: BM25-style overlap; ``cross_encoder``: the given model, loaded whatever
-    #: ``retrieval.rerank`` says (the benchmark that measures it); ``disabled``: none
-    reranker: Literal["lexical", "cross_encoder", "disabled"] | None = None
-    reranker_model: CrossEncoderModel | None = None
     #: ``lexical``: token coverage mapped onto NLI scores (never representative)
     nli: Literal["lexical", "disabled"] | None = None
     #: the text parser instead of docling
@@ -114,7 +109,6 @@ class Overrides:
             ("graph_store", self.graph_store),
             ("embedding", self.embedding or (self.dense_model and self.dense_model.id)),
             ("multilingual_dense", self.multilingual_dense),
-            ("reranker", self.reranker),
             ("nli", self.nli),
             ("document_parser", self.document_parser),
             ("graph_enrichment", self.graph_enrichment),
@@ -171,7 +165,6 @@ class Container:
     dense_spaces: Any = None
     embedding: Any = None
     sparse: Any = None
-    reranker: Any = None
     nli: Any = None
     llm: Any = None
     memory_intelligence: Any = None
@@ -242,7 +235,7 @@ class Container:
         an ablation, on the hosts where the thread budget is the thing being measured.
         ``DenseSpaces.close()`` closes every space it holds, the primary included.
         """
-        for name in ("dense_spaces", "reranker", "nli"):
+        for name in ("dense_spaces", "nli"):
             model = getattr(self, name, None)
             closer = getattr(model, "close", None)
             if closer is None:

@@ -47,10 +47,10 @@ webhooks = memory.administer("acme").webhooks
 created = await webhooks.create(
     "https://ops.example.com/hooks/memory",
     ["memory.created", "feedback.projected"],
-    workspace_id="supply-chain-ws",      # optional: only that workspace's events
+    workspace_id="supply-chain-ws",  # optional: only that workspace's events
     description="ops timeline",
 )
-secret = created.secret       # shown once; None on an idempotent replay. Store it now.
+secret = created.secret  # shown once; None on an idempotent replay. Store it now.
 
 await webhooks.test(created.subscription_id)
 for delivery in await webhooks.deliveries(created.subscription_id, limit=20):
@@ -68,9 +68,9 @@ from trellis.memory.webhooks import verify_signature
 
 
 async def receive(request: Request) -> dict:
-    body = await request.body()                       # the raw bytes, not the parsed JSON
+    body = await request.body()  # the raw bytes, not the parsed JSON
     if not verify_signature(SECRET, request.headers.get("X-Trellis-Signature"), body):
-        return {"ok": False}                          # 400: not ours, or too old
+        return {"ok": False}  # 400: not ours, or too old
     event = await request.json()
     print(event["type"], event["event_id"], event["data"])
     return {"ok": True}

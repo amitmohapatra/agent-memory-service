@@ -52,7 +52,6 @@ class Session(BaseModel):
     user_id: str | None = None
     client: str | None = Field(default=None, description="ui | sdk | langgraph | import")
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    ended_at: datetime | None = None
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -67,7 +66,6 @@ class Turn(BaseModel):
     tenant_id: str
     sequence: int = Field(..., ge=1, description="1-based position in the thread")
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    completed_at: datetime | None = None
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 
 

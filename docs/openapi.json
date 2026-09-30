@@ -802,9 +802,8 @@
           },
           "score_kind": {
             "default": "fusion",
-            "description": "fusion is rank aggregation; cross_encoder is neural reranking; exact is an identifier match. Use relevance to compare across kinds.",
+            "description": "fusion is rank aggregation; exact is an identifier match. Use relevance to compare across kinds.",
             "enum": [
-              "cross_encoder",
               "fusion",
               "exact"
             ],
@@ -941,9 +940,8 @@
           },
           "score_kind": {
             "default": "fusion",
-            "description": "Where score came from: a cross-encoder probability (cross_encoder), a fusion rank score (fusion) or an exact identifier hit (exact).",
+            "description": "Where score came from: a fusion rank score (fusion) or an exact identifier hit (exact).",
             "enum": [
-              "cross_encoder",
               "fusion",
               "exact"
             ],
@@ -5614,7 +5612,7 @@
       },
       "UnusedEvidenceBody": {
         "additionalProperties": false,
-        "description": "Retrieved but not packed (reranked out or over budget); the grounding cascade scans\nthese for contradictions with the answer.",
+        "description": "Retrieved but not packed (ranked out or over budget); the grounding cascade scans\nthese for contradictions with the answer.",
         "properties": {
           "item_id": {
             "title": "Item Id",

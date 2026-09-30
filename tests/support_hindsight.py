@@ -1,13 +1,21 @@
-"""Real SDK against a local HTTP fixture; never contacts a model or memory server."""
+"""Real SDK against a local HTTP fixture; never contacts a model or memory server.
+
+The SDK is the optional ``[hindsight]`` extra: a test module importing this is skipped
+without it.
+"""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
-from aiohttp import web
+import pytest
 
-from memory_service.adapters.models.hindsight import HindsightExtractor
-from memory_service.config.settings import HindsightSettings
+pytest.importorskip("hindsight_client")
+
+from aiohttp import web  # noqa: E402  (after the skip: aiohttp arrives with the extra)
+
+from memory_service.adapters.models.hindsight import HindsightExtractor  # noqa: E402
+from memory_service.config.settings import HindsightSettings  # noqa: E402
 
 
 @dataclass

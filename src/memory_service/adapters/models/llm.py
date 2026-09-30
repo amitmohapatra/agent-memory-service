@@ -71,12 +71,9 @@ def _catalog_key(
 #: The only status for which falling back to a prompt-shaped schema is correct.
 _BAD_REQUEST = 400
 
-# Presence with an empty value means deny-all in Bifrost; absent headers can inherit
-# the virtual key's tools. Options.mcp(clients=[]) omits empties, so use explicit headers.
-MEMORY_CALL_OPTIONS = Options(
-    content_logging=False,
-    extra={"x-bf-mcp-include-clients": "", "x-bf-mcp-include-tools": ""},
-)
+# Empty MCP scopes are sent as empty headers, the gateway's deny-all: a memory call never
+# inherits the virtual key's tools.
+MEMORY_CALL_OPTIONS = Options(content_logging=False, mcp_clients=(), mcp_tools=())
 
 
 class LLMCallFailed(DependencyUnavailable):
@@ -388,7 +385,7 @@ class BifrostLLM:
                         model=model,
                         max_tokens=max_tokens,
                         temperature=temperature,
-                        _options=options,
+                        options=options,
                         tool_choice="none",
                         **extra,
                     )

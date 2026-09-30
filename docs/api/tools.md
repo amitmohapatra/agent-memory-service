@@ -48,7 +48,7 @@ result = await ctx.tools.record(
     {"sku": "SKU-1"},
     output={"on_hand": 95},
     output_summary="95 units at EU-1",
-    status="ok",                  # ok | error | timeout | rejected
+    status="ok",  # ok | error | timeout | rejected
     latency_ms=41.0,
     cost=0.0,
     task="check stock before reordering",
@@ -68,7 +68,7 @@ from trellis.memory import ToolCall
 
 
 async def executor(tool: str, args: dict) -> dict:
-    return await my_tools[tool](**args)     # local, a framework node, or a POST to a gateway
+    return await my_tools[tool](**args)  # local, a framework node, or a POST to a gateway
 
 
 result = await ctx.tools.execute(
@@ -91,10 +91,10 @@ plan = await ctx.tools.plan(
     "reprice a quote",
     available_tools=[{"name": "reprice", "description": "…", "parameters": {...}}],
 )
-print(plan.valid, plan.reason, plan.problems)   # whether there is a validated chain at all
-print(plan.steps)          # the tool sequence, in order, with argument bindings
-print(plan.support)        # how many successful runs back it
-print(plan.success_rate)   # and how often they succeeded
+print(plan.valid, plan.reason, plan.problems)  # whether there is a validated chain at all
+print(plan.steps)  # the tool sequence, in order, with argument bindings
+print(plan.support)  # how many successful runs back it
+print(plan.success_rate)  # and how often they succeeded
 
 for procedure in await ctx.tools.procedures("reprice a quote"):
     print(procedure)

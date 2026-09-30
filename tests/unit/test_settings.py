@@ -9,13 +9,9 @@ def test_defaults_are_cpu_first_with_credential_gated_auto_assistance() -> None:
     s = Settings(_env_file=None)
     assert s.models.llm.enabled == "auto" and s.models.llm.api_key is None
     assert s.models.llm.wants("contextual_extraction")
-    assert not s.models.llm.wants("ambiguous_worthiness")
     assert FROZEN_MODELS.dense.id == "ibm-granite/granite-embedding-small-english-r2"
     assert FROZEN_MODELS.dense.dimension == 384 and FROZEN_MODELS.dense.backend == "torch"
-    assert FROZEN_MODELS.reranker is None, "no reranker ships (SciFact -5.2 nDCG, p=0.012)"
     assert RETRIEVAL.bm25 and RETRIEVAL.dense and RETRIEVAL.exact and RETRIEVAL.graph
-    # `rerank` is off on measured evidence, not on caution — see RetrievalSettings.rerank.
-    assert RETRIEVAL.rerank is False
 
 
 def test_default_depth_matches_the_promoted_memory_configuration() -> None:

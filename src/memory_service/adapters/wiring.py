@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from memory_service.application.container import Dependency
 from memory_service.config import constants
 from memory_service.config.constants import FROZEN_MODELS
-from memory_service.domain.errors import ProviderNotConfigured
+from memory_service.domain.errors import DependencyUnavailable
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -193,7 +193,7 @@ def _wire_services(container: Container) -> None:
 
 def _wire_conversation(container: Container) -> None:
     from memory_service.modules.conversation.service import ConversationService
-    from memory_service.modules.working_memory.hot_thread import HotThreadCache, WorkingMemory
+    from memory_service.modules.working_memory.hot_thread import HotThreadCache
 
     hot = HotThreadCache(
         container.cache,
@@ -201,9 +201,6 @@ def _wire_conversation(container: Container) -> None:
         ttl_seconds=constants.CACHE.hot_thread_ttl_seconds,
     )
     container.services["hot_thread"] = hot
-    container.services["working_memory"] = WorkingMemory(
-        container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
-    )
     container.services["conversation"] = ConversationService(
         container.services["authz"], hot, archive_enabled=container.tuning.archive.enabled
     )
@@ -307,7 +304,6 @@ def _model_threads(container: Container, dense: Any = None) -> int:
 
 def _wire_models(container: Container) -> None:
     from memory_service.adapters.models.embeddings import HashEmbedding, load_dense
-    from memory_service.adapters.models.rerankers import CrossEncoderReranker, LexicalReranker
     from memory_service.adapters.models.sparse import Bm25SparseEncoder
     from memory_service.domain.script import Script
     from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
@@ -340,29 +336,6 @@ def _wire_models(container: Container) -> None:
     container.dense_spaces = spaces
     container.embedding = spaces.primary
     container.sparse = Bm25SparseEncoder()
-
-    reranker: Any = None
-    if stand_in.reranker == "lexical":
-        # Free to construct, so it is not behind the flag below: a test that turns
-        # `retrieval.rerank` on after wiring still has a reranker to exercise.
-        reranker = LexicalReranker()
-    elif stand_in.reranker == "cross_encoder":
-        model = stand_in.reranker_model or FROZEN_MODELS.reranker
-        if model is None:
-            raise ProviderNotConfigured("reranker=cross_encoder needs a reranker_model")
-        reranker = CrossEncoderReranker(model)
-    elif stand_in.reranker == "disabled" or not container.tuning.retrieval.rerank:
-        # Guarded by its own flag. Without this the cross-encoder was constructed whatever
-        # `retrieval.rerank` said — 566 MB of weights loaded into both the API and the
-        # worker at startup, reported on /version as an active provider, and never called,
-        # because engine.py guards the only call site on `cfg.rerank`. Reranking is off on
-        # measured evidence (constants.RetrievalSettings.rerank).
-        reranker = None
-    elif FROZEN_MODELS.reranker is None:
-        log.warning("reranker.no_model", note="retrieval.rerank is on but no reranker is frozen")
-    else:
-        reranker = CrossEncoderReranker(FROZEN_MODELS.reranker)
-    container.reranker = reranker
 
 
 def _wire_llm(container: Container) -> None:
@@ -452,9 +425,7 @@ def _wire_retrieval(container: Container) -> None:
         container.services["authz"],
         container.search,
         indexer,
-        container.reranker,
         settings=tuning.retrieval,
-        rerank_k=tuning.retrieval.rerank_k,
         assist=container.services["llm_assist"],
     )
     container.services["retrieval"] = engine
@@ -503,8 +474,13 @@ def _wire_memory(container: Container) -> None:
     if llm.enabled is True and llm.wants("contextual_extraction"):
         from memory_service.adapters.models.hindsight import HindsightExtractor
 
-        extractor = HindsightExtractor(container.settings.hindsight)
-        container.add_closer("hindsight_extractor", extractor.close)
+        try:
+            extractor = HindsightExtractor(container.settings.hindsight)
+        except DependencyUnavailable as exc:
+            # the optional extra is absent: extraction stays on the native path
+            log.warning("hindsight.unavailable", reason=str(exc))
+        else:
+            container.add_closer("hindsight_extractor", extractor.close)
     provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
         cfg,
         container.embedding,

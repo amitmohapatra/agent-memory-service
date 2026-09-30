@@ -147,7 +147,6 @@ async def version(request: Request) -> VersionResponse:
             # the single-encoder arm, so a benchmark artifact stamped from this endpoint
             # can say which one it measured.
             "dense_spaces": _spaces(c.dense_spaces),
-            "reranker": _active(c.reranker, "none"),
             "llm": "bifrost" if s.models.llm.enabled else "disabled",
             "memory_intelligence": "native",
             "graph_enrichment": _active(c.graph_enrichment, "native"),
@@ -170,9 +169,9 @@ def _spaces(spaces: Any) -> dict[str, str]:
 def _active(provider: Any, configured: str) -> str:
     """What is actually running, not what was configured.
 
-    ``None`` means the component was never built, and saying so matters: the reranker is
-    off by default and used to be reported here by its configured provider name, so
-    /version named a cross-encoder that had never been loaded and would never be called.
+    ``None`` means the component was never built, and saying so matters: reporting a
+    configured provider name for a component that was never loaded is how /version once
+    named a model that would never be called.
     """
     if provider is None:
         return "disabled"
@@ -195,6 +194,4 @@ def _degraded(c: Any) -> list[str]:
         notes.append(f"document_parser: configured {wanted_parser!r}, running {active_parser!r}")
     if c.nli is not None and getattr(c.nli, "representative", True) is False:
         notes.append("nli: running a non-representative stand-in; grounding verdicts are weak")
-    if c.tuning.retrieval.rerank and c.reranker is None:
-        notes.append("rerank: requested, but no reranker was built; results are unreranked")
     return notes

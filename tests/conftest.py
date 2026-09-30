@@ -12,8 +12,8 @@ from fastapi.testclient import TestClient
 #: The suite configures the service in code, not from the developer's shell.
 #:
 #: ``MEMORY__*`` is the service's own settings prefix, and a local ``.env`` fills it in. That
-#: file reaches os.environ before this module is imported — the deepeval pytest plugin loads
-#: it — so "the environment is empty in tests" was never true: four model paths were being
+#: file can reach os.environ before this module is imported — a shell that sourced it, or a
+#: pytest plugin that loads it — so "the environment is empty in tests" was never true: four model paths were being
 #: inherited from it, pointing at directories that do not exist. They were harmless only
 #: because the stand-in providers never load a model, which is exactly the kind of latency a
 #: latent bug has. Strip them, so a test run means the same thing on every machine.
@@ -36,8 +36,8 @@ from memory_service.config.settings import Settings, reset_settings_cache  # noq
 #: 1.2 s idle timed out at 120 s waiting on a lock, and queue tests had their jobs stolen.
 #:
 #: Read from MEMORY_TEST_DATABASE_URL and *deliberately not* from MEMORY__DATABASE__URL.
-#: That one is the service's own variable, `.env` sets it to the dev database, and the
-#: deepeval pytest plugin loads `.env` into os.environ before this module is imported — so
+#: That one is the service's own variable, `.env` sets it to the dev database, and a
+#: shell or plugin can load `.env` into os.environ before this module is imported — so
 #: an `os.environ.get("MEMORY__DATABASE__URL", ...)` here is not a default with an escape
 #: hatch, it is the dev database every time, and the suite truncated it on every run.
 DB_URL = os.environ.get(
@@ -83,7 +83,6 @@ HERMETIC = Overrides(
     blob="memory",
     embedding="hash",
     embedding_dimension=64,
-    reranker="lexical",
     nli="lexical",
     document_parser="builtin",
 )
@@ -103,7 +102,6 @@ def _test_overrides(**changes: object) -> Overrides:
             search=None,
             authorization=None,
             embedding=None,
-            reranker=None,
             nli=None,
             document_parser=None,
         )

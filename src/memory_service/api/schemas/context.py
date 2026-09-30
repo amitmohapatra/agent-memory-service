@@ -56,10 +56,10 @@ class ContextItemBody(BaseModel):
         le=1.0,
         description="Comparable across the bundle, 0..1, higher is better.",
     )
-    score_kind: Literal["cross_encoder", "fusion", "exact"] = Field(
+    score_kind: Literal["fusion", "exact"] = Field(
         default="fusion",
-        description="Where score came from: a cross-encoder probability (cross_encoder), a "
-        "fusion rank score (fusion) or an exact identifier hit (exact).",
+        description="Where score came from: a fusion rank score (fusion) or an exact "
+        "identifier hit (exact).",
     )
     retrievers: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
@@ -88,7 +88,7 @@ class ConversationWindowBody(BaseModel):
 
 
 class UnusedEvidenceBody(BaseModel):
-    """Retrieved but not packed (reranked out or over budget); the grounding cascade scans
+    """Retrieved but not packed (ranked out or over budget); the grounding cascade scans
     these for contradictions with the answer."""
 
     model_config = ConfigDict(extra="forbid")

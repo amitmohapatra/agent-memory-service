@@ -282,7 +282,7 @@ def main() -> int:
         nargs="*",
         default=[],
         metavar="FLAG",
-        help="retrieval flags to disable for this run, e.g. --off rerank",
+        help="retrieval flags to disable for this run, e.g. --off graph",
     )
     parser.add_argument(
         "--reuse-index",

@@ -35,14 +35,6 @@ TASK_ARCHIVE_PURGE = "archive.purge_payloads"
 TASK_MEMORY_EXPIRE = "memory.expire"
 TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
-#: Transitional. Nothing enqueues this any more: the thread observer it fed was deleted
-#: (it was a complete implementation nothing constructed, and its enqueue cost one
-#: list_thread SELECT per ingested message). The name stays registered for one release so
-#: outbox rows written before the upgrade dispatch to a no-op instead of failing with
-#: ``KeyError: task 'memory.observe' is not registered`` and retrying until they go dead.
-#: Delete this constant and ``memory_observe`` below once every deployment has run a
-#: release that no longer writes the row (the outbox sweep drains them within minutes).
-TASK_MEMORY_OBSERVE = "memory.observe"
 
 
 def register_handlers(container: Container) -> None:
@@ -203,10 +195,6 @@ def register_handlers(container: Container) -> None:
         if connections is not None:
             await connections.connect_all()
 
-    async def memory_observe(payload: dict[str, Any]) -> None:
-        """No-op for outbox rows written by a release that still enqueued it (see
-        ``TASK_MEMORY_OBSERVE``). Remove together with the constant."""
-
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -313,7 +301,6 @@ def register_handlers(container: Container) -> None:
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
-    queue.register(TASK_MEMORY_OBSERVE, Queue.RECONCILE, memory_observe, retries=0)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
     # Registered *and scheduled*. It was only registered, so the handler existed and nothing
     # ever called it — and the outbox is not an optimisation, it is the only path from a

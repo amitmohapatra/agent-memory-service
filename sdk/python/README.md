@@ -17,7 +17,7 @@ answer = my_agent(bundle.rendered)
 await ctx.chat.assistant(answer)
 ```
 
-The SDK hides Qdrant, BM25, embeddings, rerankers, RRF, GCS compaction, graph enrichment,
+The SDK hides Qdrant, BM25, embeddings, RRF, GCS compaction, graph enrichment,
 dedup, memory types, TTLs, cache keys and task queues. Those are service configuration.
 
 ## Agent credentials and model-free reads

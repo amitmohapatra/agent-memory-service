@@ -195,7 +195,7 @@ async def test_only_opted_in_aggregate_queries_without_explicit_limits_expand(pa
 
 async def test_real_store_actor_search_cannot_cross_visibility_tenant_or_current_state(parts):
     engine = base._engine(parts)
-    indexer, embedding, _, store = parts
+    indexer, embedding, store = parts
     body = "Alice enjoys hiking and pottery."
     dense = (await embedding.embed_documents([body]))[0]
     sparse = indexer.sparse.encode_documents([body])[0]

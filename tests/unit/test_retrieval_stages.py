@@ -109,7 +109,7 @@ async def test_a_stage_without_prefetch_is_called_exactly_as_before(parts):
 @pytest.mark.parametrize("selected", [None, ["doc_a"]])
 async def test_document_diversity_runs_before_cut_and_bypasses_focused_queries(parts, selected):
     engine = _engine(parts)
-    engine.cfg = engine.cfg.model_copy(update={"max_chunks_per_document": 1, "rerank": False})
+    engine.cfg = engine.cfg.model_copy(update={"max_chunks_per_document": 1})
     pool = [
         Candidate(
             record_id="a1",

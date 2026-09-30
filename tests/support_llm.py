@@ -3,7 +3,7 @@
 Usage::
 
     with mocked_gateway(['{"worthy": true}', '{"worthy": false}']) as gw:
-        assist = gw.assist(uses=["ambiguous_worthiness"])
+        assist = gw.assist(uses=["query_expansion"])
         ...
         assert gw.route.call_count == 1
         assert gw.prompts()[0]["messages"][1]["content"].startswith("...")

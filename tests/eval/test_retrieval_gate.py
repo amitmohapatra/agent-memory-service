@@ -86,7 +86,6 @@ async def test_critical_recall_and_evidence_group_gates(container, uow_factory) 
         "golden_set": golden.name,
         "embedding": indexer.embedding.fingerprint(),
         "sparse": indexer.sparse.fingerprint(),
-        "reranker": engine.reranker.fingerprint() if engine.reranker else None,
         "representative": not indexer.embedding.fingerprint().startswith("hash-"),
         "note": (
             "hash embedding is a deterministic stand-in; quality numbers are not representative"

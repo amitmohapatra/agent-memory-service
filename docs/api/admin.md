@@ -33,9 +33,9 @@ created = await memory.admin.create_tenant(
     tenant_id="acme",
     retention_days=365,
     rate_limit_per_minute=600,
-    idempotency_key="onboard-acme-2026-09",   # a retry returns the tenant, token=None
+    idempotency_key="onboard-acme-2026-09",  # a retry returns the tenant, token=None
 )
-print(created.tenant.tenant_id, created.admin_key.token)   # the token is shown once
+print(created.tenant.tenant_id, created.admin_key.token)  # the token is shown once
 ```
 
 A suspended tenant's own administrators are suspended with it — resuming is the platform's job, not
@@ -107,7 +107,7 @@ is the full production shape rather than a fixed list.
   "providers": {
     "cache": "dragonfly", "search": "qdrant", "blob": "s3", "tasks": "procrastinate",
     "authorization": "openfga", "embedding": "ibm-granite/granite-embedding-small-english-r2",
-    "reranker": "disabled", "llm": "bifrost", "memory_intelligence": "native",
+    "llm": "bifrost", "memory_intelligence": "native",
     "graph_enrichment": "native", "document_parser": "builtin"
   }
 }
@@ -115,8 +115,7 @@ is the full production shape rather than a fixed list.
 
 `providers` reports what is **running**, not what was configured, and `degraded` names every place
 the two disagree: a document parser that fell back to the builtin, an NLI head running a
-non-representative stand-in (grounding verdicts are weak), a reranker that was requested but never
-built. This is the endpoint to check before believing a number from a benchmark: a run whose
+non-representative stand-in (grounding verdicts are weak). This is the endpoint to check before believing a number from a benchmark: a run whose
 `degraded` list is non-empty measured something other than the configured system.
 
 ## What this area does not do

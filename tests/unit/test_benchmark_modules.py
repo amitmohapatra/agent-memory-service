@@ -1,4 +1,4 @@
-"""The embedding / reranker benchmark modules: candidate matrices, verdict selection on
+"""The embedding benchmark module: candidate matrices, verdict selection on
 synthetic rows, and one end-to-end run of the embedding benchmark with the hash stand-in."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-from benchmark import embedding, reranker
+from benchmark import embedding
 
 from tests.conftest import DB_URL, PG_AVAILABLE
 
@@ -21,10 +21,6 @@ def _row(recall: float, egr: float, **extra: object) -> dict[str, object]:
 
 def _emb_row(recall: float, egr: float, *, q_p95: float, dim: int) -> dict[str, object]:
     return _row(recall, egr, embed_ms={"query_p95": q_p95}, dimension=dim)
-
-
-def _rr_row(recall: float, egr: float, *, k: int, p95: float) -> dict[str, object]:
-    return _row(recall, egr, candidate_k=k, rerank_ms={"p95": p95})
 
 
 @pytest.mark.unit
@@ -64,23 +60,6 @@ class TestVerdicts:
         assert verdict["default"] is None
         assert verdict["eligible"] == []
 
-    def test_reranker_cheapest_k_keeping_best_quality(self) -> None:
-        rows = {
-            "sentence_transformers@k15": _rr_row(1.0, 0.9, k=15, p95=20.0),
-            "sentence_transformers@k20": _rr_row(1.0, 1.0, k=20, p95=25.0),
-            "sentence_transformers@k25": _rr_row(1.0, 1.0, k=25, p95=30.0),
-            "onnx@k20": _rr_row(1.0, 1.0, k=20, p95=15.0),
-            "lexical@k15": _rr_row(0.8, 0.8, k=15, p95=0.5),
-            "disabled@k15": _rr_row(0.7, 0.7, k=15, p95=0.0),
-        }
-        verdict = embedding.pick_default(rows, reranker.reranker_cost)
-        assert verdict["default"] == "onnx@k20"
-        assert verdict["eligible"] == [
-            "onnx@k20",
-            "sentence_transformers@k20",
-            "sentence_transformers@k25",
-        ]
-
 
 @pytest.mark.unit
 class TestCandidates:
@@ -105,22 +84,6 @@ class TestCandidates:
         stand_in = embedding.candidates(stand_in=True)
         assert list(stand_in) == [embedding.STAND_IN]
         assert stand_in[embedding.STAND_IN] is None
-
-    def test_reranker_matrix(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        monkeypatch.setenv("BENCH_MODELS_DIR", str(tmp_path))
-        full = reranker.candidates()
-        assert len(full) == 12
-        assert sorted({c.candidate_k for c in full.values()}) == [15, 20, 25]
-        ce = full["onnx@k25"]
-        assert ce.provider == "onnx"
-        assert ce.candidate_k == 25
-        assert ce.model is not None and ce.model.backend == "onnx"
-        assert ce.model_path == str(tmp_path / "ms-marco-MiniLM-L6-v2")
-        assert full["lexical@k15"].model_path is None
-        assert {c.provider for c in reranker.candidates(stand_in=True).values()} == {
-            "lexical",
-            "disabled",
-        }
 
     def test_sample_documents_cycles_to_batch_size(self) -> None:
         from benchmark.evaluation.golden import GoldenSet

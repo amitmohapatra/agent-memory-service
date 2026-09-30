@@ -129,7 +129,7 @@ class QueryDecomposer:
 
         ``rrf_fuse`` in the engine is not reused: it fuses ``SearchHit``s by a single
         ``retriever`` attribute, and what is being fused here is whole results whose text,
-        rerank score and expansion provenance must survive.
+        score and expansion provenance must survive.
         """
         scores: dict[str, float] = {}
         best: dict[str, Candidate] = {}

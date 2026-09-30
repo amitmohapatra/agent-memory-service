@@ -432,7 +432,8 @@ class ConnectionService:
             decided.add(index)
             if kind == "none":
                 continue
-            why = raw.get("why") if isinstance(raw.get("why"), str) else ""
+            why = raw.get("why")
+            why = why if isinstance(why, str) else ""
             accepted[index] = (index, str(kind), re.sub(r"\s+", " ", why).strip()[:_MAX_WHY_CHARS])
         return [accepted[index] for index in sorted(accepted)]
 

@@ -106,7 +106,6 @@ class _Engine:
     def __init__(self, authz: AuthorizationService, memories: int = 2) -> None:
         self.authz = authz
         self.indexer = _Indexer()
-        self.reranker = None
         self.calls = 0
         self.count = memories
 

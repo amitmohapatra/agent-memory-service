@@ -85,7 +85,6 @@ async def test_pdf_critical_recall_and_evidence_group_gates(container, uow_facto
         "parser": type(container.document_parser).__name__,
         "embedding": indexer.embedding.fingerprint(),
         "sparse": indexer.sparse.fingerprint(),
-        "reranker": engine.reranker.fingerprint() if engine.reranker else None,
         "representative": not indexer.embedding.fingerprint().startswith("hash-"),
         **summary,
         "provenance": provenance(),

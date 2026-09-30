@@ -194,7 +194,7 @@ async def test_long_document_navigation_without_pageindex(container, corpus) -> 
 
 
 async def test_precision_over_a_distractor_without_colbert(container, corpus) -> None:
-    """`colbert`'s claim, covered by the cross-encoder reranker.
+    """`colbert`'s claim, covered by hybrid fusion.
 
     The distractor shares the vocabulary and holds none of the facts; it must not outrank
     the document that answers the question.

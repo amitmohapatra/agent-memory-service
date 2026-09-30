@@ -28,8 +28,6 @@ from memory_service.ports.models import (
     NLIProvider,
     NLIScore,
     ProviderInfo,
-    Reranker,
-    RerankResult,
     SparseEncoder,
 )
 from memory_service.ports.search import (
@@ -82,8 +80,6 @@ __all__ = [
     "Queue",
     "Relation",
     "RelationTuple",
-    "RerankResult",
-    "Reranker",
     "SearchFilter",
     "SearchHit",
     "SearchRecord",

@@ -16,7 +16,7 @@ same in-process stand-ins the test suite and the benchmarks use - not settings, 
 about the shipped service's configuration surface changes. With the compose stack
 (`make dev-up`) run the service itself: `uv run memory-api` and `uv run memory-worker`.
 Models: the frozen weights are used when `./models` holds them (`make models`); otherwise the
-hash embedding, lexical reranker and lexical NLI stand in, and the launcher says so.
+hash embedding and lexical NLI stand in, and the launcher says so.
 
 ## `sdk_tour.py` — the SDK, method by method
 

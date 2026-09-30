@@ -184,8 +184,8 @@ def test_the_test_suite_has_exactly_one_database_url() -> None:
 def test_the_suite_never_reads_the_services_own_database_variable() -> None:
     """``MEMORY__DATABASE__URL`` must not decide where tests write.
 
-    It is the *service's* variable and ``.env`` sets it to the dev database. The deepeval
-    pytest plugin loads ``.env`` into ``os.environ`` before conftest is imported, so reading
+    It is the *service's* variable and ``.env`` sets it to the dev database. A shell or a
+    pytest plugin can load ``.env`` into ``os.environ`` before conftest is imported, so reading
     it here is not "a default with an escape hatch" — it resolves to the dev database on
     every run, and the suite truncated it. The suite's own variable is
     ``MEMORY_TEST_DATABASE_URL``.
@@ -243,7 +243,7 @@ def test_every_declared_stand_in_has_a_wiring_branch() -> None:
     handled: set[str] = set()
     fallthrough = False
     for node in ast.walk(wiring):
-        # `stand_in == "x"`, `stand_in.reranker == "x"` and `... in ("x", "y")`
+        # `stand_in == "x"`, `stand_in.nli == "x"` and `... in ("x", "y")`
         if isinstance(node, ast.Compare):
             for comparator in node.comparators:
                 if isinstance(comparator, ast.Constant):
@@ -267,8 +267,8 @@ def test_every_declared_stand_in_has_a_wiring_branch() -> None:
 def test_the_suite_configures_itself_and_never_the_developers_shell() -> None:
     """A test run must mean the same thing on every machine.
 
-    Two doors let a local ``.env`` into the suite, and both had to be shut: the deepeval
-    pytest plugin loads that file into ``os.environ`` before conftest is imported, and
+    Two doors let a local ``.env`` into the suite, and both had to be shut: a shell or a
+    pytest plugin can load that file into ``os.environ`` before conftest is imported, and
     pydantic-settings reads ``./.env`` directly as a settings source. Four model paths were
     arriving that way, pointing at directories that do not exist — invisible only because the
     stand-in providers never load a model.

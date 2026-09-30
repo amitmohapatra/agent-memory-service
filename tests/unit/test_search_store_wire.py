@@ -44,7 +44,6 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "memory_service"
 #: from nothing else, so a new reader either adds its key here or gets None in production.
 READERS = (
     "modules/retrieval/engine.py",
-    "modules/retrieval/source_turns.py",
     "modules/context/builder.py",
     "modules/context/evidence.py",
     "modules/context/expansion.py",

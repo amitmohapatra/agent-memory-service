@@ -15,7 +15,6 @@ from memory_service.modules.llm.credentials import ModelCredentials, agent_ident
 from memory_service.modules.llm.policy import current_model_identity, model_identity
 from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
-from tests.support_hindsight import preview_server
 from tests.support_llm import chat_response, mocked_gateway
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 from tests.unit.test_narrative_memory import MESSAGE
@@ -227,6 +226,8 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
 async def test_background_ingestion_uses_owner_key_and_never_hindsight_operator_budget(
     container, uow_factory, registered
 ):
+    from tests.support_hindsight import preview_server
+
     credentials = service(uow_factory)
     if registered:
         await save(credentials, uow_factory, ALICE, "vk-job-test")

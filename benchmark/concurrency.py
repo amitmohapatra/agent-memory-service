@@ -82,7 +82,6 @@ def _close(a: list[float], b: list[float], tol: float = 1e-5) -> bool:
 async def _measure(container, workers: int, rounds: int) -> dict:
     """One (workers) point: run `rounds` batches split across `workers` concurrent callers."""
     embedding = container.embedding
-    reranker = container.reranker
 
     # sequential baseline for the agreement check
     baseline = await embedding.embed_documents(_TEXTS)
@@ -108,27 +107,9 @@ async def _measure(container, workers: int, rounds: int) -> dict:
         if not _close(got, want)
     )
 
-    rerank_seconds = None
-    reranked = 0
-    if reranker is not None and getattr(reranker, "representative", True):
-        docs = list(_TEXTS)
-        started = time.perf_counter()
-
-        async def score() -> list[float]:
-            return await reranker.rerank(QUERY, docs)
-
-        for i in range(0, rounds, workers):
-            group = min(workers, rounds - i)
-            await asyncio.gather(*(score() for _ in range(group)))
-            reranked += group * len(docs)
-        rerank_seconds = time.perf_counter() - started
-
     return {
         "workers": workers,
         "embed_per_second": round(embedded / embed_seconds, 1) if embed_seconds else 0.0,
-        "rerank_pairs_per_second": (
-            round(reranked / rerank_seconds, 1) if rerank_seconds else None
-        ),
         "disagreements_vs_sequential": disagreements,
         "peak_rss_mb": round(_peak_rss_mb(), 1),
     }

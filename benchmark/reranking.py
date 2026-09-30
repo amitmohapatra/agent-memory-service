@@ -14,11 +14,10 @@ import platform
 import time
 from pathlib import Path
 
+from benchmark.cross_encoder import CrossEncoderModel, CrossEncoderReranker
 from benchmark.harness import stats
 from benchmark.multilingual_dense import metrics, record
 from benchmark.multilingual_sparse import SparseCorpus, load_dataset
-from memory_service.adapters.models.rerankers import CrossEncoderReranker
-from memory_service.config.constants import CrossEncoderModel
 
 
 async def run(args) -> None:

@@ -186,7 +186,6 @@ def provenance(**extra: Any) -> dict[str, Any]:
                 "sentence-transformers",
                 "torch",
                 "transformers",
-                "fastembed",
                 "onnxruntime",
                 "docling",
             )

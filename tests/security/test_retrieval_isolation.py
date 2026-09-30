@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 
 from memory_service.adapters.models.embeddings import HashEmbedding
-from memory_service.adapters.models.rerankers import LexicalReranker
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 from memory_service.config.constants import RetrievalSettings
@@ -135,9 +134,7 @@ async def engine_and_ids() -> tuple[RetrievalEngine, dict[str, dict[str, Any]]]:
         None,  # type: ignore[arg-type]
         store,
         indexer,
-        LexicalReranker(),
         settings=cfg,
-        rerank_k=5,
     )
     return engine, by_id
 

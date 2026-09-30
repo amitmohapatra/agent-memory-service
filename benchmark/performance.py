@@ -93,7 +93,6 @@ async def run(copies: int, requests: int) -> dict[str, Any]:
                 "transport": "in-process ASGI (no network hop)",
                 "providers": {
                     "embedding": container.embedding.fingerprint(),
-                    "reranker": type(container.reranker).__name__ if container.reranker else None,
                     "search": BENCH.search,
                     "cache": "memory",
                     "blob": settings.blob.provider,

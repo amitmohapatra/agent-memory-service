@@ -32,7 +32,7 @@ vendor: ## Refresh the vendored copy of bifrost-sdk (generated; never edit it in
 	  > $(VENDOR)/VENDORED.md
 
 .PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
-        performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-reranker bench-storage \
+        performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-storage \
         load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
 
 help: ## Show targets
@@ -236,8 +236,8 @@ BENCH_DENSE ?= ensemble
 #: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,
 #: TIMEOUT, retries off - a provider counts *wire* requests, so max_retries=2 sends three per
 #: logical call and a run paced at half the documented limit still exceeds it). The only
-#: LLM use is the judge: ambiguous_worthiness / ambiguous_extraction at ingest were measured
-#: harmful (v2 -> v3: 0.674 -> 0.661, p50 281 -> 572 ms) and are off.
+#: LLM use is the judge: the former ambiguous-extraction/worthiness ingest uses were measured
+#: harmful (v2 -> v3: 0.674 -> 0.661, p50 281 -> 572 ms) and were removed.
 BENCH_LLM_ENV = -e BENCH_DEPTH=judged \
   -e MEMORY__MODELS__LLM__ENABLED=true \
   -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
@@ -375,9 +375,6 @@ THREADS ?= 1 2 4 8
 
 bench-embedding: ## Embedding runtime benchmark
 	$(PY) python -m benchmark.embedding
-
-bench-reranker: ## Reranker benchmark
-	$(PY) python -m benchmark.reranker
 
 bench-storage: ## Archive segment / storage benchmark
 	$(PY) python -m benchmark.storage

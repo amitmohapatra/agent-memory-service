@@ -1,6 +1,6 @@
 """Baseline retrieval: index job -> Qdrant (local mode) hybrid search -> engine -> bundle.
 
-Uses the deterministic hash embedding + BM25 sparse encoder + lexical reranker, so the
+Uses the deterministic hash embedding + BM25 sparse encoder, so the
 assertions are about *plumbing and isolation* (store-side filtering, fusion, exact lookups,
 budgets, caching), not about semantic quality. Quality is measured in tests/eval.
 """
@@ -177,14 +177,9 @@ async def test_thread_private_document_is_not_visible_to_other_users(
     assert (await engine.retrieve(agent, q, limit=5)).candidates
 
 
-async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) -> None:
+async def test_engine_pipeline_exact_fusion_and_kinds(container, uow_factory) -> None:
     doc_id = await _ingest(container, uow_factory)
-    # Reranking is off by default now — it measured significantly worse on SciFact (see
-    # RetrievalSettings.rerank). This test is *about* the rerank stage, so it turns the flag
-    # on explicitly rather than inheriting whatever the default happens to be; that keeps the
-    # stage covered while the default reflects the evidence.
     engine = container.services["retrieval"]
-    engine.cfg = engine.cfg.model_copy(update={"rerank": True})
     async with uow_factory() as uow:
         chunks = await uow.documents.list_chunks("acme", doc_id)
     target = next(c for c in chunks if "increased to EUR 98" in c.text)
@@ -197,14 +192,12 @@ async def test_engine_pipeline_exact_rerank_and_kinds(container, uow_factory) ->
     )
     # exact lookup respects visibility
     assert (await engine.retrieve(OTHER_TENANT, f"show {target.chunk_id}")).candidates == []
-    # multi-hop question: hybrid + rerank, bounded to limit
+    # multi-hop question: hybrid fusion, bounded to limit
     res = await engine.retrieve(OWNER, "why did Adjusted EBITDA increase despite lower revenue?")
     assert res.routed.query_type is QueryType.DOCUMENT_MULTI_HOP
-    assert res.diagnostics["reranked"] is True and res.diagnostics["fused_candidates"] >= 5
+    assert res.diagnostics["fused_candidates"] >= 5
     evidence = [c for c in res.candidates if c.kind in ("chunk", "memory")]
     assert len(evidence) <= container.tuning.retrieval.final_k
-    reranked = [c for c in res.candidates if c.kind == "chunk" and c.expansion_edge is None]
-    assert all(c.rerank_score is not None for c in reranked[: engine.rerank_k])
     assert res.candidates[0].record_id == target.chunk_id
     # limit is honoured; document_ids restricts; kinds=memory returns nothing yet (M7)
     two = await engine.retrieve(OWNER, "revenue", limit=2)

@@ -1,5 +1,5 @@
 """RetrievalEngine: authorized scope -> exact -> route -> hybrid (BM25 + dense, RRF) ->
-prune -> bounded CPU rerank -> (M9: expansion + evidence verification).
+prune -> (M9: expansion + evidence verification).
 
 Every candidate comes out of the store already filtered by tenant + visibility keys; the
 engine never sees another principal's data, so there is nothing to "filter in memory".
@@ -28,12 +28,10 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
-from memory_service.modules.retrieval.source_turns import promote_source_turns
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
-from memory_service.ports.models import Reranker
 from memory_service.ports.search import (
     AnchoredPrefetch,
     Retriever,
@@ -88,7 +86,6 @@ class Candidate:
     score: float
     retrievers: list[str] = field(default_factory=list)
     payload: dict[str, Any] = field(default_factory=dict)
-    rerank_score: float | None = None
     expanded_from: str | None = None
     expansion_edge: str | None = None
 
@@ -211,10 +208,8 @@ class RetrievalEngine:
         authz: AuthorizationService,
         store: SearchStore,
         indexer: Indexer,
-        reranker: Reranker | None,
         *,
         settings: RetrievalSettings,
-        rerank_k: int = 20,
         router: QueryRouter | None = None,
         assist: LLMAssist | None = None,
     ) -> None:
@@ -222,9 +217,7 @@ class RetrievalEngine:
         self.authz = authz
         self.store = store
         self.indexer = indexer
-        self.reranker = reranker
         self.cfg = settings
-        self.rerank_k = rerank_k
         self.router = router or QueryRouter(semantic_graph=settings.semantic_graph)
         self.assist = assist or LLMAssist.disabled()
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
@@ -251,8 +244,8 @@ class RetrievalEngine:
         selected_documents = frozenset(document_ids or ())
         selected_kinds = frozenset(kinds)
         # Bound the query before anything expensive touches it. See
-        # RetrievalSettings.max_query_chars: the cost of a query is paid again for every
-        # cross-encoder pair, and the embedding models truncate at 512 tokens anyway.
+        # RetrievalSettings.max_query_chars: the embedding models truncate at 512 tokens
+        # anyway, so the text past it was only ever paid for.
         if len(query) > self.cfg.max_query_chars:
             log.warning(
                 "retrieval.query_truncated",
@@ -380,8 +373,7 @@ class RetrievalEngine:
                             )
                         )
                     # interleave the per-kind lists by rank so a long document result list
-                    # can never crowd out the memories (or summaries) before the reranker
-                    # sees them
+                    # can never crowd out the memories (or summaries) before the cut
                     for group in itertools.zip_longest(*per_kind):
                         candidates.extend(c for c in group if c is not None)
                     diagnostics["fused_candidates"] = len(candidates)
@@ -414,15 +406,11 @@ class RetrievalEngine:
                     pool_limit = max(pool_limit, derived_k(limit))
                     diagnostics["memory_recall_k"] = limit
                 before = len(candidates)
-                if self.cfg.source_turn_expansion:
-                    candidates, promoted = promote_source_turns(candidates)
-                    diagnostics["source_turn_promotions"] = promoted
                 candidates = _dedup(candidates)[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
-                # 4. bounded CPU rerank
                 # list(), not an alias. ``unused`` below is everything in the pool that the
                 # cut dropped, and it feeds EvidenceReport.unused, which the grounding cascade
                 # scans for contradictions. Today the only rebinding between here and that
@@ -431,16 +419,6 @@ class RetrievalEngine:
                 # whole pool, ``unused`` goes silently empty, and the cascade stops seeing
                 # contradictions with every test still green.
                 pool = list(candidates)
-                # Always stated, so a caller can tell "reranking is off" from "the key is
-                # missing" - a test that toggled the flag after wiring read the absence as a
-                # KeyError rather than as the answer it was.
-                diagnostics["reranked"] = False
-                if self.cfg.rerank and self.reranker is not None and len(candidates) > 1:
-                    with timings.stage("rerank"):
-                        candidates = await self._rerank(
-                            routed.query, candidates, limit=len(candidates)
-                        )
-                    diagnostics["reranked"] = True
                 candidates = diverse_head(
                     candidates,
                     limit=limit,
@@ -676,7 +654,7 @@ class RetrievalEngine:
 
     async def _expand_query(self, query: str) -> QueryExpansion | None:
         """Model-assisted routing + lexical expansion when no rule fired. The original query
-        is kept for reranking and verification; the terms only widen the hybrid search."""
+        is kept for ranking and verification; the terms only widen the hybrid search."""
         out = await self.assist.structured(
             "query_expansion",
             system=_EXPANSION_SYSTEM,
@@ -835,20 +813,6 @@ class RetrievalEngine:
             weights=self.cfg.hybrid_weights,
             anchors=self._anchors(query, vectors, kind=kind),
         )
-
-    async def _rerank(
-        self, query: str, candidates: list[Candidate], *, limit: int
-    ) -> list[Candidate]:
-        head = candidates[: self.rerank_k]
-        tail = candidates[self.rerank_k :]
-        with span("rerank", k=len(head)), stage_seconds.labels("rerank").time():
-            results = await self.reranker.rerank(query, [c.text for c in head], top_k=len(head))  # type: ignore[union-attr]
-        reranked: list[Candidate] = []
-        for r in results:
-            c = head[r.index]
-            c.rerank_score = r.score
-            reranked.append(c)
-        return (reranked + tail)[:limit]
 
 
 def diverse_head(candidates: list[Candidate], *, limit: int, per_document: int) -> list[Candidate]:

@@ -18,7 +18,7 @@ cannot drift apart. The service never downloads at runtime; a missing model is a
 error, not a silent fall back to a stand-in. ``models/MANIFEST.json`` records the exact
 revision of each so a benchmark result can name the weights it was produced with.
 
-Benchmark challengers (other encoders, rerankers, learned sparse) are not in the catalogue
+Benchmark challengers (other encoders, cross-encoders, learned sparse) are not in the catalogue
 any more - ~7 GB of weights with no production code path. ``benchmark/challengers.txt``
 lists them for an ad-hoc ``--challengers`` fetch.
 """
@@ -75,8 +75,8 @@ def _frozen() -> tuple[Model, ...]:
     from memory_service.config.constants import FROZEN_MODELS
 
     dense, dense_ml = FROZEN_MODELS.dense, FROZEN_MODELS.dense_ml
-    nli, reranker = FROZEN_MODELS.nli, FROZEN_MODELS.reranker
-    out = [
+    nli = FROZEN_MODELS.nli
+    return (
         Model(
             dense.local_dir,
             dense.id,
@@ -104,19 +104,7 @@ def _frozen() -> tuple[Model, ...]:
             runtime=nli.runtime,
             revision=nli.revision,
         ),
-    ]
-    if reranker is not None:
-        out.append(
-            Model(
-                reranker.local_dir,
-                reranker.id,
-                "reranker",
-                "cross-encoder reranker",
-                default=True,
-                revision=reranker.revision,
-            )
-        )
-    return tuple(out)
+    )
 
 
 MODELS: tuple[Model, ...] = _frozen()

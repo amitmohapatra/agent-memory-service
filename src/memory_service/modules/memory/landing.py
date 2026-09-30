@@ -51,7 +51,7 @@ class LandingReflection:
         sources = self._bounded_sources(memory.subject, sources)
         affected: set[str] = set()
         predicate = memory.predicate
-        if is_multi_valued(predicate):
+        if predicate is not None and is_multi_valued(predicate):
             support = [m for m in sources if m.predicate == predicate]
             if len(support) >= self.cfg.belief_min_support:
                 belief, changed = await self.beliefs.upsert(

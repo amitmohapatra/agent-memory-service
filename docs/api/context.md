@@ -52,17 +52,17 @@ handing you a bundle you might answer from anyway.
 ```python
 bundle = await ctx.context("how did revenue develop?", token_budget=4000)
 
-bundle.rendered            # prompt-ready text, with citation markers
-bundle.conversation        # ConversationWindow: thread_id, message_ids, rendered, summary
-bundle.memories            # durable facts and preferences      (ContextItem)
-bundle.knowledge           # document passages, with document, page and evidence
-bundle.graph_facts         # entity relations
-bundle.summaries           # rolling summaries
-bundle.evidence.status     # COMPLETE | INCOMPLETE | INSUFFICIENT
+bundle.rendered  # prompt-ready text, with citation markers
+bundle.conversation  # ConversationWindow: thread_id, message_ids, rendered, summary
+bundle.memories  # durable facts and preferences      (ContextItem)
+bundle.knowledge  # document passages, with document, page and evidence
+bundle.graph_facts  # entity relations
+bundle.summaries  # rolling summaries
+bundle.evidence.status  # COMPLETE | INCOMPLETE | INSUFFICIENT
 bundle.evidence.missing_groups
 bundle.token_estimate, bundle.token_budget, bundle.cache_hit
-bundle.insufficient        # the status, as a boolean
-bundle.evidence_items()    # the packed evidence as /v1/verify items, in citation order
+bundle.insufficient  # the status, as a boolean
+bundle.evidence_items()  # the packed evidence as /v1/verify items, in citation order
 ```
 
 `rendered` presents memory as evidence to weigh with ids to cite — not as instructions to follow.
@@ -85,7 +85,7 @@ report = await ctx.verify(answer_text, bundle=bundle)
 print(report.supported, report.unsupported, report.contradicted, report.borderline)
 print(report.per_claim_hallucination_rate, report.nli_provider, report.representative)
 for verdict in report.claims:
-    print(verdict.verdict, verdict.claim)   # supported | unsupported | contradicted | borderline
+    print(verdict.verdict, verdict.claim)  # supported | unsupported | contradicted | borderline
 ```
 
 The cascade is deterministic first: citations are resolved, then an NLI head scores each claim
@@ -96,10 +96,10 @@ uses before it is willing to spend anything on an LLM judge.
 ## Conversation
 
 ```python
-thread = await ctx.chat.create(title="Q3 planning")     # idempotent; messages also create one
+thread = await ctx.chat.create(title="Q3 planning")  # idempotent; messages also create one
 await ctx.chat.user("Revenue was EUR 412 million in FY26.")
 await ctx.chat.assistant("Noted — that's up 4% year on year.")
-await ctx.chat.internal("plan: check the FY25 figure", role="AGENT")   # kind=INTERNAL
+await ctx.chat.internal("plan: check the FY25 figure", role="AGENT")  # kind=INTERNAL
 for message in await ctx.chat.history(limit=20):
     print(message.role, message.content[:60])
 ```
@@ -116,14 +116,14 @@ from trellis.memory import BriefSpec
 
 brief = await ctx.briefs.create(
     BriefSpec(
-        kind="mental_model",          # or "knowledge_page"
+        kind="mental_model",  # or "knowledge_page"
         title="Supply risk for SKU-1",
         question="What threatens SKU-1 availability this quarter?",
-        refresh_seconds=3600,         # 60 … 86400
-        use_llm=False,                # synthesis stays deterministic unless permitted
+        refresh_seconds=3600,  # 60 … 86400
+        use_llm=False,  # synthesis stays deterministic unless permitted
     )
 )
-fresh = await ctx.briefs.get(brief.brief_id)    # a read: never generates, may be stale
+fresh = await ctx.briefs.get(brief.brief_id)  # a read: never generates, may be stale
 print(fresh.status, fresh.output.text if fresh.output else None)
 ```
 

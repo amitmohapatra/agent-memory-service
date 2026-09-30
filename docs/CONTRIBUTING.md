@@ -28,7 +28,7 @@ R. Do not proceed if a release gate fails.
   `failure`, `eval`; plus `docker` (needs a Docker daemon with registry access), `models`
   (needs local model files / Docling) and `bifrost` (needs a running gateway). CI runs
   everything that is not `docker`/`models`/`bifrost`; the release gates run the rest.
-- Test settings are hermetic by default (hash embedding, lexical reranker, in-process
+- Test settings are hermetic by default (hash embedding, in-process
   Qdrant/cache/authorization, builtin parser). `MEMORY_TEST_PROVIDERS=env` makes every
   fixture take the *models / search / cache / authorization / documents / retrieval*
   sections from the environment instead, so the same suites run against real weights and

@@ -22,7 +22,6 @@ def test_stand_ins_replace_the_stores_a_single_process_never_talks_to() -> None:
     )
     assert with_weights.document_parser == "builtin"
     assert with_weights.embedding is None and with_weights.nli is None
-    assert with_weights.reranker is None
     # the tuning is the shipped tuning: an example must not run a different retriever
     assert with_weights.retrieval is None and with_weights.context is None
 
@@ -30,7 +29,7 @@ def test_stand_ins_replace_the_stores_a_single_process_never_talks_to() -> None:
 def test_model_stand_ins_only_without_the_weights() -> None:
     without = serve.stand_ins(weights=False)
     assert without.embedding == "hash" and without.embedding_dimension == 64
-    assert without.reranker == "lexical" and without.nli == "lexical"
+    assert without.nli == "lexical"
     assert without.search == "memory" and without.tasks == "inline"
 
 

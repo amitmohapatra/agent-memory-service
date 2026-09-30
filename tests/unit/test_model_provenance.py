@@ -72,9 +72,7 @@ def test_permitted_models_are_not_false_positives(name: str) -> None:
 
 
 def test_the_frozen_set_is_permitted() -> None:
-    frozen = [FROZEN_MODELS.dense.id, FROZEN_MODELS.nli.id]
-    if FROZEN_MODELS.reranker is not None:
-        frozen.append(FROZEN_MODELS.reranker.id)
+    frozen = [FROZEN_MODELS.dense.id, FROZEN_MODELS.dense_ml.id, FROZEN_MODELS.nli.id]
     assert all(permitted_model(name) for name in frozen), frozen
 
 

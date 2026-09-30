@@ -52,15 +52,15 @@ of evidence.
 await ctx.observe(
     "Stock check for SKU-1 returned 95 units at EU-1.",
     kind="EVENT",
-    sku="SKU-1",              # anything extra is custom metadata
+    sku="SKU-1",  # anything extra is custom metadata
 )
 
 # "I know this": state the type, the lifetime and the audience yourself
 await ctx.remember(
     "The planner prefers weekly digests over per-event alerts.",
-    memory_type="PREFERENCE",   # SEMANTIC · EPISODIC · PROCEDURAL · PREFERENCE · DECISION · OUTCOME · FAILURE · SHARED
-    lifetime="LONG_TERM",       # EPHEMERAL · SHORT_TERM · LONG_TERM · ARCHIVAL
-    visibility="USER",          # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORK · WORKSPACE · TENANT
+    memory_type="PREFERENCE",  # SEMANTIC · EPISODIC · PROCEDURAL · PREFERENCE · DECISION · OUTCOME · FAILURE · SHARED
+    lifetime="LONG_TERM",  # EPHEMERAL · SHORT_TERM · LONG_TERM · ARCHIVAL
+    visibility="USER",  # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORK · WORKSPACE · TENANT
 )
 ```
 
@@ -76,10 +76,10 @@ for memory in page.items:
 if page.next_cursor:
     page = await ctx.memories_page(limit=50, cursor=page.next_cursor)
 
-async for memory in ctx.iter_memories(limit=200):   # the cursor, walked for you
+async for memory in ctx.iter_memories(limit=200):  # the cursor, walked for you
     ...
 
-await ctx.forget(memory.memory_id)   # soft delete + index removal; idempotent
+await ctx.forget(memory.memory_id)  # soft delete + index removal; idempotent
 ```
 
 `memories` is the audit view — "what do we hold about this user, thread or run" — and it is not
@@ -102,7 +102,7 @@ audience before it walks.
 
 ```python
 ack = await ctx.observe("Castor Supply raised lead time to 12 days.", kind="EVENT")
-for job_id in ack.job_ids:                       # one write can queue more than one job
+for job_id in ack.job_ids:  # one write can queue more than one job
     job = await ctx.job(job_id)
     while job.status in ("PENDING", "RUNNING", "RETRYING"):
         await asyncio.sleep(0.2)

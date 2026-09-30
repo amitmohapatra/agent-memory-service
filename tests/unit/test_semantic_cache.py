@@ -31,16 +31,6 @@ def semantic_builder():
     return builder
 
 
-async def test_reranker_profile_changes_the_context_cache_namespace():
-    builder = semantic_builder()
-    original = builder._config_fingerprint()
-    builder.engine.reranker = SimpleNamespace(fingerprint=lambda: "reranker-profile-a")
-    first = builder._config_fingerprint()
-    builder.engine.reranker = SimpleNamespace(fingerprint=lambda: "reranker-profile-b")
-    assert original != first != builder._config_fingerprint()
-    await builder.close()
-
-
 async def test_read_model_policy_separates_exact_and_semantic_cache_entries():
     builder = semantic_builder()
     assisted = await builder.build(CTX, "my timezone?")

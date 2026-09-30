@@ -8,7 +8,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from hindsight_client_api.models.dry_run_extraction_result import DryRunExtractionResult
+
+pytest.importorskip("hindsight_client")
+
+from hindsight_client_api.models.dry_run_extraction_result import (  # noqa: E402
+    DryRunExtractionResult,
+)
 
 from memory_service.adapters.models.hindsight import HindsightExtractor, _validated_texts
 from memory_service.config.constants import MemoryIntelligenceSettings
@@ -38,7 +43,7 @@ async def test_real_sdk_preview_keeps_local_identity_chronology_and_native_facts
         with mocked_gateway(failing=True) as gateway:
             provider = NativeMemoryIntelligence(
                 MemoryIntelligenceSettings(),
-                assist=gateway.assist(uses=["contextual_extraction", "ambiguous_worthiness"]),
+                assist=gateway.assist(uses=["contextual_extraction"]),
                 contextual_extractor=server.extractor,
             )
             candidates = await provider.extract(obs, CTX)
@@ -68,7 +73,7 @@ async def test_preview_failure_has_one_attempt_and_no_secondary_model_calls(stat
         with mocked_gateway(failing=True) as gateway:
             provider = NativeMemoryIntelligence(
                 MemoryIntelligenceSettings(),
-                assist=gateway.assist(uses=["contextual_extraction", "ambiguous_worthiness"]),
+                assist=gateway.assist(uses=["contextual_extraction"]),
                 contextual_extractor=server.extractor,
             )
             candidates = await provider.extract(_obs(MESSAGE), CTX)

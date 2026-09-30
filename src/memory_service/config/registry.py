@@ -53,7 +53,6 @@ class Registries:
         self.authorization: ProviderRegistry[Any] = ProviderRegistry("authorization")
         self.embedding: ProviderRegistry[Any] = ProviderRegistry("embedding")
         self.sparse: ProviderRegistry[Any] = ProviderRegistry("sparse")
-        self.reranker: ProviderRegistry[Any] = ProviderRegistry("reranker")
         self.llm: ProviderRegistry[Any] = ProviderRegistry("llm")
         self.memory_intelligence: ProviderRegistry[Any] = ProviderRegistry("memory_intelligence")
         self.graph_store: ProviderRegistry[Any] = ProviderRegistry("graph_store")

@@ -59,8 +59,8 @@ def representativeness(results: dict[str, dict[str, Any] | None]) -> list[str]:
     retrieval = results.get("retrieval_gate")
     if retrieval is not None and not retrieval.get("representative", False):
         notes.append(
-            f"retrieval quality measured with embedding={retrieval.get('embedding')} "
-            f"reranker={retrieval.get('reranker')}: NOT representative of production models"
+            f"retrieval quality measured with embedding={retrieval.get('embedding')}: "
+            "NOT representative of production models"
         )
     perf = results.get("performance")
     if perf is not None and (note := _latency_caveat(perf)):

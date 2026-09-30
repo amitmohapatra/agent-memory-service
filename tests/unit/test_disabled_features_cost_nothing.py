@@ -1,14 +1,9 @@
 """A feature that is off must not be built, loaded, or advertised.
 
-Three retrieval capabilities were measured and left off: reranking (worse *and* twelve
-times slower on document RAG — docs/MEASUREMENTS.md §3b), SPLADE (removed with the freeze:
-a BERT-sized pass per document at ingest for an English-only vocabulary) and ColBERT late
-interaction (removed outright, ADR 0012). Off should mean off all the way down, and for the
-reranker it did not: `_wire_models` branched on the model provider and never on
-`retrieval.rerank`, so a cross-encoder was constructed in both the API and the worker
-whatever the flag said, and /version reported it as an active provider.
-
-Nothing called it. `RetrievalEngine` guards its only call site on `cfg.rerank`.
+Retrieval capabilities that were measured and rejected are removed rather than left behind a
+flag: cross-encoder reranking (worse *and* twelve times slower on document RAG —
+docs/MEASUREMENTS.md §3b), SPLADE (a BERT-sized pass per document at ingest for an
+English-only vocabulary) and ColBERT late interaction (ADR 0012).
 """
 
 from __future__ import annotations
@@ -16,30 +11,15 @@ from __future__ import annotations
 import pathlib
 
 from memory_service.api.routers.ops import _active
-from memory_service.config.constants import FROZEN_MODELS, RETRIEVAL
+from memory_service.config.constants import RETRIEVAL
 from memory_service.config.settings import Settings
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def test_the_reranker_is_off_by_default() -> None:
-    """On measured evidence, not preference. Changing this needs a new measurement."""
-    assert RETRIEVAL.rerank is False
-    assert FROZEN_MODELS.reranker is None, "nothing ships to load even if the flag flips"
-
-
 def test_a_disabled_component_reports_disabled_rather_than_its_configured_name() -> None:
     """/version used to name a cross-encoder that had never been loaded."""
     assert _active(None, "sentence_transformers") == "disabled"
-
-
-def test_the_reranker_is_guarded_by_its_own_flag() -> None:
-    """The asymmetry this test exists to prevent: the reranker's model load sat behind
-    nothing, so 566 MB of weights loaded into every process for something nothing called."""
-    wiring = (ROOT / "src/memory_service/adapters/wiring.py").read_text()
-    assert "not container.tuning.retrieval.rerank" in wiring, (
-        "the reranker must not be constructed when retrieval.rerank is false"
-    )
 
 
 def test_colbert_left_no_configuration_behind() -> None:
@@ -81,3 +61,11 @@ def test_every_memory_env_var_maps_to_a_real_setting() -> None:
                     break
                 node = getattr(node, part)
     assert not unknown, f"variables no setting reads: {unknown}"
+
+
+def test_reranking_left_no_configuration_behind() -> None:
+    """The reranker was measured worse and removed: no flag, no depth, no frozen model."""
+    assert "rerank" not in type(RETRIEVAL).model_fields
+    assert "rerank_k" not in type(RETRIEVAL).model_fields
+    wiring = (ROOT / "src/memory_service/adapters/wiring.py").read_text()
+    assert "rerank" not in wiring

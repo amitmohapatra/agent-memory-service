@@ -1438,7 +1438,7 @@ def main() -> int:
         nargs="*",
         default=[],
         metavar="FLAG",
-        help="retrieval flags to disable for this run, e.g. --off rerank graph",
+        help="retrieval flags to disable for this run, e.g. --off graph bm25",
     )
     parser.add_argument(
         "--judge",

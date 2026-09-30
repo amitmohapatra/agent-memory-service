@@ -64,7 +64,7 @@ def _settings(**overrides: object) -> LLMSettings:
         "model": "openai/gpt-4.1",
         "fast_model": "openai/gpt-4.1-mini",
         "max_retries": 2,
-        "uses": ["ambiguous_worthiness", "summaries"],
+        "uses": ["query_expansion", "summaries"],
     }
     base.update(overrides)
     return LLMSettings(**base)  # type: ignore[arg-type]
@@ -140,7 +140,7 @@ async def test_fast_model_is_used_for_fast_uses() -> None:
         return_value=httpx.Response(200, json=_chat("x", model="openai/gpt-4.1-mini"))
     )
     llm = BifrostLLM(_settings())
-    await llm.complete(_messages(), use="ambiguous_worthiness")
+    await llm.complete(_messages(), use="query_expansion")
     assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-4.1-mini"
     await llm.complete(_messages(), use="summaries")
     assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-4.1"
@@ -152,7 +152,7 @@ async def test_structured_requests_json_schema_and_validates() -> None:
         return_value=httpx.Response(200, json=_chat('{"worthy": true, "reason": "fact"}'))
     )
     llm = BifrostLLM(_settings())
-    out = await llm.structured(_messages(), schema=SCHEMA, use="ambiguous_worthiness")
+    out = await llm.structured(_messages(), schema=SCHEMA, use="query_expansion")
     assert out == {"worthy": True, "reason": "fact"}
     body = json.loads(route.calls.last.request.content)
     assert body["response_format"]["type"] == "json_schema"
@@ -281,8 +281,8 @@ async def test_assist_falls_back_to_none_on_any_failure() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(500))
     llm = BifrostLLM(_settings(max_retries=0))
     assist = LLMAssist(llm, _settings())
-    assert assist.wants("ambiguous_worthiness") and not assist.wants("reflection")
-    out = await assist.structured("ambiguous_worthiness", system="s", user="u", schema=SCHEMA)
+    assert assist.wants("query_expansion") and not assist.wants("reflection")
+    out = await assist.structured("query_expansion", system="s", user="u", schema=SCHEMA)
     assert out is None and route.call_count == 1
     assert await assist.structured("reflection", system="s", user="u", schema=SCHEMA) is None
     assert route.call_count == 1  # a use that is not enabled never calls the gateway
@@ -473,7 +473,7 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
     out = await llm.structured(
         [LLMMessage(role="user", content="grade this")],
         schema=SCHEMA,
-        use="ambiguous_worthiness",
+        use="query_expansion",
     )
     assert out == {"worthy": True, "reason": "fact"}
     assert "response_format" in seen[0], "the first attempt should still ask for the envelope"
@@ -483,7 +483,7 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
     out2 = await llm.structured(
         [LLMMessage(role="user", content="grade this too")],
         schema=SCHEMA,
-        use="ambiguous_worthiness",
+        use="query_expansion",
     )
     assert out2 == {"worthy": True, "reason": "fact"}
     assert len(seen) == 3 and "response_format" not in seen[2], "no second 400 for a known model"
@@ -510,7 +510,7 @@ async def test_the_repair_round_survives_the_envelope_fallback() -> None:
     respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
     llm = BifrostLLM(_settings())
     out = await llm.structured(
-        [LLMMessage(role="user", content="grade this")], schema=SCHEMA, use="ambiguous_worthiness"
+        [LLMMessage(role="user", content="grade this")], schema=SCHEMA, use="query_expansion"
     )
     assert out == {"worthy": True, "reason": "repaired"}
     assert len(seen) == 3, "refusal, invalid answer, one repair - and no more"
