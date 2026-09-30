@@ -205,6 +205,18 @@ class SearchStore(Protocol):
         self, collection: str, vector: SparseVector, flt: SearchFilter, *, limit: int
     ) -> list[SearchHit]: ...
 
+    async def similarity(
+        self,
+        collection: str,
+        name: VectorName,
+        vector: Sequence[float],
+        record_ids: Sequence[str],
+    ) -> dict[str, float]:
+        """The dense similarity of each named record to ``vector`` in space ``name`` (cosine,
+        so an absolute number, unlike a fusion score). Records without that vector are
+        absent. ``record_ids`` are already authorized: no filter beyond the ids."""
+        ...
+
     async def search_hybrid(
         self,
         collection: str,

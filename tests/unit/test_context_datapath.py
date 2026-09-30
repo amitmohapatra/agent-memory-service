@@ -21,7 +21,7 @@ import pytest
 
 from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
 from memory_service.adapters.cache.memory_cache import MemoryCache
-from memory_service.config.constants import CONTEXT, RETRIEVAL
+from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ContextBundle, ConversationWindow
 from memory_service.domain.enums import QueryType
@@ -69,10 +69,18 @@ class _Memories:
         return len(self.bumps[-1])
 
 
+class _Threads:
+    """No thread exists: the conversation window is empty."""
+
+    async def get(self, tenant_id: str, thread_id: str) -> None:
+        return None
+
+
 class _UoW:
     def __init__(self, revisions: _Revisions, memories: _Memories) -> None:
         self.revisions = revisions
         self.memories = memories
+        self.threads = _Threads()
         self.commits = 0
 
     async def __aenter__(self) -> _UoW:
@@ -108,6 +116,12 @@ class _Engine:
         self.indexer = _Indexer()
         self.calls = 0
         self.count = memories
+
+    #: the frozen multilingual encoder's floor
+    relevance_floor = FROZEN_MODELS.dense_ml.relevance_floor
+
+    async def score_similarity(self, result: RetrievalResult) -> None:
+        """The fixture's memories carry no vectors: nothing to score."""
 
     async def retrieve(
         self, ctx: MemoryExecutionContext, query: str, **kwargs: Any
@@ -673,3 +687,34 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
     assert response.json()["cache_hit"] is False
+
+
+async def test_a_ranked_memory_under_the_relevance_floor_is_not_packed() -> None:
+    """A fusion score always fills the budget; the dense similarity decides what is worth a
+    slot. Exact hits and companions are judged by what brought them in."""
+    builder = _builder(memories=4)
+    _, engine = _parts(builder)
+    similarities = {"mem_0": 0.62, "mem_1": 0.05, "mem_2": engine.relevance_floor}
+
+    async def score(result: RetrievalResult) -> None:
+        for c in result.candidates:
+            c.similarity = similarities.get(c.record_id)
+        result.candidates[3].retrievers = ["exact"]
+        result.candidates[3].similarity = 0.01
+
+    engine.score_similarity = score  # type: ignore[method-assign]
+    bundle = await builder.build(CTX, "who owns the rollback plan?")
+    packed = {m.item_id: m.relevance for m in bundle.memories}
+    assert set(packed) == {"mem_0", "mem_2", "mem_3"}, "mem_1 is under the floor"
+    assert packed["mem_0"] == pytest.approx(0.62), "relevance is the similarity"
+    assert packed["mem_3"] == 1.0, "an exact hit is exempt"
+    assert bundle.diagnostics["below_relevance_floor"] == 1
+    await builder.close()
+
+
+def test_the_relevance_floor_belongs_to_the_encoder_that_measured_it() -> None:
+    from memory_service.adapters.models.embeddings import HashEmbedding
+
+    assert FROZEN_MODELS.dense_ml.relevance_floor == 0.2
+    assert FROZEN_MODELS.dense.relevance_floor == 0.0, "never the space every query reads"
+    assert HashEmbedding().relevance_floor == 0.0, "a stand-in has no calibrated cosine"

@@ -617,8 +617,9 @@ same client the agent harness uses, so neither service can learn a lesson the ot
 
 Available uses: `contextual_extraction`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `memory_connections`,
-`briefs`, `query_expansion`, `query_decomposition`, `chunk_context`, `grounding_judge`,
-`procedure_abstraction`.
+`briefs`, `query_expansion`, `chunk_context`, `grounding_judge`, `procedure_abstraction`
+(each described in [`docs/LLM-USES.md`](docs/LLM-USES.md): when it runs, its tier, its
+fallback).
 
 Each use has its own gate. Contextual extraction consults the model only for
 eligible inputs; assisted brief refresh generates only when evidence or synthesis

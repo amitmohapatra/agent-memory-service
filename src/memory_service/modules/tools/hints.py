@@ -16,6 +16,7 @@ Every read is indexed and bounded; the only model is the query encoder of the to
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -219,11 +220,14 @@ class ToolHintsService:
         profile: Sequence[Any] = (),
         vectors: QueryVectors | None = None,
     ) -> ToolHints:
-        procedures = await self.procedures(ctx, task, scope_keys, k=3)
+        # the stored procedures and the catalog search are independent reads
+        procedures, found = await asyncio.gather(
+            self.procedures(ctx, task, scope_keys, k=3),
+            self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors),
+        )
         plan = next(
             (p for p in procedures if available is None or set(p.tools) <= set(available)), None
         )
-        found = await self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors)
         names = sorted({n for n, _ in found} | set(plan.tools if plan else ()))
         async with self.uow_factory() as uow:
             entries = {

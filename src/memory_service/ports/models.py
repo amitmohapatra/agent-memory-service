@@ -43,6 +43,8 @@ class ProviderInfo(BaseModel):
 class EmbeddingProvider(Protocol):
     info: ProviderInfo
     dimension: int
+    #: the least cosine a ranked item needs to be packed (``DenseModel.relevance_floor``)
+    relevance_floor: float
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
 

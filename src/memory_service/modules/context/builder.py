@@ -47,13 +47,6 @@ from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_calls_allowed
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.retrieval.decomposition import (
-    LLM_USE as DECOMPOSITION_USE,
-)
-from memory_service.modules.retrieval.decomposition import (
-    QueryDecomposer,
-    decompose_and_retrieve,
-)
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
     Candidate,
@@ -77,9 +70,9 @@ def _cacheable(bundle: ContextBundle) -> bool:
     )
 
 
-#: The model uses a cached bundle's content depends on. A deployment that decomposes questions
+#: The model uses a cached bundle's content depends on. A deployment that expands queries
 #: assembles a different bundle from the same query, so it must not read another's cache.
-CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion", DECOMPOSITION_USE)
+CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion",)
 #: How long the record of what a bundle served is kept for a later delta request.
 SERVED_TTL_SECONDS = 3600
 
@@ -94,10 +87,14 @@ def _relevance(c: Candidate) -> tuple[float, ScoreKind, float]:
     """The raw ranking number, what produced it, and a comparable 0..1 relevance.
 
     The raw number has two incompatible scales - an RRF fusion score (~0.001..0.25) and a
-    hardcoded 1.0 for exact identifier hits - so clients compare ``relevance`` instead.
+    hardcoded 1.0 for exact identifier hits - so clients compare ``relevance`` instead: the
+    dense similarity to the question when the context read it (``score_similarity``), else
+    the fusion score mapped into a low band.
     """
     if "exact" in (c.retrievers or []):
         return float(c.score), "exact", 1.0
+    if c.similarity is not None:
+        return float(c.score), "fusion", min(max(c.similarity, 0.0), 1.0)
     # RRF scores are sums of 1/(k+rank): bounded and monotone in rank, but not a probability
     return float(c.score), "fusion", min(float(c.score), 1.0) * _FUSION_CEILING
 
@@ -241,9 +238,6 @@ class ContextBuilder:
         )
         self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
-        #: Multi-hop decomposition. Inert unless the read allowed model calls (``use_llm``, or
-        #: the policy's ``read_assist``) and the operator and policy allow the use.
-        self.decomposer = QueryDecomposer(self.assist)
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
         #: tenant -> the memory ids served since the last flush. A set, because a memory
@@ -374,7 +368,7 @@ class ContextBuilder:
     def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
-        if self.assist.wants("query_expansion") or self.assist.wants(DECOMPOSITION_USE):
+        if self.assist.wants("query_expansion"):
             return None
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
@@ -467,26 +461,33 @@ class ContextBuilder:
                 ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
             )
         tokens_before = self.assist.tokens_used()
-        # the pinned sections are independent of retrieval: they run under it
+        # the pinned sections and the thread's recent messages are independent of retrieval:
+        # they are read under it
         sections = (
             asyncio.ensure_future(self.sections.gather(ctx, query, visibility))
             if self.sections is not None
             else None
         )
-        with timings.stage("retrieve"):
-            result = await decompose_and_retrieve(
-                self.engine,
-                self.decomposer,
-                ctx,
-                query,
-                document_ids=document_ids,
-                visibility=visibility,
-                query_embedding=(query, embedding) if embedding is not None else None,
-            )
+        recent = asyncio.ensure_future(self._recent_messages(ctx, query))
+        try:
+            with timings.stage("retrieve"):
+                result = await self.engine.retrieve(
+                    ctx,
+                    query,
+                    document_ids=document_ids,
+                    visibility=visibility,
+                    query_embedding=(query, embedding) if embedding is not None else None,
+                )
+        except BaseException:
+            for side in (sections, recent):
+                if side is not None:
+                    side.cancel()
+            raise
         with timings.stage("sections"):
             pinned = await sections if sections is not None else Pinned()
-        with timings.stage("window"):
-            window = await self._conversation_window(ctx, result, after=pinned.covered_to)
+            window = self._window(ctx, result, await recent, after=pinned.covered_to)
+        with timings.stage("similarity"):
+            await self.engine.score_similarity(result)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -755,24 +756,53 @@ class ContextBuilder:
         """Tenant, the caller's security scope, and the bundle. All three, always."""
         return f"ctx:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{bundle_id}"
 
-    async def _conversation_window(
-        self, ctx: MemoryExecutionContext, result: RetrievalResult, *, after: int
-    ) -> ConversationWindow:
-        """The thread's most recent messages after its durable summary (which covers
-        everything up to ``after``) that fit the conversation budget."""
-        if not ctx.thread_id or not result.routed.needs_conversation:
-            return ConversationWindow(thread_id=ctx.thread_id)
+    async def _recent_messages(self, ctx: MemoryExecutionContext, query: str) -> list[Any]:
+        """The thread's most recent messages, read while retrieval runs, when the question's
+        route reads a window. The rule route decides: a model-expanded route only ever
+        narrows GENERAL_SEMANTIC, which reads one."""
+        if (
+            not ctx.thread_id
+            or not self._cache_router.route(query, has_thread=True).needs_conversation
+        ):
+            return []
         async with self.uow_factory() as uow:
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
             if thread is None:
-                return ConversationWindow(thread_id=ctx.thread_id)
-            messages = await self.conversation.list_messages(
-                uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
+                return []
+            return list(
+                await self.conversation.list_messages(
+                    uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
+                )
             )
+
+    def _window(
+        self,
+        ctx: MemoryExecutionContext,
+        result: RetrievalResult,
+        messages: Sequence[Any],
+        *,
+        after: int,
+    ) -> ConversationWindow:
+        """The messages after the thread's durable summary (which covers everything up to
+        ``after``) that fit the conversation budget."""
+        if not ctx.thread_id or not result.routed.needs_conversation:
+            return ConversationWindow(thread_id=ctx.thread_id)
         return render_window(
             ctx.thread_id,
             [m for m in messages if m.sequence > after],
             self.cfg.conversation_token_budget,
+        )
+
+    def _below_floor(self, c: Candidate) -> bool:
+        """A ranked item whose similarity to the question is under the floor is not packed:
+        a fusion score always fills the budget, relevant or not. Exact hits, expansion and
+        graph companions and items with no similarity (graph facts, working memory) are
+        judged by what brought them in, not by this."""
+        return (
+            c.similarity is not None
+            and c.similarity < self.engine.relevance_floor
+            and c.expanded_from is None
+            and "exact" not in (c.retrievers or [])
         )
 
     def _assemble(
@@ -826,8 +856,12 @@ class ContextBuilder:
                         break
             return out
 
+        below_floor = 0
         for c, item in items:
             if c.record_id in included_ids:
+                continue
+            if self._below_floor(c):
+                below_floor += 1
                 continue
             if c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:
                 node = str(c.payload.get("node_id") or "")
@@ -868,6 +902,8 @@ class ContextBuilder:
                 continue
             included_ids.add(c.record_id)
             remaining -= item.token_estimate
+        if below_floor:
+            result.diagnostics["below_relevance_floor"] = below_floor
         evidence = result.diagnostics.get("evidence")
         report = (
             EvidenceReport.model_validate(evidence)

@@ -89,6 +89,8 @@ class Candidate:
     payload: dict[str, Any] = field(default_factory=dict)
     expanded_from: str | None = None
     expansion_edge: str | None = None
+    #: dense similarity to the query (cosine), when the context read it (score_similarity)
+    similarity: float | None = None
 
     @property
     def representation(self) -> Representation:
@@ -185,6 +187,9 @@ class QueryVectors:
     sparse: SparseVector | None
     script: Script
 
+
+#: the collection a candidate kind is indexed in (graph facts and working memory are not)
+_COLLECTION_OF_KIND = {"memory": MEMORIES, "chunk": KNOWLEDGE, "summary": KNOWLEDGE}
 
 #: entity anchors read off a query; a question names a handful of things at most
 MAX_QUERY_ENTITIES = 6
@@ -658,6 +663,41 @@ class RetrievalEngine:
             )
             for rid, score, _, payload in fused
         ]
+
+    @property
+    def relevance_floor(self) -> float:
+        """The floor of the space ``score_similarity`` reads (its encoder's)."""
+        return self.indexer.spaces.primary.relevance_floor
+
+    async def score_similarity(self, result: RetrievalResult) -> None:
+        """Set each ranked memory, chunk and summary's dense similarity to the query
+        (``Candidate.similarity``): the one absolute number a candidate has, since a fusion
+        score only orders. One bounded read per collection, concurrently, in the space every
+        query is searched in; a candidate the store has no vector for gets none."""
+        vectors = result.query_vectors
+        space = self.indexer.spaces.primary_space.name
+        if vectors is None or space not in vectors.dense:
+            return
+        groups: dict[str, list[Candidate]] = {}
+        for c in result.candidates:
+            base = _COLLECTION_OF_KIND.get(c.kind)
+            if base is not None:
+                groups.setdefault(base, []).append(c)
+        with span("retrieval.similarity"):
+            found = await asyncio.gather(
+                *(
+                    self.store.similarity(
+                        self.indexer.collection(base),
+                        space,
+                        vectors.dense[space],
+                        [c.record_id for c in group],
+                    )
+                    for base, group in groups.items()
+                )
+            )
+        for group, scores in zip(groups.values(), found, strict=True):
+            for c in group:
+                c.similarity = scores.get(c.record_id)
 
     async def _expand_query(self, query: str) -> QueryExpansion | None:
         """Model-assisted routing + lexical expansion when no rule fired. The original query

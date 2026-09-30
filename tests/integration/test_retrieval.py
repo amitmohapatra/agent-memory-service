@@ -262,3 +262,20 @@ async def test_context_builder_budget_and_cache(container, uow_factory) -> None:
     # tight budget: nothing exceeds it
     small = await builder.build(ctx, "restructuring programme headcount", token_budget=260)
     assert small.token_estimate <= 260
+
+
+async def test_the_context_reads_each_ranked_items_similarity_to_the_question(
+    container, uow_factory
+) -> None:
+    """One bounded read per collection gives every ranked chunk and summary its dense
+    similarity (the absolute number the relevance floor compares); graph facts have none."""
+    await _ingest(container, uow_factory)
+    engine = container.services["retrieval"]
+    res = await engine.retrieve(OWNER, "why did Adjusted EBITDA increase despite lower revenue?")
+    await engine.score_similarity(res)
+    stored = [c for c in res.candidates if c.kind in ("chunk", "summary")]
+    assert stored and all(c.similarity is not None for c in stored)
+    assert all(-1.0 <= c.similarity <= 1.0 for c in stored if c.similarity is not None)
+    assert all(c.similarity is None for c in res.candidates if c.kind == "fact")
+    top = res.candidates[0]
+    assert top.similarity == max(c.similarity or -1.0 for c in stored if c.expanded_from is None)

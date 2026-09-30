@@ -133,7 +133,7 @@ work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hier
 is then consulted only when the operator allow-list `models.llm.uses` and the resolved tenant
 policy both allow it and a key can pay (contextual_extraction, relation_extraction,
 entity_resolution, conflict_adjudication, summaries, reflection, memory_connections, briefs,
-query_expansion, query_decomposition, chunk_context, grounding_judge, procedure_abstraction).
+query_expansion, chunk_context, grounding_judge, procedure_abstraction; see `docs/LLM-USES.md`).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong

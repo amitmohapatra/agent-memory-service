@@ -465,6 +465,32 @@ class QdrantSearchStore:
             )
         return [self._hit(p, retriever) for p in res.points]
 
+    async def similarity(
+        self,
+        collection: str,
+        name: VectorName,
+        vector: Sequence[float],
+        record_ids: Sequence[str],
+    ) -> dict[str, float]:
+        if not record_ids:
+            return {}
+        ids = list(dict.fromkeys(record_ids))
+        with span("search.similarity"), stage_seconds.labels("retrieval.similarity").time():
+            res = await _read(
+                "similarity",
+                lambda: self._client.query_points(
+                    collection_name=self._name(collection),
+                    query=list(vector),
+                    using=name.value,
+                    query_filter=models.Filter(
+                        must=[models.HasIdCondition(has_id=[point_id(r) for r in ids])]
+                    ),
+                    limit=len(ids),
+                    with_payload=models.PayloadSelectorInclude(include=["record_id"]),
+                ),
+            )
+        return {str((p.payload or {}).get("record_id", p.id)): float(p.score) for p in res.points}
+
     async def search_sparse(
         self, collection: str, vector: SparseVector, flt: SearchFilter, *, limit: int
     ) -> list[SearchHit]:

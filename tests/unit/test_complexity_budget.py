@@ -1,7 +1,7 @@
 """A ratchet on complexity, not a style opinion.
 
 Measured at the time of writing: 1,332 functions, mean cyclomatic complexity 4.1 — the code
-base is not generally complex. The tail is: 43 functions above 15, the worst being
+base is not generally complex. The tail is: 41 functions above 15, the worst being
 ``_sentence_facts`` at 109 across 383 lines.
 
 These budgets are set at *today's* worst, so nothing may get worse and every improvement
@@ -22,7 +22,7 @@ MAX_COMPLEXITY = 109
 #: the current longest function, in lines
 MAX_FUNCTION_LINES = 383
 #: how many functions may exceed a complexity of 15
-MAX_OVER_15 = 43
+MAX_OVER_15 = 41
 #: the mean must not drift upwards. 4.2 -> 4.25 on 2026-09-22: the Phase-1 deletions removed
 #: ~140 trivial functions (observer, served-model adapters, model server), which lifts the
 #: mean of what remains without any function getting more complex.

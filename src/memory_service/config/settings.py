@@ -197,9 +197,6 @@ LLMUse = Literal[
     "memory_connections",
     "briefs",
     "query_expansion",
-    #: Split a multi-hop question into sub-questions, retrieve each and fuse. Read-side and
-    #: opt-in twice over: the request must set ``use_llm`` and the operator must list the use.
-    "query_decomposition",
     "chunk_context",
     "grounding_judge",
     #: Distil a stored procedure's title and strategy from the runs that followed it (the

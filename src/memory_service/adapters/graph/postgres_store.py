@@ -792,58 +792,61 @@ class PostgresGraphStore:
         seeds = list(dict.fromkeys(entity_ids))[:max_visited]
         if not seeds or not scope_keys:
             return GraphNeighborhood(entities=[], relations=[], visited=0)
-        rows_by_id: dict[str, GraphEntityRow] = {}
-        relations: list[Relation] = []
-        visited = len(seeds)
+        params = traversal_params(
+            tenant_id,
+            seeds,
+            scope_keys=scope_keys,
+            max_visited=max_visited,
+            layers=layers,
+            as_of=as_of,
+            valid_at=valid_at,
+        )
         sessions = self._budgeted if budgeted else self._reads
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
             async with sessions() as s:
-                if hops > 0:
-                    statement = traversal_query(
-                        hops,
-                        layers=bool(layers),
-                        as_of=as_of is not None,
-                        valid_at=valid_at is not None,
-                    )
-                    params = traversal_params(
-                        tenant_id,
-                        seeds,
-                        scope_keys=scope_keys,
-                        max_visited=max_visited,
-                        layers=layers,
-                        as_of=as_of,
-                        valid_at=valid_at,
-                    )
-                    try:
-                        found = (await s.execute(statement, params)).all()
-                    except DBAPIError as exc:
-                        if isinstance(exc.orig, QueryCanceled):
-                            raise GraphBudgetExceededError(self._budget_ms) from exc
-                        raise
-                    for relation, subject, obj, reached in found:
-                        relations.append(_relation(relation))
-                        rows_by_id.setdefault(subject.entity_id, subject)
-                        rows_by_id.setdefault(obj.entity_id, obj)
-                        visited = reached
-                unread = [eid for eid in seeds if eid not in rows_by_id]
-                if unread:
-                    for row in (
-                        await s.scalars(
-                            select(GraphEntityRow).where(
-                                GraphEntityRow.tenant_id == tenant_id,
-                                GraphEntityRow.entity_id.in_(unread),
-                                _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
+                found = await self._walk(s, hops, params) if hops > 0 else []
+                rows_by_id: dict[str, GraphEntityRow] = {}
+                for _, subject, obj, _ in found:
+                    rows_by_id.setdefault(subject.entity_id, subject)
+                    rows_by_id.setdefault(obj.entity_id, obj)
+                if unread := [eid for eid in seeds if eid not in rows_by_id]:
+                    rows_by_id.update(
+                        (row.entity_id, row)
+                        for row in (
+                            await s.scalars(
+                                select(GraphEntityRow).where(
+                                    GraphEntityRow.tenant_id == tenant_id,
+                                    GraphEntityRow.entity_id.in_(unread),
+                                    _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
+                                )
                             )
-                        )
-                    ).all():
-                        rows_by_id[row.entity_id] = row
-        seed_rows = [rows_by_id[eid] for eid in seeds if eid in rows_by_id]
-        reached_rows = [row for eid, row in rows_by_id.items() if eid not in set(seeds)]
+                        ).all()
+                    )
+        start = set(seeds)
+        ordered = [rows_by_id[eid] for eid in seeds if eid in rows_by_id] + [
+            row for eid, row in rows_by_id.items() if eid not in start
+        ]
         return GraphNeighborhood(
-            entities=[_entity(e) for e in (*seed_rows, *reached_rows)],
-            relations=relations,
-            visited=visited,
+            entities=[_entity(e) for e in ordered],
+            relations=[_relation(row[0]) for row in found],
+            visited=found[-1][3] if found else len(seeds),
         )
+
+    async def _walk(self, s: AsyncSession, hops: int, params: dict[str, Any]) -> list[Any]:
+        """The traversal statement's rows; a statement the server stopped at the budget is
+        ``GraphBudgetExceededError``."""
+        statement = traversal_query(
+            hops,
+            layers="layers" in params,
+            as_of="as_of" in params,
+            valid_at="valid_at" in params,
+        )
+        try:
+            return list((await s.execute(statement, params)).all())
+        except DBAPIError as exc:
+            if isinstance(exc.orig, QueryCanceled):
+                raise GraphBudgetExceededError(self._budget_ms) from exc
+            raise
 
     async def relations_for_document(
         self,

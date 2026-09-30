@@ -77,6 +77,11 @@ class DenseModel(BaseModel):
     query_prefix: str = ""
     document_prefix: str = ""
     batch_size: int = Field(default=32, ge=1)
+    #: The least cosine to the query a ranked item needs to be packed into a context, when
+    #: this encoder's space is the one every query is searched in. A cosine is only
+    #: comparable within one encoder, so the floor belongs to it; 0 is no floor. Not part of
+    #: the fingerprint: it reads vectors, it does not make them.
+    relevance_floor: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Bound each non-preemptible indexing turn on the shared model runner. A full
     #: 32-passage forward pass blocked interactive queries for seconds on CPU.
     document_batch_size: int = Field(default=1, ge=1)
@@ -153,6 +158,12 @@ class FrozenModels(BaseModel):
         revision="c721113d59a1d91b447450324f51c4b3332c924a",
         license="MIT",
         batch_size=8,
+        # Fusion scores only order, so without a floor a context fills its budget with
+        # whatever ranked next: ten questions nothing in the corpus answers packed 30.8
+        # memories each. Measured on a LoCoMo conversation (docs/MEASUREMENTS.md, section
+        # 8): at 0.20 every evidence memory of 135 questions is still packed and those
+        # off-topic questions pack 0.9; 0.25 already loses 1.5% of the evidence.
+        relevance_floor=0.2,
     )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()

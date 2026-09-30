@@ -169,21 +169,29 @@ def _fact(item: object, sentences: Sequence[str], eligible: set[int]) -> SourceF
         return None
     text = " ".join(str(item.get("text", "")).split())
     kind = KINDS.get(str(item.get("kind", "")))
-    cited = item.get("sentences")
-    if not text or len(text) > MAX_FACT_CHARS or kind is None or not isinstance(cited, list):
-        return None
-    indices = sorted({i for i in cited if type(i) is int and 0 <= i < len(sentences)})
-    if not indices or len(indices) > MAX_CITED or not eligible.intersection(indices):
+    indices = _cited(item.get("sentences"), len(sentences), eligible)
+    if not text or len(text) > MAX_FACT_CHARS or kind is None or indices is None:
         return None
     source = " ".join(sentences[i] for i in indices)
     if _translated(text, source):
         return None
     slot = SLOTS.get(str(item.get("slot", "")))
     value = " ".join(str(item.get("value", "")).split())
-    if slot is not None and value and value.casefold() in source.casefold():
-        memory_type, predicate = slot
-        return SourceFact(text, memory_type, predicate, value)
-    return SourceFact(text, kind)
+    if slot is None or not value or value.casefold() not in source.casefold():
+        return SourceFact(text, kind)
+    memory_type, predicate = slot
+    return SourceFact(text, memory_type, predicate, value)
+
+
+def _cited(cited: object, count: int, eligible: set[int]) -> list[int] | None:
+    """The sentence indices a fact cites, when they are real, few and include one the rules
+    did not read; otherwise None."""
+    if not isinstance(cited, list):
+        return None
+    indices = sorted({i for i in cited if type(i) is int and 0 <= i < count})
+    if not indices or len(indices) > MAX_CITED or not eligible.intersection(indices):
+        return None
+    return indices
 
 
 def _translated(text: str, source: str) -> bool:

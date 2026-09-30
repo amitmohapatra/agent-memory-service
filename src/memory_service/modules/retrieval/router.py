@@ -81,6 +81,26 @@ _DOC_LOCAL = re.compile(
 )
 
 
+_CUES = {
+    "conversation": (_CONVERSATION,),
+    "user_memory": (_USER_MEMORY,),
+    "decision": (_DECISION,),
+    "temporal": (_TEMPORAL,),
+    "global": (_GLOBAL,),
+    "multi_hop": (_MULTI_HOP, _MULTI_HOP_NAMED),
+    "entity": (_ENTITY,),
+    "doc_local": (_DOC_LOCAL,),
+}
+
+
+def _cue_signals(query: str, *, english: bool) -> dict[str, bool]:
+    """Which English cue patterns the query matches; none for another language."""
+    return {
+        name: english and any(pattern.search(query) for pattern in patterns)
+        for name, patterns in _CUES.items()
+    }
+
+
 @dataclass(frozen=True)
 class RoutedQuery:
     query: str
@@ -104,18 +124,7 @@ class QueryRouter:
         q = query.strip()
         ids = _ID.findall(q)
         lang = detect_language(q)
-        english = is_english(lang)
-        signals = {
-            "identifier": bool(ids),
-            "conversation": english and bool(_CONVERSATION.search(q)),
-            "user_memory": english and bool(_USER_MEMORY.search(q)),
-            "decision": english and bool(_DECISION.search(q)),
-            "temporal": english and bool(_TEMPORAL.search(q)),
-            "global": english and bool(_GLOBAL.search(q)),
-            "multi_hop": english and bool(_MULTI_HOP.search(q) or _MULTI_HOP_NAMED.search(q)),
-            "entity": english and bool(_ENTITY.search(q)),
-            "doc_local": english and bool(_DOC_LOCAL.search(q)),
-        }
+        signals = {"identifier": bool(ids), **_cue_signals(q, english=is_english(lang))}
         if signals["identifier"]:
             qt = QueryType.EXACT_IDENTIFIER
         elif signals["conversation"]:
