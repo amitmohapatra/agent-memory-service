@@ -86,26 +86,13 @@ def test_missing_tenant_and_auth(settings, overrides) -> None:
         assert r.status_code == 401 and r.json()["code"] == "AUTHENTICATION"
 
 
-def test_the_old_header_spellings_resolve_the_same_context(settings, overrides) -> None:
-    """``X-Memory-*`` is read for one release (ADR 0022); a context built from either
-    spelling is the same context, and two spellings that disagree are refused."""
+def test_the_removed_header_spellings_name_no_tenant(settings, overrides) -> None:
+    """``X-Memory-*`` was removed in 0.3.0: a request that names its tenant only that way
+    names none."""
     old = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
     with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
-        new = c.post("/echo-context", headers=HEADERS, json={"thread_id": "thr_1"}).json()
-        legacy = c.post("/echo-context", headers=old, json={"thread_id": "thr_1"}).json()
-        assert legacy["tenant_id"] == new["tenant_id"] == "acme"
-        assert legacy["user_id"] == new["user_id"] == "u1"
-        mixed = c.post(
-            "/echo-context",
-            headers={**HEADERS, "X-Memory-User": "someone-else"},
-            json={"thread_id": "thr_1"},
-        )
-        assert mixed.status_code == 422 and mixed.json()["code"] == "VALIDATION"
-        assert mixed.json()["details"] == {"field": "X-Trellis-User"}
-        agreeing = c.post(
-            "/echo-context", headers={**HEADERS, "X-Memory-User": "u1"}, json={"thread_id": "thr_1"}
-        ).json()
-        assert agreeing["user_id"] == "u1"
+        r = c.post("/echo-context", headers=old, json={"thread_id": "thr_1"})
+        assert r.status_code == 422 and "tenant_id" in r.json()["detail"]
 
 
 def test_a_correlation_id_named_in_the_body_is_the_one_echoed(settings, overrides) -> None:

@@ -158,12 +158,8 @@ def test_a_request_x_trace_id_is_a_response_header_and_not_continued(settings, o
             assert "X-Trace-ID" not in {p["name"] for p in op.get("parameters", [])}
 
 
-def test_an_unhandled_error_on_an_alias_route_is_marked_and_logged_with_its_ids(
-    settings, overrides, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_unhandled_error_is_answered_and_logged_with_its_ids(settings, overrides) -> None:
     from fastapi import APIRouter
-
-    from memory_service.api import headers as header_module
 
     app = create_app(settings, overrides=overrides)
     router = APIRouter()
@@ -173,14 +169,8 @@ def test_an_unhandled_error_on_an_alias_route_is_marked_and_logged_with_its_ids(
         raise RuntimeError("x")
 
     app.include_router(router)
-    monkeypatch.setattr(
-        header_module,
-        "DEPRECATED_ROUTES",
-        {**header_module.DEPRECATED_ROUTES, ("GET", "/old-boom"): "/new"},
-    )
     with TestClient(app, raise_server_exceptions=False) as client:
         r = client.get("/old-boom", headers={"X-Request-ID": "req_boom"})
     assert r.status_code == 500 and r.headers["content-type"] == "application/problem+json"
-    assert r.headers["Deprecation"] == header_module.ALIASES_DEPRECATED_AT
-    assert r.headers["Link"] == '</new>; rel="successor-version"'
+    assert "Deprecation" not in r.headers
     assert r.headers["X-Request-ID"] == "req_boom" == r.json()["request_id"]

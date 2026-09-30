@@ -46,18 +46,6 @@ def operations() -> dict[str, str]:
     return out
 
 
-@lru_cache(maxsize=1)
-def deprecated() -> frozenset[str]:
-    """The operation ids the schema marks deprecated (the one-release aliases of ADR 0022)."""
-    schema = json.loads(OPENAPI.read_text())
-    return frozenset(
-        op["operationId"]
-        for item in schema["paths"].values()
-        for method, op in item.items()
-        if method in _METHODS and op.get("deprecated")
-    )
-
-
 def concrete_path(template: str, **values: str) -> str:
     """``template`` with every ``{placeholder}`` filled, defaulting to a value that exists
     nowhere: the unauthenticated sweep must be refused before anything is looked up."""
@@ -78,10 +66,6 @@ _CURRENT: dict[str, set[int]] = {}
 #: The last problem body an SDK request received, so a test can assert the RFC 9457 envelope
 #: the service actually sent rather than the fields the SDK keeps.
 _LAST_PROBLEM: dict[str, Any] = {}
-#: operation id -> the response headers of its most recent call in this test. The SDK hands a
-#: caller the decoded body, so this is where a test asserting a *header* contract (the alias
-#: routes' Deprecation/Link, the echoed request id) reads what the service sent.
-_LAST_HEADERS: dict[str, dict[str, str]] = {}
 
 #: operation id -> node ids that claim it. Filled at collection time by
 #: ``conftest.pytest_collection_modifyitems``, which is why the gate is order-independent.
@@ -93,7 +77,6 @@ CLAIMED_ERRORS: dict[str, list[str]] = {}
 def begin_test() -> None:
     _CURRENT.clear()
     _LAST_PROBLEM.clear()
-    _LAST_HEADERS.clear()
 
 
 def record(operation: str, status: int) -> None:
@@ -117,11 +100,6 @@ def last_problem() -> dict[str, Any]:
     return dict(_LAST_PROBLEM)
 
 
-def headers_of(operation: str) -> dict[str, str]:
-    """The response headers of ``operation``'s most recent call in the running test."""
-    return dict(_LAST_HEADERS.get(operation, {}))
-
-
 @lru_cache(maxsize=1)
 def _matchers() -> tuple[tuple[str, re.Pattern[str], str], ...]:
     """``(METHOD, compiled template, operation id)``, literal templates first.
@@ -129,8 +107,7 @@ def _matchers() -> tuple[tuple[str, re.Pattern[str], str], ...]:
     Matching against the committed schema rather than the app's route table is deliberate:
     ``include_router`` nests its routes behind a private ``_IncludedRouter`` in FastAPI 0.141,
     so a walk of ``app.routes`` depends on framework internals, while the schema is the surface
-    the service publishes and the thing this suite is measuring coverage of. The deprecated
-    aliases are separate paths in it, so they resolve to themselves.
+    the service publishes and the thing this suite is measuring coverage of.
     """
     out = []
     for operation, spec in operations().items():
@@ -168,9 +145,6 @@ class RecordingTransport(httpx.AsyncBaseTransport):
         operation = resolve(request.method, request.url.path)
         if operation is not None:
             record(operation, response.status_code)
-            _LAST_HEADERS[operation] = {
-                name.lower(): value for name, value in response.headers.items()
-            }
         if response.status_code >= 400:
             # Small bodies, and the only reason to read one here: a test that asserts the
             # problem envelope should assert what the service sent, not what the SDK kept.

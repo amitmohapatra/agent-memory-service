@@ -33,12 +33,10 @@ from memory_service.api.headers import (
     REQUEST_ID_HEADER,
     RETRY_AFTER_HEADER,
     correlation_headers,
-    deprecation_headers_for,
     refuse_ambiguous_headers,
-    route_path,
     scope_header,
 )
-from memory_service.config.constants import DEPRECATED_RESPONSE_HEADER_ALIASES, HEADERS
+from memory_service.config.constants import HEADERS
 from memory_service.domain.enums import ErrorCode
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.ids import is_valid_id, new_id
@@ -111,9 +109,6 @@ class CorrelationMiddleware:
         state["traceparent"] = traceparent
         state["idempotency_key"] = headers.get(IDEMPOTENCY_KEY_HEADER)
         path = scope["path"]
-        marks = deprecation_headers_for(
-            scope["method"], route_path(scope), scope.get("root_path") or ""
-        )
 
         content_length = headers.get("content-length")
         if (
@@ -131,7 +126,7 @@ class CorrelationMiddleware:
                     trace_id=trace_id,
                     request_id=request_id,
                 ),
-                headers={**correlation_headers(state), **marks},
+                headers=correlation_headers(state),
             )
             await response(scope, receive, send)
             return
@@ -152,7 +147,7 @@ class CorrelationMiddleware:
                     request_id=request_id,
                     details=exc.details,
                 ),
-                headers={**correlation_headers(state), **marks},
+                headers=correlation_headers(state),
             )
             await response(scope, receive, send)
             return
@@ -161,7 +156,7 @@ class CorrelationMiddleware:
         bind_log_context(request_id=request_id, trace_id=trace_id, correlation_id=correlation_id)
         try:
             with llm_accounting() as llm_tokens:
-                await self._serve(scope, receive, send, state, marks, llm_tokens)
+                await self._serve(scope, receive, send, state, llm_tokens)
         finally:
             clear_log_context()
 
@@ -171,7 +166,6 @@ class CorrelationMiddleware:
         receive: Receive,
         send: Send,
         state: dict[str, Any],
-        marks: dict[str, str],
         llm_tokens: LLMTokens,
     ) -> None:
         """The request inside its LLM accounting scope: metrics, logs and response headers."""
@@ -201,11 +195,8 @@ class CorrelationMiddleware:
                 # (build_context writes the effective one back), and the response must echo
                 # the id the logs carry
                 response_headers.update(correlation_headers(state))
-                response_headers.update(marks)
                 if llm_tokens.total:
                     response_headers[HEADERS.llm_tokens] = str(llm_tokens.total)
-                    for alias in DEPRECATED_RESPONSE_HEADER_ALIASES.values():
-                        response_headers[alias] = str(llm_tokens.total)
                 record(message["status"])
             await send(message)
 

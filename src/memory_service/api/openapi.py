@@ -11,7 +11,6 @@ from fastapi.routing import APIRoute
 from memory_service.api.errors import Problem, error_responses
 from memory_service.api.headers import (
     CORRELATION_ID_HEADER,
-    DEPRECATION_HEADER,
     IDEMPOTENCY_KEY_HEADER,
     IDEMPOTENT_REPLAYED_HEADER,
     LINK_HEADER,
@@ -20,19 +19,13 @@ from memory_service.api.headers import (
     REQUEST_ID_HEADER,
     RETRY_AFTER_HEADER,
     TRACE_ID_HEADER,
-    deprecation_headers_for,
 )
-from memory_service.config.constants import (
-    ALIASES_REMOVED_IN,
-    DEPRECATED_HEADER_ALIASES,
-    DEPRECATED_RESPONSE_HEADER_ALIASES,
-    HEADERS,
-)
+from memory_service.config.constants import HEADERS
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
 TITLE = "trellis-memory API"
 
-DESCRIPTION = f"""
+DESCRIPTION = """
 trellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.
 
 **Durable**: a `2xx/202` is returned only after the source record and its processing job
@@ -49,8 +42,7 @@ optionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or
 trusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which
 are only honored from an authenticated caller; in `api_key` mode the tenant comes from the
 key and a header may agree with it, never contradict it. Fine-grained authorization is
-evaluated by OpenFGA on every request. The pre-0.2 spellings `X-Memory-Tenant`,
-`X-Memory-Workspace` and `X-Memory-User` are still read; they are removed in {ALIASES_REMOVED_IN}.
+evaluated by OpenFGA on every request.
 
 ### Standard headers
 | Header | Direction | Purpose |
@@ -63,9 +55,8 @@ evaluated by OpenFGA on every request. The pre-0.2 spellings `X-Memory-Tenant`,
 | `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |
 
 An id starts with a letter or digit, continues with letters, digits and `._:-`, and is at
-most 200 characters. A request carrying a scope header under both spellings with different
-values, or any scope or credential header more than once with different values, is refused
-(422) before the credential is read: a gateway that stamps one spelling must strip both.
+most 200 characters. A request carrying any scope or credential header more than once with
+different values is refused (422) before the credential is read.
 
 ### Errors
 Every error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):
@@ -77,9 +68,8 @@ are what to quote.
 Public routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its
 only consumers were the owner's own repositories: problem details replaced the error
 envelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.
-From 0.2.0 on, breaking changes ship under a new prefix and `/v1` remains available for at
-least one release after deprecation. Routes marked deprecated are aliases kept for one
-release and removed in {ALIASES_REMOVED_IN}.
+0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header
+spellings): each operation has exactly one route and each header one spelling.
 """
 
 TAGS: list[dict[str, Any]] = [
@@ -98,12 +88,6 @@ TAGS: list[dict[str, Any]] = [
         "name": "documents",
         "description": "Document ingestion into RAG memory with structural context, and "
         "document status.",
-    },
-    {
-        "name": "files",
-        "description": (
-            f"Deprecated alias of `documents` (ADR 0022); removed in {ALIASES_REMOVED_IN}."
-        ),
     },
     {
         "name": "feedback",
@@ -164,19 +148,14 @@ def operation_id(route: APIRoute) -> str:
     return f"{route.tags[0]}.{route.name}" if route.tags else route.name
 
 
-def _header_param(
-    name: str, description: str, *, required: bool = False, deprecated: bool = False
-) -> dict[str, Any]:
-    param: dict[str, Any] = {
+def _header_param(name: str, description: str, *, required: bool = False) -> dict[str, Any]:
+    return {
         "name": name,
         "in": "header",
         "required": required,
         "description": description,
         "schema": {"type": "string"},
     }
-    if deprecated:
-        param["deprecated"] = True
-    return param
 
 
 #: Response headers every public operation carries (the correlation middleware sets them).
@@ -197,34 +176,22 @@ WRITE_RESPONSE_HEADERS: dict[str, str] = {
     IDEMPOTENT_REPLAYED_HEADER: "true when the response is the stored result of an earlier "
     "request with the same Idempotency-Key."
 }
-DEPRECATED_ROUTE_HEADERS: dict[str, str] = {
-    DEPRECATION_HEADER: "RFC 9745 structured-field date (@<unix seconds>) of this alias "
-    f"route's deprecation; the route is removed in {ALIASES_REMOVED_IN}.",
-    LINK_HEADER: 'RFC 8288 link: rel="next" names the next page of a list (present exactly '
-    'when one exists, ADR 0023); rel="successor-version" (RFC 5829) names the canonical '
-    "route of a deprecated alias.",
-}
 #: On the responses of cursor-paged list routes: the next page, when there is one.
-PAGED_RESPONSE_HEADERS: dict[str, str] = {LINK_HEADER: DEPRECATED_ROUTE_HEADERS[LINK_HEADER]}
+PAGED_RESPONSE_HEADERS: dict[str, str] = {
+    LINK_HEADER: 'RFC 8288 link: rel="next" names the next page of a list (present exactly '
+    "when one exists, ADR 0023)."
+}
 #: Every public operation can answer these before the route runs.
 EDGE_STATUSES = (413, 429)
 
 
 def _header_components() -> dict[str, Any]:
-    described = {**RESPONSE_HEADERS, **WRITE_RESPONSE_HEADERS, **DEPRECATED_ROUTE_HEADERS}
+    described = {**RESPONSE_HEADERS, **WRITE_RESPONSE_HEADERS, **PAGED_RESPONSE_HEADERS}
     described[RETRY_AFTER_HEADER] = "Seconds until the rate-limit window resets (on 429)."
     components: dict[str, Any] = {
         name: {"description": text, "schema": {"type": "string"}}
         for name, text in described.items()
     }
-    for name, example in deprecation_headers_for("POST", "/v1/files").items():
-        components[name]["example"] = example  # what the middleware sends for that alias
-    for name, alias in DEPRECATED_RESPONSE_HEADER_ALIASES.items():
-        components[alias] = {
-            "description": f"Deprecated spelling of {name}; sent until {ALIASES_REMOVED_IN}.",
-            "schema": {"type": "string"},
-            "deprecated": True,
-        }
     return components
 
 
@@ -237,12 +204,10 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
     responses = op.setdefault("responses", {})
     for status in EDGE_STATUSES:
         responses.setdefault(str(status), error_responses(status)[status])
-    headers = list(RESPONSE_HEADERS) + list(DEPRECATED_RESPONSE_HEADER_ALIASES.values())
+    headers = list(RESPONSE_HEADERS)
     if method != "get":
         headers += list(WRITE_RESPONSE_HEADERS)
-    if op.get("deprecated"):
-        headers += list(DEPRECATED_ROUTE_HEADERS)
-    elif any(p.get("name") == "cursor" for p in op.get("parameters", [])):
+    if any(p.get("name") == "cursor" for p in op.get("parameters", [])):
         headers += list(PAGED_RESPONSE_HEADERS)
     for status, response in responses.items():
         response.setdefault("headers", {}).update(_response_header_refs(headers))
@@ -288,18 +253,7 @@ def _scope_header_params() -> list[dict[str, Any]]:
         HEADERS.workspace: "The workspace (team) acted in; membership is checked.",
         HEADERS.user: "The end user acted for.",
     }
-    params = [_header_param(name, text) for name, text in described.items()]
-    params.extend(
-        _header_param(
-            alias,
-            f"Deprecated spelling of {name}; read until {ALIASES_REMOVED_IN}. A request "
-            "carrying both spellings, or either more than once, with different values is "
-            "refused.",
-            deprecated=True,
-        )
-        for name, alias in DEPRECATED_HEADER_ALIASES.items()
-    )
-    return params
+    return [_header_param(name, text) for name, text in described.items()]
 
 
 def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:

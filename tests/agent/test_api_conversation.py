@@ -1,16 +1,9 @@
-"""A conversation as an adapter records it: a thread, the turns inside it, an attachment, and
-the two deprecated spellings a caller written against 0.1 still uses.
-
-The alias route (``POST /v1/files``) is driven through ``client.transport`` on purpose: the SDK
-speaks the canonical noun only (ADR 0022), so the alias has no method of its own, and what
-needs proving is that it still answers the same contract and says it is deprecated.
-"""
+"""A conversation as an adapter records it: a thread, the turns inside it and an attachment."""
 
 from __future__ import annotations
 
 import pytest
 
-from tests.agent import coverage
 from tests.agent.conftest import BOOTSTRAP, sdk
 from trellis.memory import MemoryError
 
@@ -111,30 +104,6 @@ async def test_an_agent_attaches_a_document_and_waits_for_it_to_be_retrievable(
     assert document.thread_id == "thr-attachments"
 
 
-@pytest.mark.covers("files.upload_file")
-async def test_the_deprecated_upload_alias_still_answers_and_says_it_is_deprecated(
-    app, running
-) -> None:
-    harness = await _harness(app)
-    chat = harness.bind(user_id="u1", thread_id="thr-legacy")
-
-    body = await harness.transport.request(
-        "POST",
-        "/v1/files",
-        scope=chat.scope,
-        files={"file": ("legacy.txt", NOTES, "text/plain")},
-        data={"scope": chat.scope.model_dump_json(exclude_none=True, exclude={"trace_id"})},
-        idempotency_key="legacy-upload-1",
-    )
-
-    assert body["document_id"] and body["filename"] == "legacy.txt"
-    assert (await chat.advanced.documents.document(body["document_id"])).filename == "legacy.txt"
-
-    headers = coverage.headers_of("files.upload_file")
-    assert headers["deprecation"] == "@1790553600"
-    assert headers["link"] == '</v1/documents>; rel="successor-version"'
-
-
 @pytest.mark.covers_error(
     "threads.get_thread",
     "messages.get_message",
@@ -144,7 +113,6 @@ async def test_the_deprecated_upload_alias_still_answers_and_says_it_is_deprecat
     "messages.create_message",
     "documents.upload_document",
     "threads.create_thread",
-    "files.upload_file",
 )
 async def test_another_tenant_reaches_none_of_this_conversation(app, running) -> None:
     harness = await _harness(app, "acme")
@@ -186,12 +154,3 @@ async def test_another_tenant_reaches_none_of_this_conversation(app, running) ->
     with pytest.raises(MemoryError) as upload:
         await claiming.advanced.documents.add(("x.txt", b"x", "text/plain"))
     assert upload.value.status == 403
-    with pytest.raises(MemoryError) as alias:
-        await other.transport.request(
-            "POST",
-            "/v1/files",
-            scope=claiming.scope,
-            files={"file": ("x.txt", b"x", "text/plain")},
-            data={"scope": claiming.scope.model_dump_json(exclude_none=True)},
-        )
-    assert alias.value.status == 403

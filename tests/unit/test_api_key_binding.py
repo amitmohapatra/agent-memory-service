@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 from starlette.datastructures import Headers
 
 from memory_service.api.deps import ScopeBody, build_context
@@ -179,43 +180,25 @@ def test_the_platform_role_is_the_bootstrap_secret_and_nothing_else() -> None:
     assert _has_role(real, (KeyRole.PLATFORM,))
 
 
-def test_the_deprecated_spellings_feed_the_same_binding_checks() -> None:
-    """``X-Memory-*`` is read for one release (ADR 0022) through the same checks: a key's
-    tenant binds whichever spelling carried the header, a pair that disagrees is refused,
-    and a workspace-bound key refuses another workspace under the old name too."""
+def test_the_removed_spellings_bind_nothing() -> None:
+    """``X-Memory-*`` was removed in 0.3.0: a key's tenant is not overridden, a workspace is
+    not named, and an administrative call is not redirected by the old spelling."""
     from memory_service.api.deps import administered_tenant
 
     key = _key("acme")
-    assert _build(key, **{"X-Memory-Tenant": "acme"}).tenant_id == "acme"
-    with pytest.raises(ScopeDenied):
-        _build(key, **{"X-Memory-Tenant": "globex"})
-    with pytest.raises(ValidationFailed, match="different values"):
-        _build(key, **{"X-Trellis-Tenant": "globex", "X-Memory-Tenant": "acme"})
+    assert _build(key, **{"X-Memory-Tenant": "globex"}).tenant_id == "acme"
     bound = _key("acme", workspace="finance")
-    assert _build(bound, **{"X-Memory-Workspace": "finance"}).workspace_id == "finance"
-    with pytest.raises(ScopeDenied):
-        _build(bound, **{"X-Memory-Workspace": "legal"})
-    dev = ServicePrincipal(service_id="dev:1", mode="trusted_dev", claims={})
-    ctx = _build(dev, **{"X-Memory-Tenant": "acme", "X-Memory-Workspace": "finance"})
-    assert (ctx.tenant_id, ctx.workspace_id) == ("acme", "finance")
+    assert _build(bound, **{"X-Memory-Workspace": "legal"}).workspace_id == "finance"
     admin = _key("acme", role="admin")
-    with pytest.raises(ScopeDenied):
-        administered_tenant(_Request(admin, **{"X-Memory-Tenant": "globex"}), admin, _Container())  # type: ignore[arg-type]
+    named = administered_tenant(
+        _Request(admin, **{"X-Memory-Tenant": "globex"}), admin, _Container()
+    )  # type: ignore[arg-type]
+    assert named == "acme"
 
 
-def test_the_body_never_names_the_trace() -> None:
+def test_the_body_cannot_name_the_trace() -> None:
     """The trace id in headers, logs, rows and problems is the one the correlation middleware
-    resolved; a body ``trace_id`` is accepted for compatibility and ignored (ADR 0022)."""
-    ctx = _build(_key("acme"), ScopeBody(trace_id="opaque-from-the-body"))
-    assert ctx.trace_id == "trace_id_test"
-
-
-def test_the_admin_path_refuses_two_spellings_that_disagree() -> None:
-    from memory_service.api.deps import administered_tenant
-
-    platform = ServicePrincipal(service_id="platform", mode="api_key", claims={"role": "platform"})
-    disagree = _Request(platform, **{"X-Trellis-Tenant": "acme", "X-Memory-Tenant": "globex"})
-    with pytest.raises(ValidationFailed, match="different values"):
-        administered_tenant(disagree, platform, _Container())  # type: ignore[arg-type]
-    agree = _Request(platform, **{"X-Trellis-Tenant": "acme", "X-Memory-Tenant": "acme"})
-    assert administered_tenant(agree, platform, _Container()) == "acme"  # type: ignore[arg-type]
+    resolved; a body ``trace_id`` is refused like any other unknown field."""
+    with pytest.raises(ValidationError):
+        ScopeBody.model_validate({"trace_id": "opaque-from-the-body"})
+    assert _build(_key("acme")).trace_id == "trace_id_test"

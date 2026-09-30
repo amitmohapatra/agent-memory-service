@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 PUBLIC = {"operations.live", "operations.ready", "operations.metrics", "operations.version"}
 PROBLEM_MEMBERS = {"type", "title", "status", "detail", "instance", "code"}
 #: Multipart routes: an empty JSON body would be refused for the wrong reason.
-MULTIPART = {"documents.upload_document", "files.upload_file"}
+MULTIPART = {"documents.upload_document"}
 
 
 def test_every_operation_is_driven_by_an_agent_test(request: pytest.FixtureRequest) -> None:

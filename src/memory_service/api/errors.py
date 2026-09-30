@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from memory_service.api.headers import correlation_headers, deprecation_headers_for, route_path
+from memory_service.api.headers import correlation_headers
 from memory_service.config.constants import MAX_BODY_BYTES
 from memory_service.domain.enums import ErrorCode
 from memory_service.domain.errors import MemoryServiceError
@@ -287,9 +287,4 @@ def install_error_handlers(app: FastAPI) -> None:
             status=500,
         )
         response.headers.update(correlation_headers(state))
-        response.headers.update(
-            deprecation_headers_for(
-                request.method, route_path(request.scope), request.scope.get("root_path") or ""
-            )
-        )
         return response

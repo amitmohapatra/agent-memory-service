@@ -10,7 +10,7 @@ them is written. Until now the SDK was `universal_memory` (distribution
 `universal-memory 0.1.0`), the trusted context headers were `X-Memory-*`, errors were a
 bespoke `{"error": {...}}` envelope, the trace id was whatever `X-Trace-ID` said or else the
 request id, operation ids were path-derived (`create_tenant_v1_admin_tenants_post`) and two
-nouns were wrong: `POST /v1/files` next to `GET /v1/documents/{id}`, and
+nouns were wrong: `POST /v1/files` (removed in 0.3.0) next to `GET /v1/documents/{id}`, and
 `POST /v1/tools/record` (removed since) for a resource every other route calls an invocation. The only
 consumers are the owner's own repositories.
 

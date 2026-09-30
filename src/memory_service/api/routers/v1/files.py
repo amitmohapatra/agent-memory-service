@@ -18,7 +18,6 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.headers import alias_route
 from memory_service.api.idempotent import run_idempotent
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, DocumentStatus, Visibility
@@ -160,20 +159,8 @@ _UPLOAD_ROUTE: dict[str, Any] = {
     },
 }
 
-_FILES_ALIAS = alias_route("/v1/files")
-
 
 @router.post("/documents", tags=["documents"], name="upload_document", **_UPLOAD_ROUTE)
-@router.post(
-    "/files",
-    tags=["files"],
-    name="upload_file",
-    **{
-        **_UPLOAD_ROUTE,
-        **_FILES_ALIAS,
-        "description": f"{_FILES_ALIAS['description']} {_UPLOAD_ROUTE['description']}",
-    },
-)
 async def upload_document(
     request: Request,
     container: ContainerDep,

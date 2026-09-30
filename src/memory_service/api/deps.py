@@ -7,10 +7,10 @@ from typing import Annotated, Any
 from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from memory_service.api.headers import require_one_spelling
+from memory_service.api.headers import require_one_value
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
-from memory_service.config.constants import ALIASES_REMOVED_IN, HEADERS
+from memory_service.config.constants import HEADERS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import (
     AuthorizationFailed,
@@ -46,13 +46,6 @@ class ScopeBody(BaseModel):
     agent_group_id: str | None = None
     agent_run_id: str | None = None
     parent_agent_run_id: str | None = None
-    trace_id: str | None = Field(
-        default=None,
-        deprecated=True,
-        description="Ignored since 0.2.0 (ADR 0022): the trace is the request's traceparent "
-        "(X-Trace-ID names it on the response); an opaque id belongs in X-Correlation-ID. "
-        f"Accepted until {ALIASES_REMOVED_IN} so older clients are not refused.",
-    )
     correlation_id: str | None = None
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
@@ -80,9 +73,9 @@ ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)
 def _header_scope(request: Request, container: Container) -> dict[str, Any]:
     h = request.headers
     return {
-        "tenant_id": require_one_spelling(h, HEADERS.tenant),
-        "workspace_id": require_one_spelling(h, HEADERS.workspace),
-        "user_id": require_one_spelling(h, HEADERS.user),
+        "tenant_id": require_one_value(h, HEADERS.tenant),
+        "workspace_id": require_one_value(h, HEADERS.workspace),
+        "user_id": require_one_value(h, HEADERS.user),
     }
 
 
@@ -315,7 +308,7 @@ def administered_tenant(request: Request, principal: ServicePrincipal, container
     """The tenant an administrative call acts on: the key's own tenant, or - for a
     credential that names none, the platform key and development keys - the header."""
     claimed = principal.claims.get("tenant") if principal.mode == "api_key" else None
-    named = require_one_spelling(request.headers, HEADERS.tenant)
+    named = require_one_value(request.headers, HEADERS.tenant)
     if named and not is_valid_tenant_id(named):
         raise ValidationFailed("invalid tenant_id", details={"field": HEADERS.tenant})
     if claimed and named and named != claimed:

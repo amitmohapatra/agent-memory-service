@@ -310,7 +310,7 @@ Ten users, 10 rps offered, 4 cores, 180 seconds:
 | `POST /v1/recall` | 14,000 ms | - |
 | `POST /v1/context` (verified) | **42,000 ms**, max 96,410 | - |
 | `POST /v1/messages` (ingest) | 1,700 ms | - |
-| `POST /v1/files` (docling) | 3,500 ms | - |
+| `POST /v1/files` (docling; the route was removed in 0.3.0) | 3,500 ms | - |
 
 Achieved 0.66 rps against 10 offered, 12% failures, CPU 382% of 400%.
 
