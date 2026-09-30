@@ -9,11 +9,17 @@ from typing import TYPE_CHECKING, Any
 
 from memory_service.config.constants import TASKS, WEBHOOKS
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.conversation.summary import TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.profile.service import (
+    PROFILE_MEMORY_TYPES,
+    TASK_PROFILE_REFRESH,
+    ProfileService,
+)
 from memory_service.modules.tools.service import TASK_TOOLS_INDEX, TASK_TOOLS_LEARN
 from memory_service.modules.webhooks.service import (
     TASK_WEBHOOK_DELIVER,
@@ -162,6 +168,12 @@ def register_handlers(container: Container) -> None:
         async with uow_factory() as uow:
             memories = await uow.memories.get_many(tenant_id, memory_ids)
             await bump_memory_revisions(uow, memories)
+            # what the user said about themselves keeps their pinned profile block current
+            for user_id in sorted(
+                {m.scope.user_id for m in memories if m.memory_type in PROFILE_MEMORY_TYPES}
+                - {None}
+            ):
+                await ProfileService.enqueue_refresh(uow, tenant_id, str(user_id))
             # A deletion is absent from get_many. Invalidate after index removal too:
             # a read between the SQL commit and this job could cache the stale index.
             if len(memories) < len(set(memory_ids)):
@@ -230,6 +242,19 @@ def register_handlers(container: Container) -> None:
         connections = container.services.get("connections")
         if connections is not None:
             await connections.connect_all()
+
+    async def summary_refresh(payload: dict[str, Any]) -> None:
+        """Fold a thread's new messages into its durable summary."""
+        await container.services["thread_summaries"].refresh(
+            payload["tenant_id"],
+            payload["thread_id"],
+            principal_id=payload.get("principal_id"),
+            workspace_id=payload.get("workspace_id"),
+        )
+
+    async def profile_refresh(payload: dict[str, Any]) -> None:
+        """Keep a user's pinned ``user`` block from their USER and PREFERENCE memories."""
+        await container.services["profile"].refresh_user(payload["tenant_id"], payload["user_id"])
 
     async def tools_index(payload: dict[str, Any]) -> None:
         """Embed changed catalog entries for tool search."""
@@ -344,6 +369,8 @@ def register_handlers(container: Container) -> None:
         queue.register_periodic(
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
+    queue.register(TASK_SUMMARY_REFRESH, Queue.SUMMARY, summary_refresh, retries=3)
+    queue.register(TASK_PROFILE_REFRESH, Queue.SUMMARY, profile_refresh, retries=3)
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
     queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
     queue.register_periodic(

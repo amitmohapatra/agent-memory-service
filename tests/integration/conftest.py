@@ -30,6 +30,8 @@ TABLES = [
     "tool_stats",
     "approval_patterns",
     "procedures",
+    "profile_blocks",
+    "thread_summaries",
     "run_outcomes",
     "tools",
     "graph_relations",

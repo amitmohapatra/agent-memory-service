@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import and_, func, literal, or_, select, text, tuple_, update
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import Text, and_, func, literal, or_, select, text, tuple_, update
+from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -401,6 +401,27 @@ class SqlMemoryRepository:
         for r in exact + recent:
             seen.setdefault(r.memory_id, r)
         return [_to_domain(r) for r in list(seen.values())[: max(limit, len(exact))]]
+
+    async def about_user(
+        self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int
+    ) -> list[CanonicalMemory]:
+        audience = [f"user:{tenant_id}/{user_id}", f"principal:{tenant_id}/user:{user_id}"]
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.user_id == user_id,
+                    MemoryRow.memory_type.in_(list(memory_types)),
+                    MemoryRow.deleted_at.is_(None),
+                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                    MemoryRow.visibility_keys.op("?|")(array(audience, type_=Text)),
+                )
+                .order_by(MemoryRow.created_at.desc(), MemoryRow.memory_id.desc())
+                .limit(limit)
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
 
     async def list_scope(
         self,

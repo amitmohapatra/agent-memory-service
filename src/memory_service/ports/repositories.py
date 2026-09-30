@@ -97,6 +97,12 @@ class MessageRepository(Protocol):
         before_sequence: int | None = None,
         include_internal: bool = False,
     ) -> list[Message]: ...
+    async def list_after(
+        self, tenant_id: str, thread_id: str, *, after_sequence: int, limit: int
+    ) -> list[Message]:
+        """Visible messages after ``after_sequence``, oldest first, at most ``limit``."""
+        ...
+
     async def find_by_source(
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None: ...
@@ -344,6 +350,13 @@ class MemoryRepository(Protocol):
     ) -> list[CanonicalMemory]:
         """Existing CURRENT memories that could be duplicates of a new candidate: same scope
         and (same hash OR same subject OR most recent)."""
+        ...
+
+    async def about_user(
+        self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int
+    ) -> list[CanonicalMemory]:
+        """The user's own current memories of these types (readable by the user, not an
+        agent's private notes about them), newest first."""
         ...
 
     async def list_scope(

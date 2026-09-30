@@ -9,6 +9,8 @@
 - procedures: the procedure learned per (tenant, audience, task pattern).
 - tool_invocations.learned_at (was the never-written indexed_at): the learning job's
   cursor, behind a partial index on the calls not learned yet.
+- profile_blocks: pinned text per (scope, block); thread_summaries: a thread's durable
+  summary, one row per version (the primary key reads the newest).
 """
 
 import sqlalchemy as sa
@@ -122,7 +124,35 @@ def _procedures() -> None:
     )
 
 
+def _profile_and_summaries() -> None:
+    op.create_table(
+        "profile_blocks",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("scope_key", sa.String(600), primary_key=True),
+        sa.Column("block", sa.String(60), primary_key=True),
+        sa.Column("text", sa.Text(), nullable=False, server_default=""),
+        sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("source", sa.String(20), nullable=False, server_default="learned"),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+    )
+    op.create_table(
+        "thread_summaries",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("thread_id", sa.String(200), primary_key=True),
+        sa.Column("version", sa.Integer(), primary_key=True),
+        sa.Column("text", sa.Text(), nullable=False),
+        sa.Column("covers_to_sequence", sa.Integer(), nullable=False),
+        sa.Column("model", sa.String(200), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+    )
+
+
 def upgrade() -> None:
+    _profile_and_summaries()
     _catalog()
     _counters()
     _procedures()
@@ -137,6 +167,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.drop_table("thread_summaries")
+    op.drop_table("profile_blocks")
     op.drop_index("ix_tool_invocations_unlearned", table_name="tool_invocations")
     op.alter_column("tool_invocations", "learned_at", new_column_name="indexed_at")
     op.create_index(

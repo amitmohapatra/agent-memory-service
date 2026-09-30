@@ -14,6 +14,10 @@ from memory_service.adapters.db.document_repository import SqlDocumentRepository
 from memory_service.adapters.db.feedback_repository import SqlFeedbackRepository
 from memory_service.adapters.db.llm_repository import SqlLLMPolicyRepository, SqlLLMUsageRepository
 from memory_service.adapters.db.memory_repository import SqlMemoryRepository
+from memory_service.adapters.db.profile_repository import (
+    SqlProfileRepository,
+    SqlThreadSummaryRepository,
+)
 from memory_service.adapters.db.repositories import (
     SqlAgentRunRepository,
     SqlArchiveRepository,
@@ -128,6 +132,8 @@ class SqlUnitOfWork:
         self.memories = SqlMemoryRepository(s)
         self.tools = SqlToolRepository(s)
         self.procedures = SqlProcedureRepository(s)
+        self.profiles = SqlProfileRepository(s)
+        self.summaries = SqlThreadSummaryRepository(s)
         self.credentials = SqlCredentialRepository(s)
         self.llm_policies = SqlLLMPolicyRepository(s)
         self.llm_usage = SqlLLMUsageRepository(s)

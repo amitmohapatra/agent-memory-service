@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -130,6 +132,35 @@ async def get_thread(
     async with container.services["uow_factory"]() as uow:
         thread = await _service(container).get_thread(uow, ctx, thread_id)
     return ThreadResponse.model_validate(_thread_response(thread))
+
+
+class ThreadSummaryResponse(BaseModel):
+    """A thread's durable summary: every message up to ``covers_to_sequence``."""
+
+    thread_id: str
+    text: str
+    covers_to_sequence: int
+    version: int
+    model: str = Field(description="the model that wrote it, or extractive without one")
+    created_at: datetime
+
+
+@router.get(
+    "/threads/{thread_id}/summary",
+    response_model=ThreadSummaryResponse,
+    tags=["threads"],
+    summary="The thread's durable summary (404 until it has one)",
+    responses=_READ_ERRORS,
+)
+async def get_thread_summary(
+    thread_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> ThreadSummaryResponse:
+    async with container.services["uow_factory"]() as uow:
+        await _service(container).get_thread(uow, ctx, thread_id)
+        summary = await uow.summaries.latest(ctx.tenant_id, thread_id)
+    if summary is None:
+        raise NotFound("the thread has no summary yet")
+    return ThreadSummaryResponse.model_validate(summary.model_dump())
 
 
 @router.delete(

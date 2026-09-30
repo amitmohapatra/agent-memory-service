@@ -889,6 +889,34 @@ class ProcedureRow(Base):
     )
 
 
+class ProfileBlockRow(Base):
+    """A pinned profile block of one scope (user, agent principal, workspace)."""
+
+    __tablename__ = "profile_blocks"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(600), primary_key=True)
+    block: Mapped[str] = mapped_column(String(60), primary_key=True)
+    text: Mapped[str] = mapped_column(Text, default="", server_default="")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    source: Mapped[str] = mapped_column(String(20), default="learned", server_default="learned")
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+
+class ThreadSummaryRow(Base):
+    """One version of a thread's durable summary; the newest is the primary key's last."""
+
+    __tablename__ = "thread_summaries"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    covers_to_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+
 class ToolInvocationRow(Base):
     __tablename__ = "tool_invocations"
 

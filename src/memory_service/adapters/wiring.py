@@ -193,6 +193,8 @@ def _wire_services(container: Container) -> None:
 
 def _wire_conversation(container: Container) -> None:
     from memory_service.modules.conversation.service import ConversationService
+    from memory_service.modules.conversation.summary import ThreadSummaries
+    from memory_service.modules.profile.service import ProfileService
     from memory_service.modules.working_memory.hot_thread import HotThreadCache
 
     hot = HotThreadCache(
@@ -203,6 +205,14 @@ def _wire_conversation(container: Container) -> None:
     container.services["hot_thread"] = hot
     container.services["conversation"] = ConversationService(
         container.services["authz"], hot, archive_enabled=container.tuning.archive.enabled
+    )
+    container.services["thread_summaries"] = ThreadSummaries(
+        container.services["uow_factory"], container.services["llm_assist"]
+    )
+    container.services["profile"] = ProfileService(
+        container.services["uow_factory"],
+        container.services["authz"],
+        container.services["llm_assist"],
     )
 
 

@@ -372,6 +372,25 @@ class SqlMessageRepository:
             by_msg.setdefault(a.message_id, []).append(a)
         return [_row_to_message(r, by_msg.get(r.message_id, ())) for r in rows]
 
+    async def list_after(
+        self, tenant_id: str, thread_id: str, *, after_sequence: int, limit: int
+    ) -> list[Message]:
+        rows = (
+            await self.s.execute(
+                select(MessageRow)
+                .where(
+                    MessageRow.tenant_id == tenant_id,
+                    MessageRow.thread_id == thread_id,
+                    MessageRow.deleted_at.is_(None),
+                    MessageRow.kind == MessageKind.VISIBLE.value,
+                    MessageRow.sequence > after_sequence,
+                )
+                .order_by(MessageRow.sequence)
+                .limit(limit)
+            )
+        ).scalars()
+        return [_row_to_message(r) for r in rows]
+
     async def find_by_source(
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None:

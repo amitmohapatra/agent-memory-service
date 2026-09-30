@@ -10,7 +10,8 @@ answering it share a turn. Both derivations are deterministic.
 Hot path (synchronous, one transaction):
     authorize -> upsert thread/session/turn -> message row (+attachments)
     -> observation row -> outbox jobs (memory + archive) -> revisions -> COMMIT
-Everything expensive (extraction, embedding, graph, archive, summaries) is asynchronous.
+Everything expensive (extraction, embedding, graph, archive, the thread summary every
+``SUMMARY_EVERY`` messages) is asynchronous.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import validate_requested_visibility
+from memory_service.modules.conversation.summary import SUMMARY_EVERY, enqueue_refresh
 from memory_service.modules.tenancy.gate import guard_workspace_visibility, require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -277,6 +279,16 @@ class ConversationService:
                 if outbox_id is not None:
                     job_ids.append(f"obx_{outbox_id}")
 
+            if sequence % SUMMARY_EVERY == 0:
+                # the durable summary rolls forward every SUMMARY_EVERY messages, in the
+                # background, paid by whoever wrote the message that crossed the mark
+                await enqueue_refresh(
+                    uow,
+                    ctx.tenant_id,
+                    ctx.thread_id,
+                    principal_id=ctx.principal_id,
+                    workspace_id=ctx.workspace_id,
+                )
             revision = await uow.threads.touch(ctx.tenant_id, ctx.thread_id)
             await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, ctx.thread_id)
             ack = MessageAck(

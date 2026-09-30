@@ -108,7 +108,8 @@ TAGS: list[dict[str, Any]] = [
     {
         "name": "feedback",
         "description": "Human, judge and interrupt judgements on runs, answers, memories, tool "
-        "calls, briefs and procedures; a verdict on a memory is projected into it (ADR 0023).",
+        "calls, briefs and procedures, projected into what they judge (memory standing, run "
+        "outcomes, tool statistics and approval patterns, procedures).",
     },
     {
         "name": "webhooks",
@@ -120,11 +121,16 @@ TAGS: list[dict[str, Any]] = [
         "grounding verification of an answer against evidence.",
     },
     {"name": "graph", "description": "Entity and relation queries over the knowledge graph."},
+    {
+        "name": "profile",
+        "description": "Pinned profile blocks of the user, the agent and the workspace, part of "
+        "every pushed context.",
+    },
     {"name": "briefs", "description": "Standing questions and pages kept current by the service."},
     {
         "name": "tools",
-        "description": "Tool memory: declared tools, invocation records, the output cache, "
-        "chains and run outcomes.",
+        "description": "Tool memory: the catalog, call records, run outcomes, tool hints "
+        "(candidates, learned plan, next step, prefilled arguments) and approval suggestions.",
     },
     {
         "name": "agents",

@@ -435,12 +435,15 @@ async def tool_hints(
 ) -> ToolHints:
     ctx = build_context(request, container, body.scope)
     visibility = await container.services["authz"].visibility(ctx)
+    async with container.services["uow_factory"]() as uow:
+        profile = await container.services["profile"].blocks(uow, ctx)
     return await container.services["tool_hints"].hints(
         ctx,
         body.task,
         available=body.available,
         k=body.k,
         scope_keys=list(visibility.keys),
+        profile=profile,
     )
 
 
