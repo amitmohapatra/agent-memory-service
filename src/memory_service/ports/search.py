@@ -165,31 +165,6 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
 )
 
 
-#: What a ranked search returns in its first phase: the fields ranking, deduplication, the
-#: derived-memory check, the time filter and the cut read. Everything else of
-#: ``PAYLOAD_FIELDS`` - attributes, connections, contributors, dated mentions, the graph and
-#: section fields - is read only for the items that survive the cut, so it is fetched for
-#: those alone (``SearchStore.get``). A memory query ranks 200 candidates to keep ~33; the
-#: full payload of all 200 was most of the bytes and most of the time of the read.
-RANK_FIELDS: tuple[str, ...] = (
-    "category",
-    "confidence",
-    "derived",
-    "document_id",
-    "kind",
-    "memory_type",
-    "observed_at",
-    "owner_principal",
-    "provider",
-    "record_id",
-    "reinforcement",
-    "source_refs",
-    "subject",
-    "text",
-    "text_hash",
-)
-
-
 @runtime_checkable
 class SearchStore(Protocol):
     async def ensure_collection(self, spec: CollectionSpec) -> None: ...
@@ -242,11 +217,10 @@ class SearchStore(Protocol):
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
-        fields: Sequence[str] = PAYLOAD_FIELDS,
     ) -> list[SearchHit]:
         """Bounded hybrid fusion over every dense space given plus the sparse arm, each arm
-        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0. Hits carry the
-        payload ``fields`` (``RANK_FIELDS`` for a ranking read, hydrated later by ``get``)."""
+        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0. Hits carry
+        ``PAYLOAD_FIELDS`` (a two-phase read was measured slower: MEASUREMENTS.md 8.7)."""
         ...
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]: ...

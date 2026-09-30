@@ -487,16 +487,10 @@ class QdrantSearchStore:
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
-        fields: Sequence[str] = PAYLOAD_FIELDS,
     ) -> list[SearchHit]:
         if rrf_k < 0:
             raise ValueError("rrf_k must be nonnegative")
         qf = _filter(flt)
-        selector = (
-            _PAYLOAD
-            if tuple(fields) == PAYLOAD_FIELDS
-            else models.PayloadSelectorInclude(include=list(fields))
-        )
         arms = _arms(
             dense=dense,
             sparse=sparse,
@@ -521,7 +515,7 @@ class QdrantSearchStore:
                     using=single.using,
                     query_filter=single.filter,
                     limit=limit,
-                    with_payload=selector,
+                    with_payload=_PAYLOAD,
                 ),
             )
             return [self._hit(p, retriever) for p in res.points]
@@ -535,7 +529,7 @@ class QdrantSearchStore:
                         query=_fusion(rrf_k, [weight for _, _, weight in arms]),
                         query_filter=qf,
                         limit=limit,
-                        with_payload=selector,
+                        with_payload=_PAYLOAD,
                     ),
                 )
             except Exception as exc:

@@ -33,7 +33,6 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.search import (
-    RANK_FIELDS,
     Retriever,
     SearchHit,
     SearchStore,
@@ -90,9 +89,6 @@ class Candidate:
     expansion_edge: str | None = None
     #: dense similarity to the query (cosine), when the context read it (score_similarity)
     similarity: float | None = None
-    #: False while the payload holds only the ranking fields (``RANK_FIELDS``); the items
-    #: that survive the cut are hydrated with the rest (``RetrievalEngine._hydrate``)
-    hydrated: bool = True
 
     @property
     def representation(self) -> Representation:
@@ -418,8 +414,6 @@ class RetrievalEngine:
                     else 0,
                 )
                 kept = {c.record_id for c in candidates}
-                with timings.stage("hydrate"):
-                    await self._hydrate(candidates)
                 unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
                 if unused:
                     # retrieved but ranked out: the grounding cascade scans these for
@@ -586,7 +580,6 @@ class RetrievalEngine:
                 score=h.score,
                 retrievers=retrievers_of.get(h.record_id, [h.retriever]),
                 payload=h.payload,
-                hydrated=False,
             )
             for h in hits
         ]
@@ -652,7 +645,6 @@ class RetrievalEngine:
                 score=score,
                 retrievers=["entity_topic"],
                 payload=payload,
-                hydrated=False,
             )
             for rid, score, _, payload in fused
         ]
@@ -843,33 +835,7 @@ class RetrievalEngine:
             prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
             rrf_k=self.cfg.hybrid_rrf_k,
             weights=self.cfg.hybrid_weights,
-            fields=RANK_FIELDS,
         )
-
-    async def _hydrate(self, candidates: list[Candidate]) -> None:
-        """The second phase of a ranked read: the full payload of the items that survived the
-        cut, one ``get`` per collection, concurrently. What ranking already read stays (the
-        derived mark, the collapsed duplicates); an item the store no longer has keeps its
-        ranking fields."""
-        partial: dict[str, list[Candidate]] = {}
-        for c in candidates:
-            if not c.hydrated:
-                collection = self.indexer.collection(MEMORIES if c.kind == "memory" else KNOWLEDGE)
-                partial.setdefault(collection, []).append(c)
-        if not partial:
-            return
-        with stage_seconds.labels("retrieval.hydrate").time():
-            fetched = await asyncio.gather(
-                *(
-                    self.store.get(collection, [c.record_id for c in items])
-                    for collection, items in partial.items()
-                )
-            )
-        full = {r.record_id: r.payload for records in fetched for r in records}
-        for items in partial.values():
-            for c in items:
-                c.payload = {**full.get(c.record_id, {}), **c.payload}
-                c.hydrated = True
 
 
 def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:

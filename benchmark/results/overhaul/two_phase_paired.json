@@ -1,0 +1,14 @@
+{
+  "what": "one Qdrant read of 200 candidates with the full payload (PAYLOAD_FIELDS) against two phases: 200 with the ranking fields, then retrieve of the kept 33 with the full payload; 80 alternating paired reads per variant, dense_ml query vectors of stored points, isolated Qdrant (127.0.0.1:16333), host load 6-13 on 4 cores",
+  "date": "2026-10-01",
+  "unit": "ms",
+  "rank_fields_as_shipped (RANK_FIELDS incl. text, source_refs)": {
+    "knowledge (8,137 points)": {"one_phase": {"p50": 28.9, "p95": 73.9}, "two_phase": {"p50": 48.3, "p95": 116.1}, "of_which_hydrate": {"p50": 15.2, "p95": 40.0}},
+    "memories (10,388 points)": {"one_phase": {"p50": 40.8, "p95": 82.0}, "two_phase": {"p50": 54.7, "p95": 96.1}, "of_which_hydrate": {"p50": 15.4, "p95": 32.0}}
+  },
+  "rank_fields_minimal (RANK_FIELDS without text, source_refs)": {
+    "knowledge (8,137 points)": {"one_phase": {"p50": 29.6, "p95": 92.3}, "two_phase": {"p50": 43.3, "p95": 108.0}, "of_which_hydrate": {"p50": 14.1, "p95": 40.0}},
+    "memories (10,388 points)": {"one_phase": {"p50": 30.0, "p95": 53.6}, "two_phase": {"p50": 36.8, "p95": 56.5}, "of_which_hydrate": {"p50": 11.7, "p95": 20.1}}
+  },
+  "decision": "single phase: the second round trip costs more than the payload it saves"
+}

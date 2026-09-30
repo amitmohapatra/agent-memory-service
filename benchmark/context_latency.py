@@ -152,6 +152,11 @@ async def _timed(client: httpx.AsyncClient, path: str, body: dict[str, Any]) -> 
     return elapsed, response.json()
 
 
+def _debug(scope: dict[str, Any], query: str) -> dict[str, Any]:
+    """The whole bundle with its diagnostics: for the stage split and the floor analysis."""
+    return {"scope": scope, "query": query, "format": "full", "debug": True}
+
+
 def _stage_summary(rows: list[dict[str, float]]) -> dict[str, dict[str, float]]:
     stages = sorted({name for row in rows for name in row})
     out: dict[str, dict[str, float]] = {}
@@ -194,7 +199,10 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
                 r = await client.post(
                     "/v1/messages",
                     headers=H,
-                    json={"scope": scope, "role": "USER", "content": f"{speaker}: {text}"},
+                    json={
+                        "scope": scope,
+                        "messages": [{"role": "USER", "content": f"{speaker}: {text}"}],
+                    },
                 )
                 r.raise_for_status()
                 if i % 20 == 19:
@@ -216,18 +224,24 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
                 query = f"{queries[i % len(queries)]} (variant {i})"
                 ms, _ = await _timed(client, "/v1/recall", {"scope": scope, "query": query})
                 latencies["recall"].append(ms)
+                # the measured series are what the SDK and the harness ask for: format=prompt,
+                # no diagnostics; the stage split comes from a separate debug read of the
+                # same shape, so building diagnostics never inflates the measured numbers
                 ms, body = await _timed(
                     client, "/v1/context", {"scope": scope, "query": f"{query} [c]"}
                 )
                 latencies["context"].append(ms)
-                stage_rows["context"].append(body["diagnostics"].get("timings_ms", {}))
                 sizes.append(len(json.dumps(body)))
+                _, body = await _timed(client, "/v1/context", _debug(scope, f"{query} [cd]"))
+                stage_rows["context"].append(body["diagnostics"].get("timings_ms", {}))
+                tools = {"available": available}
                 ms, body = await _timed(
-                    client,
-                    "/v1/context",
-                    {"scope": scope, "query": f"{query} [t]", "tools": {"available": available}},
+                    client, "/v1/context", {"scope": scope, "query": f"{query} [t]", "tools": tools}
                 )
                 latencies["context_tools"].append(ms)
+                _, body = await _timed(
+                    client, "/v1/context", {**_debug(scope, f"{query} [td]"), "tools": tools}
+                )
                 stage_rows["context_tools"].append(body["diagnostics"].get("timings_ms", {}))
                 repeat = {"scope": scope, "query": queries[i % len(queries)]}
                 await _timed(client, "/v1/context", repeat)
@@ -235,9 +249,7 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
                 latencies["cached"].append(ms)
             floor_rows: list[tuple[list[tuple[float, bool]], int]] = []
             for question, texts in zip(questions, evidence, strict=True):
-                _, body = await _timed(
-                    client, "/v1/context", {"scope": scope, "query": f"{question} [f]"}
-                )
+                _, body = await _timed(client, "/v1/context", _debug(scope, f"{question} [f]"))
                 items = [
                     (
                         float(item["relevance"]),
@@ -250,7 +262,7 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
             off_topic: list[list[float]] = []
             off_bytes: list[float] = []
             for question in OFF_TOPIC:
-                _, body = await _timed(client, "/v1/context", {"scope": scope, "query": question})
+                _, body = await _timed(client, "/v1/context", _debug(scope, question))
                 off_topic.append([float(item["relevance"]) for item in body["memories"]])
                 off_bytes.append(float(len(json.dumps(body))))
         return {
@@ -276,6 +288,7 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
             },
             "requests": requests,
             "transport": "in-process ASGI (no network hop)",
+            "context_format": "prompt (the stage split: format=full, debug=true)",
             "providers": {
                 "embedding": container.embedding.fingerprint(),
                 "search": BENCH.search,

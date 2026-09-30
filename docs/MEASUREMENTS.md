@@ -524,3 +524,41 @@ is unaffected.
 a first attempt killed mid-ingest was still writing into the same database, so the control
 retrieved against duplicates. The clean rerun (`p7_locomo_ctl3`) is the row above; the
 contaminated one was discarded.
+
+### 8.7 The final surface: `format=prompt`, and the two-phase read measured and dropped — 2026-10-01
+
+`make bench-context-latency` now measures what the SDK and the harness send: `/v1/context`
+with the default `format=prompt` (`{rendered, bundle_id, token_estimate}`), no diagnostics;
+the stage split and the floor analysis come from a separate `format=full, debug=true` read of
+the same shape, so building diagnostics never inflates the measured series. Same corpus and
+box as 8.1; VM load 3.9-6.0 (`benchmark/results/overhaul/context_latency_final_surface.json`).
+
+| run | recall p50 / p95 | context p50 / p95 | context+tools p50 / p95 | cached p50 / p95 | context bytes p50 |
+|---|---|---|---|---|---|
+| `final` (8.1, format=full) | 247 / 397 | 314 / 495 | 356 / 544 | 26 / 300 | 74,128 |
+| `final_surface` (format=prompt) | 244 / 421 | 305 / 525 | 406 / 578 | 26 / 194 | 12,456 |
+
+Stage means (ms): encode 103, search 130, expansion 33, graph 20, similarity 19, verify 21,
+scope 32 - the same split as 8.1: two encodes and two hybrid searches are ~75% of a context
+on this box. The prompt form is 6x smaller on the wire and no faster to build, as expected:
+what it drops is serialisation, not work.
+
+**The two-phase read (8.1's "next hot spot") was built and then removed.** Measured paired on
+the isolated Qdrant (80 alternating reads per variant over the benchmark's own collections,
+`benchmark/results/overhaul/two_phase_paired.json`): one read of 200 candidates with the full
+payload is p50 29-41 / p95 74-82 ms; ranking fields for 200 then the full payload of the kept
+33 is p50 48-55 / p95 96-116 ms, of which the second round trip alone is p50 15 ms. Even with
+the ranking read cut to scalars (no `text`, no `source_refs`) two phases stay slower (p50
+37-43 against 30). The 221 KB / 34-320 ms figure of 8.1 was a loaded-box outlier; at this
+payload size the extra round trip costs more than the bytes it saves. The end-to-end run
+with it in place (`context_latency_twophase.json`, VM load 6.1-7.8) was slower everywhere
+(context p95 1,821 ms), dominated by load but in no stage better. Ranked search reads the
+full payload once again.
+
+**`memory_entity_search` stays on** - the decision of 8.4 on its numbers (+2.5 / +2.8 points
+of complete multi-hop coverage at @50 / @100, all-question p95 +44 ms on this box), which
+nothing in this pass changes: it runs inside its own timeout, and the context p95 above
+includes it.
+
+The 300 ms p95 target (8 vCPU VM) is still not reachable on this 4-core, no-AVX2 box and is
+not claimed.
