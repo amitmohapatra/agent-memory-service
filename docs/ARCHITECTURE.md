@@ -50,8 +50,10 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 HOT      Dragonfly      recent thread, ephemeral memories, caches (never source of truth)
 WARM     PostgreSQL     threads/sessions/turns/messages, observations, canonical memories,
                         evidence refs, documents/nodes/chunks metadata, jobs, revisions,
-                        archive manifests, graph, tools, feedback, model keys and policies
-SEARCH   Qdrant         BM25 sparse + dense — rebuildable
+                        archive manifests, graph, tool catalog/calls/statistics/procedures,
+                        approval patterns, agent-tool pulls and prefetch counts, profile
+                        blocks, thread summaries, feedback, model keys and policies
+SEARCH   Qdrant         BM25 sparse + dense (knowledge, memories, tools) — rebuildable
 ARCHIVE  GCS            raw chat segments (JSONL+zstd), raw files, imports, old versions
 ```
 
@@ -80,7 +82,28 @@ query -> rule-based route -> overlap encoder with authorized scope + graph prefe
       -> graph facts/evidence -> document companion expansion
       -> request-local evidence verification / bounded companion escalation
       -> ContextBuilder packs provenance and evidence groups under the token budget
+         (concurrently with retrieval: profile blocks, the thread summary, procedures and
+          prefetched memories - one indexed read each; the pinned sections take at most
+          half the budget; tool hints when asked)
 ```
+
+Memories are re-scored by standing (confidence and reinforcement, which feedback moves) with
+a bounded factor (±15%) before the cut.
+
+## Learning (background)
+
+```
+record_tool / outcome ----> tools.learn: stored procedures per (audience, task pattern),
+                            distilled with the tenant model; procedural graph edges
+feedback --------------> feedback.project: memory standing, run outcomes, tool statistics,
+                            approval patterns, procedure rejection
+message every 20 ------> summary.refresh: the thread's durable summary (rolling)
+USER/PREFERENCE memory -> profile.refresh: the user's pinned block
+agent-tool pulls ------> prefetch (every 5 min): what the push pre-includes per pattern
+catalog upsert --------> tools.index: the tools search collection
+```
+
+The request path reads only what these jobs precompute (indexed, bounded).
 
 Document selection is applied to exact hits and after every post-stage, before the next
 stage verifies evidence. Tenant and visibility filtering remain independent requirements.
@@ -110,7 +133,8 @@ work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hier
 is then consulted only when the operator allow-list `models.llm.uses` and the resolved tenant
 policy both allow it and a key can pay (contextual_extraction, relation_extraction,
 entity_resolution, conflict_adjudication, summaries, reflection, memory_connections, briefs,
-query_expansion, query_decomposition, chunk_context, grounding_judge). Any failure returns
+query_expansion, query_decomposition, chunk_context, grounding_judge, procedure_abstraction).
+Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;

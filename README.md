@@ -256,7 +256,8 @@ Need just the search results? `await ctx.search("...")` returns ranked items.
 A read consults the model only when the tenant's model policy allows it (`read_assist`, on by
 default once a key is registered) or when the request says so: `use_llm=True` or `use_llm=False`
 overrides the policy for that call. Agent-owned virtual keys and persistent
-standing questions/pages are exposed through `ctx.advanced.model_keys.set(...)` and `ctx.briefs`;
+standing questions/pages are exposed through `ctx.advanced.model_keys.set(...)` and
+`ctx.advanced.briefs`;
 see the [SDK examples](sdk/python/README.md) and
 [capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
 
@@ -615,8 +616,9 @@ client, which owns the transport, the retries, the rate-limit parsing and the br
 same client the agent harness uses, so neither service can learn a lesson the other misses.
 
 Available uses: `contextual_extraction`, `relation_extraction`,
-`entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `query_expansion`,
-`chunk_context`, `grounding_judge`, `briefs`.
+`entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `memory_connections`,
+`briefs`, `query_expansion`, `query_decomposition`, `chunk_context`, `grounding_judge`,
+`procedure_abstraction`.
 
 Each use has its own gate. Contextual extraction consults the model only for
 eligible inputs; assisted brief refresh generates only when evidence or synthesis
