@@ -707,13 +707,25 @@ class GraphEntityRow(Base):
     mention_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     summary: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: fingerprint of the facts ``summary`` was written from; unchanged facts are not rewritten
+    summary_source: Mapped[str] = mapped_column(String(64), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "scope_key", "canonical_name", name="uq_graph_entity"),
         Index("ix_graph_entities_tenant_name", "tenant_id", "canonical_name"),
-
+        Index(
+            "ix_graph_entities_name_prefix",
+            "tenant_id",
+            text("canonical_name text_pattern_ops"),
+        ),
+        Index(
+            "ix_graph_entities_tenant_mentions",
+            "tenant_id",
+            text("mention_count DESC"),
+            "entity_id",
+        ),
         Index("ix_graph_entities_keys", "visibility_keys", postgresql_using="gin"),
     )
 

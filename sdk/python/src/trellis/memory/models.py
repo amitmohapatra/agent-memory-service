@@ -460,6 +460,11 @@ class GraphEntity(BaseModel):
     entity_type: str = "THING"
     mention_count: int = 1
     aliases: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+GraphLayer = Literal["entity", "temporal", "causal", "structural"]
+RelationStatus = Literal["CURRENT", "SUPERSEDED", "RETRACTED", "INVALIDATED"]
 
 
 class GraphFact(BaseModel):
@@ -470,7 +475,8 @@ class GraphFact(BaseModel):
     predicate: str
     object: str
     fact_text: str = ""
-    status: TemporalStatus = "CURRENT"
+    status: RelationStatus = "CURRENT"
+    layer: GraphLayer = "entity"
     valid_from: datetime | None = None
     valid_to: datetime | None = None
     observed_at: datetime | None = None
@@ -488,6 +494,30 @@ class GraphAnswer(BaseModel):
     entities: list[GraphEntity] = Field(default_factory=list)
     facts: list[GraphFact] = Field(default_factory=list)
     visited: int = 0
+
+
+class EntityValue(BaseModel):
+    """The newest current value of one predicate the entity is the subject of."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    predicate: str
+    value: str
+    relation_id: str
+    valid_from: datetime | None = None
+    observed_at: datetime
+
+
+class EntityProfile(BaseModel):
+    """``GET /v1/graph/entities/{id}``: current value per predicate, relations, history."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    entity: GraphEntity
+    current: list[EntityValue] = Field(default_factory=list)
+    relations: list[GraphFact] = Field(default_factory=list)
+    history: list[GraphFact] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- tool memory

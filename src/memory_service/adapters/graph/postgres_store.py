@@ -15,8 +15,21 @@ from datetime import datetime
 from typing import Any
 
 import orjson
-from sqlalchemy import Select, Text, case, delete, func, or_, select, text, update
-from sqlalchemy.dialects.postgresql import array, insert
+from sqlalchemy import (
+    Select,
+    Text,
+    and_,
+    case,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    union_all,
+    update,
+)
+from sqlalchemy.dialects.postgresql import JSONB, array, insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
@@ -26,7 +39,7 @@ from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
 from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.intelligence import Entity, GraphNeighborhood, Relation
+from memory_service.ports.intelligence import Entity, EntityFacts, GraphNeighborhood, Relation
 
 
 def _keys_clause(column: Any, keys: Sequence[str]) -> Any:
@@ -135,8 +148,15 @@ def neighborhood_query(
     as_of: datetime | None,
     valid_at: datetime | None,
     limit: int,
+    expanded: Sequence[str] = (),
 ) -> Select[tuple[GraphRelationRow]]:
-    """One hop of the traversal: the best edges out of ``frontier``, in a total order.
+    """One hop of the traversal: the best new edges out of ``frontier``, in a total order.
+
+    Everything that would be dropped after the query is dropped *before* its limit, so the
+    limit is spent only on edges the traversal keeps: an edge back to an entity an earlier
+    hop already expanded (``expanded``) was a candidate of that hop's query, and an edge to
+    a neighbour the caller cannot see is removed by the join on the neighbour's audience.
+    Filtering either after the LIMIT let them fill it and starve the edges that were new.
 
     ORDER BY confidence alone is not an order here. Every MENTIONS edge is written at the
     same capped confidence, so over a busy entity the LIMIT returned whichever of the tied
@@ -158,6 +178,8 @@ def neighborhood_query(
     ]
     if layers:
         conds.append(GraphRelationRow.layer.in_(list(layers)))
+    if expanded:
+        conds.append(neighbour.not_in(list(expanded)))
     # Deduplicate in SQL, before the limit - not in Python after it. A triple is written
     # once per memory that states it, and every 'mentions' edge carries the same capped
     # confidence, so the tie-break falls to the neighbour's mention_count and the busiest
@@ -178,7 +200,13 @@ def neighborhood_query(
     )
     inner = (
         select(GraphRelationRow, ranked)
-        .outerjoin(GraphEntityRow, GraphEntityRow.entity_id == neighbour)
+        .join(
+            GraphEntityRow,
+            and_(
+                GraphEntityRow.entity_id == neighbour,
+                _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
+            ),
+        )
         .where(*conds)
         .distinct(*identity)
         .order_by(
@@ -416,24 +444,142 @@ class PostgresGraphStore:
             ).all()
         return [_entity(r) for r in rows]
 
-    async def list_entities(
-        self, tenant_id: str, *, scope_keys: Sequence[str], limit: int = 200
+    async def search_entities(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        prefix: str | None = None,
+        entity_type: str | None = None,
+        limit: int = 200,
     ) -> list[Entity]:
         if not scope_keys or limit <= 0:
             return []
+        conds = [
+            GraphEntityRow.tenant_id == tenant_id,
+            _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
+        ]
+        if prefix:
+            # a range scan on ix_graph_entities_name_prefix (text_pattern_ops)
+            conds.append(GraphEntityRow.canonical_name.startswith(prefix, autoescape=True))
+        if entity_type:
+            conds.append(GraphEntityRow.entity_type == entity_type)
         async with self.session() as s:
             rows = (
                 await s.scalars(
                     select(GraphEntityRow)
-                    .where(
-                        GraphEntityRow.tenant_id == tenant_id,
-                        _keys_clause(GraphEntityRow.visibility_keys, scope_keys),
-                    )
-                    .order_by(GraphEntityRow.mention_count.desc(), GraphEntityRow.canonical_name)
+                    .where(*conds)
+                    .order_by(GraphEntityRow.mention_count.desc(), GraphEntityRow.entity_id)
                     .limit(limit)
                 )
             ).all()
         return [_entity(r) for r in rows]
+
+    async def entity_relations(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        *,
+        scope_keys: Sequence[str],
+        current: bool,
+        limit: int,
+    ) -> list[Relation]:
+        if not scope_keys or limit <= 0:
+            return []
+        status = (
+            GraphRelationRow.status == "CURRENT"
+            if current
+            else GraphRelationRow.status != "CURRENT"
+        )
+        ends = [
+            (GraphRelationRow.subject_id == entity_id),
+            (GraphRelationRow.object_id == entity_id),
+        ]
+        # one indexed branch per end (ix_graph_relations_subject / _object), merged
+        branches = [
+            select(GraphRelationRow.relation_id)
+            .where(
+                GraphRelationRow.tenant_id == tenant_id,
+                end,
+                status,
+                GraphRelationRow.predicate != INVALIDATED_BY,
+                _keys_clause(GraphRelationRow.visibility_keys, scope_keys),
+            )
+            .order_by(GraphRelationRow.observed_at.desc(), GraphRelationRow.relation_id)
+            .limit(limit)
+            for end in ends
+        ]
+        ids = union_all(*branches).subquery()
+        async with self.session() as s:
+            rows = (
+                await s.scalars(
+                    select(GraphRelationRow)
+                    .where(GraphRelationRow.relation_id.in_(select(ids.c.relation_id)))
+                    .order_by(GraphRelationRow.observed_at.desc(), GraphRelationRow.relation_id)
+                    .limit(limit)
+                )
+            ).all()
+        return [_relation(r) for r in rows]
+
+    async def summary_sources(
+        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int
+    ) -> list[EntityFacts]:
+        if not entity_ids or limit <= 0:
+            return []
+        target = aliased(GraphEntityRow)
+        out: list[EntityFacts] = []
+        async with self.session() as s:
+            entities = (
+                await s.scalars(
+                    select(GraphEntityRow)
+                    .where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        GraphEntityRow.entity_id.in_(list(entity_ids)),
+                    )
+                    .order_by(GraphEntityRow.entity_id)
+                )
+            ).all()
+            for entity in entities:
+                facts = (
+                    await s.execute(
+                        select(GraphRelationRow.predicate, target.name)
+                        .join(target, target.entity_id == GraphRelationRow.object_id)
+                        .where(
+                            GraphRelationRow.tenant_id == tenant_id,
+                            GraphRelationRow.subject_id == entity.entity_id,
+                            GraphRelationRow.status == "CURRENT",
+                            GraphRelationRow.layer != "structural",
+                            # every reader of the entity can read the fact
+                            GraphRelationRow.visibility_keys.op("@>")(
+                                literal(list(entity.visibility_keys or []), JSONB)
+                            ),
+                        )
+                        .order_by(
+                            GraphRelationRow.confidence.desc(),
+                            GraphRelationRow.observed_at.desc(),
+                            GraphRelationRow.relation_id,
+                        )
+                        .limit(limit)
+                    )
+                ).all()
+                out.append(
+                    EntityFacts(
+                        entity=_entity(entity),
+                        facts=[(str(p), str(n)) for p, n in facts],
+                        summary_source=entity.summary_source or "",
+                    )
+                )
+        return out
+
+    async def set_summary(
+        self, tenant_id: str, entity_id: str, *, summary: str, source: str
+    ) -> None:
+        async with self.session() as s, s.begin():
+            await s.execute(
+                update(GraphEntityRow)
+                .where(GraphEntityRow.tenant_id == tenant_id, GraphEntityRow.entity_id == entity_id)
+                .values(summary=summary, summary_source=source)
+            )
 
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]
@@ -468,6 +614,7 @@ class PostgresGraphStore:
             return GraphNeighborhood(entities=[], relations=[], visited=0)
         visited: dict[str, None] = dict.fromkeys(entity_ids)
         frontier = list(entity_ids)
+        expanded: list[str] = []  # entities whose edges an earlier hop already queried
         relations: dict[str, GraphRelationRow] = {}  # rows; converted after the scope filter
         seen: set[RelationIdentity] = set()
         with span("graph.neighborhood", hops=hops), stage_seconds.labels("graph.traverse").time():
@@ -485,6 +632,7 @@ class PostgresGraphStore:
                                 as_of=as_of,
                                 valid_at=valid_at,
                                 limit=max_visited * 3,
+                                expanded=expanded,
                             )
                         )
                     ).all()
@@ -495,6 +643,7 @@ class PostgresGraphStore:
                             if eid not in visited and len(visited) < max_visited:
                                 visited[eid] = None
                                 next_frontier.append(eid)
+                    expanded.extend(frontier)
                     frontier = next_frontier
                 ents = (
                     await s.scalars(

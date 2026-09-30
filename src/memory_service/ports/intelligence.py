@@ -187,6 +187,20 @@ class EntityAlias(BaseModel):
     source: str = "canonical"
 
 
+class EntityFacts(BaseModel):
+    """What an entity's summary is written from: its strongest current typed facts that every
+    reader of the entity may also read (a relation's audience covers the entity's), so the
+    summary never discloses a fact its entity's readers could not see."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entity: Entity
+    #: ``(predicate, object name)``, strongest and most recent first
+    facts: list[tuple[str, str]]
+    #: the fingerprint of the facts the stored summary was written from ("" when none)
+    summary_source: str = ""
+
+
 class GraphNeighborhood(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -205,10 +219,43 @@ class GraphStore(Protocol):
         self, tenant_id: str, names: Sequence[str], *, scope_keys: Sequence[str]
     ) -> list[Entity]: ...
 
-    async def list_entities(
-        self, tenant_id: str, *, scope_keys: Sequence[str], limit: int = 200
+    async def search_entities(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        prefix: str | None = None,
+        entity_type: str | None = None,
+        limit: int = 200,
     ) -> list[Entity]:
-        """Bounded listing of visible entities, most mentioned first."""
+        """Visible entities, most mentioned first (ties by id), bounded by ``limit``.
+        ``prefix`` matches the start of the canonical name (an indexed range scan)."""
+        ...
+
+    async def entity_relations(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        *,
+        scope_keys: Sequence[str],
+        current: bool,
+        limit: int,
+    ) -> list[Relation]:
+        """Visible relations with the entity at either end, newest first: the CURRENT ones,
+        or (``current=False``) its history - superseded, retracted and invalidated facts.
+        ``invalidated_by`` bookkeeping edges are never returned."""
+        ...
+
+    async def summary_sources(
+        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int
+    ) -> list[EntityFacts]:
+        """At most ``limit`` summary facts per entity (see ``EntityFacts``)."""
+        ...
+
+    async def set_summary(
+        self, tenant_id: str, entity_id: str, *, summary: str, source: str
+    ) -> None:
+        """Store an entity's summary and the fingerprint of the facts it was written from."""
         ...
 
     async def neighborhood(

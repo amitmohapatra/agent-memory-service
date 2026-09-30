@@ -20,6 +20,10 @@ from typing import Literal, get_args
 GraphLayer = Literal["entity", "temporal", "causal", "structural"]
 LAYERS: tuple[GraphLayer, ...] = get_args(GraphLayer)
 
+#: CURRENT holds now; SUPERSEDED stopped holding (a newer fact replaced it); RETRACTED was
+#: withdrawn; INVALIDATED was never right.
+RelationStatus = Literal["CURRENT", "SUPERSEDED", "RETRACTED", "INVALIDATED"]
+
 INVALIDATED_BY = "invalidated_by"
 
 _CAUSAL = frozenset(

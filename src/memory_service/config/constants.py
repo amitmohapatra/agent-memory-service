@@ -406,6 +406,18 @@ class GraphSettings(BaseModel):
     #: to imply - it read 10 + 10, which the settings have never been. The two numbers are
     #: only safe as a pair, so moving either one means re-reading this.
     max_parked_traversals: int = Field(default=8, ge=1)
+    #: ``GET /v1/graph/entities``: the most entities one search returns.
+    entity_search_max: int = Field(default=100, ge=1)
+    #: ``GET /v1/graph/entities/{id}``: current relations and history rows in a profile.
+    profile_relations_max: int = Field(default=50, ge=1)
+    profile_history_max: int = Field(default=20, ge=1)
+    #: Entity summaries, refreshed by the enrichment job for the entities it touched: the
+    #: facts one summary is written from, how many entities one job refreshes (most
+    #: mentioned first), and how many of those may be rewritten by the model per job - an
+    #: entity named in every message would otherwise cost a model call per message.
+    entity_summary_facts: int = Field(default=12, ge=1)
+    entity_summaries_per_job: int = Field(default=32, ge=0)
+    entity_summary_model_calls_per_job: int = Field(default=4, ge=0)
 
 
 GRAPH = GraphSettings()

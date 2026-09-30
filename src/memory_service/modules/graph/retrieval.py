@@ -60,7 +60,6 @@ _MULTI_HOP_TYPES = {
     QueryType.ENTITY_RELATION,
     QueryType.GENERAL_SEMANTIC,
 }
-_STRUCTURAL = {"mentioned_in", "co_occurs_with", "discusses", "refers_to", "segment_of"}
 # query words that name a relation: "exclude" -> excludes, "drove" -> driven_by, "pay" -> ...
 _PREDICATE_CUES: dict[str, tuple[str, ...]] = {
     "excludes": ("exclude", "excludes", "excluded", "excluding", "exclusion", "exclusions"),
@@ -249,7 +248,7 @@ class GraphStage:
                 sorted(
                     answer.relations,
                     key=lambda r: (
-                        r.predicate in _STRUCTURAL,
+                        r.layer == "structural",
                         -_predicate_boost(r.predicate, routed.query),
                         not (r.subject_id in seeds or r.object_id in seeds),
                         -r.confidence,

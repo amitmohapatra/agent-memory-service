@@ -118,7 +118,7 @@ async def test_memory_relations_flag_off_never_calls_the_gateway() -> None:
     mem = await _memory(DECISION)
     _, native_relations = await NativeGraphEnrichment().enrich_memory(mem, CTX)
     with mocked_gateway(['{"relations": []}']) as gw:
-        provider = NativeGraphEnrichment(assist=gw.assist(uses=["ambiguous_worthiness"]))
+        provider = NativeGraphEnrichment(assist=gw.assist(uses=["query_expansion"]))
         _, relations = await provider.enrich_memory(mem, CTX)
         assert gw.route.call_count == 0
     assert {r.relation_id for r in relations} == {r.relation_id for r in native_relations}
@@ -418,11 +418,11 @@ async def _service(assist=None) -> tuple[GraphService, MemoryGraphStore]:
 
 async def test_memory_store_lists_visible_entities_most_mentioned_first() -> None:
     _, store = await _service()
-    listed = await store.list_entities("acme", scope_keys=["user:acme/u1"], limit=2)
+    listed = await store.search_entities("acme", scope_keys=["user:acme/u1"], limit=2)
     assert [e.canonical_name for e in listed] == ["eur 98 million", "adjusted ebitda"]
-    assert await store.list_entities("acme", scope_keys=[], limit=10) == []
-    assert await store.list_entities("globex", scope_keys=["user:acme/u1"], limit=10) == []
-    everything = await store.list_entities("acme", scope_keys=["user:acme/u1"], limit=10)
+    assert await store.search_entities("acme", scope_keys=[], limit=10) == []
+    assert await store.search_entities("globex", scope_keys=["user:acme/u1"], limit=10) == []
+    everything = await store.search_entities("acme", scope_keys=["user:acme/u1"], limit=10)
     assert "secret plan" not in {e.canonical_name for e in everything}
 
 

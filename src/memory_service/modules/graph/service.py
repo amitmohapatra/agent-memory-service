@@ -11,12 +11,15 @@ from typing import Any
 
 from memory_service.config.constants import GraphSettings
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.memory import Scope, unverified_representation
+from memory_service.domain.errors import NotFound
+from memory_service.domain.graph import GraphLayer
+from memory_service.domain.memory import CanonicalMemory, Scope, unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import unicode_tokens
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichment
+from memory_service.modules.graph.summaries import EntitySummaries
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_identity
@@ -73,6 +76,19 @@ class GraphAnswer:
     visited: int = 0
 
 
+@dataclass
+class EntityProfile:
+    """One entity as a reader sees it: its current value per predicate (the newest current
+    relation of each, with the entity as subject), every visible current relation, the
+    history of facts that stopped holding, and the names of the entities they point at."""
+
+    entity: Entity
+    current: list[Relation]
+    relations: list[Relation]
+    history: list[Relation]
+    names: dict[str, str]
+
+
 def query_terms(query: str, *, max_terms: int = 12) -> list[str]:
     """Canonical candidate entity names in a question: extracted entities, plus lowercased
     uni/bi/tri-grams so 'adjusted ebitda' matches even when not capitalised."""
@@ -125,6 +141,7 @@ class GraphService:
         self.authz = authz
         self.cfg = settings
         self.assist = assist or LLMAssist.disabled()
+        self.summaries = EntitySummaries(store, self.assist, settings)
 
     # -- enrichment (called from index jobs) ------------------------------------------
     async def enrich_memories(self, tenant_id: str, memory_ids: Sequence[str]) -> int:
@@ -134,6 +151,8 @@ class GraphService:
         found = {m.memory_id for m in memories}
         n = 0
         removed = 0
+        #: entities to re-summarise, per owner whose model identity may pay for it
+        touched: dict[tuple[str, str | None], list[str]] = {}
         with (
             span("graph.enrich_memories", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
@@ -147,19 +166,29 @@ class GraphService:
                 ):
                     removed += await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
                     continue
-                ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=m.scope.user_id)
-                with model_identity(
-                    tenant_id, m.owner_principal, workspace_id=m.scope.workspace_id
-                ):
-                    entities, relations = await self.provider.enrich_memory(m, ctx)
-                await self.store.upsert_entities(entities)
-                await self.store.upsert_relations(relations)
-                n += len(relations)
+                n += await self._enrich_memory(m, touched)
+            for (principal, workspace_id), entity_ids in touched.items():
+                with model_identity(tenant_id, principal, workspace_id=workspace_id):
+                    await self.summaries.refresh(tenant_id, entity_ids)
         if n or removed:
             async with self.uow_factory() as uow:
                 await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
                 await uow.commit()
         return n
+
+    async def _enrich_memory(
+        self, m: CanonicalMemory, touched: dict[tuple[str, str | None], list[str]]
+    ) -> int:
+        """One memory's entities and relations; records the entities it touched per owner."""
+        ctx = MemoryExecutionContext(tenant_id=m.tenant_id, user_id=m.scope.user_id)
+        with model_identity(m.tenant_id, m.owner_principal, workspace_id=m.scope.workspace_id):
+            entities, relations = await self.provider.enrich_memory(m, ctx)
+        await self.store.upsert_entities(entities)
+        await self.store.upsert_relations(relations)
+        if relations:
+            owner = (m.owner_principal, m.scope.workspace_id)
+            touched.setdefault(owner, []).extend(e.entity_id for e in entities)
+        return len(relations)
 
     async def enrich_document(self, tenant_id: str, document_id: str) -> int:
         async with self.uow_factory() as uow:
@@ -197,6 +226,8 @@ class GraphService:
             )
             await self.store.upsert_entities(entities)
             await self.store.upsert_relations(relations)
+            busiest = sorted(entities, key=lambda e: (-e.mention_count, e.entity_id))
+            await self.summaries.refresh(tenant_id, [e.entity_id for e in busiest])
         async with self.uow_factory() as uow:
             await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
             await uow.commit()
@@ -235,7 +266,7 @@ class GraphService:
     ) -> list[Entity]:
         candidates = [
             e
-            for e in await self.store.list_entities(
+            for e in await self.store.search_entities(
                 tenant_id, scope_keys=scope_keys, limit=LLM_MAX_CANDIDATES
             )
             if e.entity_type not in VALUE_TYPES
@@ -282,18 +313,19 @@ class GraphService:
         entities: Sequence[str] = (),
         hops: int | None = None,
         as_of: datetime | None = None,
+        valid_at: datetime | None = None,
+        layers: Sequence[GraphLayer] | None = None,
         visibility: VisibilitySpecification | None = None,
         max_visited: int | None = None,
     ) -> GraphAnswer:
         if visibility is None:
-            async with self.uow_factory() as uow:
-                visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
+            visibility = await self._visibility(ctx)
         names = list(entities) + (query_terms(query) if query else [])
         matched = await self.resolve(ctx, names, visibility)
         if not matched:
             return GraphAnswer(entities=[], relations=[], matched=[], visited=0)
         # prefer the most specific matches: longer canonical names first, bounded
-        matched.sort(key=lambda e: (-len(e.canonical_name), e.canonical_name))
+        matched.sort(key=lambda e: (-len(e.canonical_name), e.canonical_name, e.entity_id))
         seeds = [e.entity_id for e in matched[:8]]
         hood: GraphNeighborhood = await self.store.neighborhood(
             ctx.tenant_id,
@@ -302,6 +334,8 @@ class GraphService:
             hops=hops or self.cfg.default_hops,
             max_visited=max_visited or self.cfg.max_visited,
             as_of=as_of,
+            valid_at=valid_at,
+            layers=layers,
         )
         return GraphAnswer(
             entities=hood.entities,
@@ -309,3 +343,65 @@ class GraphService:
             matched=matched[:8],
             visited=hood.visited,
         )
+
+    async def search_entities(
+        self,
+        ctx: MemoryExecutionContext,
+        *,
+        query: str | None = None,
+        entity_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[Entity]:
+        """Visible entities whose canonical name starts with ``query``, most mentioned first."""
+        visibility = await self._visibility(ctx)
+        return await self.store.search_entities(
+            ctx.tenant_id,
+            scope_keys=sorted(visibility.keys),
+            prefix=canonical_entity(query) if query and query.strip() else None,
+            entity_type=entity_type,
+            limit=min(limit or self.cfg.entity_search_max, self.cfg.entity_search_max),
+        )
+
+    async def profile(self, ctx: MemoryExecutionContext, entity_id: str) -> EntityProfile:
+        """The entity's profile, bounded; ``NotFound`` when it is absent or not visible."""
+        visibility = await self._visibility(ctx)
+        scope_keys = sorted(visibility.keys)
+        found = await self.store.get_entities(ctx.tenant_id, [entity_id], scope_keys=scope_keys)
+        if not found:
+            raise NotFound(f"entity {entity_id} not found")
+        relations = await self.store.entity_relations(
+            ctx.tenant_id,
+            entity_id,
+            scope_keys=scope_keys,
+            current=True,
+            limit=self.cfg.profile_relations_max,
+        )
+        history = await self.store.entity_relations(
+            ctx.tenant_id,
+            entity_id,
+            scope_keys=scope_keys,
+            current=False,
+            limit=self.cfg.profile_history_max,
+        )
+        # newest first, so the first relation seen per predicate is its current value
+        current: dict[str, Relation] = {}
+        for relation in relations:
+            if relation.subject_id == entity_id and relation.layer != "structural":
+                current.setdefault(relation.predicate, relation)
+        others = {r.subject_id for r in (*relations, *history)} | {
+            r.object_id for r in (*relations, *history)
+        }
+        visible = await self.store.get_entities(
+            ctx.tenant_id, sorted(others), scope_keys=scope_keys
+        )
+        return EntityProfile(
+            entity=found[0],
+            current=[current[p] for p in sorted(current)],
+            relations=relations,
+            history=history,
+            names={e.entity_id: e.name for e in visible},
+        )
+
+    async def _visibility(self, ctx: MemoryExecutionContext) -> VisibilitySpecification:
+        async with self.uow_factory() as uow:
+            return await self.authz.visibility(ctx, revisions=uow.revisions)

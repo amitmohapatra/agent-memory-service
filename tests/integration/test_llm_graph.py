@@ -72,18 +72,18 @@ async def _seed(store) -> None:
 async def test_postgres_store_lists_visible_entities_bounded(container) -> None:
     store = container.graph_store
     await _seed(store)
-    listed = await store.list_entities("acme", scope_keys=["user:acme/u1"], limit=2)
+    listed = await store.search_entities("acme", scope_keys=["user:acme/u1"], limit=2)
     assert [e.canonical_name for e in listed] == ["eur 98 million", "adjusted ebitda"]
-    everything = await store.list_entities("acme", scope_keys=["user:acme/u1"], limit=50)
+    everything = await store.search_entities("acme", scope_keys=["user:acme/u1"], limit=50)
     assert {e.canonical_name for e in everything} == {
         "eur 98 million",
         "adjusted ebitda",
         "restructuring programme",
     }
-    assert await store.list_entities("acme", scope_keys=[], limit=50) == []
-    assert await store.list_entities("globex", scope_keys=["user:acme/u1"], limit=50) == []
+    assert await store.search_entities("acme", scope_keys=[], limit=50) == []
+    assert await store.search_entities("globex", scope_keys=["user:acme/u1"], limit=50) == []
     assert [
-        e.canonical_name for e in await store.list_entities("acme", scope_keys=["user:acme/u2"])
+        e.canonical_name for e in await store.search_entities("acme", scope_keys=["user:acme/u2"])
     ] == ["secret plan"]
 
 

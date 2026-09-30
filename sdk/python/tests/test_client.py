@@ -1,4 +1,6 @@
+import json
 import re
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -546,3 +548,61 @@ def test_an_id_that_is_not_an_id_is_refused_when_the_scope_is_built(client: Memo
 
 def test_the_sdk_deprecation_window_is_still_open() -> None:
     assert Version(trellis.memory.__version__) < Version(client_module.ALIASES_REMOVED_IN)
+
+
+@respx.mock
+async def test_graph_entity_search_and_profile(client: MemoryClient) -> None:
+    entity = {
+        "entity_id": "ent_acme",
+        "name": "Acme",
+        "canonical_name": "acme",
+        "entity_type": "ORG",
+        "mention_count": 3,
+        "summary": "Acme (ORG): operates in Germany",
+    }
+    search = respx.get("http://memory.test/v1/graph/entities").respond(
+        200, json={"entities": [entity]}
+    )
+    fact = {
+        "relation_id": "rel_1",
+        "subject": "Acme",
+        "predicate": "operates_in",
+        "object": "Germany",
+        "status": "SUPERSEDED",
+        "layer": "entity",
+        "observed_at": "2026-09-15T00:00:00Z",
+    }
+    respx.get("http://memory.test/v1/graph/entities/ent_acme").respond(
+        200,
+        json={
+            "entity": entity,
+            "current": [
+                {
+                    "predicate": "operates_in",
+                    "value": "France",
+                    "relation_id": "rel_2",
+                    "observed_at": "2026-09-16T00:00:00Z",
+                }
+            ],
+            "relations": [],
+            "history": [fact],
+            "evidence": [],
+        },
+    )
+    ctx = client.bind(tenant_id="acme", user_id="u1")
+    [found] = await ctx.graph.entities("Ac", entity_type="ORG", limit=5)
+    assert found.summary.startswith("Acme") and found.entity_id == "ent_acme"
+    assert dict(search.calls.last.request.url.params) == {"q": "Ac", "type": "ORG", "limit": "5"}
+    profile = await ctx.graph.entity("ent_acme")
+    assert profile.current[0].value == "France" and profile.history[0].status == "SUPERSEDED"
+
+
+@respx.mock
+async def test_graph_query_sends_layers_and_knowledge_time(client: MemoryClient) -> None:
+    route = respx.post("http://memory.test/v1/graph/query").respond(200, json={"facts": []})
+    ctx = client.bind(tenant_id="acme", user_id="u1")
+    await ctx.graph.query(
+        entities=["Acme"], layers=["causal"], valid_at=datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body["layers"] == ["causal"] and body["valid_at"].startswith("2026-09-01")

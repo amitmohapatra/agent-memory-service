@@ -36,6 +36,7 @@ from trellis.memory.models import (
     CreatedTenant,
     DeliveryInfo,
     DocumentInfo,
+    EntityProfile,
     EvidenceRef,
     Feedback,
     FeedbackSource,
@@ -43,6 +44,8 @@ from trellis.memory.models import (
     FeedbackVerdict,
     FileHandle,
     GraphAnswer,
+    GraphEntity,
+    GraphLayer,
     GroundingReport,
     GroupInfo,
     GroupMemberInfo,
@@ -792,7 +795,8 @@ def _default_key(prefix: str, scope: Scope, *parts: str) -> str:
 
 class GraphAPI:
     """Knowledge-graph queries: resolve entities in a question (or given names) and traverse
-    a bounded, visibility-filtered neighbourhood; ``as_of`` gives the temporal view."""
+    a bounded, visibility-filtered neighbourhood; ``as_of`` gives the valid-time view and
+    ``valid_at`` the knowledge-time view. ``entities``/``entity`` search and profile them."""
 
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
@@ -804,6 +808,8 @@ class GraphAPI:
         entities: list[str] | None = None,
         hops: int = 1,
         as_of: datetime | None = None,
+        valid_at: datetime | None = None,
+        layers: Sequence[GraphLayer] | None = None,
         use_llm: bool = False,
     ) -> GraphAnswer:
         payload: dict[str, Any] = {
@@ -815,8 +821,30 @@ class GraphAPI:
         }
         if as_of is not None:
             payload["as_of"] = as_of.isoformat()
+        if valid_at is not None:
+            payload["valid_at"] = valid_at.isoformat()
+        if layers:
+            payload["layers"] = list(layers)
         data = await self._ctx._request("POST", "/v1/graph/query", json=payload)
         return GraphAnswer.model_validate(data)
+
+    async def entities(
+        self, query: str | None = None, *, entity_type: str | None = None, limit: int = 20
+    ) -> list[GraphEntity]:
+        """Entities visible in this scope whose name starts with ``query``, most mentioned
+        first; ``entity_type`` narrows to one type (ORG, PERSON, ...)."""
+        params: dict[str, Any] = {"limit": limit}
+        if query:
+            params["q"] = query
+        if entity_type:
+            params["type"] = entity_type
+        data = await self._ctx._request("GET", "/v1/graph/entities", params=params)
+        return [GraphEntity.model_validate(e) for e in data.get("entities", [])]
+
+    async def entity(self, entity_id: str) -> EntityProfile:
+        """One entity: its current value per predicate, relations, history and evidence."""
+        data = await self._ctx._request("GET", f"/v1/graph/entities/{entity_id}")
+        return EntityProfile.model_validate(data)
 
 
 class ToolsAPI:

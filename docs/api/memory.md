@@ -39,7 +39,9 @@ of evidence.
 | `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.memories()`, `ctx.memories_page()`, `ctx.iter_memories()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.get_memory(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
-| `POST /v1/graph/query` | resolve entities and traverse the knowledge graph (bounded, visibility-filtered) | `ctx.graph.query(...)` |
+| `POST /v1/graph/query` | resolve entities and traverse the knowledge graph (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.graph.query(...)` |
+| `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.graph.entities(...)` |
+| `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence | `ctx.graph.entity(id)` |
 | `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.job(job_id)` |
 
 `kind` is a closed vocabulary — `MESSAGE`, `FILE`, `AGENT_RESULT`, `TOOL_RESULT`, `DECISION`,
@@ -96,7 +98,28 @@ for fact in answer.facts:
 Entities and relations are extracted from the same observations, deterministically, with validity
 windows — so "who approved this, and when" is answerable, and a fact that stopped being true is
 closed rather than deleted. Traversal is bounded (hops and fan-out) and filtered by the caller's
-audience before it walks.
+audience before it walks; each hop's limit is spent only on new, visible edges.
+
+Two clocks: `as_of` asks what was *true* at an instant (valid time — a superseded fact that
+held then comes back), `valid_at` what had been *asserted* by then and not yet invalidated
+(knowledge time). `layers` restricts the walk to `entity`, `temporal`, `causal` and/or
+`structural` relations.
+
+```python
+[acme] = await ctx.graph.entities("acme", entity_type="ORG", limit=1)
+print(acme.summary)  # "Acme Corp (ORG): acquired Westfalen; operates in Germany"
+profile = await ctx.graph.entity(acme.entity_id)
+for value in profile.current:  # the newest current value of each predicate
+    print(value.predicate, value.value)
+for fact in profile.history:  # superseded, retracted and invalidated facts
+    print(fact.predicate, fact.object, fact.status, fact.valid_to)
+```
+
+An entity's `summary` is written by the enrichment job from its strongest current typed facts
+— only facts every reader of the entity may read, so a summary never discloses more than the
+relations do. With a model key and the `summaries` use the model phrases it (a bounded number
+of entities per job); otherwise it is the facts on one line. It is rewritten only when those
+facts change.
 
 ## Waiting, when you must
 

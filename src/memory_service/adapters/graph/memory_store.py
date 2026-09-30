@@ -8,7 +8,13 @@ from typing import Any
 
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
 from memory_service.modules.graph.invalidation import invalidation_edge, passes_time
-from memory_service.ports.intelligence import Entity, EntityAlias, GraphNeighborhood, Relation
+from memory_service.ports.intelligence import (
+    Entity,
+    EntityAlias,
+    EntityFacts,
+    GraphNeighborhood,
+    Relation,
+)
 
 
 class MemoryGraphStore:
@@ -16,6 +22,7 @@ class MemoryGraphStore:
         self.entities: dict[str, Entity] = {}
         self.relations: dict[str, Relation] = {}
         self.aliases: dict[tuple[str, str, str], EntityAlias] = {}
+        self.summary_sources_by_id: dict[str, str] = {}
 
     @staticmethod
     def _visible(keys: Sequence[str], audience: Sequence[str]) -> bool:
@@ -69,18 +76,87 @@ class MemoryGraphStore:
             and self._visible(e.visibility_keys, scope_keys)
         ]
 
-    async def list_entities(
-        self, tenant_id: str, *, scope_keys: Sequence[str], limit: int = 200
+    async def search_entities(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        prefix: str | None = None,
+        entity_type: str | None = None,
+        limit: int = 200,
     ) -> list[Entity]:
         if not scope_keys or limit <= 0:
             return []
         visible = [
             e
             for e in self.entities.values()
-            if e.tenant_id == tenant_id and self._visible(e.visibility_keys, scope_keys)
+            if e.tenant_id == tenant_id
+            and self._visible(e.visibility_keys, scope_keys)
+            and (not prefix or e.canonical_name.startswith(prefix))
+            and (not entity_type or e.entity_type == entity_type)
         ]
-        visible.sort(key=lambda e: (-e.mention_count, e.canonical_name))
+        visible.sort(key=lambda e: (-e.mention_count, e.entity_id))
         return visible[:limit]
+
+    async def entity_relations(
+        self,
+        tenant_id: str,
+        entity_id: str,
+        *,
+        scope_keys: Sequence[str],
+        current: bool,
+        limit: int,
+    ) -> list[Relation]:
+        found = [
+            r
+            for r in self.relations.values()
+            if r.tenant_id == tenant_id
+            and entity_id in (r.subject_id, r.object_id)
+            and (r.status == "CURRENT") is current
+            and r.predicate != INVALIDATED_BY
+            and self._visible(r.visibility_keys, scope_keys)
+        ]
+        found.sort(key=lambda r: (-r.observed_at.timestamp(), r.relation_id))
+        return found[:limit]
+
+    async def summary_sources(
+        self, tenant_id: str, entity_ids: Sequence[str], *, limit: int
+    ) -> list[EntityFacts]:
+        out: list[EntityFacts] = []
+        for entity_id in sorted(set(entity_ids)):
+            entity = self.entities.get(entity_id)
+            if entity is None or entity.tenant_id != tenant_id:
+                continue
+            audience = set(entity.visibility_keys)
+            facts = sorted(
+                (
+                    r
+                    for r in self.relations.values()
+                    if r.tenant_id == tenant_id
+                    and r.subject_id == entity_id
+                    and r.status == "CURRENT"
+                    and r.layer != "structural"
+                    and r.object_id in self.entities
+                    and audience <= set(r.visibility_keys)
+                ),
+                key=lambda r: (-r.confidence, -r.observed_at.timestamp(), r.relation_id),
+            )[:limit]
+            out.append(
+                EntityFacts(
+                    entity=entity,
+                    facts=[(r.predicate, self.entities[r.object_id].name) for r in facts],
+                    summary_source=self.summary_sources_by_id.get(entity_id, ""),
+                )
+            )
+        return out
+
+    async def set_summary(
+        self, tenant_id: str, entity_id: str, *, summary: str, source: str
+    ) -> None:
+        entity = self.entities.get(entity_id)
+        if entity is not None and entity.tenant_id == tenant_id:
+            self.entities[entity_id] = entity.model_copy(update={"summary": summary})
+            self.summary_sources_by_id[entity_id] = source
 
     async def get_entities(
         self, tenant_id: str, entity_ids: Sequence[str], *, scope_keys: Sequence[str]

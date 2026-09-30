@@ -77,6 +77,27 @@ def test_graph_query_and_context_facts(client) -> None:
     assert "## Facts" in bundle["rendered"]
     pages = {k.get("page") for k in bundle["knowledge"]}
     assert {11, 14, 20} <= pages, pages
+    # layer restriction: structural edges only
+    r = client.post(
+        "/v1/graph/query",
+        headers=H,
+        json={"scope": scope, "entities": ["Adjusted EBITDA"], "layers": ["structural"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["facts"] and {f["layer"] for f in r.json()["facts"]} == {"structural"}
+    # entity search and profile over HTTP, scoped by the same headers
+    hits = client.get("/v1/graph/entities", headers=H, params={"q": "adjusted", "limit": 5})
+    assert hits.status_code == 200, hits.text
+    ebitda = next(e for e in hits.json()["entities"] if e["canonical_name"] == "adjusted ebitda")
+    assert ebitda["summary"].startswith("Adjusted EBITDA")
+    profile = client.get(f"/v1/graph/entities/{ebitda['entity_id']}", headers=H)
+    assert profile.status_code == 200, profile.text
+    assert profile.json()["relations"] and profile.json()["evidence"]
+    other = {**H, "X-Trellis-User": "u2"}
+    assert client.get(f"/v1/graph/entities/{ebitda['entity_id']}", headers=other).status_code == 404
+    assert client.get("/v1/graph/entities", headers=other, params={"q": "adjusted"}).json() == {
+        "entities": []
+    }
     assert (
         client.post("/v1/graph/query", headers=H, json={"scope": scope, "hops": 9}).status_code
         == 422

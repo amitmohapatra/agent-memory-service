@@ -24,6 +24,7 @@ from typing import Any
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.graph import layer_for
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.graph.document_facts import DocumentIE, Fact, LexEntity, sentences
@@ -46,9 +47,6 @@ LLM_MAX_RELATIONS_PER_MEMORY = 8
 LLM_MAX_PAIRS_PER_DOCUMENT = 12
 _LLM_MAX_TEXT = 1200
 _LLM_MAX_SENTENCE = 300
-_STRUCTURAL_PREDICATES = frozenset(
-    {"mentions", "mentioned_in", "co_occurs_with", "discusses", "defined_in"}
-)
 _PREDICATE_RE = re.compile(r"[a-z][a-z0-9_]{1,39}")
 _RELATIONS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -92,7 +90,7 @@ def llm_predicate(raw: object) -> str | None:
     """Model predicate normalised like native ones (``works at`` -> ``works_at``); ``None``
     when it is empty, malformed or one of the structural predicates the native layer owns."""
     pred = re.sub(r"[^a-z0-9]+", "_", str(raw).strip().casefold()).strip("_")
-    if not _PREDICATE_RE.fullmatch(pred) or pred in _STRUCTURAL_PREDICATES:
+    if not _PREDICATE_RE.fullmatch(pred) or layer_for(pred) == "structural":
         return None
     return pred
 

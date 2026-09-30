@@ -80,8 +80,30 @@ def test_the_surviving_row_of_a_triple_is_the_most_confident_one() -> None:
 def test_the_hop_reads_the_neighbour_end_for_its_mention_count() -> None:
     sql = _sql()
     # the tie-break is the mention count of the far end of the edge, whichever end that is
-    assert "LEFT OUTER JOIN graph_entities" in sql
+    assert "JOIN graph_entities" in sql
     assert "CASE WHEN" in sql and "coalesce" in sql.lower()
+
+
+def test_edges_the_hop_would_drop_are_dropped_before_its_limit() -> None:
+    """An invisible neighbour and an entity an earlier hop expanded used to be filtered after
+    the LIMIT, so their edges filled it and starved the new ones."""
+    stmt = neighborhood_query(
+        "acme",
+        ["ent_b"],
+        scope_keys=["user:acme/u1"],
+        layers=None,
+        as_of=None,
+        valid_at=None,
+        limit=600,
+        expanded=["ent_a"],
+    )
+    sql = str(stmt.compile(dialect=postgresql.dialect()))
+    inner = sql.split("LIMIT", maxsplit=1)[0]
+    # the neighbour's audience is part of the join, before the limit
+    assert "LEFT OUTER JOIN" not in inner
+    assert inner.count("?|") == 2, "both the edge's and the neighbour's audience are filtered"
+    assert "NOT IN" in inner, "edges back to an expanded entity are excluded in SQL"
+    assert "NOT IN" not in _sql(), "the first hop has nothing to exclude"
 
 
 def test_identical_triples_are_kept_once_across_hops() -> None:

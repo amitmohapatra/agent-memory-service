@@ -1,5 +1,10 @@
-"""Drop the write-only conversation tables and columns (message versions, turn/run links,
-session end and turn completion): nothing ever read them."""
+"""The overhaul's schema step.
+
+- Drop the write-only conversation tables and columns (message versions, turn/run links,
+  session end and turn completion): nothing ever read them.
+- Entity search and summaries: a prefix index on the canonical name, a most-mentioned index,
+  and the fingerprint of the facts an entity summary was written from.
+"""
 
 import sqlalchemy as sa
 from alembic import op
@@ -15,9 +20,26 @@ def upgrade() -> None:
     op.drop_table("turn_run_links")
     op.drop_column("sessions", "ended_at")
     op.drop_column("turns", "completed_at")
+    op.add_column(
+        "graph_entities",
+        sa.Column("summary_source", sa.String(64), nullable=False, server_default=""),
+    )
+    op.create_index(
+        "ix_graph_entities_name_prefix",
+        "graph_entities",
+        ["tenant_id", sa.text("canonical_name text_pattern_ops")],
+    )
+    op.create_index(
+        "ix_graph_entities_tenant_mentions",
+        "graph_entities",
+        ["tenant_id", sa.text("mention_count DESC"), "entity_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_graph_entities_tenant_mentions", table_name="graph_entities")
+    op.drop_index("ix_graph_entities_name_prefix", table_name="graph_entities")
+    op.drop_column("graph_entities", "summary_source")
     op.add_column("turns", sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("sessions", sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True))
     op.create_table(

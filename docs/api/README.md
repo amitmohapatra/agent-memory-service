@@ -7,7 +7,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 
 | Page | The question it answers | Routes |
 | --- | --- | --- |
-| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/observations`, `/v1/memories`, `/v1/graph/query`, `/v1/jobs/{id}` |
+| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/observations`, `/v1/memories`, `/v1/graph/*`, `/v1/jobs/{id}` |
 | [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads`, `/v1/messages`, `/v1/briefs` |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool worked for this task, in what order? | `/v1/tools/*`, `/v1/runs/{id}/outcome` |
