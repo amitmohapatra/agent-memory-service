@@ -1,40 +1,18 @@
 # Tool memory — remembering tool calls, outcomes and procedures (change 30)
 
-> **Status: the service is built; the framework adapters are not.** Sections 30.0-30.4,
-> 30.6, 30.7 and 30.9 are implemented and covered by a hard gate — the registry, invocation
-> records, the replay cache, chain mining, procedures, `/v1/tools`, the SDK and
-> `benchmark/results/tool_gate.json`. Sections 30.5 and 30.8 — the adapter-side wrappers
-> (LangGraph tool wrapper, ADK callbacks, CrewAI wrapper, MCP verbs, the Bifrost agent-mode
-> plugin) — are not built, and will not be built here: they belong in the framework layer,
-> not in the memory service. See [adr/0018-tool-memory.md](adr/0018-tool-memory.md) for what
-> was decided and the README for how to use what exists.
+> **Status (overhaul, September 2026).** This document is the design history of change 30.
+> What exists now is described in [api/tools.md](api/tools.md): a catalog (`PUT
+> /v1/tools/catalog`, `GET /v1/tools`) with side effects and argument entity types, call records
+> (`POST /v1/tools/invocations`) counted into per-tool statistics, run outcomes, a background
+> learning job that stores one procedure per task pattern and audience (distilled by the
+> tenant's model when one is available) and writes `procedural` graph edges, tool hints
+> (`POST /v1/tools/hints`, also inline in `POST /v1/context`) and approval suggestions from
+> tool-call feedback. Removed: `POST /v1/tools/plan`, `GET /v1/tools/procedures`, the tool
+> policy / replay cache and the `/v1/tools/record` alias. Sections below that describe other
+> endpoints are kept as history, not as current API. The framework-side wrappers (§30.5, §30.8)
+> live in the harness, not here.
 
 Companion to `TARGET_STACK.md`.
-
-
-> **Status note (September 2026).** The surface described below was reduced to what is
-> actually used. These were all removed, along with their SDK methods:
-> `POST /v1/tools` (registry, removed), `/v1/tools/lookup` (output cache, removed),
-> `/v1/tools/suggest` (removed) and `/v1/tools/next` (removed).
->
-> Why: the harness — the only client — called `record` and nothing else, and the five other
-> endpoints' sole consumers were this document and the test that checked this document still
-> compiled. Beyond being unused, each was answering a question that has moved. Modern models
-> plan tool use better than a support count can; every agent framework already owns a tool
-> catalogue, so a second one only drifts; and an output cache replays stale results —
-> `stock_level(SKU-1)` returning yesterday's number is precisely the failure the rest of this
-> service exists to prevent.
->
-> What remains is the part the model genuinely cannot know: **what worked here before.**
-> `POST /v1/tools/invocations` writes an invocation, `POST /v1/runs/{id}/outcome` labels the run,
-> and `POST /v1/tools/plan` returns the mined procedure with its support count, success rate,
-> argument bindings and observed failure modes. Sections 30.0, 30.2, 30.4 and 30.6 below
-> describe the removed endpoints and are kept as design history, not as current API.
->
-> The published evidence for this reduction is in the research summarised at the end of
-> §30.9: under a matched token budget, injecting mined sequences as prompt guidance loses to
-> giving the model the same tokens as extra reasoning, and retrieval precision over a growing
-> procedure library collapses from 29.6% to 3.3% between 5 and 100 entries.
 
 ## What the service does today
 
@@ -151,7 +129,7 @@ Bifrost reflection may name and generalise a chain, never invent edges without s
 One call serves agents mid-task (`POST /v1/tools/next` was removed with the rest of the
 advisory surface):
 
-- `POST /v1/tools/plan {task, available_tools}` → the whole best-known chain for a task
+- (removed; now `POST /v1/tools/hints`) `POST /v1/tools/plan {task, available_tools}` → the whole best-known chain for a task
   pattern, as an ordered plan with data-flow bindings, so a planner node can start from a
   validated procedure instead of an empty prompt; the plan carries the evidence that backs it
   and the known failure branches.

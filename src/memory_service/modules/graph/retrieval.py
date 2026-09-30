@@ -22,6 +22,7 @@ from prometheus_client import Counter, Gauge
 from memory_service.config.constants import GRAPH
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, TemporalStatus
+from memory_service.domain.graph import BOOKKEEPING_LAYERS
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
@@ -243,12 +244,12 @@ class GraphStage:
             names = {e.entity_id: e.name for e in answer.entities}
             seeds = {e.entity_id for e in answer.matched}
             # facts the question names first (predicate cues), then typed facts touching
-            # a seed, structural facts last; one fact per distinct triple
+            # a seed, structural and procedural facts last; one fact per distinct triple
             ranked = _distinct(
                 sorted(
                     answer.relations,
                     key=lambda r: (
-                        r.layer == "structural",
+                        r.layer in BOOKKEEPING_LAYERS,
                         -_predicate_boost(r.predicate, routed.query),
                         not (r.subject_id in seeds or r.object_id in seeds),
                         -r.confidence,

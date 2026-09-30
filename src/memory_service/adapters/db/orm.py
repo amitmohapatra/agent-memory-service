@@ -800,27 +800,92 @@ class GraphRelationRow(Base):
 
 
 class ToolRow(Base):
+    """One catalog entry per (tenant, workspace, name); ``workspace_id`` is "" for the tenant."""
+
     __tablename__ = "tools"
 
     tool_id: Mapped[str] = mapped_column(String(200), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
-    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    workspace_id: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     description: Mapped[str] = mapped_column(Text, default="", server_default="")
     input_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    tags: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
-    source: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    required: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    argument_entity_types: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    side_effects: Mapped[str | None] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(50), default="manual", server_default="manual")
     server: Mapped[str | None] = mapped_column(String(200))
-    policy: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    examples: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    redact: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "name", "schema_hash", name="uq_tools_tenant_name_schema"),
-        Index("ix_tools_tenant_name", "tenant_id", "name"),
+        UniqueConstraint("tenant_id", "workspace_id", "name", name="uq_tools_catalog_name"),
+    )
+
+
+class ToolStatsRow(Base):
+    """Running counts per tool: one upsert per recorded call or tool-call verdict."""
+
+    __tablename__ = "tool_stats"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    calls: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    successes: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    latency_ms_total: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    latency_calls: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    approvals: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    rejections: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    edits: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    last_used_at: Mapped[datetime | None]
+
+
+class ApprovalPatternRow(Base):
+    """Approve / reject / edit decisions per (agent, tool, argument shape)."""
+
+    __tablename__ = "approval_patterns"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(String(200), primary_key=True)
+    arg_shape: Mapped[str] = mapped_column(String(1000), primary_key=True)
+    approvals: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    rejections: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    edits: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+
+class ProcedureRow(Base):
+    """One learned procedure per (tenant, audience, task pattern)."""
+
+    __tablename__ = "procedures"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    procedure_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, default="", server_default="")
+    strategy: Mapped[str] = mapped_column(Text, default="", server_default="")
+    steps: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    bindings: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+    success_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    support: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(20), default="candidate", server_default="candidate")
+    steps_hash: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    distilled: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    owner_principal: Mapped[str | None] = mapped_column(String(512))
+    workspace_id: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "scope_key", "pattern", name="uq_procedures_pattern"),
+        Index("ix_procedures_scope", "tenant_id", "scope_key", "status", "updated_at"),
     )
 
 
@@ -858,14 +923,19 @@ class ToolInvocationRow(Base):
         JSONB, default=list, server_default="[]"
     )
     occurred_at: Mapped[datetime] = mapped_column(server_default=_now())
-    indexed_at: Mapped[datetime | None]
+    #: when the learning job last folded this call into procedures and the graph
+    learned_at: Mapped[datetime | None]
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_tool_invocations_idempotent"),
         Index("ix_tool_invocations_run", "tenant_id", "run_id", "step"),
         Index("ix_tool_invocations_tool", "tenant_id", "tool_id", "occurred_at"),
         Index("ix_tool_invocations_pattern", "tenant_id", "task_pattern"),
-        Index("ix_tool_invocations_unindexed", "tenant_id", "indexed_at"),
+        Index(
+            "ix_tool_invocations_unlearned",
+            "occurred_at",
+            postgresql_where=text("learned_at IS NULL"),
+        ),
     )
 
 

@@ -1,12 +1,10 @@
-"""PostgreSQL persistence for tool memory (TOOL_MEMORY.md §30.0-§30.1).
+"""PostgreSQL persistence for tool memory: the catalog, invocation records, run outcomes,
+running statistics, approval patterns and stored procedures.
 
-Registration is an idempotent upsert on (tenant, name, schema_hash): the same tool used
-from two adapters is one row, a changed schema is a new version, and a policy is only ever
-widened by an explicit call — never by a per-call declaration.
-
-Recording is idempotent on (run, step, tool, args_hash): a retried step re-reads its own
-row instead of writing a second one, so replayed graphs never inflate the statistics the
-suggestions are built from.
+The catalog is one row per (tenant, workspace, name), ``workspace_id`` "" for the tenant.
+Recording is idempotent on (run, step, tool, args_hash): a retried step re-reads its own row
+instead of writing a second one, so replayed graphs never inflate the statistics. Statistics
+and approval patterns are counters, one upsert per event.
 """
 
 from __future__ import annotations
@@ -20,31 +18,45 @@ from sqlalchemy import false as sa_false
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from memory_service.adapters.db.orm import RunOutcomeRow, ToolInvocationRow, ToolRow
+from memory_service.adapters.db.orm import (
+    ApprovalPatternRow,
+    ProcedureRow,
+    RunOutcomeRow,
+    ToolInvocationRow,
+    ToolRow,
+    ToolStatsRow,
+)
+from memory_service.domain.ids import new_id
+from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
+    StoredProcedure,
     SubCall,
     ToolDescriptor,
     ToolInvocation,
-    ToolOutcomeStats,
-    ToolPolicy,
+    ToolStats,
 )
+
+_TENANT_WIDE = ""
+_VERDICT_COLUMNS = ("approvals", "rejections", "edits")
 
 
 def _to_descriptor(row: ToolRow) -> ToolDescriptor:
     return ToolDescriptor(
         tool_id=row.tool_id,
         tenant_id=row.tenant_id,
-        workspace_id=row.workspace_id,
+        workspace_id=row.workspace_id or None,
         name=row.name,
         version=row.version,
         description=row.description,
         input_schema=row.input_schema,
-        output_schema=row.output_schema,
-        tags=list(row.tags or []),
-        source=row.source,  # type: ignore[arg-type]
+        required=list(row.required or []),
+        argument_entity_types=dict(row.argument_entity_types or {}),
+        side_effects=row.side_effects,  # type: ignore[arg-type]
+        source=row.source,
         server=row.server,
-        policy=ToolPolicy(**(row.policy or {})),
+        examples=list(row.examples or []),
+        redact=list(row.redact or []),
         schema_hash=row.schema_hash,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -84,246 +96,29 @@ def _to_invocation(row: ToolInvocationRow) -> ToolInvocation:
     )
 
 
-class SqlToolRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.s = session
+def _to_outcome(row: RunOutcomeRow) -> RunOutcome:
+    return RunOutcome(
+        tenant_id=row.tenant_id,
+        run_id=row.run_id,
+        success=row.success,
+        note=row.note,
+        source=row.source,  # type: ignore[arg-type]
+        recorded_at=row.recorded_at,
+    )
 
-    # ------------------------------------------------------------------ registry
-    async def register(self, descriptor: ToolDescriptor, *, widen_policy: bool) -> ToolDescriptor:
-        """Upsert by (tenant, name, schema_hash). ``widen_policy`` is the admin-scope flag: without
-        it an existing row keeps its stored policy, so an agent's per-call declaration can never
-        make a tool cacheable or mark it side-effect free."""
-        desc = descriptor.with_schema_hash() if not descriptor.schema_hash else descriptor
-        existing = await self.by_name(desc.tenant_id, desc.name, schema_hash=desc.schema_hash)
-        if existing is not None:
-            policy = desc.policy if widen_policy else existing.policy
-            await self.s.execute(
-                update(ToolRow)
-                .where(ToolRow.tool_id == existing.tool_id)
-                .values(
-                    description=desc.description or existing.description,
-                    tags=list(desc.tags or existing.tags),
-                    policy=policy.model_dump(),
-                    server=desc.server or existing.server,
-                    updated_at=datetime.now(UTC),
-                )
-            )
-            return existing.model_copy(update={"policy": policy})
-        version = await self._next_version(desc.tenant_id, desc.name)
-        row = ToolRow(
-            tool_id=desc.tool_id,
-            tenant_id=desc.tenant_id,
-            workspace_id=desc.workspace_id,
-            name=desc.name,
-            version=version,
-            description=desc.description,
-            input_schema=desc.input_schema,
-            output_schema=desc.output_schema,
-            tags=list(desc.tags),
-            source=desc.source,
-            server=desc.server,
-            policy=desc.policy.model_dump(),
-            schema_hash=desc.schema_hash,
-        )
-        self.s.add(row)
-        await self.s.flush()
-        return desc.model_copy(update={"version": version})
 
-    async def _next_version(self, tenant_id: str, name: str) -> int:
-        current = await self.s.scalar(
-            select(func.max(ToolRow.version)).where(
-                ToolRow.tenant_id == tenant_id, ToolRow.name == name
-            )
-        )
-        return int(current or 0) + 1
-
-    async def by_name(
-        self, tenant_id: str, name: str, *, schema_hash: str | None = None
-    ) -> ToolDescriptor | None:
-        stmt = select(ToolRow).where(ToolRow.tenant_id == tenant_id, ToolRow.name == name)
-        if schema_hash is not None:
-            stmt = stmt.where(ToolRow.schema_hash == schema_hash)
-        stmt = stmt.order_by(ToolRow.version.desc()).limit(1)
-        row = (await self.s.execute(stmt)).scalar_one_or_none()
-        return _to_descriptor(row) if row is not None else None
-
-    async def get(self, tenant_id: str, tool_id: str) -> ToolDescriptor | None:
-        row = (
-            await self.s.execute(
-                select(ToolRow).where(ToolRow.tenant_id == tenant_id, ToolRow.tool_id == tool_id)
-            )
-        ).scalar_one_or_none()
-        return _to_descriptor(row) if row is not None else None
-
-    async def stats(
-        self, tenant_id: str, *, names: Sequence[str] | None = None
-    ) -> list[ToolOutcomeStats]:
-        stmt = (
-            select(
-                ToolInvocationRow.tool_name,
-                func.count().label("n"),
-                func.count().filter(ToolInvocationRow.status == "ok").label("ok"),
-                func.percentile_cont(0.5)
-                .within_group(ToolInvocationRow.latency_ms)
-                .label("median_latency"),
-                func.coalesce(func.sum(ToolInvocationRow.cost), 0.0).label("cost"),
-                func.max(ToolInvocationRow.occurred_at).label("last_used"),
-            )
-            .where(ToolInvocationRow.tenant_id == tenant_id)
-            .group_by(ToolInvocationRow.tool_name)
-        )
-        if names:
-            stmt = stmt.where(ToolInvocationRow.tool_name.in_(list(names)))
-        return [
-            ToolOutcomeStats(
-                tool_name=r.tool_name,
-                invocations=int(r.n),
-                successes=int(r.ok),
-                failures=int(r.n) - int(r.ok),
-                median_latency_ms=float(r.median_latency) if r.median_latency is not None else None,
-                total_cost=float(r.cost or 0.0),
-                last_used_at=r.last_used,
-            )
-            for r in (await self.s.execute(stmt)).all()
-        ]
-
-    # ------------------------------------------------------------------ invocations
-    async def record(self, invocation: ToolInvocation) -> ToolInvocation:
-        """Insert once. A retry of the same (run, step, tool, args) returns the stored row."""
-        key = invocation.idempotency_key()
-        values: dict[str, Any] = {
-            "invocation_id": invocation.invocation_id,
-            "tenant_id": invocation.tenant_id,
-            "tool_id": invocation.tool_id,
-            "tool_name": invocation.tool_name,
-            "tool_version": invocation.tool_version,
-            "run_id": invocation.run_id,
-            "thread_id": invocation.thread_id,
-            "turn_id": invocation.turn_id,
-            "workspace_id": invocation.workspace_id,
-            "user_id": invocation.user_id,
-            "agent_id": invocation.agent_id,
-            "principal_id": invocation.principal_id,
-            "step": invocation.step,
-            "args_redacted": invocation.args_redacted,
-            "args_hash": invocation.args_hash,
-            "idempotency_key": key,
-            "output_summary": invocation.output_summary,
-            "output_digest": invocation.output_digest,
-            "output_blob_ref": invocation.output_blob_ref,
-            "output_fields": invocation.output_fields,
-            "status": invocation.status,
-            "error_class": invocation.error_class,
-            "latency_ms": invocation.latency_ms,
-            "cost": invocation.cost,
-            "task": invocation.task,
-            "task_pattern": invocation.task_pattern,
-            "sub_calls": [c.model_dump() for c in invocation.sub_calls],
-            "visibility_keys": invocation.visibility_keys,
-            "occurred_at": invocation.occurred_at,
-        }
-        stmt = (
-            insert(ToolInvocationRow)
-            .values(**values)
-            .on_conflict_do_nothing(constraint="uq_tool_invocations_idempotent")
-            .returning(ToolInvocationRow.invocation_id)
-        )
-        inserted = (await self.s.execute(stmt)).scalar_one_or_none()
-        if inserted is not None:
-            return invocation
-        row = (
-            await self.s.execute(
-                select(ToolInvocationRow).where(
-                    ToolInvocationRow.tenant_id == invocation.tenant_id,
-                    ToolInvocationRow.idempotency_key == key,
-                )
-            )
-        ).scalar_one()
-        return _to_invocation(row)
-
-    async def invocations_for_run(
-        self, tenant_id: str, run_id: str, *, scope_keys: Sequence[str] | None = None
-    ) -> list[ToolInvocation]:
-        stmt = (
-            select(ToolInvocationRow)
-            .where(ToolInvocationRow.tenant_id == tenant_id, ToolInvocationRow.run_id == run_id)
-            .order_by(ToolInvocationRow.step, ToolInvocationRow.occurred_at)
-        )
-        stmt = _visible(stmt, scope_keys)
-        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
-
-    async def recent(
-        self,
-        tenant_id: str,
-        *,
-        task_pattern: str | None = None,
-        tool_name: str | None = None,
-        scope_keys: Sequence[str] | None = None,
-        limit: int = 200,
-    ) -> list[ToolInvocation]:
-        stmt = select(ToolInvocationRow).where(ToolInvocationRow.tenant_id == tenant_id)
-        if task_pattern is not None:
-            stmt = stmt.where(ToolInvocationRow.task_pattern == task_pattern)
-        if tool_name is not None:
-            stmt = stmt.where(ToolInvocationRow.tool_name == tool_name)
-        stmt = _visible(stmt, scope_keys)
-        stmt = stmt.order_by(ToolInvocationRow.occurred_at.desc()).limit(limit)
-        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
-
-    async def mark_indexed(self, tenant_id: str, invocation_ids: Sequence[str]) -> None:
-        if not invocation_ids:
-            return
-        await self.s.execute(
-            update(ToolInvocationRow)
-            .where(
-                ToolInvocationRow.tenant_id == tenant_id,
-                ToolInvocationRow.invocation_id.in_(list(invocation_ids)),
-            )
-            .values(indexed_at=datetime.now(UTC))
-        )
-
-    # ------------------------------------------------------------------ outcomes
-    async def set_outcome(self, outcome: RunOutcome) -> None:
-        stmt = (
-            insert(RunOutcomeRow)
-            .values(
-                tenant_id=outcome.tenant_id,
-                run_id=outcome.run_id,
-                success=outcome.success,
-                note=outcome.note,
-                source=outcome.source,
-                recorded_at=outcome.recorded_at,
-            )
-            .on_conflict_do_update(
-                index_elements=[RunOutcomeRow.tenant_id, RunOutcomeRow.run_id],
-                set_={
-                    "success": outcome.success,
-                    "note": outcome.note,
-                    "source": outcome.source,
-                    "recorded_at": outcome.recorded_at,
-                },
-            )
-        )
-        await self.s.execute(stmt)
-
-    async def outcome(self, tenant_id: str, run_id: str) -> RunOutcome | None:
-        row = (
-            await self.s.execute(
-                select(RunOutcomeRow).where(
-                    RunOutcomeRow.tenant_id == tenant_id, RunOutcomeRow.run_id == run_id
-                )
-            )
-        ).scalar_one_or_none()
-        if row is None:
-            return None
-        return RunOutcome(
-            tenant_id=row.tenant_id,
-            run_id=row.run_id,
-            success=row.success,
-            note=row.note,
-            source=row.source,  # type: ignore[arg-type]
-            recorded_at=row.recorded_at,
-        )
+def _to_stats(row: ToolStatsRow) -> ToolStats:
+    return ToolStats(
+        tool_name=row.tool_name,
+        calls=row.calls,
+        successes=row.successes,
+        latency_ms_total=row.latency_ms_total,
+        latency_calls=row.latency_calls,
+        approvals=row.approvals,
+        rejections=row.rejections,
+        edits=row.edits,
+        last_used_at=row.last_used_at,
+    )
 
 
 def _visible(stmt: Any, scope_keys: Sequence[str] | None) -> Any:
@@ -336,3 +131,422 @@ def _visible(stmt: Any, scope_keys: Sequence[str] | None) -> Any:
     return stmt.where(
         ToolInvocationRow.visibility_keys.op("?|")(array([str(k) for k in scope_keys], type_=Text))
     )
+
+
+class SqlToolRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.s = session
+
+    # ------------------------------------------------------------------ catalog
+    async def upsert(self, descriptor: ToolDescriptor) -> tuple[ToolDescriptor, bool]:
+        desc = descriptor.with_schema_hash()
+        workspace = desc.workspace_id or _TENANT_WIDE
+        row = (
+            await self.s.execute(
+                select(ToolRow).where(
+                    ToolRow.tenant_id == desc.tenant_id,
+                    ToolRow.workspace_id == workspace,
+                    ToolRow.name == desc.name,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            desc = desc.model_copy(update={"tool_id": new_id("tool")})
+            self.s.add(_new_row(desc, workspace))
+            await self.s.flush()
+            return desc, True
+        stored = _to_descriptor(row)
+        if stored.catalog_fields() == desc.catalog_fields():
+            return stored, False
+        version = row.version + (1 if row.schema_hash != desc.schema_hash else 0)
+        values = {**desc.catalog_fields(), "schema_hash": desc.schema_hash, "version": version}
+        await self.s.execute(
+            update(ToolRow)
+            .where(ToolRow.tool_id == row.tool_id)
+            .values(**values, updated_at=datetime.now(UTC))
+        )
+        return stored.model_copy(update=values), True
+
+    async def ensure(self, tenant_id: str, name: str) -> ToolDescriptor:
+        found = await self.by_name(tenant_id, name)
+        if found is not None:
+            return found
+        desc = ToolDescriptor(tenant_id=tenant_id, name=name).with_schema_hash()
+        await self.s.execute(
+            insert(ToolRow)
+            .values(**_row_values(desc, _TENANT_WIDE))
+            .on_conflict_do_nothing(constraint="uq_tools_catalog_name")
+        )
+        stored = await self.by_name(tenant_id, name)
+        assert stored is not None
+        return stored
+
+    async def by_name(
+        self, tenant_id: str, name: str, *, workspace_id: str | None = None
+    ) -> ToolDescriptor | None:
+        row = (
+            await self.s.execute(
+                select(ToolRow)
+                .where(
+                    ToolRow.tenant_id == tenant_id,
+                    ToolRow.name == name,
+                    ToolRow.workspace_id.in_(_workspaces(workspace_id)),
+                )
+                .order_by(ToolRow.workspace_id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return _to_descriptor(row) if row is not None else None
+
+    async def catalog(
+        self,
+        tenant_id: str,
+        *,
+        workspace_id: str | None,
+        names: Sequence[str] | None = None,
+        limit: int,
+    ) -> list[ToolDescriptor]:
+        stmt = select(ToolRow).where(
+            ToolRow.tenant_id == tenant_id,
+            ToolRow.workspace_id.in_(_workspaces(workspace_id)),
+        )
+        if names is not None:
+            stmt = stmt.where(ToolRow.name.in_(list(names)))
+        rows = (
+            await self.s.execute(
+                stmt.order_by(ToolRow.name, ToolRow.workspace_id.desc()).limit(limit * 2)
+            )
+        ).scalars()
+        out: dict[str, ToolDescriptor] = {}
+        for row in rows:
+            out.setdefault(row.name, _to_descriptor(row))
+        return list(out.values())[:limit]
+
+    async def catalog_by_ids(self, tenant_id: str, tool_ids: Sequence[str]) -> list[ToolDescriptor]:
+        if not tool_ids:
+            return []
+        rows = (
+            await self.s.execute(
+                select(ToolRow).where(
+                    ToolRow.tenant_id == tenant_id, ToolRow.tool_id.in_(list(tool_ids))
+                )
+            )
+        ).scalars()
+        return [_to_descriptor(r) for r in rows]
+
+    # ------------------------------------------------------------------ calls
+    async def record(self, invocation: ToolInvocation) -> tuple[ToolInvocation, bool]:
+        key = invocation.idempotency_key()
+        values: dict[str, Any] = {
+            **invocation.model_dump(exclude={"sub_calls"}),
+            "sub_calls": [c.model_dump() for c in invocation.sub_calls],
+            "idempotency_key": key,
+        }
+        stmt = (
+            insert(ToolInvocationRow)
+            .values(**values)
+            .on_conflict_do_nothing(constraint="uq_tool_invocations_idempotent")
+            .returning(ToolInvocationRow.invocation_id)
+        )
+        if (await self.s.execute(stmt)).scalar_one_or_none() is not None:
+            return invocation, True
+        row = (
+            await self.s.execute(
+                select(ToolInvocationRow).where(
+                    ToolInvocationRow.tenant_id == invocation.tenant_id,
+                    ToolInvocationRow.idempotency_key == key,
+                )
+            )
+        ).scalar_one()
+        return _to_invocation(row), False
+
+    async def invocations_for_run(
+        self, tenant_id: str, run_id: str, *, scope_keys: Sequence[str] | None = None
+    ) -> list[ToolInvocation]:
+        stmt = (
+            select(ToolInvocationRow)
+            .where(ToolInvocationRow.tenant_id == tenant_id, ToolInvocationRow.run_id == run_id)
+            .order_by(ToolInvocationRow.step, ToolInvocationRow.occurred_at)
+        )
+        stmt = _visible(stmt, scope_keys)
+        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
+
+    async def for_pattern(
+        self, tenant_id: str, audience: str, pattern: str, *, limit: int
+    ) -> list[ToolInvocation]:
+        stmt = (
+            select(ToolInvocationRow)
+            .where(
+                ToolInvocationRow.tenant_id == tenant_id,
+                ToolInvocationRow.task_pattern == pattern,
+                ToolInvocationRow.visibility_keys[0].astext == audience,
+            )
+            .order_by(ToolInvocationRow.occurred_at.desc())
+            .limit(limit)
+        )
+        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
+
+    async def unlearned(self, *, tenant_id: str | None, limit: int) -> list[ToolInvocation]:
+        stmt = select(ToolInvocationRow).where(ToolInvocationRow.learned_at.is_(None))
+        if tenant_id is not None:
+            stmt = stmt.where(ToolInvocationRow.tenant_id == tenant_id)
+        stmt = stmt.order_by(ToolInvocationRow.occurred_at).limit(limit)
+        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
+
+    async def mark_learned(self, tenant_id: str, invocation_ids: Sequence[str]) -> None:
+        if not invocation_ids:
+            return
+        await self.s.execute(
+            update(ToolInvocationRow)
+            .where(
+                ToolInvocationRow.tenant_id == tenant_id,
+                ToolInvocationRow.invocation_id.in_(list(invocation_ids)),
+            )
+            .values(learned_at=datetime.now(UTC))
+        )
+
+    # ------------------------------------------------------------------ outcomes
+    async def set_outcome(self, outcome: RunOutcome) -> None:
+        values = outcome.model_dump()
+        stmt = insert(RunOutcomeRow).values(**values)
+        await self.s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[RunOutcomeRow.tenant_id, RunOutcomeRow.run_id],
+                set_={k: stmt.excluded[k] for k in ("success", "note", "source", "recorded_at")},
+            )
+        )
+        await self.s.execute(
+            update(ToolInvocationRow)
+            .where(
+                ToolInvocationRow.tenant_id == outcome.tenant_id,
+                ToolInvocationRow.run_id == outcome.run_id,
+            )
+            .values(learned_at=None)
+        )
+
+    async def outcome(self, tenant_id: str, run_id: str) -> RunOutcome | None:
+        return (await self.outcomes(tenant_id, [run_id])).get(run_id)
+
+    async def outcomes(self, tenant_id: str, run_ids: Sequence[str]) -> dict[str, RunOutcome]:
+        if not run_ids:
+            return {}
+        rows = (
+            await self.s.execute(
+                select(RunOutcomeRow).where(
+                    RunOutcomeRow.tenant_id == tenant_id, RunOutcomeRow.run_id.in_(list(run_ids))
+                )
+            )
+        ).scalars()
+        return {row.run_id: _to_outcome(row) for row in rows}
+
+    # ------------------------------------------------------------------ statistics
+    async def count_call(
+        self, tenant_id: str, tool_name: str, *, ok: bool, latency_ms: float | None, at: datetime
+    ) -> None:
+        timed = latency_ms is not None
+        stmt = insert(ToolStatsRow).values(
+            tenant_id=tenant_id,
+            tool_name=tool_name,
+            calls=1,
+            successes=int(ok),
+            latency_ms_total=latency_ms or 0.0,
+            latency_calls=int(timed),
+            last_used_at=at,
+        )
+        await self.s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[ToolStatsRow.tenant_id, ToolStatsRow.tool_name],
+                set_={
+                    "calls": ToolStatsRow.calls + 1,
+                    "successes": ToolStatsRow.successes + int(ok),
+                    "latency_ms_total": ToolStatsRow.latency_ms_total + (latency_ms or 0.0),
+                    "latency_calls": ToolStatsRow.latency_calls + int(timed),
+                    "last_used_at": func.greatest(ToolStatsRow.last_used_at, at),
+                },
+            )
+        )
+
+    async def count_verdict(self, tenant_id: str, tool_name: str, verdict: str) -> None:
+        column = _verdict_column(verdict)
+        stmt = insert(ToolStatsRow).values(tenant_id=tenant_id, tool_name=tool_name, **{column: 1})
+        await self.s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[ToolStatsRow.tenant_id, ToolStatsRow.tool_name],
+                set_={column: getattr(ToolStatsRow, column) + 1},
+            )
+        )
+
+    async def stats(self, tenant_id: str, names: Sequence[str]) -> dict[str, ToolStats]:
+        if not names:
+            return {}
+        rows = (
+            await self.s.execute(
+                select(ToolStatsRow).where(
+                    ToolStatsRow.tenant_id == tenant_id, ToolStatsRow.tool_name.in_(list(names))
+                )
+            )
+        ).scalars()
+        return {row.tool_name: _to_stats(row) for row in rows}
+
+    # ------------------------------------------------------------------ approvals
+    async def count_approval(
+        self, tenant_id: str, agent_id: str, tool_name: str, arg_shape: str, verdict: str
+    ) -> None:
+        column = _verdict_column(verdict)
+        stmt = insert(ApprovalPatternRow).values(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            tool_name=tool_name,
+            arg_shape=arg_shape,
+            updated_at=datetime.now(UTC),
+            **{column: 1},
+        )
+        await self.s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[
+                    ApprovalPatternRow.tenant_id,
+                    ApprovalPatternRow.agent_id,
+                    ApprovalPatternRow.tool_name,
+                    ApprovalPatternRow.arg_shape,
+                ],
+                set_={
+                    column: getattr(ApprovalPatternRow, column) + 1,
+                    "updated_at": stmt.excluded.updated_at,
+                },
+            )
+        )
+
+    async def approval_patterns(
+        self,
+        tenant_id: str,
+        agent_id: str,
+        *,
+        tool_name: str | None,
+        min_support: int,
+        limit: int,
+    ) -> list[ApprovalCounts]:
+        row = ApprovalPatternRow
+        support = row.approvals + row.rejections + row.edits
+        stmt = select(row).where(
+            row.tenant_id == tenant_id, row.agent_id == agent_id, support >= min_support
+        )
+        if tool_name is not None:
+            stmt = stmt.where(row.tool_name == tool_name)
+        stmt = stmt.order_by(support.desc(), row.tool_name, row.arg_shape).limit(limit)
+        return [
+            ApprovalCounts(
+                agent_id=r.agent_id,
+                tool=r.tool_name,
+                arg_shape=r.arg_shape,
+                approvals=r.approvals,
+                rejections=r.rejections,
+                edits=r.edits,
+            )
+            for r in (await self.s.execute(stmt)).scalars()
+        ]
+
+
+def _workspaces(workspace_id: str | None) -> list[str]:
+    """The catalog rows a workspace reads: its own and the tenant's."""
+    return list(dict.fromkeys((_TENANT_WIDE, workspace_id or _TENANT_WIDE)))
+
+
+def _verdict_column(verdict: str) -> str:
+    if verdict not in _VERDICT_COLUMNS:
+        raise ValueError(f"not a verdict count: {verdict}")
+    return verdict
+
+
+def _row_values(desc: ToolDescriptor, workspace: str) -> dict[str, Any]:
+    return {
+        "tool_id": desc.tool_id,
+        "tenant_id": desc.tenant_id,
+        "workspace_id": workspace,
+        "name": desc.name,
+        "version": desc.version,
+        "schema_hash": desc.schema_hash,
+        **desc.catalog_fields(),
+    }
+
+
+def _new_row(desc: ToolDescriptor, workspace: str) -> ToolRow:
+    return ToolRow(**_row_values(desc, workspace))
+
+
+def _to_procedure(row: ProcedureRow) -> StoredProcedure:
+    return StoredProcedure(
+        procedure_id=row.procedure_id,
+        tenant_id=row.tenant_id,
+        scope_key=row.scope_key,
+        pattern=row.pattern,
+        title=row.title,
+        strategy=row.strategy,
+        steps=list(row.steps or []),
+        bindings=list(row.bindings or []),
+        success_rate=row.success_rate,
+        support=row.support,
+        status=row.status,  # type: ignore[arg-type]
+        steps_hash=row.steps_hash,
+        distilled=row.distilled,
+        owner_principal=row.owner_principal,
+        workspace_id=row.workspace_id,
+        updated_at=row.updated_at,
+    )
+
+
+class SqlProcedureRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.s = session
+
+    async def get(self, tenant_id: str, procedure_id: str) -> StoredProcedure | None:
+        row = await self.s.get(ProcedureRow, (tenant_id, procedure_id))
+        return _to_procedure(row) if row is not None else None
+
+    async def by_pattern(
+        self, tenant_id: str, scope_key: str, pattern: str
+    ) -> StoredProcedure | None:
+        row = (
+            await self.s.execute(
+                select(ProcedureRow).where(
+                    ProcedureRow.tenant_id == tenant_id,
+                    ProcedureRow.scope_key == scope_key,
+                    ProcedureRow.pattern == pattern,
+                )
+            )
+        ).scalar_one_or_none()
+        return _to_procedure(row) if row is not None else None
+
+    async def save(self, procedure: StoredProcedure) -> None:
+        values = procedure.model_dump()
+        stmt = insert(ProcedureRow).values(**values)
+        mutable = {k: stmt.excluded[k] for k in values if k not in ("tenant_id", "procedure_id")}
+        await self.s.execute(
+            stmt.on_conflict_do_update(constraint="uq_procedures_pattern", set_=mutable)
+        )
+
+    async def visible(
+        self, tenant_id: str, scope_keys: Sequence[str], *, limit: int
+    ) -> list[StoredProcedure]:
+        if not scope_keys:
+            return []
+        rows = (
+            await self.s.execute(
+                select(ProcedureRow)
+                .where(
+                    ProcedureRow.tenant_id == tenant_id,
+                    ProcedureRow.scope_key.in_(list(scope_keys)),
+                    ProcedureRow.status == "active",
+                )
+                .order_by(ProcedureRow.updated_at.desc(), ProcedureRow.procedure_id)
+                .limit(limit)
+            )
+        ).scalars()
+        return [_to_procedure(r) for r in rows]
+
+    async def reject(self, tenant_id: str, procedure_id: str) -> bool:
+        result = await self.s.execute(
+            update(ProcedureRow)
+            .where(ProcedureRow.tenant_id == tenant_id, ProcedureRow.procedure_id == procedure_id)
+            .values(status="rejected", updated_at=datetime.now(UTC))
+        )
+        return bool(getattr(result, "rowcount", 0))

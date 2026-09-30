@@ -426,62 +426,71 @@ environments, and unset once onboarding is done. ADR 0021 has the design.
 
 ## Tool memory
 
-Agents rediscover the same chain of calls every run, and the same failure every time. Tool
-memory records what happened and mines the chains that worked.
+Agents call tools. Tool memory keeps a catalog of what each tool is and does, records what
+your agent called, learns what worked, and answers "which tool, which plan, which arguments"
+in one call.
 
 **The service never executes your tools.** It records what your agent did, and learns from
 runs you label successful.
+
+### Tell it what your tools are
+
+```python
+await ctx.advanced.tools.put_catalog(
+    [
+        {
+            "name": "pricing-lookup_price",
+            "description": "List price for a SKU in a region",
+            "side_effects": "read",
+        },
+        {
+            "name": "crm-update_quote",
+            "description": "Write a price onto a quote",
+            "side_effects": "write",
+            "argument_entity_types": {"customer": "ORG"},
+        },
+    ]
+)
+```
+
+`side_effects` (read, write, irreversible) is what a harness decides approval and code mode
+by; `argument_entity_types` lets hints fill an argument from the knowledge graph.
 
 ### Record what your agent did
 
 ```python
 await ctx.record_tool(
-    "pricing.lookup_price",
+    "pricing-lookup_price",
     args={"sku": "SKU-22", "region": "EMEA"},
     output={"price": 1200, "currency": "EUR", "quote_id": "Q-1183"},
     task="update quote Q-1183 with EMEA price for SKU-22",
     latency_ms=42,
 )
+await ctx.outcome(success=True)  # the bound run; only successful runs teach a procedure
 ```
 
 Recording is idempotent on (run, step, tool, arguments), so retries never double-count.
+`task` is the **question**, not an identifier: it is normalised into a typed-placeholder
+pattern (`update quote {id} with {entity} price for {id}`), so two phrasings of the same request
+learn together.
 
-`task` is the important argument, and it is the **question**, not an identifier. The service
-normalises it into a typed-placeholder pattern — `"update quote {entity} with {entity} price
-for {entity}"` — so two phrasings of the same request mine the same trajectory. Pass an
-opaque id and nothing will ever match.
-
-### Read back what worked
+### Ask what to call
 
 ```python
-plan = await ctx.advanced.tools.plan(task, available_tools=tools)
-# plan.steps      the tool sequence, in order
-# plan.support    how many successful runs back it
-# plan.success_rate
+hints = await ctx.tool_hints(task, available=["pricing-lookup_price", "crm-update_quote"])
+# hints.candidates  ranked by relevance and by how well each tool has worked
+# hints.plan        the learned procedure: its steps, their argument bindings, support
+# hints.next        the plan's next step for this run
+# hints.prefill     argument values found in the run, the graph, the profile or the task
+# hints.missing     required arguments nothing could fill, with the question to ask
 ```
 
-Each step carries an argument template whose bindings point at earlier steps' outputs, the
-preconditions those bindings imply, and the failure modes observed after that step. A plan is
-`valid` only if every tool exists and every binding resolves against a real run — nothing is
-invented.
-
-### What this deliberately does not do
-
-There is no `suggest`, no `next`, no tool registry and no output cache. Modern models plan
-tool use better than a support count can, every agent framework already owns a tool
-catalogue, and caching tool output replays stale results — `stock_level(SKU-1)` returning
-yesterday's number is the exact failure the rest of this service exists to prevent. What the
-model *cannot* know is what worked here before, which is the one thing this keeps.
-
-### Tell it whether the run worked
-
-```python
-await ctx.outcome(success=True)  # the bound run; run_id= names another
-```
-
-Only successful runs turn into procedures. This is the single most valuable signal you can
-give tool memory — without it, the service waits and treats an old, error-free, uncorrected
-run as a weak positive.
+A background job stores one procedure per task pattern once at least two labelled runs
+support it; with the tenant's model it also writes a title and a strategy from what
+succeeded and what failed. `ctx.context(query, tools={"available": [...]})` carries the same
+hints inline. Approvals and rejections of tool calls (feedback) become suggested approval
+rules (`ctx.advanced.tools.approval_suggestions()`) that nothing applies automatically. See
+[docs/api/tools.md](docs/api/tools.md).
 
 ---
 

@@ -89,7 +89,7 @@ def test_only_alias_routes_are_marked_deprecated_by_method_and_route_path() -> N
     mounted = deprecation_headers_for("POST", route_path(scope), "/memory")
     assert mounted["Link"] == '</memory/v1/documents>; rel="successor-version"'
     assert route_path({"path": "/v1/files", "root_path": ""}) == "/v1/files"
-    assert set(DEPRECATED_ROUTES) == {("POST", "/v1/files"), ("POST", "/v1/tools/record")}
+    assert set(DEPRECATED_ROUTES) == {("POST", "/v1/files")}
 
 
 def test_the_deprecation_window_is_still_open() -> None:

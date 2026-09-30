@@ -333,12 +333,12 @@ def test_an_alias_route_is_marked_on_the_responses_the_middleware_writes(
     with TestClient(create_app(settings, overrides=overrides), raise_server_exceptions=False) as c:
         too_big = c.post("/v1/files", headers={**H, "Content-Length": str(10**9)}, content=b"")
         unparsable = c.post(
-            "/v1/tools/record",
+            "/v1/files",
             headers={**H, "content-type": "application/json"},
             content=b"{not json",
         )
         canonical = c.post(
-            "/v1/tools/invocations",
+            "/v1/documents",
             headers={**H, "content-type": "application/json"},
             content=b"{not json",
         )
@@ -346,7 +346,7 @@ def test_an_alias_route_is_marked_on_the_responses_the_middleware_writes(
     for r in (too_big, unparsable):
         assert r.headers["Deprecation"] == ALIASES_DEPRECATED_AT
         assert r.headers["Link"].endswith('; rel="successor-version"')
-    assert unparsable.headers["Link"] == '</v1/tools/invocations>; rel="successor-version"'
+    assert unparsable.headers["Link"] == '</v1/documents>; rel="successor-version"'
     assert canonical.status_code == 422 and "Deprecation" not in canonical.headers
     with TestClient(create_app(settings, overrides=overrides), raise_server_exceptions=False) as c:
         wrong_method = c.get("/v1/files", headers=H)

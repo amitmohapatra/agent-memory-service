@@ -47,8 +47,8 @@ async def wire_all(container: Container) -> None:
     _wire_nli(container)
     _wire_retrieval(container)
     _wire_memory(container)
-    _wire_tools(container)
     _wire_graph(container)
+    _wire_tools(container)
     _wire_context_preservation(container)
     _register_jobs(container)
     log.info(
@@ -534,15 +534,23 @@ def _wire_memory(container: Container) -> None:
 
 
 def _wire_tools(container: Container) -> None:
-    """Tool memory: registry, invocation records, output cache, chains and procedures."""
+    """Tool memory: the catalog and call records, tool search, hints and the learning job."""
+    from memory_service.modules.tools.hints import ToolHintsService
+    from memory_service.modules.tools.index import ToolIndex
+    from memory_service.modules.tools.learning import ToolLearning
     from memory_service.modules.tools.service import ToolMemoryService
 
+    uow_factory = container.services["uow_factory"]
     container.services["tool_memory"] = ToolMemoryService(
-        container.services["uow_factory"],
         container.services["authz"],
         blob=container.blob,
         blob_bucket=container.settings.blob.file_bucket,
-        indexer=container.services.get("indexer"),
+    )
+    index = ToolIndex(uow_factory, container.services["indexer"], container.search)
+    container.services["tool_index"] = index
+    container.services["tool_hints"] = ToolHintsService(uow_factory, index, container.graph_store)
+    container.services["tool_learning"] = ToolLearning(
+        uow_factory, container.services["llm_assist"], container.graph_store
     )
 
 

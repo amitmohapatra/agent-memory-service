@@ -42,10 +42,6 @@ def _ctx(run_id: str, agent_id: str = "ops-agent") -> MemoryExecutionContext:
     )
 
 
-def _declared(tools: set[str]) -> list[dict[str, str]]:
-    return [{"name": t} for t in sorted(tools)]
-
-
 async def _replay(container, service, run: dict) -> None:
     ctx = _ctx(run["run_id"], run.get("agent_id", "ops-agent"))
     async with container.services["uow_factory"]() as uow:
@@ -89,28 +85,30 @@ async def test_tool_gate(container, uow_factory) -> None:
         c["tool"] for r in runs if r.get("agent_id") == "ops-agent" for c in r["invocations"]
     }
 
-    # --- first-step hit rate: does the mined procedure open the way the real run did? ---
+    learning = container.services["tool_learning"]
+    while await learning.learn():
+        pass
+    hints = container.services["tool_hints"]
+
+    # --- first-step hit rate: does the stored procedure open the way the real run did? ---
     #
-    # This used to be measured through service.suggest() and service.next_step(). Those
-    # endpoints are gone — the model plans better than a support count can — but the signal
-    # they measured is procedure *quality*, and that is a property of the mined procedure
-    # itself. Reading it straight off the procedure keeps the measurement and drops the API.
+    # Read straight off the procedure the learning job stored for the pattern: procedure
+    # quality is a property of the procedure, whatever surface serves it.
     async def _procedure(task: str):
-        async with uow_factory() as uow:
-            found = await service.procedures(uow, ctx, task=task, scope_keys=keys)
-            await uow.commit()
+        found = await hints.procedures(ctx, task, keys, k=1)
         return found[0] if found else None
 
     suggestion_hits = 0
     undeclared = 0
     for run in evaluation:
         expected = run["invocations"][0]["tool"]
-        declared = {d["name"] for d in _declared({c["tool"] for c in run["invocations"]})}
+        declared = {c["tool"] for c in run["invocations"]}
+        advice = await hints.hints(
+            ctx, run["task"], available=sorted(declared), k=5, scope_keys=keys
+        )
+        undeclared += len({c.name for c in advice.candidates} - declared)
         procedure = await _procedure(run["task"])
-        if procedure is None or not procedure.steps:
-            continue
-        undeclared += len({s.tool for s in procedure.steps} - declared)
-        if procedure.steps[0].tool == expected:
+        if procedure is not None and procedure.tools and procedure.tools[0] == expected:
             suggestion_hits += 1
     suggestion_rate = suggestion_hits / len(evaluation)
 
@@ -119,7 +117,7 @@ async def test_tool_gate(container, uow_factory) -> None:
     for run in evaluation:
         successful = [c for c in run["invocations"] if c.get("status") == "ok"]
         procedure = await _procedure(run["task"])
-        steps = [s.tool for s in procedure.steps] if procedure else []
+        steps = procedure.tools if procedure else []
         for cut in range(1, len(successful)):
             expected = successful[cut]["tool"]
             next_total += 1
@@ -128,24 +126,16 @@ async def test_tool_gate(container, uow_factory) -> None:
                 next_hits += 1
     next_rate = next_hits / next_total if next_total else 0.0
 
-    # --- plan validity: every returned plan's bindings must resolve ---
+    # --- plan validity: every stored plan's bindings must read an earlier step ---
     plans = valid_plans = 0
     for run in evaluation:
-        declared = _declared({c["tool"] for c in run["invocations"]})
-        async with uow_factory() as uow:
-            plan = await service.plan(
-                uow, ctx, task=run["task"], available_tools=declared, scope_keys=keys
-            )
-            await uow.commit()
-        if not plan.get("steps"):
+        procedure = await _procedure(run["task"])
+        if procedure is None or not procedure.steps:
             continue
         plans += 1
-        resolvable = all(
-            b.get("source_step") is None or b["source_step"] < step["ordinal"]
-            for step in plan["steps"]
-            for b in step["bindings"]
-        )
-        if plan["valid"] and resolvable and not plan.get("problems"):
+        if all(
+            b.get("source_step") is None or b["source_step"] < b["step"] for b in procedure.bindings
+        ):
             valid_plans += 1
     plan_validity = valid_plans / plans if plans else 0.0
 
@@ -154,20 +144,17 @@ async def test_tool_gate(container, uow_factory) -> None:
         c["tool"] for r in runs if r.get("agent_id") == "rival-agent" for c in r["invocations"]
     }
     isolation_violations = 0
-    async with uow_factory() as uow:
-        visible = await uow.tools.recent("acme", scope_keys=keys, limit=500)
-        isolation_violations += sum(1 for i in visible if i.tool_name in rival_tools)
-        mined = await service.procedures(
-            uow,
-            ctx,
-            task="update quote Q-9990 with EMEA price for SKU-990",
-            scope_keys=keys,
-        )
-        await uow.commit()
-    # a mined procedure must never name a tool this caller could not see being used
-    isolation_violations += sum(
-        1 for procedure in mined for step in procedure.steps if step.tool in rival_tools
+    visible = await hints.procedures(
+        ctx, "update quote Q-9990 with EMEA price for SKU-990", keys, k=10
     )
+    # a stored procedure must never name a tool this caller could not see being used
+    isolation_violations += sum(1 for p in visible for tool in p.tools if tool in rival_tools)
+    for run in runs:
+        if run.get("agent_id") == "rival-agent":
+            procedure = await _procedure(run["task"])
+            isolation_violations += sum(
+                1 for tool in (procedure.tools if procedure else []) if tool in rival_tools
+            )
 
     report = {
         "gate": "tool_memory",

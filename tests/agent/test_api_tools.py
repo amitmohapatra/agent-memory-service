@@ -1,9 +1,6 @@
-"""Tool memory end to end: an agent records what it ran, labels the run, asks what to call next
-time, and registers its own model key.
-
-``POST /v1/tools/plan`` and ``POST /v1/runs/{run_id}/outcome`` were exercised by nothing in the
-repository before this file, which is also why they are asserted hardest here: a plan is only
-worth anything if it names the caller's own tools and comes from a run somebody labelled.
+"""Tool memory end to end: an agent publishes its catalog, records what it ran, labels the run,
+asks which tool to call next time and with which arguments, reads the approval rules its
+reviewers' decisions support, and registers its own model key.
 """
 
 from __future__ import annotations
@@ -13,7 +10,6 @@ import base64
 import pytest
 
 from memory_service.api.app import create_app
-from tests.agent import coverage
 from tests.agent.conftest import BOOTSTRAP, sdk
 from tests.conftest import PG_AVAILABLE, _test_overrides
 from trellis.memory import MemoryError
@@ -21,11 +17,33 @@ from trellis.memory import MemoryError
 pytestmark = pytest.mark.e2e
 
 TASK = "update quote Q-1183 with the EMEA price for SKU-22"
-LOOKUP = "pricing.lookup_price"
-UPDATE = "crm.update_quote"
-DECLARED = [
-    {"name": LOOKUP, "description": "Current list price for a SKU in a region"},
-    {"name": UPDATE, "description": "Write a price onto a quote"},
+LOOKUP = "pricing-lookup_price"
+UPDATE = "crm-update_quote"
+CATALOG = [
+    {
+        "name": LOOKUP,
+        "description": "Current list price for a SKU in a region",
+        "input_schema": {
+            "type": "object",
+            "properties": {"sku": {"type": "string"}, "region": {"type": "string"}},
+            "required": ["sku", "region"],
+        },
+        "side_effects": "read",
+        "source": "mcp",
+        "server": "pricing",
+    },
+    {
+        "name": UPDATE,
+        "description": "Write a price onto a quote",
+        "input_schema": {
+            "type": "object",
+            "properties": {"quote": {"type": "string"}, "price": {"type": "number"}},
+            "required": ["quote", "price"],
+        },
+        "side_effects": "write",
+        "source": "mcp",
+        "server": "crm",
+    },
 ]
 #: An envelope key an operator would hold; the agent key it wraps never leaves the store.
 ENVELOPE = base64.urlsafe_b64encode(b"p9b-agent-credential-key-32bytes").decode()
@@ -53,14 +71,19 @@ async def _harness(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-async def _one_successful_run(agent) -> str:
-    """Record the two calls of a run and label the run successful, as an adapter would."""
+async def _one_successful_run(agent, quote: str = "Q-1183") -> str:
+    """Record the two calls of a run and label the run successful, as an adapter would. The
+    quote id flows from the lookup's output into the update's arguments."""
     first = await agent.record_tool(
-        LOOKUP, {"sku": "SKU-22", "region": "EMEA"}, output={"price": 1200}, task=TASK, step=0
+        LOOKUP,
+        {"sku": "SKU-22", "region": "EMEA"},
+        output={"price": 1200, "quote": quote},
+        task=TASK,
+        step=0,
     )
     second = await agent.record_tool(
         UPDATE,
-        {"quote": "Q-1183", "price": 1200},
+        {"quote": quote, "price": 1200},
         output={"ok": True},
         task=TASK,
         step=1,
@@ -102,62 +125,86 @@ async def test_an_agent_records_its_calls_and_labels_the_run(app, running) -> No
     assert corrected.success is False
 
 
-@pytest.mark.covers("tools.plan_tools", "tools.list_procedures", "tools.record_invocation")
-async def test_a_labelled_run_becomes_a_plan_that_only_names_declared_tools(app, running) -> None:
-    _, harness = await _harness(app)
-    user = harness.bind(user_id="u1")
-
-    # Nothing recorded yet: the plan says so rather than inventing a chain.
-    cold = await user.agent("quote-bot").advanced.tools.plan(TASK, available_tools=DECLARED)
-    assert cold["valid"] is False and cold["reason"] == "no validated procedure yet"
-    assert cold["steps"] == [] and cold["task_pattern"]
-
-    agent = user.agent("quote-bot")
-    run_id = await _one_successful_run(agent)
-
-    procedures = await agent.advanced.tools.procedures(TASK)
-    assert procedures, "a successful run with steps is a procedure"
-    assert [step["tool"] for step in procedures[0]["steps"]] == [LOOKUP, UPDATE]
-
-    plan = await agent.advanced.tools.plan(TASK, available_tools=DECLARED)
-    assert plan["valid"] is True and plan["problems"] == []
-    assert [step["tool"] for step in plan["steps"]] == [LOOKUP, UPDATE]
-    assert plan["support"] >= 1 and plan["success_rate"] == 1.0
-    assert run_id in plan["run_ids"]
-    assert plan["script"] and plan["rendered"]
-
-    # A caller that does not hold the second tool is told so, and is never handed a step it
-    # cannot execute.
-    partial = await agent.advanced.tools.plan(TASK, available_tools=DECLARED[:1])
-    assert partial["valid"] is False and partial["steps"] == []
-    assert UPDATE in (partial["reason"] or "")
-
-
-@pytest.mark.covers("tools.record_tool")
-async def test_the_deprecated_record_alias_still_answers_and_says_it_is_deprecated(
+@pytest.mark.covers("tools.put_catalog", "tools.list_tools")
+async def test_an_agent_publishes_its_catalog_and_reads_it_back_with_statistics(
     app, running
 ) -> None:
     _, harness = await _harness(app)
-    agent = harness.bind(user_id="u1").agent("legacy-bot")
+    agent = harness.bind(user_id="u1").agent("quote-bot")
 
-    body = await harness.transport.request(
-        "POST",
-        "/v1/tools/record",
-        scope=agent.scope,
-        json={
-            "scope": agent.scope.model_dump(mode="json", exclude_none=True, exclude={"trace_id"}),
-            "tool": LOOKUP,
-            "args": {"sku": "SKU-99", "region": "APAC"},
-            "output": {"price": 900},
-            "task": TASK,
-            "step": 0,
-        },
+    stored = await agent.advanced.tools.put_catalog(CATALOG)
+    assert {t.name for t in stored} == {LOOKUP, UPDATE}
+    lookup = next(t for t in stored if t.name == LOOKUP)
+    assert lookup.side_effects == "read" and lookup.required == ["sku", "region"]
+    again = await agent.advanced.tools.put_catalog(CATALOG)
+    assert [t.version for t in again] == [t.version for t in stored], "unchanged: no new version"
+
+    await _one_successful_run(agent)
+    listed = await agent.advanced.tools.catalog(names=[LOOKUP, "nobody-knows_this"])
+    assert [t.name for t in listed] == [LOOKUP]
+    assert listed[0].stats.calls == 1 and listed[0].stats.success_rate == 1.0
+    everything = await agent.advanced.tools.catalog()
+    assert {t.name for t in everything} == {LOOKUP, UPDATE}
+
+
+@pytest.mark.covers("tools.tool_hints")
+async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
+    app, running
+) -> None:
+    _, harness = await _harness(app)
+    user = harness.bind(user_id="u1")
+    await user.agent("quote-bot").advanced.tools.put_catalog(CATALOG)
+
+    cold = await user.agent("quote-bot").tool_hints(TASK, available=[LOOKUP, UPDATE])
+    assert cold.plan is None, "nothing learned yet: no plan is invented"
+    assert {c.name for c in cold.candidates} <= {LOOKUP, UPDATE}
+
+    for quote in ("Q-1183", "Q-2001"):
+        await _one_successful_run(user.agent("quote-bot"), quote)
+
+    fresh = user.agent("quote-bot")
+    hints = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    assert hints.plan is not None and [s["tool"] for s in hints.plan.steps] == [LOOKUP, UPDATE]
+    assert hints.plan.support == 2 and hints.plan.success_rate == 1.0
+    assert hints.next == LOOKUP and hints.candidates[0].name == LOOKUP
+    # every labelled run looked the price up in EMEA: the procedure binds the literal
+    assert hints.prefill["region"].value == "EMEA"
+    assert hints.prefill["region"].source == "procedure"
+
+    # after the lookup, the plan moves on and the quote comes from the lookup's output
+    await fresh.record_tool(
+        LOOKUP,
+        {"sku": "SKU-22", "region": "EMEA"},
+        output={"price": 1200, "quote": "Q-3003"},
+        task=TASK,
+        step=0,
     )
+    after = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    assert after.next == UPDATE
+    assert after.prefill["quote"].value == "Q-3003" and after.prefill["quote"].source == "procedure"
 
-    assert body["invocation_id"] and body["recorded"] is True and body["step"] == 0
-    headers = coverage.headers_of("tools.record_tool")
-    assert headers["deprecation"] == "@1790553600"
-    assert headers["link"] == '</v1/tools/invocations>; rel="successor-version"'
+    # a caller that cannot call the second tool is never handed a plan that needs it
+    partial = await fresh.tool_hints(TASK, available=[LOOKUP])
+    assert partial.plan is None and {c.name for c in partial.candidates} == {LOOKUP}
+
+
+@pytest.mark.covers("feedback.submit_feedback", "tools.approval_suggestions")
+async def test_approvals_become_a_suggested_rule_that_is_never_applied(app, running) -> None:
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    for i in range(5):
+        await agent.feedback(
+            "tool_call",
+            f"call_{i}",
+            "approve",
+            metadata={"tool": UPDATE, "args": {"quote": f"Q-{i}", "price": 1200 + i}},
+        )
+    suggestions = await agent.advanced.tools.approval_suggestions()
+    assert [(s.tool, s.suggestion, s.support) for s in suggestions] == [(UPDATE, "auto_approve", 5)]
+    assert suggestions[0].arg_shape == "price:num:1e3,quote:str"
+    assert await agent.advanced.tools.approval_suggestions(tool=LOOKUP) == []
+    stats = await agent.advanced.tools.catalog(names=[UPDATE])
+    assert stats == [] or stats[0].stats.approvals == 5
 
 
 @pytest.mark.covers("agents.set_key", "agents.key_status", "agents.revoke_key")
@@ -188,10 +235,11 @@ async def test_an_agent_registers_rotates_and_revokes_its_own_model_key(app, run
 
 @pytest.mark.covers_error(
     "tools.record_invocation",
-    "tools.record_tool",
-    "tools.plan_tools",
-    "tools.list_procedures",
     "tools.set_run_outcome",
+    "tools.tool_hints",
+    "tools.put_catalog",
+    "tools.list_tools",
+    "tools.approval_suggestions",
     "agents.set_key",
     "agents.key_status",
     "agents.revoke_key",
@@ -200,6 +248,7 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     _, acme = await _harness(app, "acme")
     _, globex = await _harness(app, "globex")
     mine = acme.bind(user_id="u1").agent("quote-bot")
+    await mine.advanced.tools.put_catalog(CATALOG)
     await _one_successful_run(mine)
     await mine.advanced.model_keys.set("vk-acme-only")
 
@@ -208,9 +257,11 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     )
     for call in (
         claiming.record_tool(LOOKUP, {"sku": "X"}, task=TASK, step=0),
-        claiming.advanced.tools.plan(TASK, available_tools=DECLARED),
-        claiming.advanced.tools.procedures(TASK),
-        claiming.outcome(run_id=str(mine.scope.agent_run_id), success=False),
+        claiming.tool_hints(TASK),
+        claiming.advanced.tools.put_catalog(CATALOG),
+        claiming.advanced.tools.catalog(),
+        claiming.advanced.tools.approval_suggestions(),
+        claiming.outcome(success=False),
         claiming.advanced.model_keys.set("vk-stolen"),
         claiming.advanced.model_keys.status(),
         claiming.advanced.model_keys.revoke(),
@@ -219,22 +270,8 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
             await call
         assert refused.value.status == 403, refused.value
 
-    with pytest.raises(MemoryError) as alias:
-        await globex.transport.request(
-            "POST",
-            "/v1/tools/record",
-            scope=claiming.scope,
-            json={
-                "scope": claiming.scope.model_dump(
-                    mode="json", exclude_none=True, exclude={"trace_id"}
-                ),
-                "tool": LOOKUP,
-                "args": {"sku": "X"},
-                "task": TASK,
-                "step": 0,
-            },
-        )
-    assert alias.value.status == 403
-
-    # And the procedure stays the owner's: the same task, mined under its own tenant, is empty.
-    assert await globex.bind(user_id="u1").agent("quote-bot").advanced.tools.procedures(TASK) == []
+    # And what was learned stays the owner's: the same task under its own tenant has no plan
+    # and no catalog.
+    theirs = globex.bind(user_id="u1").agent("quote-bot")
+    assert (await theirs.tool_hints(TASK)).plan is None
+    assert await theirs.advanced.tools.catalog() == []

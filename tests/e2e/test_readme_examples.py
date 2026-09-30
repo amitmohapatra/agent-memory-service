@@ -85,13 +85,13 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
 
 
 async def test_readme_tool_memory_walkthrough(app, client) -> None:
-    """README: Tool memory — record what ran, label the run, and the service mines the
-    procedure. Three endpoints, because the advice endpoints it used to have (register,
-    lookup, suggest, next) were removed: the model plans better than a support count, every
-    framework already owns a tool catalogue, and an output cache replays stale results."""
+    """README: Tool memory — publish the catalog, record what ran, label the run, and the
+    service learns the procedure; tool hints read it back as a plan with the next step and
+    its arguments."""
     memory = sdk_client(app)
     ctx = _bind(memory)
-    agent = ctx.agent("ops", agent_run_id="run_readme_1")
+    agent = ctx.agent("ops", agent_run_id="run_readme_next")
+    await agent.advanced.tools.put_catalog(TOOLS)
 
     for i in range(3):
         run = ctx.agent("ops", agent_run_id=f"run_readme_{i}")
@@ -111,13 +111,13 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             step=1,
         )
         # only a run labelled successful validates a procedure
-        await run.outcome(run_id=f"run_readme_{i}", success=True)
+        await run.outcome(success=True)
 
-    plan = await agent.advanced.tools.plan(TASK, available_tools=TOOLS)
-    assert plan["valid"] and plan["rendered"] and plan["script"]
-    steps = [s["tool"] for s in plan["steps"]]
+    hints = await agent.tool_hints(TASK, available=[t["name"] for t in TOOLS])
+    assert hints.plan is not None and hints.next == "pricing.lookup_price"
+    steps = [s["tool"] for s in hints.plan.steps]
     assert steps == ["pricing.lookup_price", "crm.update_quote"], steps
-    assert plan["support"] == 3 and plan["success_rate"] == 1.0
+    assert hints.plan.support == 3 and hints.plan.success_rate == 1.0
     # the headline claim: an argument is bound from an earlier step's output
-    binding = next(b for b in plan["steps"][1]["bindings"] if b["argument"] == "quote_id")
+    binding = next(b for b in hints.plan.steps[1]["bindings"] if b["argument"] == "quote_id")
     assert binding["source_step"] == 0 and binding["source_field"]

@@ -3,7 +3,9 @@
 Feedback is not a rating column. A verdict on a **memory** changes that memory — it is reinforced,
 retracted, or superseded by a correction; a verdict on an **answer** moves the confidence of the
 memories it cited and labels the run that answered; a verdict on a **run** is its explicit
-outcome. A brief verdict is recorded for people to read. Human verdicts, judge verdicts and interrupt
+outcome; a verdict on a **tool call** counts toward the tool's statistics and its approval
+pattern; rejecting a **procedure** stops it being offered. A brief verdict is recorded for
+people to read. Human verdicts, judge verdicts and interrupt
 decisions land in one table with one shape, so nothing downstream has to know which it was reading
 (ADR 0023).
 
@@ -29,6 +31,10 @@ sequenceDiagram
     P->>DB: label the answering run (unless it carries an explicit outcome)
   else target is a run
     P->>DB: the run's explicit outcome (confirm/approve = success)
+  else target is a tool call
+    P->>DB: tool statistics + approval pattern (agent, tool, argument shape); reject labels the run
+  else target is a procedure
+    P->>DB: reject → the procedure is no longer offered (until its steps change)
   else target is a brief
     P->>DB: recorded only
   end

@@ -45,7 +45,6 @@ ALIASES_DEPRECATED_AT: Final = "@1790553600"  # 2026-09-28T00:00:00Z
 #: (method, route path) of an alias route -> the route it is an alias of
 DEPRECATED_ROUTES: Final[Mapping[tuple[str, str], str]] = {
     ("POST", "/v1/files"): "/v1/documents",
-    ("POST", "/v1/tools/record"): "/v1/tools/invocations",
 }
 
 

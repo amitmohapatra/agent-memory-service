@@ -26,6 +26,8 @@ PREFIXES: Final[dict[str, str]] = {
     "memory": "mem",
     "tool": "tol",
     "tool_invocation": "tiv",
+    "procedure": "prc",
+    "pull": "pul",
     "evidence": "evd",
     "document": "doc",
     "document_version": "dcv",

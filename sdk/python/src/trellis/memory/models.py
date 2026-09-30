@@ -914,7 +914,7 @@ ProjectionAction = Literal[
     "memories_adjusted",
     "run_labelled",
     "tool_call_counted",
-    "procedure_retired",
+    "procedure_rejected",
 ]
 
 

@@ -33,7 +33,7 @@ from memory_service.adapters.db.tenancy_repository import (
     SqlTenantRepository,
     SqlWorkspaceRepository,
 )
-from memory_service.adapters.db.tool_repository import SqlToolRepository
+from memory_service.adapters.db.tool_repository import SqlProcedureRepository, SqlToolRepository
 from memory_service.adapters.db.webhook_repository import (
     SqlWebhookDeliveryRepository,
     SqlWebhookRepository,
@@ -127,6 +127,7 @@ class SqlUnitOfWork:
         self.documents = SqlDocumentRepository(s)
         self.memories = SqlMemoryRepository(s)
         self.tools = SqlToolRepository(s)
+        self.procedures = SqlProcedureRepository(s)
         self.credentials = SqlCredentialRepository(s)
         self.llm_policies = SqlLLMPolicyRepository(s)
         self.llm_usage = SqlLLMUsageRepository(s)

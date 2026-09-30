@@ -58,12 +58,24 @@ class ProjectionAction(StrEnum):
     MEMORIES_ADJUSTED = "memories_adjusted"
     #: a run verdict (or an answer verdict, when the run had no label) labelled the run
     RUN_LABELLED = "run_labelled"
+    #: a tool-call verdict counted toward the tool's statistics and approval patterns
+    TOOL_CALL_COUNTED = "tool_call_counted"
+    #: a procedure verdict rejected the procedure: it is no longer offered
+    PROCEDURE_REJECTED = "procedure_rejected"
 
 
 #: Verdicts that carry a replacement: the projector writes a corrected memory for them.
 CORRECTING_VERDICTS: Final = frozenset({FeedbackVerdict.CORRECT, FeedbackVerdict.EDIT})
 #: Verdicts that agree with the target as it stands.
 AFFIRMING_VERDICTS: Final = frozenset({FeedbackVerdict.CONFIRM, FeedbackVerdict.APPROVE})
+#: The approval counter a verdict on a tool call adds to.
+APPROVAL_COUNTER: Final = {
+    FeedbackVerdict.APPROVE: "approvals",
+    FeedbackVerdict.CONFIRM: "approvals",
+    FeedbackVerdict.REJECT: "rejections",
+    FeedbackVerdict.EDIT: "edits",
+    FeedbackVerdict.CORRECT: "edits",
+}
 
 
 class FeedbackEvidenceRef(BaseModel):

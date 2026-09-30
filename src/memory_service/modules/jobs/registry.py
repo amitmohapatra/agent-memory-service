@@ -14,6 +14,7 @@ from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.tools.service import TASK_TOOLS_INDEX, TASK_TOOLS_LEARN
 from memory_service.modules.webhooks.service import (
     TASK_WEBHOOK_DELIVER,
     TASK_WEBHOOK_FANOUT,
@@ -230,6 +231,14 @@ def register_handlers(container: Container) -> None:
         if connections is not None:
             await connections.connect_all()
 
+    async def tools_index(payload: dict[str, Any]) -> None:
+        """Embed changed catalog entries for tool search."""
+        await container.services["tool_index"].index(payload["tenant_id"], payload["tool_ids"])
+
+    async def tools_learn(payload: dict[str, Any]) -> None:
+        """Fold recorded tool calls into stored procedures and graph edges."""
+        await container.services["tool_learning"].learn(payload.get("tenant_id"))
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -335,6 +344,11 @@ def register_handlers(container: Container) -> None:
         queue.register_periodic(
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
+    queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
+    queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
+    queue.register_periodic(
+        "periodic.tools_learn", Queue.RECONCILE, tools_learn, cron="*/5 * * * *"
+    )
     queue.register(TASK_ARCHIVE_STAGE, Queue.ARCHIVE, archive_stage, retries=10)
     queue.register(TASK_OUTBOX_SWEEP, Queue.RECONCILE, outbox_sweep, retries=0)
     # Registered *and scheduled*. It was only registered, so the handler existed and nothing

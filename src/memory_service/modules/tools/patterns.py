@@ -31,24 +31,56 @@ _NUMBER = re.compile(r"\b\d[\d,.]*\b")
 _WS = re.compile(r"\s+")
 
 
+#: The typed shapes a task's values are replaced by, most specific first so an email is not
+#: first mangled into an identifier, and an identifier (``INV-2201``) not into a name plus a
+#: number. Entities (names the extractor finds) come between the identifiers and the numbers.
+_SHAPES_BEFORE_ENTITIES = (
+    ("url", _URL),
+    ("email", _EMAIL),
+    ("money", _MONEY),
+    ("date", _DATE),
+    ("id", _IDENT),
+)
+_SHAPES_AFTER_ENTITIES = (("num", _NUMBER),)
+
+
+def _typed(task: str) -> tuple[str, list[tuple[str, str]]]:
+    """The task with each value replaced by its typed placeholder, and the values found, as
+    ``(kind, value)`` in the order they were replaced."""
+    text = task.strip()[: MAX_PATTERN_CHARS * 2]
+    slots: list[tuple[str, str]] = []
+
+    def replace(kind: str, regex: re.Pattern[str], source: str) -> str:
+        def keep(match: re.Match[str]) -> str:
+            slots.append((kind, match.group(0)))
+            return "{" + kind + "}"
+
+        return regex.sub(keep, source)
+
+    for kind, regex in _SHAPES_BEFORE_ENTITIES:
+        text = replace(kind, regex, text)
+    for name in extract_entities(text, max_entities=12):
+        if len(name) >= 3 and not name.startswith("{"):
+            text = replace("entity", re.compile(rf"\b{re.escape(name)}\b"), text)
+    for kind, regex in _SHAPES_AFTER_ENTITIES:
+        text = replace(kind, regex, text)
+    return text, slots
+
+
 def task_pattern(task: str, *, max_chars: int = MAX_PATTERN_CHARS) -> str:
-    """Typed-placeholder form of a task description. Order matters: the most specific shapes
-    are replaced first so an email is not first mangled into an identifier."""
+    """Typed-placeholder form of a task description."""
     if not task or not task.strip():
         return ""
-    text = task.strip()[: max_chars * 2]
-    text = _URL.sub("{url}", text)
-    text = _EMAIL.sub("{email}", text)
-    text = _MONEY.sub("{money}", text)
-    text = _DATE.sub("{date}", text)
-    for name in extract_entities(text, max_entities=12):
-        if len(name) < 3 or name.startswith("{"):
-            continue
-        text = re.sub(rf"\b{re.escape(name)}\b", "{entity}", text)
-    text = _IDENT.sub("{id}", text)
-    text = _NUMBER.sub("{num}", text)
-    text = _WS.sub(" ", text).strip().casefold()
-    return text[:max_chars]
+    text, _ = _typed(task)
+    return _WS.sub(" ", text).strip().casefold()[:max_chars]
+
+
+def task_slots(task: str) -> list[tuple[str, str]]:
+    """The values a task names, with their kind (url, email, money, date, entity, id, num),
+    in the order the task names them: what a tool argument may be filled from."""
+    if not task or not task.strip():
+        return []
+    return sorted(_typed(task)[1], key=lambda slot: task.find(slot[1]))
 
 
 def similarity(left: str, right: str) -> float:

@@ -59,7 +59,8 @@ class GraphQueryRequest(BaseModel):
         default=None,
         min_length=1,
         description="restrict the traversal to these layers: entity (typed facts), temporal, "
-        "causal, structural (where things appear in the corpus); omit for every layer",
+        "causal, structural (where things appear in the corpus), procedural (what tool calls "
+        "did with entities); omit for every layer",
     )
     max_visited: int | None = Field(
         default=None,
@@ -98,7 +99,8 @@ class FactOut(BaseModel):
     layer: GraphLayer = Field(
         ...,
         description="entity (a typed fact), temporal (when it held, which fact replaced "
-        "which), causal (why), structural (where it appears in the corpus)",
+        "which), causal (why), structural (where it appears in the corpus), procedural (a "
+        "tool call used the entity, or returned the id that identifies it)",
     )
     valid_from: datetime | None = None
     valid_to: datetime | None = None

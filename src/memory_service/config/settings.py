@@ -201,6 +201,9 @@ LLMUse = Literal[
     "query_decomposition",
     "chunk_context",
     "grounding_judge",
+    #: Distil a stored procedure's title and strategy from the runs that followed it (the
+    #: tool learning job); the miner's own rendering is kept without it.
+    "procedure_abstraction",
 ]
 #: Every use: the operator allow-list's default and the default tenant policy (ADR 0023).
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)

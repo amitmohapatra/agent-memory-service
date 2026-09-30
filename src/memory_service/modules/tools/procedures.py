@@ -13,9 +13,9 @@ Mem^p update rules are followed literally:
 *decay*       a procedure that stops being used, or starts failing, loses score and is
               archived rather than deleted.
 
-Ranking is deterministic and explainable. Nothing here calls a model; the optional Bifrost
-reflection only renames and narrates a procedure that was already mined, and is rejected
-unless every step exists in the registry and every binding resolves against a real run.
+Ranking is deterministic and explainable. Nothing here calls a model; the learning job
+(``modules.tools.learning``) stores what is mined here and, with the tenant's model, distils
+a title and strategy for it.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Any
 
-from memory_service.domain.tools import ToolDescriptor, ToolInvocation
+from memory_service.domain.tools import ToolInvocation
 from memory_service.modules.tools.trajectories import EdgeSupport, Trajectory, accumulate, flatten
 
 # ranking weights (documented in docs/adr/0018-tool-memory.md)
@@ -105,11 +105,7 @@ class Procedure:
     steps: list[ProcedureStep] = field(default_factory=list)
     support: int = 0
     success_rate: float = 0.0
-    run_ids: list[str] = field(default_factory=list)
-    invocation_ids: list[str] = field(default_factory=list)
     last_used_at: datetime | None = None
-    when_not_to_use: str | None = None
-    script: str | None = None
 
     @property
     def tools(self) -> list[str]:
@@ -126,38 +122,6 @@ class Procedure:
             for error, fix in step.failure_modes.items():
                 if fix:
                     lines.append(f"     on {error}: {fix}")
-        if self.when_not_to_use:
-            lines.append(f"Do not use when: {self.when_not_to_use}")
-        return "\n".join(lines)
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "task_pattern": self.task_pattern,
-            "steps": [s.to_payload() for s in self.steps],
-            "support": self.support,
-            "success_rate": round(self.success_rate, 4),
-            "run_ids": self.run_ids[:20],
-            "invocation_ids": self.invocation_ids[:50],
-            "when_not_to_use": self.when_not_to_use,
-            "script": self.script,
-        }
-
-    def render_script(self) -> str:
-        """Starlark-shaped rendering for Bifrost code mode: each step becomes a call whose
-        arguments reference earlier results by name."""
-        lines = []
-        for step in self.steps:
-            args = []
-            for b in step.bindings:
-                if b.resolvable_from_trajectory:
-                    args.append(f"{b.argument}=step{b.source_step}[{b.source_field!r}]")
-                else:
-                    args.append(f"{b.argument}={b.literal!r}")
-            server, _, tool = step.tool.partition("-")
-            call = f"{server}.{tool or step.tool}({', '.join(args)})"
-            lines.append(f"step{step.ordinal} = {call}")
-        if lines:
-            lines.append(f"result = step{self.steps[-1].ordinal}")
         return "\n".join(lines)
 
 
@@ -208,8 +172,6 @@ def mine_procedure(pattern: str, trajectories: list[Trajectory]) -> Procedure | 
         steps=steps,
         support=len(matching),
         success_rate=len(matching) / len(total) if total else 0.0,
-        run_ids=[t.run_id for t in matching],
-        invocation_ids=[s.invocation_id for t in matching for s in t.steps],
         last_used_at=last_used,
     )
 
@@ -347,22 +309,3 @@ def decayed(procedure: Procedure, *, idle_days: float = 60.0, now: datetime | No
     if last.tzinfo is None:
         last = last.replace(tzinfo=UTC)
     return now - last > timedelta(days=idle_days)
-
-
-def validate_against_registry(
-    procedure: Procedure, registry: dict[str, ToolDescriptor]
-) -> list[str]:
-    """Problems that disqualify a procedure: an unknown tool, or a binding that points at a
-    step which does not exist or does not produce the field. Returns an empty list when valid."""
-    problems: list[str] = []
-    for step in procedure.steps:
-        if step.tool not in registry:
-            problems.append(f"step {step.ordinal}: unknown tool {step.tool!r}")
-        for binding in step.bindings:
-            if binding.source_step is None:
-                continue
-            if binding.source_step >= step.ordinal:
-                problems.append(
-                    f"step {step.ordinal}: binding {binding.argument!r} reads a later step"
-                )
-    return problems

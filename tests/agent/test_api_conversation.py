@@ -1,10 +1,9 @@
 """A conversation as an adapter records it: a thread, the turns inside it, an attachment, and
 the two deprecated spellings a caller written against 0.1 still uses.
 
-The alias routes (``POST /v1/files``, and ``POST /v1/tools/record`` in test_api_tools.py) are
-driven through ``client.transport`` on purpose: the SDK speaks the canonical noun only (ADR
-0022), so the alias has no method of its own, and what needs proving is that it still answers
-the same contract and says it is deprecated.
+The alias route (``POST /v1/files``) is driven through ``client.transport`` on purpose: the SDK
+speaks the canonical noun only (ADR 0022), so the alias has no method of its own, and what
+needs proving is that it still answers the same contract and says it is deprecated.
 """
 
 from __future__ import annotations

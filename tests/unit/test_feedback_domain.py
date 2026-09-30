@@ -82,6 +82,8 @@ def test_the_vocabularies_are_the_contracts_vocabularies() -> None:
         "memory_superseded",
         "memories_adjusted",
         "run_labelled",
+        "tool_call_counted",
+        "procedure_rejected",
     }
 
 

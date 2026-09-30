@@ -53,26 +53,3 @@ def test_post_files_is_post_documents(client) -> None:
     assert legacy.json()["deduplicated"] is True
     assert legacy.json()["document_id"] == canonical.json()["document_id"]
     _assert_marked_deprecated(legacy, "/v1/documents")
-
-
-def test_post_tools_record_is_post_tools_invocations(client) -> None:
-    body = {
-        "scope": {
-            "thread_id": new_id("thread"),
-            "agent_id": "bot",
-            "agent_run_id": new_id("agent_run"),
-        },
-        "tool": "search",
-        "args": {"q": "alias"},
-        "output_summary": "one hit",
-        "task": "find the alias",
-        "step": 0,
-    }
-    first = client.post("/v1/tools/invocations", headers=H, json=body)
-    assert first.status_code == 202, first.text
-    assert first.json()["recorded"] is True and "Deprecation" not in first.headers
-    again = client.post("/v1/tools/record", headers=OLD_H, json=body)
-    assert again.status_code == 202, again.text
-    assert again.json()["recorded"] is False
-    assert again.json()["invocation_id"] == first.json()["invocation_id"]
-    _assert_marked_deprecated(again, "/v1/tools/invocations")

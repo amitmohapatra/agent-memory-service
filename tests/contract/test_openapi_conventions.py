@@ -16,7 +16,6 @@ SCOPE_HEADERS = ("X-Trellis-Tenant", "X-Trellis-Workspace", "X-Trellis-User")
 DEPRECATED_HEADERS = ("X-Memory-Tenant", "X-Memory-Workspace", "X-Memory-User")
 ALIASES = {
     ("post", "/v1/files"): "/v1/documents",
-    ("post", "/v1/tools/record"): "/v1/tools/invocations",
 }
 
 

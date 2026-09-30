@@ -289,25 +289,6 @@ class ToolCatalogAPI:
         data = await self._ctx._request("GET", "/v1/tools/approval-suggestions", params=params)
         return [ApprovalSuggestion.model_validate(s) for s in data.get("suggestions", [])]
 
-    async def plan(self, task: str, *, available_tools: Sequence[dict[str, Any]]) -> dict[str, Any]:
-        data = await self._ctx._request(
-            "POST",
-            "/v1/tools/plan",
-            json={
-                "scope": self._ctx.scope_payload(),
-                "task": task,
-                "available_tools": list(available_tools),
-            },
-        )
-        return dict(data)
-
-    async def procedures(self, task: str) -> list[dict[str, Any]]:
-        params = {"task": task}
-        if self._ctx.scope.workspace_id:
-            params["workspace_id"] = self._ctx.scope.workspace_id
-        data = await self._ctx._request("GET", "/v1/tools/procedures", params=params)
-        return list(data.get("procedures", []))
-
 
 class ModelKeysAPI:
     """This agent's model key: the Bifrost virtual key its memory work is paid with. The

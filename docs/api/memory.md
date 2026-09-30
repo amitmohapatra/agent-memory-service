@@ -114,8 +114,10 @@ audience before it walks; each hop's limit is spent only on new, visible edges.
 
 Two clocks: `as_of` asks what was *true* at an instant (valid time — a superseded fact that
 held then comes back), `valid_at` what had been *asserted* by then and not yet invalidated
-(knowledge time). `layers` restricts the walk to `entity`, `temporal`, `causal` and/or
-`structural` relations.
+(knowledge time). `layers` restricts the walk to `entity`, `temporal`, `causal`,
+`structural` and/or `procedural` relations (the last written from recorded tool calls: a call
+`used_entity` what its typed argument named, and that entity is `identified_by` the id a tool
+returned for it — see [tools.md](tools.md)).
 
 ```python
 [acme] = await ctx.advanced.graph.entities("acme", entity_type="ORG", limit=1)

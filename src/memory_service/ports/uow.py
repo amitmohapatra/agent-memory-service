@@ -26,7 +26,6 @@ from memory_service.ports.repositories import (
     RevisionRepository,
     SessionRepository,
     ThreadRepository,
-    ToolRepository,
     TurnRepository,
 )
 from memory_service.ports.tasks import JobSpec
@@ -37,6 +36,7 @@ from memory_service.ports.tenancy import (
     TenantRepository,
     WorkspaceRepository,
 )
+from memory_service.ports.tools import ProcedureRepository, ToolRepository
 from memory_service.ports.webhooks import WebhookDeliveryRepository, WebhookRepository
 
 
@@ -59,6 +59,7 @@ class UnitOfWork(Protocol):
     documents: DocumentRepository
     memories: MemoryRepository
     tools: ToolRepository
+    procedures: ProcedureRepository
     tenants: TenantRepository
     api_keys: ApiKeyRepository
     workspaces: WorkspaceRepository

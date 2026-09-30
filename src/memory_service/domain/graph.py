@@ -6,6 +6,7 @@ Every relation belongs to exactly one layer, assigned deterministically from its
 - ``temporal``   — when a fact held or which fact replaced which (closed_on, founded_in,
                    supersedes, invalidated_by, ...)
 - ``structural`` — where a thing appears in the corpus (mentions, co_occurs_with, defined_in)
+- ``procedural`` — what tool calls did with entities (used_entity, identified_by)
 - ``entity``     — everything else: typed facts between entities and values
 
 The retrieval stage walks the layers in a query-dependent order ("why" questions read the
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 from typing import Literal, get_args
 
-GraphLayer = Literal["entity", "temporal", "causal", "structural"]
+GraphLayer = Literal["entity", "temporal", "causal", "structural", "procedural"]
 LAYERS: tuple[GraphLayer, ...] = get_args(GraphLayer)
 
 #: CURRENT holds now; SUPERSEDED stopped holding (a newer fact replaced it); RETRACTED was
@@ -86,6 +87,14 @@ _STRUCTURAL = frozenset(
     ]
 )
 
+#: Written by tool recording: a call used an entity (tool -> entity), and an entity is
+#: identified by an id a tool returned for it (entity -> identifier).
+USED_ENTITY = "used_entity"
+IDENTIFIED_BY = "identified_by"
+_PROCEDURAL = frozenset([USED_ENTITY, IDENTIFIED_BY])
+#: Layers retrieval ranks after the typed facts: where things appear, what tools touched.
+BOOKKEEPING_LAYERS: frozenset[GraphLayer] = frozenset({"structural", "procedural"})
+
 
 def layer_for(predicate: str) -> GraphLayer:
     p = predicate.strip().casefold()
@@ -95,4 +104,6 @@ def layer_for(predicate: str) -> GraphLayer:
         return "temporal"
     if p in _STRUCTURAL:
         return "structural"
+    if p in _PROCEDURAL:
+        return "procedural"
     return "entity"

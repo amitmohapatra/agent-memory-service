@@ -26,7 +26,7 @@ from memory_service.api.validation import (
 )
 from memory_service.domain import enums
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
-from memory_service.domain.tools import ToolStatus
+from memory_service.domain.tools import SideEffects, ToolStatus
 from memory_service.modules.grounding import cascade
 from trellis.memory import models as sdk
 
@@ -61,18 +61,22 @@ def test_recall_kinds_must_name_at_least_one_kind(client: TestClient) -> None:
     assert "body.kinds" in _locs(r)
 
 
-def test_tool_record_rejects_unknown_visibility_status_and_source(client: TestClient) -> None:
+def test_tool_record_rejects_unknown_visibility_and_status(client: TestClient) -> None:
     base = {"scope": SCOPE, "tool": "t", "args": {}}
     r = client.post("/v1/tools/invocations", headers=HEADERS, json={**base, "visibility": "NOPE"})
     assert _locs(r) == {"body.visibility"}
     r = client.post("/v1/tools/invocations", headers=HEADERS, json={**base, "status": "meh"})
     assert _locs(r) == {"body.status"}
-    r = client.post(
-        "/v1/tools/plan",
-        headers=HEADERS,
-        json={"scope": SCOPE, "task": "t", "available_tools": [{"name": "x", "source": "zzz"}]},
-    )
-    assert _locs(r) == {"body.available_tools.0.source"}
+
+
+def test_a_catalog_entry_s_side_effects_are_the_closed_set(client: TestClient) -> None:
+    entry = {"name": "erp-create_po", "side_effects": "unknown"}
+    r = client.put("/v1/tools/catalog", headers=HEADERS, json={"tools": [entry]})
+    assert _locs(r) == {"body.tools.0.side_effects"}
+    r = client.put("/v1/tools/catalog", headers=HEADERS, json={"tools": []})
+    assert _locs(r) == {"body.tools"}
+    r = client.post("/v1/tools/hints", headers=HEADERS, json={"task": "t", "k": 0})
+    assert _locs(r) == {"body.k"}
 
 
 def test_tool_record_sub_calls_are_typed_and_bounded(client: TestClient) -> None:
@@ -206,12 +210,10 @@ def test_tool_payloads_are_bounded_by_serialised_size(client: TestClient) -> Non
         "/v1/tools/invocations", headers=HEADERS, json={**base, "output": "x" * (256 * 1024 + 1)}
     )
     assert _locs(r) == {"body.output"}
-    r = client.post(
-        "/v1/tools/plan",
-        headers=HEADERS,
-        json={"scope": SCOPE, "task": "t", "available_tools": [{"name": "x", "schema": big}]},
+    r = client.put(
+        "/v1/tools/catalog", headers=HEADERS, json={"tools": [{"name": "x", "input_schema": big}]}
     )
-    assert _locs(r) == {"body.available_tools.0.schema"}
+    assert _locs(r) == {"body.tools.0.input_schema"}
 
 
 def test_custom_metadata_is_bounded_everywhere_it_appears(client: TestClient) -> None:
@@ -294,6 +296,7 @@ def test_sdk_literals_match_the_service_enums(sdk_literal: Any, service: Any) ->
         (sdk.ClaimVerdictValue, ClaimVerdict),
         (sdk.GroundingMethod, GroundingMethod),
         (sdk.ToolStatus, ToolStatus),
+        (sdk.SideEffects, SideEffects),
     ],
 )
 def test_sdk_literals_match_the_service_literals(sdk_literal: Any, service: Any) -> None:

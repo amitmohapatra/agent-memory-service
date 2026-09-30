@@ -11,7 +11,7 @@ them is written. Until now the SDK was `universal_memory` (distribution
 bespoke `{"error": {...}}` envelope, the trace id was whatever `X-Trace-ID` said or else the
 request id, operation ids were path-derived (`create_tenant_v1_admin_tenants_post`) and two
 nouns were wrong: `POST /v1/files` next to `GET /v1/documents/{id}`, and
-`POST /v1/tools/record` for a resource every other route calls an invocation. The only
+`POST /v1/tools/record` (removed since) for a resource every other route calls an invocation. The only
 consumers are the owner's own repositories.
 
 ## Decision
@@ -70,7 +70,7 @@ consumers are the owner's own repositories.
   route to a tag. They are stable across path edits and readable in generated clients; the
   form-body schema a dotted id would misname is renamed to `Body_<tag>_<function>`.
 - **Nouns.** `POST /v1/documents` and `POST /v1/tools/invocations` are canonical.
-  `POST /v1/files` and `POST /v1/tools/record` are the same handlers, marked deprecated in
+  `POST /v1/files` and `POST /v1/tools/record` (the latter removed since) are the same handlers, marked deprecated in
   OpenAPI, answered with `Deprecation` (RFC 9745) and `Link: rel="successor-version"`
   headers, and removed in 0.3.0. SDK: `ctx.documents` (`DocumentsAPI`), with `ctx.files` and
   `FilesAPI` kept as aliases for one release; `ctx.tools.record(...)` keeps its name, because
@@ -92,7 +92,7 @@ which a 0.1 service does not serve.
 
 ## Deprecation window
 Removed in 0.3.0: the `X-Memory-*` request headers, the `X-Memory-LLM-Tokens` response
-header, `ScopeBody.trace_id`, `POST /v1/files`, `POST /v1/tools/record`,
+header, `ScopeBody.trace_id`, `POST /v1/files`, `POST /v1/tools/record` (removed early, in the overhaul),
 `MemoryContext.files` (which warns), `FilesAPI`, and the SDK's reading of the nested `error`
 envelope.
 

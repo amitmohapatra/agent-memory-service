@@ -6,15 +6,17 @@ from __future__ import annotations
 
 from memory_service.application.container import Container
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
+from memory_service.modules.tools.index import TOOLS
 
 
 async def reset_real_backends(container: Container) -> None:
     stand_ins = container.overrides
     if stand_ins.search is None and stand_ins.search_local_path is None:
         indexer = container.services["indexer"]
-        for base in (KNOWLEDGE, MEMORIES):
+        for base in (KNOWLEDGE, MEMORIES, TOOLS):
             await container.search.drop_collection(indexer.collection(base))
         await indexer.ensure_collections()
+        container.services["tool_index"].forget_collections()
     if container.cache is not None and stand_ins.cache is None:
         keys = [key async for key in container.cache.scan("*")]
         if keys:

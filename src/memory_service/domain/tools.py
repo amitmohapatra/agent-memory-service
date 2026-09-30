@@ -1,14 +1,10 @@
 """Tool memory contracts (TOOL_MEMORY.md §30.0-§30.1).
 
-The service never executes a tool. It keeps a *descriptor* per tool so it can record,
-cache and reason about calls, one :class:`ToolInvocation` per call, and a
-:class:`RunOutcome` per agent run. Everything derived from these — chains, procedures,
-suggestions — is rebuilt from the invocation records, so the records are the only thing
-that must be durable and exactly-once.
-
-Policy defaults are deliberately conservative: an unregistered or per-call-declared tool is
-non-deterministic, not cacheable and of unknown side effects, so nothing is ever replayed
-from cache until an explicit registration widens the policy.
+The service never executes a tool. The catalog keeps a :class:`ToolDescriptor` per tool
+(what it is, which arguments name which kinds of entity, and what calling it does), one
+:class:`ToolInvocation` per recorded call, and a :class:`RunOutcome` per agent run.
+Everything derived from these — statistics, procedures, hints — is rebuilt from the records,
+so the records are the only thing that must be durable and exactly-once.
 """
 
 from __future__ import annotations
@@ -16,16 +12,18 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memory_service.domain.ids import new_id
 
-ToolSource = Literal["bifrost-mcp", "langgraph", "adk", "crewai", "mcp", "manual"]
 ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
-SideEffects = Literal["none", "read", "write", "external", "unknown"]
-CacheScope = Literal["run", "thread", "user", "tenant"]
+#: What calling a tool does: ``read`` changes nothing, ``write`` changes something that can
+#: be changed back, ``irreversible`` cannot be undone (a payment, an email sent).
+SideEffects = Literal["read", "write", "irreversible"]
+#: Where a tool comes from (mcp, local, openapi, a2a, ...): descriptive, not a closed set.
+SOURCE_MAX_CHARS: Final = 50
 
 
 def stable_hash(value: Any) -> str:
@@ -34,31 +32,9 @@ def stable_hash(value: Any) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-class ToolPolicy(BaseModel):
-    """How the service may treat a tool. Widened only by an explicit registration."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    deterministic: bool = False
-    side_effects: SideEffects = "unknown"
-    cacheable: bool = False
-    cache_ttl_seconds: int = Field(default=300, ge=0)
-    cache_scope: CacheScope = "run"
-    cost_hint: float | None = Field(default=None, ge=0.0)
-    redact: list[str] = Field(
-        default_factory=list,
-        description="Dotted argument paths whose values never reach storage (e.g. 'auth.token').",
-    )
-
-    @property
-    def replayable(self) -> bool:
-        """A cached result may be served only for a deterministic, cacheable, side-effect-free
-        tool: replaying anything else would hide a real call the agent must make."""
-        return self.deterministic and self.cacheable and self.side_effects in ("none", "read")
-
-
 class ToolDescriptor(BaseModel):
-    """A tool the service knows about. Identity is (tenant, name, schema_hash)."""
+    """One catalog entry. Identity is (tenant, workspace, name); a changed input schema is a
+    new ``version`` of the same entry."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,11 +45,19 @@ class ToolDescriptor(BaseModel):
     version: int = Field(default=1, ge=1)
     description: str = ""
     input_schema: dict[str, Any] | None = None
-    output_schema: dict[str, Any] | None = None
-    tags: list[str] = Field(default_factory=list)
-    source: ToolSource = "manual"
+    required: list[str] = Field(default_factory=list)
+    argument_entity_types: dict[str, str] = Field(
+        default_factory=dict,
+        description="argument name -> the entity type its value names (e.g. supplier: ORG)",
+    )
+    side_effects: SideEffects | None = None
+    source: str = Field(default="manual", max_length=SOURCE_MAX_CHARS)
     server: str | None = Field(default=None, description="MCP server name for gateway tools.")
-    policy: ToolPolicy = ToolPolicy()
+    examples: list[dict[str, Any]] = Field(default_factory=list)
+    redact: list[str] = Field(
+        default_factory=list,
+        description="Dotted argument paths whose values never reach storage (e.g. 'auth.token').",
+    )
     schema_hash: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -84,17 +68,37 @@ class ToolDescriptor(BaseModel):
         return value.strip()
 
     def with_schema_hash(self) -> ToolDescriptor:
-        digest = stable_hash(
-            {"input": self.input_schema, "output": self.output_schema, "name": self.name}
+        return self.model_copy(
+            update={"schema_hash": stable_hash({"input": self.input_schema, "name": self.name})}
         )
-        return self.model_copy(update={"schema_hash": digest})
+
+    def catalog_fields(self) -> dict[str, Any]:
+        """What an upsert compares: an entry whose fields are unchanged is left as it is."""
+        return self.model_dump(
+            include={
+                "description",
+                "input_schema",
+                "required",
+                "argument_entity_types",
+                "side_effects",
+                "source",
+                "server",
+                "examples",
+                "redact",
+            }
+        )
+
+    def index_text(self) -> str:
+        """What the tool is searched by: its name, description and argument names."""
+        fields = sorted(((self.input_schema or {}).get("properties") or {}).keys())
+        return " ".join(filter(None, (self.name, self.description, " ".join(fields))))
 
     def redacted_args(self, args: dict[str, Any]) -> dict[str, Any]:
         """Drop every configured path before the arguments are persisted or hashed for storage."""
-        if not self.policy.redact:
+        if not self.redact:
             return args
         out = json.loads(json.dumps(args, default=str))
-        for path in self.policy.redact:
+        for path in self.redact:
             node: Any = out
             parts = path.split(".")
             for part in parts[:-1]:
@@ -184,24 +188,133 @@ class RunOutcome(BaseModel):
     run_id: str
     success: bool
     note: str | None = None
-    #: explicit: the run said so; feedback: a verdict on the run or an answer implied it
+    #: explicit: the run said so; feedback: a verdict on the run, an answer or a tool call
     source: Literal["explicit", "feedback"] = "explicit"
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
-class ToolOutcomeStats(BaseModel):
-    """Aggregated behaviour of one tool, reported by ``GET /v1/tools``."""
+class ToolStats(BaseModel):
+    """What the service has seen one tool do, kept per call and per feedback (O(1) each)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     tool_name: str
-    invocations: int = 0
+    calls: int = 0
     successes: int = 0
-    failures: int = 0
-    median_latency_ms: float | None = None
-    total_cost: float = 0.0
+    latency_ms_total: float = 0.0
+    latency_calls: int = 0
+    approvals: int = 0
+    rejections: int = 0
+    edits: int = 0
     last_used_at: datetime | None = None
 
     @property
-    def success_rate(self) -> float:
-        return self.successes / self.invocations if self.invocations else 0.0
+    def failures(self) -> int:
+        return self.calls - self.successes
+
+    @property
+    def success_rate(self) -> float | None:
+        return self.successes / self.calls if self.calls else None
+
+    @property
+    def avg_latency_ms(self) -> float | None:
+        return self.latency_ms_total / self.latency_calls if self.latency_calls else None
+
+
+#: candidate: not enough support yet; active: offered; retired: stopped working or aged
+#: out; rejected: a reviewer rejected it (kept until its steps change)
+ProcedureStatus = Literal["candidate", "active", "retired", "rejected"]
+
+
+class StoredProcedure(BaseModel):
+    """A procedure the learning job keeps for one task pattern and one audience.
+
+    ``scope_key`` is the audience of the records it was mined from (their first visibility
+    key), so it is read by exactly those who could read the records. Only an ``active``
+    procedure is offered; it is admitted when enough runs support it and enough of them
+    succeeded, retired when it stops working, and rejected by a reviewer's verdict."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    procedure_id: str = Field(default_factory=lambda: new_id("procedure"))
+    tenant_id: str
+    scope_key: str
+    pattern: str
+    title: str = ""
+    strategy: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    bindings: list[dict[str, Any]] = Field(default_factory=list)
+    success_rate: float = 0.0
+    support: int = 0
+    status: ProcedureStatus = "candidate"
+    #: the fingerprint of the steps; the title and strategy were distilled from ``distilled``
+    steps_hash: str = ""
+    distilled: str = ""
+    #: whose model key distils it: the principal that recorded the calls
+    owner_principal: str | None = None
+    workspace_id: str | None = None
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def tools(self) -> list[str]:
+        return [str(step.get("tool")) for step in self.steps]
+
+
+class ToolCandidate(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    score: float
+    success_rate: float | None = None
+    why: str = ""
+
+
+class PlanHint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    procedure_id: str
+    title: str = ""
+    steps: list[dict[str, Any]] = Field(default_factory=list)
+    success_rate: float = 0.0
+    support: int = 0
+
+
+PrefillSource = Literal["procedure", "graph", "profile", "memory", "task"]
+
+
+class Prefill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    tool: str
+    value: Any = None
+    source: PrefillSource = Field(
+        description="where the value came from: procedure (a learned binding: an earlier "
+        "step's output in this run, or the literal every successful run used), graph (an "
+        "entity of the argument's type named in the task, or the id a tool returned for it), "
+        "profile (a pinned profile line), memory (a memory whose predicate is the argument), "
+        "task (a value the task names)"
+    )
+    evidence_id: str | None = Field(
+        default=None, description="the call, entity, relation, block or memory it came from"
+    )
+
+
+class MissingArgument(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    tool: str
+    arg: str
+    entity_type: str | None = None
+    question: str
+
+
+class ToolHints(BaseModel):
+    """Which tools fit a task, the learned plan, the next step and its arguments."""
+
+    model_config = ConfigDict(frozen=True)
+
+    candidates: list[ToolCandidate] = Field(default_factory=list)
+    plan: PlanHint | None = None
+    next: str | None = None
+    prefill: dict[str, Prefill] = Field(default_factory=dict)
+    missing: list[MissingArgument] = Field(default_factory=list)

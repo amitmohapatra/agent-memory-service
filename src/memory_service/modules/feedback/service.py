@@ -7,7 +7,10 @@ the record, so a verdict is never lost and never slows the request that carried 
   memory that supersedes the old one;
 - answer: the memories the answer cited (its evidence references) gain or lose confidence,
   and the run that answered is labelled unless it already carries an explicit label;
-- run: the verdict is the run's explicit outcome.
+- run: the verdict is the run's explicit outcome;
+- tool call: counted on the tool's statistics and on its approval pattern (a rejection also
+  labels the run unless it carries an explicit outcome);
+- procedure: a rejection takes it out of what is offered.
 
 Every projection that touches a memory re-indexes it (the index carries the confidence and
 reinforcement retrieval ranks by) and bumps its revisions, so a cached bundle that showed the
@@ -26,6 +29,7 @@ from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.feedback import (
     AFFIRMING_VERDICTS,
+    APPROVAL_COUNTER,
     CORRECTING_VERDICTS,
     Feedback,
     FeedbackProjection,
@@ -37,8 +41,10 @@ from memory_service.domain.learning import (
     ANSWER_CONFIDENCE_STEP,
     ANSWER_MEMORIES_MAX,
     CONFIDENCE_FLOOR,
+    arg_shape,
 )
 from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import RunOutcome
 from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.service import AuthorizationService
@@ -282,6 +288,8 @@ class FeedbackService:
             FeedbackTargetKind.MEMORY: self._project_memory,
             FeedbackTargetKind.ANSWER: self._project_answer,
             FeedbackTargetKind.RUN: self._project_run,
+            FeedbackTargetKind.TOOL_CALL: self._project_tool_call,
+            FeedbackTargetKind.PROCEDURE: self._project_procedure,
         }.get(record.target_kind)
         if handler is None:
             return FeedbackProjection(
@@ -359,6 +367,61 @@ class FeedbackService:
         return FeedbackProjection(
             action=ProjectionAction.RUN_LABELLED, run_id=run_id, projected_at=now
         )
+
+    async def _project_tool_call(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """Approve, reject or edit of a tool call: counted on the tool and on the approval
+        pattern of (agent, tool, argument shape). The tool is ``metadata.tool`` and its
+        arguments ``metadata.args`` (the edit's replacement arguments when absent). A
+        rejection also labels the run as not successful, unless it carries an explicit
+        outcome."""
+        tool = str(record.metadata.get("tool") or "").strip()
+        if not tool:
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="the verdict names no tool (metadata.tool)",
+                projected_at=now,
+            )
+        counter = APPROVAL_COUNTER[record.verdict]
+        args = record.metadata.get("args")
+        if not isinstance(args, dict) and isinstance(record.correction, dict):
+            args = record.correction
+        await uow.tools.count_verdict(record.tenant_id, tool, counter)
+        await uow.tools.count_approval(
+            record.tenant_id,
+            record.agent_id or "",
+            tool,
+            arg_shape(args if isinstance(args, dict) else None),
+            counter,
+        )
+        run_id = (
+            await self._label_run(
+                uow, record, record.agent_run_id, success=False, source="feedback", now=now
+            )
+            if record.verdict is FeedbackVerdict.REJECT
+            else None
+        )
+        return FeedbackProjection(
+            action=ProjectionAction.TOOL_CALL_COUNTED, run_id=run_id, projected_at=now
+        )
+
+    async def _project_procedure(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """A rejected procedure is no longer offered (until its steps change)."""
+        if record.verdict is not FeedbackVerdict.REJECT:
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason=f"a {record.verdict.value} of a procedure is recorded",
+                projected_at=now,
+            )
+        if not await uow.procedures.reject(record.tenant_id, record.target_id):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE, reason="no such procedure", projected_at=now
+            )
+        await uow.revisions.bump(record.tenant_id, RevisionKind.TENANT, "")
+        return FeedbackProjection(action=ProjectionAction.PROCEDURE_REJECTED, projected_at=now)
 
     async def _adjust_cited(
         self, uow: UnitOfWork, record: Feedback, *, affirmed: bool, now: datetime

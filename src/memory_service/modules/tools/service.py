@@ -1,142 +1,115 @@
-"""Tool memory service (TOOL_MEMORY.md §30.0-§30.6).
+"""Tool memory service (TOOL_MEMORY.md): the catalog, call records and run outcomes.
 
-The service registers tools, records what agents did with them, serves a cached output when
-(and only when) the tool's policy allows it, mines chains and procedures from the records,
-and answers three questions an agent asks mid-task:
+The service never runs a tool. The catalog says what each tool is and does (side effects,
+the entity types its arguments name); ``record`` stores what an agent called and counts it;
+``set_outcome`` labels a run and queues its calls to be learned again. Everything learned from
+the records - procedures, graph edges - is the learning job's (``modules.tools.learning``);
+the advice read back is ``modules.tools.hints``.
 
-    suggest(task)                        which tool, for this kind of task?
-    next(task, trajectory_so_far)        given what I have already called, what now?
-    plan(task)                           the whole validated chain, up front.
-
-Three rules hold everywhere and are enforced here rather than at the edges: nothing is ever
-suggested that the caller did not declare as available; nothing is read that the caller's
-visibility keys do not cover; and a policy is only ever widened by an explicit admin-scope
-registration, never by a per-call declaration.
+Nothing is read that the caller's visibility keys do not cover, and a call record carries the
+same audience keys a memory written by the same caller would.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Sequence
-from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import Visibility
+from memory_service.domain.enums import Lifetime, MemoryType, Visibility
+from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import (
     RunOutcome,
     SubCall,
     ToolDescriptor,
     ToolInvocation,
-    ToolPolicy,
+    ToolStats,
+    ToolStatus,
     stable_hash,
 )
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.memory.pipeline import keys_for, scope_for
 from memory_service.modules.tenancy.gate import guard_workspace_visibility
-from memory_service.modules.tools.patterns import best_match, task_pattern
-from memory_service.modules.tools.procedures import (
-    Procedure,
-    decayed,
-    mine_procedure,
-    validate_against_registry,
-)
-from memory_service.modules.tools.trajectories import build_trajectory, flatten
+from memory_service.modules.tools.patterns import task_pattern
+from memory_service.modules.tools.trajectories import flatten
 from memory_service.observability.logging import get_logger
-from memory_service.ports.uow import UnitOfWorkFactory
+from memory_service.ports.intelligence import MemoryCandidate
+from memory_service.ports.tasks import JobSpec, Queue
+from memory_service.ports.uow import UnitOfWork
 
 log = get_logger(__name__)
 
-INLINE_OUTPUT_LIMIT = 4096
-SUMMARY_CHARS = 600
-MAX_TRAJECTORY_RUNS = 60
+TASK_TOOLS_INDEX: Final = "tools.index"
+TASK_TOOLS_LEARN: Final = "tools.learn"
+INLINE_OUTPUT_LIMIT: Final = 4096
+SUMMARY_CHARS: Final = 600
+#: Entries one catalog listing or upsert handles.
+CATALOG_MAX: Final = 500
 
 
 class ToolMemoryService:
     def __init__(
         self,
-        uow_factory: UnitOfWorkFactory,
         authz: AuthorizationService,
         *,
         blob: Any = None,
         blob_bucket: str = "memory-tool-outputs",
-        indexer: Any = None,
-        weak_positive_after_hours: float = 24.0,
     ) -> None:
-        self.uow_factory = uow_factory
         self.authz = authz
         self.blob = blob
         self.blob_bucket = blob_bucket
-        self.indexer = indexer
-        self.weak_positive_after_hours = weak_positive_after_hours
 
-    # ------------------------------------------------------------------ registry
-    async def register(
-        self,
-        uow: Any,
-        ctx: MemoryExecutionContext,
-        descriptor: ToolDescriptor,
-        *,
-        widen_policy: bool | None = None,
-    ) -> ToolDescriptor:
-        """Register or upsert a descriptor. Widening a policy needs tenant admin; without it the
-        stored policy is preserved and the caller's policy is ignored (never rejected, so an
-        adapter can keep declaring what it knows without needing admin rights)."""
-        if widen_policy is None:
-            widen_policy = await self.authz.is_tenant_admin(ctx)
-        desc = descriptor.model_copy(
-            update={"tenant_id": ctx.tenant_id, "workspace_id": descriptor.workspace_id}
-        ).with_schema_hash()
-        stored = await uow.tools.register(desc, widen_policy=bool(widen_policy))
-        log.info(
-            "tools.registered",
-            tool=stored.name,
-            version=stored.version,
-            source=stored.source,
-            widened=bool(widen_policy),
-            **ctx.log_fields(),
-        )
+    # ------------------------------------------------------------------ catalog
+    async def put_catalog(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, entries: Sequence[ToolDescriptor]
+    ) -> list[ToolDescriptor]:
+        """Upsert entries in the caller's workspace (or tenant-wide without one). Changed
+        entries are re-indexed for tool search, and bundles that carried tool hints go stale."""
+        stored: list[ToolDescriptor] = []
+        changed: list[str] = []
+        for entry in entries:
+            scoped = entry.model_copy(
+                update={"tenant_id": ctx.tenant_id, "workspace_id": ctx.workspace_id}
+            )
+            saved, was_changed = await uow.tools.upsert(scoped)
+            stored.append(saved)
+            if was_changed:
+                changed.append(saved.tool_id)
+        if changed:
+            await uow.enqueue(
+                JobSpec(
+                    task_name=TASK_TOOLS_INDEX,
+                    queue=Queue.EMBEDDING,
+                    payload={"tenant_id": ctx.tenant_id, "tool_ids": changed},
+                    tenant_id=ctx.tenant_id,
+                )
+            )
+            await uow.revisions.bump(ctx.tenant_id, RevisionKind.TENANT, "")
+        log.info("tools.catalog", upserted=len(stored), changed=len(changed), **ctx.log_fields())
         return stored
 
-    async def declare(
-        self, uow: Any, ctx: MemoryExecutionContext, declared: Sequence[dict[str, Any]]
-    ) -> dict[str, ToolDescriptor]:
-        """Upsert the tools a caller declares for this request. Conservative by construction:
-        a declared tool that is not already registered gets the default policy, which is
-        non-deterministic, non-cacheable and of unknown side effects."""
-        out: dict[str, ToolDescriptor] = {}
-        for item in declared:
-            name = str(item.get("name", "")).strip()
-            if not name:
-                continue
-            existing = await uow.tools.by_name(ctx.tenant_id, name)
-            if existing is not None:
-                out[name] = existing
-                continue
-            descriptor = ToolDescriptor(
-                tenant_id=ctx.tenant_id,
-                name=name,
-                description=str(item.get("description", "")),
-                input_schema=item.get("schema") or item.get("input_schema"),
-                output_schema=item.get("output_schema"),
-                tags=list(item.get("tags") or []),
-                source=item.get("source", "manual"),
-                server=item.get("server"),
-                policy=ToolPolicy(),
-            )
-            out[name] = await self.register(uow, ctx, descriptor, widen_policy=False)
-        return out
+    async def catalog(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, names: Sequence[str] | None
+    ) -> list[tuple[ToolDescriptor, ToolStats]]:
+        entries = await uow.tools.catalog(
+            ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=CATALOG_MAX
+        )
+        stats = await uow.tools.stats(ctx.tenant_id, [e.name for e in entries])
+        return [(e, stats.get(e.name) or ToolStats(tool_name=e.name)) for e in entries]
 
     # ------------------------------------------------------------------ recording
     async def record(
         self,
-        uow: Any,
+        uow: UnitOfWork,
         ctx: MemoryExecutionContext,
         *,
         tool: str,
         args: dict[str, Any],
         output: Any = None,
         output_summary: str | None = None,
-        status: str = "ok",
+        status: ToolStatus = "ok",
         error_class: str | None = None,
         latency_ms: float | None = None,
         cost: float | None = None,
@@ -144,28 +117,14 @@ class ToolMemoryService:
         step: int | None = None,
         sub_calls: Sequence[dict[str, Any]] | None = None,
         visibility: Visibility = Visibility.PRIVATE,
-    ) -> ToolInvocation:
-        """Persist one call. Idempotent on (run, step, tool, args_hash): a replayed graph step
-        re-reads its row instead of inflating the statistics."""
+    ) -> tuple[ToolInvocation, bool]:
+        """Persist one call and count it. Idempotent on (run, step, tool, args_hash): a
+        replayed graph step re-reads its row instead of inflating the statistics."""
         await guard_workspace_visibility(uow, self.authz, ctx, visibility)
-        descriptor = await uow.tools.by_name(ctx.tenant_id, tool)
-        if descriptor is None:
-            descriptor = await self.register(
-                uow,
-                ctx,
-                ToolDescriptor(tenant_id=ctx.tenant_id, name=tool, policy=ToolPolicy()),
-                widen_policy=False,
-            )
-        # The *full* arguments, redacted ones included. Only the redacted copy is ever
-        # persisted, but the hash has to distinguish calls that differ solely in a redacted
-        # field — two callers with different credentials legitimately get different results.
-        # The hash is one-way, so the secret is not recoverable from it.
-        digest = stable_hash(args)
-        fields = flatten(output) if output is not None else {}
-        summary, blob_ref, output_digest = await self._store_output(
-            ctx, descriptor, output, output_summary
-        )
-        resolved_step = step if step is not None else await self._next_step(uow, ctx)
+        descriptor = await uow.tools.by_name(
+            ctx.tenant_id, tool, workspace_id=ctx.workspace_id
+        ) or await uow.tools.ensure(ctx.tenant_id, tool)
+        summary, blob_ref, output_digest = await self._store_output(ctx, output, output_summary)
         invocation = ToolInvocation(
             tenant_id=ctx.tenant_id,
             tool_id=descriptor.tool_id,
@@ -178,37 +137,43 @@ class ToolMemoryService:
             user_id=ctx.user_id,
             agent_id=ctx.agent_id,
             principal_id=ctx.principal_id,
-            step=resolved_step,
+            step=step if step is not None else await self._next_step(uow, ctx),
             args_redacted=descriptor.redacted_args(args),
-            args_hash=digest,
+            # The *full* arguments: only the redacted copy is persisted, but the hash has to
+            # tell apart calls that differ solely in a redacted field. It is one-way.
+            args_hash=stable_hash(args),
             output_summary=summary,
             output_digest=output_digest,
             output_blob_ref=blob_ref,
-            output_fields=fields,
-            status=status,  # type: ignore[arg-type]
+            output_fields=flatten(output) if output is not None else {},
+            status=status,
             error_class=error_class,
             latency_ms=latency_ms,
             cost=cost,
             task=task,
             task_pattern=task_pattern(task) if task else None,
             sub_calls=[SubCall.model_validate(c) for c in (sub_calls or [])],
-            visibility_keys=self._visibility_keys(ctx, visibility),
+            visibility_keys=_visibility_keys(ctx, visibility),
         )
-        stored = await uow.tools.record(invocation)
-        return stored
+        stored, created = await uow.tools.record(invocation)
+        if created:
+            await uow.tools.count_call(
+                ctx.tenant_id,
+                stored.tool_name,
+                ok=stored.succeeded,
+                latency_ms=stored.latency_ms,
+                at=stored.occurred_at,
+            )
+        return stored, created
 
-    async def _next_step(self, uow: Any, ctx: MemoryExecutionContext) -> int:
+    async def _next_step(self, uow: UnitOfWork, ctx: MemoryExecutionContext) -> int:
         if not ctx.agent_run_id:
             return 0
         existing = await uow.tools.invocations_for_run(ctx.tenant_id, ctx.agent_run_id)
         return max((i.step for i in existing), default=-1) + 1
 
     async def _store_output(
-        self,
-        ctx: MemoryExecutionContext,
-        descriptor: ToolDescriptor,
-        output: Any,
-        provided_summary: str | None,
+        self, ctx: MemoryExecutionContext, output: Any, provided_summary: str | None
     ) -> tuple[str, str | None, str | None]:
         if output is None:
             return (provided_summary or "", None, None)
@@ -227,134 +192,43 @@ class ToolMemoryService:
                 log.warning("tools.output_archive_failed", error=type(exc).__name__)
         return (summary, blob_ref, digest)
 
-    def _visibility_keys(self, ctx: MemoryExecutionContext, visibility: Visibility) -> list[str]:
-        """Tool records are audienced exactly like memories: the same anchor rules and the same
-        audience keys, so an agent's tool chatter reaches a user or a group only when it was
-        explicitly shared, and a hand-off is visible to the child run and no further.
-
-        The default is PRIVATE rather than RUN, because a procedure is mined from trajectories
-        across MANY runs - and RUN is now a run-tree audience, so a record written in one run
-        is invisible to the next. It used to work only because RUN carried the author's
-        principal key, which made it an identity audience wearing a run's name. PRIVATE is
-        that audience, honestly: the agent's own durable store, readable by no one else."""
-        from memory_service.domain.enums import Lifetime, MemoryType
-        from memory_service.modules.memory.pipeline import keys_for, scope_for
-        from memory_service.ports.intelligence import MemoryCandidate
-
-        anchor = MemoryCandidate(
-            content="",
-            memory_type=MemoryType.TOOL,
-            lifetime=Lifetime.SHORT_TERM,
-            visibility=visibility,
-        )
-        return keys_for(scope_for(anchor, ctx), visibility, ctx)
-
     # ------------------------------------------------------------------ outcomes
     async def set_outcome(
         self,
-        uow: Any,
+        uow: UnitOfWork,
         ctx: MemoryExecutionContext,
         *,
         run_id: str,
         success: bool,
         note: str | None = None,
-        source: str = "explicit",
     ) -> RunOutcome:
-        outcome = RunOutcome(
-            tenant_id=ctx.tenant_id,
-            run_id=run_id,
-            success=success,
-            note=note,
-            source=source,  # type: ignore[arg-type]
-        )
+        """Label a run (the last word wins) and queue its calls to be learned again: a label
+        is what turns a trajectory into evidence for a procedure."""
+        outcome = RunOutcome(tenant_id=ctx.tenant_id, run_id=run_id, success=success, note=note)
         await uow.tools.set_outcome(outcome)
+        await uow.enqueue(
+            JobSpec(
+                task_name=TASK_TOOLS_LEARN,
+                queue=Queue.RECONCILE,
+                payload={"tenant_id": ctx.tenant_id},
+                tenant_id=ctx.tenant_id,
+            )
+        )
         return outcome
 
-    async def _outcome_for(self, uow: Any, tenant_id: str, run_id: str) -> bool:
-        """A run counts as successful when it was labelled so, or — as a weak positive — when it
-        is older than the window, had no failing call, and nobody corrected it."""
-        recorded = await uow.tools.outcome(tenant_id, run_id)
-        if recorded is not None:
-            return recorded.success
-        invocations = await uow.tools.invocations_for_run(tenant_id, run_id)
-        if not invocations:
-            return False
-        if any(not i.succeeded for i in invocations):
-            return False
-        newest = max(i.occurred_at for i in invocations)
-        if newest.tzinfo is None:
-            newest = newest.replace(tzinfo=UTC)
-        age_hours = (datetime.now(UTC) - newest).total_seconds() / 3600.0
-        return age_hours >= self.weak_positive_after_hours
 
-    # ------------------------------------------------------------------ learning
-    async def procedures(
-        self, uow: Any, ctx: MemoryExecutionContext, *, task: str, scope_keys: Sequence[str]
-    ) -> list[Procedure]:
-        """Mine the procedure(s) for the pattern of ``task`` from the records this caller may
-        see. Cheap enough to run per request; the periodic job persists the result."""
-        pattern = task_pattern(task)
-        if not pattern:
-            return []
-        records = await uow.tools.recent(
-            ctx.tenant_id, scope_keys=list(scope_keys), limit=MAX_TRAJECTORY_RUNS * 8
-        )
-        patterns = sorted({r.task_pattern for r in records if r.task_pattern})
-        matched = best_match(pattern, patterns) or pattern
-        relevant = [r for r in records if r.task_pattern == matched and r.run_id]
-        by_run: dict[str, list[ToolInvocation]] = {}
-        for record in relevant:
-            by_run.setdefault(str(record.run_id), []).append(record)
-        trajectories = []
-        for run_id, invocations in list(by_run.items())[:MAX_TRAJECTORY_RUNS]:
-            succeeded = await self._outcome_for(uow, ctx.tenant_id, run_id)
-            trajectories.append(build_trajectory(run_id, invocations, succeeded=succeeded))
-        procedure = mine_procedure(matched, trajectories)
-        if procedure is None or decayed(procedure):
-            return []
-        return [procedure]
-
-    async def plan(
-        self,
-        uow: Any,
-        ctx: MemoryExecutionContext,
-        *,
-        task: str,
-        available_tools: Sequence[dict[str, Any]],
-        scope_keys: Sequence[str],
-    ) -> dict[str, Any]:
-        declared = await self.declare(uow, ctx, available_tools)
-        procedures = await self.procedures(uow, ctx, task=task, scope_keys=scope_keys)
-        if not procedures:
-            return {
-                "task_pattern": task_pattern(task),
-                "steps": [],
-                "valid": False,
-                "reason": "no validated procedure yet",
-            }
-        procedure = procedures[0]
-        undeclared = [s.tool for s in procedure.steps if s.tool not in declared]
-        if undeclared:
-            return {
-                "task_pattern": procedure.task_pattern,
-                "steps": [],
-                "valid": False,
-                "reason": (
-                    f"procedure uses tools the caller did not declare: {sorted(set(undeclared))}"
-                ),
-            }
-        problems = validate_against_registry(procedure, dict(declared))
-        payload = procedure.to_payload()
-        payload["valid"] = not problems
-        payload["problems"] = problems
-        payload["script"] = procedure.render_script()
-        payload["rendered"] = procedure.render()
-        return payload
+def _visibility_keys(ctx: MemoryExecutionContext, visibility: Visibility) -> list[str]:
+    """Tool records are audienced exactly like memories: the same anchor rules and the same
+    audience keys, so an agent's tool chatter reaches a user or a group only when it was
+    explicitly shared, and a hand-off is visible to the child run and no further. The default
+    is PRIVATE, the agent's own durable store: a procedure is learned across its runs."""
+    anchor = MemoryCandidate(
+        content="", memory_type=MemoryType.TOOL, lifetime=Lifetime.SHORT_TERM, visibility=visibility
+    )
+    return keys_for(scope_for(anchor, ctx), visibility, ctx)
 
 
 def _render(value: Any) -> str:
-    import json
-
     try:
         return json.dumps(value, default=str, sort_keys=True)[:20000]
     except (TypeError, ValueError):
