@@ -124,7 +124,7 @@ async def test_a_message_the_rules_cannot_read_becomes_typed_facts_in_its_langua
     assert extracted.evidence[0].source_id == observation.message_id
     assert any(c.category == "verbatim_turn" for c in candidates), "the turn is kept too"
     (prompt,) = gateway.prompts()
-    assert prompt["model"] == "test/fast", "contextual_extraction is a fast-tier use"
+    assert prompt["model"] == "gemini/gemini-3.8-flash", "contextual_extraction is a fast-tier use"
     system, user = (m["content"] for m in prompt["messages"])
     assert SOURCE_LANGUAGE_RULE in system
     sent = json.loads(user)["sentences"]

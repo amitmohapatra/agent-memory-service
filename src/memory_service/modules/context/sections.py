@@ -1,10 +1,11 @@
 """The pinned sections of a pushed context: the profile blocks, the thread's durable summary,
-the procedures learned for the task, the items prefetched from what earlier pulls used, and -
-when asked - the tool hints.
+the procedures learned for the task and the tool hints (both only for an agent with tools),
+and the items prefetched from what earlier pulls used.
 
 Each is one indexed read (the procedures a bounded one) and they run concurrently with
 retrieval, so they add a round trip, not a stage. The pinned sections are budgeted first: they
-may take at most ``PINNED_SHARE`` of the token budget, in priority order.
+may take at most ``PINNED_SHARE`` of the token budget, in priority order, each costed as the
+text it renders to. The thread summary is truncated to what is left rather than dropped.
 """
 
 from __future__ import annotations
@@ -22,6 +23,10 @@ from memory_service.domain.context_bundle import (
     ProcedureView,
     ProfileBlockView,
     ThreadSummaryView,
+    procedures_section,
+    profile_section,
+    summary_section,
+    tools_section,
 )
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.tools import StoredProcedure, ToolHints
@@ -34,15 +39,25 @@ from memory_service.ports.uow import UnitOfWorkFactory
 CONTEXT_PROCEDURES: Final = 3
 #: The share of the token budget the pinned sections may take, all together.
 PINNED_SHARE: Final = 0.5
+#: A summary truncated below this many tokens says too little to keep.
+SUMMARY_MIN_TOKENS: Final = 40
+#: Characters per token when a summary is cut to fit (estimate_tokens' own ratio).
+CHARS_PER_TOKEN: Final = 4
 
 
 class ToolsRequest(BaseModel):
-    """``tools`` of a context request: hints for these callable tools (None: any)."""
+    """``tools`` of a context request: the agent's callable tools (None: any catalog tool).
+    An agent with tools gets the procedures learned for the task and the tool hints."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     available: list[str] | None = Field(default=None, max_length=500)
     k: int = Field(default=8, ge=1, le=20)
+
+    @property
+    def any(self) -> bool:
+        """Whether the agent has any tool (an empty list: none)."""
+        return self.available is None or bool(self.available)
 
     def fingerprint(self) -> str:
         names = ",".join(sorted(self.available)) if self.available is not None else "*"
@@ -72,30 +87,44 @@ def _procedure_view(p: StoredProcedure) -> ProcedureView:
     )
 
 
-def _tokens(pinned: Pinned) -> list[tuple[str, int]]:
-    summary = pinned.thread_summary
-    tools = pinned.tools
-    return [
-        ("profile", sum(estimate_tokens(b.text) + 4 for b in pinned.profile)),
-        ("thread_summary", estimate_tokens(summary.text) if summary else 0),
-        ("procedures", sum(estimate_tokens(p.title) + 8 * len(p.steps) for p in pinned.procedures)),
-        ("tools", estimate_tokens(tools.model_dump_json()) // 2 if tools else 0),
-    ]
+def _truncated(summary: ThreadSummaryView, tokens: int) -> ThreadSummaryView | None:
+    """The summary's newest part whose section fits ``tokens``, or None when too little
+    would fit. Cut by characters, then shortened until the estimate agrees (a script the
+    estimate counts by bytes costs more than four characters a token)."""
+    if tokens < SUMMARY_MIN_TOKENS:
+        return None
+    chars = tokens * CHARS_PER_TOKEN
+    while chars > 0:
+        cut = summary.model_copy(update={"text": "..." + summary.text[-chars:].lstrip()})
+        if estimate_tokens(summary_section(cut) or "") <= tokens:
+            return cut
+        chars = chars * 9 // 10
+    return None
 
 
 def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
     """The pinned sections that fit ``PINNED_SHARE`` of the budget, in priority order, and
-    the tokens they take."""
+    the tokens they take. A section is costed as the text it renders to; one that does not
+    fit is dropped, except the thread summary, which keeps its newest part."""
     allowed, used = int(budget * PINNED_SHARE), 0
-    empty = {"profile": [], "thread_summary": None, "procedures": [], "tools": None}
-    kept: dict[str, Any] = {}
-    for name, cost in _tokens(pinned):
-        if cost and used + cost <= allowed:
-            kept[name] = getattr(pinned, name)
-            used += cost
-        else:
-            kept[name] = empty[name] if cost else getattr(pinned, name)
-    return Pinned(**kept, prefetched=pinned.prefetched), used
+    kept = Pinned(prefetched=pinned.prefetched)
+    if (text := profile_section(pinned.profile)) and (cost := estimate_tokens(text)) <= allowed:
+        kept.profile, used = pinned.profile, used + cost
+    if (text := summary_section(pinned.thread_summary)) and pinned.thread_summary is not None:
+        cost = estimate_tokens(text)
+        if used + cost <= allowed:
+            kept.thread_summary, used = pinned.thread_summary, used + cost
+        elif (cut := _truncated(pinned.thread_summary, allowed - used)) is not None:
+            kept.thread_summary = cut
+            used += estimate_tokens(summary_section(cut) or "")
+    if (text := procedures_section(pinned.procedures)) and used + estimate_tokens(text) <= allowed:
+        kept.procedures, used = pinned.procedures, used + estimate_tokens(text)
+    if (text := tools_section(pinned.tools)) and used + estimate_tokens(text) <= allowed:
+        kept.tools, used = pinned.tools, used + estimate_tokens(text)
+    elif pinned.tools is not None:
+        # the candidates still narrow the caller's tools; only the rendered section is cut
+        kept.tools = pinned.tools.model_copy(update={"next": None, "prefill": {}, "missing": []})
+    return kept, used
 
 
 class ContextSections:
@@ -104,21 +133,30 @@ class ContextSections:
         self.services = services
 
     async def gather(
-        self, ctx: MemoryExecutionContext, query: str, visibility: VisibilitySpecification
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        visibility: VisibilitySpecification,
+        *,
+        summary: bool,
+        procedures: bool,
     ) -> Pinned:
-        """Everything but the tool hints, concurrently."""
-        profile, summary, procedures, prefetched = await asyncio.gather(
+        """Everything but the tool hints, concurrently: the thread summary only when the
+        context carries the conversation, the procedures only for an agent with tools."""
+        found_profile, found_summary, found_procedures, prefetched = await asyncio.gather(
             self._profile(ctx),
-            self._summary(ctx),
+            self._summary(ctx) if summary else _none(),
             self.services["tool_hints"].procedures(
                 ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES
-            ),
+            )
+            if procedures
+            else _empty(),
             self._prefetched(ctx, query, visibility),
         )
         return Pinned(
-            profile=profile,
-            thread_summary=summary,
-            procedures=[_procedure_view(p) for p in procedures],
+            profile=found_profile,
+            thread_summary=found_summary,
+            procedures=[_procedure_view(p) for p in found_procedures],
             prefetched=prefetched,
         )
 
@@ -179,3 +217,11 @@ class ContextSections:
             and m.deleted_at is None
             and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
         ]
+
+
+async def _none() -> None:
+    return None
+
+
+async def _empty() -> list[StoredProcedure]:
+    return []

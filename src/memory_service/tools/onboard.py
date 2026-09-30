@@ -1,7 +1,6 @@
 """Grant a user their memberships in a tenant.
 
-    uv run python -m memory_service.tools.onboard --tenant arhaus --user alice \
-        [--workspace eng --workspace design] [--group legal] [--admin]
+    uv run python -m memory_service.tools.onboard --tenant arhaus --user alice [--admin]
 
 A tenant needs no registration: identifiers are tenant-prefixed everywhere, so the first
 write to ``arhaus`` creates it and nothing else is required to read your own memories back.

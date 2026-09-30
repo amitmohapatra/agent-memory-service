@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import bench_llm_settings, bench_overrides, bench_retrieval
+from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.evaluation import BUDGETS, CRITICAL_RECALL_K
 from benchmark.evaluation.golden import (
     GoldenSet,
@@ -50,11 +50,18 @@ TABLES = (
 
 
 def _settings() -> Settings:
-    """Sandbox-friendly defaults; any ``MEMORY__*`` environment variable overrides them."""
+    """Sandbox-friendly defaults; any ``MEMORY__*`` environment variable overrides them.
+
+    The model gateway (``BIFROST_URL``, ``BIFROST_VIRTUAL_KEY``) is read only when the run
+    opts in with ``BENCH_LLM=on`` (the Makefile's ``BENCH_LLM_ENV``): a shell that happens to
+    carry the harness's gateway variables must not turn a retrieval benchmark into a paid one.
+    Its budgets and models are ``BenchEnv.llm_tuning``, its uses the tenant policy the harness
+    pins (``benchmark.env.pin_model_policy``)."""
+    llm_on = os.environ.get("BENCH_LLM", "off") == "on"
     defaults = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
-        "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["bench"]},
-        "models": {"llm": {"enabled": False, **bench_llm_settings()}},
+        "authentication": {"trusted_dev_api_keys": ["bench"]},
+        **({} if llm_on else {"bifrost_url": None, "bifrost_virtual_key": None}),
         "database": {
             "url": os.environ.get(
                 "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"
@@ -70,7 +77,7 @@ ENV_PREFIX = "MEMORY__"
 
 
 def _env_paths() -> set[tuple[str, ...]]:
-    """The settings paths a ``MEMORY__*`` variable actually names, e.g. ``models.llm.model``.
+    """The settings paths a ``MEMORY__*`` variable actually names, e.g. ``database.pool_size``.
 
     This replaces ``Settings().model_dump(exclude_unset=True)``, which does not do what its
     name suggests on a pydantic-settings object: every field counts as "set" because a

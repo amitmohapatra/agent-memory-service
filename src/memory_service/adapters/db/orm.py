@@ -24,6 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -44,14 +45,14 @@ class AgentCredentialRow(Base):
 
 
 class LLMPolicyRow(Base):
-    """What the model may be used for at one level of the key hierarchy (ADR 0023)."""
+    """A tenant's model policy: the uses it allows, read assistance, the model per use."""
 
     __tablename__ = "llm_policies"
 
     tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    principal_id: Mapped[str] = mapped_column(String(512), primary_key=True)
     uses: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False)
     read_assist: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    models: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revision: Mapped[int] = mapped_column(Integer)
 
@@ -66,24 +67,6 @@ class LLMUsageDailyRow(Base):
     use: Mapped[str] = mapped_column(String(40), primary_key=True)
     tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     calls: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-
-class BriefRow(Base):
-    __tablename__ = "standing_briefs"
-
-    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    brief_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    scope_key: Mapped[str] = mapped_column(String(200))
-    context: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    spec: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    generation: Mapped[int] = mapped_column(Integer)
-    output: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    next_refresh_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (
-        Index("ix_briefs_due", "next_refresh_at", "brief_id"),
-        Index("ix_briefs_scope", "tenant_id", "scope_key", "brief_id"),
-    )
 
 
 def _now() -> Any:
@@ -586,7 +569,6 @@ class MemoryRow(Base):
     scope_key: Mapped[str] = mapped_column(String(600), nullable=False)
     workspace_id: Mapped[str | None] = mapped_column(String(200))
     user_id: Mapped[str | None] = mapped_column(String(200))
-    group_id: Mapped[str | None] = mapped_column(String(200))
     thread_id: Mapped[str | None] = mapped_column(String(200))
     work_id: Mapped[str | None] = mapped_column(String(200))
     agent_id: Mapped[str | None] = mapped_column(String(200))
@@ -823,6 +805,8 @@ class ToolRow(Base):
     server: Mapped[str | None] = mapped_column(String(200))
     examples: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
     redact: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    annotations: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    approve_when: Mapped[str | None] = mapped_column(Text)
     schema_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
@@ -904,6 +888,18 @@ class ProfileBlockRow(Base):
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     source: Mapped[str] = mapped_column(String(20), default="learned", server_default="learned")
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+    source_query: Mapped[str | None] = mapped_column(Text)
+    source_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    refresh_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    #: the profile job's claim of due standing questions (only blocks that have one)
+    __table_args__ = (
+        Index(
+            "ix_profile_blocks_due",
+            "refresh_due_at",
+            postgresql_where=sql_text("source_query IS NOT NULL"),
+        ),
+    )
 
 
 class ThreadSummaryRow(Base):
@@ -1022,14 +1018,14 @@ class RunOutcomeRow(Base):
     run_id: Mapped[str] = mapped_column(String(200), primary_key=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
-    source: Mapped[str] = mapped_column(String(20), default="explicit", server_default="explicit")
+    source: Mapped[str] = mapped_column(String(20), default="system", server_default="system")
     recorded_at: Mapped[datetime] = mapped_column(server_default=_now())
 
     __table_args__ = (Index("ix_run_outcomes_tenant_success", "tenant_id", "success"),)
 
 
 # ---------------------------------------------------------------------------
-# Platform layer: tenants, API keys, workspaces, groups, read audit
+# Platform layer: tenants, API keys, workspaces, read audit
 # ---------------------------------------------------------------------------
 
 
@@ -1061,6 +1057,9 @@ class ApiKeyRow(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    may_act_as: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=lambda: ["*"], server_default='["*"]'
+    )
 
     __table_args__ = (
         Index("ix_api_keys_tenant", "tenant_id"),
@@ -1089,28 +1088,8 @@ class WorkspaceMemberRow(Base):
     added_by: Mapped[str] = mapped_column(String(512), nullable=False)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
 
-    # memberships_of: which workspaces admitted this principal (deleting a group walks it)
+    # memberships_of: which workspaces admitted this principal
     __table_args__ = (Index("ix_workspace_members_principal", "tenant_id", "principal"),)
-
-
-class GroupRow(Base):
-    __tablename__ = "user_groups"
-
-    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    group_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class GroupMemberRow(Base):
-    __tablename__ = "user_group_members"
-
-    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    group_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    added_by: Mapped[str] = mapped_column(String(512), nullable=False)
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
 
 
 class ReadAuditRow(Base):
@@ -1168,50 +1147,5 @@ class FeedbackRow(Base):
             "target_id",
             created_at.desc(),
             feedback_id.desc(),
-        ),
-    )
-
-
-class WebhookSubscriptionRow(Base):
-    __tablename__ = "webhook_subscriptions"
-
-    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    subscription_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    workspace_id: Mapped[str | None] = mapped_column(String(200))
-    url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    events: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
-    description: Mapped[str | None] = mapped_column(String(500))
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_by: Mapped[str] = mapped_column(String(512), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    secret_key_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    secret_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-
-
-class WebhookDeliveryRow(Base):
-    __tablename__ = "webhook_deliveries"
-
-    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    delivery_id: Mapped[str] = mapped_column(String(200), primary_key=True)
-    subscription_id: Mapped[str] = mapped_column(String(200), nullable=False)
-    event_id: Mapped[str] = mapped_column(String(200), nullable=False)
-    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    status_code: Mapped[int | None] = mapped_column(Integer)
-    last_error: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    __table_args__ = (
-        Index(
-            "ix_webhook_deliveries_subscription",
-            "tenant_id",
-            "subscription_id",
-            created_at.desc(),
-            delivery_id.desc(),
         ),
     )

@@ -12,23 +12,18 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
 from memory_service.api.schemas.context import (
-    REPRESENTATION_DESCRIPTION,
     ContextItemBody,
     ConversationWindowBody,
     EvidenceReportBody,
 )
-from memory_service.api.validation import UseLLM
 from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ProcedureView, ProfileBlockView, ThreadSummaryView
-from memory_service.domain.enums import QueryType, Representation
-from memory_service.domain.errors import ProviderNotConfigured
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.enums import QueryType
 from memory_service.domain.tools import ToolHints
-from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.context.sections import ToolsRequest
-from memory_service.modules.grounding.cascade import attach
+from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
 
 
 def _audit(
@@ -59,8 +54,6 @@ def _audit(
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
 
-RecallKind = Literal["chunk", "memory", "summary"]
-
 _QUERY_TYPE_DESCRIPTION = (
     "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was "
     "looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage "
@@ -80,6 +73,15 @@ _RECALL_EXAMPLE: dict[str, Any] = {
     "query": "Why did Adjusted EBITDA increase despite lower revenue?",
     "limit": 20,
 }
+_ITEM_EXAMPLE: dict[str, Any] = {
+    "id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+    "kind": "chunk",
+    "text": "Adjusted EBITDA increased to EUR 98 million…",
+    "observed_on": None,
+    "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+    "document_id": "doc_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
+    "page": 11,
+}
 _CONTEXT_EXAMPLE: dict[str, Any] = {
     "scope": _SCOPE,
     "query": "Why did Adjusted EBITDA increase despite lower revenue?",
@@ -90,7 +92,6 @@ _CONTEXT_EXAMPLE: dict[str, Any] = {
 class RecallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_RECALL_EXAMPLE]})
 
-    use_llm: UseLLM = None
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -99,93 +100,40 @@ class RecallRequest(BaseModel):
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
     )
     limit: int = Field(default=20, ge=1, le=100, examples=[20])
-    kinds: list[RecallKind] = Field(
-        default_factory=lambda: ["chunk", "memory"],
+    kinds: list[SearchKind] = Field(
+        default_factory=lambda: list(DEFAULT_KINDS),
         min_length=1,
-        max_length=3,
-        description=(
-            "Which record kinds to search and return: chunk (document passages), memory "
-            "(canonical memories) and summary (rolled-up summaries; also added by the router "
-            "when the query asks for an overview). Graph facts are not a recall kind: ask "
-            "/v1/context or /v1/graph/query for them."
-        ),
+        max_length=4,
+        description="What to search: memory (what was learned or stated), chunk (document "
+        "passages), summary (document summaries), message (this thread's history).",
         examples=[["chunk", "memory"]],
     )
+    time_from: datetime | None = Field(
+        default=None, description="only what was observed since (filters before ranking)"
+    )
+    time_to: datetime | None = Field(default=None, description="only what was observed until")
     document_ids: list[str] | None = Field(
         default=None,
         max_length=100,
         description="Restrict knowledge retrieval to these documents",
         examples=[None],
     )
-
-
-class RecallItem(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "item_id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                    "representation": "CHUNK",
-                    "text": "Adjusted EBITDA increased to EUR 98 million…",
-                    "score": 0.83,
-                    "retrievers": ["fusion"],
-                    "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                    "document_id": "doc_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                    "page": 11,
-                    "section_path": "ACME FY26 Annual Report > 3. Financial Results",
-                    "evidence": [],
-                }
-            ]
-        }
-    )
-
-    item_id: str
-    representation: Representation = Field(..., description=REPRESENTATION_DESCRIPTION)
-    text: str
-    score: float
-    retrievers: list[str]
-    citation: str
-    document_id: str | None = None
-    page: int | None = None
-    section_path: str | None = None
-    expanded_from: str | None = None
-    expansion_edge: str | None = None
-    evidence: list[EvidenceRef] = Field(default_factory=list)
-    attributes: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Source provenance and qualifiers, including model-extracted status.",
-    )
+    debug: bool = Field(default=False, description="add each item's ranking detail")
 
 
 class RecallResponse(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "query": "Why did Adjusted EBITDA increase?",
-                    "query_type": "DOCUMENT_MULTI_HOP",
-                    "results": [],
-                    "diagnostics": {"fused_candidates": 12, "duplicates_collapsed": 2},
-                }
-            ]
-        }
-    )
+    model_config = ConfigDict(json_schema_extra={"examples": [{"items": [_ITEM_EXAMPLE]}]})
 
-    query: str
-    query_type: QueryType = Field(..., description=_QUERY_TYPE_DESCRIPTION)
-    results: list[RecallItem]
-    diagnostics: dict[str, Any] = Field(default_factory=dict)
-    evidence: EvidenceReportBody | None = Field(
-        default=None,
-        description="EvidenceReport (COMPLETE | INCOMPLETE | INSUFFICIENT) when the "
-        "verification stage ran; absent otherwise.",
+    items: list[SearchItem]
+    query_type: QueryType | None = Field(
+        default=None, description=_QUERY_TYPE_DESCRIPTION + " Only with debug."
     )
+    diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
 
 
 class ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CONTEXT_EXAMPLE]})
 
-    use_llm: UseLLM = None
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -195,74 +143,58 @@ class ContextRequest(BaseModel):
     )
     token_budget: int | None = Field(default=None, ge=200, le=16_000, examples=[6000])
     document_ids: list[str] | None = Field(default=None, max_length=100, examples=[None])
-    answer: str | None = Field(
-        default=None,
-        max_length=8_000,
-        description="When given, the grounding cascade verifies this answer against the "
-        "bundle and the report is attached as evidence.grounding",
-        examples=[None],
-    )
-    since_revision: int | None = Field(
-        default=None,
-        ge=0,
-        description="a previous bundle's revision: list only the items new or changed since "
-        "(delta=true); the whole bundle when that revision's record has expired",
-    )
     tools: ToolsRequest | None = Field(
         default=None,
-        description="add tool hints for these callable tools (available: null means any)",
+        description="the agent's callable tools (available: null means any catalog tool): "
+        "adds the procedures learned for the task and the tool hints",
     )
+    window: bool = Field(
+        default=True,
+        description="carry the thread's recent messages and its summary; false when the "
+        "framework keeps its own history (a LangGraph checkpointer, an OpenAI session)",
+    )
+    format: Literal["prompt", "full"] = Field(
+        default="prompt",
+        description="prompt: {rendered, bundle_id, token_estimate} (+ tool_candidates when "
+        "tools were given); full: the whole bundle",
+    )
+    debug: bool = Field(default=False, description="add the build diagnostics")
 
 
-class ContextResponse(BaseModel):
-    """ContextBundle: bounded, ranked, provenance-carrying context. ``rendered`` is prompt-ready."""
+class PromptContextResponse(BaseModel):
+    """What a prompt needs: the rendered context, the handle verify and the handles refer to,
+    and its size."""
 
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
             "examples": [
                 {
-                    "query": "Why did Adjusted EBITDA increase?",
-                    "query_type": "DOCUMENT_MULTI_HOP",
-                    "conversation": {
-                        "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
-                        "message_ids": ["msg_1"],
-                        "rendered": "USER: …",
-                        "token_estimate": 120,
-                    },
-                    "memories": [],
-                    "knowledge": [],
-                    "graph_facts": [],
-                    "summaries": [],
-                    "evidence": {
-                        "status": "COMPLETE",
-                        "required_groups": [],
-                        "satisfied_groups": [],
-                        "missing_groups": [],
-                        "escalations": [],
-                        "notes": [],
-                        "unused": [],
-                        "grounding": None,
-                        "llm_tokens": 0,
-                    },
+                    "rendered": "## Profile\n### user\nname: Ann\n\n## Memories\n- [m1] …",
                     "bundle_id": "6f1c…",
-                    "token_budget": 6000,
                     "token_estimate": 1840,
-                    "cache_hit": False,
-                    "revision_fingerprint": "…",
-                    "built_at": "2026-09-14T10:00:00Z",
-                    "diagnostics": {},
-                    "rendered": "## Recent conversation\nUSER: …",
                 }
             ]
         },
     )
 
+    rendered: str = Field(description="prompt-ready; items are cited by handle ([m1], [d2]...)")
+    bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
+    token_estimate: int
+    tool_candidates: list[str] | None = Field(
+        default=None, description="the tools that fit the task, best first (only with tools)"
+    )
+    diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
+
+
+class ContextResponse(BaseModel):
+    """ContextBundle (format=full): bounded, ranked, provenance-carrying context."""
+
+    model_config = ConfigDict(extra="forbid")
+
     query: str
     query_type: QueryType = Field(..., description=_QUERY_TYPE_DESCRIPTION)
-    bundle_id: str = Field(
-        default="", description="tenant-bound handle for /v1/verify while the bundle is cached"
-    )
+    bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
     conversation: ConversationWindowBody
     memories: list[ContextItemBody]
     knowledge: list[ContextItemBody]
@@ -272,16 +204,9 @@ class ContextResponse(BaseModel):
     token_budget: int
     token_estimate: int
     cache_hit: bool
-    revision_fingerprint: str = Field(
-        default="", description="revisions this bundle was built from"
-    )
     built_at: datetime
-    diagnostics: dict[str, Any] = Field(default_factory=dict)
     rendered: str
-    revision: int = Field(
-        default=0, description="the scope revision this bundle was built at (since_revision)"
-    )
-    delta: bool = Field(default=False, description="only what changed since since_revision")
+    handles: dict[str, str] = Field(description="handle -> item id, as rendered cites them")
     profile: list[ProfileBlockView] = Field(
         default_factory=list, description="the pinned profile blocks of the user, agent, workspace"
     )
@@ -289,93 +214,73 @@ class ContextResponse(BaseModel):
         default=None, description="the thread's durable summary; the window follows it"
     )
     procedures: list[ProcedureView] = Field(
-        default_factory=list, description="procedures learned for this task"
+        default_factory=list, description="procedures learned for this task (only with tools)"
     )
     tools: ToolHints | None = Field(default=None, description="tool hints, when asked for")
+    diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
 
 
 @router.post(
     "/recall",
     response_model=RecallResponse,
+    response_model_exclude_none=True,
     tags=["retrieval"],
-    summary="Scope-filtered ranked recall",
+    summary="Ranked, scope-filtered items for a query",
     responses=_ERRORS,
 )
 async def recall(
     request: Request, body: RecallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecallResponse:
     ctx = build_context(request, container, body.scope)
-    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
-        engine = container.services["retrieval"]
-        result = await engine.retrieve(
-            ctx,
-            body.query,
-            limit=body.limit,
-            kinds=tuple(k for k in body.kinds if k in ("chunk", "memory")),
-            document_ids=body.document_ids,
-        )
-        wanted = set(body.kinds)
-        items = [candidate_to_item(c) for c in result.candidates if c.kind in wanted][: body.limit]
-        _audit(request, container, ctx, "recall", body.query, (i.item_id for i in items))
-        evidence = result.diagnostics.get("evidence")
-        return RecallResponse(
-            query=body.query,
-            query_type=result.routed.query_type,
-            results=[RecallItem.model_validate(i.model_dump(mode="json")) for i in items],
-            diagnostics={
-                k: v
-                for k, v in result.diagnostics.items()
-                if k not in ("evidence", "evidence_targets")
-            },
-            evidence=EvidenceReportBody.model_validate(evidence) if evidence is not None else None,
-        )
+    found = await container.services["search"].search(
+        ctx,
+        body.query,
+        kinds=body.kinds,
+        limit=body.limit,
+        observed=(body.time_from, body.time_to) if body.time_from or body.time_to else None,
+        document_ids=body.document_ids,
+        debug=body.debug,
+    )
+    _audit(request, container, ctx, "recall", body.query, (i.id for i in found.items))
+    if not body.debug:
+        return RecallResponse(items=found.items)
+    return RecallResponse(
+        items=found.items, query_type=found.query_type, diagnostics=found.diagnostics
+    )
 
 
 @router.post(
     "/context",
-    # The unverified answer is sent as the bytes the builder already produced, so the route
-    # returns a Response and FastAPI validates nothing. ContextResponse stays the documented
-    # 200 below, and tests/unit/test_context_datapath.py asserts those bytes still validate
-    # against it - the contract is checked where it can be checked once, not per request.
+    # The body is the bytes the builder produced (a cache hit is the stored bytes), so the
+    # route returns a Response and FastAPI validates nothing; the documented 200 is either
+    # model, and tests/unit/test_context_datapath.py checks the bytes against them.
     response_model=None,
     tags=["retrieval"],
-    summary="Build a ContextBundle for the current turn",
-    responses={200: {"model": ContextResponse, "description": "Successful Response"}, **_ERRORS},
+    summary="The context for the current turn (format=prompt: rendered; full: the bundle)",
+    responses={
+        200: {
+            "model": PromptContextResponse | ContextResponse,
+            "description": "format=prompt: PromptContextResponse; format=full: ContextResponse",
+        },
+        **_ERRORS,
+    },
 )
 async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> Response | ContextResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
-    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
-        builder = container.services["context_builder"]
-        if not body.answer:
-            # One serialisation for the whole request: a cache hit is the stored bytes, a miss is
-            # one dump. Parsing the cached bundle only to dump it, validate it and dump it again
-            # was most of what a 30-80 KB hit cost.
-            payload = await builder.build_api(
-                ctx,
-                body.query,
-                token_budget=body.token_budget,
-                document_ids=body.document_ids,
-                tools=body.tools,
-                since_revision=body.since_revision,
-            )
-            # The bundle is opaque bytes here on purpose (see above), so the audit records
-            # who asked what under which scope; the records served are in the bundle itself.
-            _audit(request, container, ctx, "context", body.query, ())
-            return Response(content=payload, media_type="application/json")
-        # Grounding needs the bundle itself, so this arm keeps the model round trip.
-        cascade = container.services.get("grounding")
-        if cascade is None:
-            raise ProviderNotConfigured("the NLI classifier is disabled in this process")
-        bundle = await builder.build(
+    async with container.services["llm_assist"].reading(ctx):
+        payload = await container.services["context_builder"].build_api(
             ctx,
             body.query,
             token_budget=body.token_budget,
             document_ids=body.document_ids,
             tools=body.tools,
+            window=body.window,
+            output=body.format,
+            debug=body.debug,
         )
-        bundle = attach(bundle, await cascade.verify_bundle(bundle, body.answer))
-        served = (i.item_id for i in (*bundle.memories, *bundle.knowledge))
-        _audit(request, container, ctx, "context", body.query, served)
-        return ContextResponse.model_validate(bundle_to_api(bundle))
+    # The bundle is opaque bytes here on purpose (see above), so the audit records who asked
+    # what under which scope; the records served are in the bundle itself.
+    _audit(request, container, ctx, "context", body.query, ())
+    return Response(content=payload, media_type="application/json")

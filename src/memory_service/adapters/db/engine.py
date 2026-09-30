@@ -69,7 +69,7 @@ class Database:
         )
         # Every statement carries the SQLAlchemy instrumentation's wrapper once this is
         # installed, whether or not anything is listening. Tracing is configured exactly when
-        # an exporter is set (observability.otel_exporter != "none"), and that is what puts a
+        # an endpoint is set (OTEL_EXPORTER_OTLP_ENDPOINT), and that is what puts a
         # real TracerProvider in place of the API's no-op proxy, so the presence of one is
         # the same condition read where it can be seen from an adapter.
         if _tracing_is_on():

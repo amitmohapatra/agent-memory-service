@@ -1,4 +1,4 @@
-"""Tenant administration: keys, workspaces (teams), groups and the read audit.
+"""Tenant administration: keys, workspaces (teams) and the read audit.
 
 The tenant is the credential's own; the platform key may administer any tenant by naming it
 in ``X-Trellis-Tenant``. Membership changes take effect on the next request: the authorization
@@ -17,6 +17,7 @@ from memory_service.api.deps import (
     AdministeredTenantDep,
     ContainerDep,
     ServicePrincipalDep,
+    key_self_of,
     request_context,
 )
 from memory_service.api.errors import error_responses
@@ -24,14 +25,13 @@ from memory_service.api.idempotent import run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
-    CreateGroupRequest,
     CreateWorkspaceRequest,
-    GroupMemberResponse,
-    GroupResponse,
     IssuedKeyResponse,
     IssueKeyRequest,
+    KeySelfResponse,
     ReadAuditResponse,
     SetMemberRequest,
+    UpdateKeyRequest,
     WorkspaceMemberResponse,
     WorkspaceResponse,
 )
@@ -81,6 +81,7 @@ async def issue_key(
             workspace_id=body.workspace_id,
             expires_in_days=body.expires_in_days,
             created_by=principal.service_id,
+            may_act_as=body.may_act_as,
         )
 
         async def after_commit() -> None:
@@ -99,6 +100,18 @@ async def issue_key(
         handler=handler,
         stored_body=_without_token,
     )
+
+
+@router.get(
+    "/keys/self",
+    response_model=KeySelfResponse,
+    responses=error_responses(401, 403, 503),
+    summary="Who the calling key is (401 unknown, revoked or expired; 403 refused)",
+    description="The introspection other services of the platform authenticate a key by: "
+    "send the key as any call sends it and read who it is. Any key may ask about itself.",
+)
+async def key_self(principal: ServicePrincipalDep) -> KeySelfResponse:
+    return key_self_of(principal)
 
 
 @router.get(
@@ -126,6 +139,26 @@ async def list_keys(
     )
     link_next(request, response, next_cursor)
     return [ApiKeyResponse.of(k) for k in items]
+
+
+@router.patch(
+    "/keys/{key_id}",
+    response_model=ApiKeyResponse,
+    responses=_ERRORS,
+    summary="Change whom a key may act for; it applies on the key's next request",
+)
+async def update_key(
+    key_id: str, body: UpdateKeyRequest, container: ContainerDep, tenant_id: AdministeredTenantDep
+) -> ApiKeyResponse:
+    verifier = container.services["api_keys"]
+    async with container.services["uow_factory"]() as uow:
+        key = await _service(container).set_may_act_as(uow, tenant_id, key_id, body.may_act_as)
+        # the same order a revocation takes: tombstone first, so no instance keeps serving
+        # the old grant from its cache
+        await verifier.invalidate(key_id, strict=True)
+        await uow.commit()
+    await verifier.invalidate(key_id)
+    return ApiKeyResponse.of(key)
 
 
 @router.delete(
@@ -263,7 +296,7 @@ async def list_members(
     "/workspaces/{workspace_id}/members/{principal_ref}",
     response_model=WorkspaceMemberResponse,
     responses=_ERRORS,
-    summary="Admit a user, agent or group (user:<id> | agent:<id> | group:<id>) with one role",
+    summary="Admit a user or agent (user:<id> | agent:<id>) with one role",
 )
 async def set_member(
     workspace_id: str,
@@ -297,118 +330,6 @@ async def remove_member(
 ) -> None:
     async with container.services["uow_factory"]() as uow:
         await _service(container).remove_member(uow, tenant_id, workspace_id, principal_ref)
-        await uow.commit()
-
-
-# -- groups ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/groups",
-    response_model=GroupResponse,
-    status_code=201,
-    responses=_ERRORS,
-    summary="Create a group of users a workspace can admit at once",
-)
-async def create_group(
-    request: Request,
-    body: CreateGroupRequest,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-) -> JSONResponse:
-    ctx = request_context(request, tenant_id)
-    payload = body.model_dump(mode="json")
-
-    async def handler(uow):  # type: ignore[no-untyped-def]
-        group = await _service(container).create_group(
-            uow, tenant_id, name=body.name, group_id=body.group_id
-        )
-        return 201, GroupResponse.of(group).model_dump(mode="json"), None
-
-    return await run_idempotent(
-        request, container, ctx, key=request.state.idempotency_key, payload=payload, handler=handler
-    )
-
-
-@router.get(
-    "/groups",
-    response_model=list[GroupResponse],
-    responses=_ERRORS,
-    summary="List groups (cursor paged)",
-)
-async def list_groups(
-    request: Request,
-    response: Response,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-    cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
-) -> list[GroupResponse]:
-    position = decode_cursor(cursor, fields=("group_id",))
-    async with container.services["uow_factory"]() as uow:
-        groups = await _service(container).list_groups(
-            uow, tenant_id, after=position["group_id"] if position else "", limit=limit + 1
-        )
-    items, next_cursor = page(groups, limit=limit, position=lambda g: {"group_id": g.group_id})
-    link_next(request, response, next_cursor)
-    return [GroupResponse.of(g) for g in items]
-
-
-@router.delete("/groups/{group_id}", status_code=204, responses=_ERRORS, summary="Delete a group")
-async def delete_group(
-    group_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
-    async with container.services["uow_factory"]() as uow:
-        await _service(container).delete_group(uow, tenant_id, group_id)
-        await uow.commit()
-
-
-@router.get(
-    "/groups/{group_id}/members",
-    response_model=list[GroupMemberResponse],
-    responses=_ERRORS,
-    summary="List a group's users",
-)
-async def list_group_members(
-    group_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> list[GroupMemberResponse]:
-    async with container.services["uow_factory"]() as uow:
-        members = await _service(container).group_members(uow, tenant_id, group_id)
-    return [GroupMemberResponse.of(m) for m in members]
-
-
-@router.put(
-    "/groups/{group_id}/members/{user_id}",
-    response_model=GroupMemberResponse,
-    responses=_ERRORS,
-    summary="Add a user to a group",
-)
-async def add_group_user(
-    group_id: str,
-    user_id: str,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-    principal: ServicePrincipalDep,
-) -> GroupMemberResponse:
-    async with container.services["uow_factory"]() as uow:
-        member = await _service(container).add_group_user(
-            uow, tenant_id, group_id, user_id, added_by=principal.service_id
-        )
-        await uow.commit()
-    return GroupMemberResponse.of(member)
-
-
-@router.delete(
-    "/groups/{group_id}/members/{user_id}",
-    status_code=204,
-    responses=_ERRORS,
-    summary="Remove a user from a group",
-)
-async def remove_group_user(
-    group_id: str, user_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
-    async with container.services["uow_factory"]() as uow:
-        await _service(container).remove_group_user(uow, tenant_id, group_id, user_id)
         await uow.commit()
 
 

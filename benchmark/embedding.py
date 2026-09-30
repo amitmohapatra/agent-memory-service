@@ -9,7 +9,7 @@ re-indexed (the fingerprint changes the collection names) and the golden questio
 
 Weights are read from ``./models/<model-dir>`` (or ``/models`` in the image). A backend that
 cannot be loaded (missing extra, impossible ONNX/OpenVINO export, ...) is recorded as
-``{"skipped": "<ExceptionType>: reason"}`` — never dropped. ``MEMORY__MODELS__EMBEDDING__THREADS``
+``{"skipped": "<ExceptionType>: reason"}`` — never dropped. ``BENCH_THREADS``
 bounds the CPU threads of every candidate. The challengers here are benchmark candidates,
 never the product: the service ships exactly ``constants.FROZEN_MODELS``.
 
@@ -31,7 +31,7 @@ from typing import Any
 
 from benchmark.advanced import _corpus
 from benchmark.common import provenance, reset_store, write_result
-from benchmark.env import BENCH, bench_overrides
+from benchmark.env import BENCH, bench_overrides, bench_threads
 from benchmark.evaluation import CRITICAL_RECALL_K
 from benchmark.evaluation.golden import (
     GoldenSet,
@@ -233,7 +233,7 @@ async def run_candidate(
         if spec is not None
         else {"model": STAND_IN, "runtime": "hash", "backend": "hash", "model_path": None}
     )
-    threads = base.models.embedding.threads
+    threads = bench_threads()
     t0 = time.perf_counter()
     try:
         model = load_embedding(spec, threads=threads)

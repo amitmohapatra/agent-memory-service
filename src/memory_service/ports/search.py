@@ -10,6 +10,7 @@ natively; the fallback is a bounded client-side RRF over per-retriever candidate
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -77,6 +78,8 @@ class SearchFilter(BaseModel):
     must: dict[str, str | int | bool] = Field(default_factory=dict)
     must_any: dict[str, list[str]] = Field(default_factory=dict)
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
+    #: field -> (from, to) instants, either bound open; a record without the field is out
+    within: dict[str, tuple[datetime | None, datetime | None]] = Field(default_factory=dict)
 
 
 class SearchHit(BaseModel):
@@ -162,6 +165,31 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
 )
 
 
+#: What a ranked search returns in its first phase: the fields ranking, deduplication, the
+#: derived-memory check, the time filter and the cut read. Everything else of
+#: ``PAYLOAD_FIELDS`` - attributes, connections, contributors, dated mentions, the graph and
+#: section fields - is read only for the items that survive the cut, so it is fetched for
+#: those alone (``SearchStore.get``). A memory query ranks 200 candidates to keep ~33; the
+#: full payload of all 200 was most of the bytes and most of the time of the read.
+RANK_FIELDS: tuple[str, ...] = (
+    "category",
+    "confidence",
+    "derived",
+    "document_id",
+    "kind",
+    "memory_type",
+    "observed_at",
+    "owner_principal",
+    "provider",
+    "record_id",
+    "reinforcement",
+    "source_refs",
+    "subject",
+    "text",
+    "text_hash",
+)
+
+
 @runtime_checkable
 class SearchStore(Protocol):
     async def ensure_collection(self, spec: CollectionSpec) -> None: ...
@@ -214,9 +242,11 @@ class SearchStore(Protocol):
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
+        fields: Sequence[str] = PAYLOAD_FIELDS,
     ) -> list[SearchHit]:
         """Bounded hybrid fusion over every dense space given plus the sparse arm, each arm
-        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0."""
+        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0. Hits carry the
+        payload ``fields`` (``RANK_FIELDS`` for a ranking read, hydrated later by ``get``)."""
         ...
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]: ...

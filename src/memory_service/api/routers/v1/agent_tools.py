@@ -36,6 +36,12 @@ class CallRequest(BaseModel):
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     args: dict[str, Any] = Field(default_factory=dict, description="the tool's arguments")
+    toolbox: list[str] | None = Field(
+        default=None,
+        max_length=500,
+        description="the caller's own tools, which tool_search chooses among (every catalog "
+        "tool when omitted); not part of the arguments the model sees",
+    )
 
 
 class CallResponse(BaseModel):
@@ -64,4 +70,7 @@ async def call_agent_tool(
     name: str, request: Request, body: CallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> CallResponse:
     ctx = build_context(request, container, body.scope)
-    return CallResponse(result=await container.services["agent_tools"].call(ctx, name, body.args))
+    result = await container.services["agent_tools"].call(
+        ctx, name, body.args, toolbox=body.toolbox
+    )
+    return CallResponse(result=result)

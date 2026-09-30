@@ -1,7 +1,8 @@
-"""Standing questions and judgements: the two groups that learn off the request path.
+"""Standing questions and judgements: the two things that learn off the request path.
 
-A brief is a question the platform keeps answering; feedback is a verdict on something it did,
-and a verdict on a memory is what reinforces or retracts it. Eight operations.
+A profile block with a standing question is kept answering it from what its scope may read;
+feedback is a verdict on something the platform did - a memory it reinforces or retracts, a
+run whose outcome follows the highest-ranked source that judged it.
 """
 
 from __future__ import annotations
@@ -9,17 +10,12 @@ from __future__ import annotations
 import pytest
 
 from tests.agent.conftest import BOOTSTRAP, sdk
-from trellis.memory import BriefSpec, MemoryError
+from trellis.memory import MemoryError
 
 pytestmark = pytest.mark.e2e
 
 FACT = "The payments platform team runs its release review on Thursdays at 15:00."
-SPEC = BriefSpec(
-    kind="mental_model",
-    title="Release cadence",
-    question="when does the payments platform team review releases",
-    refresh_seconds=3600,
-)
+QUESTION = "when does the payments platform team review releases"
 
 
 async def _harness(app, tenant_id: str = "acme"):
@@ -30,43 +26,24 @@ async def _harness(app, tenant_id: str = "acme"):
     return sdk(app, service.token)
 
 
-@pytest.mark.covers(
-    "briefs.create_brief",
-    "briefs.read_brief",
-    "briefs.list_briefs",
-    "briefs.update_brief",
-    "briefs.delete_brief",
-)
-async def test_an_agent_keeps_a_standing_question_and_reads_it_back(app, running) -> None:
+@pytest.mark.covers("profile.edit_profile_block", "profile.get_profile")
+async def test_a_standing_question_is_answered_into_its_block(app, running) -> None:
     harness = await _harness(app)
     user = harness.bind(user_id="u1")
     await user.remember(FACT, visibility="USER")
 
-    created = await user.advanced.briefs.create(SPEC)
-    assert created.brief_id and created.status in ("pending", "ready", "stale")
-    assert created.spec.question == SPEC.question and created.spec.use_llm is False
+    block = await user.profile.edit("user.releases", source_query=QUESTION)
+    assert block.source_query == QUESTION and block.block == "user.releases"
+    # the job answered it (inline here): without a model the answer is the evidence itself
+    answered = next(b for b in await user.profile() if b.block == "user.releases")
+    assert "Thursdays at 15:00" in answered.text
+    assert answered.version > block.version
 
-    read = await user.advanced.briefs.get(created.brief_id)
-    assert read.brief_id == created.brief_id
-    if read.output is not None:
-        # A read never generates text: without a model the answer is the evidence itself.
-        assert read.output.generated is False
-        assert all(item.text for item in read.output.sources)
-
-    listed = await user.advanced.briefs.list()
-    assert created.brief_id in {b.brief_id for b in listed}
-
-    wider = SPEC.model_copy(update={"question": SPEC.question + " and who owns it"})
-    updated = await user.advanced.briefs.update(created.brief_id, wider)
-    assert updated.brief_id == created.brief_id
-    assert updated.spec.question == wider.question
-    assert (await user.advanced.briefs.get(created.brief_id)).spec.question == wider.question
-
-    await user.advanced.briefs.delete(created.brief_id)
-    with pytest.raises(MemoryError) as gone:
-        await user.advanced.briefs.get(created.brief_id)
-    assert gone.value.status == 404
-    assert created.brief_id not in {b.brief_id for b in await user.advanced.briefs.list()}
+    # an edit of the text keeps the question; clearing the question keeps the text
+    edited = await user.profile.edit("user.releases", "Thursdays, 15:00 (release review)")
+    assert edited.source_query == QUESTION and edited.text.startswith("Thursdays")
+    cleared = await user.profile.edit("user.releases", source_query=None)
+    assert cleared.source_query is None and cleared.text == edited.text
 
 
 @pytest.mark.covers("feedback.submit_feedback", "feedback.get_feedback", "feedback.list_feedback")
@@ -93,6 +70,7 @@ async def test_a_verdict_on_a_memory_is_stored_and_projected(app, running) -> No
 
     one = await user.feedback.get(confirmed.feedback_id)
     assert one.feedback_id == confirmed.feedback_id and one.verdict == "confirm"
+    assert one.projection is not None and one.projection.action == "memory_reinforced"
 
     corrected = await user.feedback(
         "memory",
@@ -105,59 +83,62 @@ async def test_a_verdict_on_a_memory_is_stored_and_projected(app, running) -> No
     assert [f.created_at for f in on_target] == sorted(
         (f.created_at for f in on_target), reverse=True
     ), "newest first"
-    # A correction is projected onto the memory it judges: that is the point of storing it.
-    assert corrected.projection is None or corrected.projection.action in (
-        "none",
-        "memory_reinforced",
-        "memory_retracted",
-        "memory_superseded",
+    projected = await user.feedback.get(corrected.feedback_id)
+    assert projected.projection is not None
+    assert projected.projection.action == "memory_superseded"
+
+
+@pytest.mark.covers("feedback.submit_feedback", "feedback.get_feedback")
+async def test_a_run_s_outcome_follows_the_highest_ranked_verdict(app, running) -> None:
+    """The harness reports how the run ended (system); the judge grounds its answer; a person
+    has the last word. A lower-ranked verdict never overrides a higher one."""
+    harness = await _harness(app)
+    run = harness.bind(user_id="u1").agent("buyer", agent_run_id="run_outcome_1")
+
+    system = await run.feedback("run", "run_outcome_1", "confirm", source="system")
+    assert (await run.feedback.get(system.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
+    judge = await run.feedback("run", "run_outcome_1", "reject", source="judge", score=0.2)
+    assert (await run.feedback.get(judge.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
+    human = await run.feedback("run", "run_outcome_1", "confirm", source="human")
+    assert (await run.feedback.get(human.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
+    late = await run.feedback("run", "run_outcome_1", "reject", source="system")
+    projection = (await run.feedback.get(late.feedback_id)).projection
+    assert projection is not None and projection.action == "none", (
+        "the run's own status does not override a person"
     )
 
 
 @pytest.mark.covers_error(
-    "briefs.read_brief",
-    "briefs.create_brief",
-    "briefs.update_brief",
-    "briefs.delete_brief",
-    "briefs.list_briefs",
     "feedback.get_feedback",
     "feedback.submit_feedback",
     "feedback.list_feedback",
+    "profile.edit_profile_block",
 )
-async def test_neither_briefs_nor_verdicts_cross_a_tenant(app, running) -> None:
+async def test_verdicts_do_not_cross_a_tenant(app, running) -> None:
     acme = await _harness(app, "acme")
     globex = await _harness(app, "globex")
     mine = acme.bind(user_id="u1")
     await mine.remember(FACT, visibility="USER")
     memory = next(m for m in await mine.advanced.memories.list() if FACT in m.content)
-    brief = await mine.advanced.briefs.create(SPEC)
     verdict = await mine.feedback("memory", memory.memory_id, "confirm")
 
     theirs = globex.bind(user_id="u1")
-    for call, expected in (
-        (theirs.advanced.briefs.get(brief.brief_id), 404),
-        (theirs.advanced.briefs.update(brief.brief_id, SPEC), 404),
-        (theirs.advanced.briefs.delete(brief.brief_id), 404),
-        (theirs.feedback.get(verdict.feedback_id), 404),
-    ):
-        with pytest.raises(MemoryError) as refused:
-            await call
-        assert refused.value.status == expected, refused.value
+    with pytest.raises(MemoryError) as refused:
+        await theirs.feedback.get(verdict.feedback_id)
+    assert refused.value.status == 404
 
-    # Nothing of the other tenant's leaks into a listing either. Feedback is listed *by its
-    # target*, so the target is resolved in the caller's own tenant first: the answer is
-    # "no such memory", never an empty page that would confirm the id exists somewhere.
-    assert brief.brief_id not in {b.brief_id for b in await theirs.advanced.briefs.list()}
+    # Feedback is listed *by its target*, so the target is resolved in the caller's own
+    # tenant first: the answer is "no such memory", never an empty page that would confirm
+    # the id exists somewhere.
     with pytest.raises(MemoryError) as unknown_target:
         await theirs.feedback.list_for("memory", memory.memory_id)
     assert unknown_target.value.status == 404
 
     claiming = globex.bind(tenant_id="acme", user_id="u1")
     for call in (
-        claiming.advanced.briefs.create(SPEC),
-        claiming.advanced.briefs.list(),
         claiming.feedback("memory", memory.memory_id, "reject"),
         claiming.feedback.list_for("memory", memory.memory_id),
+        claiming.profile.edit("user", "x"),
     ):
         with pytest.raises(MemoryError) as crossed:
             await call

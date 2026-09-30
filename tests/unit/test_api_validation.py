@@ -53,7 +53,7 @@ def test_unknown_recall_kind_is_rejected_not_dropped(client: TestClient) -> None
         "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["fact"]}
     )
     assert "body.kinds.0" in _locs(r)
-    assert "'chunk', 'memory' or 'summary'" in r.text
+    assert "'memory', 'chunk', 'summary' or 'message'" in r.text
 
 
 def test_recall_kinds_must_name_at_least_one_kind(client: TestClient) -> None:
@@ -98,13 +98,26 @@ def test_memory_type_filter_is_an_enum(client: TestClient) -> None:
     assert _locs(r) == {"query.memory_type.1"}
 
 
-def test_verify_item_kind_is_closed(client: TestClient) -> None:
+def test_verify_needs_the_bundle_it_checks_against(client: TestClient) -> None:
+    r = client.post("/v1/verify", headers=HEADERS, json={"scope": SCOPE, "answer": "a"})
+    assert _locs(r) == {"body.bundle_id"}
     r = client.post(
         "/v1/verify",
         headers=HEADERS,
-        json={"scope": SCOPE, "answer": "a", "items": [{"item_id": "i", "text": "t", "kind": "x"}]},
+        json={"scope": SCOPE, "answer": "a", "bundle_id": "b", "items": []},
     )
-    assert _locs(r) == {"body.items.0.kind"}
+    assert "body.items" in _locs(r), "the one evidence source is the bundle"
+
+
+def test_context_format_is_closed(client: TestClient) -> None:
+    r = client.post(
+        "/v1/context", headers=HEADERS, json={"scope": SCOPE, "query": "q", "format": "xml"}
+    )
+    assert _locs(r) == {"body.format"}
+    r = client.post(
+        "/v1/context", headers=HEADERS, json={"scope": SCOPE, "query": "q", "use_llm": True}
+    )
+    assert "body.use_llm" in _locs(r), "the model policy decides; a request does not"
 
 
 def test_file_visibility_form_field_is_an_enum(client: TestClient) -> None:
@@ -157,40 +170,26 @@ def test_pydantic_validation_error_raised_inside_a_handler_is_a_500(settings, ov
     ("path", "body", "loc"),
     [
         ("/v1/context", {"query": "q", "token_budget": 16_001}, "body.token_budget"),
-        ("/v1/context", {"query": "q", "answer": "x" * 8_001}, "body.answer"),
         ("/v1/context", {"query": "q", "document_ids": ["d"] * 101}, "body.document_ids"),
         ("/v1/recall", {"query": "q", "document_ids": ["d"] * 101}, "body.document_ids"),
-        ("/v1/graph/query", {"query": "q", "max_visited": 501}, "body.max_visited"),
-        ("/v1/verify", {"answer": "x" * 8_001, "query": "q"}, "body.answer"),
-        (
-            "/v1/verify",
-            {"answer": "a", "items": [{"item_id": "i", "text": "t"}] * 51},
-            "body.items",
-        ),
-        (
-            "/v1/verify",
-            {"answer": "a", "items": [{"item_id": "i", "text": "x" * 4_001}]},
-            "body.items.0.text",
-        ),
-        (
-            "/v1/verify",
-            {
-                "answer": "a",
-                "items": [{"item_id": "i", "text": "t"}],
-                "unused": [{"item_id": "u", "text": "t"}] * 21,
-            },
-            "body.unused",
-        ),
-        (
-            "/v1/observations",
-            {"content": "c", "hints": {"custom_type": "x" * 65}},
-            "body.hints.custom_type",
-        ),
-        ("/v1/observations", {"content": "c", "source_system": "x" * 101}, "body.source_system"),
+        ("/v1/recall", {"query": "q", "limit": 101}, "body.limit"),
+        ("/v1/verify", {"answer": "x" * 8_001, "bundle_id": "b"}, "body.answer"),
+        ("/v1/verify", {"answer": "a", "bundle_id": "b" * 65}, "body.bundle_id"),
         (
             "/v1/messages",
-            {"role": "USER", "content": "c", "source_system": "x" * 101},
-            "body.source_system",
+            {"messages": [{"role": "USER", "content": "c", "source_system": "x" * 101}]},
+            "body.messages.0.source_system",
+        ),
+        (
+            "/v1/messages",
+            {"messages": [{"role": "USER", "content": "c"}] * 101},
+            "body.messages",
+        ),
+        ("/v1/messages", {"messages": []}, "body.messages"),
+        (
+            "/v1/agent-tools/tool_search",
+            {"args": {}, "toolbox": ["t"] * 501},
+            "body.toolbox",
         ),
     ],
 )
@@ -220,16 +219,16 @@ def test_custom_metadata_is_bounded_everywhere_it_appears(client: TestClient) ->
     too_many = {f"k{i}": i for i in range(METADATA_MAX_KEYS + 1)}
     too_deep = {"a": {"b": {"c": 1}}}
     too_big = {"blob": "x" * METADATA_MAX_BYTES}
-    for path, body in (
-        ("/v1/threads", {}),
-        ("/v1/messages", {"role": "USER", "content": "c"}),
-        ("/v1/observations", {"content": "c"}),
-    ):
-        for bad in (too_many, too_deep, too_big):
-            r = client.post(
-                path, headers=HEADERS, json={"scope": SCOPE, **body, "custom_metadata": bad}
-            )
-            assert "body.custom_metadata" in _locs(r), (path, r.text)
+    for bad in (too_many, too_deep, too_big):
+        r = client.patch(
+            "/v1/threads/thr_1", headers=HEADERS, json={"scope": SCOPE, "custom_metadata": bad}
+        )
+        assert "body.custom_metadata" in _locs(r), r.text
+        message = {"role": "USER", "content": "c", "custom_metadata": bad}
+        r = client.post(
+            "/v1/messages", headers=HEADERS, json={"scope": SCOPE, "messages": [message]}
+        )
+        assert "body.messages.0.custom_metadata" in _locs(r), r.text
     # the scope's own metadata, on any route that carries a scope
     r = client.post(
         "/v1/recall",
@@ -279,7 +278,6 @@ def _values(literal: Any) -> set[str]:
         (sdk.EvidenceStatus, enums.EvidenceStatus),
         (sdk.MessageRole, enums.MessageRole),
         (sdk.MessageKind, enums.MessageKind),
-        (sdk.ObservationKind, enums.ObservationKind),
         (sdk.JobStatus, enums.JobStatus),
         (sdk.DocumentStatus, enums.DocumentStatus),
         (sdk.ArchiveStatus, enums.ArchiveStatus),
@@ -303,15 +301,17 @@ def test_sdk_literals_match_the_service_literals(sdk_literal: Any, service: Any)
     assert _values(sdk_literal) == _values(service)
 
 
-def test_recall_kinds_are_the_three_record_kinds_the_engine_serves() -> None:
-    from memory_service.api.routers.v1.retrieval import RecallKind
+def test_search_kinds_are_the_record_kinds_and_the_history() -> None:
+    from memory_service.modules.retrieval.search import SearchKind
 
-    assert _values(RecallKind) == _values(sdk.RecallKind) == {"chunk", "memory", "summary"}
+    assert (
+        _values(SearchKind) == _values(sdk.SearchKind) == {"memory", "chunk", "summary", "message"}
+    )
 
 
-def test_verify_accepts_exactly_the_kinds_it_ranks() -> None:
-    """/v1/verify's ``kind`` is the key set of the citation-preference table, so every kind a
-    bundle emits (a packed item's representation, an unused item's record kind) round-trips."""
+def test_grounding_ranks_every_kind_a_bundle_carries() -> None:
+    """Grounding ranks evidence by kind through the citation-preference table, so every kind a
+    bundle records (a packed item's representation, an unused item's record kind) is in it."""
     assert _values(cascade.EvidenceKind) == set(cascade._SOURCE_RANK)
     packed = {"CHUNK", "TABLE", "PARAGRAPH", "SECTION", "SUBSECTION", "CODE_BLOCK"}
     packed |= {"SUMMARY", "ENTITY", "RELATION", "MEMORY"}

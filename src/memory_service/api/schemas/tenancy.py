@@ -9,9 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.tenancy import (
+    ANY_PRINCIPAL,
+    MAY_ACT_AS_MAX,
     ApiKey,
-    Group,
-    GroupMember,
     IssuedKey,
     KeyRole,
     MemberRole,
@@ -24,6 +24,10 @@ from memory_service.domain.tenancy import (
 _STATUS = (
     "active serves requests; suspended stops every credential of the tenant on its next "
     "request (403 tenant is suspended), refuses new keys and is skipped by retention"
+)
+_MAY_ACT_AS = (
+    "the principals a request with this key may act for (user:<id>, agent:<id>), or * for "
+    "every principal of the tenant; empty: only the key itself"
 )
 _QUOTA = (
     "requests per minute per credential of this tenant, replacing the service default; "
@@ -87,6 +91,32 @@ class IssueKeyRequest(BaseModel):
         "no other; the key still acts for the tenant's users within it",
     )
     expires_in_days: int | None = Field(default=None, ge=1, le=3660)
+    may_act_as: list[str] = Field(
+        default_factory=lambda: [ANY_PRINCIPAL],
+        max_length=MAY_ACT_AS_MAX,
+        description=_MAY_ACT_AS,
+    )
+
+
+class UpdateKeyRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"examples": [{"may_act_as": ["user:u-123"]}]}
+    )
+
+    may_act_as: list[str] = Field(max_length=MAY_ACT_AS_MAX, description=_MAY_ACT_AS)
+
+
+class KeySelfResponse(BaseModel):
+    """Who a key is, for the platform's other services (agent-runs) to authenticate by."""
+
+    key_id: str = Field(description="the key's id (never the secret)")
+    tenant_id: str | None = Field(
+        description="the tenant the key speaks for; null for a key that names the tenant per "
+        "request (the platform key, development keys)"
+    )
+    principal: str = Field(description="who the caller is; a principal the key may always be")
+    role: str = Field(description="platform, admin, service, trusted_dev or jwt")
+    may_act_as: list[str] = Field(description=_MAY_ACT_AS)
 
 
 class ApiKeyResponse(BaseModel):
@@ -100,6 +130,7 @@ class ApiKeyResponse(BaseModel):
     expires_at: datetime | None
     revoked_at: datetime | None
     last_used_at: datetime | None
+    may_act_as: list[str] = Field(description=_MAY_ACT_AS)
 
     @classmethod
     def of(cls, key: ApiKey) -> ApiKeyResponse:
@@ -167,38 +198,6 @@ class WorkspaceMemberResponse(BaseModel):
 
     @classmethod
     def of(cls, member: WorkspaceMember) -> WorkspaceMemberResponse:
-        return cls.model_validate(member.model_dump())
-
-
-class CreateGroupRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={"examples": [{"group_id": "analysts", "name": "Analysts"}]},
-    )
-
-    group_id: str | None = Field(default=None, description="omit for a generated id")
-    name: str = Field(min_length=1, max_length=200)
-
-
-class GroupResponse(BaseModel):
-    group_id: str
-    tenant_id: str
-    name: str
-    created_at: datetime
-
-    @classmethod
-    def of(cls, group: Group) -> GroupResponse:
-        return cls.model_validate(group.model_dump())
-
-
-class GroupMemberResponse(BaseModel):
-    group_id: str
-    user_id: str
-    added_by: str
-    added_at: datetime
-
-    @classmethod
-    def of(cls, member: GroupMember) -> GroupMemberResponse:
         return cls.model_validate(member.model_dump())
 
 

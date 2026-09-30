@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from memory_service.adapters.blob.filesystem import BlobAlreadyExists
 from memory_service.domain.ids import content_hash
-from memory_service.ports.blob import BlobChecksumMismatch, BlobNotFound, BlobRef
+from memory_service.ports.blob import BlobAlreadyExists, BlobChecksumMismatch, BlobNotFound, BlobRef
 from memory_service.ports.models import ProviderInfo
 
 

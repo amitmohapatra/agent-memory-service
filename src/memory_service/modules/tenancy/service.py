@@ -1,7 +1,7 @@
 """Onboarding and team administration.
 
 A platform operator creates a tenant and receives its first admin key. A tenant admin issues
-keys for its services, creates workspaces (teams) and groups, and admits or removes members.
+keys for its services, creates workspaces (teams), and admits or removes members.
 Every write runs in the unit of work the router opened; the authorization tuples are written
 beside the rows, and the membership revision is bumped so a change is seen on the caller's
 next request rather than at a cache's expiry.
@@ -9,15 +9,15 @@ next request rather than at a cache's expiry.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.ids import is_valid_id, new_id
 from memory_service.domain.tenancy import (
+    ANY_PRINCIPAL,
     MAX_KEYS_PER_TENANT,
     ApiKey,
-    Group,
-    GroupMember,
     IssuedKey,
     KeyRole,
     MemberRole,
@@ -25,6 +25,7 @@ from memory_service.domain.tenancy import (
     TenantStatus,
     Workspace,
     WorkspaceMember,
+    acting_principals,
     is_valid_tenant_id,
     mint_token,
     parse_principal,
@@ -61,6 +62,13 @@ def _clean_name(name: str) -> str:
 def _actor(service_id: str) -> str:
     """Who did it, bounded to the column: a JWT subject can be longer than 512 characters."""
     return service_id[:ACTOR_MAX]
+
+
+def _principals(principals: Sequence[str]) -> list[str]:
+    try:
+        return acting_principals(principals)
+    except ValueError as exc:
+        raise ValidationFailed(str(exc)) from exc
 
 
 def _valid(value: str, kind: str) -> str:
@@ -155,6 +163,7 @@ class TenancyService:
         created_by: str,
         workspace_id: str | None = None,
         expires_in_days: int | None = None,
+        may_act_as: Sequence[str] = (ANY_PRINCIPAL,),
     ) -> IssuedKey:
         if role is KeyRole.PLATFORM:
             raise ValidationFailed("the platform role is configured, never issued")
@@ -185,10 +194,21 @@ class TenancyService:
             secret_hash=secret_hash,
             created_by=_actor(created_by),
             expires_at=_now() + timedelta(days=expires_in_days) if expires_in_days else None,
+            may_act_as=_principals(may_act_as),
         )
         await uow.api_keys.add(key)
         log.info("api_key.issued", tenant_id=tenant_id, key_id=key_id, role=role.value)
         return IssuedKey(key=key, token=token)
+
+    async def set_may_act_as(
+        self, uow: UnitOfWork, tenant_id: str, key_id: str, principals: Sequence[str]
+    ) -> ApiKey:
+        """Replace whom a key of this tenant may act for; it applies on the key's next use
+        on every instance (the caller invalidates the verifier's cache)."""
+        key = await uow.api_keys.set_may_act_as(tenant_id, key_id, _principals(principals))
+        if key is None:
+            raise NotFound(f"key {key_id} not found")
+        return key
 
     async def list_keys(
         self,
@@ -288,7 +308,7 @@ class TenancyService:
         added_by: str,
     ) -> WorkspaceMember:
         try:
-            kind, ident = parse_principal(principal)
+            kind, _ = parse_principal(principal)
         except ValueError as exc:
             raise ValidationFailed(str(exc)) from exc
         if role == "admin" and kind != "user":
@@ -298,8 +318,6 @@ class TenancyService:
         # principal at once must not leave the union of their roles in the tuples
         await uow.serialize(f"workspace-members:{tenant_id}/{workspace_id}")
         await self.get_workspace(uow, tenant_id, workspace_id)
-        if kind == "group":
-            await self.get_group(uow, tenant_id, ident)
         member = WorkspaceMember(
             tenant_id=tenant_id,
             workspace_id=workspace_id,
@@ -332,75 +350,3 @@ class TenancyService:
     ) -> list[WorkspaceMember]:
         await self.get_workspace(uow, tenant_id, workspace_id)
         return await uow.workspaces.members(tenant_id, workspace_id)
-
-    # -- groups -------------------------------------------------------------------
-    async def create_group(
-        self, uow: UnitOfWork, tenant_id: str, *, name: str, group_id: str | None = None
-    ) -> Group:
-        group_id = _require_id(group_id, "group")
-        if await uow.groups.ever_existed(tenant_id, group_id):
-            raise Conflict(f"group id {group_id} exists or was used before")
-        group = Group(group_id=group_id, tenant_id=tenant_id, name=_clean_name(name))
-        await uow.groups.add(group)
-        await self.authz.grant_group(tenant_id, group_id)
-        return group
-
-    async def get_group(self, uow: UnitOfWork, tenant_id: str, group_id: str) -> Group:
-        group = await uow.groups.get(tenant_id, _valid(group_id, "group"))
-        if group is None:
-            raise NotFound("Group not found")
-        return group
-
-    async def list_groups(
-        self, uow: UnitOfWork, tenant_id: str, *, after: str = "", limit: int = 100
-    ) -> list[Group]:
-        return await uow.groups.list(
-            tenant_id, after=_valid(after, "group") if after else "", limit=limit
-        )
-
-    async def delete_group(self, uow: UnitOfWork, tenant_id: str, group_id: str) -> None:
-        """Its users leave the group and the group leaves every workspace it was admitted
-        to, so no dangling ``group:`` member remains in a workspace's listing or tuples.
-        Deleting a deleted group is a no-op."""
-        group_id = _valid(group_id, "group")
-        if await uow.groups.get(tenant_id, group_id) is None:
-            if await uow.groups.ever_existed(tenant_id, group_id):
-                return
-            raise NotFound("Group not found")
-        for member in await uow.groups.members(tenant_id, group_id):
-            await self.authz.revoke_group_member(
-                tenant_id, group_id, member.user_id, revisions=uow.revisions
-            )
-        principal = f"group:{group_id}"
-        for workspace_id in await uow.workspaces.memberships_of(tenant_id, principal):
-            await uow.workspaces.remove_member(tenant_id, workspace_id, principal)
-            await self.authz.revoke_workspace_member(
-                tenant_id, workspace_id, principal, revisions=uow.revisions
-            )
-        await uow.groups.soft_delete(tenant_id, group_id, at=_now())
-
-    async def add_group_user(
-        self, uow: UnitOfWork, tenant_id: str, group_id: str, user_id: str, *, added_by: str
-    ) -> GroupMember:
-        if not is_valid_id(user_id):
-            raise ValidationFailed(f"invalid user_id: {user_id!r}")
-        await self.get_group(uow, tenant_id, group_id)
-        member = GroupMember(
-            tenant_id=tenant_id, group_id=group_id, user_id=user_id, added_by=_actor(added_by)
-        )
-        await uow.groups.put_member(member)
-        await self.authz.set_group_member(tenant_id, group_id, user_id, revisions=uow.revisions)
-        return member
-
-    async def remove_group_user(
-        self, uow: UnitOfWork, tenant_id: str, group_id: str, user_id: str
-    ) -> None:
-        await self.get_group(uow, tenant_id, group_id)
-        await uow.groups.remove_member(tenant_id, group_id, _valid(user_id, "user"))
-        await self.authz.revoke_group_member(tenant_id, group_id, user_id, revisions=uow.revisions)
-
-    async def group_members(
-        self, uow: UnitOfWork, tenant_id: str, group_id: str
-    ) -> list[GroupMember]:
-        await self.get_group(uow, tenant_id, group_id)
-        return await uow.groups.members(tenant_id, group_id)

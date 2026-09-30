@@ -27,11 +27,9 @@ pytestmark = pytest.mark.unit
 #: What the Makefile exports for a judged run: the gateway's address and model, nothing about
 #: budgets or retries - those are the benchmark's to pin.
 JUDGED_ENV = {
-    "MEMORY__MODELS__LLM__ENABLED": "true",
-    "MEMORY__MODELS__LLM__MODEL": "gemini/gemini-3.8-flash",
-    "MEMORY__MODELS__LLM__FAST_MODEL": "gemini/gemini-3.8-flash",
-    "MEMORY__MODELS__LLM__USES": '["grounding_judge"]',
-    "MEMORY__MODELS__LLM__FAST_USES": '["grounding_judge"]',
+    "BENCH_LLM": "on",
+    "BIFROST_URL": "http://gateway.test/v1",
+    "BENCH_LLM_MODEL": "gemini/gemini-3.8-flash",
 }
 
 
@@ -45,6 +43,7 @@ def judged(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in [n for n in list(os.environ) if n.startswith("MEMORY__")]:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("BIFROST_VIRTUAL_KEY", raising=False)
     monkeypatch.setenv("BENCH_DEPTH", "judged")
     for name, value in JUDGED_ENV.items():
         monkeypatch.setenv(name, value)
@@ -53,7 +52,8 @@ def judged(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_the_judged_budget_survives_the_gateway_variables(judged: None) -> None:
     """The defect, pinned. Setting the model must not reset the output ceiling."""
-    llm = _settings().models.llm
+    llm = bench_env.bench_overrides().llm
+    assert llm is not None
     assert llm.max_tokens == 16384, "a reasoning model at 1024 returns an empty string"
     assert llm.timeout_seconds == 120
     assert llm.max_retries == 0, "retries make the pacer's rate not the request rate"
@@ -61,10 +61,18 @@ def test_the_judged_budget_survives_the_gateway_variables(judged: None) -> None:
 
 def test_the_environment_still_wins_for_what_it_names(judged: None) -> None:
     """The other half: this must not become a merge that ignores the environment."""
-    llm = _settings().models.llm
-    assert llm.enabled is True
-    assert llm.model == "gemini/gemini-3.8-flash"
-    assert llm.uses == ["grounding_judge"]
+    assert _settings().llm.enabled is True
+    llm = bench_env.bench_overrides().llm
+    assert llm is not None and llm.model == llm.fast_model == "gemini/gemini-3.8-flash"
+    assert bench_env.JUDGE_USES == ("grounding_judge",)
+
+
+def test_a_gateway_in_the_shell_does_not_enable_the_model(monkeypatch) -> None:
+    """``BIFROST_URL`` is the harness's variable too; without ``BENCH_LLM=on`` a benchmark
+    process must not become a paid one because the shell happened to carry it."""
+    monkeypatch.setenv("BIFROST_URL", "http://gateway.test/v1")
+    monkeypatch.delenv("BENCH_LLM", raising=False)
+    assert _settings().llm.enabled is False
 
 
 def test_defaults_outside_the_models_section_survive_too(judged: None) -> None:
@@ -75,24 +83,24 @@ def test_defaults_outside_the_models_section_survive_too(judged: None) -> None:
 
 
 def test_env_paths_reads_names_not_values(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MEMORY__MODELS__LLM__MODEL", "x")
+    monkeypatch.setenv("MEMORY__DATABASE__POOL_SIZE", "3")
     monkeypatch.setenv("MEMORY__DATABASE__URL", "y")
     paths = _env_paths()
-    assert ("models", "llm", "model") in paths
+    assert ("database", "pool_size") in paths
     assert ("database", "url") in paths
 
 
 def test_an_unknown_variable_does_not_invent_a_setting() -> None:
     """A typo must stay a typo, not become a validation error somewhere unrelated."""
-    target: dict = {"models": {"llm": {"model": "kept"}}}
-    _overlay(target, {"models": {"llm": {"model": "env"}}}, ("models", "llm", "nonesuch"))
-    assert target == {"models": {"llm": {"model": "kept"}}}
+    target: dict = {"database": {"pool_size": 1}}
+    _overlay(target, {"database": {"pool_size": 3}}, ("database", "nonesuch"))
+    assert target == {"database": {"pool_size": 1}}
 
 
 def test_a_branch_the_defaults_lack_is_created() -> None:
     target: dict = {}
-    _overlay(target, {"models": {"llm": {"model": "env"}}}, ("models", "llm", "model"))
-    assert target == {"models": {"llm": {"model": "env"}}}
+    _overlay(target, {"database": {"pool_size": 3}}, ("database", "pool_size"))
+    assert target == {"database": {"pool_size": 3}}
 
 
 @pytest.fixture
@@ -104,6 +112,7 @@ def shipped(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in [n for n in list(os.environ) if n.startswith("MEMORY__")]:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("BIFROST_VIRTUAL_KEY", raising=False)
     monkeypatch.setenv("BENCH_DEPTH", "shipped")
     for name, value in JUDGED_ENV.items():
         monkeypatch.setenv(name, value)
@@ -120,7 +129,8 @@ def test_the_judge_keeps_its_budget_at_shipping_depth(shipped: None) -> None:
     read 0.7993 - and 25 of the 28 had every gold evidence item already in the bundle. A
     shallower retrieval is a legitimate thing to measure; a blinded judge is not.
     """
-    llm = _settings().models.llm
+    llm = bench_env.bench_overrides().llm
+    assert llm is not None
     assert llm.max_tokens == 16384, "the judge's ceiling does not depend on retrieval depth"
     assert llm.timeout_seconds == 120
     assert llm.max_retries == 0

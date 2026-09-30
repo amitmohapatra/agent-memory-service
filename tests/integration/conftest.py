@@ -19,10 +19,7 @@ from tests.conftest import (  # noqa: E402  (one definition, see tests/conftest.
 REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
 
 TABLES = [
-    "webhook_deliveries",
-    "webhook_subscriptions",
     "feedback",
-    "standing_briefs",
     "agent_credentials",
     "llm_policies",
     "llm_usage_daily",
@@ -120,6 +117,8 @@ async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
     # tests read from disk and corrupt on purpose; the memory stand-in has no files
     c = await build_container(settings, __version__, overrides=integration_overrides(blob=None))
     async with c.database.engine.begin() as conn:
+        # a reset, not a hot path: on a loaded host it may outlast the statement timeout
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
         await conn.execute(
             text("TRUNCATE procrastinate_jobs, procrastinate_events RESTART IDENTITY CASCADE")

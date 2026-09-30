@@ -123,6 +123,8 @@ class MessageRole(StrEnum):
     SYSTEM = "SYSTEM"
     TOOL = "TOOL"
     AGENT = "AGENT"
+    #: something that happened, told to the service as evidence to learn from (INTERNAL)
+    EVENT = "EVENT"
 
 
 class MessageKind(StrEnum):
@@ -231,5 +233,4 @@ class ErrorCode(StrEnum):
     TIMEOUT = "TIMEOUT"
     RETRYABLE_PROCESSING = "RETRYABLE_PROCESSING"
     CORRUPT_SOURCE = "CORRUPT_SOURCE"
-    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
     INTERNAL = "INTERNAL"

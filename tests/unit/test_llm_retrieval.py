@@ -97,7 +97,7 @@ async def test_expansion_reroutes_and_widens_search_but_keeps_the_original_query
         engine = _engine(parts, gw.assist(uses=["query_expansion"]))
         res = await engine.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
         assert gw.route.call_count == 1
-        assert gw.prompts()[0]["model"] == "test/fast"
+        assert gw.prompts()[0]["model"] == "gemini/gemini-3.8-flash"
         assert gw.prompts()[0]["messages"][1]["content"] == f"Query: {QUERY}"
     assert res.routed.query_type is QueryType.ENTITY_RELATION and res.routed.needs_graph
     assert res.routed.query == QUERY

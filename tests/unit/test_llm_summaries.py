@@ -100,7 +100,7 @@ async def test_document_summaries_are_rewritten_from_extractive_and_source() -> 
             gw.assist(uses=["summaries"]), nodes, chunks, extractive, title=TITLE
         )
         prompts = gw.prompts()
-    assert len(prompts) == 2 and all(p["model"] == "test/strong" for p in prompts)
+    assert len(prompts) == 2 and all(p["model"] == "gemini/gemini-3.8-pro" for p in prompts)
     first = prompts[0]["messages"]
     assert "at most 900 characters" in first[0]["content"]
     assert first[1]["content"].startswith(f"Document: {TITLE}\nSection: {TITLE}\n")

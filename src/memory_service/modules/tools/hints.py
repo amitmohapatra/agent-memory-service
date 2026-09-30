@@ -5,10 +5,11 @@
   record), re-scored by how well each has worked and how recently;
 - plan / next: the best stored procedure for the task pattern that uses only callable tools,
   and its first step this run has not done yet;
-- prefill: each argument of the next tool, resolved in order from the procedure's bindings
-  (a literal, or an earlier step's output in this run), the knowledge graph (entities of the
-  argument's type named in the task, and the ids tools returned for them), the pinned
-  profile and the memories in hand, and finally the values the task itself names;
+- prefill: each argument of the next tool (keyed ``tool.arg``), resolved in order from the
+  procedure's bindings (a literal, or an earlier step's output in this run), the knowledge
+  graph (entities of the argument's type named in the task, and the ids tools returned for
+  them), the pinned profile and the memories in hand, and finally the values the task itself
+  names;
 - missing: required arguments nothing resolved, with the question to ask.
 
 Every read is indexed and bounded; the only model is the query encoder of the tool search.
@@ -50,8 +51,11 @@ PROCEDURE_MATCH: Final = 0.6
 VISIBLE_PROCEDURES_MAX: Final = 100
 #: How much a tool's success rate moves its score around the neutral 0.5.
 SUCCESS_WEIGHT: Final = 0.5
-#: Added to the score of a tool the learned plan uses, and again to the plan's next step.
+#: Added to the score of a tool the learned plan uses.
 PLAN_BONUS: Final = 0.5
+#: Added to the plan's next step: it leads whatever the search found (the step to take is
+#: known, a closer text match is not a reason to take another).
+NEXT_STEP_BONUS: Final = 1.0
 #: Added when the tool was used within ``RECENT``.
 RECENCY_BONUS: Final = 0.1
 RECENT: Final = timedelta(days=30)
@@ -135,10 +139,7 @@ def _candidate(
         score += PLAN_BONUS
         why.append(f"step {plan.tools.index(name) + 1} of the learned plan")
     if next_step:
-        score += PLAN_BONUS
-        why.append("the plan's next step")
-    if next_step:
-        score += PLAN_BONUS
+        score += NEXT_STEP_BONUS
         why.append("the plan's next step")
     if stats is not None and stats.calls:
         why.append(f"succeeded {stats.successes}/{stats.calls}")
@@ -268,7 +269,7 @@ class ToolHintsService:
         for arg in _arguments(job.tool, job.plan):
             found = await self._resolve(job, arg)
             if found is not None:
-                prefill[arg] = found
+                prefill[f"{job.tool.name}.{arg}"] = found
             elif arg in job.tool.required:
                 missing.append(_missing(job.tool, arg))
         return prefill, missing

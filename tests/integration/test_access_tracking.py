@@ -16,6 +16,7 @@ A test that only asserted "the column exists" would have passed throughout.
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
@@ -30,9 +31,7 @@ FACT = "Priya owns the rollback plan and pins the previous image digest in the r
 async def _remember(container, uow_factory, text: str) -> None:
     register_handlers(container)
     async with uow_factory() as uow:
-        await container.services["memory"].submit_observation(
-            uow, CTX, kind=ObservationKind.MESSAGE, content=text
-        )
+        await submit_observation(uow, CTX, kind=ObservationKind.MESSAGE, content=text)
         await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()

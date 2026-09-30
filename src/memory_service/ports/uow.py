@@ -10,7 +10,6 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
-from memory_service.ports.briefs import BriefRepository
 from memory_service.ports.credentials import CredentialRepository
 from memory_service.ports.feedback import FeedbackRepository
 from memory_service.ports.llm import LLMPolicyRepository, LLMUsageRepository
@@ -33,18 +32,15 @@ from memory_service.ports.repositories import (
 from memory_service.ports.tasks import JobSpec
 from memory_service.ports.tenancy import (
     ApiKeyRepository,
-    GroupRepository,
     ReadAuditRepository,
     TenantRepository,
     WorkspaceRepository,
 )
 from memory_service.ports.tools import ProcedureRepository, ToolRepository
-from memory_service.ports.webhooks import WebhookDeliveryRepository, WebhookRepository
 
 
 @runtime_checkable
 class UnitOfWork(Protocol):
-    briefs: BriefRepository
     credentials: CredentialRepository
     llm_policies: LLMPolicyRepository
     llm_usage: LLMUsageRepository
@@ -68,11 +64,8 @@ class UnitOfWork(Protocol):
     tenants: TenantRepository
     api_keys: ApiKeyRepository
     workspaces: WorkspaceRepository
-    groups: GroupRepository
     read_audit: ReadAuditRepository
     feedback: FeedbackRepository
-    webhooks: WebhookRepository
-    webhook_deliveries: WebhookDeliveryRepository
 
     async def __aenter__(self) -> Self: ...
 

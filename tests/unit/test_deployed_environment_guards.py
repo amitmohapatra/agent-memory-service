@@ -47,7 +47,11 @@ def test_staging_also_refuses_the_filesystem_blob_store() -> None:
     with pytest.raises(ValueError) as raised:
         Settings(
             service={"environment": "staging"},
-            authentication={"mode": "jwt", "jwt_issuer": "https://i", "jwt_audience": "a"},
+            authentication={
+                "jwt_jwks_url": "https://i/jwks",
+                "jwt_issuer": "https://i",
+                "jwt_audience": "a",
+            },
             blob={"provider": "filesystem"},
         )
     assert "blob.provider" in str(raised.value)

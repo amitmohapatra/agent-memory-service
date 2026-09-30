@@ -38,11 +38,11 @@ from bifrost_sdk import (
 )
 
 from memory_service.adapters.models.catalog import ModelCatalog
-from memory_service.config.constants import LLM_TRANSPORT, LLMTransport
+from memory_service.config.constants import LLM, LLM_TRANSPORT, LLMTransport, LLMTuning
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.cost import record_llm_tokens
-from memory_service.modules.llm.policy import current_model_identity
+from memory_service.modules.llm.policy import current_model_identity, model_for
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import llm_requests_total, llm_seconds, llm_tokens_total
 from memory_service.observability.tracing import span
@@ -127,7 +127,7 @@ def _json_only_instruction(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 class DisabledLLM:
-    """The LLM port when ``models.llm.enabled=false``: every call is a ProviderNotConfigured."""
+    """The LLM port when no gateway is configured: every call is a ProviderNotConfigured."""
 
     info = ProviderInfo(
         name="disabled-llm", version="0", license="Apache-2.0", origin="internal", locality="local"
@@ -181,16 +181,16 @@ class BifrostLLM:
         transport: LLMTransport = LLM_TRANSPORT,
         credentials: CredentialResolver | None = None,
         usage: LLMUsageRecorder | None = None,
+        tuning: LLMTuning = LLM,
     ) -> None:
-        if not settings.enabled:
-            raise ProviderNotConfigured("models.llm.enabled must be true")
-        if not settings.model:
-            raise ProviderNotConfigured("models.llm.model is required")
+        if settings.base_url is None:
+            raise ProviderNotConfigured("the model gateway (BIFROST_URL) is not configured")
         self.settings = settings
+        #: models, output budget, timeout and retries (``constants.LLM`` unless a container
+        #: override replaced it)
+        self.tuning = tuning
         self.credentials = credentials
         self.usage = usage
-        self.model = settings.model
-        self.fast_model = settings.fast_model or settings.model
         self.log_source_text = log_source_text
         #: Transport, retries, rate-limit handling and the breaker all live in the shared
         #: client; what stays here is what is *this service's*: per-use model routing,
@@ -212,9 +212,7 @@ class BifrostLLM:
         self._http_client = client or httpx.AsyncClient(
             base_url=settings.base_url.rstrip("/"),
             headers=headers,
-            timeout=httpx.Timeout(
-                settings.timeout_seconds, connect=min(5.0, settings.timeout_seconds)
-            ),
+            timeout=httpx.Timeout(tuning.timeout_seconds, connect=min(5.0, tuning.timeout_seconds)),
         )
         # httpx invokes request hooks for every SDK retry, after its backoff. This
         # keeps retries in the shared SDK while denying a newly retired key before send.
@@ -223,28 +221,25 @@ class BifrostLLM:
         self._gateway = Bifrost(
             settings.base_url,
             api_key=settings.api_key.get_secret_value() if settings.api_key else None,
-            timeout=settings.timeout_seconds,
-            max_retries=settings.max_retries,
+            timeout=tuning.timeout_seconds,
+            max_retries=tuning.max_retries,
             backoff_seconds=transport.retry_backoff_seconds,
-            max_tokens=settings.max_tokens,
+            max_tokens=tuning.max_tokens,
             circuit_failure_threshold=transport.circuit_failure_threshold,
             circuit_open_seconds=transport.circuit_open_seconds,
             client=self._http_client,
         )
 
     # ------------------------------------------------------------------ port
-    def model_for(self, use: str) -> str:
-        return self.fast_model if use in self.settings.fast_uses else self.model
-
     async def _resolve_model(self, use: str) -> str:
-        configured = self.model_for(use)
+        configured = model_for(use, self.tuning)
         if configured != "auto":
             return configured
         async with self._call_options() as options:
             return await self._catalog.resolve(
                 _catalog_key(self._credential_attempt.get()),
                 options,
-                fast=use in self.settings.fast_uses,
+                fast=use in self.tuning.fast_uses,
             )
 
     async def complete(
@@ -258,7 +253,7 @@ class BifrostLLM:
         return await self._chat(
             [m.model_dump() for m in messages],
             use=use,
-            max_tokens=min(max_tokens, self.settings.max_tokens),
+            max_tokens=min(max_tokens, self.tuning.max_tokens),
             temperature=temperature,
             source=messages,
         )
@@ -301,7 +296,7 @@ class BifrostLLM:
                     turns,
                     use=use,
                     selected_model=model,
-                    max_tokens=min(max_tokens, self.settings.max_tokens),
+                    max_tokens=min(max_tokens, self.tuning.max_tokens),
                     source=messages,
                     **envelope,
                 )
@@ -473,7 +468,7 @@ class BifrostLLM:
             else None
         )
         options = MEMORY_CALL_OPTIONS
-        if self.settings.enabled == "auto" and credential is None and not self.settings.api_key:
+        if credential is None and not self.settings.operator_pays:
             raise ProviderNotConfigured("Automatic assistance requires an agent or operator key")
         if credential is not None:
             # Per-request headers, never mutation of the shared client's defaults. Override

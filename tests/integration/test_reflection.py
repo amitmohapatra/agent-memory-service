@@ -4,6 +4,7 @@ memory with evidence pointing at its sources, indexed through ``memory.index``."
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, ObservationKind
@@ -19,9 +20,7 @@ U1 = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
 async def _observe(container, uow_factory, ctx, content):
     register_handlers(container)
     async with uow_factory() as uow:
-        await container.services["memory"].submit_observation(
-            uow, ctx, kind=ObservationKind.MESSAGE, content=content
-        )
+        await submit_observation(uow, ctx, kind=ObservationKind.MESSAGE, content=content)
         await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()

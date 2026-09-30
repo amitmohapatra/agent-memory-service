@@ -54,6 +54,7 @@ class VerifiedKey:
     tenant_id: str
     role: KeyRole
     workspace_id: str | None
+    may_act_as: tuple[str, ...] = ("*",)
 
 
 class _Cached(BaseModel):
@@ -121,7 +122,13 @@ class ApiKeyVerifier:
             # Only a successful use is a use: a wrong secret against a real id must not move
             # last_used_at. Bounded to one write per key per window per process.
             await self._touch(key_id, now)
-        return VerifiedKey(record.key_id, record.tenant_id, record.role, record.workspace_id)
+        return VerifiedKey(
+            record.key_id,
+            record.tenant_id,
+            record.role,
+            record.workspace_id,
+            tuple(record.may_act_as),
+        )
 
     async def invalidate(self, key_id: str, *, strict: bool = False) -> None:
         """Replace whatever the cache holds with a tombstone: the next reads go to the store

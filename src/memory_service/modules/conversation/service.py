@@ -26,13 +26,12 @@ from memory_service.domain.conversation import AgentRun, Attachment, Message, Se
 from memory_service.domain.enums import MessageKind, MessageRole, ObservationKind
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash, new_id, thread_session_id, thread_turn_id
-from memory_service.domain.observation import Observation, ProcessingHints
+from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.authz.visibility import validate_requested_visibility
 from memory_service.modules.conversation.summary import SUMMARY_EVERY, enqueue_refresh
-from memory_service.modules.tenancy.gate import guard_workspace_visibility, require_workspace_member
+from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -119,6 +118,34 @@ class ConversationService:
         log.info("thread.created", **ctx.log_fields())
         return thread
 
+    async def patch_thread(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        thread_id: str,
+        *,
+        title: str | None = None,
+        custom_metadata: dict[str, Any] | None = None,
+    ) -> Thread:
+        """Set a thread's title and metadata, creating the thread when it does not exist yet
+        (messages create threads on demand; this is how one gets a title first)."""
+        await uow.serialize(f"thread:{ctx.tenant_id}/{thread_id}")
+        existing = await uow.threads.get(ctx.tenant_id, thread_id)
+        if existing is None:
+            return await self.create_thread(
+                uow, ctx, thread_id=thread_id, title=title, custom_metadata=custom_metadata
+            )
+        await self.authz.require(ctx, "can_write", "thread", thread_id)
+        if title is None and custom_metadata is None:
+            return existing
+        await uow.threads.touch(
+            ctx.tenant_id, thread_id, title=title, custom_metadata=custom_metadata
+        )
+        await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
+        updated = await uow.threads.get(ctx.tenant_id, thread_id)
+        assert updated is not None
+        return updated
+
     async def get_thread(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str
     ) -> Thread:
@@ -152,11 +179,14 @@ class ConversationService:
         occurred_at: datetime | None = None,
         source_system: str | None = None,
         source_message_id: str | None = None,
-        hints: ProcessingHints | None = None,
         parent_message_id: str | None = None,
     ) -> AppendResult:
+        """Append one message. An EVENT is internal evidence: it is kept in the transcript and
+        learned from as an event, never shown as chat."""
         if not ctx.thread_id:
             raise ValidationFailed("thread_id is required for messages")
+        if role is MessageRole.EVENT:
+            kind = MessageKind.INTERNAL
         # Same reason as MemoryService.submit_observation: a message is agent-authored text
         # going into a PostgreSQL `text` column, and a NUL byte in it fails the INSERT.
         content = sanitise(content)
@@ -181,11 +211,6 @@ class ConversationService:
                 await self.create_thread(uow, ctx, thread_id=ctx.thread_id)
             else:
                 await self.authz.require(ctx, "can_write", "thread", ctx.thread_id)
-            # a message may carry a visibility hint; the same rule as a direct observation
-            validate_requested_visibility(ctx, hints)
-            await guard_workspace_visibility(
-                uow, self.authz, ctx, getattr(hints, "visibility", None)
-            )
 
             # imports: the same source message must not be stored twice
             if source_system and source_message_id:
@@ -236,13 +261,14 @@ class ConversationService:
 
             observation = Observation(
                 **ctx.provenance(),
-                kind=ObservationKind.MESSAGE,
+                kind=ObservationKind.EVENT
+                if role is MessageRole.EVENT
+                else ObservationKind.MESSAGE,
                 content=content,
                 content_hash=message.content_hash,
                 message_id=message.message_id,
                 source_system=source_system,
                 source_id=source_message_id,
-                hints=hints or ProcessingHints(),
                 custom_metadata={"role": role.value, "kind": kind.value},
                 occurred_at=message.occurred_at,
             )
@@ -287,7 +313,6 @@ class ConversationService:
                     ctx.tenant_id,
                     ctx.thread_id,
                     principal_id=ctx.principal_id,
-                    workspace_id=ctx.workspace_id,
                 )
             revision = await uow.threads.touch(ctx.tenant_id, ctx.thread_id)
             await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, ctx.thread_id)

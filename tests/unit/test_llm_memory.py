@@ -390,21 +390,20 @@ def test_model_jobs_are_registered_whenever_a_model_may_be_reached(make_settings
     can appear at any time), so the jobs exist unless the model is prohibited outright."""
     from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
 
-    def handlers(**llm):
-        settings = make_settings(models={"llm": llm})
+    def handlers(bifrost_url):
+        settings = make_settings(bifrost_url=bifrost_url)
         container = Container(settings=settings, version="test")
         container.tasks = RecordingTaskQueue()
         container.services["uow_factory"] = None
         register_handlers(container)
         return container.tasks
 
-    off = handlers(enabled=False)
+    off = handlers(None)
     assert "memory.reflect" not in off.handlers and "periodic.memory_reflect" not in off.periodic
     assert "memory.connect" not in off.handlers
-    for llm in ({"enabled": "auto"}, {"enabled": True, "model": "test/strong"}):
-        on = handlers(**llm)
-        assert {"memory.reflect", "memory.connect"} <= set(on.handlers)
-        assert {"periodic.memory_reflect", "periodic.memory_connect"} <= set(on.periodic)
+    on = handlers("http://bifrost.test/v1")
+    assert {"memory.reflect", "memory.connect"} <= set(on.handlers)
+    assert {"periodic.memory_reflect", "periodic.memory_connect"} <= set(on.periodic)
 
 
 # --- dedup batching -----------------------------------------------------------------------

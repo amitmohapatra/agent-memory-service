@@ -86,17 +86,6 @@ async def test_one_role_per_principal_and_every_role_reads() -> None:
     assert held == {"admin"}, "changing role replaces it rather than accumulating"
 
 
-async def test_group_membership_reaches_the_workspace_and_revokes_with_the_group() -> None:
-    authz = _service()
-    await authz.grant_workspace("acme", "finance")
-    await authz.grant_group("acme", "analysts")
-    await authz.set_group_member("acme", "analysts", "u3")
-    await authz.set_workspace_member("acme", "finance", "group:analysts", "member")
-    assert (await authz.scope(_ctx(user_id="u3"))).workspace_ids == ["finance"]
-    await authz.revoke_group_member("acme", "analysts", "u3")
-    assert (await authz.scope(_ctx(user_id="u3"))).workspace_ids == []
-
-
 async def test_an_unattended_agent_can_be_a_member_and_a_bound_agent_inherits_its_user() -> None:
     authz = _service()
     await authz.grant_workspace("acme", "finance")

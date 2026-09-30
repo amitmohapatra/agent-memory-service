@@ -301,7 +301,7 @@ class AuthorizationService:
         if revisions is not None:
             await self._bump_membership(tenant_id, revisions, user_id)
 
-    # -- teams: workspaces and groups -------------------------------------------
+    # -- teams: workspaces -------------------------------------------------------
     #
     # Every grant below has a revoke, and both bump the membership revision, so a change is
     # seen on the caller's next request rather than at the scope cache's expiry. This is the
@@ -312,8 +312,6 @@ class AuthorizationService:
     def _member_subject(tenant_id: str, principal: str) -> tuple[str, str]:
         """FGA subject for a workspace principal, and the revision id its scopes hang on."""
         kind, ident = parse_principal(principal)
-        if kind == "group":
-            return f"group:{object_id(tenant_id, ident)}#member", ""
         return f"{kind}:{ident}", ident
 
     async def grant_workspace(self, tenant_id: str, workspace_id: str) -> None:
@@ -360,40 +358,6 @@ class AuthorizationService:
             [], [RelationTuple(user=subject, relation=r, object=obj) for r in WORKSPACE_ROLES]
         )
         await self._bump_membership(tenant_id, revisions, ident)
-
-    async def grant_group(self, tenant_id: str, group_id: str) -> None:
-        obj = f"group:{object_id(tenant_id, group_id)}"
-        await self.provider.write(
-            [RelationTuple(user=f"tenant:{tenant_id}", relation="tenant", object=obj)]
-        )
-
-    async def set_group_member(
-        self,
-        tenant_id: str,
-        group_id: str,
-        user_id: str,
-        *,
-        revisions: RevisionRepository | None = None,
-    ) -> None:
-        obj = f"group:{object_id(tenant_id, group_id)}"
-        await self.provider.write(
-            [RelationTuple(user=f"user:{user_id}", relation="member", object=obj)]
-        )
-        await self._bump_membership(tenant_id, revisions, user_id)
-
-    async def revoke_group_member(
-        self,
-        tenant_id: str,
-        group_id: str,
-        user_id: str,
-        *,
-        revisions: RevisionRepository | None = None,
-    ) -> None:
-        obj = f"group:{object_id(tenant_id, group_id)}"
-        await self.provider.write(
-            [], [RelationTuple(user=f"user:{user_id}", relation="member", object=obj)]
-        )
-        await self._bump_membership(tenant_id, revisions, user_id)
 
     def describe(self) -> str:
         return json.dumps(

@@ -20,7 +20,7 @@ from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
 from memory_service.modules.retrieval.engine import RetrievalEngine
-from memory_service.ports.search import SearchRecord, VectorName
+from memory_service.ports.search import RANK_FIELDS, SearchRecord, VectorName
 
 pytestmark = pytest.mark.unit
 
@@ -88,6 +88,9 @@ async def _parts(delay: float = 0.0, **settings):
                     sparse=sparse[i],
                     payload={
                         "kind": kind,
+                        "record_id": f"{rid}_{kind}",
+                        "tenant_id": "t",
+                        "section_path": f"section of {rid}",
                         "visibility_keys": ["tenant:t"],
                         "current": True,
                         "text": text,
@@ -149,3 +152,18 @@ async def test_the_shipped_fusion_is_unweighted() -> None:
     engine, _, _, store = await _parts()
     await engine.retrieve(CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY)
     assert store.hybrid_calls[-1]["weights"] is None
+
+
+async def test_the_ranked_read_is_two_phase_and_the_cut_is_hydrated() -> None:
+    """Ranking reads the ranking fields of every candidate; only what survives the cut is
+    read whole (``RANK_FIELDS`` then ``get``), and it arrives with every field."""
+    engine, _, _, store = await _parts()
+    result = await engine.retrieve(
+        CTX, "Berlin office", kinds=("chunk",), limit=1, visibility=VISIBILITY
+    )
+    assert all(call["fields"] == RANK_FIELDS for call in store.hybrid_calls)
+    assert "section_path" not in RANK_FIELDS
+    assert [c.record_id for c in result.candidates] == ["chk_berlin_chunk"]
+    head = result.candidates[0]
+    assert head.hydrated and head.payload["section_path"] == "section of chk_berlin"
+    assert "hydrate" in result.diagnostics["timings_ms"]

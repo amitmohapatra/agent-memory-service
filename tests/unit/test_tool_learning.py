@@ -9,7 +9,7 @@ import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY, layer_for
-from memory_service.domain.learning import ApprovalCounts, arg_shape
+from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import RunOutcome, StoredProcedure, ToolDescriptor, ToolInvocation
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.hints import (
@@ -31,6 +31,7 @@ from memory_service.modules.tools.learning import (
 from memory_service.modules.tools.patterns import task_pattern, task_slots
 from memory_service.modules.tools.procedures import mine_procedure
 from memory_service.modules.tools.trajectories import build_trajectory
+from trellis.memory.approval import arg_shape
 
 NOW = datetime(2026, 9, 30, tzinfo=UTC)
 

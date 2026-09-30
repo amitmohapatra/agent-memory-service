@@ -1,16 +1,16 @@
 """The 90% path::
 
     memory = MemoryClient("http://memory-service:8080", api_key="...")
-    ctx = memory.bind(tenant_id=..., user_id=..., thread_id=...)  # session/turn optional
-    await ctx.chat.user(message)
-    bundle = await ctx.context(message)          # push: what the prompt gets
+    ctx = memory.bind(user_id=..., thread_id=...)   # the key names the tenant
+    pushed = await ctx.context(question)            # what the prompt gets: pushed.rendered
     ...
-    await ctx.chat.assistant(answer)
+    await ctx.history.add([("USER", question), ("ASSISTANT", answer)])
+    await ctx.verify(answer, bundle_id=pushed.bundle_id)
 
 The verbs an agent uses every turn live on the context (``context``, ``remember``,
-``update``, ``forget``, ``search``, ``history``, ``observe``, ``feedback``, ``record_tool``,
-``outcome``, ``tool_hints``, ``agent_tools``, ``call_agent_tool``, ``profile``, ``summary``,
-``verify``); everything else is under ``ctx.advanced``.
+``update``, ``forget``, ``search``, ``history``, ``feedback``, ``record_tool``,
+``tool_hints``, ``agent_tools``, ``call_agent_tool``, ``profile``, ``verify``, ``agent``);
+everything else is under ``ctx.advanced``.
 
 ``MemoryClient`` is static (one per process). ``MemoryContext`` is per request and
 immutable; ``contextvars`` propagate it within one async execution for convenience only.
@@ -19,47 +19,43 @@ immutable; ``contextvars`` propagate it within one async execution for convenien
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from collections.abc import Mapping, Sequence
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any, Self
+from typing import Any, Literal, Self, overload
 
 import httpx
 
 from trellis.memory.admin import AdminAPI, TenantAPI
 from trellis.memory.advanced import AdvancedAPI
-from trellis.memory.errors import InsufficientEvidence, NotFoundError
 from trellis.memory.models import (
     AgentTool,
     ContextBundle,
-    ContextItem,
     EvidenceRef,
     Feedback,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
-    GroundingReport,
     Lifetime,
     MemoryType,
+    Message,
     MessageAck,
     MessageInfo,
-    MessageKind,
-    MessageRole,
-    ObservationAck,
-    ObservationKind,
     Page,
     ProfileBlock,
-    RecallKind,
+    PromptContext,
     RememberAck,
-    RunOutcome,
     Scope,
+    SearchItem,
+    SearchKind,
     SupersedeAck,
     ThreadInfo,
-    ThreadSummary,
     ToolHints,
     ToolResult,
     ToolStatus,
+    VerifyReport,
     Visibility,
 )
 from trellis.memory.transport import Transport
@@ -96,7 +92,7 @@ class MemoryClient:
         )
         #: Platform administration (the bootstrap key): onboarding tenants.
         self.admin = AdminAPI(self)
-        #: Administration of the key's own tenant: keys, workspaces, groups, the read audit.
+        #: Administration of the key's own tenant: keys, workspaces, model keys, the read audit.
         self.tenant = TenantAPI(self)
 
     def administer(self, tenant_id: str) -> TenantAPI:
@@ -138,15 +134,16 @@ class MemoryClient:
 
 
 class MemoryContext:
-    """Per-request handle. Immutable; ``derive``/``agent`` create child contexts."""
+    """Per-request handle. Immutable; ``agent`` creates child contexts."""
 
     def __init__(self, client: MemoryClient, scope: Scope) -> None:
         self._client = client
         self.scope = scope
-        self.chat = ChatAPI(self)
-        #: ``await ctx.feedback(record)``; ``.get`` / ``.list_for`` / ``.page_for`` read it back
+        #: ``await ctx.history()`` reads the thread; ``.add`` appends to it
+        self.history = HistoryAPI(self)
+        #: ``await ctx.feedback(...)`` records a judgement; ``.get`` / ``.list_for`` read them
         self.feedback = FeedbackAPI(self)
-        #: ``await ctx.profile()`` lists the pinned blocks; ``.set`` / ``.edit`` change one
+        #: ``await ctx.profile()`` lists the pinned blocks; ``.edit`` changes one
         self.profile = ProfileAPI(self)
         self.advanced = AdvancedAPI(self)
         self._token: Any = None
@@ -165,10 +162,6 @@ class MemoryContext:
             _current_context.reset(self._token)
             self._token = None
 
-    def derive(self, **changes: Any) -> MemoryContext:
-        """Child context (e.g. for an internal agent run): same lineage, new agent fields."""
-        return MemoryContext(self._client, self.scope.model_copy(update=changes))
-
     def agent(
         self, agent_id: str, *, agent_run_id: str | None = None, agent_group_id: str | None = None
     ) -> MemoryContext:
@@ -181,53 +174,82 @@ class MemoryContext:
         for its user, or ``"PRIVATE"`` for its own durable store (what a scheduled job with no
         user uses). Peers that must collaborate share ``agent_group_id`` and
         ``visibility="AGENT_GROUP"``, which is not bounded by the run tree."""
-        return self.derive(
-            agent_id=agent_id,
-            agent_run_id=agent_run_id or f"run_{uuid.uuid4().hex}",
-            agent_group_id=agent_group_id or self.scope.agent_group_id,
-            parent_agent_run_id=self.scope.agent_run_id,
+        return MemoryContext(
+            self._client,
+            self.scope.model_copy(
+                update={
+                    "agent_id": agent_id,
+                    "agent_run_id": agent_run_id or f"run_{uuid.uuid4().hex}",
+                    "agent_group_id": agent_group_id or self.scope.agent_group_id,
+                    "parent_agent_run_id": self.scope.agent_run_id,
+                }
+            ),
         )
 
     # -- push -----------------------------------------------------------
+    @overload
+    async def context(
+        self,
+        query: str,
+        *,
+        token_budget: int | None = ...,
+        tools: Sequence[str] | None = ...,
+        window: bool = ...,
+        document_ids: Sequence[str] | None = ...,
+        format: Literal["prompt"] = ...,
+        debug: bool = ...,
+    ) -> PromptContext: ...
+
+    @overload
+    async def context(
+        self,
+        query: str,
+        *,
+        token_budget: int | None = ...,
+        tools: Sequence[str] | None = ...,
+        window: bool = ...,
+        document_ids: Sequence[str] | None = ...,
+        format: Literal["full"],
+        debug: bool = ...,
+    ) -> ContextBundle: ...
+
     async def context(
         self,
         query: str,
         *,
         token_budget: int | None = None,
-        tools: Mapping[str, Any] | None = None,
-        since_revision: int | None = None,
-        require_evidence: bool = False,
-        use_llm: bool | None = None,
-        **options: Any,
-    ) -> ContextBundle:
-        """Bounded, ranked context for this turn: memories, knowledge, the pinned profile,
-        the thread summary and the procedures learned for the task, rendered for a prompt.
+        tools: Sequence[str] | None = None,
+        window: bool = True,
+        document_ids: Sequence[str] | None = None,
+        format: Literal["prompt", "full"] = "prompt",
+        debug: bool = False,
+    ) -> PromptContext | ContextBundle:
+        """The context for this turn: the pinned profile, the thread's summary and recent
+        messages (unless ``window=False``: the framework keeps its own history), and the
+        memories, documents and facts that answer ``query``, rendered for a prompt within
+        ``token_budget``. Items are cited by handle ([m1], [d2]...), which ``update``,
+        ``forget`` and ``verify`` accept within the bundle.
 
-        ``tools={"available": [names] | None, "k": 8}`` adds tool hints (``bundle.tools``).
-        ``since_revision`` (a previous bundle's ``revision``) lists only what changed since
-        (``bundle.delta``). With ``require_evidence=True`` an ``INSUFFICIENT`` evidence report
-        raises :class:`InsufficientEvidence`. ``use_llm`` omitted follows the model policy."""
-        payload: dict[str, Any] = {"query": query, "scope": self.scope_payload(), **options}
-        for name, value in (
-            ("use_llm", use_llm),
-            ("token_budget", token_budget),
-            ("since_revision", since_revision),
-        ):
-            if value is not None:
-                payload[name] = value
+        ``tools`` - the agent's own tools - adds the procedures learned for the task and the
+        tool hints (the next tool, argument values, what is missing), and returns the
+        ``tool_candidates`` that fit. ``format="full"`` returns the whole bundle."""
+        payload: dict[str, Any] = {
+            "query": query,
+            "scope": self.scope_payload(),
+            "window": window,
+            "format": format,
+            "debug": debug,
+        }
+        if token_budget is not None:
+            payload["token_budget"] = token_budget
+        if document_ids is not None:
+            payload["document_ids"] = list(document_ids)
         if tools is not None:
-            payload["tools"] = {"k": TOOL_HINTS_K, **dict(tools)}
-        bundle = ContextBundle.model_validate(
-            await self._request("POST", "/v1/context", json=payload)
-        )
-        if require_evidence and bundle.evidence.status == "INSUFFICIENT":
-            raise InsufficientEvidence(
-                "no sufficient evidence was retrieved for this query",
-                code="INSUFFICIENT_EVIDENCE",
-                status=200,
-                details={"notes": list(bundle.evidence.notes)},
-            )
-        return bundle
+            payload["tools"] = {"available": list(tools), "k": TOOL_HINTS_K}
+        data = await self._request("POST", "/v1/context", json=payload)
+        if format == "full":
+            return ContextBundle.model_validate(data)
+        return PromptContext.model_validate(data)
 
     # -- memory ----------------------------------------------------------
     async def remember(
@@ -244,9 +266,8 @@ class MemoryContext:
         idempotency_key: str | None = None,
         **metadata: Any,
     ) -> RememberAck:
-        """Store ``content`` verbatim as one memory, now (``observe`` is for evidence the
-        service learns from). The same content in the same scope returns the memory already
-        stored, with ``deduplicated=True``."""
+        """Store ``content`` verbatim as one memory, now. The same content in the same scope
+        returns the memory already stored, with ``deduplicated=True``."""
         payload: dict[str, Any] = {
             "scope": self.scope_payload(),
             "content": content,
@@ -266,22 +287,38 @@ class MemoryContext:
         return RememberAck.model_validate(data)
 
     async def update(
-        self, memory_id: str, content: str, *, reason: str, idempotency_key: str | None = None
+        self,
+        memory: str,
+        content: str,
+        *,
+        reason: str = "",
+        bundle_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> SupersedeAck:
-        """Replace a memory with a new version: the new one is current from now, the old one
+        """Replace a memory (its id, or its handle in the context ``bundle_id`` - by default
+        this run's latest) with a new version: the new one is current from now, the old one
         is closed (``SUPERSEDED``) and still readable in a temporal view."""
+        body: dict[str, Any] = {"scope": self.scope_payload(), "content": content}
+        if reason:
+            body["reason"] = reason
+        if bundle_id:
+            body["bundle_id"] = bundle_id
         data = await self._request(
             "POST",
-            f"/v1/memories/{memory_id}/supersede",
-            json={"scope": self.scope_payload(), "content": content, "reason": reason},
-            idempotency_key=idempotency_key or _default_key("sup", self.scope, memory_id, content),
+            f"/v1/memories/{memory}/supersede",
+            json=body,
+            idempotency_key=idempotency_key or _default_key("sup", self.scope, memory, content),
         )
         return SupersedeAck.model_validate(data)
 
-    async def forget(self, memory_id: str) -> None:
-        """Forget a memory (soft delete, audited): it stops being retrieved."""
+    async def forget(self, memory: str, *, bundle_id: str | None = None) -> None:
+        """Forget a memory (its id, or its handle in the context ``bundle_id``; soft delete,
+        audited): it stops being retrieved."""
         await self._request(
-            "DELETE", f"/v1/memories/{memory_id}", idempotency_key=f"del-{memory_id}"
+            "DELETE",
+            f"/v1/memories/{memory}",
+            params={"bundle_id": bundle_id} if bundle_id else None,
+            idempotency_key=f"del-{bundle_id or ''}-{memory}",
         )
 
     async def search(
@@ -289,99 +326,45 @@ class MemoryContext:
         query: str,
         *,
         limit: int = 20,
-        kinds: Sequence[RecallKind] | None = None,
-        use_llm: bool | None = None,
-        **options: Any,
-    ) -> list[ContextItem]:
-        """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly.
-        ``kinds`` narrows what is searched: chunk (document passages), memory, summary."""
-        payload = {"query": query, "scope": self.scope_payload(), "limit": limit, **options}
-        if use_llm is not None:
-            payload["use_llm"] = use_llm
+        kinds: Sequence[SearchKind] | None = None,
+        time_from: datetime | None = None,
+        time_to: datetime | None = None,
+        document_ids: Sequence[str] | None = None,
+        debug: bool = False,
+    ) -> list[SearchItem]:
+        """Ranked items for ``query``: memories and document passages by default; ``kinds``
+        also reads document summaries and this thread's messages. ``time_from``/``time_to``
+        keep what was observed within the range (before anything is ranked)."""
+        payload: dict[str, Any] = {
+            "query": query,
+            "scope": self.scope_payload(),
+            "limit": limit,
+            "debug": debug,
+        }
         if kinds is not None:
             payload["kinds"] = list(kinds)
+        for name, when in (("time_from", time_from), ("time_to", time_to)):
+            if when is not None:
+                payload[name] = when.isoformat()
+        if document_ids is not None:
+            payload["document_ids"] = list(document_ids)
         data = await self._request("POST", "/v1/recall", json=payload)
-        return [ContextItem.model_validate(m) for m in data.get("results", [])]
-
-    async def history(
-        self, *, limit: int = 50, include_internal: bool = False
-    ) -> list[MessageInfo]:
-        """The thread's latest messages, oldest first (empty without a thread)."""
-        thread_id = self.scope.thread_id
-        if not thread_id:
-            return []
-        data = await self._request(
-            "GET",
-            f"/v1/threads/{thread_id}/messages",
-            params={"limit": limit, "include_internal": include_internal},
-        )
-        return [MessageInfo.model_validate(m) for m in data.get("messages", [])]
-
-    async def summary(self) -> ThreadSummary | None:
-        """The thread's durable summary, or None when the thread has none yet."""
-        thread_id = self.scope.thread_id
-        if not thread_id:
-            return None
-        try:
-            data = await self._request("GET", f"/v1/threads/{thread_id}/summary")
-        except NotFoundError:
-            return None
-        return ThreadSummary.model_validate(data)
-
-    async def observe(
-        self,
-        content: str,
-        *,
-        kind: ObservationKind = "EVENT",
-        idempotency_key: str | None = None,
-        hints: dict[str, Any] | None = None,
-        **metadata: Any,
-    ) -> ObservationAck:
-        """Raw evidence the service learns from, asynchronously (``remember`` states a
-        memory verbatim)."""
-        payload = {
-            "kind": kind,
-            "content": content,
-            "scope": self.scope_payload(),
-            "hints": hints or {},
-            "custom_metadata": metadata,
-        }
-        key = idempotency_key or _default_key("obs", self.scope, kind, content)
-        data = await self._request("POST", "/v1/observations", json=payload, idempotency_key=key)
-        return ObservationAck.model_validate(data)
+        return [SearchItem.model_validate(i) for i in data.get("items", [])]
 
     async def verify(
-        self,
-        answer: str,
-        *,
-        bundle: ContextBundle | None = None,
-        query: str | None = None,
-        items: Sequence[ContextItem | dict[str, Any]] | None = None,
-        unused: Sequence[dict[str, Any]] | None = None,
-        document_ids: Sequence[str] | None = None,
-        use_llm: bool | None = None,
-    ) -> GroundingReport:
-        """Verify ``answer`` claim by claim (citation validation, NLI, judge for borderline
-        claims, contradiction scan) against a ``bundle`` from :meth:`context`, explicit
-        evidence ``items`` or a fresh retrieval for ``query`` under this scope."""
-        payload: dict[str, Any] = {"answer": answer, "scope": self.scope_payload()}
-        if use_llm is not None:
-            payload["use_llm"] = use_llm
-        if bundle is not None:
-            payload["items"] = bundle.evidence_items()
-            payload["unused"] = [u.model_dump(mode="json") for u in bundle.evidence.unused]
-        elif items is not None:
-            payload["items"] = [_verify_item(i) for i in items]
-            if unused:
-                payload["unused"] = [dict(u) for u in unused]
-        elif query is not None:
-            payload["query"] = query
-            if document_ids:
-                payload["document_ids"] = list(document_ids)
-        else:
-            raise ValueError("verify() needs a bundle, items or a query")
-        data = await self._request("POST", "/v1/verify", json=payload)
-        return GroundingReport.model_validate(data)
+        self, answer: str, *, bundle_id: str, run_id: str | None = None
+    ) -> VerifyReport:
+        """Verify ``answer`` claim by claim against the context it was given (``bundle_id``);
+        its handle citations ([m1]) resolve within it. With a run (``run_id``, or this
+        context's agent run) the verdict is recorded as the judge's RUN feedback."""
+        body: dict[str, Any] = {
+            "scope": self.scope_payload(),
+            "bundle_id": bundle_id,
+            "answer": answer,
+        }
+        if run_id is not None:
+            body["run_id"] = run_id
+        return VerifyReport.model_validate(await self._request("POST", "/v1/verify", json=body))
 
     # -- tools -----------------------------------------------------------
     async def record_tool(
@@ -423,26 +406,12 @@ class MemoryContext:
         )
         return ToolResult.model_validate(data)
 
-    async def outcome(
-        self, *, success: bool, note: str | None = None, run_id: str | None = None
-    ) -> RunOutcome:
-        """Whether this run (or ``run_id``) achieved its task. Only a successful run
-        validates the procedures learned from what it did."""
-        run = run_id or self.scope.agent_run_id
-        if not run:
-            raise ValueError("outcome() needs a run: bind agent_run_id or pass run_id")
-        data = await self._request(
-            "POST",
-            f"/v1/runs/{run}/outcome",
-            json={"scope": self.scope_payload(), "success": success, "note": note},
-        )
-        return RunOutcome.model_validate(data)
-
     async def tool_hints(
         self, task: str, *, available: Sequence[str] | None = None, k: int = TOOL_HINTS_K
     ) -> ToolHints:
         """Which tools fit ``task`` (among ``available`` when given), the learned plan, the
-        next step, argument values found in memory, and what is missing."""
+        next step, argument values found in memory (keyed ``tool.arg``), and what is
+        missing."""
         data = await self._request(
             "POST",
             "/v1/tools/hints",
@@ -461,13 +430,15 @@ class MemoryContext:
         data = await self._request("GET", "/v1/agent-tools")
         return [AgentTool.model_validate(t) for t in data.get("tools", [])]
 
-    async def call_agent_tool(self, name: str, args: Mapping[str, Any]) -> Any:
-        """Run one memory tool in this scope and return its ``result``."""
-        data = await self._request(
-            "POST",
-            f"/v1/agent-tools/{name}",
-            json={"scope": self.scope_payload(), "args": dict(args)},
-        )
+    async def call_agent_tool(
+        self, name: str, args: Mapping[str, Any], *, toolbox: Sequence[str] | None = None
+    ) -> Any:
+        """Run one memory tool in this scope and return its ``result``. ``toolbox`` - the
+        agent's own tools - is what ``tool_search`` chooses among."""
+        body: dict[str, Any] = {"scope": self.scope_payload(), "args": dict(args)}
+        if toolbox is not None:
+            body["toolbox"] = list(toolbox)
+        data = await self._request("POST", f"/v1/agent-tools/{name}", json=body)
         return data.get("result")
 
     # -- plumbing -------------------------------------------------------
@@ -485,9 +456,10 @@ class MemoryContext:
 
 
 class FeedbackAPI:
-    """Judgements on what the platform did: stored apart from memory, learned from off the
-    request path (a verdict on a memory reinforces, retracts or corrects it; on an answer it
-    adjusts the cited memories; on a tool call it counts toward approval patterns)."""
+    """Judgements on what the platform did - the learning signal: a verdict on a memory
+    reinforces, retracts or corrects it; on a run it decides the run's outcome (a person over
+    the judge over the run's own status) and moves the confidence of the memories it cites;
+    on a tool call it counts toward approval patterns; on a procedure it can retire it."""
 
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
@@ -592,6 +564,10 @@ def _record(feedback: Any) -> dict[str, Any]:
     return dict(dump(mode="json"))
 
 
+#: ``profile.edit(source_query=...)`` not given: the block keeps its standing question.
+_KEEP: Any = object()
+
+
 class ProfileAPI:
     """Pinned profile blocks for this scope: ``user``, ``agent`` and ``workspace`` (and
     ``<level>.<name>`` blocks beside them), always part of the pushed context."""
@@ -603,126 +579,109 @@ class ProfileAPI:
         data = await self._ctx._request("GET", "/v1/profile")
         return [ProfileBlock.model_validate(b) for b in data.get("blocks", [])]
 
-    async def set(self, block: str, text: str) -> ProfileBlock:
-        """Replace the block's text."""
-        data = await self._ctx._request(
-            "PUT",
-            f"/v1/profile/{block}",
-            json={"scope": self._ctx.scope_payload(), "text": text},
-        )
+    async def edit(
+        self,
+        block: str,
+        new: str | None = None,
+        *,
+        old: str = "",
+        source_query: str | None = _KEEP,
+    ) -> ProfileBlock:
+        """Replace ``old`` with ``new`` in the block (``ConflictError`` when ``old`` is not in
+        it: read the block again and retry), or the whole text when ``old`` is empty.
+        ``source_query`` sets a standing question the service answers into the block now and
+        every hour (None removes it)."""
+        body: dict[str, Any] = {"scope": self._ctx.scope_payload(), "old": old}
+        if new is not None:
+            body["new"] = new
+        if source_query is not _KEEP:
+            body["source_query"] = source_query
+        data = await self._ctx._request("PATCH", f"/v1/profile/{block}", json=body)
         return ProfileBlock.model_validate(data)
 
-    async def edit(self, block: str, old: str, new: str) -> ProfileBlock:
-        """Replace ``old`` with ``new`` in the block; ``ConflictError`` when ``old`` is not
-        in it (read the block again and retry)."""
-        data = await self._ctx._request(
-            "PATCH",
-            f"/v1/profile/{block}",
-            json={"scope": self._ctx.scope_payload(), "old": old, "new": new},
-        )
-        return ProfileBlock.model_validate(data)
+
+def _message(message: Message | Mapping[str, Any] | tuple[str, str]) -> dict[str, Any]:
+    if isinstance(message, tuple):
+        role, content = message
+        message = Message(role=role, content=content)  # type: ignore[arg-type]
+    elif not isinstance(message, Message):
+        message = Message.model_validate(dict(message))
+    return message.model_dump(mode="json", exclude_none=True)
 
 
-class ChatAPI:
-    """The thread's transcript: what the user and the assistant said."""
+class HistoryAPI:
+    """The thread's transcript: ``await ctx.history()`` reads it, ``add`` appends to it.
+    Without a ``thread_id`` in the scope, an agent run's messages go to the thread named by
+    its run id."""
 
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
 
-    async def user(
-        self,
-        content: str,
-        *,
-        attachments: list[Any] | None = None,
-        idempotency_key: str | None = None,
-        **metadata: Any,
-    ) -> MessageAck:
-        ack = await self._message("USER", content, idempotency_key=idempotency_key, **metadata)
-        for attachment in attachments or ():
-            await self._ctx.advanced.documents.add(attachment, message_id=ack.message_id)
-        return ack
+    def _thread(self) -> str | None:
+        return self._ctx.scope.thread_id or self._ctx.scope.agent_run_id
 
-    async def assistant(
-        self, content: str, *, idempotency_key: str | None = None, **metadata: Any
-    ) -> MessageAck:
-        return await self._message(
-            "ASSISTANT", content, idempotency_key=idempotency_key, **metadata
+    async def __call__(
+        self, *, limit: int = 50, include_internal: bool = False
+    ) -> list[MessageInfo]:
+        """The thread's latest messages, oldest first (empty without a thread)."""
+        thread_id = self._thread()
+        if not thread_id:
+            return []
+        data = await self._ctx._request(
+            "GET",
+            f"/v1/threads/{thread_id}/messages",
+            params={"limit": limit, "include_internal": include_internal},
         )
+        return [MessageInfo.model_validate(m) for m in data.get("messages", [])]
 
-    async def internal(
+    async def add(
         self,
-        content: str,
+        messages: Sequence[Message | Mapping[str, Any] | tuple[str, str]],
         *,
-        role: MessageRole = "AGENT",
         idempotency_key: str | None = None,
-        **metadata: Any,
-    ) -> MessageAck:
-        return await self._message(
-            role, content, kind="INTERNAL", idempotency_key=idempotency_key, **metadata
+    ) -> list[MessageAck]:
+        """Append messages (``Message``, a mapping of its fields, or ``(role, content)``) in
+        one durable write; ``role="EVENT"`` tells the service something that happened. A
+        retry with the same ``idempotency_key`` returns the first acknowledgements."""
+        body = {"scope": self._ctx.scope_payload(), "messages": [_message(m) for m in messages]}
+        scope = self._ctx.scope
+        # A turn makes lineage + content the batch's identity. Without one, two identical
+        # batches ("ok") are two appends: a fresh key per call, reused across its retries.
+        key = idempotency_key or (
+            _default_key("msgs", scope, json.dumps(body["messages"], sort_keys=True))
+            if scope.turn_id
+            else f"msgs-{uuid.uuid4().hex}"
         )
+        data = await self._ctx._request("POST", "/v1/messages", json=body, idempotency_key=key)
+        return [MessageAck.model_validate(a) for a in data.get("messages", [])]
 
     async def thread(self) -> ThreadInfo:
-        data = await self._ctx._request("GET", f"/v1/threads/{self._ctx.scope.thread_id}")
+        """The thread, with its durable summary once it has one."""
+        data = await self._ctx._request("GET", f"/v1/threads/{self._thread()}")
         return ThreadInfo.model_validate(data)
 
-    async def create(self, *, title: str | None = None, **metadata: Any) -> ThreadInfo:
-        """Create the context's thread explicitly (idempotent: an existing thread is
-        returned). Messages create threads on demand, so this is for titles/metadata."""
-        payload: dict[str, Any] = {"scope": self._ctx.scope_payload(), "custom_metadata": metadata}
-        if self._ctx.scope.thread_id:
-            payload["thread_id"] = self._ctx.scope.thread_id
+    async def update(
+        self, *, title: str | None = None, metadata: dict[str, Any] | None = None
+    ) -> ThreadInfo:
+        """Set the thread's title and metadata (the thread is created when it does not exist
+        yet: messages create threads on demand, this is how one gets a title first)."""
+        body: dict[str, Any] = {"scope": self._ctx.scope_payload()}
         if title is not None:
-            payload["title"] = title
-        data = await self._ctx._request("POST", "/v1/threads", json=payload)
+            body["title"] = title
+        if metadata is not None:
+            body["custom_metadata"] = metadata
+        data = await self._ctx._request("PATCH", f"/v1/threads/{self._thread()}", json=body)
         return ThreadInfo.model_validate(data)
 
     async def message(self, message_id: str) -> MessageInfo:
         data = await self._ctx._request("GET", f"/v1/messages/{message_id}")
         return MessageInfo.model_validate(data)
 
-    async def delete_thread(self, thread_id: str | None = None) -> None:
-        """Soft-delete a thread (owner or tenant admin): messages stop being listed and
+    async def delete(self) -> None:
+        """Soft-delete the thread (owner or tenant admin): messages stop being listed and
         retrieved; archived segments are kept for the retention period."""
-        tid = thread_id or self._ctx.scope.thread_id
+        tid = self._thread()
         await self._ctx._request("DELETE", f"/v1/threads/{tid}", idempotency_key=f"delthr-{tid}")
-
-    async def _message(
-        self,
-        role: MessageRole,
-        content: str,
-        *,
-        kind: MessageKind = "VISIBLE",
-        idempotency_key: str | None = None,
-        **metadata: Any,
-    ) -> MessageAck:
-        payload = {
-            "role": role,
-            "kind": kind,
-            "content": content,
-            "scope": self._ctx.scope_payload(),
-            "custom_metadata": metadata,
-        }
-        scope = self._ctx.scope
-        # A turn makes lineage + content a message's identity. Without one, two identical
-        # messages in a thread ("ok") are two messages: a fresh key per call, which the
-        # transport reuses across its own retries of that call.
-        key = idempotency_key or (
-            _default_key("msg", scope, role, kind, content)
-            if scope.turn_id
-            else f"msg-{uuid.uuid4().hex}"
-        )
-        data = await self._ctx._request("POST", "/v1/messages", json=payload, idempotency_key=key)
-        return MessageAck.model_validate(data)
-
-
-def _verify_item(item: ContextItem | dict[str, Any]) -> dict[str, Any]:
-    if isinstance(item, ContextItem):
-        return item.verification_item()
-    return {
-        k: v
-        for k, v in dict(item).items()
-        if k in ("item_id", "text", "kind", "citation", "attributes")
-    }
 
 
 def _default_key(prefix: str, scope: Scope, *parts: str) -> str:

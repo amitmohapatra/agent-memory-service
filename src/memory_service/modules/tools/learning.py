@@ -257,9 +257,7 @@ class ToolLearning:
         """Title and strategy from the tenant's model; the deterministic ones stay otherwise."""
         if not procedure.owner_principal:
             return
-        identity = ModelIdentity(
-            procedure.tenant_id, procedure.owner_principal, procedure.workspace_id
-        )
+        identity = ModelIdentity(procedure.tenant_id, procedure.owner_principal)
         async with self.assist.bound(identity):
             if not self.assist.wants("procedure_abstraction"):
                 return

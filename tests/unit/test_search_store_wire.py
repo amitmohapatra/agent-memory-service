@@ -30,6 +30,7 @@ from memory_service.config.settings import SearchSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.ports.search import (
     PAYLOAD_FIELDS,
+    RANK_FIELDS,
     CollectionSpec,
     SearchFilter,
     SparseVector,
@@ -292,6 +293,22 @@ async def test_every_read_projects_the_payload() -> None:
     for selector in selectors:
         assert isinstance(selector, models.PayloadSelectorInclude)
         assert selector.include == list(PAYLOAD_FIELDS)
+
+
+async def test_a_ranking_read_asks_for_the_ranking_fields_only() -> None:
+    client = FakeClient()
+    await _store(client).search_hybrid(
+        "c",
+        dense={VectorName.DENSE_ML: [0.1] * 4},
+        sparse=SparseVector(indices=[1], values=[1.0]),
+        flt=_flt(),
+        limit=5,
+        prefetch_limit=8,
+        fields=RANK_FIELDS,
+    )
+    (_, kwargs), *_ = client.calls
+    assert kwargs["with_payload"].include == list(RANK_FIELDS)
+    assert set(RANK_FIELDS) < set(PAYLOAD_FIELDS)
 
 
 @pytest.mark.parametrize("order", [("b", "a", "c"), ("c", "a", "b"), ("a", "b", "c")])

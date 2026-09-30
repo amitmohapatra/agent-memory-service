@@ -8,7 +8,7 @@ import respx
 
 from memory_service.adapters.models.llm import BifrostLLM, LLMCallFailed
 from memory_service.ports.models import LLMMessage
-from tests.support_llm import BASE, chat_response, llm_settings
+from tests.support_llm import BASE, CATALOG, chat_response, llm_settings
 
 pytestmark = pytest.mark.unit
 
@@ -18,6 +18,7 @@ async def test_all_memory_calls_explicitly_deny_mcp_and_use_service_prompts(stru
     adapter = BifrostLLM(llm_settings())
     messages = [LLMMessage(role="system", content="Service-owned prompt.")]
     with respx.mock as mock:
+        mock.get(f"{BASE}/models").respond(200, json=CATALOG)
         route = mock.post(f"{BASE}/chat/completions").respond(
             200, json=chat_response('{"ok":true}')
         )
@@ -49,6 +50,7 @@ async def test_tool_response_is_rejected_even_when_text_is_present(field, value)
     payload["choices"][0]["message"][field] = value
     adapter = BifrostLLM(llm_settings())
     with respx.mock as mock:
+        mock.get(f"{BASE}/models").respond(200, json=CATALOG)
         route = mock.post(f"{BASE}/chat/completions").mock(
             return_value=httpx.Response(200, json=payload)
         )

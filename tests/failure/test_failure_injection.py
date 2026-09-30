@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from benchmark.common import submit_observation
 from sqlalchemy import text
 
 from memory_service.__about__ import __version__
@@ -93,6 +94,8 @@ async def test_worker_kill_requeues_the_job_and_processes_once(
     )
     try:
         async with container.database.engine.begin() as conn:
+            # a reset, not a hot path: on a loaded host it may outlast the statement timeout
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
             await conn.execute(
                 text("TRUNCATE procrastinate_jobs, procrastinate_events RESTART IDENTITY CASCADE")
@@ -100,7 +103,7 @@ async def test_worker_kill_requeues_the_job_and_processes_once(
         register_handlers(container)
         ctx = _ctx()
         async with container.services["uow_factory"]() as uow:
-            ack = await container.services["memory"].submit_observation(
+            ack = await submit_observation(
                 uow, ctx, kind=ObservationKind.EVENT, content="My timezone is Europe/Berlin."
             )
             await uow.commit()

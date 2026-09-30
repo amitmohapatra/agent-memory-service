@@ -15,7 +15,7 @@ log = get_logger(__name__)
 async def main() -> None:
     settings = get_settings()
     configure_logging(settings.service.log_level, settings.service.log_json)
-    configure_tracing(settings.observability, SERVICE_NAME + "-worker", __version__)
+    configure_tracing(settings.otel_endpoint, SERVICE_NAME + "-worker", __version__)
     container = await build_container(settings, __version__)
     if container.tasks is None:
         log.error("worker.no_task_queue")

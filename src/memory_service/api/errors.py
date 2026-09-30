@@ -47,7 +47,6 @@ PROBLEM_TITLES: Final[dict[ErrorCode, str]] = {
     ErrorCode.TIMEOUT: "Operation timed out",
     ErrorCode.RETRYABLE_PROCESSING: "Processing did not complete",
     ErrorCode.CORRUPT_SOURCE: "Source could not be processed",
-    ErrorCode.INSUFFICIENT_EVIDENCE: "Insufficient evidence",
     ErrorCode.INTERNAL: "Internal error",
 }
 

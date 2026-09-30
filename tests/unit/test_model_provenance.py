@@ -15,7 +15,6 @@ import pytest
 
 from memory_service.adapters.models.catalog import choose_model
 from memory_service.config.constants import FROZEN_MODELS
-from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.provenance import EXCLUDED_MODEL_ORIGINS, permitted_model
 from memory_service.ports.models import ProviderInfo
@@ -104,10 +103,17 @@ def test_a_provider_cannot_be_constructed_from_an_excluded_origin() -> None:
         )
 
 
-def test_operator_configuration_refuses_an_excluded_model() -> None:
+def test_a_tenant_policy_refuses_an_excluded_model() -> None:
+    from memory_service.api.routers.v1.model_keys import ModelPolicyRequest
+
     with pytest.raises(ValueError, match="excluded origin"):
-        LLMSettings(model="deepseek/deepseek-flash")
-    assert LLMSettings(model="gemini/gemini-3.8-flash", fast_model="auto").model
+        ModelPolicyRequest(
+            uses=["summaries"], read_assist=True, models={"summaries": "deepseek/deepseek-flash"}
+        )
+    ok = ModelPolicyRequest(
+        uses=["summaries"], read_assist=True, models={"summaries": "gemini/gemini-3.8-flash"}
+    )
+    assert ok.models == {"summaries": "gemini/gemini-3.8-flash"}
 
 
 def test_gateway_discovery_never_selects_an_excluded_family() -> None:

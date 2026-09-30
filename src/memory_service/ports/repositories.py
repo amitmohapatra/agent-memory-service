@@ -57,8 +57,16 @@ class ThreadRepository(Protocol):
         an anchor already in use)."""
         ...
 
-    async def touch(self, tenant_id: str, thread_id: str, *, title: str | None = None) -> int:
-        """Bump the thread revision/updated_at; returns new revision."""
+    async def touch(
+        self,
+        tenant_id: str,
+        thread_id: str,
+        *,
+        title: str | None = None,
+        custom_metadata: dict[str, Any] | None = None,
+    ) -> int:
+        """Bump the thread revision/updated_at (and set what is given); returns the new
+        revision."""
         ...
 
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool: ...

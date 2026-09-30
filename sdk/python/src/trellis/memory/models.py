@@ -24,15 +24,16 @@ class AgentKeyStatus(BaseModel):
 
 
 class ModelPolicy(BaseModel):
-    """What the model may be used for at one level (tenant or workspace). ``stored=False``:
-    the level has none, so the next level's (or the default - every use, reads assisted)
-    applies."""
+    """The tenant's model policy: the uses it allows, whether reads are assisted, the model a
+    use calls. ``stored=False``: none is set, so the default applies (every use, reads
+    assisted, the service's model per use)."""
 
     model_config = ConfigDict(extra="allow")
 
     stored: bool
     uses: list[str]
     read_assist: bool
+    models: dict[str, str] = Field(default_factory=dict)
     revision: int
     updated_at: datetime | None = None
 
@@ -129,18 +130,15 @@ QueryType = Literal[
     "GENERAL_SEMANTIC",
 ]
 EvidenceStatus = Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
-MessageRole = Literal["USER", "ASSISTANT", "SYSTEM", "TOOL", "AGENT"]
+#: EVENT: something that happened, told to the service to learn from (always INTERNAL)
+MessageRole = Literal["USER", "ASSISTANT", "SYSTEM", "TOOL", "AGENT", "EVENT"]
 MessageKind = Literal["VISIBLE", "INTERNAL"]
-ObservationKind = Literal[
-    "MESSAGE", "FILE", "AGENT_RESULT", "TOOL_RESULT", "DECISION", "FEEDBACK", "EVENT", "IMPORT"
-]
 JobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "RETRYING", "CANCELLED"]
 DocumentStatus = Literal["STAGED", "READY", "FAILED"]
 ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
-#: What ``recall`` searches: document passages, canonical memories, rolled-up summaries.
-RecallKind = Literal["chunk", "memory", "summary"]
-#: What ``verify`` accepts as an item's kind: a bundle item's representation or the record
-#: kind of an unused item.
+#: What ``search`` reads: memories, document passages, document summaries, thread messages.
+SearchKind = Literal["memory", "chunk", "summary", "message"]
+#: An unused evidence item's kind: a bundle item's representation or a record kind.
 EvidenceKind = Literal[
     "CHUNK",
     "TABLE",
@@ -237,14 +235,6 @@ class MessageAck(BaseModel):
     deduplicated: bool = False
 
 
-class ObservationAck(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    observation_id: str
-    job_ids: list[str] = Field(default_factory=list)
-    deduplicated: bool = False
-
-
 class RememberAck(BaseModel):
     """``remember``: the memory stored now (or the one that already held the same content)."""
 
@@ -329,13 +319,32 @@ class MemoryResult(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
+class SearchItem(BaseModel):
+    """One ``search`` result: enough to use it and cite it."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    kind: str
+    text: str
+    observed_on: str | None = None
+    citation: str
+    document_id: str | None = None
+    page: int | None = None
+    #: ranking detail, only with ``debug=True``
+    debug: dict[str, Any] | None = None
+
+
 class ContextItem(BaseModel):
+    """One ranked item of a full context bundle."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
     item_id: str
     representation: Representation
     text: str
     score: float = 0.0
+    relevance: float = 0.0
     citation: str
     document_id: str | None = None
     page: int | None = None
@@ -346,16 +355,6 @@ class ContextItem(BaseModel):
     @property
     def predicate(self) -> str | None:
         return self.attributes.get("predicate")
-
-    def verification_item(self) -> dict[str, Any]:
-        """Preserve provenance when forwarding retrieved text as grounding evidence."""
-        return {
-            "item_id": self.item_id,
-            "text": self.text,
-            "kind": self.representation,
-            "citation": self.citation,
-            "attributes": dict(self.attributes),
-        }
 
 
 class ConversationWindow(BaseModel):
@@ -405,6 +404,17 @@ class GroundingReport(BaseModel):
     def grounded(self) -> bool:
         return self.per_claim_hallucination_rate == 0.0
 
+    @property
+    def score(self) -> float:
+        """The share of claims grounded (1 - the per-claim hallucination rate)."""
+        return 1.0 - self.per_claim_hallucination_rate
+
+
+class VerifyReport(GroundingReport):
+    """``verify``: the grounding report, and the RUN feedback it was recorded as."""
+
+    feedback_id: str | None = None
+
 
 class UnusedEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
@@ -428,8 +438,24 @@ class EvidenceReport(BaseModel):
     llm_tokens: int = 0
 
 
+class PromptContext(BaseModel):
+    """What a prompt needs (``context()``): the rendered context, citing by handle ([m1],
+    [d2]...), the ``bundle_id`` that ``verify`` and the handles refer to, and its size."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    rendered: str
+    bundle_id: str
+    token_estimate: int
+    #: the tools that fit the task, best first (only when ``tools`` were given)
+    tool_candidates: list[str] | None = None
+    #: the build's diagnostics (only with ``debug=True``)
+    diagnostics: dict[str, Any] | None = None
+
+
 class ContextBundle(BaseModel):
-    """Bounded, ranked context for the current turn. ``rendered`` is ready to prompt with."""
+    """The whole bundle (``context(..., format="full")``): bounded, ranked context for the
+    current turn, the rendering and its handles."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -445,11 +471,8 @@ class ContextBundle(BaseModel):
     token_budget: int
     token_estimate: int
     rendered: str = ""
+    handles: dict[str, str] = Field(default_factory=dict)
     cache_hit: bool = False
-    #: the scope revision this bundle was built at: pass it back as ``since_revision``
-    revision: int = 0
-    #: true when only what changed since ``since_revision`` is listed
-    delta: bool = False
     profile: list[ProfileBlock] = Field(default_factory=list)
     thread_summary: ThreadSummary | None = None
     procedures: list[ProcedureView] = Field(default_factory=list)
@@ -460,27 +483,18 @@ class ContextBundle(BaseModel):
     def insufficient(self) -> bool:
         return self.evidence.status == "INSUFFICIENT"
 
-    @property
-    def grounding(self) -> GroundingReport | None:
-        return self.evidence.grounding
-
-    def evidence_items(self) -> list[dict[str, Any]]:
-        """The packed evidence as ``/v1/verify`` items, in citation order (``[1]`` is the
-        first memory, then facts, summaries, knowledge)."""
-        return [
-            i.verification_item()
-            for group in (self.memories, self.graph_facts, self.summaries, self.knowledge)
-            for i in group
-        ]
-
 
 class ThreadInfo(BaseModel):
+    """A thread, with its durable summary once it has one."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
     thread_id: str
     tenant_id: str
     title: str | None = None
     created_at: datetime | None = None
+    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    summary: ThreadSummary | None = None
 
 
 class DocumentInfo(BaseModel):
@@ -496,6 +510,22 @@ class DocumentInfo(BaseModel):
     archive_status: ArchiveStatus
     current_version_id: str | None = None
     thread_id: str | None = None
+
+
+class Message(BaseModel):
+    """One message to append (``history.add``)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    role: MessageRole
+    content: str
+    kind: MessageKind = "VISIBLE"
+    occurred_at: datetime | None = None
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
+    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    source_system: str | None = None
+    source_message_id: str | None = None
+    parent_message_id: str | None = None
 
 
 class MessageInfo(BaseModel):
@@ -545,10 +575,11 @@ class GraphFact(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
-class GraphAnswer(BaseModel):
+class GraphNeighborhood(BaseModel):
+    """The graph around an entity (``entity(..., depth=n)``)."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    matched: list[GraphEntity] = Field(default_factory=list)
     entities: list[GraphEntity] = Field(default_factory=list)
     facts: list[GraphFact] = Field(default_factory=list)
     visited: int = 0
@@ -567,7 +598,8 @@ class EntityValue(BaseModel):
 
 
 class EntityProfile(BaseModel):
-    """``GET /v1/graph/entities/{id}``: current value per predicate, relations, history."""
+    """``GET /v1/graph/entities/{id}``: current value per predicate, relations, history, and
+    with a depth the graph around it."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -576,6 +608,7 @@ class EntityProfile(BaseModel):
     relations: list[GraphFact] = Field(default_factory=list)
     history: list[GraphFact] = Field(default_factory=list)
     evidence: list[EvidenceRef] = Field(default_factory=list)
+    neighborhood: GraphNeighborhood | None = None
 
 
 # --------------------------------------------------------------------------- tools
@@ -601,16 +634,6 @@ class ToolResult(BaseModel):
     step: int = 0
     args_hash: str = ""
     recorded: bool = True
-
-
-class RunOutcome(BaseModel):
-    """``outcome``: whether the run achieved its task, and who said so."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    run_id: str
-    success: bool
-    source: str
 
 
 class ToolStats(BaseModel):
@@ -645,16 +668,25 @@ class CatalogTool(BaseModel):
     source: str = "manual"
     server: str | None = None
     examples: list[dict[str, Any]] = Field(default_factory=list)
+    #: the MCP annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+    annotations: dict[str, bool] = Field(default_factory=dict)
+    #: ask a person before a call when this is true (``trellis.memory.approval``)
+    approve_when: str | None = None
+    #: read (run), write (run and notify) or irreversible (ask)
+    risk: SideEffects = "write"
     schema_hash: str = ""
     workspace_id: str | None = None
     stats: ToolStats = Field(default_factory=ToolStats)
 
 
 class ApprovalSuggestion(BaseModel):
-    """A rule the approvals given so far support; the service never applies it."""
+    """A rule the approvals given so far support; the service applies it only when it is
+    accepted (``tools.accept_suggestion``)."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
+    id: str
+    accepted: bool = False
     tool: str
     arg_shape: str
     suggestion: Literal["auto_approve", "always_ask"]
@@ -743,6 +775,8 @@ class ProfileBlock(BaseModel):
     text: str
     version: int
     updated_at: datetime | None = None
+    #: the standing question the service keeps this block answering
+    source_query: str | None = None
 
 
 class ThreadSummary(BaseModel):
@@ -768,36 +802,6 @@ class ProcedureView(BaseModel):
     steps: list[dict[str, Any]] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
-
-
-class BriefSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    kind: Literal["mental_model", "knowledge_page"] = "mental_model"
-    title: str = Field(min_length=1, max_length=200)
-    question: str = Field(min_length=1, max_length=4000)
-    use_llm: bool = False
-    refresh_seconds: int = Field(default=3600, ge=60, le=86400)
-
-
-class BriefOutput(BaseModel):
-    text: str
-    sources: list[ContextItem] = Field(default_factory=list)
-    generated: bool = False
-    generation_profile: str | None = None
-    revision_fingerprint: str
-    valid_until: datetime
-    built_at: datetime
-
-
-class BriefInfo(BaseModel):
-    brief_id: str
-    spec: BriefSpec
-
-
-class Brief(BriefInfo):
-    status: Literal["pending", "ready", "stale"]
-    output: BriefOutput | None = None
 
 
 # --- platform administration -----------------------------------------------------
@@ -828,6 +832,17 @@ class ApiKeyInfo(BaseModel):
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    may_act_as: list[str] = Field(default_factory=lambda: ["*"])
+
+
+class KeyInfo(BaseModel):
+    """Who a key is (``keys.whoami``)."""
+
+    key_id: str
+    tenant_id: str | None = None
+    principal: str
+    role: str
+    may_act_as: list[str] = Field(default_factory=list)
 
 
 class IssuedKey(ApiKeyInfo):
@@ -856,20 +871,6 @@ class WorkspaceMemberInfo(BaseModel):
     workspace_id: str
     principal: str
     role: MemberRole
-    added_by: str
-    added_at: datetime
-
-
-class GroupInfo(BaseModel):
-    group_id: str
-    tenant_id: str
-    name: str
-    created_at: datetime
-
-
-class GroupMemberInfo(BaseModel):
-    group_id: str
-    user_id: str
     added_by: str
     added_at: datetime
 
@@ -903,15 +904,16 @@ class Page[T](BaseModel):
 
 # --------------------------------------------------------------------------- feedback
 
-FeedbackTargetKind = Literal["run", "answer", "memory", "tool_call", "brief", "procedure"]
+FeedbackTargetKind = Literal["run", "memory", "tool_call", "procedure"]
 FeedbackVerdict = Literal["confirm", "reject", "correct", "approve", "edit"]
-FeedbackSource = Literal["human", "judge", "interrupt"]
+#: who judged: a person (human, or interrupt: an answer to an interrupt), the grounding judge,
+#: or the run's own final status (system); a run's outcome follows the highest-ranked
+FeedbackSource = Literal["human", "interrupt", "judge", "system"]
 ProjectionAction = Literal[
     "none",
     "memory_reinforced",
     "memory_retracted",
     "memory_superseded",
-    "memories_adjusted",
     "run_labelled",
     "tool_call_counted",
     "procedure_rejected",
@@ -956,66 +958,3 @@ class Feedback(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     projection: FeedbackProjection | None = None
-
-
-# --------------------------------------------------------------------------- webhooks
-
-WebhookEvent = Literal[
-    "memory.created",
-    "memory.superseded",
-    "memory.retracted",
-    "feedback.received",
-    "feedback.projected",
-    "webhook.test",
-]
-DeliveryStatus = Literal["PENDING", "DELIVERED", "FAILED", "DEAD"]
-
-
-class WebhookInfo(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    subscription_id: str
-    tenant_id: str
-    workspace_id: str | None = None
-    url: str
-    events: list[WebhookEvent]
-    description: str | None = None
-    enabled: bool
-    failures: int = 0
-    created_by: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class WebhookCreated(WebhookInfo):
-    """The subscription plus its HMAC secret, shown once (None on an idempotent replay)."""
-
-    secret: str | None = None
-
-
-class DeliveryInfo(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    delivery_id: str
-    subscription_id: str
-    event_id: str
-    event_type: WebhookEvent
-    status: DeliveryStatus
-    attempts: int
-    status_code: int | None = None
-    last_error: str | None = None
-    created_at: datetime
-    delivered_at: datetime | None = None
-
-
-class WebhookEventPayload(BaseModel):
-    """What a receiver gets: the event, as the service serialises it."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    event_id: str
-    type: WebhookEvent
-    tenant_id: str
-    workspace_id: str | None = None
-    occurred_at: datetime
-    data: dict[str, Any] = Field(default_factory=dict)

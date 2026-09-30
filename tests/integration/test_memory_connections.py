@@ -9,6 +9,7 @@ bumps the row revision without touching the audience or the temporal state.
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
@@ -28,9 +29,7 @@ NEW = "The release review is on Thursdays at 15:00."
 async def _observe(container, uow_factory, content: str) -> None:
     register_handlers(container)
     async with uow_factory() as uow:
-        await container.services["memory"].submit_observation(
-            uow, U1, kind=ObservationKind.MESSAGE, content=content
-        )
+        await submit_observation(uow, U1, kind=ObservationKind.MESSAGE, content=content)
         await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()

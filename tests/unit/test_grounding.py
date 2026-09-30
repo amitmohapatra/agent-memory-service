@@ -16,13 +16,13 @@ from memory_service.domain.context_bundle import (
     UnusedEvidence,
 )
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
+from memory_service.modules.context.handles import record_of
 from memory_service.modules.grounding.cascade import (
     Evidence,
     GroundingCascade,
     _contradicts,
-    attach,
-    bundle_evidence,
     decompose,
+    record_evidence,
     resolve_citation,
 )
 from memory_service.modules.grounding.lexical import conflicts, coverage
@@ -255,7 +255,7 @@ async def test_borderline_band_uses_the_judge_and_falls_back_to_borderline() -> 
     assert report.claims[0].verdict == "borderline" and report.judge_consulted == 0
 
 
-def test_bundle_evidence_order_and_attach() -> None:
+def test_a_bundle_s_evidence_is_cited_by_handle_in_bundle_order() -> None:
     def item(item_id: str, rep: Representation, text: str) -> ContextItem:
         return ContextItem(
             item_id=item_id, representation=rep, text=text, citation=f"{rep.value}:{item_id}"
@@ -276,19 +276,13 @@ def test_bundle_evidence_order_and_attach() -> None:
         token_budget=100,
         token_estimate=10,
     )
-    packed, unused = bundle_evidence(bundle)
+    packed, unused = record_evidence(record_of(bundle))
     assert [e.item_id for e in packed] == ["mem_1", "rel_1", "sum_1", "chk_1"]
+    assert [e.citation for e in packed] == ["m1", "f1", "s1", "d1"]
     assert [e.item_id for e in unused] == ["chk_9"] and unused[0].text == E2.text
     assert resolve_citation("4", packed).item_id == "chk_1"  # type: ignore[union-attr]
-    report = GroundingReport_stub()
-    out = attach(bundle, report)
-    assert out.evidence.grounding is report and out.evidence.unused == bundle.evidence.unused
-
-
-def GroundingReport_stub():  # noqa: N802 - tiny helper keeps the test readable
-    from memory_service.domain.grounding import GroundingReport
-
-    return GroundingReport(nli_provider="lexical-nli-v2")
+    assert resolve_citation("d1", packed).item_id == "chk_1"  # type: ignore[union-attr]
+    assert resolve_citation("m1", packed).item_id == "mem_1"  # type: ignore[union-attr]
 
 
 @pytest.mark.parametrize(
@@ -318,12 +312,15 @@ async def test_generated_rewrite_cannot_prove_itself_and_citations_keep_their_po
         citation="memory:source",
     )
     bundle = _bundle([generated, source])
-    packed, _ = bundle_evidence(bundle)
+    packed, _ = record_evidence(record_of(bundle))
     assert resolve_citation("2", packed).item_id == "source"
+    assert resolve_citation("m2", packed).item_id == "source"
     for answer in (claim, claim + " [1]"):
         report = await cascade().verify_bundle(bundle, answer)
         assert report.supported == 0
     source = source.model_copy(update={"text": claim})
     supported = await cascade().verify_bundle(_bundle([generated, source]), claim + " [2]")
     assert supported.supported == 1
+    by_handle = await cascade().verify_bundle(_bundle([generated, source]), claim + " [m2]")
+    assert by_handle.supported == 1
     assert "model-extracted, unverified" in bundle.render()

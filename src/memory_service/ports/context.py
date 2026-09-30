@@ -8,7 +8,10 @@ from memory_service.domain.context_bundle import ContextBundle
 
 class ContextReader(Protocol):
     async def build(
-        self, ctx: MemoryExecutionContext, query: str, *, token_budget: int | None = None
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        *,
+        token_budget: int | None = None,
+        window: bool = True,
     ) -> ContextBundle: ...
-
-    async def revision_fingerprint(self, ctx: MemoryExecutionContext) -> str: ...

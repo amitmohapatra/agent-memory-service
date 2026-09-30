@@ -21,7 +21,12 @@ from fastapi.testclient import TestClient
 #: ``MEMORY_TEST_*`` is the suite's own namespace and is deliberately kept, as is everything
 #: when ``MEMORY_TEST_PROVIDERS=env`` asks for the real components on purpose.
 if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
-    for _leaked in [k for k in os.environ if k.startswith("MEMORY__")]:
+    for _leaked in [
+        k
+        for k in os.environ
+        if k.startswith("MEMORY__")
+        or k in ("BIFROST_URL", "BIFROST_VIRTUAL_KEY", "OTEL_EXPORTER_OTLP_ENDPOINT")
+    ]:
         del os.environ[_leaked]
 
 from memory_service.api.app import create_app  # noqa: E402 - after the environment is cleaned
@@ -49,8 +54,7 @@ DB_URL = os.environ.get(
 def _test_settings(**overrides: object) -> Settings:
     base = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
-        "authentication": {"mode": "trusted_dev", "trusted_dev_api_keys": ["test-key"]},
-        "models": {"llm": {"enabled": False}},
+        "authentication": {"trusted_dev_api_keys": ["test-key"]},
         "database": {"url": DB_URL},
     }
     for key, value in overrides.items():
@@ -62,10 +66,13 @@ def _test_settings(**overrides: object) -> Settings:
         # Real-component runs: the environment's stores and gateway (Qdrant server, cache,
         # OpenFGA, LLM) replace the hermetic stand-ins for these sections only; tasks/blob
         # stay test-local so drain() and tmp_path semantics hold.
-        env_only = Settings().model_dump(exclude_unset=True)
-        for section in ("models", "search", "authorization", "cache"):
+        env = Settings()
+        env_only = env.model_dump(exclude_unset=True)
+        for section in ("search", "authorization", "cache"):
             if isinstance(env_only.get(section), dict):
                 base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
+        base.setdefault("bifrost_url", env.bifrost_url)
+        base.setdefault("bifrost_virtual_key", env.bifrost_virtual_key)
     # ``_env_file=None`` disables the dotenv source. Stripping MEMORY__* from os.environ is
     # not enough on its own: pydantic-settings also reads ./.env directly, so a suite run from
     # the repo root still inherited it. Both doors have to be shut for a run to be hermetic.

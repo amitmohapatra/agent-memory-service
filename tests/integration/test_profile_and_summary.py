@@ -60,7 +60,7 @@ async def test_with_a_model_the_previous_summary_and_the_new_messages_are_folded
         stored = await summaries.refresh("acme", "thr_sum", principal_id="user:ann")
         prompt = gateway.prompts()[0]["messages"][1]["content"]
     assert stored is not None and stored.text == "Ann asked about three things."
-    assert stored.model == "test/strong" and "Previous summary:\n(none)" in prompt
+    assert stored.model == "gemini/gemini-3.8-pro" and "Previous summary:\n(none)" in prompt
     again = await summaries.refresh("acme", "thr_sum", principal_id="user:ann")
     assert again == stored, "nothing new: nothing written"
 

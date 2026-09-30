@@ -1,8 +1,6 @@
-"""The pinned sections of a pushed context: budgeting, rendering, and the delta."""
+"""The pinned sections of a pushed context: budgeting and rendering."""
 
 from __future__ import annotations
-
-import orjson
 
 from memory_service.domain.context_bundle import (
     ContextBundle,
@@ -15,8 +13,12 @@ from memory_service.domain.context_bundle import (
 )
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
 from memory_service.domain.tools import MissingArgument, Prefill, ToolCandidate, ToolHints
-from memory_service.modules.context.builder import _delta, bundle_to_api, served
-from memory_service.modules.context.sections import Pinned, ToolsRequest, within_budget
+from memory_service.modules.context.sections import (
+    SUMMARY_MIN_TOKENS,
+    Pinned,
+    ToolsRequest,
+    within_budget,
+)
 
 
 def _pinned() -> Pinned:
@@ -40,7 +42,11 @@ def _pinned() -> Pinned:
         tools=ToolHints(
             candidates=[ToolCandidate(name="erp-create_po", score=1.0, why="step 2")],
             next="erp-create_po",
-            prefill={"supplier": Prefill(tool="erp-create_po", value="Acme", source="graph")},
+            prefill={
+                "erp-create_po.supplier": Prefill(
+                    tool="erp-create_po", value="Acme", source="graph"
+                )
+            },
             missing=[MissingArgument(tool="erp-create_po", arg="qty", question="How many?")],
         ),
     )
@@ -50,8 +56,39 @@ def test_the_pinned_sections_fit_half_the_budget_in_priority_order() -> None:
     kept, used = within_budget(_pinned(), 2000)
     assert kept.profile and kept.thread_summary and kept.procedures and kept.tools
     assert 0 < used <= 1000
-    tight, used_tight = within_budget(_pinned(), 16)
-    assert tight.profile and not tight.procedures and used_tight <= 8
+    tight, used_tight = within_budget(_pinned(), 30)
+    assert tight.profile and not tight.procedures and used_tight <= 15
+
+
+def test_each_section_costs_what_it_renders_to() -> None:
+    """The tools section renders only the next tool, its arguments and what is missing:
+    costing the whole hints object (candidates and all) dropped it from budgets it fit."""
+    from memory_service.domain.context_bundle import tools_section
+    from memory_service.modules.ingestion.hierarchy import estimate_tokens
+
+    pinned = _pinned()
+    many = pinned.tools.model_copy(  # type: ignore[union-attr]
+        update={
+            "candidates": [
+                ToolCandidate(name=f"tool_{i}", score=0.5, why="matches the task " * 5)
+                for i in range(20)
+            ]
+        }
+    )
+    cost = estimate_tokens(tools_section(many) or "")
+    only_tools = Pinned(tools=many)
+    kept, used = within_budget(only_tools, cost * 2)
+    assert kept.tools is not None and kept.tools.next == "erp-create_po" and used == cost
+
+
+def test_a_summary_over_its_share_is_truncated_not_dropped() -> None:
+    long = ThreadSummaryView(text="x " * 4000, covers_to_sequence=90, version=3)
+    kept, used = within_budget(Pinned(thread_summary=long), 400)
+    assert kept.thread_summary is not None
+    assert kept.thread_summary.text.startswith("...")
+    assert len(kept.thread_summary.text) < len(long.text) and used <= 200
+    gone, _ = within_budget(Pinned(thread_summary=long), SUMMARY_MIN_TOKENS)
+    assert gone.thread_summary is None, "below the minimum a summary says too little to keep"
 
 
 def test_a_tools_request_is_part_of_the_cache_identity() -> None:
@@ -91,17 +128,7 @@ def test_the_prompt_starts_from_the_pinned_sections() -> None:
     positions = [rendered.index(heading) for heading in order]
     assert positions == sorted(positions)
     assert "erp-get_stock -> erp-create_po (worked 90% of 10 runs)" in rendered
-    assert "supplier = 'Acme' (graph)" in rendered and "missing qty: How many?" in rendered
-
-
-def test_a_delta_lists_only_what_changed_since_the_record() -> None:
-    before = _bundle()
-    payload = orjson.dumps(bundle_to_api(before))
-    same = orjson.loads(_delta(payload, orjson.dumps(served(before))))
-    assert same["delta"] is True and same["memories"] == []
-    changed = _bundle().model_copy(
-        update={"memories": [before.memories[0].model_copy(update={"text": "Globex now"})]}
-    )
-    moved = orjson.loads(_delta(orjson.dumps(bundle_to_api(changed)), orjson.dumps(served(before))))
-    assert [m["text"] for m in moved["memories"]] == ["Globex now"]
-    assert orjson.loads(_delta(payload, None))["delta"] is False, "no record: the whole bundle"
+    assert "- erp-create_po.supplier = 'Acme' (graph)" in rendered
+    assert "- missing erp-create_po.qty: How many?" in rendered
+    assert "step 2" not in rendered, "the candidates narrow the tools; they are not text"
+    assert "[m1] Acme supplies paper" in rendered

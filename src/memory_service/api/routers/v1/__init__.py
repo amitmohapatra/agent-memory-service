@@ -9,7 +9,6 @@ def routers() -> list[APIRouter]:
     from memory_service.api.routers.v1 import (
         admin,
         agent_tools,
-        briefs,
         conversation,
         feedback,
         files,
@@ -21,15 +20,12 @@ def routers() -> list[APIRouter]:
         retrieval,
         tenancy,
         tools,
-        webhooks,
     )
 
     return [
         admin.router,
         tenancy.router,
         model_keys.router,
-        webhooks.router,
-        briefs.router,
         conversation.router,
         files.router,
         retrieval.router,

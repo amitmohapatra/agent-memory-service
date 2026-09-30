@@ -21,7 +21,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from benchmark.common import provenance, reset_store, write_result
+from benchmark.common import provenance, reset_store, submit_observation, write_result
 from benchmark.env import bench_overrides
 from benchmark.evaluation import BUDGETS
 from benchmark.evaluation.memory_pairs import evaluate_pairs, load_pairs
@@ -30,7 +30,6 @@ from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 
@@ -91,7 +90,6 @@ async def run(n_observations: int) -> dict[str, Any]:
         await reset_store(container, "acme")
         register_handlers(container)
         uow_factory = container.services["uow_factory"]
-        service = container.services["memory"]
         pipeline = container.services["observation_pipeline"]
         ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
         accept_ms: list[float] = []
@@ -101,15 +99,13 @@ async def run(n_observations: int) -> dict[str, Any]:
         for content in _stream(n_observations):
             t = time.perf_counter()
             async with uow_factory() as uow:
-                ack = await service.submit_observation(
-                    uow, ctx, kind=ObservationKind.MESSAGE, content=content
-                )
+                observation_id = (
+                    await submit_observation(uow, ctx, content=content)
+                ).observation_id
                 await uow.commit()
             accept_ms.append((time.perf_counter() - t) * 1000)
             t = time.perf_counter()
-            outcomes = await pipeline.run(
-                {"tenant_id": "acme", "observation_id": ack.observation_id}
-            )
+            outcomes = await pipeline.run({"tenant_id": "acme", "observation_id": observation_id})
             process_ms.append((time.perf_counter() - t) * 1000)
             for o in outcomes:
                 decisions[o.decision.value] = decisions.get(o.decision.value, 0) + 1
@@ -139,7 +135,7 @@ async def run(n_observations: int) -> dict[str, Any]:
             },
             "budgets_ms": {"chat_accept_p95": BUDGETS.chat_accept_p95_ms},
             "provider": "native",
-            "llm_enabled": settings.models.llm.enabled,
+            "llm_enabled": settings.llm.enabled,
             "provenance": provenance(),
         }
     finally:

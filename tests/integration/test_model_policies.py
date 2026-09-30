@@ -13,14 +13,14 @@ from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 from memory_service.modules.memory.reflection import ReflectionService
-from memory_service.ports.credentials import ModelIdentity, tenant_identity, workspace_identity
+from memory_service.ports.credentials import ModelIdentity, tenant_identity
 from tests.integration.test_agent_credentials import service as credentials_service
 from tests.integration.test_reflection import _memories, _observe
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
 
-AGENT = ModelIdentity("acme", "agent:u1/research", "finance")
+AGENT = ModelIdentity("acme", "agent:u1/research")
 U1 = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
 G1 = MemoryExecutionContext(tenant_id="globex", user_id="u1", workspace_id="ws1")
 
@@ -31,13 +31,13 @@ async def _set_key(credentials, uow_factory, identity: ModelIdentity, key: str |
         await uow.commit()
 
 
-async def _set_policy(policies, uow_factory, level, uses, read_assist) -> None:
+async def _set_policy(policies, uow_factory, tenant_id, uses, read_assist, models=None) -> None:
     async with uow_factory() as uow:
-        await policies.set(uow, level, uses=uses, read_assist=read_assist)
+        await policies.set(uow, tenant_id, uses=uses, read_assist=read_assist, models=models or {})
         await uow.commit()
 
 
-async def test_policies_and_keys_resolve_most_specific_first(container, uow_factory) -> None:
+async def test_the_tenant_policy_and_the_most_specific_key_decide(container, uow_factory) -> None:
     policies = ModelPolicies(uow_factory)
     credentials = credentials_service(uow_factory)
     default = await policies.access(AGENT)
@@ -46,34 +46,36 @@ async def test_policies_and_keys_resolve_most_specific_first(container, uow_fact
     await _set_key(credentials, uow_factory, tenant_identity("acme"), "vk-tenant-test")
     assert (await policies.access(AGENT)).has_key, "the tenant's key pays for its agents"
 
-    await _set_policy(policies, uow_factory, tenant_identity("acme"), ["summaries"], False)
+    await _set_policy(
+        policies,
+        uow_factory,
+        "acme",
+        ["summaries"],
+        False,
+        {"summaries": "gemini/gemini-3.8-flash"},
+    )
     tenant_wide = await policies.access(AGENT)
     assert tenant_wide.uses == {"summaries"} and not tenant_wide.read_assist
-
-    finance = workspace_identity("acme", "finance")
-    await _set_policy(policies, uow_factory, finance, ["reflection", "summaries"], True)
-    team = await policies.access(AGENT)
-    assert team.uses == {"reflection", "summaries"} and team.read_assist
-    elsewhere = await policies.access(ModelIdentity("acme", "agent:u1/research", "legal"))
-    assert elsewhere.uses == {"summaries"}, "another team falls back to the tenant's policy"
+    assert tenant_wide.models == {"summaries": "gemini/gemini-3.8-flash"}
+    other_agent = await policies.access(ModelIdentity("acme", "agent:u2/support"))
+    assert other_agent.uses == {"summaries"}, "one policy for the whole tenant"
 
     # a revocation at the agent's own level is final: it never borrows the tenant's key
-    await _set_key(credentials, uow_factory, ModelIdentity("acme", AGENT.principal_id), None)
+    await _set_key(credentials, uow_factory, ModelIdentity("acme", "agent:research"), None)
     assert not (await policies.access(AGENT)).has_key
+    assert (await policies.access(ModelIdentity("acme", "agent:u1/support"))).has_key
 
-    stored = await policies.get(finance)
+    stored = await policies.get("acme")
     assert stored is not None and stored.revision == 1
-    await _set_policy(policies, uow_factory, finance, ["summaries"], True)
-    assert (await policies.get(finance)).revision == 2  # type: ignore[union-attr]
-    assert await policies.get(workspace_identity("acme", "legal")) is None
+    await _set_policy(policies, uow_factory, "acme", ["summaries"], True)
+    assert (await policies.get("acme")).revision == 2  # type: ignore[union-attr]
+    assert await policies.get("globex") is None
 
 
 async def test_a_policy_change_invalidates_cached_bundles(container, uow_factory) -> None:
     async with uow_factory() as uow:
         before = await uow.revisions.get_many("acme", [(RevisionKind.TENANT, "")])
-    await _set_policy(
-        ModelPolicies(uow_factory), uow_factory, tenant_identity("acme"), ["summaries"], True
-    )
+    await _set_policy(ModelPolicies(uow_factory), uow_factory, "acme", ["summaries"], True)
     async with uow_factory() as uow:
         after = await uow.revisions.get_many("acme", [(RevisionKind.TENANT, "")])
     assert after != before
@@ -119,7 +121,7 @@ async def test_reflection_runs_only_where_a_key_pays_and_the_policy_allows(
         ]
     }
     with mocked_gateway([reply]) as gw:
-        auto = gw.assist(uses=["reflection"], enabled="auto", api_key=None)
+        auto = gw.assist(uses=["reflection"], api_key=None)
         auto.provider.credentials = credentials
         auto.provider.usage = LLMUsage(uow_factory)  # as production wires it
         assist = LLMAssist(auto.provider, auto.settings, policies)
@@ -131,7 +133,7 @@ async def test_reflection_runs_only_where_a_key_pays_and_the_policy_allows(
         assert gw.route.call_count == 1
 
         await _observe(container, uow_factory, U1, "I prefer dark mode in every editor.")
-        await _set_policy(policies, uow_factory, tenant_identity("acme"), ["summaries"], True)
+        await _set_policy(policies, uow_factory, "acme", ["summaries"], True)
         assert await service.reflect_all() == []
         assert gw.route.call_count == 1, "the policy no longer allows reflection"
         async with uow_factory() as uow:

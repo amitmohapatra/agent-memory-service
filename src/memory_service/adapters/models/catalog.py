@@ -32,7 +32,10 @@ def choose_model(models: tuple[str, ...], *, fast: bool) -> str:
         canonical = name.removeprefix("openrouter/")
         if not _FAMILIES.fullmatch(canonical) or not permitted_model(canonical):
             continue
-        compact = any(part in canonical for part in ("flash", "haiku", "mini", "nano"))
+        # By name part, not substring: every "gemini" contains "mini", which made each Gemini
+        # model compact and a strong use pick whichever sorted last.
+        parts = set(re.split(r"[/_.:-]", canonical))
+        compact = bool(parts & {"flash", "haiku", "mini", "nano"})
         # Prefer a compact model for bounded extraction/expansion, and a full model for
         # synthesis. Within a tier use deterministic IDs; do not infer speed from size.
         eligible.append((compact == fast, name))

@@ -4,6 +4,7 @@ down, never up or sideways), cross-agent corroboration and conflict, and no chat
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
@@ -46,9 +47,7 @@ async def _observe(
     container, uow_factory, ctx, content, *, kind=ObservationKind.AGENT_RESULT, hints=None
 ):
     async with uow_factory() as uow:
-        ack = await container.services["memory"].submit_observation(
-            uow, ctx, kind=kind, content=content, hints=hints
-        )
+        ack = await submit_observation(uow, ctx, kind=kind, content=content, hints=hints)
         await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()

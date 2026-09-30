@@ -15,13 +15,12 @@ from memory_service.config.settings import LLMSettings
 
 
 def _settings(**over: object) -> LLMSettings:
-    base = {
-        "enabled": True,
-        "base_url": "http://gateway/v1",
-        "model": "gemini/gemini-3.6-flash",
-        "max_retries": 1,
-    }
+    base = {"base_url": "http://gateway/v1", "api_key": "vk-operator"}
     return LLMSettings(**{**base, **over})  # type: ignore[arg-type]
+
+
+#: what the gateway lists on /models
+CATALOG = {"data": [{"id": "gemini/gemini-3.6-flash"}, {"id": "gemini/gemini-3.6-pro"}]}
 
 
 #: no backoff between retries: these tests count requests, not seconds
@@ -30,10 +29,34 @@ FAST = LLMTransport(retry_backoff_seconds=0.0)
 TWO_STRIKES = LLMTransport(retry_backoff_seconds=0.0, circuit_failure_threshold=2)
 
 
+def _no_retries(settings: LLMSettings, client: httpx.AsyncClient) -> BifrostLLM:
+    """The breaker tests count calls one request each: no retries inside a call."""
+    import dataclasses
+
+    from memory_service.config.constants import LLM
+
+    return BifrostLLM(
+        settings,
+        client=client,
+        transport=TWO_STRIKES,
+        tuning=dataclasses.replace(LLM, max_retries=0),
+    )
+
+
+def _client(handler) -> httpx.AsyncClient:
+    """A gateway that lists ``CATALOG`` on /models and answers everything else with
+    ``handler``."""
+
+    def routed(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json=CATALOG)
+        return handler(request)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(routed), base_url="http://gateway/v1")
+
+
 def _llm(handler) -> BifrostLLM:
-    transport = httpx.MockTransport(handler)
-    client = httpx.AsyncClient(transport=transport, base_url="http://gateway/v1")
-    return BifrostLLM(_settings(), client=client, transport=FAST)
+    return BifrostLLM(_settings(), client=_client(handler), transport=FAST)
 
 
 # ``Retry-After`` parsing moved to the shared gateway client when this service stopped
@@ -107,10 +130,7 @@ async def test_a_rate_limit_does_not_open_the_circuit() -> None:
 
     from memory_service.ports.models import LLMMessage
 
-    settings = _settings(max_retries=0)
-    transport = httpx.MockTransport(handler)
-    client = httpx.AsyncClient(transport=transport, base_url="http://gateway/v1")
-    llm = BifrostLLM(settings, client=client, transport=TWO_STRIKES)
+    llm = _no_retries(_settings(), _client(handler))
 
     for _ in range(4):
         with pytest.raises(Exception):  # noqa: B017 - either error type is acceptable here
@@ -130,10 +150,7 @@ async def test_a_server_error_still_opens_the_circuit() -> None:
     from memory_service.domain.errors import DependencyUnavailable
     from memory_service.ports.models import LLMMessage
 
-    settings = _settings(max_retries=0)
-    transport = httpx.MockTransport(handler)
-    client = httpx.AsyncClient(transport=transport, base_url="http://gateway/v1")
-    llm = BifrostLLM(settings, client=client, transport=TWO_STRIKES)
+    llm = _no_retries(_settings(), _client(handler))
 
     for _ in range(2):
         with pytest.raises(Exception):  # noqa: B017

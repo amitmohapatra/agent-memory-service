@@ -7,10 +7,12 @@ in the CacheProvider when available.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 from openfga_sdk import ClientConfiguration, OpenFgaClient
 from openfga_sdk.client.models import (
     ClientBatchCheckItem,
@@ -20,11 +22,9 @@ from openfga_sdk.client.models import (
     ClientTuple,
     ClientWriteRequest,
 )
+from openfga_sdk.configuration import RetryParams
 from openfga_sdk.credentials import CredentialConfiguration, Credentials
 from openfga_sdk.models import CreateStoreRequest, WriteAuthorizationModelRequest
-from openfga_sdk.sync import (
-    OpenFgaClient as SyncOpenFgaClient,  # noqa: F401 - documents sync availability
-)
 
 from memory_service.config.constants import AUTHORIZATION
 from memory_service.config.settings import AuthorizationSettings
@@ -72,7 +72,13 @@ class OpenFGAAuthorizationProvider:
             store_id=self.settings.openfga_store_id,
             authorization_model_id=self.settings.openfga_model_id,
             credentials=credentials,
-            timeout_millisec=3000,
+            timeout_millisec=int(AUTHORIZATION.timeout_seconds * 1000),
+            # the SDK's own retries cover a 429 and a 5xx; ``_transient`` below covers the
+            # timeouts and dropped connections it does not
+            retry_params=RetryParams(
+                max_retry=AUTHORIZATION.retries,
+                min_wait_in_ms=int(AUTHORIZATION.retry_pause_seconds * 1000),
+            ),
         )
         client = OpenFgaClient(config)
         try:
@@ -177,9 +183,11 @@ class OpenFGAAuthorizationProvider:
         client = await self._get_client()
         with span("authz.check", relation=check.relation), stage_seconds.labels("authz").time():
             try:
-                response = await client.check(
-                    ClientCheckRequest(
-                        user=check.user, relation=check.relation, object=check.object
+                response = await _transient(
+                    lambda: client.check(
+                        ClientCheckRequest(
+                            user=check.user, relation=check.relation, object=check.object
+                        )
                     )
                 )
             except Exception as exc:
@@ -200,7 +208,9 @@ class OpenFGAAuthorizationProvider:
             for i, c in enumerate(checks)
         ]
         try:
-            response = await client.batch_check(ClientBatchCheckRequest(checks=items))
+            response = await _transient(
+                lambda: client.batch_check(ClientBatchCheckRequest(checks=items))
+            )
         except Exception as exc:
             raise DependencyUnavailable(f"OpenFGA batch_check failed: {_reason(exc)}") from exc
         by_id = {r.correlation_id: bool(r.allowed) for r in response.result}
@@ -235,16 +245,15 @@ class OpenFGAAuthorizationProvider:
     async def _apply(
         self, client: Any, add: Sequence[RelationTuple], delete: Sequence[RelationTuple]
     ) -> None:
-        await client.write(
-            ClientWriteRequest(
-                writes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in add]
-                or None,
-                deletes=[
-                    ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in delete
-                ]
-                or None,
-            )
+        request = ClientWriteRequest(
+            writes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in add]
+            or None,
+            deletes=[ClientTuple(user=t.user, relation=t.relation, object=t.object) for t in delete]
+            or None,
         )
+        # a write that timed out may have landed; its retry then answers "already exists",
+        # which ``write`` treats as done
+        await _transient(lambda: client.write(request))
 
     async def _apply_one(
         self,
@@ -264,8 +273,10 @@ class OpenFGAAuthorizationProvider:
     async def list_objects(self, user: str, relation: str, object_type: str) -> list[str]:
         client = await self._get_client()
         try:
-            response = await client.list_objects(
-                ClientListObjectsRequest(user=user, relation=relation, type=object_type)
+            response = await _transient(
+                lambda: client.list_objects(
+                    ClientListObjectsRequest(user=user, relation=relation, type=object_type)
+                )
             )
         except Exception as exc:
             if _unknown_subject_type(exc):
@@ -298,6 +309,21 @@ class OpenFGAAuthorizationProvider:
     async def close(self) -> None:
         if self._client is not None:
             await self._client.close()
+
+
+async def _transient[T](call: Callable[[], Awaitable[T]]) -> T:
+    """``call``, retried ``AUTHORIZATION.retries`` times after a timeout or a dropped
+    connection (the SDK retries a 429 or a 5xx itself); pauses double from
+    ``retry_pause_seconds``. Anything else - a decision, a validation error - is raised at
+    once."""
+    for attempt in range(AUTHORIZATION.retries + 1):
+        try:
+            return await call()
+        except (TimeoutError, aiohttp.ClientConnectionError):
+            if attempt == AUTHORIZATION.retries:
+                raise
+            await asyncio.sleep(AUTHORIZATION.retry_pause_seconds * 2**attempt)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 #: OpenFGA's code for a write that would not change anything: a tuple that already exists, or

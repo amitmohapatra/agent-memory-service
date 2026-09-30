@@ -113,6 +113,8 @@ async def corpus(container, uow_factory):
     distractors = json.loads(dataset.read_text())["corpus"][:DISTRACTOR_DOCS]
 
     async with container.database.engine.begin() as conn:
+        # a reset, not a hot path: on a loaded host it may outlast the statement timeout
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
     register_handlers(container)
     ctx = MemoryExecutionContext(

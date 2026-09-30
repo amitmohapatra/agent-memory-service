@@ -69,7 +69,7 @@ def test_memory_line_names_date_weekday_and_speaker_once() -> None:
     rendered = _bundle([_memory("mem_1", "I moved to Paris.", day="2023-05-08", who="caroline")])
     line = _section(rendered.render(), "Memories")[0]
     # 2023-05-08 was a Monday; the weekday is what the model derives worst
-    assert line == "- [memory_id:mem_1] 2023-05-08 Mon caroline: I moved to Paris."
+    assert line == "- [m1] 2023-05-08 Mon caroline: I moved to Paris."
     assert line.count("2023-05-08") == 1 and line.count("caroline") == 1
     # and no trace of the older doubled form: "[2023-05-08] caroline:" plus the same date
     # and speaker stamped into the text by the ingesting harness
@@ -78,13 +78,9 @@ def test_memory_line_names_date_weekday_and_speaker_once() -> None:
 
 def test_memory_line_drops_what_the_memory_does_not_carry() -> None:
     plain = _bundle([_memory("mem_1", "A fact with no date and no subject.")])
-    assert _section(plain.render(), "Memories") == [
-        "- [memory_id:mem_1] A fact with no date and no subject."
-    ]
+    assert _section(plain.render(), "Memories") == ["- [m1] A fact with no date and no subject."]
     dated = _bundle([_memory("mem_1", "Dated but unattributed.", day="2023-05-08")])
-    assert _section(dated.render(), "Memories") == [
-        "- [memory_id:mem_1] 2023-05-08 Mon Dated but unattributed."
-    ]
+    assert _section(dated.render(), "Memories") == ["- [m1] 2023-05-08 Mon Dated but unattributed."]
 
 
 def test_derived_creation_date_is_not_presented_as_the_date_of_its_events() -> None:
@@ -99,9 +95,7 @@ def test_derived_creation_date_is_not_presented_as_the_date_of_its_events() -> N
 def test_memory_line_tolerates_an_unparseable_observed_at() -> None:
     item = _memory("mem_1", "Body.", who="mel")
     broken = item.model_copy(update={"attributes": {**item.attributes, "observed_at": "last May"}})
-    assert _section(_bundle([broken]).render(), "Memories") == [
-        "- [memory_id:mem_1] last May mel: Body."
-    ]
+    assert _section(_bundle([broken]).render(), "Memories") == ["- [m1] last May mel: Body."]
 
 
 def test_top_ranked_memories_are_repeated_above_the_chronological_timeline() -> None:
@@ -116,9 +110,9 @@ def test_top_ranked_memories_are_repeated_above_the_chronological_timeline() -> 
 
     relevant = _section(rendered, "Most relevant")
     assert len(relevant) == MOST_RELEVANT_MAX
-    assert relevant[0] == "- [memory_id:mem_0] 2023-05-30 Tue caroline: body 0."
+    assert relevant[0] == "- [m1] 2023-05-30 Tue caroline: body 0."
     assert [line.split("]")[0] for line in relevant] == [
-        f"- [memory_id:mem_{i}" for i in range(MOST_RELEVANT_MAX)
+        f"- [m{i + 1}" for i in range(MOST_RELEVANT_MAX)
     ]
 
     timeline = _section(rendered, "Memories")
@@ -128,7 +122,7 @@ def test_top_ranked_memories_are_repeated_above_the_chronological_timeline() -> 
     # printed in full above appear there as a pointer instead of a second copy
     assert sum(SHOWN_ABOVE in line for line in timeline) == MOST_RELEVANT_MAX
     # the head is 30 now, so the first chronological line that is not a pointer moves
-    assert timeline[0].startswith("- [memory_id:mem_")
+    assert timeline[0].startswith("- [m")
     assert sum(rendered.count(f"body {i}.") for i in range(len(memories))) == len(memories)
 
 
@@ -168,9 +162,7 @@ def test_several_values_of_one_multi_valued_slot_render_as_one_dated_block() -> 
     ]
     timeline = _section(_bundle(memories).render(), "Memories")
     assert len(timeline) == 3  # one heading line plus one statement per value
-    assert timeline[0] == (
-        "- [memory_id:mem_1; memory_id:mem_2] user:jon — participated in (source statements):"
-    )
+    assert timeline[0] == ("- [m1; m2] user:jon — participated in (source statements):")
     assert timeline[1:] == [
         "[observed 2023-05-02] Jon ran the charity race.",
         "[observed 2023-06-11] Jon joined the hackathon.",
@@ -186,7 +178,7 @@ def test_a_single_valued_slot_is_never_gathered() -> None:
     ]
     timeline = _section(_bundle(memories).render(), "Memories")
     assert len(timeline) == 2
-    assert all(line.startswith("- [memory_id:mem_") for line in timeline)
+    assert all(line.startswith("- [m") for line in timeline)
 
 
 def test_one_value_alone_keeps_its_own_line() -> None:
@@ -198,8 +190,8 @@ def test_one_value_alone_keeps_its_own_line() -> None:
     ]
     timeline = _section(_bundle(memories).render(), "Memories")
     assert timeline == [
-        "- [memory_id:mem_1] 2023-05-02 Tue jon: Jon ran the race.",
-        "- [memory_id:mem_2] 2023-06-11 Sun jon: Jon likes rain.",
+        "- [m1] 2023-05-02 Tue jon: Jon ran the race.",
+        "- [m2] 2023-06-11 Sun jon: Jon likes rain.",
     ]
 
 
@@ -212,7 +204,7 @@ def test_the_same_slot_on_two_subjects_stays_two_blocks() -> None:
     rendered = _bundle(memories).render()
     timeline = _section(rendered, "Memories")
     # Jon's two are gathered at his oldest place; Mel's single value keeps its own line
-    assert timeline[0].startswith("- [memory_id:mem_1; memory_id:mem_3] user:jon")
+    assert timeline[0].startswith("- [m1; m3] user:jon")
     assert "user:mel —" not in rendered
     assert sum("Mel ran." in line for line in timeline) == 1
 
@@ -248,7 +240,7 @@ def test_a_derived_memory_is_already_an_aggregate_and_is_not_gathered() -> None:
     ]
     timeline = _section(_bundle(memories).render(), "Memories")
     assert len(timeline) == 2
-    assert all(line.startswith("- [memory_id:mem_") for line in timeline)
+    assert all(line.startswith("- [m") for line in timeline)
 
 
 def test_a_promoted_memory_is_not_gathered_so_every_body_appears_once() -> None:

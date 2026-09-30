@@ -237,7 +237,7 @@ async def test_without_a_bootstrap_secret_nobody_is_the_platform(make_settings) 
 
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
-    settings = make_settings(authentication={"mode": "api_key"})
+    settings = make_settings(authentication={"trusted_dev_api_keys": []})
     app = create_app(settings, overrides=_test_overrides(tasks="inline"))
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.post("/v1/admin/tenants", headers={"X-API-Key": BOOTSTRAP}, json={"name": "x"})

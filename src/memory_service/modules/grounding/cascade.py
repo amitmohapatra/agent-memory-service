@@ -22,8 +22,8 @@ from typing import Any, Literal
 from memory_service.config.constants import NLISettings
 from memory_service.domain.context_bundle import ContextBundle
 from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
-from memory_service.domain.memory import unverified_representation
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK
+from memory_service.modules.context.handles import BundleRecord, record_of
 from memory_service.modules.grounding.lexical import content_tokens, coverage, words
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.metrics import grounding_claims_total, stage_seconds
@@ -45,7 +45,8 @@ _DISCOURSE = re.compile(
     re.IGNORECASE,
 )
 _ID_LIKE = re.compile(
-    r"^(?:\d{1,3}|[a-z_]+:.+|(?:chk|mem|sum|rel|wm|fact|doc)_\S+)$", re.IGNORECASE
+    r"^(?:\d{1,3}|[mfsd][1-9]\d{0,3}|[a-z_]+:.+|(?:chk|mem|sum|rel|wm|fact|doc)_\S+)$",
+    re.IGNORECASE,
 )
 
 HEDGE_MAX_WORDS = 8
@@ -203,22 +204,16 @@ def decompose(answer: str, *, max_claims: int = 40) -> list[Claim]:
 # ------------------------------------------------------------------ evidence
 
 
-def bundle_evidence(bundle: ContextBundle) -> tuple[list[Evidence], list[Evidence]]:
-    """(packed, unused) evidence of a bundle; ordinal citations (``[1]``) count through the
-    packed list in this order: memories, facts, summaries, knowledge."""
+def record_evidence(record: BundleRecord) -> tuple[list[Evidence], list[Evidence]]:
+    """(packed, unused) evidence of a bundle, cited by its handles; ordinal citations
+    (``[1]``) count through the packed list in the bundle's order: memories, facts,
+    summaries, knowledge. A model-extracted item keeps its place with no text: it cannot
+    prove itself, its source has to."""
     packed = [
-        # Retain ordinal citation positions, but generated representations cannot act as
-        # independent proof of their own text. The original source must support the claim.
-        Evidence(
-            item_id=i.item_id,
-            text="" if unverified_representation(i.attributes) else i.text,
-            kind=i.representation.value,
-            citation=i.citation,
-        )
-        for group in (bundle.memories, bundle.graph_facts, bundle.summaries, bundle.knowledge)
-        for i in group
+        Evidence(item_id=e.item_id, text=e.text, kind=e.kind, citation=e.citation)
+        for e in record.evidence
     ]
-    unused = [Evidence(item_id=u.item_id, text=u.text, kind=u.kind) for u in bundle.evidence.unused]
+    unused = [Evidence(item_id=u.item_id, text=u.text, kind=u.kind) for u in record.unused]
     return packed, unused
 
 
@@ -234,15 +229,6 @@ def resolve_citation(cite: str, evidence: Sequence[Evidence]) -> Evidence | None
     return None
 
 
-def attach(bundle: ContextBundle, report: GroundingReport) -> ContextBundle:
-    return bundle.model_copy(
-        update={"evidence": bundle.evidence.model_copy(update={"grounding": report})}
-    )
-
-
-# ------------------------------------------------------------------ cascade
-
-
 class GroundingCascade:
     def __init__(
         self,
@@ -256,7 +242,7 @@ class GroundingCascade:
         self.assist = assist or LLMAssist.disabled()
 
     async def verify_bundle(self, bundle: ContextBundle, answer: str) -> GroundingReport:
-        packed, unused = bundle_evidence(bundle)
+        packed, unused = record_evidence(record_of(bundle))
         return await self.verify(answer, packed, unused=unused)
 
     async def verify(

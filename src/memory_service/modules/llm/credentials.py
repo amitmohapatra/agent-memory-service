@@ -1,5 +1,5 @@
-"""Model credentials at agent, workspace and tenant level: rotated and revoked atomically,
-resolved at call time from the most specific row that exists (ADR 0023)."""
+"""Model credentials at agent and tenant level: rotated and revoked atomically, resolved at
+call time from the most specific row that exists."""
 
 from pydantic import SecretStr
 
@@ -7,6 +7,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured, ValidationFailed
 from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.credentials import (
+    AGENT_PRINCIPAL_PREFIX,
     CredentialCipher,
     ModelIdentity,
     ResolvedCredential,
@@ -18,9 +19,11 @@ KEY_MAX_CHARS = 4096
 
 
 def agent_identity(ctx: MemoryExecutionContext) -> ModelIdentity:
+    """The agent's own level: ``agent:<agent_id>``, the same whichever user the request
+    names, so the key registered at startup is the key every run of the agent resolves."""
     if ctx.agent_id is None:
         raise ValidationFailed("An agent_id is required for model credentials")
-    return ModelIdentity(ctx.tenant_id, ctx.principal_id, ctx.workspace_id)
+    return ModelIdentity(ctx.tenant_id, f"{AGENT_PRINCIPAL_PREFIX}{ctx.agent_id}")
 
 
 def _validated(key: SecretStr) -> None:
@@ -46,7 +49,7 @@ class ModelCredentials:
         self, uow: UnitOfWork, identity: ModelIdentity, key: SecretStr | None
     ) -> StoredCredential:
         """The same for any level: the row is the identity's own, never a fallback's."""
-        own = ModelIdentity(identity.tenant_id, identity.principal_id)
+        own = identity
         if key is not None:
             _validated(key)
         key_id, encrypted = self.cipher.encrypt(own, key) if key is not None else ("", None)
@@ -61,9 +64,7 @@ class ModelCredentials:
 
     async def metadata_for(self, identity: ModelIdentity) -> StoredCredential | None:
         async with self.uow_factory() as uow:
-            return await uow.credentials.get(
-                ModelIdentity(identity.tenant_id, identity.principal_id)
-            )
+            return await uow.credentials.get(identity)
 
     async def resolve(self, identity: ModelIdentity) -> ResolvedCredential | None:
         """The key of the most specific level that has a row. A revocation tombstone at that

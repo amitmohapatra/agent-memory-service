@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from memory_service.config.constants import TASKS, WEBHOOKS
+from memory_service.config.constants import TASKS
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.summary import TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
@@ -17,15 +17,11 @@ from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.profile.service import (
     PROFILE_MEMORY_TYPES,
+    TASK_PROFILE_QUERY,
     TASK_PROFILE_REFRESH,
     ProfileService,
 )
 from memory_service.modules.tools.service import TASK_TOOLS_INDEX, TASK_TOOLS_LEARN
-from memory_service.modules.webhooks.service import (
-    TASK_WEBHOOK_DELIVER,
-    TASK_WEBHOOK_FANOUT,
-    TASK_WEBHOOK_PURGE,
-)
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue, TaskHandler
 
@@ -124,23 +120,6 @@ def register_handlers(container: Container) -> None:
         if feedback is not None:
             await feedback.project(payload["tenant_id"], payload["feedback_id"])
 
-    async def webhook_fanout(payload: dict[str, Any]) -> None:
-        webhooks = container.services.get("webhooks")
-        if webhooks is not None:
-            await webhooks.fanout(payload)
-
-    async def webhook_deliver(payload: dict[str, Any]) -> None:
-        """One attempt; the queue retries a raised DeliveryError with backoff, and the
-        delivery row's own attempt counter decides which attempt is the last."""
-        webhooks = container.services.get("webhooks")
-        if webhooks is not None:
-            await webhooks.deliver(payload)
-
-    async def webhook_purge(payload: dict[str, Any]) -> None:
-        webhooks = container.services.get("webhooks")
-        if webhooks is not None:
-            await webhooks.purge()
-
     async def memory_index(payload: dict[str, Any]) -> None:
         tenant_id, memory_ids = payload["tenant_id"], list(payload["memory_ids"])
         indexer = container.services.get("indexer")
@@ -213,12 +192,6 @@ def register_handlers(container: Container) -> None:
         if forgetting is not None:
             await forgetting.sweep()
 
-    async def brief_refresh(payload: dict[str, Any]) -> None:
-        await container.services["briefs"].refresh(payload["tenant_id"], payload["brief_id"])
-
-    async def brief_schedule(payload: dict[str, Any]) -> None:
-        await container.services["briefs"].schedule_due()
-
     async def retention_sweep(payload: dict[str, Any]) -> None:
         """Forget canonical memories past their tenant's retention (modules/tenancy)."""
         await container.services["retention"].sweep()
@@ -249,12 +222,21 @@ def register_handlers(container: Container) -> None:
             payload["tenant_id"],
             payload["thread_id"],
             principal_id=payload.get("principal_id"),
-            workspace_id=payload.get("workspace_id"),
         )
 
     async def profile_refresh(payload: dict[str, Any]) -> None:
         """Keep a user's pinned ``user`` block from their USER and PREFERENCE memories."""
         await container.services["profile"].refresh_user(payload["tenant_id"], payload["user_id"])
+
+    async def profile_query(payload: dict[str, Any]) -> None:
+        """Answer one block's standing question into its text."""
+        await container.services["profile"].answer_query(
+            payload["tenant_id"], payload["scope_key"], payload["block"]
+        )
+
+    async def profile_queries(payload: dict[str, Any]) -> None:
+        """Claim the standing questions that are due."""
+        await container.services["profile"].schedule_due()
 
     async def prefetch_learn(payload: dict[str, Any]) -> None:
         """Fold settled agent-tool pulls into what the context pre-includes."""
@@ -316,8 +298,6 @@ def register_handlers(container: Container) -> None:
         if archiver is not None:
             await archiver.purge_staged_payloads()
 
-    queue.register("brief.refresh", Queue.SUMMARY, brief_refresh, retries=0)
-    queue.register_periodic("periodic.briefs", Queue.RECONCILE, brief_schedule, cron="* * * * *")
     queue.register_periodic(
         "periodic.retention", Queue.RECONCILE, retention_sweep, cron="37 3 * * *"
     )
@@ -329,14 +309,6 @@ def register_handlers(container: Container) -> None:
     queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
     queue.register(TASK_FEEDBACK_PROJECT, Queue.RECONCILE, feedback_project, retries=3)
-    queue.register(TASK_WEBHOOK_FANOUT, Queue.RECONCILE, webhook_fanout, retries=3)
-    queue.register(
-        TASK_WEBHOOK_DELIVER,
-        Queue.RECONCILE,
-        webhook_deliver,
-        retries=WEBHOOKS.max_attempts - 1,  # retries after the first run: max_attempts runs
-    )
-    queue.register_periodic(TASK_WEBHOOK_PURGE, Queue.RECONCILE, webhook_purge, cron="23 * * * *")
     queue.register(TASK_MEMORY_EXPIRE, Queue.RECONCILE, memory_expire, retries=0)
     queue.register(TASK_MEMORY_FORGET, Queue.RECONCILE, memory_forget, retries=0)
     queue.register(TASK_RECONCILE, Queue.RECONCILE, reconcile, retries=0)
@@ -360,7 +332,7 @@ def register_handlers(container: Container) -> None:
     queue.register_periodic(
         "periodic.memory_forget", Queue.RECONCILE, memory_forget, cron="11 4 * * *"
     )
-    if container.settings.models.llm.enabled is not False:
+    if container.settings.llm.enabled:
         # Registered whenever a model may be reached: whether one tenant may use it is
         # decided per identity inside the job (a tenant key, workspace key or policy can
         # appear at any time), and a job with nothing payable scans nothing. Connections are
@@ -375,6 +347,10 @@ def register_handlers(container: Container) -> None:
         )
     queue.register(TASK_SUMMARY_REFRESH, Queue.SUMMARY, summary_refresh, retries=3)
     queue.register(TASK_PROFILE_REFRESH, Queue.SUMMARY, profile_refresh, retries=3)
+    queue.register(TASK_PROFILE_QUERY, Queue.SUMMARY, profile_query, retries=1)
+    queue.register_periodic(
+        "periodic.profile_queries", Queue.RECONCILE, profile_queries, cron="*/5 * * * *"
+    )
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
     queue.register_periodic(
         "periodic.prefetch_learn", Queue.RECONCILE, prefetch_learn, cron="*/5 * * * *"

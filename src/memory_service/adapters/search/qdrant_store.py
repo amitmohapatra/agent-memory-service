@@ -126,6 +126,7 @@ _PAYLOAD_INDEXES = {
     "document_id": models.PayloadSchemaType.KEYWORD,
     "current": models.PayloadSchemaType.BOOL,
     "script": models.PayloadSchemaType.KEYWORD,
+    "observed_at": models.PayloadSchemaType.DATETIME,
 }
 
 
@@ -142,6 +143,8 @@ def _filter(flt: SearchFilter) -> models.Filter:
         must.append(models.FieldCondition(key=key, match=models.MatchValue(value=value)))
     for key, values in flt.must_any.items():
         must.append(models.FieldCondition(key=key, match=models.MatchAny(any=list(values))))
+    for key, (start, end) in flt.within.items():
+        must.append(models.FieldCondition(key=key, range=models.DatetimeRange(gte=start, lte=end)))
     must_not: list[Any] = [
         models.FieldCondition(key=k, match=models.MatchValue(value=v))
         for k, v in flt.must_not.items()
@@ -484,10 +487,16 @@ class QdrantSearchStore:
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
+        fields: Sequence[str] = PAYLOAD_FIELDS,
     ) -> list[SearchHit]:
         if rrf_k < 0:
             raise ValueError("rrf_k must be nonnegative")
         qf = _filter(flt)
+        selector = (
+            _PAYLOAD
+            if tuple(fields) == PAYLOAD_FIELDS
+            else models.PayloadSelectorInclude(include=list(fields))
+        )
         arms = _arms(
             dense=dense,
             sparse=sparse,
@@ -512,7 +521,7 @@ class QdrantSearchStore:
                     using=single.using,
                     query_filter=single.filter,
                     limit=limit,
-                    with_payload=_PAYLOAD,
+                    with_payload=selector,
                 ),
             )
             return [self._hit(p, retriever) for p in res.points]
@@ -526,7 +535,7 @@ class QdrantSearchStore:
                         query=_fusion(rrf_k, [weight for _, _, weight in arms]),
                         query_filter=qf,
                         limit=limit,
-                        with_payload=_PAYLOAD,
+                        with_payload=selector,
                     ),
                 )
             except Exception as exc:

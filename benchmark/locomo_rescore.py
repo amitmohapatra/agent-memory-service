@@ -23,9 +23,10 @@ import asyncio
 import copy
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from benchmark.env import bench_overrides
+from benchmark.env import BENCH, bench_overrides
 from benchmark.locomo import JUDGE_RULERS, _judge, _Pacer, judged_hit
 from benchmark.retrieval import _settings
 from memory_service.application.container import build_container
@@ -36,24 +37,15 @@ async def rescore(
 ) -> dict:
     """The same records, graded again under ``ruler``. Pure over its input; I/O is the caller's."""
     settings = _settings()
+    tuning = BENCH.llm_tuning()
     if judge_model:
-        # The judge use is routed to the fast model (see BifrostLLM.model_for), so naming a
+        # The judge use is routed to the fast model (see policy.model_for), so naming a
         # judge means naming both: the grading call must not fall back to the answerer's model.
-        settings = settings.model_copy(
-            update={
-                "models": settings.models.model_copy(
-                    update={
-                        "llm": settings.models.llm.model_copy(
-                            update={"model": judge_model, "fast_model": judge_model}
-                        )
-                    }
-                )
-            }
-        )
-    container = await build_container(settings, "bench", overrides=bench_overrides())
+        tuning = replace(tuning, model=judge_model, fast_model=judge_model)
+    container = await build_container(settings, "bench", overrides=bench_overrides(llm=tuning))
     llm = container.llm
     if not getattr(llm, "enabled", False):
-        raise SystemExit("rescoring needs a generative model: set models.llm.enabled=true")
+        raise SystemExit("rescoring needs a generative model: BENCH_LLM=on and BIFROST_URL")
     pacer = _Pacer(calls_per_minute)
     out = copy.deepcopy(result)
     by_cat: dict[str, list[bool]] = {}

@@ -5,11 +5,12 @@ this operation may consult a model at all.
 and policy hierarchy) and sets it here; ``LLMAssist.wants`` reads it synchronously.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from memory_service.config.constants import LLM, LLMTuning
 from memory_service.config.settings import ALL_LLM_USES
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Document
@@ -18,11 +19,13 @@ from memory_service.ports.credentials import ModelIdentity
 
 @dataclass(frozen=True)
 class ModelAccess:
-    """What the resolved policy allows and whether a registered key can pay for it."""
+    """What the tenant's policy allows, whether a registered key can pay for it, and the model
+    the policy names for a use (the service's default for the use otherwise)."""
 
     uses: frozenset[str]
     read_assist: bool
     has_key: bool
+    models: Mapping[str, str] = field(default_factory=dict)
 
 
 #: No policy row at any level: every use, and reads assisted. Without a key this allows
@@ -48,19 +51,28 @@ def current_binding() -> ModelBinding | None:
     return _BINDING.get()
 
 
+def model_for(use: str, tuning: LLMTuning = LLM) -> str:
+    """The model ``use`` calls: the one the bound tenant's policy names for it, else the
+    service's (``tuning``; ``auto`` is discovered through the gateway per call)."""
+    binding = _BINDING.get()
+    named = binding.access.models.get(use) if binding is not None else None
+    return named or (tuning.fast_model if use in tuning.fast_uses else tuning.model)
+
+
 def current_model_identity() -> ModelIdentity | None:
     binding = _BINDING.get()
     return binding.identity if binding is not None else None
 
 
 def identity_of(ctx: MemoryExecutionContext) -> ModelIdentity:
-    """An authenticated request's owner: its principal, falling back to its team's key."""
-    return ModelIdentity(ctx.tenant_id, ctx.principal_id, ctx.workspace_id)
+    """An authenticated request's owner: its principal (resolved through its agent, then its
+    tenant)."""
+    return ModelIdentity(ctx.tenant_id, ctx.principal_id)
 
 
 def document_identity(document: Document) -> ModelIdentity:
-    """A document's model work is owned by whoever uploaded it, falling back to its team."""
-    return ModelIdentity(document.tenant_id, document.model_principal, document.workspace_id)
+    """A document's model work is owned by whoever uploaded it."""
+    return ModelIdentity(document.tenant_id, document.model_principal)
 
 
 @contextmanager

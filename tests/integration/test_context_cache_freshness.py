@@ -14,6 +14,7 @@ nothing in it.
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
@@ -55,11 +56,11 @@ async def test_indexing_moves_the_revisions_again_so_a_bundle_cached_mid_write_i
     ctx = _ctx()
     async with container.services["uow_factory"]() as uow:
         # the thread an observation names is ensured by the API router, which is the
-        # only production caller of submit_observation; a test that reaches past it
+        # only production caller that writes observations; a test that reaches past it
         # has to grant the thread itself or its THREAD-scoped memories are readable
         # by nobody, including their author
         await container.services["conversation"].create_thread(uow, ctx)
-        await container.services["memory"].submit_observation(
+        await submit_observation(
             uow,
             ctx,
             kind=ObservationKind.EVENT,
@@ -98,11 +99,11 @@ async def test_the_bundle_is_rebuilt_once_the_memory_is_indexed(container) -> No
 
     async with container.services["uow_factory"]() as uow:
         # the thread an observation names is ensured by the API router, which is the
-        # only production caller of submit_observation; a test that reaches past it
+        # only production caller that writes observations; a test that reaches past it
         # has to grant the thread itself or its THREAD-scoped memories are readable
         # by nobody, including their author
         await container.services["conversation"].create_thread(uow, ctx)
-        await container.services["memory"].submit_observation(
+        await submit_observation(
             uow,
             ctx,
             kind=ObservationKind.EVENT,
@@ -133,7 +134,7 @@ async def test_semantic_cache_uses_real_revisions_and_forget_invalidates_it(cont
     memory = container.services["memory"]
     async with factory() as uow:
         await container.services["conversation"].create_thread(uow, ctx)
-        await memory.submit_observation(
+        await submit_observation(
             uow, ctx, kind=ObservationKind.EVENT, content="My timezone is Asia/Kolkata."
         )
         await uow.commit()

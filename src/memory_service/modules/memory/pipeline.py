@@ -25,7 +25,6 @@ from memory_service.domain.enums import (
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
 from memory_service.domain.script import detect_script
-from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
@@ -45,7 +44,6 @@ from memory_service.ports.intelligence import (
 )
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
-from memory_service.ports.webhooks import EventPublisher
 
 log = get_logger(__name__)
 
@@ -209,21 +207,6 @@ def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: dat
     target.updated_at = now
 
 
-def created_event(memory: CanonicalMemory) -> Event:
-    """``memory.created``: identity only; a receiver reads content through the API."""
-    return Event(
-        type=WebhookEvent.MEMORY_CREATED,
-        tenant_id=memory.tenant_id,
-        workspace_id=memory.scope.workspace_id,
-        data={
-            "memory_id": memory.memory_id,
-            "memory_type": memory.memory_type.value,
-            "scope_level": memory.scope.level.value,
-            "owner_principal": memory.owner_principal,
-        },
-    )
-
-
 class ObservationPipeline:
     def __init__(
         self,
@@ -233,7 +216,6 @@ class ObservationPipeline:
         settings: MemoryIntelligenceSettings,
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
-        events: EventPublisher | None = None,
         assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
@@ -241,7 +223,6 @@ class ObservationPipeline:
         self.cfg = settings
         self.working = working
         self.gate = gate
-        self.events = events
         #: binds each observation's model work to its owner (key, policy, usage)
         self.assist = assist or LLMAssist.disabled()
 
@@ -275,11 +256,7 @@ class ObservationPipeline:
                     or observation.hints.importance is not None
                 )
                 async with self.uow_factory() as uow:
-                    affected, created = await self._apply_all(
-                        uow, ctx, candidates, outcomes, hinted=hinted
-                    )
-                    if created and self.events is not None:
-                        await self._announce(uow, ctx, created)
+                    affected = await self._apply_all(uow, ctx, candidates, outcomes, hinted=hinted)
                     if affected:
                         await uow.enqueue(
                             JobSpec(
@@ -344,10 +321,9 @@ class ObservationPipeline:
         outcomes: list[ConsolidationOutcome],
         *,
         hinted: bool = False,
-    ) -> tuple[set[str], set[str]]:
-        """Returns the ids written (created or reinforced) and the ids created."""
+    ) -> set[str]:
+        """Returns the ids written (created or reinforced)."""
         affected: set[str] = set()
-        created: set[str] = set()
         now = datetime.now(UTC)
         for cand in candidates:
             if cand.lifetime is Lifetime.EPHEMERAL:
@@ -398,17 +374,7 @@ class ObservationPipeline:
             outcomes.append(outcome)
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
-            if outcome.decision is DedupDecision.CREATE:
-                created |= ids
-        return affected, created
-
-    async def _announce(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, created: set[str]
-    ) -> None:
-        """One ``memory.created`` event per new memory, in the writing transaction."""
-        assert self.events is not None
-        for memory in await uow.memories.get_many(ctx.tenant_id, sorted(created)):
-            await self.events.publish(uow, created_event(memory))
+        return affected
 
     @staticmethod
     def _new_memory(

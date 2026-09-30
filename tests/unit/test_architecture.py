@@ -385,12 +385,12 @@ def test_the_memory_type_docs_match_what_the_pipeline_actually_produces() -> Non
     """
     import re
 
-    from memory_service.api.schemas.conversation import ProcessingHintsIn
+    from memory_service.api.routers.v1.memory import RememberRequest
     from memory_service.domain.enums import MemoryType
 
     blob = "\n".join(path.read_text() for path in SRC.rglob("*.py"))
     produced = set(re.findall(r"memory_type\s*=\s*MemoryType\.(\w+)", blob))
-    description = ProcessingHintsIn.model_fields["memory_type"].description or ""
+    description = RememberRequest.model_fields["memory_type"].description or ""
 
     claimed = {
         name

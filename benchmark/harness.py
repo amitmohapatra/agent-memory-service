@@ -159,10 +159,10 @@ async def drive_stream(
                 client,
                 "/v1/messages",
                 hdrs,
-                json={"scope": scope, "role": "USER", "content": content},
+                json={"scope": scope, "messages": [{"role": "USER", "content": content}]},
             )
             if r.status_code == 202:
-                body = r.json()
+                body = r.json()["messages"][0]
                 acked.messages[body["message_id"]] = {
                     "thread_id": scope["thread_id"],
                     "content": content,
@@ -173,14 +173,18 @@ async def drive_stream(
             else:
                 acked.errors.append(f"messages {r.status_code}: {r.text[:200]}")
             if i % 3 == 0:
+                # an event: something that happened, told to the service to learn from
                 r = await post_with_retry(
                     client,
-                    "/v1/observations",
+                    "/v1/messages",
                     hdrs,
-                    json={"scope": scope, "kind": "EVENT", "content": rng.choice(FACTS)},
+                    json={
+                        "scope": scope,
+                        "messages": [{"role": "EVENT", "content": rng.choice(FACTS)}],
+                    },
                 )
                 if r.status_code == 202:
-                    acked.observations[r.json()["observation_id"]] = {
+                    acked.observations[r.json()["messages"][0]["observation_id"]] = {
                         "thread_id": scope["thread_id"]
                     }
                 elif r.status_code in (503, 429):

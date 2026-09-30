@@ -20,6 +20,7 @@ class _Verified:
     tenant_id: str
     role: KeyRole
     workspace_id: str | None
+    may_act_as: tuple[str, ...] = ("*",)
 
 
 class _Keys:
@@ -55,6 +56,7 @@ async def test_a_stored_key_carries_its_tenant_role_and_workspace() -> None:
         "tenant": "acme",
         "workspace": "finance",
         "key_id": "k1",
+        "may_act_as": ["*"],
     }
 
 

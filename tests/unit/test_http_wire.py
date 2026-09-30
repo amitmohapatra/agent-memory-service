@@ -219,11 +219,11 @@ async def _noop_send(message: dict[str, Any]) -> None:
 @pytest.fixture
 def limited(make_settings, monkeypatch, overrides):
     monkeypatch.setattr(constants, "RATE_LIMIT_BURST", 0)
+    monkeypatch.setattr(constants, "RATE_LIMIT_PER_MINUTE", 3)
     # the window is a wall-clock minute; a test that straddles the boundary would see two
     frozen = types.SimpleNamespace(time=lambda: 1_790_553_605.0, perf_counter=time.perf_counter)
     monkeypatch.setattr(middleware, "time", frozen)
-    settings = make_settings(service={"rate_limit_per_minute": 3})
-    app = create_app(settings, overrides=overrides)
+    app = create_app(make_settings(), overrides=overrides)
     with TestClient(app, raise_server_exceptions=False) as client:
         yield client, app.state.container
 

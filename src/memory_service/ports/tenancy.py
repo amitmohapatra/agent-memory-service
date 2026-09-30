@@ -1,4 +1,4 @@
-"""Repositories for the platform layer: tenants, API keys, workspaces, groups, read audit."""
+"""Repositories for the platform layer: tenants, API keys, workspaces, read audit."""
 
 from __future__ import annotations
 
@@ -9,8 +9,6 @@ from typing import Protocol, runtime_checkable
 from memory_service.domain.audit import ReadAuditEntry
 from memory_service.domain.tenancy import (
     ApiKey,
-    Group,
-    GroupMember,
     MemberRole,
     Tenant,
     Workspace,
@@ -56,6 +54,12 @@ class ApiKeyRepository(Protocol):
 
     async def revoke(self, tenant_id: str, key_id: str, *, at: datetime) -> bool: ...
 
+    async def set_may_act_as(
+        self, tenant_id: str, key_id: str, principals: Sequence[str]
+    ) -> ApiKey | None:
+        """Replace whom the key may act for; None when the tenant has no such key."""
+        ...
+
     async def touch(self, key_id: str, *, at: datetime) -> None: ...
 
     async def key_tenants(self, tenant_ids: Sequence[str]) -> dict[str, str]:
@@ -96,29 +100,8 @@ class WorkspaceRepository(Protocol):
     async def members(self, tenant_id: str, workspace_id: str) -> list[WorkspaceMember]: ...
 
     async def memberships_of(self, tenant_id: str, principal: str) -> list[str]:
-        """Workspace ids a principal (user:, agent: or group:) is a member of."""
+        """Workspace ids a principal (user: or agent:) is a member of."""
         ...
-
-
-@runtime_checkable
-class GroupRepository(Protocol):
-    async def add(self, group: Group) -> None: ...
-
-    async def get(self, tenant_id: str, group_id: str) -> Group | None: ...
-
-    async def list(self, tenant_id: str, *, after: str = "", limit: int = 100) -> list[Group]:
-        """By group id; ``after`` is the last id of the previous page."""
-        ...
-
-    async def soft_delete(self, tenant_id: str, group_id: str, *, at: datetime) -> bool: ...
-
-    async def ever_existed(self, tenant_id: str, group_id: str) -> bool: ...
-
-    async def put_member(self, member: GroupMember) -> None: ...
-
-    async def remove_member(self, tenant_id: str, group_id: str, user_id: str) -> bool: ...
-
-    async def members(self, tenant_id: str, group_id: str) -> list[GroupMember]: ...
 
 
 @runtime_checkable

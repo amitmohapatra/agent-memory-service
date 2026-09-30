@@ -6,14 +6,18 @@ Sources, highest precedence first:
 2. ``.env`` then ``secrets.env`` in the working directory
 3. defaults below
 
-``WEB_CONCURRENCY`` is the one variable read outside that scheme: it is the ecosystem's name
-for ``service.workers``, and it supplies that field's default (see ``_workers_default``).
+Four variables are read outside that scheme, under the names the rest of the platform uses:
+``WEB_CONCURRENCY`` (the default of ``service.workers``), ``BIFROST_URL`` and
+``BIFROST_VIRTUAL_KEY`` (the model gateway, and the operator's key on it) and
+``OTEL_EXPORTER_OTLP_ENDPOINT`` (where traces go; tracing is on exactly when it is set).
 
-Only topology and credentials live here - where the stores are, how to authenticate, whether
-the generative model is on and where its gateway is. Everything that makes the product what
-it is (models, retrieval depth, budgets, timeouts, thresholds) is a constant in
-``config/constants.py``; the test suite's in-process stand-ins are
-``application.container.Overrides``. Domain code never reads environment variables.
+Only deployment facts live here - where the stores and the gateway are, the secrets, ports
+and worker counts. Everything that makes the product what it is (models, retrieval depth,
+budgets, timeouts, retries, thresholds, rate limits) is a constant in ``config/constants.py``;
+the test suite's in-process stand-ins are ``application.container.Overrides``. What is
+derived is derived: the model is available when the gateway is configured, the
+authentication mode follows from the credentials configured, tracing from its endpoint.
+Domain code never reads environment variables.
 
 Every credential is a ``SecretStr`` and ``Settings.redacted()`` masks all of them.
 """
@@ -24,10 +28,8 @@ import os
 from functools import lru_cache
 from typing import Any, ClassVar, Literal, get_args
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from memory_service.domain.provenance import require_permitted_model
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -65,10 +67,6 @@ class ServiceSettings(BaseModel):
     port: int = 8080
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     log_json: bool = True
-    rate_limit_per_minute: int = Field(
-        default=6000,
-        description="Requests per tenant per minute (0 disables); counted in the cache",
-    )
     workers: int = Field(
         default_factory=_workers_default,
         # the factory reads the environment, so the bounds below have to apply to what it
@@ -123,8 +121,13 @@ class TaskSettings(BaseModel):
     worker_concurrency: int = Field(default=4, ge=1, le=8)
 
 
+AuthenticationMode = Literal["trusted_dev", "jwt", "api_key"]
+
+
 class AuthenticationSettings(BaseModel):
-    mode: Literal["trusted_dev", "jwt", "api_key"] = "trusted_dev"
+    """How callers authenticate. The mode is not a setting: it follows from what is
+    configured (``mode``)."""
+
     #: The platform operator in ``api_key`` mode: the one secret that may onboard tenants and
     #: issue their first admin key. It acts for no tenant. Unset, nobody can onboard, which
     #: is the safe state for a deployment that has finished onboarding.
@@ -132,7 +135,8 @@ class AuthenticationSettings(BaseModel):
     jwt_issuer: str | None = None
     jwt_audience: str | None = None
     jwt_jwks_url: str | None = None
-    trusted_dev_api_keys: list[SecretStr] = Field(default_factory=lambda: [SecretStr("dev-key")])
+    #: Development keys that trust the context headers as given (refused when deployed).
+    trusted_dev_api_keys: list[SecretStr] = Field(default_factory=list)
     #: Claim on the credential naming the tenant it may act for. Unset, a credential may
     #: assert ANY tenant - the tenant arrives in a header and nothing checks it against who
     #: is calling, so one key reaches every tenant on the deployment by changing a header.
@@ -141,6 +145,16 @@ class AuthenticationSettings(BaseModel):
     #: proof: the header must equal this claim or the request is refused. Fails closed - a
     #: credential carrying no such claim is refused rather than trusted.
     tenant_claim: str | None = None
+
+    @property
+    def mode(self) -> AuthenticationMode:
+        """``jwt`` with an issuer's JWKS; ``api_key`` with the bootstrap key; ``trusted_dev``
+        with development keys; ``api_key`` otherwise (the service's own issued keys)."""
+        if self.jwt_jwks_url:
+            return "jwt"
+        if self.bootstrap_admin_key is None and self.trusted_dev_api_keys:
+            return "trusted_dev"
+        return "api_key"
 
 
 class AuthorizationSettings(BaseModel):
@@ -170,20 +184,6 @@ class SearchSettings(BaseModel):
     qdrant_api_key: SecretStr | None = None
 
 
-class EmbeddingSettings(BaseModel):
-    """The encoder itself is ``constants.FROZEN_MODELS.dense``; the only thing a deployment
-    says about it is how many intra-op threads the in-process models may use.
-
-    Unset means the count frozen with the encoder, not torch's own default - both this
-    docstring and ``.env.example`` used to say otherwise. ``torch.set_num_threads`` is
-    process-wide, so the encoder and the NLI head share whatever this resolves to; giving
-    them separate numbers only meant the one that loaded last won, which is how this field
-    came to have no effect at all on the encoder it names.
-    """
-
-    threads: int | None = Field(default=None, ge=1)
-
-
 LLMUse = Literal[
     "contextual_extraction",
     "relation_extraction",
@@ -195,7 +195,6 @@ LLMUse = Literal[
     #: relates). Separate from ``reflection``, which writes a new insight instead of an edge,
     #: so an operator can run one without the other.
     "memory_connections",
-    "briefs",
     "query_expansion",
     "chunk_context",
     "grounding_judge",
@@ -203,7 +202,7 @@ LLMUse = Literal[
     #: tool learning job); the miner's own rendering is kept without it.
     "procedure_abstraction",
 ]
-#: Every use: the operator allow-list's default and the default tenant policy (ADR 0023).
+#: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)
 
 
@@ -214,107 +213,41 @@ class AgentCredentialSettings(BaseModel):
     encryption_keys: dict[str, SecretStr] = Field(default_factory=dict)
 
 
-class WebhookSettings(BaseModel):
-    """Outbound webhooks (ADR 0023). Delivery tuning lives in ``config/constants.py``; the one
-    deployment fact is whether receivers may live on the local network (docker-compose
-    development), which is refused in deployed environments."""
-
-    allow_local_targets: bool = Field(
-        default=False,
-        description="permit http and loopback, private and link-local targets: development only",
-    )
-
-
 class HindsightSettings(BaseModel):
-    """Integrated knowledge-processing service topology and deployment quota."""
+    """Where the Hindsight extraction service is, when a deployment runs one: non-agent
+    contextual extraction goes through it (with the ``[hindsight]`` extra installed). Its
+    tuning is ``constants.HINDSIGHT``."""
 
-    base_url: str = "http://localhost:8888"
+    base_url: str | None = None
     api_key: SecretStr | None = None
-    bank_id: str = Field(default="extraction-preview", min_length=1)
-    timeout_seconds: float = Field(default=30.0, gt=0, le=120)
-    max_concurrency: int = Field(default=1, ge=1, le=16)
 
 
 class LLMSettings(BaseModel):
-    """Generative access gates. Native calls use Bifrost; Hindsight extraction
-    uses its server's model configuration. Model provider keys stay outside this service.
+    """The model gateway. The model is available exactly when ``base_url`` is set; a call runs
+    only when a key can pay for it - the acting agent's or its tenant's registered key
+    (``PUT /v1/agents/model-key``, ``PUT /v1/model-key``) or the operator's ``api_key`` - and
+    the tenant's policy allows the use. Models, budgets and retries are
+    ``constants.LLM``; the tenant's policy may name the model a use calls."""
 
-    Whether one call may consult the model is decided per identity (``LLMAssist.wants``):
-    this allow-list, intersected with the tenant's policy for the resolved principal, and
-    only when a key (the principal's, its workspace's, its tenant's or the operator's) can
-    pay for it.
-    """
-
-    #: Auto requires a registered agent/workspace/tenant key or an operator key at call time.
-    #: False is a deployment-wide prohibition. True also permits keyless gateway calls.
-    enabled: bool | Literal["auto"] = "auto"
-    base_url: str = Field(
-        default="http://localhost:8091/v1",
-        description="Bifrost OpenAI-compatible endpoint (the local gateway publishes 8091; "
-        "8090 is agent-runs)",
+    base_url: str | None = Field(
+        default=None, description="Bifrost OpenAI-compatible endpoint, e.g. http://bifrost:8080/v1"
     )
     api_key: SecretStr | None = Field(
-        default=None,
-        description="Bifrost virtual key (MEMORY__MODELS__LLM__API_KEY or secrets.env)",
+        default=None, description="the operator's Bifrost virtual key: pays for tenants without one"
     )
-    model: str | None = Field(
-        default="auto",
-        description="strong model (Bifrost provider/model name) for complex uses",
-    )
-    fast_model: str | None = Field(
-        default="auto",
-        description="cheap model for fast_uses (classification-sized calls)",
-    )
-    uses: list[LLMUse] = Field(
-        default_factory=lambda: list(ALL_LLM_USES),
-        description="the operator allow-list: which uses may consult the model at all "
-        "(default every use); a tenant policy can narrow it, never widen it",
-    )
-    fast_uses: list[LLMUse] = Field(
-        default_factory=lambda: [
-            "contextual_extraction",
-            "query_expansion",
-            "chunk_context",
-        ]
-    )
-    max_tokens: int = Field(default=1024, ge=1)
-    timeout_seconds: float = Field(default=30.0, gt=0)
-    max_retries: int = Field(default=2, ge=0, description="retries on 429/5xx/timeouts, bounded")
 
-    @field_validator("model", "fast_model")
-    @classmethod
-    def _permitted_model(cls, value: str | None) -> str | None:
-        """An operator naming a model is bound by the same provenance rule as discovery."""
-        if value and value != "auto":
-            require_permitted_model(value)
-        return value
+    @property
+    def enabled(self) -> bool:
+        return self.base_url is not None
 
     def wants(self, use: LLMUse) -> bool:
-        """Whether the deployment allows ``use`` at all (before any tenant policy)."""
-        return self.enabled is not False and use in self.uses
+        """Whether the deployment can call the model for ``use`` at all (before any policy)."""
+        return self.enabled
 
     @property
     def operator_pays(self) -> bool:
-        """A call may proceed without a registered key: the operator key pays, or an
-        explicitly enabled gateway accepts keyless calls."""
-        return self.enabled is True or self.api_key is not None
-
-
-class ModelSettings(BaseModel):
-    embedding: EmbeddingSettings = EmbeddingSettings()
-    llm: LLMSettings = LLMSettings()
-
-
-class ObservabilitySettings(BaseModel):
-    otel_exporter: Literal["none", "console", "otlp"] = "none"
-    otel_endpoint: str | None = None
-
-    @property
-    def otel_enabled(self) -> bool:
-        """Tracing is on exactly when something receives the spans. There used to be a
-        separate ``otel_enabled`` flag beside the exporter; on by default with the exporter
-        off, it installed a tracer provider that dropped every span."""
-        return self.otel_exporter != "none"
+        """A call may proceed without a registered key: the operator's key pays."""
+        return self.api_key is not None
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +267,19 @@ class Settings(BaseSettings):
     #: built per Settings() rather than once at import, so ``workers`` reads the
     #: environment the process actually has (see ``_workers_default``)
     service: ServiceSettings = Field(default_factory=ServiceSettings)
+    #: the model gateway and the operator's key on it (the platform's names, unprefixed)
+    bifrost_url: str | None = Field(
+        default=None, validation_alias=AliasChoices("BIFROST_URL", "bifrost_url")
+    )
+    bifrost_virtual_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("BIFROST_VIRTUAL_KEY", "bifrost_virtual_key"),
+    )
+    #: where traces go (OTLP over HTTP); tracing is on exactly when it is set
+    otel_endpoint: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OTEL_EXPORTER_OTLP_ENDPOINT", "otel_endpoint"),
+    )
     database: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
     tasks: TaskSettings = TaskSettings()
@@ -341,11 +287,12 @@ class Settings(BaseSettings):
     authorization: AuthorizationSettings = AuthorizationSettings()
     blob: BlobSettings = BlobSettings()
     search: SearchSettings = SearchSettings()
-    models: ModelSettings = ModelSettings()
     hindsight: HindsightSettings = HindsightSettings()
     agent_credentials: AgentCredentialSettings = AgentCredentialSettings()
-    webhooks: WebhookSettings = WebhookSettings()
-    observability: ObservabilitySettings = ObservabilitySettings()
+
+    @property
+    def llm(self) -> LLMSettings:
+        return LLMSettings(base_url=self.bifrost_url, api_key=self.bifrost_virtual_key)
 
     #: Environments that are *deployed*, and so may not run the laptop defaults. ``test`` is
     #: absent on purpose: the suite and the benchmarks run under it with ``trusted_dev`` and a
@@ -373,38 +320,6 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"authentication.bootstrap_admin_key must be at least 32 characters in "
                     f"{where} (e.g. `openssl rand -base64 32`)"
-                )
-            if self.webhooks.allow_local_targets:
-                raise ValueError(
-                    f"webhooks.allow_local_targets is a development flag and is not allowed "
-                    f"in {where}"
-                )
-        if self.models.llm.enabled and not self.models.llm.model:
-            raise ValueError("llm.enabled=true requires models.llm.model")
-        if self.models.llm.enabled is True and not self.models.llm.uses:
-            # Opting in per use is the design — each path falls back natively, so a use you
-            # have not enabled is a deterministic answer, not a broken one. What is not the
-            # design is the silence: with uses empty the service starts clean, reports
-            # "llm": "bifrost" on /version, and sends the gateway nothing at all. Every one
-            # of the paths in LLMUse quietly takes its fallback, and the only way to find
-            # out is to notice that the token metrics never move.
-            raise ValueError(
-                "llm.enabled=true with models.llm.uses empty: nothing would call the model. "
-                "List the paths that may consult it, e.g. "
-                'MEMORY__MODELS__LLM__USES=["query_expansion","summaries"], or set '
-                "llm.enabled=false."
-            )
-        if self.models.llm.enabled and self.models.llm.fast_uses:
-            # fast_model is a separate credential in practice: it defaults to a different
-            # provider than model does. `self.fast_model or settings.model` in the adapter
-            # does not rescue a mismatch because the default is truthy — so setting MODEL
-            # and forgetting FAST_MODEL sends exactly the fast_uses to whatever the default
-            # happens to be, which on this deployment is a provider with no credit.
-            fast = set(self.models.llm.fast_uses) & set(self.models.llm.uses)
-            if fast and not self.models.llm.fast_model:
-                raise ValueError(
-                    f"models.llm.fast_uses {sorted(fast)} are enabled but fast_model is "
-                    "unset: those uses would silently route somewhere else"
                 )
         return self
 

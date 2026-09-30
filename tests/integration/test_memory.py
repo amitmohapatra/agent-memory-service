@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from benchmark.common import submit_observation
 from sqlalchemy import text
 
 from memory_service.domain.context import MemoryExecutionContext
@@ -32,9 +33,8 @@ async def _observe(
     container, uow_factory, ctx, content, *, kind=ObservationKind.MESSAGE, hints=None
 ):
     register_handlers(container)
-    service = container.services["memory"]
     async with uow_factory() as uow:
-        ack = await service.submit_observation(uow, ctx, kind=kind, content=content, hints=hints)
+        ack = await submit_observation(uow, ctx, kind=kind, content=content, hints=hints)
         await uow.commit()
     await container.tasks.drain()  # process_observation
     await container.tasks.drain()  # memory.index

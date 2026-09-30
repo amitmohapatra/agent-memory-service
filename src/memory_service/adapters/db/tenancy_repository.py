@@ -1,4 +1,4 @@
-"""SQL repositories for tenants, API keys, workspaces, groups and the read audit."""
+"""SQL repositories for tenants, API keys, workspaces and the read audit."""
 
 from __future__ import annotations
 
@@ -12,8 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import (
     ApiKeyRow,
-    GroupMemberRow,
-    GroupRow,
     ReadAuditRow,
     TenantRow,
     WorkspaceMemberRow,
@@ -24,8 +22,6 @@ from memory_service.domain.audit import ReadAuditEntry
 from memory_service.domain.errors import Conflict, ValidationFailed
 from memory_service.domain.tenancy import (
     ApiKey,
-    Group,
-    GroupMember,
     KeyRole,
     MemberRole,
     Tenant,
@@ -59,6 +55,7 @@ def _key(row: ApiKeyRow) -> ApiKey:
         expires_at=row.expires_at,
         revoked_at=row.revoked_at,
         last_used_at=row.last_used_at,
+        may_act_as=list(row.may_act_as),
     )
 
 
@@ -78,26 +75,6 @@ def _workspace_member(row: WorkspaceMemberRow) -> WorkspaceMember:
         workspace_id=row.workspace_id,
         principal=row.principal,
         role=row.role,  # type: ignore[arg-type]
-        added_by=row.added_by,
-        added_at=row.added_at,
-    )
-
-
-def _group(row: GroupRow) -> Group:
-    return Group(
-        group_id=row.group_id,
-        tenant_id=row.tenant_id,
-        name=row.name,
-        created_at=row.created_at,
-        deleted_at=row.deleted_at,
-    )
-
-
-def _group_member(row: GroupMemberRow) -> GroupMember:
-    return GroupMember(
-        tenant_id=row.tenant_id,
-        group_id=row.group_id,
-        user_id=row.user_id,
         added_by=row.added_by,
         added_at=row.added_at,
     )
@@ -228,6 +205,19 @@ class SqlApiKeyRepository:
         )
         return _rowcount(result) > 0
 
+    async def set_may_act_as(
+        self, tenant_id: str, key_id: str, principals: Sequence[str]
+    ) -> ApiKey | None:
+        row = (
+            await self.s.execute(
+                update(ApiKeyRow)
+                .where(ApiKeyRow.key_id == key_id, ApiKeyRow.tenant_id == tenant_id)
+                .values(may_act_as=list(principals))
+                .returning(ApiKeyRow)
+            )
+        ).scalar_one_or_none()
+        return _key(row) if row is not None else None
+
     async def touch(self, key_id: str, *, at: datetime) -> None:
         await self.s.execute(
             update(ApiKeyRow).where(ApiKeyRow.key_id == key_id).values(last_used_at=at)
@@ -342,72 +332,6 @@ class SqlWorkspaceRepository:
             .order_by(WorkspaceMemberRow.principal)
         )
         return [_workspace_member(r) for r in (await self.s.scalars(stmt)).all()]
-
-
-class SqlGroupRepository:
-    def __init__(self, session: AsyncSession) -> None:
-        self.s = session
-
-    async def add(self, group: Group) -> None:
-        await _insert(self.s, GroupRow(**group.model_dump()), f"group {group.group_id}")
-
-    async def get(self, tenant_id: str, group_id: str) -> Group | None:
-        row = await self.s.get(GroupRow, (tenant_id, group_id))
-        return _group(row) if row is not None and row.deleted_at is None else None
-
-    async def list(self, tenant_id: str, *, after: str = "", limit: int = 100) -> list[Group]:
-        stmt = (
-            select(GroupRow)
-            .where(
-                GroupRow.tenant_id == tenant_id,
-                GroupRow.deleted_at.is_(None),
-                GroupRow.group_id > after,
-            )
-            .order_by(GroupRow.group_id)
-            .limit(limit)
-        )
-        return [_group(r) for r in (await self.s.scalars(stmt)).all()]
-
-    async def soft_delete(self, tenant_id: str, group_id: str, *, at: datetime) -> bool:
-        result = await self.s.execute(
-            update(GroupRow)
-            .where(
-                GroupRow.tenant_id == tenant_id,
-                GroupRow.group_id == group_id,
-                GroupRow.deleted_at.is_(None),
-            )
-            .values(deleted_at=at)
-        )
-        return _rowcount(result) > 0
-
-    async def ever_existed(self, tenant_id: str, group_id: str) -> bool:
-        return await self.s.get(GroupRow, (tenant_id, group_id)) is not None
-
-    async def put_member(self, member: GroupMember) -> None:
-        stmt = pg_insert(GroupMemberRow).values(**member.model_dump())
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["tenant_id", "group_id", "user_id"],
-            set_={"added_by": stmt.excluded.added_by, "added_at": stmt.excluded.added_at},
-        )
-        await _execute(self.s, stmt, "group member")
-
-    async def remove_member(self, tenant_id: str, group_id: str, user_id: str) -> bool:
-        result = await self.s.execute(
-            delete(GroupMemberRow).where(
-                GroupMemberRow.tenant_id == tenant_id,
-                GroupMemberRow.group_id == group_id,
-                GroupMemberRow.user_id == user_id,
-            )
-        )
-        return _rowcount(result) > 0
-
-    async def members(self, tenant_id: str, group_id: str) -> list[GroupMember]:
-        stmt = (
-            select(GroupMemberRow)
-            .where(GroupMemberRow.tenant_id == tenant_id, GroupMemberRow.group_id == group_id)
-            .order_by(GroupMemberRow.user_id)
-        )
-        return [_group_member(r) for r in (await self.s.scalars(stmt)).all()]
 
 
 class SqlReadAuditRepository:

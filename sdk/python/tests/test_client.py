@@ -66,20 +66,20 @@ async def test_context_manager_propagates_via_contextvars(client: MemoryClient) 
     assert current_context() is None
 
 
+_ACK = {
+    "message_id": "msg_1",
+    "thread_id": "thr_1",
+    "session_id": "ses_1",
+    "turn_id": "trn_1",
+    "sequence": 1,
+    "job_ids": ["job_1"],
+}
+
+
 @respx.mock
-async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryClient) -> None:
+async def test_history_add_sends_scope_headers_and_idempotency_key(client: MemoryClient) -> None:
     route = respx.post("http://memory.test/v1/messages").mock(
-        return_value=httpx.Response(
-            202,
-            json={
-                "message_id": "msg_1",
-                "thread_id": "thr_1",
-                "session_id": "ses_1",
-                "turn_id": "trn_1",
-                "sequence": 1,
-                "job_ids": ["job_1"],
-            },
-        )
+        return_value=httpx.Response(202, json={"messages": [_ACK]})
     )
     ctx = client.bind(
         tenant_id="acme",
@@ -88,20 +88,20 @@ async def test_chat_user_sends_scope_headers_and_idempotency_key(client: MemoryC
         session_id="ses_1",
         turn_id="trn_1",
     )
-    ack = await ctx.chat.user("hello")
+    [ack] = await ctx.history.add([("USER", "hello")])
     assert ack.message_id == "msg_1" and ack.job_ids == ["job_1"]
     req = route.calls.last.request
     assert req.headers["X-Trellis-Tenant"] == "acme"
     assert req.headers["X-Trellis-User"] == "u1"
     assert req.headers["X-API-Key"] == "k"
-    assert req.headers["Idempotency-Key"].startswith("msg-")
+    assert req.headers["Idempotency-Key"].startswith("msgs-")
     # same content + lineage => same key (safe retries)
-    await ctx.chat.user("hello")
+    await ctx.history.add([("USER", "hello")])
     assert (
         route.calls[0].request.headers["Idempotency-Key"]
         == route.calls[1].request.headers["Idempotency-Key"]
     )
-    await ctx.chat.user("different")
+    await ctx.history.add([("USER", "different")])
     assert (
         route.calls[2].request.headers["Idempotency-Key"]
         != route.calls[0].request.headers["Idempotency-Key"]
@@ -131,7 +131,7 @@ async def test_a_0_1_error_envelope_still_maps_to_the_typed_exception(client: Me
 
 @respx.mock
 async def test_retryable_error_is_retried_for_idempotent_writes(client: MemoryClient) -> None:
-    route = respx.post("http://memory.test/v1/observations").mock(
+    route = respx.post("http://memory.test/v1/memories").mock(
         side_effect=[
             httpx.Response(
                 503,
@@ -139,12 +139,12 @@ async def test_retryable_error_is_retried_for_idempotent_writes(client: MemoryCl
                     "error": {"code": "DEPENDENCY_UNAVAILABLE", "message": "db", "retryable": True}
                 },
             ),
-            httpx.Response(202, json={"observation_id": "obs_1", "job_ids": []}),
+            httpx.Response(201, json={"memory_id": "mem_1", "deduplicated": False}),
         ]
     )
     ctx = client.bind(tenant_id="acme")
-    ack = await ctx.observe("something happened")
-    assert ack.observation_id == "obs_1"
+    ack = await ctx.remember("something is true")
+    assert ack.memory_id == "mem_1"
     assert route.call_count == 2
 
 
@@ -178,37 +178,13 @@ async def test_context_bundle_parses_and_flags_insufficient(client: MemoryClient
                 "token_budget": 100,
                 "token_estimate": 0,
                 "rendered": "",
+                "bundle_id": "b1",
             },
         )
     )
     ctx = client.bind(tenant_id="acme")
-    bundle = await ctx.context("q")
+    bundle = await ctx.context("q", format="full")
     assert bundle.insufficient and bundle.evidence.missing_groups == ["PAGE11"]
-
-
-@respx.mock
-async def test_brief_sdk_preserves_scope_kind_and_async_status(client):
-    from trellis.memory import BriefSpec
-
-    spec = BriefSpec(
-        kind="knowledge_page", title="Project status", question="Which projects are active?"
-    )
-    pending = {"brief_id": "brf_example", "spec": spec.model_dump(), "status": "pending"}
-    post = respx.post("http://memory.test/v1/briefs").respond(202, json=pending)
-    put = respx.put("http://memory.test/v1/briefs/brf_example").respond(202, json=pending)
-    get = respx.get("http://memory.test/v1/briefs/brf_example").respond(200, json=pending)
-    respx.get("http://memory.test/v1/briefs").respond(200, json=[pending])
-    respx.delete("http://memory.test/v1/briefs/brf_example").respond(200, json={"deleted": True})
-    ctx = client.bind(tenant_id="acme", user_id="alice", agent_id="research")
-    created = await ctx.advanced.briefs.create(spec, idempotency_key="brief-1")
-    assert created.status == "pending" and created.spec.kind == "knowledge_page"
-    assert post.calls.last.request.headers["Idempotency-Key"] == "brief-1"
-    assert (await ctx.advanced.briefs.update(created.brief_id, spec)).status == "pending"
-    assert put.call_count == 1
-    assert (await ctx.advanced.briefs.get(created.brief_id)).output is None
-    assert get.calls.last.request.url.params["agent_id"] == "research"
-    assert len(await ctx.advanced.briefs.list()) == 1
-    await ctx.advanced.briefs.delete(created.brief_id)
 
 
 @respx.mock
@@ -342,7 +318,7 @@ async def test_everything_past_the_verbs_is_under_advanced(client: MemoryClient)
     assert isinstance(ctx.advanced.documents, DocumentsAPI)
     assert not hasattr(ctx, "documents") and not hasattr(ctx, "files")
     assert ctx.advanced.tenant is client.tenant and ctx.advanced.admin is client.admin
-    assert ctx.advanced.webhooks is client.tenant.webhooks
+    assert not hasattr(ctx.advanced, "webhooks") and not hasattr(ctx.advanced, "briefs")
     handle = await ctx.advanced.documents.add(b"hello", filename="a.md", media_type="text/markdown")
     assert handle.document_id == "doc_1" and route.called
 
@@ -592,14 +568,24 @@ async def test_graph_entity_search_and_profile(client: MemoryClient) -> None:
 
 
 @respx.mock
-async def test_graph_query_sends_layers_and_knowledge_time(client: MemoryClient) -> None:
-    route = respx.post("http://memory.test/v1/graph/query").respond(200, json={"facts": []})
-    ctx = client.bind(tenant_id="acme", user_id="u1")
-    await ctx.advanced.graph.query(
-        entities=["Acme"], layers=["causal"], valid_at=datetime(2026, 9, 1, tzinfo=UTC)
+async def test_an_entity_s_traversal_sends_depth_layers_and_knowledge_time(
+    client: MemoryClient,
+) -> None:
+    route = respx.get("http://memory.test/v1/graph/entities/ent_1").respond(
+        200,
+        json={
+            "entity": {"entity_id": "ent_1", "name": "Acme", "canonical_name": "acme"},
+            "neighborhood": {"entities": [], "facts": [], "visited": 3},
+        },
     )
-    body = json.loads(route.calls.last.request.content)
-    assert body["layers"] == ["causal"] and body["valid_at"].startswith("2026-09-01")
+    ctx = client.bind(tenant_id="acme", user_id="u1")
+    profile = await ctx.advanced.graph.entity(
+        "ent_1", depth=2, layers=["causal"], valid_at=datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    params = route.calls.last.request.url.params
+    assert params["depth"] == "2" and params.get_list("layers") == ["causal"]
+    assert params["valid_at"].startswith("2026-09-01")
+    assert profile.neighborhood is not None and profile.neighborhood.visited == 3
 
 
 @respx.mock
@@ -642,24 +628,28 @@ async def test_a_message_without_a_turn_is_not_deduplicated_by_content(
     route = respx.post("http://memory.test/v1/messages").respond(
         202,
         json={
-            "message_id": "msg_1",
-            "thread_id": "thr_1",
-            "session_id": "ses_derived",
-            "turn_id": "trn_derived",
-            "sequence": 1,
+            "messages": [
+                {
+                    "message_id": "msg_1",
+                    "thread_id": "thr_1",
+                    "session_id": "ses_derived",
+                    "turn_id": "trn_derived",
+                    "sequence": 1,
+                }
+            ]
         },
     )
     loose = client.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")
-    ack = await loose.chat.user("ok")
+    [ack] = await loose.history.add([("USER", "ok")])
     assert ack.turn_id == "trn_derived", "the service's derived ids come back"
-    await loose.chat.user("ok")
+    await loose.history.add([("USER", "ok")])
     keys = [call.request.headers["Idempotency-Key"] for call in route.calls]
     assert keys[0] != keys[1], "two identical messages without a turn are two messages"
     assert "session_id" not in json.loads(route.calls.last.request.content)["scope"]
 
     turned = client.bind(tenant_id="acme", user_id="u1", thread_id="thr_1", turn_id="trn_1")
-    await turned.chat.user("ok")
-    await turned.chat.user("ok")
+    await turned.history.add([("USER", "ok")])
+    await turned.history.add([("USER", "ok")])
     assert (
         route.calls[-1].request.headers["Idempotency-Key"]
         == (route.calls[-2].request.headers["Idempotency-Key"])

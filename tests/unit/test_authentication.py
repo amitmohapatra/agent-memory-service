@@ -17,11 +17,11 @@ async def test_trusted_dev_api_key() -> None:
         await auth.authenticate({})
 
 
-async def test_jwt_mode_without_a_jwks_url_fails_closed() -> None:
-    """The HS256 shared-secret spelling of ``jwt`` went with ``jwt_hs256_secret``; a bearer
-    token with nowhere to fetch signing keys from is refused, never accepted unverified."""
-    auth = ServiceAuthenticator(AuthenticationSettings(mode="jwt"))
-    with pytest.raises(AuthenticationFailed, match="jwt_jwks_url"):
+async def test_jwt_mode_refuses_what_is_not_a_verifiable_bearer_token() -> None:
+    """``jwt`` is the mode exactly when the issuer's JWKS is configured, so a token always has
+    somewhere its signing key comes from; anything that is not a bearer token is refused."""
+    auth = ServiceAuthenticator(AuthenticationSettings(jwt_jwks_url="http://127.0.0.1:9/jwks"))
+    with pytest.raises(AuthenticationFailed, match="Invalid token"):
         await auth.authenticate({"authorization": "Bearer not.a.jwt"})
     with pytest.raises(AuthenticationFailed, match="bearer"):
         await auth.authenticate({"authorization": "Basic abc"})

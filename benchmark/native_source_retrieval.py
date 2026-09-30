@@ -41,7 +41,6 @@ from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.constants import DenseModel
-from memory_service.config.settings import LLMSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.jobs.registry import register_handlers
@@ -187,10 +186,10 @@ def refuse_silent_reingest(ledger: CorpusLedger, key: CorpusKey, *, allowed: boo
 
 
 def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, Any]:
-    """Everything that shapes the corpus at ingest, for the corpus ledger's key."""
-    llm = settings.models.llm
+    """Everything that shapes the corpus at ingest, for the corpus ledger's key. The model is
+    never reachable here (``run``), so no use can shape the corpus."""
     return {
-        "llm": {"enabled": str(llm.enabled), "model": llm.model, "uses": sorted(llm.uses)},
+        "llm": {"enabled": str(settings.llm.enabled), "model": None, "uses": []},
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
     }
@@ -199,7 +198,8 @@ def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, An
 async def run(args) -> None:
     settings = _settings()
     database = _guard(settings)
-    settings.models.llm = LLMSettings(enabled=False)  # no .env can authorize model calls
+    # no environment can authorize model calls: the gateway is not configured at all
+    settings = settings.model_copy(update={"bifrost_url": None, "bifrost_virtual_key": None})
     base_overrides = bench_overrides()
     overrides = replace(
         base_overrides,

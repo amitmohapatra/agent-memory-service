@@ -26,6 +26,29 @@ SideEffects = Literal["read", "write", "irreversible"]
 SOURCE_MAX_CHARS: Final = 50
 
 
+class ToolAnnotations(BaseModel):
+    """The MCP tool annotations a gateway listing carries (hints, not guarantees)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    read_only: bool | None = Field(default=None, alias="readOnlyHint")
+    destructive: bool | None = Field(default=None, alias="destructiveHint")
+    idempotent: bool | None = Field(default=None, alias="idempotentHint")
+    open_world: bool | None = Field(default=None, alias="openWorldHint")
+
+
+def risk_tier(side_effects: SideEffects | None, annotations: ToolAnnotations) -> SideEffects:
+    """What calling the tool risks: the catalog's ``side_effects`` when set, else the MCP
+    annotations (``readOnlyHint`` -> read, ``destructiveHint`` -> irreversible), else write."""
+    if side_effects is not None:
+        return side_effects
+    if annotations.read_only:
+        return "read"
+    if annotations.destructive:
+        return "irreversible"
+    return "write"
+
+
 def stable_hash(value: Any) -> str:
     """SHA-256 over a canonical JSON form: same arguments, same hash, any key order."""
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
@@ -58,6 +81,12 @@ class ToolDescriptor(BaseModel):
         default_factory=list,
         description="Dotted argument paths whose values never reach storage (e.g. 'auth.token').",
     )
+    annotations: ToolAnnotations = Field(default_factory=ToolAnnotations)
+    approve_when: str | None = Field(
+        default=None,
+        description="ask a person before a call when this expression over the arguments is "
+        "true (trellis.memory.approval); None: the risk tier decides",
+    )
     schema_hash: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -85,8 +114,14 @@ class ToolDescriptor(BaseModel):
                 "server",
                 "examples",
                 "redact",
+                "annotations",
+                "approve_when",
             }
         )
+
+    @property
+    def risk(self) -> SideEffects:
+        return risk_tier(self.side_effects, self.annotations)
 
     def index_text(self) -> str:
         """What the tool is searched by: its name, description and argument names."""
@@ -188,8 +223,8 @@ class RunOutcome(BaseModel):
     run_id: str
     success: bool
     note: str | None = None
-    #: explicit: the run said so; feedback: a verdict on the run, an answer or a tool call
-    source: Literal["explicit", "feedback"] = "explicit"
+    #: the feedback source that decided it (``domain.feedback.OUTCOME_PRECEDENCE``)
+    source: Literal["system", "judge", "interrupt", "human"] = "system"
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -316,5 +351,7 @@ class ToolHints(BaseModel):
     candidates: list[ToolCandidate] = Field(default_factory=list)
     plan: PlanHint | None = None
     next: str | None = None
-    prefill: dict[str, Prefill] = Field(default_factory=dict)
+    prefill: dict[str, Prefill] = Field(
+        default_factory=dict, description="argument values found, keyed tool.arg"
+    )
     missing: list[MissingArgument] = Field(default_factory=list)

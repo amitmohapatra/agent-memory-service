@@ -15,6 +15,7 @@ the enum rather than a hand-written list so a type added later cannot skip it.
 from __future__ import annotations
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, ObservationKind
@@ -50,7 +51,7 @@ async def _submit(container, uow_factory, memory_type: MemoryType) -> list:
     register_handlers(container)
     service = container.services["memory"]
     async with uow_factory() as uow:
-        ack = await service.submit_observation(
+        ack = await submit_observation(
             uow,
             CTX,
             kind=ObservationKind.MESSAGE,

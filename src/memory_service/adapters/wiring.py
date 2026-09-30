@@ -7,6 +7,7 @@ overrides and takes the first branch of nothing.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from memory_service.application.container import Dependency
@@ -27,7 +28,7 @@ async def wire_all(container: Container) -> None:
         "wiring.start",
         environment=settings.service.environment,
         blob=settings.blob.provider,
-        llm_enabled=settings.models.llm.enabled,
+        llm_enabled=settings.llm.enabled,
         stand_ins=container.overrides.summary(),
     )
     await _wire_cache(container)
@@ -213,6 +214,7 @@ def _wire_conversation(container: Container) -> None:
         container.services["uow_factory"],
         container.services["authz"],
         container.services["llm_assist"],
+        reader=lambda: container.services["context_builder"],
     )
 
 
@@ -302,14 +304,14 @@ async def _wire_search(container: Container) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _model_threads(container: Container, dense: Any = None) -> int:
-    """Intra-op threads every in-process model shares.
+def _model_threads(container: Container) -> int:
+    """Intra-op threads every in-process model shares: this worker's share of the cores.
 
     ``torch.set_num_threads`` is process-wide, so the last model to load decides it for all of
-    them. One resolved number, given to each, is the only way the setting means anything.
+    them; one resolved number, given to each, is the only way it means anything. The measured
+    8-vCPU box with three workers resolves to the 2 the models were frozen with.
     """
-    spec = dense or FROZEN_MODELS.dense
-    return container.settings.models.embedding.threads or spec.threads
+    return max(1, (os.cpu_count() or 1) // container.settings.service.workers)
 
 
 def _wire_models(container: Container) -> None:
@@ -325,9 +327,7 @@ def _wire_models(container: Container) -> None:
         spaces = DenseSpaces.single(HashEmbedding(stand_in.embedding_dimension))
     else:
         dense = stand_in.dense_model or FROZEN_MODELS.dense
-        # The thread count is frozen with the model (constants.DenseModel.threads); the
-        # environment field is what is left of the served-model tier and is going away.
-        threads = _model_threads(container, dense)
+        threads = _model_threads(container)
         english = load_dense(dense, threads=threads)
         if stand_in.multilingual_dense == "disabled":
             # the single-encoder arm: the English specialist answers every script
@@ -359,7 +359,6 @@ def _wire_llm(container: Container) -> None:
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
-    from memory_service.modules.webhooks.service import WebhookService
 
     uow_factory = container.services["uow_factory"]
     cipher = AesCredentialCipher(container.settings.agent_credentials)
@@ -369,20 +368,21 @@ def _wire_llm(container: Container) -> None:
     container.services["model_credentials"] = credentials
     container.services["model_policies"] = policies
     container.services["llm_usage"] = usage
-    container.services["webhooks"] = WebhookService(
-        uow_factory, cipher, container.settings.webhooks
-    )
-    cfg = container.settings.models.llm
+    cfg = container.settings.llm
     if not cfg.enabled:
         container.llm = DisabledLLM()
         container.services["llm_assist"] = LLMAssist.disabled()
         return
     llm = BifrostLLM(
-        cfg, log_source_text=constants.LOG_SOURCE_TEXT, credentials=credentials, usage=usage
+        cfg,
+        log_source_text=constants.LOG_SOURCE_TEXT,
+        credentials=credentials,
+        usage=usage,
+        tuning=container.tuning.llm,
     )
     container.llm = llm
     container.services["llm_assist"] = LLMAssist(llm, cfg, policies)
-    if cfg.enabled == "auto" and not cfg.api_key:
+    if not cfg.operator_pays:
         # Agent credentials are resolved only in their authenticated request/job scope.
         # An unauthenticated background health probe cannot represent their gateway access.
         container.add_closer("llm", llm.close)
@@ -429,6 +429,7 @@ def _wire_retrieval(container: Container) -> None:
     from memory_service.modules.memory.ephemeral import EphemeralMemory
     from memory_service.modules.rag.indexer import Indexer
     from memory_service.modules.retrieval.engine import RetrievalEngine
+    from memory_service.modules.retrieval.search import Searcher
 
     tuning = container.tuning
     dense = container.overrides.dense_model or FROZEN_MODELS.dense
@@ -469,10 +470,12 @@ def _wire_retrieval(container: Container) -> None:
         sections=ContextSections(container.services["uow_factory"], container.services),
     )
     container.services["context_builder"] = builder
-    from memory_service.modules.briefs.service import BriefService
-
-    container.services["briefs"] = BriefService(
-        container.services["uow_factory"], builder, container.services["llm_assist"]
+    container.services["bundle_records"] = builder.records
+    container.services["search"] = Searcher(
+        container.services["uow_factory"],
+        engine,
+        container.services["conversation"],
+        container.services["llm_assist"],
     )
     # The builder buffers served-memory ids for up to access_flush_seconds and writes bundles
     # to the cache in the background. Without this, SIGTERM drops a whole window of both, per
@@ -493,8 +496,7 @@ def _wire_memory(container: Container) -> None:
 
     cfg = container.tuning.memory_intelligence
     extractor = None
-    llm = container.settings.models.llm
-    if llm.enabled is True and llm.wants("contextual_extraction"):
+    if container.settings.hindsight.base_url is not None:
         from memory_service.adapters.models.hindsight import HindsightExtractor
 
         try:
@@ -516,19 +518,12 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
-        events=container.services.get("webhooks"),
         assist=container.services["llm_assist"],
     )
-    container.services["memory"] = MemoryService(
-        container.services["authz"], events=container.services.get("webhooks")
+    container.services["memory"] = MemoryService(container.services["authz"])
+    container.services["feedback"] = FeedbackService(
+        container.services["uow_factory"], container.services["authz"], container.services["memory"]
     )
-    if "webhooks" in container.services:
-        container.services["feedback"] = FeedbackService(
-            container.services["uow_factory"],
-            container.services["authz"],
-            container.services["memory"],
-            container.services["webhooks"],
-        )
     container.services["forgetting"] = ForgettingService(
         container.services["uow_factory"],
         settings=cfg,

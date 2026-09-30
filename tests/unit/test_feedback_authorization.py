@@ -56,17 +56,11 @@ class _Uow:
         self.jobs.append(spec)
 
 
-class _Events:
-    async def publish(self, uow, event) -> None:
-        return None
-
-
 def _service(admins: set[str] = frozenset()) -> FeedbackService:
     return FeedbackService(
         lambda: None,  # the projector is not exercised here
         _Authz(set(admins)),
         _MemoryService(),
-        _Events(),
         clock=lambda: datetime(2026, 9, 28, 7, tzinfo=UTC),
     )
 

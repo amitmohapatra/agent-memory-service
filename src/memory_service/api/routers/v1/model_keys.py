@@ -1,15 +1,15 @@
-"""Register/rotate/revoke model keys at agent, workspace and tenant level; never return
-secret material. A call resolves the most specific level that has a key (ADR 0023).
+"""Register/rotate/revoke model keys at agent and tenant level; never return secret material.
+A call resolves the acting agent's key, else the tenant's.
 
-Model policies (which uses may run, whether reads are assisted) are set per tenant and per
-workspace and resolve the same way; the tenant's usage ledger is read here too."""
+The tenant's model policy (which uses may run, whether reads are assisted, which model each
+use calls) and its usage ledger are read and set here too."""
 
 import hashlib
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from memory_service.api.deps import (
     AdministeredTenantDep,
@@ -23,16 +23,12 @@ from memory_service.api.deps import (
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import default_idempotency_key, run_idempotent
 from memory_service.config.settings import ALL_LLM_USES, LLMUse
-from memory_service.domain.errors import NotFound, ValidationFailed
+from memory_service.domain.errors import ValidationFailed
+from memory_service.domain.provenance import require_permitted_model
 from memory_service.modules.llm.credentials import ModelCredentials
 from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 from memory_service.modules.llm.policy import DEFAULT_ACCESS
-from memory_service.ports.credentials import (
-    ModelIdentity,
-    StoredCredential,
-    tenant_identity,
-    workspace_identity,
-)
+from memory_service.ports.credentials import ModelIdentity, StoredCredential, tenant_identity
 from memory_service.ports.llm import StoredPolicy
 
 router = APIRouter()
@@ -154,15 +150,7 @@ async def revoke_key(request: Request, container: ContainerDep, ctx: HeaderConte
     )
 
 
-# --------------------------------------------------------------------------- the team's
-
-
-async def _workspace_identity(container, tenant_id: str, workspace_id: str) -> ModelIdentity:  # type: ignore[no-untyped-def]
-    async with container.services["uow_factory"]() as uow:
-        workspace = await uow.workspaces.get(tenant_id, workspace_id)
-    if workspace is None or workspace.deleted_at is not None:
-        raise NotFound(f"workspace {workspace_id} not found")
-    return workspace_identity(tenant_id, workspace_id)
+# --------------------------------------------------------------------------- the tenant's
 
 
 async def _put_level(
@@ -194,57 +182,11 @@ async def _put_level(
 
 
 @router.get(
-    "/workspaces/{workspace_id}/model-key",
-    response_model=AgentKeyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Read the workspace's model-key status (used by its agents without a key of their own)",
-)
-async def workspace_key_status(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> AgentKeyStatus:
-    identity = await _workspace_identity(container, tenant_id, workspace_id)
-    return _status(await _service(container).metadata_for(identity))
-
-
-@router.put(
-    "/workspaces/{workspace_id}/model-key",
-    response_model=AgentKeyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Register or rotate the workspace's encrypted Bifrost virtual key",
-)
-async def set_workspace_key(
-    request: Request,
-    workspace_id: str,
-    body: ModelKeyRequest,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-):
-    identity = await _workspace_identity(container, tenant_id, workspace_id)
-    return await _put_level(request, container, tenant_id, identity, body.virtual_key, "rotate")
-
-
-@router.delete(
-    "/workspaces/{workspace_id}/model-key",
-    response_model=AgentKeyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Revoke the workspace's model key (its agents fall back to nothing, not the operator)",
-)
-async def revoke_workspace_key(
-    request: Request, workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-):
-    identity = await _workspace_identity(container, tenant_id, workspace_id)
-    return await _put_level(request, container, tenant_id, identity, None, "revoke")
-
-
-@router.get(
     "/model-key",
     response_model=AgentKeyStatus,
     tags=["tenancy"],
     responses=_ERRORS,
-    summary="Read the tenant's model-key status (the last level before the operator key)",
+    summary="Read the tenant's model-key status (used by agents without a key of their own)",
 )
 async def tenant_key_status(
     container: ContainerDep, tenant_id: AdministeredTenantDep
@@ -292,28 +234,45 @@ class ModelPolicyRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
-            "examples": [{"uses": ["contextual_extraction", "summaries"], "read_assist": False}]
+            "examples": [
+                {
+                    "uses": ["contextual_extraction", "summaries", "grounding_judge"],
+                    "read_assist": False,
+                    "models": {"grounding_judge": "gemini/gemini-3.8-flash"},
+                }
+            ]
         },
     )
 
     uses: list[LLMUse] = Field(
-        max_length=len(ALL_LLM_USES),
-        description="what the model may be used for at this level; the operator's allow-list "
-        "still applies, so a use it does not allow stays off",
+        max_length=len(ALL_LLM_USES), description="what the model may be used for in this tenant"
     )
     read_assist: bool = Field(
-        description="whether reads (/v1/context, /v1/recall, /v1/verify, /v1/graph/query) "
-        "consult the model when the request does not set use_llm"
+        description="whether reads (/v1/context, /v1/recall, /v1/verify, /v1/graph/entities) "
+        "consult the model"
     )
+    models: dict[LLMUse, str] = Field(
+        default_factory=dict,
+        description="the gateway model (provider/model) a use calls; a use not named here "
+        "calls the service's default for it",
+    )
+
+    @field_validator("models")
+    @classmethod
+    def _permitted(cls, value: dict[LLMUse, str]) -> dict[LLMUse, str]:
+        for model in value.values():
+            require_permitted_model(model)
+        return value
 
 
 class ModelPolicyStatus(BaseModel):
     stored: bool = Field(
-        description="false: no policy at this level, so the next level's (or the default: "
-        "every use, reads assisted) applies"
+        description="false: the tenant has set no policy, so the default applies (every use, "
+        "reads assisted, the default model per use)"
     )
     uses: list[LLMUse]
     read_assist: bool
+    models: dict[str, str]
     revision: int
     updated_at: datetime | None = None
 
@@ -324,12 +283,14 @@ def _policy_status(stored: StoredPolicy | None) -> ModelPolicyStatus:
             stored=False,
             uses=_uses(DEFAULT_ACCESS.uses),
             read_assist=DEFAULT_ACCESS.read_assist,
+            models={},
             revision=0,
         )
     return ModelPolicyStatus(
         stored=True,
         uses=_uses(stored.uses),
         read_assist=stored.read_assist,
+        models=dict(stored.models),
         revision=stored.revision,
         updated_at=stored.updated_at,
     )
@@ -343,14 +304,41 @@ def _policies(container) -> ModelPolicies:  # type: ignore[no-untyped-def]
     return container.services["model_policies"]
 
 
-async def _put_policy(
-    request: Request, container, tenant_id: str, level: ModelIdentity, body: ModelPolicyRequest
-):  # type: ignore[no-untyped-def]
+@router.get(
+    "/model-key/policy",
+    response_model=ModelPolicyStatus,
+    tags=["tenancy"],
+    responses=_ERRORS,
+    summary="Read the tenant's model policy: uses, read assistance, the model per use",
+)
+async def tenant_policy(
+    container: ContainerDep, tenant_id: AdministeredTenantDep
+) -> ModelPolicyStatus:
+    return _policy_status(await _policies(container).get(tenant_id))
+
+
+@router.put(
+    "/model-key/policy",
+    response_model=ModelPolicyStatus,
+    tags=["tenancy"],
+    responses=_ERRORS,
+    summary="Set the tenant's model policy",
+)
+async def set_tenant_policy(
+    request: Request,
+    body: ModelPolicyRequest,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+):
     ctx = request_context(request, tenant_id)
 
     async def write(uow):  # type: ignore[no-untyped-def]
         stored = await _policies(container).set(
-            uow, level, uses=body.uses, read_assist=body.read_assist
+            uow,
+            tenant_id,
+            uses=body.uses,
+            read_assist=body.read_assist,
+            models={str(use): model for use, model in body.models.items()},
         )
         return 200, _policy_status(stored).model_dump(mode="json"), None
 
@@ -360,70 +348,9 @@ async def _put_policy(
         ctx,
         key=request.state.idempotency_key
         or default_idempotency_key(ctx, "model-policy-put", ctx.request_id),
-        payload={"principal": level.principal_id, **body.model_dump(mode="json")},
+        payload=body.model_dump(mode="json"),
         handler=write,
     )
-
-
-@router.get(
-    "/model-key/policy",
-    response_model=ModelPolicyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Read the tenant's model policy: which uses may run and whether reads are assisted",
-)
-async def tenant_policy(
-    container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> ModelPolicyStatus:
-    return _policy_status(await _policies(container).get(tenant_identity(tenant_id)))
-
-
-@router.put(
-    "/model-key/policy",
-    response_model=ModelPolicyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Set the tenant's model policy (workspaces and agents without their own inherit it)",
-)
-async def set_tenant_policy(
-    request: Request,
-    body: ModelPolicyRequest,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-):
-    return await _put_policy(request, container, tenant_id, tenant_identity(tenant_id), body)
-
-
-@router.get(
-    "/workspaces/{workspace_id}/model-key/policy",
-    response_model=ModelPolicyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Read the workspace's model policy",
-)
-async def workspace_policy(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> ModelPolicyStatus:
-    identity = await _workspace_identity(container, tenant_id, workspace_id)
-    return _policy_status(await _policies(container).get(identity))
-
-
-@router.put(
-    "/workspaces/{workspace_id}/model-key/policy",
-    response_model=ModelPolicyStatus,
-    tags=["tenancy"],
-    responses=_ERRORS,
-    summary="Set the workspace's model policy (its agents without their own inherit it)",
-)
-async def set_workspace_policy(
-    request: Request,
-    workspace_id: str,
-    body: ModelPolicyRequest,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-):
-    identity = await _workspace_identity(container, tenant_id, workspace_id)
-    return await _put_policy(request, container, tenant_id, identity, body)
 
 
 # --------------------------------------------------------------------------- usage

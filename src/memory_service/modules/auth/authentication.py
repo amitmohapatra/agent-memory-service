@@ -96,6 +96,7 @@ class ServiceAuthenticator:
                 "tenant": key.tenant_id,
                 "workspace": key.workspace_id,
                 "key_id": key.key_id,
+                "may_act_as": list(key.may_act_as),
             },
         )
 
@@ -138,15 +139,14 @@ class ServiceAuthenticator:
         return ServicePrincipal(service_id=sub, mode="jwt", claims=claims)
 
     async def _verify_with_jwks(self, token: str) -> dict[str, Any]:
-        if not self.settings.jwt_jwks_url:
-            raise AuthenticationFailed("jwt mode requires jwt_jwks_url")
+        jwks_url = str(self.settings.jwt_jwks_url)
         try:
             import jwt as pyjwt
             from jwt import PyJWKClient
         except ImportError as exc:  # pragma: no cover
             raise DependencyUnavailable("PyJWT[crypto] is required for JWKS verification") from exc
         try:
-            client = PyJWKClient(self.settings.jwt_jwks_url, cache_keys=True)
+            client = PyJWKClient(jwks_url, cache_keys=True)
             signing_key = client.get_signing_key_from_jwt(token)
             return pyjwt.decode(
                 token,

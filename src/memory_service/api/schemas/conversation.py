@@ -9,108 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ScopeBody
 from memory_service.api.validation import CustomMetadata
-from memory_service.domain.enums import (
-    ArchiveStatus,
-    JobStatus,
-    Lifetime,
-    MemoryType,
-    MessageKind,
-    MessageRole,
-    Visibility,
-)
+from memory_service.domain.enums import ArchiveStatus, JobStatus, MessageKind, MessageRole
 
 _SCOPE_EXAMPLE: dict[str, Any] = {
     "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
     "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
     "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
 }
-
-
-class ProcessingHintsIn(BaseModel):
-    """Expert-only overrides; omit for the default 'the service decides' behaviour.
-
-    Every field here is a *hint*: the service classifies observations on its own, and the
-    right call for almost every caller is to send none of them. They exist for the cases
-    where the caller genuinely knows something the extractor cannot infer — an import whose
-    provenance is already known, a note that must not outlive the run.
-
-    Setting one wrongly is worse than leaving it unset: a hint overrides the classifier, so a
-    ``memory_type`` that does not match the content makes the memory unreachable by the
-    queries that should find it.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    lifetime: Lifetime | None = Field(
-        default=None,
-        examples=["LONG_TERM"],
-        description=(
-            "How long this should survive. EPHEMERAL: within the turn only. SHORT_TERM: the "
-            "current thread/session. LONG_TERM: durable, the default for facts about a user "
-            "or the world. ARCHIVAL: cold storage, retained for audit rather than retrieval. "
-            "Omit to let the extractor choose from the content."
-        ),
-    )
-    memory_type: MemoryType | None = Field(
-        default=None,
-        examples=["PREFERENCE"],
-        description=(
-            "What kind of thing this is. The ones a caller normally means: SEMANTIC (a fact "
-            "about the world), PREFERENCE (how the user likes things), EPISODIC (something "
-            "that happened), DECISION (a choice and its reason), PROCEDURAL (how to do "
-            "something). TOOL, OBSERVATION, AGENT, TASK and USER are "
-            "written by the pipeline itself; setting them by hand mislabels the record. The "
-            "remaining values (ENTITY_SUMMARY, BELIEF, WORKING, CONVERSATION, SHARED, WORK, SKILL, "
-            "DECISION, FAILURE, "
-            "OUTCOME, ARTIFACT, KNOWLEDGE_RAG, SUMMARY, DERIVED, POLICY, CUSTOM) are accepted "
-            "but never produced by extraction — they exist for callers importing records whose "
-            "type is already known. Omit unless that is what you are doing."
-        ),
-    )
-    custom_type: str | None = Field(
-        default=None,
-        max_length=64,
-        examples=["release_note"],
-        description=(
-            "Required when memory_type=CUSTOM, and meaningless otherwise: the caller's own "
-            "label for a record this service's taxonomy has no name for. Without it a CUSTOM "
-            "memory is rejected, so omitting it turns the hint into a failed write rather "
-            "than a stored memory."
-        ),
-    )
-    visibility: Visibility | None = Field(
-        default=None,
-        examples=["USER"],
-        description=(
-            "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, "
-            "GROUP, USER, WORKSPACE, TENANT, GLOBAL. Each level is a superset of the ones "
-            "before it. Omit to inherit the scope the observation was submitted in — which is "
-            "the safe answer; widening by hand is how one tenant's data reaches another."
-        ),
-    )
-    importance: float | None = Field(
-        default=None,
-        ge=0,
-        le=1,
-        examples=[0.8],
-        description=(
-            "0-1 prior on how much this matters, influencing admission and ranking. Omit "
-            "unless you have a real signal; a blanket high value just flattens ranking."
-        ),
-    )
-    skip_extraction: bool = Field(
-        default=False,
-        description="Store the observation verbatim without deriving memories from it.",
-    )
-    skip_embedding: bool = Field(
-        default=False, description="Do not index for semantic search (keyword/graph only)."
-    )
-    skip_graph: bool = Field(
-        default=False, description="Do not extract entities or relations into the graph."
-    )
-    skip_summary: bool = Field(
-        default=False, description="Do not roll this into thread or entity summaries."
-    )
 
 
 class AttachmentIn(BaseModel):
@@ -129,26 +34,27 @@ class AttachmentIn(BaseModel):
     )
 
 
-class CreateThreadRequest(BaseModel):
+class PatchThreadRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {"scope": {"thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"}, "title": "Q3 planning"}
-            ]
-        },
+        json_schema_extra={"examples": [{"title": "Q3 planning", "custom_metadata": {}}]},
     )
 
-    scope: ScopeBody = Field(
-        default_factory=ScopeBody, examples=[{"thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"}]
+    scope: ScopeBody = Field(default_factory=ScopeBody)
+    title: str | None = Field(default=None, max_length=500, examples=["Q3 planning"])
+    custom_metadata: CustomMetadata | None = Field(
+        default=None, description="replaces the thread's metadata when given"
     )
-    thread_id: str | None = Field(
-        default=None,
-        description="Client-generated id; generated when absent",
-        examples=["thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"],
-    )
-    title: str | None = Field(default=None, examples=["Q3 planning"])
-    custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"channel": "web"}])
+
+
+class ThreadSummaryBody(BaseModel):
+    """The thread's durable summary: every message up to ``covers_to_sequence``."""
+
+    text: str
+    covers_to_sequence: int
+    version: int
+    model: str = Field(description="the model that wrote it, or extractive without one")
+    created_at: datetime
 
 
 class ThreadResponse(BaseModel):
@@ -179,44 +85,27 @@ class ThreadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class CreateMessageRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "scope": _SCOPE_EXAMPLE,
-                    "role": "USER",
-                    "kind": "VISIBLE",
-                    "content": "Why did EBITDA increase despite lower revenue?",
-                }
-            ]
-        },
+    summary: ThreadSummaryBody | None = Field(
+        default=None, description="the durable summary, once the thread has one"
     )
 
-    scope: ScopeBody = Field(
-        ...,
-        description="Lineage: the thread (required), and optionally the session and turn "
-        "(+ agent fields for internal messages). Without a session the message joins the "
-        "thread's own session; without a turn a USER message opens the thread's next turn and "
-        "any other joins its latest. The acknowledgement returns the ids used.",
-        examples=[_SCOPE_EXAMPLE],
-    )
+
+class MessageIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     role: MessageRole = Field(
         ...,
         description=(
             "Who produced the message: USER, ASSISTANT or SYSTEM for the visible chat; TOOL "
-            "for a tool's output and AGENT for an internal agent step (kind=INTERNAL)."
+            "for a tool's output and AGENT for an internal agent step (kind=INTERNAL); EVENT "
+            "for something that happened, which the service learns from (always INTERNAL)."
         ),
         examples=["USER"],
     )
     kind: MessageKind = Field(
         default=MessageKind.VISIBLE,
-        description=(
-            "VISIBLE messages form the chat history; INTERNAL messages record agent/tool execution."
-        ),
+        description="VISIBLE messages form the chat history; INTERNAL messages record "
+        "agent/tool execution and events.",
         examples=["VISIBLE"],
     )
     content: str = Field(
@@ -226,7 +115,6 @@ class CreateMessageRequest(BaseModel):
         examples=["Why did EBITDA increase despite lower revenue?"],
     )
     attachments: list[AttachmentIn] = Field(default_factory=list)
-    hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
     custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
     occurred_at: datetime | None = Field(default=None, description="Original timestamp for imports")
     source_system: str | None = Field(default=None, max_length=100, examples=["slack"])
@@ -234,6 +122,38 @@ class CreateMessageRequest(BaseModel):
         default=None, max_length=400, examples=["1726300000.000100"]
     )
     parent_message_id: str | None = None
+
+
+#: Messages one request appends.
+MESSAGES_MAX = 100
+
+
+class CreateMessagesRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": _SCOPE_EXAMPLE,
+                    "messages": [
+                        {"role": "USER", "content": "Why did EBITDA increase?"},
+                        {"role": "ASSISTANT", "content": "Lower costs [d1]."},
+                    ],
+                }
+            ]
+        },
+    )
+
+    scope: ScopeBody = Field(
+        ...,
+        description="Lineage: the thread (defaults to the agent run's id when a run is in the "
+        "scope), and optionally the session and turn (+ agent fields for internal messages). "
+        "Without a session the messages join the thread's own session; without a turn a USER "
+        "message opens the thread's next turn and any other joins its latest. The "
+        "acknowledgements return the ids used.",
+        examples=[_SCOPE_EXAMPLE],
+    )
+    messages: list[MessageIn] = Field(..., min_length=1, max_length=MESSAGES_MAX)
 
 
 class MessageAckResponse(BaseModel):
@@ -297,7 +217,7 @@ class MessageResponse(BaseModel):
     turn_id: str
     role: MessageRole = Field(
         ...,
-        description="Who produced it: USER, ASSISTANT, SYSTEM, TOOL or AGENT, as recorded.",
+        description="Who produced it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT.",
     )
     kind: MessageKind = Field(
         ...,
@@ -317,6 +237,12 @@ class MessageResponse(BaseModel):
     )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MessagesAckResponse(BaseModel):
+    """One acknowledgement per message, in request order."""
+
+    messages: list[MessageAckResponse]
 
 
 class MessageListResponse(BaseModel):

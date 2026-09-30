@@ -6,9 +6,8 @@ the identity that owns the work (``bound`` / ``reading``); a module then asks
 (disabled provider, gateway error, invalid output, timeout) returns ``None`` and the module
 decides whether to keep native evidence or fail an explicitly assisted operation.
 
-``wants(use)`` is the operator allow-list (``models.llm.uses``) intersected with the policy of
-the bound identity (the most specific of agent, workspace and tenant that has one), and true
-only when something can pay: a registered key at one of those levels, or the operator.
+``wants(use)`` is the bound tenant's policy, and true only when the gateway is configured and
+something can pay: the acting agent's or the tenant's registered key, or the operator.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
+from memory_service.config.constants import LLM
 from memory_service.config.settings import LLMSettings, LLMUse
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured
@@ -33,6 +33,7 @@ from memory_service.modules.llm.policy import (
     identity_of,
     model_call_policy,
     model_calls_allowed,
+    model_for,
 )
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import llm_assist_total
@@ -68,7 +69,7 @@ class LLMAssist:
 
     @classmethod
     def disabled(cls) -> LLMAssist:
-        return cls(None, LLMSettings(enabled=False))
+        return cls(None, LLMSettings())
 
     @property
     def available(self) -> bool:
@@ -88,13 +89,11 @@ class LLMAssist:
             yield access
 
     @asynccontextmanager
-    async def reading(
-        self, ctx: MemoryExecutionContext, *, use_llm: bool | None
-    ) -> AsyncIterator[None]:
-        """A read: bound to the caller, and assisted when the request says so or, when it
-        does not, when the resolved policy's ``read_assist`` does."""
+    async def reading(self, ctx: MemoryExecutionContext) -> AsyncIterator[None]:
+        """A read: bound to the caller, and model-assisted when the resolved policy's
+        ``read_assist`` says so (a request does not decide it)."""
         async with self.bound(identity_of(ctx)) as access:
-            with model_call_policy(access.read_assist if use_llm is None else use_llm):
+            with model_call_policy(access.read_assist):
                 yield
 
     async def payable_tenants(self, use: LLMUse, only: str | None = None) -> list[str | None]:
@@ -128,14 +127,12 @@ class LLMAssist:
         if not active:
             return ""
         settings = self.settings
+        tuning = getattr(self.provider, "tuning", LLM)
         return stable_key(
-            "bifrost-output-v1",
-            settings.base_url.rstrip("/"),
-            settings.model or "",
-            settings.fast_model or "",
-            ",".join(active),
-            ",".join(sorted(set(active) & set(settings.fast_uses))),
-            str(settings.max_tokens),
+            "bifrost-output-v2",
+            (settings.base_url or "").rstrip("/"),
+            ",".join(f"{use}={model_for(use, tuning)}" for use in active),
+            str(tuning.max_tokens),
             settings.api_key.get_secret_value() if settings.api_key else "",
         )
 

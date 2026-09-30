@@ -122,10 +122,19 @@ class SqlThreadRepository:
             return None
         return _row_to_thread(row)
 
-    async def touch(self, tenant_id: str, thread_id: str, *, title: str | None = None) -> int:
+    async def touch(
+        self,
+        tenant_id: str,
+        thread_id: str,
+        *,
+        title: str | None = None,
+        custom_metadata: dict[str, Any] | None = None,
+    ) -> int:
         values: dict[str, Any] = {"revision": ThreadRow.revision + 1, "updated_at": func.now()}
         if title is not None:
             values["title"] = title
+        if custom_metadata is not None:
+            values["custom_metadata"] = custom_metadata
         result = await self.s.execute(
             update(ThreadRow)
             .where(ThreadRow.thread_id == thread_id, ThreadRow.tenant_id == tenant_id)

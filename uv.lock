@@ -5493,6 +5493,7 @@ dependencies = [
     { name = "redis" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
+    { name = "trellis-memory" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "zstandard" },
 ]
@@ -5602,6 +5603,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'models'", specifier = ">=2.4" },
     { name = "torchvision", marker = "sys_platform == 'linux' and extra == 'models'", specifier = ">=0.19", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "sys_platform != 'linux' and extra == 'models'", specifier = ">=0.19" },
+    { name = "trellis-memory", editable = "sdk/python" },
     { name = "trellis-memory-service", extras = ["gcp", "docling", "models", "eval", "load", "hindsight"], marker = "extra == 'all'" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.53" },
     { name = "zstandard", specifier = ">=0.25" },

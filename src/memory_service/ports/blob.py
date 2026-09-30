@@ -35,6 +35,10 @@ class BlobNotFound(Exception):
     pass
 
 
+class BlobAlreadyExists(Exception):
+    """An immutable write found the object already there (``if_generation_match=0``)."""
+
+
 class BlobChecksumMismatch(Exception):
     pass
 

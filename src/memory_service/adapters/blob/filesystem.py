@@ -14,12 +14,13 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 from memory_service.domain.ids import content_hash
-from memory_service.ports.blob import BlobChecksumMismatch, BlobNotFound, BlobRef
+from memory_service.ports.blob import (
+    BlobAlreadyExists,
+    BlobChecksumMismatch,
+    BlobNotFound,
+    BlobRef,
+)
 from memory_service.ports.models import ProviderInfo
-
-
-class BlobAlreadyExists(Exception):
-    pass
 
 
 class FilesystemBlobStore:

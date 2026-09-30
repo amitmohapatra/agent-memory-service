@@ -1,4 +1,4 @@
-"""The SDK: feedback, webhooks, team model keys and cursor paging map to the wire."""
+"""The SDK: feedback, keys, model keys and policy, and cursor paging map to the wire."""
 
 from __future__ import annotations
 
@@ -185,29 +185,6 @@ async def test_bare_list_routes_page_through_the_link_header(client: MemoryClien
     )
     workspaces = await admin.workspaces.page()
     assert workspaces.items[0].workspace_id == "fin" and workspaces.next_cursor is None
-    respx.get(f"{BASE}/v1/groups").respond(
-        200,
-        json=[
-            {
-                "group_id": "g1",
-                "tenant_id": "acme",
-                "name": "Analysts",
-                "created_at": "2026-09-28T07:00:00Z",
-            }
-        ],
-        headers={"Link": f'<{BASE}/v1/groups?cursor=g-next>; rel="next"'},
-    )
-    groups = await admin.groups.page()
-    assert groups.items[0].group_id == "g1" and groups.next_cursor == "g-next"
-    briefs = respx.get(f"{BASE}/v1/briefs").respond(
-        200,
-        json=[{"brief_id": "brf_1", "spec": {"title": "Changes", "question": "What changed?"}}],
-        headers={"Link": f'<{BASE}/v1/briefs?limit=1&cursor=b-next>; rel="next"'},
-    )
-    async with client.bind(tenant_id="acme", user_id="u1") as ctx:
-        page = await ctx.advanced.briefs.page(limit=1, cursor="b-prev")
-        assert page.items[0].brief_id == "brf_1" and page.next_cursor == "b-next"
-        assert briefs.calls.last.request.url.params["cursor"] == "b-prev"
     tenants = respx.get(f"{BASE}/v1/admin/tenants").respond(
         200,
         json=[
@@ -229,83 +206,57 @@ async def test_bare_list_routes_page_through_the_link_header(client: MemoryClien
 
 
 @respx.mock
-async def test_webhooks_and_team_model_keys_are_tenant_administration(client: MemoryClient) -> None:
-    created = {
-        "subscription_id": "whk_1",
+async def test_keys_model_keys_and_the_policy_are_tenant_administration(
+    client: MemoryClient,
+) -> None:
+    admin = client.administer("acme")
+    key = {
+        "key_id": "k1",
         "tenant_id": "acme",
-        "workspace_id": None,
-        "url": "https://hooks.example/x",
-        "events": ["memory.created"],
-        "description": None,
-        "enabled": True,
-        "failures": 0,
+        "role": "service",
+        "name": "harness",
         "created_by": "svc",
         "created_at": "2026-09-28T07:00:00Z",
-        "updated_at": "2026-09-28T07:00:00Z",
-        "secret": "s" * 64,
+        "may_act_as": ["user:u1"],
     }
-    create = respx.post(f"{BASE}/v1/webhooks").respond(201, json=created)
-    listing = respx.get(f"{BASE}/v1/webhooks").respond(
-        200, json={"webhooks": [{**created, "secret": None}], "next_cursor": None}
-    )
-    patch = respx.patch(f"{BASE}/v1/webhooks/whk_1").respond(
-        200, json={**created, "enabled": False, "secret": None}
-    )
-    deliveries = respx.get(f"{BASE}/v1/webhooks/whk_1/deliveries").respond(
+    issued = respx.post(f"{BASE}/v1/keys").respond(201, json={**key, "token": "mk_k1.s"})
+    patched = respx.patch(f"{BASE}/v1/keys/k1").respond(200, json={**key, "may_act_as": ["*"]})
+    whoami = respx.get(f"{BASE}/v1/keys/self").respond(
         200,
         json={
-            "deliveries": [
-                {
-                    "delivery_id": "wdl_1",
-                    "subscription_id": "whk_1",
-                    "event_id": "evt_1",
-                    "event_type": "memory.created",
-                    "status": "DELIVERED",
-                    "attempts": 1,
-                    "status_code": 200,
-                    "last_error": None,
-                    "created_at": "2026-09-28T07:00:00Z",
-                    "delivered_at": "2026-09-28T07:00:01Z",
-                }
-            ],
-            "next_cursor": None,
+            "key_id": "k1",
+            "tenant_id": "acme",
+            "principal": "key:k1",
+            "role": "service",
+            "may_act_as": ["*"],
         },
     )
-    test = respx.post(f"{BASE}/v1/webhooks/whk_1/test").respond(
-        202,
-        json={**json.loads(deliveries.return_value.content)["deliveries"][0], "status": "PENDING"},
-    )
-    delete = respx.delete(f"{BASE}/v1/webhooks/whk_1").respond(204)
-    admin = client.administer("acme")
-    hook = await admin.webhooks.create(
-        "https://hooks.example/x", ["memory.created"], idempotency_key="idem-1"
-    )
-    assert hook.secret == "s" * 64 and hook.subscription_id == "whk_1"
-    sent = json.loads(create.calls.last.request.content)
-    assert sent == {"url": "https://hooks.example/x", "events": ["memory.created"]}
-    assert create.calls.last.request.headers["Idempotency-Key"] == "idem-1"
-    assert create.calls.last.request.headers["X-Trellis-Tenant"] == "acme"
-    assert (await admin.webhooks.list())[0].enabled is True
-    assert (await admin.webhooks.page()).next_cursor is None
-    paused = await admin.webhooks.update("whk_1", enabled=False)
-    assert paused.enabled is False and json.loads(patch.calls.last.request.content) == {
-        "enabled": False
-    }
-    assert (await admin.webhooks.deliveries("whk_1"))[0].status == "DELIVERED"
-    assert (await admin.webhooks.deliveries_page("whk_1")).items[0].delivery_id == "wdl_1"
-    assert (await admin.webhooks.test("whk_1")).status == "PENDING"
-    await admin.webhooks.delete("whk_1")
-    assert listing.called and test.called and delete.called
+    made = await admin.keys.issue("service", "harness", may_act_as=["user:u1"])
+    assert made.token == "mk_k1.s" and made.may_act_as == ["user:u1"]
+    assert json.loads(issued.calls.last.request.content)["may_act_as"] == ["user:u1"]
+    assert (await admin.keys.update("k1", may_act_as=["*"])).may_act_as == ["*"]
+    assert json.loads(patched.calls.last.request.content) == {"may_act_as": ["*"]}
+    me = await client.tenant.keys.whoami()
+    assert me.principal == "key:k1" and me.tenant_id == "acme" and whoami.called
 
     status = {"registered": True, "revoked": False, "revision": 1, "updated_at": None}
-    ws_put = respx.put(f"{BASE}/v1/workspaces/fin/model-key").respond(200, json=status)
     tenant_put = respx.put(f"{BASE}/v1/model-key").respond(200, json=status)
     tenant_get = respx.get(f"{BASE}/v1/model-key").respond(200, json=status)
-    ws_delete = respx.delete(f"{BASE}/v1/workspaces/fin/model-key").respond(
-        200, json={**status, "revoked": True}
-    )
-    assert (await admin.workspaces.set_model_key("fin", "vk-team")).registered
-    assert json.loads(ws_put.calls.last.request.content) == {"virtual_key": "vk-team"}
     assert (await admin.set_model_key("vk-tenant")).revision == 1
-    assert (await admin.model_key_status()).registered and tenant_get.called and tenant_put.called
-    assert (await admin.workspaces.revoke_model_key("fin")).revoked and ws_delete.called
+    assert json.loads(tenant_put.calls.last.request.content) == {"virtual_key": "vk-tenant"}
+    assert (await admin.model_key_status()).registered and tenant_get.called
+    policy = {
+        "stored": True,
+        "uses": ["grounding_judge"],
+        "read_assist": False,
+        "models": {"grounding_judge": "gemini/gemini-3.8-flash"},
+        "revision": 1,
+    }
+    put_policy = respx.put(f"{BASE}/v1/model-key/policy").respond(200, json=policy)
+    set_policy = await admin.set_model_policy(
+        ["grounding_judge"],
+        read_assist=False,
+        models={"grounding_judge": "gemini/gemini-3.8-flash"},
+    )
+    assert set_policy.models == {"grounding_judge": "gemini/gemini-3.8-flash"}
+    assert json.loads(put_policy.calls.last.request.content)["models"] == policy["models"]

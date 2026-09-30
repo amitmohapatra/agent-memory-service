@@ -20,6 +20,7 @@ from memory_service.config.constants import (
     DenseModel,
     DocumentSettings,
     GraphSettings,
+    LLMTuning,
     MemoryIntelligenceSettings,
     NLISettings,
     RetrievalSettings,
@@ -97,6 +98,8 @@ class Overrides:
     graph: GraphSettings | None = None
     archive: ArchiveSettings | None = None
     nli_settings: NLISettings | None = None
+    #: how the model is called (models, budgets, retries): the judged benchmarks' ruler
+    llm: LLMTuning | None = None
 
     def summary(self) -> dict[str, str]:
         """The stand-ins in force, for the startup log and /version."""
@@ -128,6 +131,7 @@ class Tuning:
     graph: GraphSettings
     archive: ArchiveSettings
     nli: NLISettings
+    llm: LLMTuning
 
     @classmethod
     def resolve(cls, overrides: Overrides) -> Tuning:
@@ -139,6 +143,7 @@ class Tuning:
             graph=overrides.graph or constants.GRAPH,
             archive=overrides.archive or constants.ARCHIVE,
             nli=overrides.nli_settings or constants.NLI,
+            llm=overrides.llm or constants.LLM,
         )
 
 

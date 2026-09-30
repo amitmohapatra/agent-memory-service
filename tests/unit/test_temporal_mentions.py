@@ -106,8 +106,8 @@ def test_the_renderer_prints_the_resolved_date_beside_the_text() -> None:
             "dated_mentions": [m.as_dict() for m in _resolve(text)],
         },
     )
-    assert _memory_line(item) == (
-        "- [memory_id:mem_1] 2023-05-08 Mon caroline: We met three days ago at the office. "
+    assert _memory_line(item, "m1") == (
+        "- [m1] 2023-05-08 Mon caroline: We met three days ago at the office. "
         "(three days ago = 2023-05-05)"
     )
-    assert _memory_line(item, body="(see Most relevant)").endswith("(see Most relevant)")
+    assert _memory_line(item, "m1", body="(see Most relevant)").endswith("(see Most relevant)")

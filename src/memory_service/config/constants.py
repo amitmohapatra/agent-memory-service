@@ -184,7 +184,12 @@ HOST = "0.0.0.0"  # noqa: S104 - a container listens on every interface
 #: never log raw source text (prompts, model output, message bodies)
 LOG_SOURCE_TEXT = False
 MAX_BODY_BYTES = 25 * 1024 * 1024
-#: extra requests tolerated above ``service.rate_limit_per_minute``
+#: Requests per tenant per minute unless the tenant's own quota says otherwise
+#: (``PATCH /v1/admin/tenants/{id}``), counted in the cache. 1200 is exactly the 20 rps the
+#: service is measured at, so a load run against one tenant spent itself answering 429s: the
+#: default is a guard against a runaway client, not the target rate.
+RATE_LIMIT_PER_MINUTE = 6000
+#: extra requests tolerated above the per-minute limit
 RATE_LIMIT_BURST = 200
 
 
@@ -202,39 +207,6 @@ class Headers:
 
 
 HEADERS = Headers()
-
-
-class WebhookHeaders:
-    """What an outbound webhook delivery carries besides the request and trace ids
-    (ADR 0023). The signature is ``t=<unix seconds>,v1=<hex hmac-sha256 of "t.body">``."""
-
-    signature: str = "X-Trellis-Signature"
-    event: str = "X-Trellis-Event"
-    delivery: str = "X-Trellis-Delivery"
-
-
-WEBHOOK_HEADERS = WebhookHeaders()
-
-
-@dataclass(frozen=True)
-class WebhookTuning:
-    """How deliveries behave (ADR 0023): the same for every deployment, so not settings."""
-
-    timeout_seconds: float = 10.0
-    max_attempts: int = 6
-    disable_after_failures: int = 20
-    max_subscriptions_per_tenant: int = 50
-    #: How much of a receiver's response body is read before the connection is closed.
-    response_read_cap_bytes: int = 64 * 1024
-    #: How long a delivery row is kept for ``GET /v1/webhooks/{id}/deliveries``.
-    delivery_retention_days: int = 30
-
-
-WEBHOOKS = WebhookTuning()
-#: Hostnames a webhook may never point at unless ``webhooks.allow_local_targets`` is set;
-#: ``modules/webhooks/targets.py`` covers the address forms (loopback, private, link-local).
-WEBHOOK_LOCAL_HOSTS: frozenset[str] = frozenset({"localhost"})
-WEBHOOK_LOCAL_SUFFIXES: tuple[str, ...] = (".localhost", ".local", ".internal")
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +304,16 @@ TASKS = TaskTuning()
 class AuthorizationTuning:
     max_listed_objects: int = 2000
     decision_cache: bool = True
+    #: One OpenFGA call's budget. It was 3 s, hardcoded in the client construction, and under
+    #: load a ListObjects that queued behind others ran past it and surfaced as a 503: long
+    #: enough to hold a worker, too short for a busy authorization server. A read path waits
+    #: at most ``timeout_seconds * (retries + 1)`` plus the pauses.
+    timeout_seconds: float = 8.0
+    #: Retries of a call that failed transiently (a timeout, a refused or reset connection, a
+    #: 5xx); a decision the server made is never retried.
+    retries: int = 2
+    #: Pause before a retry, doubled each time.
+    retry_pause_seconds: float = 0.1
 
 
 AUTHORIZATION = AuthorizationTuning()
@@ -348,6 +330,39 @@ class LLMTransport:
 
 
 LLM_TRANSPORT = LLMTransport()
+
+
+@dataclass(frozen=True)
+class LLMTuning:
+    """How the service calls the model. A tenant's policy may name the model for a use
+    (``PUT /v1/model-key/policy``); ``auto`` discovers a recognised text model through the
+    gateway's authenticated ``/models``."""
+
+    model: str = "auto"
+    #: the cheap model, for the classification-sized uses below
+    fast_model: str = "auto"
+    fast_uses: tuple[str, ...] = ("contextual_extraction", "query_expansion", "chunk_context")
+    #: A reasoning model spends its output budget thinking before it emits anything, so too
+    #: small a ceiling returns 200 OK with an empty string.
+    max_tokens: int = 1024
+    timeout_seconds: float = 30.0
+    #: retries on 429/5xx/timeouts; the sleeps sit outside the request timeout
+    max_retries: int = 2
+
+
+LLM = LLMTuning()
+
+
+@dataclass(frozen=True)
+class HindsightTuning:
+    """The Hindsight extraction preview (``[hindsight]`` extra, ``MEMORY__HINDSIGHT__*``)."""
+
+    bank_id: str = "extraction-preview"
+    timeout_seconds: float = 30.0
+    max_concurrency: int = 1
+
+
+HINDSIGHT = HindsightTuning()
 
 # ---------------------------------------------------------------------------
 # Stages

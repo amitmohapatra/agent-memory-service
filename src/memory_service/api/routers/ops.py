@@ -147,7 +147,7 @@ async def version(request: Request) -> VersionResponse:
             # the single-encoder arm, so a benchmark artifact stamped from this endpoint
             # can say which one it measured.
             "dense_spaces": _spaces(c.dense_spaces),
-            "llm": "bifrost" if s.models.llm.enabled else "disabled",
+            "llm": "bifrost" if s.llm.enabled else "disabled",
             "memory_intelligence": "native",
             "graph_enrichment": _active(c.graph_enrichment, "native"),
             # what is *running*, not what was asked for: the parser is "docling" even in an

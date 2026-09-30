@@ -30,7 +30,7 @@ def app(make_settings):
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings = make_settings(
-        authentication={"mode": "api_key", "bootstrap_admin_key": BOOTSTRAP},
+        authentication={"bootstrap_admin_key": BOOTSTRAP},
     )
     return create_app(settings, overrides=_test_overrides(tasks="inline"))
 
@@ -42,6 +42,8 @@ def running(app) -> Iterator[TestClient]:
 
         async def _truncate() -> None:
             async with container.database.engine.begin() as conn:
+                # a reset, not a hot path: on a loaded host it may outlast the statement timeout
+                await conn.execute(text("SET LOCAL statement_timeout = 0"))
                 await conn.execute(
                     text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE")
                 )

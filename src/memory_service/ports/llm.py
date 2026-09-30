@@ -1,26 +1,24 @@
-"""Per-tenant generative-model policy and usage (ADR 0023).
+"""Per-tenant generative-model policy and usage.
 
-A policy row narrows what the model may be used for at one level of the key hierarchy -
-the principal, its workspace, its tenant - and is resolved the way keys are: the most
-specific row that exists wins. Usage is one row per tenant, use and day, incremented by
-every successful gateway call.
+A tenant's policy says what the model may be used for, whether reads are assisted and which
+model each use calls. Usage is one row per tenant, use and day, incremented by every
+successful gateway call.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Protocol
 
-from memory_service.ports.credentials import ModelIdentity
-
 
 @dataclass(frozen=True)
 class StoredPolicy:
-    identity: ModelIdentity
+    tenant_id: str
     uses: frozenset[str]
     read_assist: bool
+    models: Mapping[str, str]
     revision: int
     updated_at: datetime
 
@@ -34,12 +32,15 @@ class UsageDay:
 
 
 class LLMPolicyRepository(Protocol):
-    async def first(self, levels: Sequence[ModelIdentity]) -> StoredPolicy | None:
-        """The row of the first level (most specific first) that has one: one indexed read."""
-        ...
+    async def get(self, tenant_id: str) -> StoredPolicy | None: ...
 
     async def put(
-        self, identity: ModelIdentity, *, uses: Sequence[str], read_assist: bool
+        self,
+        tenant_id: str,
+        *,
+        uses: Sequence[str],
+        read_assist: bool,
+        models: Mapping[str, str],
     ) -> StoredPolicy: ...
 
 

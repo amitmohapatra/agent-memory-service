@@ -1,11 +1,12 @@
-"""Model-use policies at agent, workspace and tenant level, resolved like keys (ADR 0023).
+"""The tenant's model policy, and the usage ledger.
 
 ``access`` answers the one question a request or job asks before any model call: which uses
-may run under this identity, whether reads are assisted by default, and whether a registered
-key can pay. One unit of work, two indexed reads (the key and the policy hierarchies).
+may run under this identity, whether reads are assisted, which model each use calls, and
+whether a registered key (the agent's or the tenant's) can pay. One unit of work, two indexed
+reads.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 
 from memory_service.domain.revisions import RevisionKind
@@ -20,30 +21,36 @@ class ModelPolicies:
         self.uow_factory = uow_factory
 
     async def access(self, identity: ModelIdentity) -> ModelAccess:
-        levels = identity.levels()
         async with self.uow_factory() as uow:
-            key = await uow.credentials.first(levels)
-            policy = await uow.llm_policies.first(levels)
+            key = await uow.credentials.first(identity.levels())
+            policy = await uow.llm_policies.get(identity.tenant_id)
         has_key = key is not None and key.ciphertext is not None
         if policy is None:
             return ModelAccess(DEFAULT_ACCESS.uses, DEFAULT_ACCESS.read_assist, has_key)
-        return ModelAccess(policy.uses, policy.read_assist, has_key)
+        return ModelAccess(policy.uses, policy.read_assist, has_key, policy.models)
 
     async def tenants_with_keys(self) -> list[str]:
         async with self.uow_factory() as uow:
             return await uow.credentials.tenants_with_keys()
 
-    async def get(self, level: ModelIdentity) -> StoredPolicy | None:
-        """The level's own row (never a fallback's)."""
+    async def get(self, tenant_id: str) -> StoredPolicy | None:
         async with self.uow_factory() as uow:
-            return await uow.llm_policies.first([level])
+            return await uow.llm_policies.get(tenant_id)
 
     async def set(
-        self, uow: UnitOfWork, level: ModelIdentity, *, uses: Sequence[str], read_assist: bool
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        *,
+        uses: Sequence[str],
+        read_assist: bool,
+        models: Mapping[str, str],
     ) -> StoredPolicy:
-        stored = await uow.llm_policies.put(level, uses=uses, read_assist=read_assist)
+        stored = await uow.llm_policies.put(
+            tenant_id, uses=uses, read_assist=read_assist, models=models
+        )
         # Cached bundles carry model-assisted output; a policy change must invalidate them.
-        await uow.revisions.bump(level.tenant_id, RevisionKind.TENANT, "")
+        await uow.revisions.bump(tenant_id, RevisionKind.TENANT, "")
         return stored
 
 

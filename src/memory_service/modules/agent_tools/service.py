@@ -8,7 +8,6 @@ learns from those which items to pre-include in the pushed context for similar r
 
 from __future__ import annotations
 
-import re
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,19 +28,21 @@ from memory_service.domain.pulls import (
     PULL_SETTLE,
     AgentPull,
 )
+from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
 from memory_service.modules.tools.patterns import task_pattern
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-#: Items a search tool returns by default, and at most.
+#: Candidates ``tool_search`` weighs before it names the next tool.
+TOOL_SEARCH_K: Final = 8
+#: Items a search returns by default, and at most.
 DEFAULT_K: Final = 8
 MAX_K: Final = 20
-#: Messages of the thread one history search looks through, newest first.
-HISTORY_SCAN: Final = 200
 #: Characters of one returned text.
 TEXT_CHARS: Final = 1000
-_WORD: Final = re.compile(r"\w+")
+#: The tool the caller answers with its own toolbox (``toolbox`` on the call).
+TOOL_SEARCH: Final = "tool_search"
 
 #: The kinds of memory an agent states.
 MemoryKind = Literal[
@@ -57,6 +58,7 @@ _VISIBILITY: Final = {
     "group": Visibility.AGENT_GROUP,
     "workspace": Visibility.WORKSPACE,
 }
+_ID: Final = "a memory id, or its handle in the context ([m3] -> m3)"
 
 
 class _Args(BaseModel):
@@ -65,76 +67,47 @@ class _Args(BaseModel):
 
 class MemorySearchArgs(_Args):
     query: str = Field(..., min_length=1, max_length=2000, description="what to look for")
-    kinds: list[Literal["memory", "chunk", "summary"]] | None = Field(
+    kinds: list[SearchKind] | None = Field(
         default=None,
-        description="memory (what was learned or stated), chunk (document passages), summary "
-        "(document summaries); omitted: memories and document passages",
+        description="memory, chunk (document passages), summary, message (this conversation); "
+        "default memory and chunk",
     )
-    time_from: datetime | None = Field(default=None, description="only what was observed since")
-    time_to: datetime | None = Field(default=None, description="only what was observed until")
-    k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K, description="how many results")
+    time_from: datetime | None = Field(default=None, description="observed since")
+    time_to: datetime | None = Field(default=None, description="observed until")
+    k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)
 
 
 class MemoryRememberArgs(_Args):
-    content: str = Field(..., min_length=1, max_length=4000, description="the statement, verbatim")
-    kind: MemoryKind = Field(
-        default="SEMANTIC",
-        description="SEMANTIC (a fact), PREFERENCE, EPISODIC (something that happened), "
-        "PROCEDURAL (how to do something), TASK, USER (about the user), TOOL, OUTCOME",
-    )
+    content: str = Field(..., min_length=1, max_length=4000, description="the statement")
+    kind: MemoryKind = Field(default="SEMANTIC")
     scope: MemoryScope = Field(
         default="user",
-        description="who may read it: user (the user and their agents), agent (this agent, for "
-        "this user), run (this run and the run that started it), thread, group (the agent "
-        "group), workspace",
+        description="who may read it: user, agent (this agent for this user), run, thread, "
+        "group (the agent group), workspace",
     )
 
 
 class MemoryUpdateArgs(_Args):
-    id: str = Field(..., min_length=1, max_length=200, description="the memory to change")
-    content: str | None = Field(
-        default=None, max_length=4000, description="the new statement, replacing the old one"
-    )
-    invalidate: bool = Field(
-        default=False, description="true: the memory is no longer true and has no replacement"
-    )
-    reason: str = Field(..., min_length=1, max_length=500, description="why it changed")
+    id: str = Field(..., min_length=1, max_length=200, description=_ID)
+    content: str = Field(..., min_length=1, max_length=4000, description="the new statement")
 
 
 class MemoryForgetArgs(_Args):
-    id: str = Field(..., min_length=1, max_length=200, description="the memory to forget")
-    reason: str = Field(..., min_length=1, max_length=500, description="why")
-
-
-class HistorySearchArgs(_Args):
-    query: str | None = Field(
-        default=None, max_length=2000, description="words the message contains; omitted: any"
-    )
-    time_from: datetime | None = None
-    time_to: datetime | None = None
-    k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)
+    id: str = Field(..., min_length=1, max_length=200, description=_ID)
 
 
 class ProfileEditArgs(_Args):
     block: str = Field(
-        ...,
-        max_length=60,
-        description="user, agent or workspace, optionally .<name> (user.preferences)",
+        ..., max_length=60, description="user, agent or workspace, optionally .<name>"
     )
     old: str = Field(
-        ..., max_length=4000, description="the exact text to replace; empty replaces the block"
+        default="", max_length=4000, description="the exact text to replace; empty: all of it"
     )
-    new: str = Field(..., max_length=4000, description="the text to put in its place")
+    new: str = Field(..., max_length=4000)
 
 
-class TaskArgs(_Args):
+class ToolSearchArgs(_Args):
     task: str = Field(..., min_length=1, max_length=2000, description="the task, in words")
-    k: int = Field(default=3, ge=1, le=MAX_K)
-
-
-class RecordOutcomeArgs(_Args):
-    success: bool = Field(..., description="whether this run achieved its task")
-    note: str | None = Field(default=None, max_length=1000)
 
 
 Handler = Callable[[MemoryExecutionContext, Any], Awaitable[Any]]
@@ -155,71 +128,35 @@ class AgentTool:
 TOOLS: Final = (
     AgentTool(
         "memory_search",
-        "Search what is remembered for this user, agent and thread, and the documents "
-        "they may read. Returns ranked items with ids, kinds, text and when they were observed.",
+        "Search what is remembered for this user, agent and conversation, and the documents "
+        "they may read. Returns items with id, kind, text, observed_on and citation.",
         MemorySearchArgs,
     ),
     AgentTool(
         "memory_remember",
-        "Remember a statement verbatim, now. Use for facts, preferences and decisions worth "
-        "keeping beyond this conversation.",
+        "Remember a statement verbatim: facts, preferences and decisions worth keeping.",
         MemoryRememberArgs,
     ),
     AgentTool(
         "memory_update",
-        "Replace a memory with a new statement, or mark it no longer true. The old version "
-        "stays in the history.",
+        "Replace a memory with a new statement; the old one stays in its history.",
         MemoryUpdateArgs,
     ),
     AgentTool("memory_forget", "Forget a memory: it is no longer retrieved.", MemoryForgetArgs),
     AgentTool(
-        "history_search",
-        "Search the messages of this conversation, newest first, by words and time.",
-        HistorySearchArgs,
-    ),
-    AgentTool(
         "profile_edit",
-        "Edit a pinned profile block in place: replace the exact old text with the new text "
-        "(empty old replaces the whole block). Pinned blocks are part of every context.",
+        "Edit a pinned profile block: replace the exact old text with the new text (empty old "
+        "replaces the whole block). Profile blocks are part of every context.",
         ProfileEditArgs,
     ),
     AgentTool(
-        "procedures_search",
-        "Find procedures learned from earlier successful runs of similar tasks: the steps, "
-        "where their arguments come from, and how often they worked.",
-        TaskArgs,
-    ),
-    AgentTool(
-        "tool_search",
-        "Find which tools fit a task, the learned plan, the next step and argument values "
-        "found in memory.",
-        TaskArgs,
-    ),
-    AgentTool(
-        "record_outcome",
-        "Record whether this run achieved its task: successful runs teach procedures.",
-        RecordOutcomeArgs,
+        TOOL_SEARCH,
+        "Which of your tools fits a task: the next tool to call, the learned plan, argument "
+        "values already known and the ones still missing.",
+        ToolSearchArgs,
     ),
 )
 BY_NAME: Final = {tool.name: tool for tool in TOOLS}
-
-
-def _text(value: str) -> str:
-    return value if len(value) <= TEXT_CHARS else value[:TEXT_CHARS] + "…"
-
-
-def _within(observed: str | None, time_from: datetime | None, time_to: datetime | None) -> bool:
-    if time_from is None and time_to is None:
-        return True
-    if not observed:
-        return False
-    when = datetime.fromisoformat(observed)
-    return (time_from is None or when >= time_from) and (time_to is None or when <= time_to)
-
-
-def _words(text: str) -> set[str]:
-    """Word tokens in any script (``\\w`` is Unicode-aware), casefolded."""
-    return {w for w in _WORD.findall(text.casefold()) if len(w) > 1}
 
 
 def result_ids(result: Any) -> list[str]:
@@ -237,7 +174,16 @@ class AgentTools:
     def specs() -> list[dict[str, Any]]:
         return [tool.spec() for tool in TOOLS]
 
-    async def call(self, ctx: MemoryExecutionContext, name: str, raw: dict[str, Any]) -> Any:
+    async def call(
+        self,
+        ctx: MemoryExecutionContext,
+        name: str,
+        raw: dict[str, Any],
+        *,
+        toolbox: Sequence[str] | None = None,
+    ) -> Any:
+        """Run one tool. ``toolbox`` is the caller's own tools, which ``tool_search`` chooses
+        among (every catalog tool without it)."""
         tool = BY_NAME.get(name)
         if tool is None:
             raise NotFound(f"no agent tool {name!r}")
@@ -250,8 +196,11 @@ class AgentTools:
                     "errors": [{"loc": ["args", *e["loc"]], "msg": e["msg"]} for e in exc.errors()]
                 },
             ) from exc
-        handler: Handler = getattr(self, f"_{name}")
-        result = await handler(ctx, args)
+        if name == TOOL_SEARCH:
+            result = await self._tool_search(ctx, ToolSearchArgs.model_validate(args), toolbox)
+        else:
+            handler: Handler = getattr(self, f"_{name}")
+            result = await handler(ctx, args)
         await self._pull(ctx, name, args, result)
         return result
 
@@ -306,25 +255,16 @@ class AgentTools:
 
     # ------------------------------------------------------------------ memory
     async def _memory_search(self, ctx: MemoryExecutionContext, args: MemorySearchArgs) -> Any:
-        kinds = tuple(args.kinds or ("memory", "chunk"))
-        # summaries are indexed beside the chunks and come back with them
-        searched = tuple(dict.fromkeys("chunk" if k == "summary" else k for k in kinds))
-        async with self.services["llm_assist"].reading(ctx, use_llm=None):
-            found = await self.services["retrieval"].retrieve(
-                ctx, args.query, limit=MAX_K * 2, kinds=searched
-            )
-        items = [
-            {
-                "id": c.record_id,
-                "kind": c.kind,
-                "text": _text(c.text),
-                "observed_at": c.payload.get("observed_at"),
-            }
-            for c in found.candidates
-            if c.kind in kinds
-            and _within(c.payload.get("observed_at"), args.time_from, args.time_to)
-        ]
-        return items[: args.k]
+        observed = (args.time_from, args.time_to) if args.time_from or args.time_to else None
+        found = await self.services["search"].search(
+            ctx,
+            args.query,
+            kinds=args.kinds or DEFAULT_KINDS,
+            limit=args.k,
+            observed=observed,
+            text_chars=TEXT_CHARS,
+        )
+        return [item.model_dump(mode="json", exclude_none=True) for item in found.items]
 
     async def _memory_remember(self, ctx: MemoryExecutionContext, args: MemoryRememberArgs) -> Any:
         async with self.uow_factory() as uow:
@@ -340,95 +280,52 @@ class AgentTools:
         return {"id": ack.memory_id, "deduplicated": ack.deduplicated}
 
     async def _memory_update(self, ctx: MemoryExecutionContext, args: MemoryUpdateArgs) -> Any:
-        if (args.content is None) == (not args.invalidate):
-            raise ValidationFailed("memory_update needs either content or invalidate=true")
-        memory = self.services["memory"]
+        memory_id = await self.services["bundle_records"].resolve(ctx, args.id)
         async with self.uow_factory() as uow:
-            if args.invalidate:
-                await memory.retract(uow, ctx, args.id, reason=args.reason)
-                result = {"id": args.id, "invalidated": True}
-            else:
-                new = await memory.supersede(
-                    uow, ctx, args.id, content=str(args.content), reason=args.reason
-                )
-                result = {"id": new.memory_id, "supersedes": args.id}
+            new = await self.services["memory"].supersede(
+                uow, ctx, memory_id, content=args.content, reason="updated by the agent"
+            )
             await uow.commit()
-        await self.used(ctx, [args.id])
-        return result
+        await self.used(ctx, [memory_id])
+        return {"id": new.memory_id, "supersedes": memory_id}
 
     async def _memory_forget(self, ctx: MemoryExecutionContext, args: MemoryForgetArgs) -> Any:
+        memory_id = await self.services["bundle_records"].resolve(ctx, args.id)
         async with self.uow_factory() as uow:
-            forgotten = await self.services["memory"].forget(uow, ctx, args.id)
+            forgotten = await self.services["memory"].forget(uow, ctx, memory_id)
             await uow.commit()
-        await self.used(ctx, [args.id])
-        log.info("agent_tools.forget", memory_id=args.id, reason=args.reason, **ctx.log_fields())
-        return {"id": args.id, "forgotten": forgotten is not None}
-
-    # ------------------------------------------------------------------ conversation
-    async def _history_search(self, ctx: MemoryExecutionContext, args: HistorySearchArgs) -> Any:
-        if not ctx.thread_id:
-            raise ValidationFailed("history_search needs a thread in the scope")
-        async with self.uow_factory() as uow:
-            messages = await self.services["conversation"].list_messages(
-                uow, ctx, ctx.thread_id, limit=HISTORY_SCAN
-            )
-        wanted = _words(args.query or "")
-        hits = [
-            {
-                "id": m.message_id,
-                "role": m.role.value,
-                "text": _text(m.content),
-                "sequence": m.sequence,
-                "observed_at": m.occurred_at.isoformat(),
-            }
-            for m in reversed(messages)
-            if (not wanted or wanted & _words(m.content))
-            and _within(m.occurred_at.isoformat(), args.time_from, args.time_to)
-        ]
-        return hits[: args.k]
+        await self.used(ctx, [memory_id])
+        return {"id": memory_id, "forgotten": forgotten is not None}
 
     async def _profile_edit(self, ctx: MemoryExecutionContext, args: ProfileEditArgs) -> Any:
-        profile = self.services["profile"]
         async with self.uow_factory() as uow:
-            if args.old:
-                block = await profile.edit(uow, ctx, args.block, args.old, args.new)
-            else:
-                block = await profile.put(uow, ctx, args.block, args.new)
+            block = await self.services["profile"].edit(uow, ctx, args.block, args.old, args.new)
             await uow.commit()
         return {"block": block.block, "text": block.text, "version": block.version}
 
     # ------------------------------------------------------------------ tools
-    async def _scope_keys(self, ctx: MemoryExecutionContext) -> list[str]:
-        return list((await self.services["authz"].visibility(ctx)).keys)
-
-    async def _procedures_search(self, ctx: MemoryExecutionContext, args: TaskArgs) -> Any:
-        found = await self.services["tool_hints"].procedures(
-            ctx, args.task, await self._scope_keys(ctx), k=args.k
-        )
-        return [
-            {
-                "id": p.procedure_id,
-                "title": p.title,
-                "strategy": p.strategy,
-                "steps": p.tools,
-                "success_rate": p.success_rate,
-                "support": p.support,
-            }
-            for p in found
-        ]
-
-    async def _tool_search(self, ctx: MemoryExecutionContext, args: TaskArgs) -> Any:
-        hints = await self.services["tool_hints"].hints(
-            ctx, args.task, available=None, k=args.k, scope_keys=await self._scope_keys(ctx)
-        )
-        return hints.model_dump(mode="json")
-
-    async def _record_outcome(self, ctx: MemoryExecutionContext, args: RecordOutcomeArgs) -> Any:
-        if not ctx.agent_run_id:
-            raise ValidationFailed("record_outcome needs an agent run in the scope")
+    async def _tool_search(
+        self, ctx: MemoryExecutionContext, args: ToolSearchArgs, toolbox: Sequence[str] | None
+    ) -> Any:
+        visibility = await self.services["authz"].visibility(ctx)
         async with self.uow_factory() as uow:
-            outcome = await self.services["tool_memory"].set_outcome(
-                uow, ctx, run_id=ctx.agent_run_id, success=args.success, note=args.note
-            )
-            await uow.commit()
-        return {"run_id": outcome.run_id, "success": outcome.success}
+            profile = await self.services["profile"].blocks(uow, ctx)
+        hints = await self.services["tool_hints"].hints(
+            ctx,
+            args.task,
+            available=toolbox,
+            k=TOOL_SEARCH_K,
+            scope_keys=list(visibility.keys),
+            profile=profile,
+        )
+        plan = hints.plan
+        return {
+            "next": hints.next,
+            "plan": {"title": plan.title, "steps": [str(s.get("tool")) for s in plan.steps]}
+            if plan is not None
+            else None,
+            "prefill": {key: p.value for key, p in hints.prefill.items()},
+            "missing": [
+                {"arg": f"{m.tool}.{m.arg}", "question": m.question} for m in hints.missing
+            ],
+        }

@@ -8,6 +8,7 @@ from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.headers import require_one_value
+from memory_service.api.schemas.tenancy import KeySelfResponse
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.config.constants import HEADERS
@@ -18,7 +19,12 @@ from memory_service.domain.errors import (
     ScopeDenied,
     ValidationFailed,
 )
-from memory_service.domain.tenancy import PLATFORM_SCOPE, KeyRole, is_valid_tenant_id
+from memory_service.domain.tenancy import (
+    ANY_PRINCIPAL,
+    PLATFORM_SCOPE,
+    KeyRole,
+    is_valid_tenant_id,
+)
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
 from memory_service.observability.logging import bind_log_context
 from memory_service.observability.metrics import stage_seconds
@@ -172,6 +178,16 @@ def _require_tenant_active(container: Container, tenant_id: str) -> None:
         raise AuthorizationFailed("tenant is suspended", details={"tenant_id": tenant_id})
 
 
+def _require_may_act_as(request: Request, user_id: str | None) -> None:
+    """A key restricted to some principals (``may_act_as``) acts for no other user."""
+    claims = credential_claims(request) if credential_mode(request) == "api_key" else {}
+    allowed = claims.get("may_act_as")
+    if user_id is None or allowed is None or ANY_PRINCIPAL in allowed:
+        return
+    if f"user:{user_id}" not in allowed:
+        raise ScopeDenied("this key may not act for that user", details={"field": HEADERS.user})
+
+
 def request_context(request: Request, tenant_id: str) -> MemoryExecutionContext:
     """A bare execution context for administrative writes: the tenant acted on and the
     request's correlation ids, nothing about users or threads."""
@@ -198,11 +214,13 @@ def build_context(
             )
     tenant_id, workspace_id = _credential_scope(request, container, headers, body)
     _require_tenant_active(container, tenant_id)
+    user_id = headers["user_id"] or body.user_id
+    _require_may_act_as(request, user_id)
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
             workspace_id=workspace_id,
-            user_id=headers["user_id"] or body.user_id,
+            user_id=user_id,
             thread_id=body.thread_id,
             session_id=body.session_id,
             turn_id=body.turn_id,
@@ -263,6 +281,35 @@ async def get_header_context(
 
 
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
+
+
+def key_self_of(principal: ServicePrincipal) -> KeySelfResponse:
+    """What ``GET /v1/keys/self`` says about the authenticated caller."""
+    claims = principal.claims
+    if principal.mode == "api_key" and is_platform(principal):
+        return KeySelfResponse(
+            key_id=PLATFORM_SCOPE,
+            tenant_id=None,
+            principal=PLATFORM_SCOPE,
+            role=KeyRole.PLATFORM.value,
+            may_act_as=[ANY_PRINCIPAL],
+        )
+    if principal.mode == "api_key":
+        return KeySelfResponse(
+            key_id=str(claims["key_id"]),
+            tenant_id=str(claims["tenant"]),
+            principal=principal.service_id,
+            role=str(claims["role"]),
+            may_act_as=list(claims.get("may_act_as") or []),
+        )
+    # a development key or an issuer's token names its tenant per request
+    return KeySelfResponse(
+        key_id=principal.service_id,
+        tenant_id=None,
+        principal=principal.service_id,
+        role=principal.mode,
+        may_act_as=[ANY_PRINCIPAL],
+    )
 
 
 def is_platform(principal: ServicePrincipal) -> bool:

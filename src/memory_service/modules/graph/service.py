@@ -88,6 +88,8 @@ class EntityProfile:
     relations: list[Relation]
     history: list[Relation]
     names: dict[str, str]
+    #: the traversal from the entity, when a depth was asked for
+    neighborhood: GraphNeighborhood | None = None
 
 
 def query_terms(query: str, *, max_terms: int = 12) -> list[str]:
@@ -153,7 +155,7 @@ class GraphService:
         n = 0
         removed = 0
         #: entities to re-summarise, per owner whose model identity may pay for it
-        touched: dict[tuple[str, str | None], list[str]] = {}
+        touched: dict[str, list[str]] = {}
         with (
             span("graph.enrich_memories", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
@@ -168,8 +170,8 @@ class GraphService:
                     removed += await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
                     continue
                 n += await self._enrich_memory(m, touched)
-            for (principal, workspace_id), entity_ids in touched.items():
-                async with self.assist.bound(ModelIdentity(tenant_id, principal, workspace_id)):
+            for principal, entity_ids in touched.items():
+                async with self.assist.bound(ModelIdentity(tenant_id, principal)):
                     await self.summaries.refresh(tenant_id, entity_ids)
         if n or removed:
             async with self.uow_factory() as uow:
@@ -177,19 +179,16 @@ class GraphService:
                 await uow.commit()
         return n
 
-    async def _enrich_memory(
-        self, m: CanonicalMemory, touched: dict[tuple[str, str | None], list[str]]
-    ) -> int:
+    async def _enrich_memory(self, m: CanonicalMemory, touched: dict[str, list[str]]) -> int:
         """One memory's entities and relations; records the entities it touched per owner."""
         ctx = MemoryExecutionContext(tenant_id=m.tenant_id, user_id=m.scope.user_id)
-        owner = ModelIdentity(m.tenant_id, m.owner_principal, m.scope.workspace_id)
+        owner = ModelIdentity(m.tenant_id, m.owner_principal)
         async with self.assist.bound(owner):
             entities, relations = await self.provider.enrich_memory(m, ctx)
         await self.store.upsert_entities(entities)
         await self.store.upsert_relations(relations)
         if relations:
-            owner = (m.owner_principal, m.scope.workspace_id)
-            touched.setdefault(owner, []).extend(e.entity_id for e in entities)
+            touched.setdefault(m.owner_principal, []).extend(e.entity_id for e in entities)
         return len(relations)
 
     async def enrich_document(self, tenant_id: str, document_id: str) -> int:
@@ -367,18 +366,41 @@ class GraphService:
         entity_type: str | None = None,
         limit: int | None = None,
     ) -> list[Entity]:
-        """Visible entities whose canonical name starts with ``query``, most mentioned first."""
+        """Visible entities for ``query``: the ones it names (resolved from the free text, by
+        the model when the read policy allows) first, then those whose name starts with it,
+        most mentioned first; of ``entity_type`` when given."""
         visibility = await self._visibility(ctx)
-        return await self.store.search_entities(
+        bound = min(limit or self.cfg.entity_search_max, self.cfg.entity_search_max)
+        text = query.strip() if query else ""
+        named = await self.resolve(ctx, [*query_terms(text), text], visibility) if text else []
+        prefixed = await self.store.search_entities(
             ctx.tenant_id,
             scope_keys=sorted(visibility.keys),
-            prefix=canonical_entity(query) if query and query.strip() else None,
+            prefix=canonical_entity(text) if text else None,
             entity_type=entity_type,
-            limit=min(limit or self.cfg.entity_search_max, self.cfg.entity_search_max),
+            limit=bound,
         )
+        wanted = entity_type.casefold() if entity_type else None
+        found = {
+            e.entity_id: e
+            for e in [*named, *prefixed]
+            if wanted is None or e.entity_type.casefold() == wanted
+        }
+        return list(found.values())[:bound]
 
-    async def profile(self, ctx: MemoryExecutionContext, entity_id: str) -> EntityProfile:
-        """The entity's profile, bounded; ``NotFound`` when it is absent or not visible."""
+    async def profile(
+        self,
+        ctx: MemoryExecutionContext,
+        entity_id: str,
+        *,
+        depth: int = 0,
+        as_of: datetime | None = None,
+        valid_at: datetime | None = None,
+        layers: Sequence[GraphLayer] | None = None,
+    ) -> EntityProfile:
+        """The entity's profile, bounded, and with ``depth`` the traversal from it (``as_of``:
+        facts true then; ``valid_at``: facts asserted by then). ``NotFound`` when it is absent
+        or not visible."""
         visibility = await self._visibility(ctx)
         scope_keys = sorted(visibility.keys)
         found = await self.store.get_entities(ctx.tenant_id, [entity_id], scope_keys=scope_keys)
@@ -409,12 +431,27 @@ class GraphService:
         visible = await self.store.get_entities(
             ctx.tenant_id, sorted(others), scope_keys=scope_keys
         )
+        neighborhood = (
+            await self.store.neighborhood(
+                ctx.tenant_id,
+                [entity_id],
+                scope_keys=scope_keys,
+                hops=depth,
+                max_visited=self.cfg.max_visited,
+                as_of=as_of,
+                valid_at=valid_at,
+                layers=layers,
+            )
+            if depth
+            else None
+        )
         return EntityProfile(
             entity=found[0],
             current=[current[p] for p in sorted(current)],
             relations=relations,
             history=history,
             names={e.entity_id: e.name for e in visible},
+            neighborhood=neighborhood,
         )
 
     async def _visibility(self, ctx: MemoryExecutionContext) -> VisibilitySpecification:

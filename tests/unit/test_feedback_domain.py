@@ -63,24 +63,17 @@ def test_scores_are_numbers_in_the_unit_interval() -> None:
             _feedback(score=score)
 
 
-def test_the_vocabularies_are_the_contracts_vocabularies() -> None:
-    """trellis-contracts 0.3.0 spells these; a member added on one side must be added here."""
-    assert {k.value for k in FeedbackTargetKind} == {
-        "run",
-        "answer",
-        "memory",
-        "tool_call",
-        "brief",
-        "procedure",
-    }
+def test_the_vocabularies_are_the_final_surface() -> None:
+    """An answer is judged as its run; briefs are gone; ``system`` is the run's own final
+    status (the harness), the lowest-ranked source of a run's outcome."""
+    assert {k.value for k in FeedbackTargetKind} == {"run", "memory", "tool_call", "procedure"}
     assert {v.value for v in FeedbackVerdict} == {"confirm", "reject", "correct", "approve", "edit"}
-    assert {s.value for s in FeedbackSource} == {"human", "judge", "interrupt"}
+    assert {s.value for s in FeedbackSource} == {"human", "interrupt", "judge", "system"}
     assert {a.value for a in ProjectionAction} == {
         "none",
         "memory_reinforced",
         "memory_retracted",
         "memory_superseded",
-        "memories_adjusted",
         "run_labelled",
         "tool_call_counted",
         "procedure_rejected",
@@ -143,8 +136,8 @@ def test_the_contracts_record_is_accepted_as_is() -> None:
         "agent_id": "refund-agent",
         "agent_run_id": "run_1",
         "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-        "target_kind": "answer",
-        "target_id": "art_9",
+        "target_kind": "run",
+        "target_id": "run_1",
         "verdict": "reject",
         "correction": None,
         "score": 0.2,

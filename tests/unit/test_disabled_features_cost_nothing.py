@@ -25,9 +25,11 @@ def test_a_disabled_component_reports_disabled_rather_than_its_configured_name()
 def test_colbert_left_no_configuration_behind() -> None:
     """ADR 0012 removed late interaction. The env var outlived it in two files, mapping to
     no setting at all — pydantic's extra="ignore" swallowed it silently in both."""
-    models = type(Settings(_env_file=None).models)
-    assert "late_interaction_model_path" not in models.model_fields
-    assert "sparse_model_path" not in models.model_fields, "SPLADE went the same way"
+    from tests.unit.test_settings import _leaves
+
+    leaves = _leaves(Settings)
+    assert not [leaf for leaf in leaves if "late_interaction" in leaf]
+    assert not [leaf for leaf in leaves if "sparse_model" in leaf], "SPLADE went the same way"
     for name in ("docker-compose.yml", ".env.example"):
         path = ROOT / name
         if path.exists():

@@ -43,14 +43,9 @@ PREFIXES: Final[dict[str, str]] = {
     "task": "tsk",
     "import": "imp",
     "summary": "sum",
-    "brief": "brf",
     "tenant": "tnt",
     "workspace": "wsp",
-    "group": "grp",
     "feedback": "fb",
-    "webhook": "whk",
-    "delivery": "wdl",
-    "event": "evt",
 }
 
 

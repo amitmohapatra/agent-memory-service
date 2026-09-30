@@ -1,9 +1,10 @@
-"""Per-tenant model use: the allow-list intersected with the bound identity's policy, gated on
-something that can pay; reads defaulting to the policy's read_assist; per-job accounting and
-per-call usage recording."""
+"""Per-tenant model use: the bound tenant's policy, gated on something that can pay; reads
+assisted by the policy's read_assist; the model a use calls named by the policy; per-job
+accounting and per-call usage recording."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -53,35 +54,30 @@ def _assist(access: ModelAccess = DEFAULT_ACCESS, **settings: Any) -> tuple[LLMA
     return LLMAssist(BifrostLLM(cfg, transport=NO_BACKOFF), cfg, policies), policies  # type: ignore[arg-type]
 
 
-async def test_wants_is_the_allow_list_intersected_with_the_bound_policy() -> None:
+async def test_wants_is_the_bound_policy() -> None:
     access = ModelAccess(frozenset({"summaries", "reflection"}), read_assist=True, has_key=True)
-    assist, policies = _assist(
-        access, uses=["summaries", "query_expansion"], enabled="auto", api_key=None
-    )
-    async with assist.bound(ModelIdentity("acme", "user:u1", "ws1")):
-        assert assist.wants("summaries"), "allowed by both"
-        assert not assist.wants("reflection"), "the operator does not allow it"
+    assist, policies = _assist(access, api_key=None)
+    async with assist.bound(ModelIdentity("acme", "user:u1")):
+        assert assist.wants("summaries") and assist.wants("reflection")
         assert not assist.wants("query_expansion"), "the policy does not allow it"
-    assert policies.resolved == [ModelIdentity("acme", "user:u1", "ws1")]
+    assert policies.resolved == [ModelIdentity("acme", "user:u1")]
     assert current_binding() is None, "the binding ends with the block"
 
 
-async def test_automatic_mode_needs_a_key_that_can_pay() -> None:
+async def test_a_call_needs_a_key_that_can_pay() -> None:
     keyless = ModelAccess(DEFAULT_ACCESS.uses, read_assist=True, has_key=False)
-    assist, _ = _assist(keyless, uses=["summaries"], enabled="auto", api_key=None)
+    assist, _ = _assist(keyless, api_key=None)
     assert not assist.wants("summaries"), "unbound and no operator key"
     async with assist.bound(ModelIdentity("acme", "user:u1")):
         assert not assist.wants("summaries"), "no key at any level"
-    keyed, _ = _assist(
-        replace(keyless, has_key=True), uses=["summaries"], enabled="auto", api_key=None
-    )
+    keyed, _ = _assist(replace(keyless, has_key=True), api_key=None)
     async with keyed.bound(ModelIdentity("acme", "user:u1")):
         assert keyed.wants("summaries")
 
 
 async def test_the_operator_key_pays_for_unbound_work() -> None:
-    assist, _ = _assist(uses=["summaries"])  # enabled=True with an operator key
-    assert assist.wants("summaries") and not assist.wants("reflection")
+    assist, _ = _assist()
+    assert assist.wants("summaries") and assist.wants("reflection")
 
 
 async def test_nothing_is_resolved_when_no_model_is_reachable() -> None:
@@ -93,32 +89,46 @@ async def test_nothing_is_resolved_when_no_model_is_reachable() -> None:
     assert await assist.payable_tenants("summaries") == []
 
 
-@pytest.mark.parametrize(
-    ("use_llm", "read_assist", "allowed"),
-    [(None, True, True), (None, False, False), (False, True, False), (True, False, True)],
-)
-async def test_a_read_follows_read_assist_unless_the_request_says(
-    use_llm: bool | None, read_assist: bool, allowed: bool
-) -> None:
+@pytest.mark.parametrize("read_assist", [True, False])
+async def test_a_read_follows_the_policy_read_assist(read_assist: bool) -> None:
     access = ModelAccess(DEFAULT_ACCESS.uses, read_assist=read_assist, has_key=True)
-    assist, policies = _assist(access, uses=["query_expansion"])
-    async with assist.reading(CTX, use_llm=use_llm):
-        assert model_calls_allowed() is allowed
-        assert assist.wants("query_expansion") is allowed
-    assert policies.resolved == [ModelIdentity("acme", CTX.principal_id, "ws1")]
+    assist, policies = _assist(access)
+    async with assist.reading(CTX):
+        assert model_calls_allowed() is read_assist
+        assert assist.wants("query_expansion") is read_assist
+    assert policies.resolved == [ModelIdentity("acme", CTX.principal_id)]
     assert model_calls_allowed(), "the read's decision does not outlive it"
 
 
 async def test_background_work_scans_only_tenants_something_can_pay_for() -> None:
-    cfg = llm_settings(enabled="auto", api_key=None, uses=["reflection"])
+    cfg = llm_settings(api_key=None)
     policies = _Policies(DEFAULT_ACCESS, keyed=["acme", "globex"])
     assist = LLMAssist(BifrostLLM(cfg, transport=NO_BACKOFF), cfg, policies)  # type: ignore[arg-type]
     assert await assist.payable_tenants("reflection") == ["acme", "globex"]
     assert await assist.payable_tenants("reflection", "globex") == ["globex"]
     assert await assist.payable_tenants("reflection", "initech") == []
-    assert await assist.payable_tenants("summaries") == [], "the operator does not allow it"
-    operator, _ = _assist(uses=["reflection"])
+    operator, _ = _assist()
     assert await operator.payable_tenants("reflection") == [None], "the operator pays: all"
+
+
+@respx.mock
+async def test_the_model_a_use_calls_is_the_one_the_policy_names() -> None:
+    respx.get(f"{BASE}/models").mock(
+        return_value=httpx.Response(
+            200, json={"data": [{"id": "gemini/gemini-3.8-pro"}, {"id": "gemini/gemini-3.8-flash"}]}
+        )
+    )
+    route = respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(200, json=chat_response("ok"))
+    )
+    llm = BifrostLLM(llm_settings(), transport=NO_BACKOFF)
+    with bound_to("acme", "user:u1", models={"grounding_judge": "openai/gpt-5-mini"}):
+        await llm.complete([], use="grounding_judge")
+        await llm.complete([], use="summaries")
+        await llm.complete([], use="query_expansion")
+    sent = [json.loads(call.request.content)["model"] for call in route.calls]
+    assert sent == ["openai/gpt-5-mini", "gemini/gemini-3.8-pro", "gemini/gemini-3.8-flash"]
+    await llm.close()
 
 
 async def test_a_job_counts_its_own_tokens_and_leaves_the_request_counter_alone() -> None:
@@ -137,6 +147,9 @@ async def test_a_job_counts_its_own_tokens_and_leaves_the_request_counter_alone(
 
 @respx.mock
 async def test_every_successful_call_is_recorded_against_its_tenant() -> None:
+    respx.get(f"{BASE}/models").mock(
+        return_value=httpx.Response(200, json={"data": [{"id": "gemini/gemini-3.8-pro"}]})
+    )
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=chat_response("ok"))
     )
@@ -158,6 +171,9 @@ async def test_every_successful_call_is_recorded_against_its_tenant() -> None:
 
 @respx.mock
 async def test_a_failing_ledger_never_fails_the_call() -> None:
+    respx.get(f"{BASE}/models").mock(
+        return_value=httpx.Response(200, json={"data": [{"id": "gemini/gemini-3.8-pro"}]})
+    )
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=chat_response("ok"))
     )

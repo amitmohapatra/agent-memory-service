@@ -31,5 +31,4 @@ def test_dsl_to_json_shape() -> None:
     assert thread["metadata"]["relations"]["participant"]["directly_related_user_types"] == [
         {"type": "user"},
         {"type": "agent"},
-        {"type": "group", "relation": "member"},
     ]

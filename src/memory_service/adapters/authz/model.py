@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 class Relation:
     """One relation definition: ``this`` (direct types) OR computed OR tuple-to-userset."""
 
-    direct: tuple[str, ...] = ()  # e.g. ("user", "group#member")
+    direct: tuple[str, ...] = ()  # e.g. ("user")
     computed: tuple[str, ...] = ()  # e.g. ("owner", "participant")
     ttu: tuple[tuple[str, str], ...] = ()  # (tupleset relation, computed relation on target)
 
@@ -33,20 +33,16 @@ MODEL: dict[str, TypeDef] = {
         "tenant",
         {
             "admin": Relation(direct=("user",)),
-            "member": Relation(direct=("user", "group#member"), computed=("admin",)),
+            "member": Relation(direct=("user",), computed=("admin",)),
         },
-    ),
-    "group": TypeDef(
-        "group",
-        {"tenant": Relation(direct=("tenant",)), "member": Relation(direct=("user",))},
     ),
     "workspace": TypeDef(
         "workspace",
         {
             "tenant": Relation(direct=("tenant",)),
             "admin": Relation(direct=("user",), ttu=(("tenant", "admin"),)),
-            "member": Relation(direct=("user", "agent", "group#member"), computed=("admin",)),
-            "viewer": Relation(direct=("user", "agent", "group#member"), computed=("member",)),
+            "member": Relation(direct=("user", "agent"), computed=("admin",)),
+            "viewer": Relation(direct=("user", "agent"), computed=("member",)),
         },
     ),
     "thread": TypeDef(
@@ -55,9 +51,9 @@ MODEL: dict[str, TypeDef] = {
             "tenant": Relation(direct=("tenant",)),
             "workspace": Relation(direct=("workspace",)),
             "owner": Relation(direct=("user",)),
-            "participant": Relation(direct=("user", "agent", "group#member")),
+            "participant": Relation(direct=("user", "agent")),
             "viewer": Relation(
-                direct=("user", "group#member"),
+                direct=("user",),
                 computed=("owner", "participant"),
                 ttu=(("workspace", "admin"),),
             ),
@@ -72,7 +68,7 @@ MODEL: dict[str, TypeDef] = {
             "workspace": Relation(direct=("workspace",)),
             "thread": Relation(direct=("thread",)),
             "owner": Relation(direct=("user",)),
-            "viewer": Relation(direct=("user", "group#member", "agent")),
+            "viewer": Relation(direct=("user", "agent")),
             "can_read": Relation(
                 computed=("owner", "viewer"),
                 ttu=(("thread", "can_read"), ("workspace", "viewer"), ("tenant", "admin")),
@@ -85,7 +81,7 @@ MODEL: dict[str, TypeDef] = {
         {
             "tenant": Relation(direct=("tenant",)),
             "owner": Relation(direct=("user", "agent")),
-            "viewer": Relation(direct=("user", "group#member", "agent")),
+            "viewer": Relation(direct=("user", "agent")),
             "can_read": Relation(computed=("owner", "viewer"), ttu=(("tenant", "admin"),)),
             "can_delete": Relation(computed=("owner",), ttu=(("tenant", "admin"),)),
         },

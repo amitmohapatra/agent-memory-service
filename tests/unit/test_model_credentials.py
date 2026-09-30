@@ -1,4 +1,4 @@
-"""Model keys resolve agent -> workspace -> tenant, and a call fails closed on any change."""
+"""Model keys resolve agent -> tenant, and a call fails closed on any change."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from memory_service.ports.credentials import (
     ResolvedCredential,
     StoredCredential,
     tenant_identity,
-    workspace_identity,
 )
 
 CTX = MemoryExecutionContext(tenant_id="acme", workspace_id="fin", user_id="alice", agent_id="ref")
@@ -89,73 +88,68 @@ async def _set(service: ModelCredentials, identity: ModelIdentity, key: str | No
         return await service.set_for(uow, identity, SecretStr(key) if key else None)
 
 
-def test_the_levels_walk_from_the_principal_to_the_tenant_without_repeats() -> None:
+def test_the_levels_are_the_agent_then_the_tenant() -> None:
     identity = agent_identity(CTX)
-    assert identity == ModelIdentity("acme", "agent:alice/ref", "fin")
-    assert identity.levels() == (
-        ModelIdentity("acme", "agent:alice/ref"),
-        ModelIdentity("acme", "workspace:fin"),
-        ModelIdentity("acme", "tenant"),
-    )
-    assert ModelIdentity("acme", "user:bob").levels() == (
-        ModelIdentity("acme", "user:bob"),
-        ModelIdentity("acme", "tenant"),
-    )
-    assert workspace_identity("acme", "fin").levels() == (
-        ModelIdentity("acme", "workspace:fin"),
-        ModelIdentity("acme", "tenant"),
-    )
-    assert tenant_identity("acme").levels() == (ModelIdentity("acme", "tenant"),)
-    assert identity_of(CTX) == identity
+    assert identity == ModelIdentity("acme", "agent:ref")
+    assert identity.levels() == (ModelIdentity("acme", "agent:ref"), tenant_identity("acme"))
+    # the agent acting for a user resolves through the same agent level
+    assert identity_of(CTX) == ModelIdentity("acme", "agent:alice/ref")
+    assert identity_of(CTX).levels() == identity.levels()
+    assert ModelIdentity("acme", "user:bob").levels() == (tenant_identity("acme"),)
+    assert tenant_identity("acme").levels() == (tenant_identity("acme"),)
     assert current_model_identity() is None, "nothing is bound outside a request or job"
     with pytest.raises(ValidationFailed):
         agent_identity(CTX.model_copy(update={"agent_id": None}))
 
 
+def test_the_agent_key_is_the_same_whichever_user_the_request_names() -> None:
+    """The harness registers the agent's key at startup, with no user; its runs then read
+    and use it with a user in the headers. Keyed by the user-bound principal, the status
+    read with a user header looked at a different row than the PUT wrote."""
+    unattended = CTX.model_copy(update={"user_id": None})
+    assert agent_identity(CTX) == agent_identity(unattended) == ModelIdentity("acme", "agent:ref")
+
+
 async def test_the_most_specific_key_wins_and_a_tombstone_never_borrows_one() -> None:
     service, _ = _service()
-    identity = agent_identity(CTX)
+    identity = identity_of(CTX)
     assert await service.resolve(identity) is None
     await _set(service, tenant_identity("acme"), "vk-tenant")
     tenant = await service.resolve(identity)
     assert tenant is not None and tenant.key.get_secret_value() == "vk-tenant"
     assert tenant.identity == tenant_identity("acme") and tenant.revision == 1
-    await _set(service, workspace_identity("acme", "fin"), "vk-team")
-    team = await service.resolve(identity)
-    assert team is not None and team.key.get_secret_value() == "vk-team"
-    assert team.identity == workspace_identity("acme", "fin")
-    # another workspace's agent still gets the tenant key
-    other = await service.resolve(ModelIdentity("acme", "agent:bob/ref", "ops"))
+    # another agent still gets the tenant key
+    other = await service.resolve(ModelIdentity("acme", "agent:bob/other"))
     assert other is not None and other.identity == tenant_identity("acme")
-    await _set(service, ModelIdentity("acme", "agent:alice/ref"), "vk-own")
+    await _set(service, agent_identity(CTX), "vk-own")
     own = await service.resolve(identity)
     assert own is not None and own.key.get_secret_value() == "vk-own"
-    # revoking the agent's key refuses: it must not fall through to the team's
-    await _set(service, ModelIdentity("acme", "agent:alice/ref"), None)
+    assert own.identity == ModelIdentity("acme", "agent:ref")
+    # the same agent acting for another user resolves the same key
+    carol = await service.resolve(ModelIdentity("acme", "agent:carol/ref"))
+    assert carol is not None and carol.key.get_secret_value() == "vk-own"
+    # revoking the agent's key refuses: it must not fall through to the tenant's
+    await _set(service, agent_identity(CTX), None)
     with pytest.raises(ProviderNotConfigured, match="revoked"):
         await service.resolve(identity)
-    # a revoked workspace key blocks every agent of the workspace the same way
-    await _set(service, workspace_identity("acme", "fin"), None)
-    with pytest.raises(ProviderNotConfigured, match="revoked"):
-        await service.resolve(ModelIdentity("acme", "agent:carol/ref", "fin"))
     # and a foreign tenant sees nothing
-    assert await service.resolve(ModelIdentity("rival", "agent:alice/ref", "fin")) is None
+    assert await service.resolve(ModelIdentity("rival", "agent:alice/ref")) is None
 
 
 async def test_confirm_requires_the_same_row_and_revision_the_call_ran_under() -> None:
     service, _ = _service()
-    identity = agent_identity(CTX)
+    identity = identity_of(CTX)
     await service.confirm(identity, None)  # operator fallback while nothing exists
-    await _set(service, workspace_identity("acme", "fin"), "vk-team")
+    await _set(service, tenant_identity("acme"), "vk-tenant")
     with pytest.raises(ProviderNotConfigured, match="changed"):
         await service.confirm(identity, None)  # a key appeared mid-call
     resolved = await service.resolve(identity)
     await service.confirm(identity, resolved)
-    await _set(service, workspace_identity("acme", "fin"), "vk-rotated")
+    await _set(service, tenant_identity("acme"), "vk-rotated")
     with pytest.raises(ProviderNotConfigured, match="changed"):
         await service.confirm(identity, resolved)  # rotated mid-call
     rotated = await service.resolve(identity)
-    await _set(service, ModelIdentity("acme", "agent:alice/ref"), "vk-own")
+    await _set(service, agent_identity(CTX), "vk-own")
     with pytest.raises(ProviderNotConfigured, match="changed"):
         await service.confirm(identity, rotated)  # a more specific key appeared mid-call
 
@@ -168,13 +162,15 @@ async def test_keys_are_validated_and_metadata_is_per_level() -> None:
         await _set(service, tenant_identity("acme"), "x" * 5000)
     await _set(service, tenant_identity("acme"), "vk-tenant")
     assert await service.metadata_for(tenant_identity("acme")) is not None
-    assert await service.metadata_for(workspace_identity("acme", "fin")) is None
     assert await service.metadata(CTX) is None  # the agent's own row, not the fallback
+    await _set(service, agent_identity(CTX), "vk-own")
+    unattended = CTX.model_copy(update={"user_id": None})
+    assert (await service.metadata(CTX)) == (await service.metadata(unattended))
 
 
 def test_the_discovery_cache_is_keyed_by_row_and_revision_never_by_key_material() -> None:
-    identity = agent_identity(CTX)
+    identity = identity_of(CTX)
     assert _catalog_key(None) is None
     assert _catalog_key((identity, None)) == (identity, None)
-    resolved = ResolvedCredential(SecretStr("vk"), 3, workspace_identity("acme", "fin"))
-    assert _catalog_key((identity, resolved)) == (workspace_identity("acme", "fin"), 3)
+    resolved = ResolvedCredential(SecretStr("vk"), 3, tenant_identity("acme"))
+    assert _catalog_key((identity, resolved)) == (tenant_identity("acme"), 3)

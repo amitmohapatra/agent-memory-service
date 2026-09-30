@@ -42,7 +42,7 @@ import sys
 import time
 
 from benchmark.common import provenance, write_result
-from benchmark.env import bench_overrides
+from benchmark.env import bench_overrides, bench_threads
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
@@ -140,7 +140,7 @@ async def run(workers: list[int], rounds: int) -> dict:
             "torch_num_threads": torch.get_num_threads(),
             "torch_interop_threads": torch.get_num_interop_threads(),
             "default_executor_max_workers": min(32, (os.cpu_count() or 1) + 4),
-            "configured_models_threads": settings.models.embedding.threads,
+            "configured_models_threads": bench_threads(),
             "encoder_threads": encoder_threads,
             "models_serialised": True,
             "configured_worker_concurrency": settings.tasks.worker_concurrency,

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MessageRole, ObservationKind, QueryType, Visibility
@@ -43,9 +44,7 @@ async def _ingest(container, uow_factory, ctx, *, visibility=None, salt=""):
 async def _observe(container, uow_factory, ctx, content, kind=ObservationKind.MESSAGE):
     register_handlers(container)
     async with uow_factory() as uow:
-        ack = await container.services["memory"].submit_observation(
-            uow, ctx, kind=kind, content=content
-        )
+        ack = await submit_observation(uow, ctx, kind=kind, content=content)
         await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()

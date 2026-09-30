@@ -75,12 +75,5 @@ class CorruptSource(MemoryServiceError):
     http_status = 422
 
 
-class InsufficientEvidence(MemoryServiceError):
-    """Retrieval could not assemble the evidence required to answer safely."""
-
-    code = ErrorCode.INSUFFICIENT_EVIDENCE
-    http_status = 200  # returned as a typed result, not an HTTP failure
-
-
 class ProviderNotConfigured(DependencyUnavailable):
     """An optional provider was requested but is not enabled/configured."""

@@ -68,10 +68,6 @@ class TimeoutError(MemoryError):
     pass
 
 
-class InsufficientEvidence(MemoryError):
-    pass
-
-
 _BY_CODE: dict[str, type[MemoryError]] = {
     "AUTHENTICATION": AuthenticationError,
     "AUTHORIZATION": AuthorizationError,
@@ -83,7 +79,6 @@ _BY_CODE: dict[str, type[MemoryError]] = {
     "DEPENDENCY_UNAVAILABLE": DependencyUnavailableError,
     "RETRYABLE_PROCESSING": DependencyUnavailableError,
     "TIMEOUT": TimeoutError,
-    "INSUFFICIENT_EVIDENCE": InsufficientEvidence,
 }
 
 

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -23,18 +21,21 @@ from memory_service.api.idempotent import (
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
 from memory_service.api.schemas.conversation import (
-    CreateMessageRequest,
-    CreateThreadRequest,
+    CreateMessagesRequest,
     JobResponse,
     MessageAckResponse,
     MessageListResponse,
     MessageResponse,
+    MessagesAckResponse,
+    PatchThreadRequest,
     ThreadResponse,
+    ThreadSummaryBody,
 )
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.conversation import Attachment, Message, Thread
 from memory_service.domain.enums import ArchiveStatus, JobStatus
-from memory_service.domain.errors import NotFound
-from memory_service.domain.observation import ProcessingHints
+from memory_service.domain.errors import NotFound, ValidationFailed
+from memory_service.domain.profile import ThreadSummary
 from memory_service.modules.conversation.service import ConversationService
 
 router = APIRouter()
@@ -43,7 +44,7 @@ _WRITE_ERRORS = error_responses(401, 403, 409, 422, 503)
 _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
-def _thread_response(t: Thread) -> dict[str, Any]:
+def _thread_response(t: Thread, summary: ThreadSummary | None = None) -> ThreadResponse:
     return ThreadResponse(
         thread_id=t.thread_id,
         tenant_id=t.tenant_id,
@@ -54,7 +55,8 @@ def _thread_response(t: Thread) -> dict[str, Any]:
         created_at=t.created_at,
         updated_at=t.updated_at,
         custom_metadata=t.custom_metadata,
-    ).model_dump(mode="json")
+        summary=ThreadSummaryBody.model_validate(summary.model_dump()) if summary else None,
+    )
 
 
 def _message_response(m: Message) -> MessageResponse:
@@ -90,40 +92,34 @@ async def _hydrate(archive, message: Message) -> Message:  # type: ignore[no-unt
 # --------------------------------------------------------------------------- threads
 
 
-@router.post(
-    "/threads",
+@router.patch(
+    "/threads/{thread_id}",
     response_model=ThreadResponse,
-    status_code=201,
     tags=["threads"],
-    summary="Create (or idempotently fetch) a thread",
-    responses={
-        **_WRITE_ERRORS,
-        200: {"model": ThreadResponse, "description": "Replayed (Idempotency-Key seen before)"},
-    },
+    summary="Set a thread's title and metadata (the thread is created when it does not exist)",
+    responses=_WRITE_ERRORS,
 )
-async def create_thread(
-    request: Request, body: CreateThreadRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
-    ctx = build_context(request, container, body.scope)
-    thread_id = body.thread_id or ctx.thread_id
-    identity = ("thread", thread_id or "", body.title or "")
-    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
-    payload = derived_or_body(request, body, identity)
-
-    async def handler(uow):  # type: ignore[no-untyped-def]
-        thread = await _service(container).create_thread(
-            uow, ctx, thread_id=thread_id, title=body.title, custom_metadata=body.custom_metadata
+async def patch_thread(
+    thread_id: str,
+    request: Request,
+    body: PatchThreadRequest,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+) -> ThreadResponse:
+    ctx = build_context(request, container, body.scope.model_copy(update={"thread_id": thread_id}))
+    async with container.services["uow_factory"]() as uow:
+        thread = await _service(container).patch_thread(
+            uow, ctx, thread_id, title=body.title, custom_metadata=body.custom_metadata
         )
-        return 201, _thread_response(thread), None
-
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+        await uow.commit()
+    return _thread_response(thread)
 
 
 @router.get(
     "/threads/{thread_id}",
     response_model=ThreadResponse,
     tags=["threads"],
-    summary="Get a thread",
+    summary="Get a thread, with its durable summary once it has one",
     responses=_READ_ERRORS,
 )
 async def get_thread(
@@ -131,36 +127,8 @@ async def get_thread(
 ) -> ThreadResponse:
     async with container.services["uow_factory"]() as uow:
         thread = await _service(container).get_thread(uow, ctx, thread_id)
-    return ThreadResponse.model_validate(_thread_response(thread))
-
-
-class ThreadSummaryResponse(BaseModel):
-    """A thread's durable summary: every message up to ``covers_to_sequence``."""
-
-    thread_id: str
-    text: str
-    covers_to_sequence: int
-    version: int
-    model: str = Field(description="the model that wrote it, or extractive without one")
-    created_at: datetime
-
-
-@router.get(
-    "/threads/{thread_id}/summary",
-    response_model=ThreadSummaryResponse,
-    tags=["threads"],
-    summary="The thread's durable summary (404 until it has one)",
-    responses=_READ_ERRORS,
-)
-async def get_thread_summary(
-    thread_id: str, ctx: HeaderContextDep, container: ContainerDep
-) -> ThreadSummaryResponse:
-    async with container.services["uow_factory"]() as uow:
-        await _service(container).get_thread(uow, ctx, thread_id)
         summary = await uow.summaries.latest(ctx.tenant_id, thread_id)
-    if summary is None:
-        raise NotFound("the thread has no summary yet")
-    return ThreadSummaryResponse.model_validate(summary.model_dump())
+    return _thread_response(thread, summary)
 
 
 @router.delete(
@@ -228,58 +196,78 @@ async def list_messages(
 # --------------------------------------------------------------------------- messages
 
 
+def _with_thread(ctx: MemoryExecutionContext) -> MemoryExecutionContext:
+    """The thread messages go to: the scope's, else the agent run's own (a run is a
+    conversation of its own when nobody named one)."""
+    if ctx.thread_id:
+        return ctx
+    if ctx.agent_run_id:
+        return ctx.model_copy(update={"thread_id": ctx.agent_run_id})
+    raise ValidationFailed("messages need a thread_id, or an agent_run_id to default it to")
+
+
 @router.post(
     "/messages",
-    response_model=MessageAckResponse,
+    response_model=MessagesAckResponse,
     status_code=202,
     tags=["messages"],
-    summary="Append a message (durably acknowledged, processed asynchronously)",
+    summary="Append messages (durably acknowledged, processed asynchronously)",
     description=(
-        "Persists the message, its observation and the processing jobs in one transaction and "
-        "returns 202 only after COMMIT. Retries with the same Idempotency-Key (or the same "
-        "lineage + content when the header is absent) return the original acknowledgement."
+        "Persists the messages, their observations and the processing jobs in one transaction "
+        "and returns 202 only after COMMIT. role=EVENT tells the service something that "
+        "happened, to learn from. Retries with the same Idempotency-Key (or the same lineage "
+        "+ contents when the header is absent) return the original acknowledgements."
     ),
     responses={
         **_WRITE_ERRORS,
-        202: {"model": MessageAckResponse, "description": "Durably acknowledged"},
+        202: {"model": MessagesAckResponse, "description": "Durably acknowledged"},
     },
 )
-async def create_message(
-    request: Request, body: CreateMessageRequest, container: ContainerDep, _: ServicePrincipalDep
+async def create_messages(
+    request: Request, body: CreateMessagesRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> JSONResponse:
-    ctx = build_context(request, container, body.scope)
-    identity: tuple[str, ...] = ("message", body.role.value, body.kind.value, body.content)
-    if ctx.turn_id is None and body.occurred_at is not None:
-        # without a turn the derived key is thread + content; a timestamp tells two identical
-        # messages apart (the SDK sends a key of its own instead)
-        identity = (*identity, body.occurred_at.isoformat())
+    ctx = _with_thread(build_context(request, container, body.scope))
+    identity: tuple[str, ...] = (
+        "messages",
+        *(
+            f"{m.role.value}\x1f{m.kind.value}\x1f{m.content}\x1f"
+            + (m.occurred_at.isoformat() if m.occurred_at and ctx.turn_id is None else "")
+            for m in body.messages
+        ),
+    )
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
     payload = derived_or_body(request, body, identity)
     service = _service(container)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
-        result = await service.append_message(
-            uow,
-            ctx,
-            role=body.role,
-            kind=body.kind,
-            content=body.content,
-            attachments=[
-                Attachment(message_id="pending", **a.model_dump()) for a in body.attachments
-            ],
-            custom_metadata=body.custom_metadata,
-            occurred_at=body.occurred_at,
-            source_system=body.source_system,
-            source_message_id=body.source_message_id,
-            hints=ProcessingHints(**body.hints.model_dump()),
-            parent_message_id=body.parent_message_id,
-        )
-        ack = MessageAckResponse(**result.ack.__dict__).model_dump(mode="json")
+        results = []
+        for m in body.messages:
+            results.append(
+                await service.append_message(
+                    uow,
+                    ctx,
+                    role=m.role,
+                    kind=m.kind,
+                    content=m.content,
+                    attachments=[
+                        Attachment(message_id="pending", **a.model_dump()) for a in m.attachments
+                    ],
+                    custom_metadata=m.custom_metadata,
+                    occurred_at=m.occurred_at,
+                    source_system=m.source_system,
+                    source_message_id=m.source_message_id,
+                    parent_message_id=m.parent_message_id,
+                )
+            )
+        acks = MessagesAckResponse(
+            messages=[MessageAckResponse(**r.ack.__dict__) for r in results]
+        ).model_dump(mode="json")
 
         async def after_commit() -> None:
-            await service.after_commit(result)
+            for result in results:
+                await service.after_commit(result)
 
-        return 202, ack, after_commit
+        return 202, acks, after_commit
 
     return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
 

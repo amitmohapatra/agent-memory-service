@@ -115,7 +115,7 @@ class ReflectionService:
             for key, mems in _groups(recent).items():
                 if batches >= self.max_batches:
                     return created
-                async with self.assist.bound(_owner(key[0], key[1], mems)):
+                async with self.assist.bound(_owner(key[0], key[1])):
                     if not self.assist.wants("reflection"):
                         # this owner may not reflect: acknowledge rather than rescan forever
                         async with self.uow_factory() as uow:
@@ -199,7 +199,7 @@ class ReflectionService:
         now: datetime | None = None,
     ) -> list[str]:
         """Reflect over one group of the principal's memories, bound to that principal."""
-        async with self.assist.bound(_owner(tenant_id, principal, memories)):
+        async with self.assist.bound(_owner(tenant_id, principal)):
             return await self._reflect(tenant_id, principal, memories, now=now)
 
     async def _reflect(
@@ -397,7 +397,6 @@ def _groups(recent: list[CanonicalMemory]) -> dict[tuple, list[CanonicalMemory]]
     return groups
 
 
-def _owner(tenant_id: str, principal: str, memories: list[CanonicalMemory]) -> ModelIdentity:
-    """Whose key pays: the principal, falling back to the team its memories belong to."""
-    workspace_id = next((m.scope.workspace_id for m in memories if m.scope.workspace_id), None)
-    return ModelIdentity(tenant_id, principal, workspace_id)
+def _owner(tenant_id: str, principal: str) -> ModelIdentity:
+    """Whose key pays: the principal's agent, else its tenant."""
+    return ModelIdentity(tenant_id, principal)

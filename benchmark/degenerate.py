@@ -32,13 +32,12 @@ import time
 
 from sqlalchemy import text
 
-from benchmark.common import provenance, reset_store, write_result
+from benchmark.common import provenance, reset_store, submit_observation, write_result
 from benchmark.env import bench_overrides
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import ObservationKind
 from memory_service.modules.jobs.registry import register_handlers
 
 #: A small, real, coherent corpus. The point is that the store is *not* empty: an empty store
@@ -156,7 +155,6 @@ async def run() -> dict:
         register_handlers(container)
         uow_factory = container.services["uow_factory"]
         ingestion = container.services["ingestion"]
-        memory = container.services["memory"]
         pipeline = container.services["observation_pipeline"]
         builder = container.services["context_builder"]
         ctx = MemoryExecutionContext(tenant_id=TENANT, user_id="u1", workspace_id="ws1")
@@ -219,13 +217,13 @@ async def run() -> dict:
             error, decisions, accepted = None, {}, False
             try:
                 async with uow_factory() as uow:
-                    ack = await memory.submit_observation(
-                        uow, ctx, kind=ObservationKind.MESSAGE, content=content
-                    )
+                    observation_id = (
+                        await submit_observation(uow, ctx, content=content)
+                    ).observation_id
                     await uow.commit()
                 accepted = True
                 outcomes = await pipeline.run(
-                    {"tenant_id": "degen", "observation_id": ack.observation_id}
+                    {"tenant_id": "degen", "observation_id": observation_id}
                 )
                 for o in outcomes:
                     key = o.decision.value

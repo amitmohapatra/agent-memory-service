@@ -16,10 +16,8 @@ GOLDEN_TUPLES = [
     T("user:u1", "member", "tenant:acme"),
     T("user:u2", "member", "tenant:acme"),
     T("user:u3", "member", "tenant:globex"),
-    T("tenant:acme", "tenant", "group:acme/legal"),
-    T("user:u2", "member", "group:acme/legal"),
     T("tenant:acme", "tenant", "workspace:acme/ws1"),
-    T("group:acme/legal#member", "member", "workspace:acme/ws1"),
+    T("user:u2", "member", "workspace:acme/ws1"),
     T("tenant:acme", "tenant", "thread:acme/thr1"),
     T("workspace:acme/ws1", "workspace", "thread:acme/thr1"),
     T("user:u1", "owner", "thread:acme/thr1"),
@@ -39,13 +37,13 @@ GOLDEN_CHECKS = [
     ("user:u1", "can_write", "thread:acme/thr1", True),
     ("agent:research", "can_read", "thread:acme/thr1", True),  # participant
     ("agent:research", "can_write", "thread:acme/thr1", True),
-    ("user:u2", "can_read", "thread:acme/thr1", False),  # legal is workspace member, not admin
+    ("user:u2", "can_read", "thread:acme/thr1", False),  # a workspace member, not its admin
     ("user:admin1", "can_read", "thread:acme/thr1", True),  # tenant admin via ttu
     ("user:admin1", "can_write", "thread:acme/thr1", True),  # tenant admin -> workspace admin
     ("user:u1", "can_read", "thread:acme/thr2", False),  # other user's thread
     ("user:u3", "can_read", "thread:acme/thr1", False),  # other tenant
     ("user:admin1", "can_read", "thread:globex/thr9", False),  # admin of a different tenant
-    ("user:u2", "viewer", "workspace:acme/ws1", True),  # group#member userset
+    ("user:u2", "viewer", "workspace:acme/ws1", True),  # member implies viewer
     ("user:u1", "viewer", "workspace:acme/ws1", False),
     ("user:u1", "can_read", "document:acme/doc1", True),  # via thread can_read
     ("agent:research", "can_read", "document:acme/doc1", True),
@@ -85,7 +83,7 @@ async def test_list_objects(provider: MemoryAuthorizationProvider) -> None:
         "thread:acme/thr2",
     ]
     assert await provider.list_objects("user:u3", "can_read", "thread") == ["thread:globex/thr9"]
-    assert await provider.list_objects("user:u2", "member", "group") == ["group:acme/legal"]
+    assert await provider.list_objects("user:u2", "member", "workspace") == ["workspace:acme/ws1"]
 
 
 async def test_delete_tuple_revokes(provider: MemoryAuthorizationProvider) -> None:
@@ -106,24 +104,6 @@ async def test_invalid_tuples_rejected() -> None:
         await p.write([T("user:u", "bogus", "thread:acme/t")])
     with pytest.raises(ValueError, match="unknown object type"):
         await p.write([T("user:u", "owner", "planet:acme/t")])
-
-
-async def test_cycles_terminate() -> None:
-    p = MemoryAuthorizationProvider()
-    await p.write(
-        [
-            T("group:acme/a#member", "member", "workspace:acme/w"),
-            T("user:x", "member", "group:acme/a"),
-        ]
-    )
-    assert (
-        await p.check(AccessCheck(user="user:x", relation="viewer", object="workspace:acme/w"))
-        is True
-    )
-    assert (
-        await p.check(AccessCheck(user="user:y", relation="viewer", object="workspace:acme/w"))
-        is False
-    )
 
 
 def test_model_shape_tells_wildcards_and_conditions_apart() -> None:

@@ -1,5 +1,6 @@
 """OpenTelemetry setup. Spans cover API, auth, authz, DB, cache, retrieval, context,
-ingestion stages, archive, graph and eval. Exporter is configuration (none|console|otlp)."""
+ingestion stages, archive and graph. Tracing is on exactly when an OTLP endpoint is
+configured (``OTEL_EXPORTER_OTLP_ENDPOINT``): spans go there over HTTP."""
 
 from __future__ import annotations
 
@@ -13,28 +14,22 @@ from typing import Any
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from memory_service.config.constants import HEADERS
-from memory_service.config.settings import ObservabilitySettings
 
 _configured = False
 
 
-def configure_tracing(settings: ObservabilitySettings, service_name: str, version: str) -> None:
+def configure_tracing(endpoint: str | None, service_name: str, version: str) -> None:
     global _configured  # noqa: PLW0603
-    if _configured or not settings.otel_enabled:
+    if _configured or not endpoint:
         return
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
     resource = Resource.create({"service.name": service_name, "service.version": version})
     provider = TracerProvider(resource=resource)
-    if settings.otel_exporter == "console":
-        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-    elif settings.otel_exporter == "otlp":
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-        provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.otel_endpoint))
-        )
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
     trace.set_tracer_provider(provider)
     _configured = True
 

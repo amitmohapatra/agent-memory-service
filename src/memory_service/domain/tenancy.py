@@ -1,4 +1,4 @@
-"""Tenants, workspaces, groups and API keys: the platform layer's own records.
+"""Tenants, workspaces and API keys: the platform layer's own records.
 
 A tenant is a customer boundary. A workspace is a team inside it whose members share what
 they store there; a group is a set of users a workspace admits at once. An API key is how a
@@ -13,6 +13,7 @@ import hmac
 import re
 import secrets
 import string
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Literal
@@ -30,7 +31,11 @@ _KEY_ID = re.compile(rf"^[{_KEY_ID_ALPHABET}]{{{KEY_ID_LENGTH}}}$")
 MAX_KEYS_PER_TENANT = 1000
 #: What a workspace may admit. Agents are named bare (``agent:<id>``) because a workspace
 #: grant is durable and an agent bound to a user already inherits that user's membership.
-PRINCIPAL_KINDS = frozenset({"user", "agent", "group"})
+PRINCIPAL_KINDS = frozenset({"user", "agent"})
+#: ``may_act_as`` entry meaning every principal of the tenant.
+ANY_PRINCIPAL = "*"
+#: Principals one key may be allowed to act as.
+MAY_ACT_AS_MAX = 100
 
 MemberRole = Literal["admin", "member", "viewer"]
 TenantStatus = Literal["active", "suspended"]
@@ -44,7 +49,7 @@ class KeyRole(StrEnum):
     """What a key may do.
 
     ``platform`` is the bootstrap operator: it onboards tenants and is never a row. ``admin``
-    manages one tenant's workspaces, groups and keys. ``service`` acts for that tenant's
+    manages one tenant's workspaces and keys. ``service`` acts for that tenant's
     users and agents - it is what a harness holds.
     """
 
@@ -99,9 +104,25 @@ class ApiKey(BaseModel):
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+    #: the principals a request made with this key may act for (``user:<id>``,
+    #: ``agent:<id>``, or ``*`` for any of the tenant's); empty: only the key itself
+    may_act_as: list[str] = Field(default_factory=lambda: [ANY_PRINCIPAL])
+
+    @field_validator("may_act_as")
+    @classmethod
+    def _principals(cls, value: list[str]) -> list[str]:
+        return acting_principals(value)
+
+    @property
+    def principal(self) -> str:
+        """Who the key is: what a service records as the author of what it writes."""
+        return f"key:{self.key_id}"
 
     def usable_at(self, now: datetime) -> bool:
         return self.revoked_at is None and (self.expires_at is None or now < self.expires_at)
+
+    def may_act_for(self, principal: str) -> bool:
+        return ANY_PRINCIPAL in self.may_act_as or principal in self.may_act_as
 
 
 class IssuedKey(BaseModel):
@@ -128,28 +149,8 @@ class WorkspaceMember(BaseModel):
 
     tenant_id: str
     workspace_id: str
-    principal: str = Field(description="user:<id> | agent:<id> | group:<id>")
+    principal: str = Field(description="user:<id> | agent:<id>")
     role: MemberRole = "member"
-    added_by: str
-    added_at: datetime = Field(default_factory=_now)
-
-
-class Group(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    group_id: str
-    tenant_id: str
-    name: str = Field(min_length=1, max_length=200)
-    created_at: datetime = Field(default_factory=_now)
-    deleted_at: datetime | None = None
-
-
-class GroupMember(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    tenant_id: str
-    group_id: str
-    user_id: str
     added_by: str
     added_at: datetime = Field(default_factory=_now)
 
@@ -160,13 +161,22 @@ def is_valid_tenant_id(value: str) -> bool:
     return is_valid_id(value) and ":" not in value and value not in RESERVED_TENANT_IDS
 
 
+def acting_principals(values: Sequence[str]) -> list[str]:
+    """A ``may_act_as`` list: ``*`` or principals, de-duplicated in order; refuses anything
+    else and more than ``MAY_ACT_AS_MAX``."""
+    if len(values) > MAY_ACT_AS_MAX:
+        raise ValueError(f"a key may act for at most {MAY_ACT_AS_MAX} principals")
+    for principal in values:
+        if principal != ANY_PRINCIPAL:
+            parse_principal(principal)
+    return list(dict.fromkeys(values))
+
+
 def parse_principal(principal: str) -> tuple[str, str]:
     """``user:u1`` -> ``("user", "u1")``; refuses anything that is not a member kind."""
     kind, sep, ident = principal.partition(":")
     if not sep or kind not in PRINCIPAL_KINDS or not is_valid_id(ident):
-        raise ValueError(
-            f"invalid principal {principal!r}: expected user:<id>, agent:<id> or group:<id>"
-        )
+        raise ValueError(f"invalid principal {principal!r}: expected user:<id> or agent:<id>")
     return kind, ident
 
 

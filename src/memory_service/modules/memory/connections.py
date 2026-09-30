@@ -150,7 +150,7 @@ def _audience(memory: CanonicalMemory) -> tuple[Any, ...]:
 
 def _owner(memory: CanonicalMemory) -> ModelIdentity:
     """Whose key pays for a group: its owner, falling back to the team it belongs to."""
-    return ModelIdentity(memory.tenant_id, memory.owner_principal, memory.scope.workspace_id)
+    return ModelIdentity(memory.tenant_id, memory.owner_principal)
 
 
 def _subject_key(memory: CanonicalMemory) -> str:

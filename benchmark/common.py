@@ -8,6 +8,7 @@ import os
 import platform
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -118,16 +119,24 @@ def _model_manifest() -> dict[str, Any]:
 
 
 def _llm_provenance() -> dict[str, Any]:
-    """Gateway + model names only; never a key."""
-    from memory_service.config.settings import Settings
+    """Whether a gateway was configured, and the model names this run calls; never a key."""
+    from benchmark.env import BENCH
+    from benchmark.retrieval import _settings
 
-    llm = Settings().models.llm
+    llm = _settings().llm
     out: dict[str, Any] = {
         "enabled": llm.enabled,
         "provider": "bifrost" if llm.enabled else "disabled",
     }
-    if llm.enabled:
-        out.update({"model": llm.model, "fast_model": llm.fast_model, "uses": list(llm.uses)})
+    if llm.enabled and llm.base_url:
+        tuning = BENCH.llm_tuning()
+        out.update(
+            {
+                "model": tuning.model,
+                "fast_model": tuning.fast_model,
+                "max_tokens": tuning.max_tokens,
+            }
+        )
         try:
             import httpx
 
@@ -247,3 +256,65 @@ async def reset_store(container: object, tenant_id: str) -> dict[str, int]:
             removed[base] = -1
             sys.stderr.write(f"reset_store: {name}: {type(exc).__name__}: {exc}\n")
     return removed
+
+
+@dataclass(frozen=True, slots=True)
+class Observed:
+    """An observation written and queued: its id and the outbox job that will process it."""
+
+    observation_id: str
+    job_ids: list[str]
+
+
+async def submit_observation(
+    uow: Any,
+    ctx: Any,
+    *,
+    content: str,
+    kind: Any = None,
+    hints: Any = None,
+    occurred_at: datetime | None = None,
+) -> Observed:
+    """Write one turn as an observation and queue its processing.
+
+    What ``POST /v1/messages`` does for a message, minus the thread: a corpus (or a test) is
+    ingested as evidence with the audience it needs (``hints.visibility``, TENANT for LoCoMo,
+    whose two speakers share one corpus), which no public route offers and no product path
+    needs. The visibility is checked the way ``remember`` checks it, so an audience the
+    context cannot express fails here and not silently in the job.
+    """
+    from memory_service.domain.enums import ObservationKind
+    from memory_service.domain.ids import content_hash
+    from memory_service.domain.observation import Observation, ProcessingHints
+    from memory_service.domain.text import sanitise
+    from memory_service.modules.authz.visibility import validate_requested_visibility
+    from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
+    from memory_service.ports.tasks import JobSpec, Queue
+
+    validate_requested_visibility(ctx, hints)
+    text = sanitise(content)
+    observation = Observation(
+        **ctx.provenance(),
+        kind=kind or ObservationKind.MESSAGE,
+        content=text,
+        content_hash=content_hash(text),
+        hints=hints or ProcessingHints(),
+        occurred_at=occurred_at or datetime.now(UTC),
+    )
+    await uow.observations.add(observation)
+    outbox_id = await uow.enqueue(
+        JobSpec(
+            task_name=TASK_PROCESS_OBSERVATION,
+            queue=Queue.CHAT_FAST,
+            payload={
+                "tenant_id": ctx.tenant_id,
+                "observation_id": observation.observation_id,
+                "trace_id": ctx.trace_id,
+            },
+            idempotency_key=f"obs:{observation.observation_id}",
+            tenant_id=ctx.tenant_id,
+        )
+    )
+    return Observed(
+        observation.observation_id, [f"obx_{outbox_id}"] if outbox_id is not None else []
+    )

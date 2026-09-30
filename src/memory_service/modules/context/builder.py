@@ -13,7 +13,7 @@ import contextlib
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import orjson
 
@@ -35,6 +35,7 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
     ContextSections,
     Pinned,
@@ -73,8 +74,10 @@ def _cacheable(bundle: ContextBundle) -> bool:
 #: The model uses a cached bundle's content depends on. A deployment that expands queries
 #: assembles a different bundle from the same query, so it must not read another's cache.
 CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion",)
-#: How long the record of what a bundle served is kept for a later delta request.
-SERVED_TTL_SECONDS = 3600
+#: What a ``format=prompt`` response carries of the bundle.
+PROMPT_FIELDS: tuple[str, ...] = ("rendered", "bundle_id", "token_estimate")
+
+ContextFormat = Literal["prompt", "full"]
 
 
 #: Fusion scores are rank aggregates, not probabilities: they are mapped into a low band
@@ -181,32 +184,24 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     )
 
 
-def _at(served_key: str, revision: int | None) -> str | None:
-    """The record of what was served at ``revision``, when a delta is asked for."""
-    return f"{served_key}:{revision}" if revision is not None else None
-
-
 @dataclass(frozen=True)
 class _Lookup:
     """What one database read and one cache read say about a query, before any work."""
 
     bundle_id: str
+    #: where the full bundle is cached (the in-process reader's and the semantic cache's)
     cache_key: str
+    #: where the prompt form is cached
+    prompt_key: str
     revision_fp: str
     #: the revisions an authorization scope depends on, in that cache's key format
     authz_fp: str
     #: the cached AuthorizedScope bytes, or None when that key missed
     scope: bytes | None
-    #: the cached bundle bytes: present means the answer is already made
+    #: the cached answer in the requested form: present means it is already made
     bundle: bytes | None
     semantic_key: str | None = None
     semantic: bytes | None = None
-    #: the scope revision: the sum of the counters the bundle depends on (monotonic)
-    revision: int = 0
-    #: where what this request served at a revision is recorded, for a later delta
-    served_key: str = ""
-    #: the record of what was served at ``since_revision``, when a delta was asked for
-    served: bytes | None = None
 
 
 class ContextBuilder:
@@ -223,6 +218,7 @@ class ContextBuilder:
         working: EphemeralMemory | None = None,
         assist: LLMAssist | None = None,
         sections: ContextSections | None = None,
+        records: BundleRecords | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.sections = sections
@@ -236,6 +232,7 @@ class ContextBuilder:
         self.semantic_cache = (
             SemanticBundleCache(cache, ttl_seconds=cache_ttl_seconds) if cache else None
         )
+        self.records = records or BundleRecords(cache)
         self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
         #: cache writes and access flushes still in flight; awaited by drain()
@@ -268,8 +265,9 @@ class ContextBuilder:
         query: str,
         budget: int,
         document_ids: Sequence[str] | None,
-        tools: ToolsRequest | None = None,
-        since_revision: int | None = None,
+        tools: ToolsRequest | None,
+        window: bool,
+        output: ContextFormat = "full",
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
 
@@ -303,39 +301,32 @@ class ContextBuilder:
             str(budget),
             ",".join(document_ids or []),
             tools.fingerprint() if tools else "",
+            "window" if window else "no-window",
         )
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
+        prompt_key = f"ctxp:{cache_key}"
         semantic = self._semantic_key(namespace, ctx, query) if tools is None else None
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
-        request = stable_key(query, str(budget), ",".join(document_ids or []))
-        served_key = self._served_key(ctx, request, tools)
-        keys = [scope_key, cache_key, semantic, _at(served_key, since_revision)]
+        keys = [scope_key, prompt_key if output == "prompt" else cache_key, semantic]
         values: list[bytes | None] = [None] * len(keys)
         if self.cache is not None:
             with contextlib.suppress(CacheUnavailable):
                 wanted = [k for k in keys if k]
                 found = iter(await self.cache.mget(wanted))
                 values = [next(found) if k else None for k in keys]
-        scope_raw, bundle_raw, semantic_raw, served_raw = values
+        scope_raw, bundle_raw, semantic_raw = values
         return _Lookup(
             bundle_id=bundle_id,
             cache_key=cache_key,
+            prompt_key=prompt_key,
             revision_fp=revision_fp,
             authz_fp=authz_fp,
             scope=scope_raw,
             bundle=bundle_raw,
             semantic_key=semantic,
             semantic=semantic_raw,
-            revision=sum(revisions.values()),
-            served_key=served_key,
-            served=served_raw,
         )
-
-    @staticmethod
-    def _served_key(ctx: MemoryExecutionContext, request: str, tools: ToolsRequest | None) -> str:
-        suffix = tools.fingerprint() if tools else ""
-        return f"ctxserved:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{request}:{suffix}"
 
     async def _revisions(self, ctx: MemoryExecutionContext) -> dict[str, int]:
         """One shared dependency set for automatic lookup and explicit bundle replay."""
@@ -361,10 +352,6 @@ class ContextBuilder:
     def _revision_fingerprint(revisions: dict[str, int]) -> str:
         return stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
 
-    async def revision_fingerprint(self, ctx: MemoryExecutionContext) -> str:
-        """Current evidence/authorization revision for persistent derived views."""
-        return self._revision_fingerprint(await self._revisions(ctx))
-
     def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
@@ -383,7 +370,9 @@ class ContextBuilder:
         token_budget: int | None = None,
         document_ids: Sequence[str] | None = None,
         tools: ToolsRequest | None = None,
+        window: bool = True,
     ) -> ContextBundle:
+        """The bundle itself, for in-process readers (the profile job, the benchmarks)."""
         budget = token_budget or self.cfg.token_budget
         with (
             span("context.build", tenant_id=ctx.tenant_id),
@@ -391,11 +380,12 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools)
+                found = await self._lookup(ctx, query, budget, document_ids, tools, window)
             if found.bundle is not None:
-                bundle = ContextBundle.model_validate_json(found.bundle)
-                return bundle.model_copy(update={"cache_hit": True})
-            bundle = await self._fresh(ctx, query, budget, document_ids, tools, found, timings)
+                return bundle_from_api(found.bundle)
+            bundle = await self._fresh(
+                ctx, query, budget, document_ids, tools, window, found, timings
+            )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         self._after_build(ctx, bundle, found, api=None)
         return bundle
@@ -408,18 +398,17 @@ class ContextBuilder:
         token_budget: int | None = None,
         document_ids: Sequence[str] | None = None,
         tools: ToolsRequest | None = None,
-        since_revision: int | None = None,
+        window: bool = True,
+        output: ContextFormat = "prompt",
+        debug: bool = False,
     ) -> bytes:
-        """The bundle as the API sends it, serialised exactly once.
+        """The context as the API sends it, serialised once.
 
-        ``/v1/context`` used to pay for the same content four times over: the cached bytes
-        were parsed into a ContextBundle, the bundle was dumped back to JSON and parsed again
-        by ``bundle_to_api``, the dict was validated into a response model, and the response
-        model was serialised onto the wire. For a 30-80 KB bundle that is most of what a
-        cache hit costs. The cache stores the API dict, so a hit is the stored bytes and
-        nothing else; a miss serialises once and hands the same object to the background
-        write. Callers that need the ContextBundle itself - grounding, the benchmarks - use
-        ``build``. A delta (``since_revision``) is the one case that re-reads the dict.
+        Both forms are cached as the bytes a hit answers with - the prompt form
+        (``{rendered, bundle_id, token_estimate}``, and the tool candidates when tools were
+        given) and the full bundle - so a hit in either is the stored bytes untouched.
+        ``debug`` asks for the build's diagnostics, which only a build has: it is never
+        served from the cache. Callers that need the ContextBundle itself use ``build``.
         """
         budget = token_budget or self.cfg.token_budget
         with (
@@ -428,19 +417,20 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools, since_revision)
-            if found.bundle is not None:
-                return (
-                    _delta(found.bundle, found.served)
-                    if since_revision is not None
-                    else (found.bundle)
-                )
-            bundle = await self._fresh(ctx, query, budget, document_ids, tools, found, timings)
+                found = await self._lookup(ctx, query, budget, document_ids, tools, window, output)
+            if found.bundle is not None and not debug:
+                self._track(self.records.given(ctx, found.bundle_id))
+                return found.bundle
+            bundle = await self._fresh(
+                ctx, query, budget, document_ids, tools, window, found, timings
+            )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         api = bundle_to_api(bundle)
         self._after_build(ctx, bundle, found, api=api)
-        payload = orjson.dumps(api)
-        return _delta(payload, found.served) if since_revision is not None else payload
+        body = prompt_of(api) if output == "prompt" else _without_diagnostics(api)
+        if debug:
+            body["diagnostics"] = api.get("diagnostics", {})
+        return orjson.dumps(body)
 
     async def _fresh(
         self,
@@ -449,6 +439,7 @@ class ContextBuilder:
         budget: int,
         document_ids: Sequence[str] | None,
         tools: ToolsRequest | None,
+        window: bool,
         found: _Lookup,
         timings: Timings,
     ) -> ContextBundle:
@@ -464,11 +455,19 @@ class ContextBuilder:
         # the pinned sections and the thread's recent messages are independent of retrieval:
         # they are read under it
         sections = (
-            asyncio.ensure_future(self.sections.gather(ctx, query, visibility))
+            asyncio.ensure_future(
+                self.sections.gather(
+                    ctx,
+                    query,
+                    visibility,
+                    summary=window,
+                    procedures=tools is not None and tools.any,
+                )
+            )
             if self.sections is not None
             else None
         )
-        recent = asyncio.ensure_future(self._recent_messages(ctx, query))
+        recent = asyncio.ensure_future(self._recent_messages(ctx) if window else _nothing())
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -485,14 +484,16 @@ class ContextBuilder:
             raise
         with timings.stage("sections"):
             pinned = await sections if sections is not None else Pinned()
-            window = self._window(ctx, result, await recent, after=pinned.covered_to)
+            conversation = self._window(ctx, await recent, after=pinned.covered_to)
         with timings.stage("similarity"):
             await self.engine.score_similarity(result)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
         pinned, pinned_tokens = within_budget(pinned, budget)
-        bundle = self._assemble(query, result, window, budget - pinned_tokens, found.revision_fp)
+        bundle = self._assemble(
+            query, result, conversation, budget - pinned_tokens, found.revision_fp
+        )
         self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -501,7 +502,6 @@ class ContextBuilder:
                 "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
                 "token_budget": budget,
                 "token_estimate": bundle.token_estimate + pinned_tokens,
-                "revision": found.revision,
                 "profile": pinned.profile,
                 "thread_summary": pinned.thread_summary,
                 "procedures": pinned.procedures,
@@ -539,7 +539,7 @@ class ContextBuilder:
         result.candidates[:0] = fresh
         if fresh:
             result.diagnostics["prefetched"] = [c.record_id for c in fresh]
-        if tools is not None and self.sections is not None:
+        if tools is not None and tools.any and self.sections is not None:
             with timings.stage("tools"):
                 pinned.tools = await self.sections.tools(
                     ctx,
@@ -596,44 +596,45 @@ class ContextBuilder:
         api: dict[str, Any] | None,
     ) -> None:
         """The bookkeeping a built bundle leaves behind, none of it on the request path: the
-        served-access counts, the cached bundle, and the record of what was served at this
-        revision (what a later delta request compares against)."""
+        served-access counts, the cached bundle, and the record of its handles and evidence
+        that later calls refer back to (``modules.context.handles``)."""
         self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
         if self.cache is None:
             return
         if _cacheable(bundle):
-            self._track(self._store(self.cache, found.cache_key, bundle, api))
-        self._track(self._store_served(self.cache, found, bundle))
+            self._track(self._store(self.cache, found, bundle, api))
+        self._track(self._remember(ctx, bundle))
 
-    async def _store_served(
-        self, cache: CacheProvider, found: _Lookup, bundle: ContextBundle
-    ) -> None:
-        with contextlib.suppress(CacheUnavailable):
-            await cache.set(
-                f"{found.served_key}:{found.revision}",
-                orjson.dumps(served(bundle)),
-                ttl_seconds=SERVED_TTL_SECONDS,
-            )
+    async def _remember(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
+        await self.records.store(ctx, record_of(bundle))
+        await self.records.given(ctx, bundle.bundle_id)
 
     async def _store(
         self,
         cache: CacheProvider,
-        cache_key: str,
+        found: _Lookup,
         bundle: ContextBundle,
         api: dict[str, Any] | None,
     ) -> None:
-        """Write the bundle to the cache after the caller has been answered.
+        """Write both forms to the cache after the caller has been answered.
 
         A bundle is 30-80 KB. Serialising it and pushing it to Dragonfly took that long off
         the front of every cache-miss response for the benefit of the *next* caller, who is
         not waiting on anything. ``cache_hit`` is stored true because a value read back from
         here is, by construction, a hit - that is what lets ``build_api`` return the stored
-        bytes untouched.
+        bytes untouched. The diagnostics are not stored: a response carries them only from
+        a build.
         """
         try:
-            data = api if api is not None else bundle_to_api(bundle)
-            payload = orjson.dumps({**data, "cache_hit": True})
-            await cache.set(cache_key, payload, ttl_seconds=self.cache_ttl)
+            data = _without_diagnostics(api if api is not None else bundle_to_api(bundle))
+            await cache.set(
+                found.cache_key,
+                orjson.dumps({**data, "cache_hit": True}),
+                ttl_seconds=self.cache_ttl,
+            )
+            await cache.set(
+                found.prompt_key, orjson.dumps(prompt_of(data)), ttl_seconds=self.cache_ttl
+            )
         except CacheUnavailable:
             return
         except Exception as exc:  # nothing awaits this task; a failure here is silent
@@ -725,45 +726,16 @@ class ContextBuilder:
                         count=len(served),
                     )
 
-    async def cached(self, ctx: MemoryExecutionContext, bundle_id: str) -> ContextBundle | None:
-        """A bundle this caller built earlier, while it is still cached.
-
-        The handle used to be looked up under the tenant alone, so a same-tenant caller who
-        held another principal's bundle id was served that principal's bundle with no
-        re-check - a cross-principal read of evidence ids and a supported/contradicted oracle
-        over someone else's memories. The automatic path was never exposed, because the
-        bundle_id it computes already folds in the scope fingerprint; only this replay,
-        reachable from ``POST /v1/verify`` with a ``bundle_id``, took the id on trust.
-
-        Including the caller's own fingerprint in the key is what closes it: a handle built
-        for another scope simply does not resolve, so the check cannot be forgotten at a call
-        site the way a separate guard could.
-        """
-        if self.cache is None or not bundle_id:
-            return None
-        try:
-            raw = await self.cache.get(self._cache_key(ctx, bundle_id))
-        except CacheUnavailable:
-            return None
-        if raw is None:
-            return None
-        bundle = ContextBundle.model_validate_json(raw)
-        current = self._revision_fingerprint(await self._revisions(ctx))
-        return bundle if bundle.revision_fingerprint == current else None
-
     @staticmethod
     def _cache_key(ctx: MemoryExecutionContext, bundle_id: str) -> str:
         """Tenant, the caller's security scope, and the bundle. All three, always."""
         return f"ctx:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{bundle_id}"
 
-    async def _recent_messages(self, ctx: MemoryExecutionContext, query: str) -> list[Any]:
-        """The thread's most recent messages, read while retrieval runs, when the question's
-        route reads a window. The rule route decides: a model-expanded route only ever
-        narrows GENERAL_SEMANTIC, which reads one."""
-        if (
-            not ctx.thread_id
-            or not self._cache_router.route(query, has_thread=True).needs_conversation
-        ):
+    async def _recent_messages(self, ctx: MemoryExecutionContext) -> list[Any]:
+        """The thread's most recent messages, read while retrieval runs. A caller that keeps
+        no history of its own (``window``) gets them whatever the question: the turn before
+        is what a follow-up means, and the route cannot know what it refers to."""
+        if not ctx.thread_id:
             return []
         async with self.uow_factory() as uow:
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
@@ -776,16 +748,11 @@ class ContextBuilder:
             )
 
     def _window(
-        self,
-        ctx: MemoryExecutionContext,
-        result: RetrievalResult,
-        messages: Sequence[Any],
-        *,
-        after: int,
+        self, ctx: MemoryExecutionContext, messages: Sequence[Any], *, after: int
     ) -> ConversationWindow:
         """The messages after the thread's durable summary (which covers everything up to
         ``after``) that fit the conversation budget."""
-        if not ctx.thread_id or not result.routed.needs_conversation:
+        if not ctx.thread_id or not messages:
             return ConversationWindow(thread_id=ctx.thread_id)
         return render_window(
             ctx.thread_id,
@@ -1031,36 +998,34 @@ def render_window(
     )
 
 
-_SERVED_LISTS = ("memories", "knowledge", "graph_facts", "summaries")
-
-
-def served(bundle: ContextBundle) -> dict[str, str]:
-    """What a bundle served: item id -> the hash of its text."""
-    return {
-        item.item_id: stable_key(item.text)
-        for name in _SERVED_LISTS
-        for item in getattr(bundle, name)
-    }
-
-
-def _delta(payload: bytes, before: bytes | None) -> bytes:
-    """The bundle with only the items new or changed since the revision whose served record
-    is ``before``; the whole bundle (``delta`` false) when that record is gone."""
-    if before is None:
-        return payload
-    seen: dict[str, str] = orjson.loads(before)
-    data: dict[str, Any] = orjson.loads(payload)
-    for name in _SERVED_LISTS:
-        data[name] = [
-            item
-            for item in data.get(name, [])
-            if seen.get(item["item_id"]) != stable_key(item["text"])
-        ]
-    data["delta"] = True
-    return orjson.dumps(data)
-
-
 def bundle_to_api(bundle: ContextBundle) -> dict[str, Any]:
-    data: dict[str, Any] = orjson.loads(bundle.model_dump_json())
+    """The full wire form: the bundle, its rendering and its handles."""
+    data: dict[str, Any] = orjson.loads(bundle.model_dump_json(exclude={"revision_fingerprint"}))
     data["rendered"] = bundle.render()
+    data["handles"] = bundle.handles()
     return data
+
+
+def bundle_from_api(raw: bytes) -> ContextBundle:
+    """A cached wire bundle back as the domain object (the fields only the wire has dropped)."""
+    data = orjson.loads(raw)
+    for name in ("rendered", "handles"):
+        data.pop(name, None)
+    return ContextBundle.model_validate(data)
+
+
+def prompt_of(api: dict[str, Any]) -> dict[str, Any]:
+    """The prompt form of a bundle: the rendering, the bundle's handle and size, and - when
+    tools were given - the tools that fit, best first."""
+    body = {name: api[name] for name in PROMPT_FIELDS}
+    if api.get("tools") is not None:
+        body["tool_candidates"] = [c["name"] for c in api["tools"]["candidates"]]
+    return body
+
+
+def _without_diagnostics(api: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in api.items() if k != "diagnostics"}
+
+
+async def _nothing() -> list[Any]:
+    return []

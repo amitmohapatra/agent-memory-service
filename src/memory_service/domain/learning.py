@@ -7,8 +7,7 @@ Pure functions and the constants that tune them; the projectors and the ranking 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -36,11 +35,11 @@ def standing_factor(confidence: float | None, reinforcement: int | None) -> floa
 # --------------------------------------------------------------------------- feedback
 
 #: How much one verdict on an answer moves the confidence of each memory it cited.
-ANSWER_CONFIDENCE_STEP: Final = 0.05
+CITED_CONFIDENCE_STEP: Final = 0.05
 #: The lowest confidence a verdict can push a memory to (retraction is a separate verdict).
 CONFIDENCE_FLOOR: Final = 0.05
 #: Memories one answer verdict may adjust (the evidence references it names, in order).
-ANSWER_MEMORIES_MAX: Final = 20
+CITED_MEMORIES_MAX: Final = 20
 
 
 # --------------------------------------------------------------------------- approvals
@@ -55,31 +54,6 @@ ALWAYS_ASK_RATE: Final = 0.5
 APPROVAL_SUGGESTIONS_MAX: Final = 100
 
 Suggestion = Literal["auto_approve", "always_ask"]
-
-
-def _value_kind(value: Any) -> str:
-    """A value's kind, and for a number its order of magnitude: approving ``amount=120`` says
-    little about ``amount=12000``, which is exactly what an approval rule is about."""
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return f"bool:{str(value).lower()}"
-    if isinstance(value, int | float):
-        magnitude = 0 if value == 0 else math.floor(math.log10(abs(value)))
-        return f"num:1e{magnitude}"
-    if isinstance(value, str):
-        return "str"
-    if isinstance(value, list | tuple):
-        return "list"
-    return "obj"
-
-
-def arg_shape(args: Mapping[str, Any] | None) -> str:
-    """The shape of a call's top-level arguments: each name with its value kind, sorted.
-    Deterministic, value-free (no customer data), and coarse enough to pool decisions."""
-    if not args:
-        return ""
-    return ",".join(f"{name}:{_value_kind(args[name])}" for name in sorted(args))
 
 
 class ApprovalCounts(BaseModel):

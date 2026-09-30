@@ -191,7 +191,6 @@ async def test_out_of_document_exact_hit_does_not_suppress_ranked_fallback(parts
     )
     assert result.routed.query_type is QueryType.EXACT_IDENTIFIER
     assert result.diagnostics["exact_hits"] == 0
-    assert result.diagnostics["exact_fallback"] is True
     assert all(c.payload.get("document_id") == "doc_1" for c in result.candidates)
 
 

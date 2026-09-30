@@ -17,6 +17,7 @@ import uuid
 from dataclasses import replace
 
 import pytest
+from benchmark.common import submit_observation
 from sqlalchemy import text
 
 from memory_service import __version__
@@ -104,6 +105,8 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     container = await build_container(settings, __version__, overrides=stand_ins)
     try:
         async with container.database.engine.begin() as conn:
+            # a reset, not a hot path: on a loaded host it may outlast the statement timeout
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             await conn.execute(text("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE"))
 
         # every mandatory dependency must actually answer, not merely be constructed
@@ -120,9 +123,7 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
         fact = "My timezone is Europe/Berlin."
         uow_factory = container.services["uow_factory"]
         async with uow_factory() as uow:
-            await container.services["memory"].submit_observation(
-                uow, ctx, kind=ObservationKind.MESSAGE, content=fact
-            )
+            await submit_observation(uow, ctx, kind=ObservationKind.MESSAGE, content=fact)
             await uow.commit()
         await container.tasks.drain()
         await container.tasks.drain()

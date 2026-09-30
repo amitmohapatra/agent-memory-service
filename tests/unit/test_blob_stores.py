@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from memory_service.adapters.blob.filesystem import BlobAlreadyExists, FilesystemBlobStore
+from memory_service.adapters.blob.filesystem import FilesystemBlobStore
 from memory_service.adapters.blob.memory import MemoryBlobStore
-from memory_service.ports.blob import BlobChecksumMismatch, BlobNotFound
+from memory_service.ports.blob import BlobAlreadyExists, BlobChecksumMismatch, BlobNotFound
 
 
 @pytest.fixture(params=["filesystem", "memory"])

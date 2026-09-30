@@ -13,7 +13,12 @@ from collections.abc import AsyncIterator
 from memory_service.config.settings import BlobSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
-from memory_service.ports.blob import BlobChecksumMismatch, BlobNotFound, BlobRef
+from memory_service.ports.blob import (
+    BlobAlreadyExists,
+    BlobChecksumMismatch,
+    BlobNotFound,
+    BlobRef,
+)
 from memory_service.ports.models import ProviderInfo
 
 
@@ -76,8 +81,6 @@ class GCSBlobStore:
                     checksum="crc32c",
                 )
             except gexc.PreconditionFailed as exc:
-                from memory_service.adapters.blob.filesystem import BlobAlreadyExists
-
                 raise BlobAlreadyExists(f"{bucket}/{key} exists") from exc
             blob.reload()
             return self._ref(blob, bucket, key, digest)

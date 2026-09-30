@@ -178,7 +178,6 @@ class QueryRouter:
                 QueryType.GLOBAL_SUMMARY,
                 QueryType.ENTITY_RELATION,
             ),
-            needs_memories=qt is not QueryType.EXACT_IDENTIFIER,
             needs_knowledge=qt not in (QueryType.CONVERSATION_HISTORY, QueryType.USER_MEMORY),
             needs_graph=(qt is QueryType.GENERAL_SEMANTIC and self.semantic_graph)
             or qt
@@ -187,6 +186,8 @@ class QueryRouter:
                 QueryType.DOCUMENT_MULTI_HOP,
                 QueryType.TEMPORAL,
                 QueryType.DECISION,
+                # an identifier names an entity: what the graph knows about it answers too
+                QueryType.EXACT_IDENTIFIER,
             ),
             needs_summaries=qt is QueryType.GLOBAL_SUMMARY,
             lang=lang,

@@ -20,6 +20,7 @@ from memory_service.domain.enums import MessageKind
 from memory_service.domain.profile import ThreadSummary
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import model_for
 from memory_service.observability.logging import get_logger
 from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.tasks import JobSpec, Queue
@@ -94,7 +95,6 @@ class ThreadSummaries:
         thread_id: str,
         *,
         principal_id: str | None = None,
-        workspace_id: str | None = None,
     ) -> ThreadSummary | None:
         async with self.uow_factory() as uow:
             previous = await uow.summaries.latest(tenant_id, thread_id)
@@ -105,7 +105,7 @@ class ThreadSummaries:
         if not new:
             return previous
         before = previous.text if previous else ""
-        text, model = await self._fold(before, new, tenant_id, principal_id, workspace_id)
+        text, model = await self._fold(before, new, tenant_id, principal_id)
         summary = ThreadSummary(
             tenant_id=tenant_id,
             thread_id=thread_id,
@@ -127,14 +127,13 @@ class ThreadSummaries:
         messages: Sequence[Message],
         tenant_id: str,
         principal_id: str | None,
-        workspace_id: str | None,
     ) -> tuple[str, str]:
         if principal_id:
-            async with self.assist.bound(ModelIdentity(tenant_id, principal_id, workspace_id)):
+            async with self.assist.bound(ModelIdentity(tenant_id, principal_id)):
                 if self.assist.wants("summaries"):
                     written = await self._abstractive(previous, messages)
                     if written is not None:
-                        return written, self.assist.settings.model or "llm"
+                        return written, model_for("summaries")
         return rolled(previous, messages), EXTRACTIVE
 
     async def _abstractive(self, previous: str, messages: Sequence[Message]) -> str | None:

@@ -61,13 +61,15 @@ def test_usable_at_respects_revocation_and_expiry() -> None:
     assert ApiKey(**base, expires_at=now + timedelta(days=1)).usable_at(now)
 
 
-@pytest.mark.parametrize("principal", ["user:u1", "agent:research", "group:analysts"])
+@pytest.mark.parametrize("principal", ["user:u1", "agent:research"])
 def test_member_principals_parse(principal: str) -> None:
     kind, ident = parse_principal(principal)
     assert principal == f"{kind}:{ident}"
 
 
-@pytest.mark.parametrize("principal", ["u1", "service:x", "user:", "tenant:acme", "user:bad id"])
+@pytest.mark.parametrize(
+    "principal", ["u1", "service:x", "user:", "tenant:acme", "user:bad id", "group:analysts"]
+)
 def test_anything_else_is_not_a_member_principal(principal: str) -> None:
     with pytest.raises(ValueError, match="invalid principal"):
         parse_principal(principal)

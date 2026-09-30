@@ -37,7 +37,7 @@ from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import archive_bytes_total, stage_seconds
 from memory_service.observability.tracing import span
-from memory_service.ports.blob import BlobStore
+from memory_service.ports.blob import BlobAlreadyExists, BlobStore
 from memory_service.ports.intelligence import DocumentParser, ParsedDocument
 from memory_service.ports.repositories import ArchiveSegment
 from memory_service.ports.tasks import JobSpec, Queue
@@ -422,8 +422,6 @@ class IngestionService:
                     metadata={"tenant": tenant_id, "document": document_id},
                 )
             except Exception as exc:
-                from memory_service.adapters.blob.filesystem import BlobAlreadyExists
-
                 if isinstance(exc, BlobAlreadyExists):
                     ref = await self.blob.head(self.file_bucket, key)
                 else:

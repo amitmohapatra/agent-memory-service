@@ -11,6 +11,7 @@ import asyncio
 import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from typing import Any
 
 from memory_service.config.constants import RetrievalSettings, derived_k
@@ -32,6 +33,7 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.search import (
+    RANK_FIELDS,
     Retriever,
     SearchHit,
     SearchStore,
@@ -88,6 +90,9 @@ class Candidate:
     expansion_edge: str | None = None
     #: dense similarity to the query (cosine), when the context read it (score_similarity)
     similarity: float | None = None
+    #: False while the payload holds only the ranking fields (``RANK_FIELDS``); the items
+    #: that survive the cut are hydrated with the rest (``RetrievalEngine._hydrate``)
+    hydrated: bool = True
 
     @property
     def representation(self) -> Representation:
@@ -175,6 +180,10 @@ def rrf_fuse(
     return [(rid, s, retrievers[rid], payloads[rid]) for rid, s in ordered]
 
 
+#: (from, to) observation instants, either bound open.
+type ObservedRange = tuple[datetime | None, datetime | None]
+
+
 @dataclass(frozen=True)
 class QueryVectors:
     """What one query was encoded into: a vector per dense space its script is searched in,
@@ -226,7 +235,11 @@ class RetrievalEngine:
         document_ids: Sequence[str] | None = None,
         visibility: VisibilitySpecification | None = None,
         query_embedding: tuple[str, list[float]] | None = None,
+        observed: ObservedRange | None = None,
     ) -> RetrievalResult:
+        """Ranked candidates for ``query``. ``observed`` keeps only what was observed within
+        the range, filtered in the store before ranking (a record with no observation time,
+        a document passage, is out)."""
         explicit_limit = limit is not None
         limit = limit or self.cfg.final_k
         selected_documents = frozenset(document_ids or ())
@@ -313,60 +326,48 @@ class RetrievalEngine:
                             )
                         )
                     diagnostics["exact_hits"] = len(candidates)
-                    if not candidates:
-                        diagnostics["exact_fallback"] = True
-                # 2. hybrid lexical + dense with native RRF inside the store
-                #
-                # An identifier lookup that found nothing has to fall back to ranked search,
-                # and that fallback has to include memories. The router sets
-                # needs_memories=False for EXACT_IDENTIFIER — reasonable when the lookup
-                # succeeds, since an exact hit beats anything ranking could offer — but it
-                # was applied to the fallback as well. So "what about SKU-88?" searched
-                # everything except memories and returned nothing, while the vaguer "which
-                # products are discontinued" found the very same memory. Asking about a
-                # specific thing is the most natural question there is; it must not be the
-                # one that fails.
-                exact_lookup_found_nothing = (
-                    routed.query_type is QueryType.EXACT_IDENTIFIER and not candidates
-                )
-                if routed.query_type is not QueryType.EXACT_IDENTIFIER or not candidates:
-                    wanted = list(kinds)
-                    if routed.needs_summaries and "chunk" in wanted and "summary" not in wanted:
-                        wanted.append("summary")
-                    wanted = [
-                        kind
-                        for kind in wanted
-                        if (kind != "chunk" or routed.needs_knowledge)
-                        and (
-                            kind != "memory" or routed.needs_memories or exact_lookup_found_nothing
-                        )
-                    ]
-                    with timings.stage("encode"):
-                        encoded = await encode_task
-                    diagnostics["query_script"] = encoded.script.value
-                    # one store round trip per kind, concurrently; `wanted` order is kept so
-                    # the interleave below is what it was when they ran one after another
-                    with timings.stage("search"):
-                        per_kind = await asyncio.gather(
-                            *(
-                                self._search_kind(
-                                    ctx,
-                                    routed,
-                                    search_text,
-                                    visibility,
-                                    kind=kind,
-                                    document_ids=document_ids,
-                                    encoded=encoded,
-                                    diagnostics=diagnostics,
-                                )
-                                for kind in wanted
+                # 2. hybrid lexical + dense with native RRF inside the store, always: an
+                #    exact hit leads, it does not end the search. A question that names a
+                #    thing ("update quote Q-1183 with the EMEA price for SKU-22") is the most
+                #    natural question there is, and the documents and memories that answer it
+                #    need not contain the identifier. Stopping at the exact hits dropped them
+                #    from the context entirely.
+                wanted = list(kinds)
+                if routed.needs_summaries and "chunk" in wanted and "summary" not in wanted:
+                    wanted.append("summary")
+                wanted = [
+                    kind
+                    for kind in wanted
+                    if (kind != "chunk" or routed.needs_knowledge)
+                    and (kind != "memory" or routed.needs_memories)
+                ]
+                with timings.stage("encode"):
+                    encoded = await encode_task
+                diagnostics["query_script"] = encoded.script.value
+                # one store round trip per kind, concurrently; `wanted` order is kept so
+                # the interleave below is what it was when they ran one after another
+                with timings.stage("search"):
+                    per_kind = await asyncio.gather(
+                        *(
+                            self._search_kind(
+                                ctx,
+                                routed,
+                                search_text,
+                                visibility,
+                                kind=kind,
+                                document_ids=document_ids,
+                                encoded=encoded,
+                                diagnostics=diagnostics,
+                                observed=observed,
                             )
+                            for kind in wanted
                         )
-                    # interleave the per-kind lists by rank so a long document result list
-                    # can never crowd out the memories (or summaries) before the cut
-                    for group in itertools.zip_longest(*per_kind):
-                        candidates.extend(c for c in group if c is not None)
-                    diagnostics["fused_candidates"] = len(candidates)
+                    )
+                # interleave the per-kind lists by rank so a long document result list
+                # can never crowd out the memories (or summaries) before the cut
+                for group in itertools.zip_longest(*per_kind):
+                    candidates.extend(c for c in group if c is not None)
+                diagnostics["fused_candidates"] = len(candidates)
                 # 3. prune to fused_k, keeping exact hits first; collapse exact-duplicate
                 #    texts (copies of the same document) so they cannot crowd out other
                 #    evidence
@@ -417,6 +418,8 @@ class RetrievalEngine:
                     else 0,
                 )
                 kept = {c.record_id for c in candidates}
+                with timings.stage("hydrate"):
+                    await self._hydrate(candidates)
                 unused = [c for c in pool if c.record_id not in kept][:UNUSED_MAX]
                 if unused:
                     # retrieved but ranked out: the grounding cascade scans these for
@@ -446,6 +449,8 @@ class RetrievalEngine:
                     ctx, candidates, visibility, diagnostics
                 )
                 candidates = _within_selection(candidates, selected_documents, selected_kinds)
+                if observed is not None:
+                    candidates = [c for c in candidates if _observed_within(c, observed)]
             finally:
                 # an exact hit never needs the encoding; a stage that raised never consumed
                 # its prefetch - neither may outlive the request or log as never retrieved
@@ -548,14 +553,20 @@ class RetrievalEngine:
         document_ids: Sequence[str] | None,
         encoded: QueryVectors,
         diagnostics: dict[str, Any],
+        observed: ObservedRange | None = None,
     ) -> list[Candidate]:
         """Ranked candidates of one kind: the store's hybrid search, fused with any extra
         chunk retrievers. One of these runs per wanted kind, concurrently."""
         hits = await self._hybrid(
-            search_text, visibility, kind=kind, document_ids=document_ids, encoded=encoded
+            search_text,
+            visibility,
+            kind=kind,
+            document_ids=document_ids,
+            encoded=encoded,
+            observed=observed,
         )
         retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
-        if kind == "chunk" and self.retrievers:
+        if kind == "chunk" and self.retrievers and observed is None:
             lists: list[Sequence[SearchHit]] = [hits]
             for name, extra in self.retrievers.items():
                 extra_hits = await extra(ctx, routed, visibility, document_ids)
@@ -575,6 +586,7 @@ class RetrievalEngine:
                 score=h.score,
                 retrievers=retrievers_of.get(h.record_id, [h.retriever]),
                 payload=h.payload,
+                hydrated=False,
             )
             for h in hits
         ]
@@ -640,6 +652,7 @@ class RetrievalEngine:
                 score=score,
                 retrievers=["entity_topic"],
                 payload=payload,
+                hydrated=False,
             )
             for rid, score, _, payload in fused
         ]
@@ -805,9 +818,12 @@ class RetrievalEngine:
         document_ids: Sequence[str] | None,
         encoded: QueryVectors | None = None,
         subject: str | None = None,
+        observed: ObservedRange | None = None,
     ) -> list[SearchHit]:
         collection = self.indexer.collection(MEMORIES if kind == "memory" else KNOWLEDGE)
         flt = visibility.search_filter(kind=kind)
+        if observed is not None:
+            flt = flt.model_copy(update={"within": {"observed_at": observed}})
         if kind == "memory":
             flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
             if subject is not None:
@@ -827,7 +843,42 @@ class RetrievalEngine:
             prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
             rrf_k=self.cfg.hybrid_rrf_k,
             weights=self.cfg.hybrid_weights,
+            fields=RANK_FIELDS,
         )
+
+    async def _hydrate(self, candidates: list[Candidate]) -> None:
+        """The second phase of a ranked read: the full payload of the items that survived the
+        cut, one ``get`` per collection, concurrently. What ranking already read stays (the
+        derived mark, the collapsed duplicates); an item the store no longer has keeps its
+        ranking fields."""
+        partial: dict[str, list[Candidate]] = {}
+        for c in candidates:
+            if not c.hydrated:
+                collection = self.indexer.collection(MEMORIES if c.kind == "memory" else KNOWLEDGE)
+                partial.setdefault(collection, []).append(c)
+        if not partial:
+            return
+        with stage_seconds.labels("retrieval.hydrate").time():
+            fetched = await asyncio.gather(
+                *(
+                    self.store.get(collection, [c.record_id for c in items])
+                    for collection, items in partial.items()
+                )
+            )
+        full = {r.record_id: r.payload for records in fetched for r in records}
+        for items in partial.values():
+            for c in items:
+                c.payload = {**full.get(c.record_id, {}), **c.payload}
+                c.hydrated = True
+
+
+def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:
+    raw = candidate.payload.get("observed_at")
+    if not raw:
+        return False
+    when = datetime.fromisoformat(str(raw))
+    start, end = observed
+    return (start is None or when >= start) and (end is None or when <= end)
 
 
 def by_standing(candidates: list[Candidate]) -> list[Candidate]:

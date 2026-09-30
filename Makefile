@@ -185,7 +185,7 @@ BENCH_LLM_MODEL ?= gemini/gemini-3.8-flash
 # The gateway credential the judged runs spend through: the Bifrost virtual key that caps the
 # accuracy budget (governance key "memory-accuracy-usd10", 10 USD/year, OpenRouter nano/mini
 # and gemini-3.8-flash only). Export it from .env: `set -a; . ./.env; set +a`.
-MEMORY__MODELS__LLM__API_KEY ?=
+BIFROST_VIRTUAL_KEY ?=
 BENCH_LIMIT ?=
 
 #: Every containerised benchmark runs through this one block. It passes exactly what the
@@ -237,19 +237,18 @@ BENCH_DENSE ?= ensemble
 #: measured it clears its own gate. (The entity prefetch arm measured nothing: removed.)
 
 #: The judged configuration: the gateway answers and grades, at the judged depth
-#: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,
-#: TIMEOUT, retries off - a provider counts *wire* requests, so max_retries=2 sends three per
-#: logical call and a run paced at half the documented limit still exceeds it). The only
-#: LLM use is the judge: the former ambiguous-extraction/worthiness ingest uses were measured
-#: harmful (v2 -> v3: 0.674 -> 0.661, p50 281 -> 572 ms) and were removed.
+#: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, and the judge's
+#: MAX_TOKENS, TIMEOUT and retries off - a provider counts *wire* requests, so max_retries=2
+#: sends three per logical call and a run paced at half the documented limit still exceeds
+#: it). BENCH_LLM=on is the opt-in: without it a benchmark never reads the gateway variables.
+#: The only use the bench tenant's policy allows is the judge (benchmark/env.py JUDGE_USES):
+#: the former ambiguous-extraction/worthiness ingest uses were measured harmful (v2 -> v3:
+#: 0.674 -> 0.661, p50 281 -> 572 ms) and were removed.
 BENCH_LLM_ENV = -e BENCH_DEPTH=judged \
-  -e MEMORY__MODELS__LLM__ENABLED=true \
-  -e MEMORY__MODELS__LLM__BASE_URL="$(BIFROST_URL)" \
-  -e MEMORY__MODELS__LLM__API_KEY="$(MEMORY__MODELS__LLM__API_KEY)" \
-  -e MEMORY__MODELS__LLM__MODEL="$(BENCH_LLM_MODEL)" \
-  -e MEMORY__MODELS__LLM__FAST_MODEL="$(BENCH_LLM_MODEL)" \
-  -e MEMORY__MODELS__LLM__USES='["grounding_judge"]' \
-  -e MEMORY__MODELS__LLM__FAST_USES='["grounding_judge"]'
+  -e BENCH_LLM=on \
+  -e BIFROST_URL="$(BIFROST_URL)" \
+  -e BIFROST_VIRTUAL_KEY="$(BIFROST_VIRTUAL_KEY)" \
+  -e BENCH_LLM_MODEL="$(BENCH_LLM_MODEL)"
 
 bench-db: ## Create and migrate the benchmark databases (idempotent, safe to re-run)
 	@# Benchmarks used to assume `memory_bench` already existed, so on any machine that had
@@ -365,7 +364,7 @@ bench-concurrency: ## How much parallelism the model tier wants, and what it cos
 	@# jobs enter the same torch module while torch fans each op across every core. This
 	@# measures throughput, peak RSS and — the part that matters — whether concurrent results
 	@# still agree with sequential ones on a shared, unlocked module.
-	$(call bench-run,$(BENCH_DB_DOCS),-e BENCH_SEARCH=memory -e BENCH_GRAPH_ENRICHMENT=disabled -e MEMORY__MODELS__EMBEDDING__THREADS="$(BENCH_THREADS)",/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS))
+	$(call bench-run,$(BENCH_DB_DOCS),-e BENCH_SEARCH=memory -e BENCH_GRAPH_ENRICHMENT=disabled -e BENCH_THREADS="$(BENCH_THREADS)",/opt/venv/bin/python -m benchmark.concurrency $(CONCURRENCY_ARGS))
 
 bench-degenerate: bench-db ## Behaviour on empty/garbage/hostile input, real models (inside the runtime image)
 	@# The input the service actually receives, as opposed to the input it was designed for.

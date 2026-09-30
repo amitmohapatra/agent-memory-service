@@ -8,7 +8,6 @@ from typing import Self
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from memory_service.adapters.db.brief_repository import SqlBriefRepository
 from memory_service.adapters.db.credential_repository import SqlCredentialRepository
 from memory_service.adapters.db.document_repository import SqlDocumentRepository
 from memory_service.adapters.db.feedback_repository import SqlFeedbackRepository
@@ -33,16 +32,11 @@ from memory_service.adapters.db.repositories import (
 )
 from memory_service.adapters.db.tenancy_repository import (
     SqlApiKeyRepository,
-    SqlGroupRepository,
     SqlReadAuditRepository,
     SqlTenantRepository,
     SqlWorkspaceRepository,
 )
 from memory_service.adapters.db.tool_repository import SqlProcedureRepository, SqlToolRepository
-from memory_service.adapters.db.webhook_repository import (
-    SqlWebhookDeliveryRepository,
-    SqlWebhookRepository,
-)
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -139,15 +133,11 @@ class SqlUnitOfWork:
         self.credentials = SqlCredentialRepository(s)
         self.llm_policies = SqlLLMPolicyRepository(s)
         self.llm_usage = SqlLLMUsageRepository(s)
-        self.briefs = SqlBriefRepository(s)
         self.tenants = SqlTenantRepository(s)
         self.api_keys = SqlApiKeyRepository(s)
         self.workspaces = SqlWorkspaceRepository(s)
-        self.groups = SqlGroupRepository(s)
         self.read_audit = SqlReadAuditRepository(s)
         self.feedback = SqlFeedbackRepository(s)
-        self.webhooks = SqlWebhookRepository(s)
-        self.webhook_deliveries = SqlWebhookDeliveryRepository(s)
         return self
 
     async def __aexit__(

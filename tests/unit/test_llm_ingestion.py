@@ -80,7 +80,7 @@ async def test_context_is_inserted_after_the_header_and_text_is_untouched() -> N
         assist = gw.assist(uses=["chunk_context"])
         out = await situate_chunks(assist, chunks, nodes, document_title="Doc")
         prompt = gw.prompts()[0]
-    assert prompt["model"] == "test/fast"
+    assert prompt["model"] == "gemini/gemini-3.8-flash"
     user = prompt["messages"][1]["content"]
     assert user.startswith("Document: Doc") and "### Chunk 0" in user
     assert "Surrounding text: " in user and "[…the chunk…]" in user

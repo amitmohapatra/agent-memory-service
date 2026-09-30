@@ -2,14 +2,11 @@
 
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any
 
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
-from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.ports.uow import UnitOfWork
-from memory_service.ports.webhooks import EventPublisher
 
 
 def memory_revision_keys(memory: CanonicalMemory) -> set[tuple[RevisionKind, str]]:
@@ -81,8 +78,6 @@ async def retract(
     memory: CanonicalMemory,
     *,
     now: datetime,
-    events: EventPublisher | None,
-    data: dict[str, Any],
 ) -> None:
     """Withdraw a memory without deleting it: RETRACTED, its validity closed at ``now``, the
     row kept for the temporal view, and ``memory.retracted`` published with ``data``."""
@@ -91,14 +86,3 @@ async def retract(
     )
     memory.updated_at = now
     await uow.memories.update(memory)
-    if events is not None:
-        await events.publish(
-            uow,
-            Event(
-                type=WebhookEvent.MEMORY_RETRACTED,
-                tenant_id=memory.tenant_id,
-                workspace_id=memory.scope.workspace_id,
-                occurred_at=now,
-                data={"memory_id": memory.memory_id, **data},
-            ),
-        )

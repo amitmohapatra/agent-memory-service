@@ -11,6 +11,7 @@ import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from memory_service.config.constants import HINDSIGHT
 from memory_service.config.settings import HindsightSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.llm.cost import record_llm_tokens
@@ -38,15 +39,16 @@ class HindsightExtractor:
                     "Hindsight extraction needs the [hindsight] extra"
                 ) from exc
 
+            if settings.base_url is None:
+                raise DependencyUnavailable("MEMORY__HINDSIGHT__BASE_URL is not set")
             client = Hindsight(
                 base_url=settings.base_url,
                 api_key=settings.api_key.get_secret_value() if settings.api_key else None,
-                timeout=settings.timeout_seconds,
+                timeout=HINDSIGHT.timeout_seconds,
                 max_attempts=1,
             )
         self._client = client
-        self._settings = settings
-        self._slots = asyncio.Semaphore(settings.max_concurrency)
+        self._slots = asyncio.Semaphore(HINDSIGHT.max_concurrency)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -58,9 +60,9 @@ class HindsightExtractor:
 
         try:
             # Include time queued for a slot; overload must not accumulate unbounded waits.
-            async with asyncio.timeout(self._settings.timeout_seconds), self._slots:
+            async with asyncio.timeout(HINDSIGHT.timeout_seconds), self._slots:
                 result = await self._client.memory.dry_run_extract_memories(
-                    bank_id=self._settings.bank_id,
+                    bank_id=HINDSIGHT.bank_id,
                     dry_run_extract_request=DryRunExtractRequest(
                         content=text,
                         timestamp=timestamp,
@@ -70,7 +72,7 @@ class HindsightExtractor:
                             "corrections and antecedents. Do not invent identities or dates."
                         ),
                     ),
-                    _request_timeout=self._settings.timeout_seconds,
+                    _request_timeout=HINDSIGHT.timeout_seconds,
                 )
                 if result.usage:
                     record_llm_tokens(

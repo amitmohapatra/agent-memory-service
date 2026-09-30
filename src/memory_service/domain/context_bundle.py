@@ -23,6 +23,13 @@ from memory_service.domain.tools import ToolHints
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
+#: Handle prefix -> the bundle list it numbers (``ContextBundle.handles``).
+HANDLE_PREFIXES: dict[str, str] = {
+    "m": "memories",
+    "f": "graph_facts",
+    "s": "summaries",
+    "d": "knowledge",
+}
 
 
 class ContextItem(BaseModel):
@@ -277,7 +284,7 @@ def _head_with_siblings(memories: Sequence[Any], count: int) -> list[Any]:
     return head
 
 
-def _memory_line(m: Any, *, body: str | None = None) -> str:
+def _memory_line(m: Any, ref: str, *, body: str | None = None) -> str:
     """One memory as one line: citation, date, weekday, speaker, text - each exactly once.
 
     The speaker is the subject's user id (``user:caroline`` -> ``caroline``). Its original
@@ -290,7 +297,7 @@ def _memory_line(m: Any, *, body: str | None = None) -> str:
     subject = str(m.attributes.get("subject") or "")
     who = subject.split(":", 1)[1] if subject.startswith("user:") else ""
     parts = (
-        f"- [{m.citation}]",
+        f"- [{ref}]",
         "model-extracted, unverified; source speaker"
         if unverified_representation(m.attributes)
         else "",
@@ -356,14 +363,16 @@ def _aggregate_key(m: Any) -> tuple[str, str] | None:
     return subject, predicate
 
 
-def _aggregate_line(subject: str, predicate: str, members: Sequence[Any]) -> str:
+def _aggregate_line(
+    subject: str, predicate: str, members: Sequence[Any], refs: dict[str, str]
+) -> str:
     """Every gathered value of one slot as a single citable block, oldest first.
 
     Carries every member's citation, so the reader can still attribute each statement, and
     every member's resolved relative dates. The unverified warning is kept if it applies to
     any member: an aggregate is no more trustworthy than its least trustworthy source.
     """
-    citations = "; ".join(dict.fromkeys(m.citation for m in members))
+    citations = "; ".join(dict.fromkeys(refs[m.item_id] for m in members))
     warning = (
         "model-extracted, unverified; source speaker"
         if any(unverified_representation(m.attributes) for m in members)
@@ -376,7 +385,7 @@ def _aggregate_line(subject: str, predicate: str, members: Sequence[Any]) -> str
     return f"{head} {aggregate_statement(subject, predicate, dated)}"
 
 
-def _timeline_lines(ordered: Sequence[Any], shown: set[str]) -> list[str]:
+def _timeline_lines(ordered: Sequence[Any], shown: set[str], refs: dict[str, str]) -> list[str]:
     """The chronological block, with each multi-valued slot gathered into one dated block.
 
     ``ordered`` is oldest first, so a gathered block is oldest first too and lands at its
@@ -400,10 +409,11 @@ def _timeline_lines(ordered: Sequence[Any], shown: set[str]) -> list[str]:
     for m in ordered:
         key = gathered.get(m.item_id)
         if key is None:
-            lines.append(_memory_line(m, body=SHOWN_ABOVE if m.item_id in shown else None))
+            body = SHOWN_ABOVE if m.item_id in shown else None
+            lines.append(_memory_line(m, refs[m.item_id], body=body))
         elif key not in done:
             done.add(key)
-            lines.append(_aggregate_line(*key, groups[key]))
+            lines.append(_aggregate_line(*key, groups[key], refs))
     return lines
 
 
@@ -431,18 +441,26 @@ class ContextBundle(BaseModel):
     )
     built_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     diagnostics: dict[str, Any] = Field(default_factory=dict)
-    #: the scope revision the bundle was built at (``since_revision`` for a delta)
-    revision: int = 0
-    #: true when only what changed since ``since_revision`` is listed
-    delta: bool = False
     profile: list[ProfileBlockView] = Field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
     procedures: list[ProcedureView] = Field(default_factory=list)
     tools: ToolHints | None = None
 
+    def handles(self) -> dict[str, str]:
+        """Short, per-bundle handles for what the bundle carries, handle -> item id: ``m1``..
+        for memories, ``f1``.. for graph facts, ``s1``.. for summaries, ``d1``.. for
+        document passages, in bundle order. The rendered prompt cites by them, and the
+        service resolves them back within the bundle (update, forget, verify)."""
+        return {
+            f"{prefix}{i}": item.item_id
+            for prefix, items in HANDLE_PREFIXES.items()
+            for i, item in enumerate(getattr(self, items), start=1)
+        }
+
     def render(self) -> str:
-        """Plain-text rendering suitable for a system prompt. Applications may ignore it."""
-        parts = pinned_sections(self)
+        """Plain-text rendering suitable for a system prompt, citing by handle."""
+        refs = {item_id: handle for handle, item_id in self.handles().items()}
+        parts = pinned_sections(self.profile, self.thread_summary, self.procedures, self.tools)
         if self.conversation.rendered:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         if self.memories:
@@ -459,27 +477,35 @@ class ContextBundle(BaseModel):
             shown: set[str] = set()
             if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
                 shown = {m.item_id for m in ranked}
-                parts.append("## Most relevant\n" + "\n".join(_memory_line(m) for m in ranked))
+                parts.append(
+                    "## Most relevant\n"
+                    + "\n".join(_memory_line(m, refs[m.item_id]) for m in ranked)
+                )
             ordered = sorted(self.memories, key=lambda m: str(m.attributes.get("observed_at", "")))
-            parts.append("## Memories\n" + "\n".join(_timeline_lines(ordered, shown)))
+            parts.append("## Memories\n" + "\n".join(_timeline_lines(ordered, shown, refs)))
         if self.memories and REPEAT_MOST_RELEVANT_AT_END and len(self.memories) > MOST_RELEVANT_MAX:
             # The tail of the prompt is the second attention peak (63.2 against the middle's
             # 53.8 in arXiv 2307.03172), and it is the last thing read before the question.
             tail = self.memories[:MOST_RELEVANT_TAIL]
-            parts.append("## Most relevant, again\n" + "\n".join(_memory_line(m) for m in tail))
+            parts.append(
+                "## Most relevant, again\n"
+                + "\n".join(_memory_line(m, refs[m.item_id]) for m in tail)
+            )
         if self.graph_facts:
             parts.append(
-                "## Facts\n" + "\n".join(f"- [{f.citation}] {f.text}" for f in self.graph_facts)
+                "## Facts\n"
+                + "\n".join(f"- [{refs[f.item_id]}] {f.text}" for f in self.graph_facts)
             )
         if self.summaries:
             parts.append(
-                "## Summaries\n" + "\n".join(f"- [{s.citation}] {s.text}" for s in self.summaries)
+                "## Summaries\n"
+                + "\n".join(f"- [{refs[s.item_id]}] {s.text}" for s in self.summaries)
             )
         if self.knowledge:
             parts.append(
                 "## Knowledge\n"
                 + "\n\n".join(
-                    f"[{k.citation}]"
+                    f"[{refs[k.item_id]}]"
                     + (f" ({k.section_path})" if k.section_path else "")
                     + f"\n{k.text}"
                     for k in self.knowledge
@@ -490,46 +516,50 @@ class ContextBundle(BaseModel):
         return "\n\n".join(parts)
 
 
-def _profile_section(bundle: ContextBundle) -> str | None:
-    if not bundle.profile:
+def profile_section(profile: Sequence[ProfileBlockView]) -> str | None:
+    if not profile:
         return None
-    return "## Profile\n" + "\n".join(f"### {b.block}\n{b.text}" for b in bundle.profile)
+    return "## Profile\n" + "\n".join(f"### {b.block}\n{b.text}" for b in profile)
 
 
-def _procedures_section(bundle: ContextBundle) -> str | None:
-    if not bundle.procedures:
+def summary_section(summary: ThreadSummaryView | None) -> str | None:
+    return f"## Conversation summary\n{summary.text}" if summary else None
+
+
+def procedures_section(procedures: Sequence[ProcedureView]) -> str | None:
+    if not procedures:
         return None
     lines = []
-    for p in bundle.procedures:
+    for p in procedures:
         steps = " -> ".join(str(step.get("tool")) for step in p.steps)
-        lines.append(
-            f"- [procedure_id:{p.id}] {p.title}: {steps} "
-            f"(worked {p.success_rate:.0%} of {p.support} runs)"
-        )
+        title = f"{p.title}: " if p.title else ""
+        lines.append(f"- {title}{steps} (worked {p.success_rate:.0%} of {p.support} runs)")
     return "## Procedures that worked for this task\n" + "\n".join(lines)
 
 
-def _tools_section(bundle: ContextBundle) -> str | None:
-    hints = bundle.tools
-    if hints is None or not (hints.candidates or hints.next):
+def tools_section(hints: ToolHints | None) -> str | None:
+    """The next tool, the arguments found for it (``tool.arg``) and what is missing: what
+    the model acts on. The candidates narrow the tools a caller offers; they are not text."""
+    if hints is None or not (hints.next or hints.prefill or hints.missing):
         return None
     lines = [f"- next: {hints.next}"] if hints.next else []
-    lines += [f"- {c.name}: {c.why}" if c.why else f"- {c.name}" for c in hints.candidates]
-    lines += [f"- {arg} = {p.value!r} ({p.source})" for arg, p in hints.prefill.items()]
-    lines += [f"- missing {m.arg}: {m.question}" for m in hints.missing]
+    lines += [f"- {key} = {p.value!r} ({p.source})" for key, p in hints.prefill.items()]
+    lines += [f"- missing {m.tool}.{m.arg}: {m.question}" for m in hints.missing]
     return "## Tools\n" + "\n".join(lines)
 
 
-def pinned_sections(bundle: ContextBundle) -> list[str]:
+def pinned_sections(
+    profile: Sequence[ProfileBlockView],
+    summary: ThreadSummaryView | None,
+    procedures: Sequence[ProcedureView],
+    tools: ToolHints | None,
+) -> list[str]:
     """What every prompt starts from: the profile, the thread summary, the procedures and
     the tool hints, in that order."""
-    summary = (
-        f"## Conversation summary\n{bundle.thread_summary.text}" if bundle.thread_summary else None
-    )
     sections = (
-        _profile_section(bundle),
-        summary,
-        _procedures_section(bundle),
-        _tools_section(bundle),
+        profile_section(profile),
+        summary_section(summary),
+        procedures_section(procedures),
+        tools_section(tools),
     )
     return [s for s in sections if s]

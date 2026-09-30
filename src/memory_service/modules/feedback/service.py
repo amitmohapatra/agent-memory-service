@@ -5,11 +5,9 @@ the record, so a verdict is never lost and never slows the request that carried 
 
 - memory: an affirming verdict reinforces, a rejection retracts, a correction writes a new
   memory that supersedes the old one;
-- answer: the memories the answer cited (its evidence references) gain or lose confidence,
-  and the run that answered is labelled unless it already carries an explicit label;
-- run: the verdict is the run's explicit outcome;
-- tool call: counted on the tool's statistics and on its approval pattern (a rejection also
-  labels the run unless it carries an explicit outcome);
+- run: the run's outcome, unless a higher-ranked source decided it (a person over the judge
+  over the run's own status); the memories the verdict cites gain or lose confidence;
+- tool call: counted on the tool's statistics and on its approval pattern;
 - procedure: a rejection takes it out of what is offered.
 
 Every projection that touches a memory re-indexes it (the index carries the confidence and
@@ -21,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Final, Literal
+from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
@@ -31,31 +29,32 @@ from memory_service.domain.feedback import (
     AFFIRMING_VERDICTS,
     APPROVAL_COUNTER,
     CORRECTING_VERDICTS,
+    OUTCOME_PRECEDENCE,
     Feedback,
     FeedbackProjection,
+    FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
     ProjectionAction,
 )
 from memory_service.domain.learning import (
-    ANSWER_CONFIDENCE_STEP,
-    ANSWER_MEMORIES_MAX,
+    CITED_CONFIDENCE_STEP,
+    CITED_MEMORIES_MAX,
     CONFIDENCE_FLOOR,
-    arg_shape,
 )
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import RunOutcome
-from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
 from memory_service.modules.memory.service import MemoryService
+from memory_service.modules.tools.service import TASK_TOOLS_LEARN
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
-from memory_service.ports.webhooks import EventPublisher
+from trellis.memory.approval import arg_shape
 
 log = get_logger(__name__)
 
@@ -81,14 +80,12 @@ class FeedbackService:
         uow_factory: UnitOfWorkFactory,
         authz: AuthorizationService,
         memory: MemoryService,
-        events: EventPublisher,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
         self.memory = memory
-        self.events = events
         self.clock = clock
 
     # ------------------------------------------------------------------ writes
@@ -108,7 +105,7 @@ class FeedbackService:
                 )
         if feedback.target_kind is FeedbackTargetKind.MEMORY:
             await self._authorize_memory_verdict(uow, ctx, feedback)
-        for memory_id in feedback.cited_memory_ids(ANSWER_MEMORIES_MAX):
+        for memory_id in feedback.cited_memory_ids(CITED_MEMORIES_MAX):
             # an answer verdict moves the confidence of what it cites: only what the
             # reviewer may read (404 / 403 otherwise)
             await self.memory.get_memory(uow, ctx, memory_id)
@@ -137,15 +134,6 @@ class FeedbackService:
                 tenant_id=stored.tenant_id,
             )
         )
-        await self.events.publish(
-            uow,
-            Event(
-                type=WebhookEvent.FEEDBACK_RECEIVED,
-                tenant_id=stored.tenant_id,
-                workspace_id=stored.workspace_id,
-                data=self.event_data(stored),
-            ),
-        )
         return stored, True
 
     async def _authorize_memory_verdict(
@@ -163,23 +151,6 @@ class FeedbackService:
                 f"only the owner (or a tenant admin) can {feedback.verdict.value} a memory",
                 details={"principal": ctx.principal_id},
             )
-
-    @staticmethod
-    def event_data(feedback: Feedback) -> dict[str, Any]:
-        """What a webhook learns about a record: its identity, target and verdict, never the
-        correction text (the receiver reads the record through the API if it needs it)."""
-        return {
-            "feedback_id": feedback.feedback_id,
-            "target_kind": feedback.target_kind.value,
-            "target_id": feedback.target_id,
-            "verdict": feedback.verdict.value,
-            "source": feedback.source.value,
-            "agent_id": feedback.agent_id,
-            "agent_run_id": feedback.agent_run_id,
-            "projection": feedback.projection.model_dump(mode="json")
-            if feedback.projection
-            else None,
-        }
 
     # ------------------------------------------------------------------ reads
     async def get(self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback_id: str) -> Feedback:
@@ -261,17 +232,6 @@ class FeedbackService:
             now = self.clock()
             projection = await self._project(uow, record, now=now)
             await uow.feedback.set_projection(tenant_id, feedback_id, projection)
-            projected = record.model_copy(update={"projection": projection})
-            await self.events.publish(
-                uow,
-                Event(
-                    type=WebhookEvent.FEEDBACK_PROJECTED,
-                    tenant_id=tenant_id,
-                    workspace_id=record.workspace_id,
-                    occurred_at=now,
-                    data=self.event_data(projected),
-                ),
-            )
             await uow.commit()
         log.info(
             "feedback.projected",
@@ -286,17 +246,10 @@ class FeedbackService:
     ) -> FeedbackProjection:
         handler = {
             FeedbackTargetKind.MEMORY: self._project_memory,
-            FeedbackTargetKind.ANSWER: self._project_answer,
             FeedbackTargetKind.RUN: self._project_run,
             FeedbackTargetKind.TOOL_CALL: self._project_tool_call,
             FeedbackTargetKind.PROCEDURE: self._project_procedure,
-        }.get(record.target_kind)
-        if handler is None:
-            return FeedbackProjection(
-                action=ProjectionAction.NONE,
-                reason=f"{record.target_kind.value} feedback is recorded, not projected",
-                projected_at=now,
-            )
+        }[record.target_kind]
         return await handler(uow, record, now=now)
 
     async def _project_memory(
@@ -325,49 +278,33 @@ class FeedbackService:
             return await self._correct(uow, memory, record, now=now)
         raise AssertionError(f"unhandled verdict {record.verdict}")  # pragma: no cover
 
-    async def _project_answer(
-        self, uow: UnitOfWork, record: Feedback, *, now: datetime
-    ) -> FeedbackProjection:
-        """An answer judged right raises the confidence of every memory it cited and
-        reinforces them; judged wrong (rejected or corrected), lowers it. The run that
-        answered is labelled too, unless it already carries an explicit label."""
-        affirmed = record.verdict in AFFIRMING_VERDICTS
-        adjusted = await self._adjust_cited(uow, record, affirmed=affirmed, now=now)
-        if affirmed and record.agent_run_id:
-            await uow.pulls.mark_used(record.tenant_id, record.agent_run_id, adjusted)
-        run_id = await self._label_run(
-            uow, record, record.agent_run_id, success=affirmed, source="feedback", now=now
-        )
-        action = (
-            ProjectionAction.MEMORIES_ADJUSTED
-            if adjusted
-            else ProjectionAction.RUN_LABELLED
-            if run_id
-            else ProjectionAction.NONE
-        )
-        return FeedbackProjection(
-            action=action,
-            memory_ids=adjusted,
-            run_id=run_id,
-            reason=None if action is not ProjectionAction.NONE else "nothing cited, no run",
-            projected_at=now,
-        )
-
     async def _project_run(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        """A verdict on a run is its explicit outcome: confirmed or approved succeeded,
-        rejected or corrected did not. The last word wins, as with ``outcome``."""
-        run_id = await self._label_run(
-            uow,
-            record,
-            record.target_id,
-            success=record.verdict in AFFIRMING_VERDICTS,
-            source="explicit",
-            now=now,
-        )
+        """A verdict on a run: confirmed or approved succeeded, rejected or corrected did not.
+
+        The run's outcome follows the verdict unless a higher-ranked source already decided
+        it (``OUTCOME_PRECEDENCE``: a person over the judge over the run's own status). The
+        memories the verdict cites (its evidence references) gain or lose confidence, and a
+        confirmed run marks them used for prefetch learning."""
+        affirmed = record.verdict in AFFIRMING_VERDICTS
+        adjusted = await self._adjust_cited(uow, record, affirmed=affirmed, now=now)
+        if affirmed and adjusted:
+            await uow.pulls.mark_used(record.tenant_id, record.target_id, adjusted)
+        labelled = await self._label_run(uow, record, success=affirmed, now=now)
+        if not labelled and not adjusted:
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                run_id=record.target_id,
+                reason="a higher-ranked source already decided the run's outcome",
+                projected_at=now,
+            )
         return FeedbackProjection(
-            action=ProjectionAction.RUN_LABELLED, run_id=run_id, projected_at=now
+            action=ProjectionAction.RUN_LABELLED if labelled else ProjectionAction.NONE,
+            memory_ids=adjusted,
+            run_id=record.target_id,
+            reason=None if labelled else "a higher-ranked source decided the run's outcome",
+            projected_at=now,
         )
 
     async def _project_tool_call(
@@ -375,9 +312,8 @@ class FeedbackService:
     ) -> FeedbackProjection:
         """Approve, reject or edit of a tool call: counted on the tool and on the approval
         pattern of (agent, tool, argument shape). The tool is ``metadata.tool`` and its
-        arguments ``metadata.args`` (the edit's replacement arguments when absent). A
-        rejection also labels the run as not successful, unless it carries an explicit
-        outcome."""
+        arguments ``metadata.args`` (the edit's replacement arguments when absent). The run's
+        outcome is not touched: that is what RUN feedback is for."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
@@ -397,16 +333,7 @@ class FeedbackService:
             arg_shape(args if isinstance(args, dict) else None),
             counter,
         )
-        run_id = (
-            await self._label_run(
-                uow, record, record.agent_run_id, success=False, source="feedback", now=now
-            )
-            if record.verdict is FeedbackVerdict.REJECT
-            else None
-        )
-        return FeedbackProjection(
-            action=ProjectionAction.TOOL_CALL_COUNTED, run_id=run_id, projected_at=now
-        )
+        return FeedbackProjection(action=ProjectionAction.TOOL_CALL_COUNTED, projected_at=now)
 
     async def _project_procedure(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
@@ -428,7 +355,7 @@ class FeedbackService:
     async def _adjust_cited(
         self, uow: UnitOfWork, record: Feedback, *, affirmed: bool, now: datetime
     ) -> list[str]:
-        ids = record.cited_memory_ids(ANSWER_MEMORIES_MAX)
+        ids = record.cited_memory_ids(CITED_MEMORIES_MAX)
         if not ids:
             return []
         await uow.serialize(*(f"memory:{record.tenant_id}:{i}" for i in sorted(ids)))
@@ -437,7 +364,7 @@ class FeedbackService:
             for m in await uow.memories.get_many(record.tenant_id, ids)
             if m.deleted_at is None and m.temporal.status is TemporalStatus.CURRENT
         ]
-        step = ANSWER_CONFIDENCE_STEP if affirmed else -ANSWER_CONFIDENCE_STEP
+        step = CITED_CONFIDENCE_STEP if affirmed else -CITED_CONFIDENCE_STEP
         for memory in memories:
             memory.confidence = min(1.0, max(CONFIDENCE_FLOOR, memory.confidence + step))
             memory.reinforcement_count += 1 if affirmed else 0
@@ -448,35 +375,36 @@ class FeedbackService:
         return sorted(m.memory_id for m in memories)
 
     async def _label_run(
-        self,
-        uow: UnitOfWork,
-        record: Feedback,
-        run_id: str | None,
-        *,
-        success: bool,
-        source: Literal["explicit", "feedback"],
-        now: datetime,
-    ) -> str | None:
-        """Set the run's outcome. A verdict that only implies one (``feedback``) never
-        overrides a label the run or a reviewer gave it explicitly."""
-        if not run_id:
-            return None
-        if source == "feedback":
-            existing = await uow.tools.outcome(record.tenant_id, run_id)
-            if existing is not None and existing.source == "explicit":
-                return None
-        note = f"feedback {record.feedback_id}: {record.verdict.value}"
+        self, uow: UnitOfWork, record: Feedback, *, success: bool, now: datetime
+    ) -> bool:
+        """Set the run's outcome unless a higher-ranked source decided it, and queue the
+        run's calls to be learned again: a label is what turns a trajectory into evidence for
+        a procedure. Serialised per run, so two verdicts apply one after the other."""
+        run_id = record.target_id
+        await uow.serialize(f"run-outcome:{record.tenant_id}:{run_id}")
+        existing = await uow.tools.outcome(record.tenant_id, run_id)
+        rank = OUTCOME_PRECEDENCE[record.source]
+        if existing is not None and OUTCOME_PRECEDENCE[FeedbackSource(existing.source)] > rank:
+            return False
         await uow.tools.set_outcome(
             RunOutcome(
                 tenant_id=record.tenant_id,
                 run_id=run_id,
                 success=success,
-                note=note,
-                source=source,
+                note=f"feedback {record.feedback_id}: {record.verdict.value}",
+                source=record.source.value,
                 recorded_at=now,
             )
         )
-        return run_id
+        await uow.enqueue(
+            JobSpec(
+                task_name=TASK_TOOLS_LEARN,
+                queue=Queue.RECONCILE,
+                payload={"tenant_id": record.tenant_id},
+                tenant_id=record.tenant_id,
+            )
+        )
+        return True
 
     async def _reinforce(
         self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
@@ -495,9 +423,7 @@ class FeedbackService:
     async def _retract(
         self, uow: UnitOfWork, memory: CanonicalMemory, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        await retract(
-            uow, memory, now=now, events=self.events, data={"feedback_id": record.feedback_id}
-        )
+        await retract(uow, memory, now=now)
         await self._reindex(uow, memory)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_RETRACTED, memory_id=memory.memory_id, projected_at=now
@@ -555,20 +481,6 @@ class FeedbackService:
         await supersede(uow, memory, corrected, now=now)
         await uow.memories.add(corrected, visibility_keys=keys)
         await self._reindex(uow, memory, corrected)
-        await self.events.publish(
-            uow,
-            Event(
-                type=WebhookEvent.MEMORY_SUPERSEDED,
-                tenant_id=memory.tenant_id,
-                workspace_id=memory.scope.workspace_id,
-                occurred_at=now,
-                data={
-                    "memory_id": memory.memory_id,
-                    "superseded_by": corrected.memory_id,
-                    "feedback_id": record.feedback_id,
-                },
-            ),
-        )
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_SUPERSEDED,
             memory_id=memory.memory_id,

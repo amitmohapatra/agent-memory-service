@@ -233,13 +233,12 @@ services:
   # here: running one from this compose file would put provider keys inside the application's
   # own deployment, which is the coupling the gateway exists to remove.
   #
-  #   MEMORY__MODELS__LLM__ENABLED=true
-  #   MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
-  #   MEMORY__MODELS__LLM__MODEL=<provider>/<model>
-  #   MEMORY__MODELS__LLM__API_KEY=<virtual key issued by the gateway, not a provider key>
+  #   BIFROST_URL=https://<your-gateway>/v1
+  #   BIFROST_VIRTUAL_KEY=<the operator's virtual key issued by the gateway, optional>
   #
-  # With llm.enabled=false the service runs complete without any gateway at all; generation is
-  # an enhancement, never a dependency.
+  # Without BIFROST_URL the service runs complete without any gateway at all; generation is an
+  # enhancement, never a dependency. Tenants and agents register their own keys through the
+  # API (PUT /v1/model-key, PUT /v1/agents/model-key).
 
   # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`
   # run on the working tree against the real services above with the weights in ./models.

@@ -1,10 +1,10 @@
-"""Tool memory service (TOOL_MEMORY.md): the catalog, call records and run outcomes.
+"""Tool memory service (TOOL_MEMORY.md): the catalog and call records.
 
 The service never runs a tool. The catalog says what each tool is and does (side effects,
 the entity types its arguments name); ``record`` stores what an agent called and counts it;
-``set_outcome`` labels a run and queues its calls to be learned again. Everything learned from
-the records - procedures, graph edges - is the learning job's (``modules.tools.learning``);
-the advice read back is ``modules.tools.hints``.
+a run's outcome is a projection of its feedback (``modules.feedback``). Everything learned from
+the records - procedures, graph edges, approval suggestions - is the learning job's
+(``modules.tools.learning``); the advice read back is ``modules.tools.hints``.
 
 Nothing is read that the caller's visibility keys do not cover, and a call record carries the
 same audience keys a memory written by the same caller would.
@@ -21,7 +21,6 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, Visibility
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import (
-    RunOutcome,
     SubCall,
     ToolDescriptor,
     ToolInvocation,
@@ -35,6 +34,7 @@ from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.modules.tools.patterns import task_pattern
 from memory_service.modules.tools.trajectories import flatten
 from memory_service.observability.logging import get_logger
+from memory_service.ports.blob import BlobAlreadyExists
 from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
@@ -63,17 +63,21 @@ class ToolMemoryService:
 
     # ------------------------------------------------------------------ catalog
     async def put_catalog(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, entries: Sequence[ToolDescriptor]
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        entries: Sequence[tuple[ToolDescriptor, frozenset[str]]],
     ) -> list[ToolDescriptor]:
-        """Upsert entries in the caller's workspace (or tenant-wide without one). Changed
-        entries are re-indexed for tool search, and bundles that carried tool hints go stale."""
+        """Upsert entries in the caller's workspace (or tenant-wide without one); an existing
+        entry changes only in the fields the caller sent. Changed entries are re-indexed for
+        tool search, and bundles that carried tool hints go stale."""
         stored: list[ToolDescriptor] = []
         changed: list[str] = []
-        for entry in entries:
+        for entry, fields in entries:
             scoped = entry.model_copy(
                 update={"tenant_id": ctx.tenant_id, "workspace_id": ctx.workspace_id}
             )
-            saved, was_changed = await uow.tools.upsert(scoped)
+            saved, was_changed = await uow.tools.upsert(scoped, fields=fields)
             stored.append(saved)
             if was_changed:
                 changed.append(saved.tool_id)
@@ -185,36 +189,18 @@ class ToolMemoryService:
             path = f"{ctx.tenant_id}/tool-output/{digest}.txt"
             try:
                 await self.blob.put(
-                    self.blob_bucket, path, text.encode("utf-8", "replace"), "text/plain"
+                    self.blob_bucket,
+                    path,
+                    text.encode("utf-8", "replace"),
+                    content_type="text/plain",
                 )
+                blob_ref = f"{self.blob_bucket}/{path}"
+            except BlobAlreadyExists:
+                # content-addressed: the same output was archived by an earlier call
                 blob_ref = f"{self.blob_bucket}/{path}"
             except Exception as exc:
                 log.warning("tools.output_archive_failed", error=type(exc).__name__)
         return (summary, blob_ref, digest)
-
-    # ------------------------------------------------------------------ outcomes
-    async def set_outcome(
-        self,
-        uow: UnitOfWork,
-        ctx: MemoryExecutionContext,
-        *,
-        run_id: str,
-        success: bool,
-        note: str | None = None,
-    ) -> RunOutcome:
-        """Label a run (the last word wins) and queue its calls to be learned again: a label
-        is what turns a trajectory into evidence for a procedure."""
-        outcome = RunOutcome(tenant_id=ctx.tenant_id, run_id=run_id, success=success, note=note)
-        await uow.tools.set_outcome(outcome)
-        await uow.enqueue(
-            JobSpec(
-                task_name=TASK_TOOLS_LEARN,
-                queue=Queue.RECONCILE,
-                payload={"tenant_id": ctx.tenant_id},
-                tenant_id=ctx.tenant_id,
-            )
-        )
-        return outcome
 
 
 def _visibility_keys(ctx: MemoryExecutionContext, visibility: Visibility) -> list[str]:

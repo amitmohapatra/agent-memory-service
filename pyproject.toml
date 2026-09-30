@@ -37,6 +37,9 @@ dependencies = [
   # The gateway client, shared with the agent harness so its retry and rate-limit
   # handling has one implementation rather than two that drift.
   "bifrost-sdk>=0.2",
+  # ``trellis.memory.approval``: the one implementation of approve_when and of the argument
+  # shape approvals are pooled by, shared with the harness that evaluates them.
+  "trellis-memory",
   "python-multipart>=0.0.20",
   "prometheus-client>=0.26",
   "opentelemetry-api>=1.44",
@@ -165,6 +168,7 @@ ignore = [
 "src/memory_service/tools/**" = ["E501"]
 "src/memory_service/adapters/**" = ["TID251"]
 "tests/**/conftest.py" = ["TID251"]
+"tests/integration/test_gcs_blob.py" = ["TID251"]  # inspects the fake bucket directly
 "migrations/**" = ["TID251", "E501"]
 "benchmark/**" = ["T20", "S", "PLR", "TID251", "E501", "SIM905", "RUF100"]
 "examples/**" = ["T20", "S", "PLR", "TID251", "E501", "RUF100", "ASYNC"]

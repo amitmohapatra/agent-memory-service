@@ -1,23 +1,16 @@
-"""Public /v1/graph routes: entity resolution, bounded visibility-filtered traversal, and
-entity search and profiles."""
+"""Public /v1/graph routes: find entities (resolved from free text, or by name), and an
+entity's profile with a bounded, visibility-filtered traversal from it."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
-from memory_service.api.deps import (
-    ContainerDep,
-    HeaderContextDep,
-    ScopeBody,
-    ServicePrincipalDep,
-    build_context,
-)
+from memory_service.api.deps import ContainerDep, HeaderContextDep
 from memory_service.api.errors import error_responses
-from memory_service.api.validation import UseLLM
 from memory_service.config.constants import GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, RelationStatus
@@ -27,47 +20,6 @@ from memory_service.ports.intelligence import Entity, Relation
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 422, 503)
 _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
-
-_EXAMPLE: dict[str, Any] = {
-    "scope": {"thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"},
-    "query": "Why did Adjusted EBITDA increase despite lower revenue?",
-    "hops": 2,
-}
-
-
-class GraphQueryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_EXAMPLE]})
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    use_llm: UseLLM = None
-    query: str | None = Field(
-        default=None, max_length=4000, description="free text; entities are resolved from it"
-    )
-    entities: list[str] = Field(default_factory=list, description="explicit entity names")
-    hops: int = Field(default=1, ge=1, le=3)
-    as_of: datetime | None = Field(
-        default=None,
-        description="valid time: facts that were true at this instant (including superseded "
-        "facts that held then)",
-    )
-    valid_at: datetime | None = Field(
-        default=None,
-        description="knowledge time: facts that had been asserted by this instant and not yet "
-        "invalidated",
-    )
-    layers: list[GraphLayer] | None = Field(
-        default=None,
-        min_length=1,
-        description="restrict the traversal to these layers: entity (typed facts), temporal, "
-        "causal, structural (where things appear in the corpus), procedural (what tool calls "
-        "did with entities); omit for every layer",
-    )
-    max_visited: int | None = Field(
-        default=None,
-        ge=1,
-        le=500,
-        description="Cap on entities the traversal may visit; omit for the server default",
-    )
 
 
 class EntityOut(BaseModel):
@@ -92,9 +44,9 @@ class FactOut(BaseModel):
     fact_text: str
     status: RelationStatus = Field(
         ...,
-        description="CURRENT unless the query carries as_of or valid_at, which also return "
-        "SUPERSEDED facts that held (or were asserted) at that instant. /v1/graph/query never "
-        "returns facts that were never right; an entity profile's history does.",
+        description="CURRENT unless the traversal carries as_of or valid_at, which also return "
+        "SUPERSEDED facts that held (or were asserted) at that instant. A traversal never "
+        "returns facts that were never right; the profile's history does.",
     )
     layer: GraphLayer = Field(
         ...,
@@ -115,43 +67,10 @@ class FactOut(BaseModel):
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
 
-class GraphQueryResponse(BaseModel):
-    matched: list[EntityOut]
+class NeighborhoodOut(BaseModel):
     entities: list[EntityOut]
     facts: list[FactOut]
     visited: int
-
-
-@router.post(
-    "/graph/query",
-    response_model=GraphQueryResponse,
-    tags=["graph"],
-    summary="Resolve entities and traverse the knowledge graph (bounded, visibility-filtered)",
-    responses=_ERRORS,
-)
-async def graph_query(
-    request: Request, body: GraphQueryRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> GraphQueryResponse:
-    ctx = build_context(request, container, body.scope)
-    graph: GraphService = container.services["graph"]
-    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
-        answer = await graph.query(
-            ctx,
-            query=body.query,
-            entities=body.entities,
-            hops=body.hops,
-            as_of=body.as_of,
-            valid_at=body.valid_at,
-            layers=body.layers,
-            max_visited=body.max_visited,
-        )
-    names = {e.entity_id: e.name for e in answer.entities}
-    return GraphQueryResponse(
-        matched=[_entity(e) for e in answer.matched],
-        entities=[_entity(e) for e in answer.entities],
-        facts=[_fact(r, names) for r in answer.relations],
-        visited=answer.visited,
-    )
 
 
 class EntityListResponse(BaseModel):
@@ -176,13 +95,16 @@ class EntityProfileResponse(BaseModel):
         description="facts that stopped holding: superseded, retracted or invalidated"
     )
     evidence: list[EvidenceRef] = Field(description="where the entity was seen")
+    neighborhood: NeighborhoodOut | None = Field(
+        default=None, description="the traversal from the entity, with depth"
+    )
 
 
 @router.get(
     "/graph/entities",
     response_model=EntityListResponse,
     tags=["graph"],
-    summary="Search the entities visible in this scope (name prefix, type), most mentioned first",
+    summary="Find the entities visible in this scope: those a text names, and by name prefix",
     responses=_ERRORS,
 )
 async def search_entities(
@@ -190,7 +112,11 @@ async def search_entities(
     container: ContainerDep,
     q: Annotated[
         str | None,
-        Query(max_length=300, description="start of the entity name (case-insensitive)"),
+        Query(
+            max_length=4000,
+            description="free text: the entities it names come first, then entities whose "
+            "name starts with it (case-insensitive)",
+        ),
     ] = None,
     type: Annotated[
         str | None, Query(max_length=40, description="entity type, e.g. ORG or PERSON")
@@ -198,7 +124,8 @@ async def search_entities(
     limit: Annotated[int, Query(ge=1, le=GRAPH.entity_search_max)] = 20,
 ) -> EntityListResponse:
     graph: GraphService = container.services["graph"]
-    found = await graph.search_entities(ctx, query=q, entity_type=type, limit=limit)
+    async with container.services["llm_assist"].reading(ctx):
+        found = await graph.search_entities(ctx, query=q, entity_type=type, limit=limit)
     return EntityListResponse(entities=[_entity(e) for e in found])
 
 
@@ -206,15 +133,43 @@ async def search_entities(
     "/graph/entities/{entity_id}",
     response_model=EntityProfileResponse,
     tags=["graph"],
-    summary="An entity's profile: current value per predicate, relations, history, evidence",
+    summary="An entity's profile (current value per predicate, relations, history, evidence) "
+    "and, with depth, the graph around it",
     responses=_READ_ERRORS,
 )
 async def entity_profile(
-    entity_id: str, ctx: HeaderContextDep, container: ContainerDep
+    entity_id: str,
+    ctx: HeaderContextDep,
+    container: ContainerDep,
+    depth: Annotated[
+        int, Query(ge=0, le=3, description="hops of traversal from the entity; 0: none")
+    ] = 0,
+    as_of: Annotated[
+        datetime | None,
+        Query(description="valid time: facts that were true at this instant"),
+    ] = None,
+    valid_at: Annotated[
+        datetime | None,
+        Query(description="knowledge time: facts asserted by this instant, not yet withdrawn"),
+    ] = None,
+    layers: Annotated[
+        list[GraphLayer] | None,
+        Query(
+            description="traverse only these layers: entity, temporal, causal, structural, "
+            "procedural; omit for every layer"
+        ),
+    ] = None,
 ) -> EntityProfileResponse:
     graph: GraphService = container.services["graph"]
-    profile = await graph.profile(ctx, entity_id)
-    names = {**profile.names, profile.entity.entity_id: profile.entity.name}
+    profile = await graph.profile(
+        ctx, entity_id, depth=depth, as_of=as_of, valid_at=valid_at, layers=layers
+    )
+    hood = profile.neighborhood
+    names = {
+        **profile.names,
+        **({e.entity_id: e.name for e in hood.entities} if hood else {}),
+        profile.entity.entity_id: profile.entity.name,
+    }
     return EntityProfileResponse(
         entity=_entity(profile.entity),
         current=[
@@ -230,6 +185,13 @@ async def entity_profile(
         relations=[_fact(r, names) for r in profile.relations],
         history=[_fact(r, names) for r in profile.history],
         evidence=list(profile.entity.evidence),
+        neighborhood=NeighborhoodOut(
+            entities=[_entity(e) for e in hood.entities],
+            facts=[_fact(r, names) for r in hood.relations],
+            visited=hood.visited,
+        )
+        if hood is not None
+        else None,
     )
 
 

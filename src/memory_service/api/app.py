@@ -58,7 +58,7 @@ def create_app(
     """``overrides`` swaps backing stores for in-process stand-ins (tests and benchmarks)."""
     settings = settings or get_settings()
     configure_logging(settings.service.log_level, settings.service.log_json)
-    configure_tracing(settings.observability, constants.SERVICE_NAME, __version__)
+    configure_tracing(settings.otel_endpoint, constants.SERVICE_NAME, __version__)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -94,7 +94,7 @@ def create_app(
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
     app.add_middleware(
         RateLimitMiddleware,
-        per_minute=settings.service.rate_limit_per_minute,
+        per_minute=constants.RATE_LIMIT_PER_MINUTE,
         burst=constants.RATE_LIMIT_BURST,
     )
     app.add_middleware(CorrelationMiddleware, max_body_bytes=constants.MAX_BODY_BYTES)
@@ -102,7 +102,7 @@ def create_app(
     app.include_router(ops.router)
     _include_v1_routers(app)
 
-    if settings.observability.otel_enabled:
+    if settings.otel_endpoint:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
         FastAPIInstrumentor.instrument_app(app, excluded_urls="health/live,health/ready,metrics")

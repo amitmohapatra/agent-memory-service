@@ -5,6 +5,9 @@ agent itself, for this user), ``workspace`` (the team), or ``<level>.<name>`` be
 block's level decides the scope it belongs to, from the caller's context, so a caller only
 ever reads and writes the blocks of its own user, agent and workspace.
 
+A block may carry a ``source_query``: a standing question the profile job answers from what
+the block's scope may read, and keeps answering as that changes.
+
 A thread summary is the durable, rolling digest of a thread up to ``covers_to_sequence``; the
 context carries it and the messages after it.
 """
@@ -13,7 +16,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,6 +29,7 @@ PROFILE_BLOCK_MAX_CHARS: Final = 4000
 BLOCK_NAME = re.compile(r"^(user|agent|workspace)(\.[a-z0-9][a-z0-9_-]{0,39})?$")
 #: The block the profile job maintains from USER and PREFERENCE memories.
 USER_BLOCK: Final = "user"
+SOURCE_QUERY_MAX_CHARS: Final = 1000
 
 BlockSource = Literal["learned", "edited"]
 
@@ -42,6 +46,12 @@ class ProfileBlock(BaseModel):
     #: whose text the job only ever appends to
     source: BlockSource = "learned"
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    #: the standing question the profile job answers into this block, when it has one
+    source_query: str | None = Field(default=None, max_length=SOURCE_QUERY_MAX_CHARS)
+    #: the context the question is answered in (who set it, so what it may read)
+    source_context: dict[str, Any] | None = None
+    #: when the job answers it next
+    refresh_due_at: datetime | None = None
 
 
 def block_scope(block: str, ctx: MemoryExecutionContext) -> str:

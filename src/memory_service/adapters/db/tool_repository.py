@@ -32,6 +32,7 @@ from memory_service.domain.tools import (
     RunOutcome,
     StoredProcedure,
     SubCall,
+    ToolAnnotations,
     ToolDescriptor,
     ToolInvocation,
     ToolStats,
@@ -57,6 +58,8 @@ def _to_descriptor(row: ToolRow) -> ToolDescriptor:
         server=row.server,
         examples=list(row.examples or []),
         redact=list(row.redact or []),
+        annotations=ToolAnnotations.model_validate(row.annotations or {}),
+        approve_when=row.approve_when,
         schema_hash=row.schema_hash,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -138,7 +141,12 @@ class SqlToolRepository:
         self.s = session
 
     # ------------------------------------------------------------------ catalog
-    async def upsert(self, descriptor: ToolDescriptor) -> tuple[ToolDescriptor, bool]:
+    async def upsert(
+        self, descriptor: ToolDescriptor, *, fields: frozenset[str] | None = None
+    ) -> tuple[ToolDescriptor, bool]:
+        """Insert the entry, or update the stored one with the ``fields`` given (every catalog
+        field when None): a publisher that does not send ``side_effects`` or ``approve_when``
+        leaves what an administrator set alone."""
         desc = descriptor.with_schema_hash()
         workspace = desc.workspace_id or _TENANT_WIDE
         row = (
@@ -156,16 +164,26 @@ class SqlToolRepository:
             await self.s.flush()
             return desc, True
         stored = _to_descriptor(row)
+        if fields is not None:
+            kept = {name: getattr(stored, name) for name in set(desc.catalog_fields()) - fields}
+            desc = desc.model_copy(update=kept).with_schema_hash()
         if stored.catalog_fields() == desc.catalog_fields():
             return stored, False
         version = row.version + (1 if row.schema_hash != desc.schema_hash else 0)
-        values = {**desc.catalog_fields(), "schema_hash": desc.schema_hash, "version": version}
+        updated = desc.model_copy(
+            update={"tool_id": row.tool_id, "version": version, "created_at": stored.created_at}
+        )
         await self.s.execute(
             update(ToolRow)
             .where(ToolRow.tool_id == row.tool_id)
-            .values(**values, updated_at=datetime.now(UTC))
+            .values(
+                **_catalog_values(updated),
+                schema_hash=updated.schema_hash,
+                version=version,
+                updated_at=datetime.now(UTC),
+            )
         )
-        return stored.model_copy(update=values), True
+        return updated, True
 
     async def ensure(self, tenant_id: str, name: str) -> ToolDescriptor:
         found = await self.by_name(tenant_id, name)
@@ -416,6 +434,12 @@ class SqlToolRepository:
             )
         )
 
+    async def approval_pattern(
+        self, tenant_id: str, agent_id: str, tool_name: str, arg_shape: str
+    ) -> ApprovalCounts | None:
+        row = await self.s.get(ApprovalPatternRow, (tenant_id, agent_id, tool_name, arg_shape))
+        return _to_counts(row) if row is not None else None
+
     async def approval_patterns(
         self,
         tenant_id: str,
@@ -433,17 +457,18 @@ class SqlToolRepository:
         if tool_name is not None:
             stmt = stmt.where(row.tool_name == tool_name)
         stmt = stmt.order_by(support.desc(), row.tool_name, row.arg_shape).limit(limit)
-        return [
-            ApprovalCounts(
-                agent_id=r.agent_id,
-                tool=r.tool_name,
-                arg_shape=r.arg_shape,
-                approvals=r.approvals,
-                rejections=r.rejections,
-                edits=r.edits,
-            )
-            for r in (await self.s.execute(stmt)).scalars()
-        ]
+        return [_to_counts(r) for r in (await self.s.execute(stmt)).scalars()]
+
+
+def _to_counts(row: ApprovalPatternRow) -> ApprovalCounts:
+    return ApprovalCounts(
+        agent_id=row.agent_id,
+        tool=row.tool_name,
+        arg_shape=row.arg_shape,
+        approvals=row.approvals,
+        rejections=row.rejections,
+        edits=row.edits,
+    )
 
 
 def _workspaces(workspace_id: str | None) -> list[str]:
@@ -465,7 +490,15 @@ def _row_values(desc: ToolDescriptor, workspace: str) -> dict[str, Any]:
         "name": desc.name,
         "version": desc.version,
         "schema_hash": desc.schema_hash,
+        **_catalog_values(desc),
+    }
+
+
+def _catalog_values(desc: ToolDescriptor) -> dict[str, Any]:
+    """The catalog fields as the row stores them (annotations under their MCP names)."""
+    return {
         **desc.catalog_fields(),
+        "annotations": desc.annotations.model_dump(by_alias=True, exclude_none=True),
     }
 
 

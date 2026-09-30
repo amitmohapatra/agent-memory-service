@@ -96,10 +96,6 @@ TAGS: list[dict[str, Any]] = [
         "outcomes, tool statistics and approval patterns, procedures).",
     },
     {
-        "name": "webhooks",
-        "description": "Outbound, signed event deliveries to a tenant's subscriptions (ADR 0023).",
-    },
-    {
         "name": "retrieval",
         "description": "Scope-filtered recall, ContextBundle assembly, and "
         "grounding verification of an answer against evidence.",
@@ -110,7 +106,6 @@ TAGS: list[dict[str, Any]] = [
         "description": "Pinned profile blocks of the user, the agent and the workspace, part of "
         "every pushed context.",
     },
-    {"name": "briefs", "description": "Standing questions and pages kept current by the service."},
     {
         "name": "tools",
         "description": "Tool memory: the catalog, call records, run outcomes, tool hints "

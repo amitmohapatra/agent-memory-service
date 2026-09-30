@@ -12,8 +12,6 @@ from enum import StrEnum
 
 class RevisionKind(StrEnum):
     TENANT = "tenant"
-    WORKSPACE = "workspace"
-    GROUP = "group"
     USER = "user"
     THREAD = "thread"
     DOCUMENT = "document"

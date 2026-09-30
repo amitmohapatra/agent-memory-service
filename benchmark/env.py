@@ -11,11 +11,19 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from memory_service.application.container import Overrides
-from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL, local_model_path
+from memory_service.config.constants import (
+    CONTEXT,
+    FROZEN_MODELS,
+    LLM,
+    RETRIEVAL,
+    LLMTuning,
+    local_model_path,
+)
 from memory_service.ports.search import VectorName
 
 #: Retrieval depth of the judged LoCoMo / LongMemEval runs - the values every judged result
@@ -216,6 +224,9 @@ class BenchEnv:
     #: Actor/topic decomposition for multi-hop memory questions (``BENCH_MEMORY_ENTITY_SEARCH``),
     #: the query-side arm of ``RetrievalSettings.memory_entity_search``.
     memory_entity_search: bool | None = None
+    #: The gateway model the answerer and the judge call (``BENCH_LLM_MODEL``); unset, the
+    #: service's own (``constants.LLM``).
+    llm_model: str | None = None
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -232,6 +243,7 @@ class BenchEnv:
         tuning: dict[str, Any] = {
             "hybrid_weights": _weights(os.environ.get("BENCH_HYBRID_WEIGHTS") or ""),
             "memory_entity_search": _switch("BENCH_MEMORY_ENTITY_SEARCH"),
+            "llm_model": os.environ.get("BENCH_LLM_MODEL") or None,
         }
         allowed = {
             "search": ("qdrant", "memory"),
@@ -247,6 +259,30 @@ class BenchEnv:
             if value not in allowed[name]:
                 raise SystemExit(f"BENCH_{name.upper()}={value!r}: expected one of {allowed[name]}")
         return cls(**values, **tuning)  # type: ignore[arg-type]
+
+    def llm_tuning(self) -> LLMTuning:
+        """How the answerer and the judge call the model: the judged ceiling, patience and
+        no retries, whatever depth is measured.
+
+        These belong to the JUDGE, which is the instrument, not to the system under test.
+        Gating them on ``BENCH_DEPTH=judged`` coupled the ruler to what it was measuring: a
+        shipped-depth run fell back to the shipped ceiling of 1024 tokens, and a reasoning
+        model spent all 1024 of them reasoning and emitted no text at all
+        (``finish_reason='length'``, ``reasoning_tokens=1024``, zero content). Those rows
+        score WRONG by construction, so the same code read 0.7467 at shipped depth against
+        0.7993 at judged depth - 28 of 304 rows failed the judge, and 25 of those 28 had every
+        gold evidence item already in the bundle. Retries off: a provider counts *wire*
+        requests, so the pacer's rate is then the actual request rate.
+        """
+        model = self.llm_model or LLM.model
+        return replace(
+            LLM,
+            model=model,
+            fast_model=self.llm_model or LLM.fast_model,
+            max_tokens=MAX_TOKENS,
+            timeout_seconds=TIMEOUT,
+            max_retries=0,
+        )
 
     def _retrieval(self) -> Any:
         """The retrieval tuning this arm runs with, or ``None`` for "change nothing".
@@ -295,6 +331,7 @@ class BenchEnv:
             document_parser="builtin" if self.embedding == "hash" else None,
             retrieval=self._retrieval(),
             context=_DEPTH_CONTEXT.get(self.depth),
+            llm=self.llm_tuning(),
         )
         return replace(base, **changes) if changes else base
 
@@ -306,23 +343,28 @@ def bench_overrides(**changes: Any) -> Overrides:
     return BENCH.overrides(**changes)
 
 
-def bench_llm_settings() -> dict[str, Any]:
-    """LLM fields every judged run pins: the output ceiling a reasoning model needs, the
-    patience a judged question needs, and retries off (the pacer's rate is then the actual
-    request rate).
+#: What a benchmark tenant's model policy allows: the judge, and nothing that shapes the
+#: corpus. The former ambiguous-extraction/worthiness ingest uses were measured harmful
+#: (v2 -> v3: 0.674 -> 0.661, p50 281 -> 572 ms) and were removed.
+JUDGE_USES: tuple[str, ...] = ("grounding_judge",)
 
-    These belong to the JUDGE, which is the instrument, not to the system under test: the
-    only thing that enables an LLM in a benchmark process is ``BENCH_LLM_ENV``, and it pins
-    ``uses=["grounding_judge"]``. Gating them on ``BENCH_DEPTH=judged`` coupled the ruler to
-    what it was measuring. A shipped-depth run fell back to the shipped ceiling of 1024
-    tokens, and a reasoning model spent all 1024 of them reasoning and emitted no text at all
-    (``finish_reason='length'``, ``reasoning_tokens=1024``, zero content). Those rows score
-    WRONG by construction, so the same code read 0.7467 at shipped depth against 0.7993 at
-    judged depth - 28 of 304 rows failed the judge, and 25 of those 28 had every gold
-    evidence item already in the bundle. The depth being measured must not change what the
-    ruler is able to say about it.
-    """
-    return {"max_tokens": MAX_TOKENS, "timeout_seconds": TIMEOUT, "max_retries": 0}
+
+async def pin_model_policy(container: Any, tenant_id: str, uses: Sequence[str]) -> None:
+    """The tenant policy a benchmark runs under: only ``uses`` may call the model, reads
+    are not assisted. There is no deployment-wide allow-list any more, so this is what keeps
+    an operator-keyed judged run from spending the model on ingestion it is not measuring."""
+    async with container.services["uow_factory"]() as uow:
+        await container.services["model_policies"].set(
+            uow, tenant_id, uses=list(uses), read_assist=False, models={}
+        )
+        await uow.commit()
+
+
+def bench_threads() -> int | None:
+    """``BENCH_THREADS``: the intra-op thread count a concurrency or embedding run pins its
+    candidate models to (unset: the runtime's own)."""
+    raw = os.environ.get("BENCH_THREADS") or ""
+    return int(raw) if raw.strip() else None
 
 
 def bench_retrieval(overrides: Overrides) -> Any:

@@ -1,5 +1,7 @@
-"""Public /v1 routes for memory: observations in (learned from asynchronously), stated
-memories in (stored now), canonical memories out, superseded or forgotten on request."""
+"""Public /v1 routes for memory: stated memories in (stored now), canonical memories out,
+superseded or forgotten on request. A memory is named by its id, or by the handle a context
+cited it by (``m3``) together with that context's ``bundle_id`` - or, in an agent run, the
+run's latest context."""
 
 from __future__ import annotations
 
@@ -24,19 +26,16 @@ from memory_service.api.idempotent import (
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
-from memory_service.api.schemas.conversation import ProcessingHintsIn
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
     Lifetime,
     MemoryType,
-    ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.memory import CanonicalMemory
-from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.memory.service import MemoryService
 
 router = APIRouter()
@@ -45,43 +44,6 @@ _WRITE_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
 _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 _SCOPE: dict[str, Any] = {"thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"}
-_OBS_EXAMPLE: dict[str, Any] = {
-    "scope": _SCOPE,
-    "kind": "EVENT",
-    "content": "My timezone is Europe/Berlin and I prefer concise answers.",
-    "hints": {},
-}
-
-
-class ObservationRequest(BaseModel):
-    """'This happened or was learned.' The service decides what (if anything) to remember."""
-
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_OBS_EXAMPLE]})
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    kind: ObservationKind = Field(
-        default=ObservationKind.EVENT,
-        description=(
-            "What happened: MESSAGE, FILE, AGENT_RESULT, TOOL_RESULT, DECISION, FEEDBACK, "
-            "EVENT (anything else worth remembering) or IMPORT (bulk-loaded from another "
-            "system). Steers extraction; it is not a memory type."
-        ),
-        examples=["EVENT"],
-    )
-    content: str = Field(..., min_length=1, max_length=100_000)
-    hints: ProcessingHintsIn = Field(default_factory=ProcessingHintsIn)
-    custom_metadata: CustomMetadata = Field(default_factory=dict)
-    occurred_at: datetime | None = None
-    source_system: str | None = Field(default=None, max_length=100)
-    source_id: str | None = Field(default=None, max_length=400)
-    tool_run_id: str | None = Field(default=None, max_length=200)
-
-
-class ObservationAckResponse(BaseModel):
-    observation_id: str
-    job_ids: list[str] = Field(default_factory=list)
-
-
 _REMEMBER_EXAMPLE: dict[str, Any] = {
     "scope": {},
     "content": "Prefers metric units.",
@@ -162,7 +124,10 @@ class SupersedeRequest(BaseModel):
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
     content: str = Field(..., min_length=1, max_length=8_000)
-    reason: str = Field(..., min_length=1, max_length=500, description="why it changed")
+    reason: str = Field(default="", max_length=500, description="why it changed")
+    bundle_id: str | None = Field(
+        default=None, max_length=64, description="the context whose handle the path names"
+    )
 
 
 class SupersedeResponse(BaseModel):
@@ -291,51 +256,6 @@ def _service(container: Any) -> MemoryService:
 
 
 @router.post(
-    "/observations",
-    response_model=ObservationAckResponse,
-    status_code=202,
-    tags=["memory"],
-    summary="Submit an observation (durably acknowledged, processed asynchronously)",
-    responses={
-        **_WRITE_ERRORS,
-        202: {"model": ObservationAckResponse, "description": "Durably acknowledged"},
-    },
-)
-async def submit_observation(
-    request: Request, body: ObservationRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
-    ctx = build_context(request, container, body.scope)
-    identity = ("observation", body.kind.value, body.content)
-    key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
-    payload = derived_or_body(request, body, identity)
-
-    async def handler(uow):  # type: ignore[no-untyped-def]
-        if ctx.thread_id:
-            # An observation naming a thread implies the thread, the same way a message does.
-            # Without this the thread is never granted, and a THREAD-scoped memory written
-            # here is readable only through its author's own key - which is exactly what let
-            # it be read from every OTHER thread too. create_thread is get-or-create and
-            # calls authz.require on an existing one, so naming someone else's thread is
-            # refused rather than silently joined.
-            await container.services["conversation"].create_thread(uow, ctx)
-        ack = await _service(container).submit_observation(
-            uow,
-            ctx,
-            kind=body.kind,
-            content=body.content,
-            hints=ProcessingHints(**body.hints.model_dump()),
-            custom_metadata=body.custom_metadata,
-            occurred_at=body.occurred_at,
-            source_system=body.source_system,
-            source_id=body.source_id,
-            tool_run_id=body.tool_run_id,
-        )
-        return 202, {"observation_id": ack.observation_id, "job_ids": ack.job_ids}, None
-
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
-
-
-@router.post(
     "/memories",
     response_model=RememberResponse,
     status_code=201,
@@ -356,7 +276,10 @@ async def remember(
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         if ctx.thread_id:
-            # the thread is implied, as it is for an observation (see submit_observation)
+            # A memory naming a thread implies the thread, the same way a message does:
+            # without it the thread is never granted, and a THREAD-scoped memory is readable
+            # only through its author's own key - and from every other thread too.
+            # create_thread is get-or-create and requires access to an existing one.
             await container.services["conversation"].create_thread(uow, ctx)
         ack = await _service(container).remember(
             uow,
@@ -391,13 +314,16 @@ async def supersede_memory(
     _: ServicePrincipalDep,
 ) -> JSONResponse:
     ctx = build_context(request, container, body.scope)
+    memory_id = await container.services["bundle_records"].resolve(
+        ctx, memory_id, bundle_id=body.bundle_id
+    )
     identity = ("supersede", memory_id, body.content)
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
     payload = derived_or_body(request, body, identity)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         new = await _service(container).supersede(
-            uow, ctx, memory_id, content=body.content, reason=body.reason
+            uow, ctx, memory_id, content=body.content, reason=body.reason or "updated"
         )
         out = SupersedeResponse(memory_id=new.memory_id, supersedes=memory_id)
         return 200, out.model_dump(mode="json"), None
@@ -490,7 +416,17 @@ async def get_memory(
     summary="Forget a memory (soft delete + index removal)",
     responses=_READ_ERRORS,
 )
-async def forget_memory(memory_id: str, ctx: HeaderContextDep, container: ContainerDep) -> None:
+async def forget_memory(
+    memory_id: str,
+    ctx: HeaderContextDep,
+    container: ContainerDep,
+    bundle_id: Annotated[
+        str | None, Query(max_length=64, description="the context whose handle the path names")
+    ] = None,
+) -> None:
+    memory_id = await container.services["bundle_records"].resolve(
+        ctx, memory_id, bundle_id=bundle_id
+    )
     async with container.services["uow_factory"]() as uow:
         await _service(container).forget(uow, ctx, memory_id)
         await uow.commit()

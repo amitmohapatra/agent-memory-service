@@ -9,7 +9,7 @@ consolidates them, and questions are answered from what retrieval surfaces.
     make bench-locomo                                         # the full set, real models
 
 **What is measured, and what is not.** The service supplies evidence; a model writes the
-prose. With ``models.llm.enabled=false`` there is no generation here, so scoring generated
+prose. Without a model gateway there is no generation here, so scoring generated
 text would be measuring nothing. What is scored instead is *evidence recall*: LoCoMo annotates
 the dialogue turns that support each answer, and the question is whether retrieval surfaces
 them. That is the half this service is responsible for.
@@ -40,16 +40,16 @@ from typing import Any
 
 from sqlalchemy.engine import make_url
 
-from benchmark.common import provenance, reset_store, write_result
+from benchmark.common import provenance, reset_store, submit_observation, write_result
 from benchmark.corpus import CorpusKey, CorpusLedger, conversation_tenant, ensure_conversation
-from benchmark.env import BENCH, bench_overrides, bench_retrieval
+from benchmark.env import BENCH, JUDGE_USES, bench_overrides, bench_retrieval, pin_model_policy
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import _memory_line, _most_relevant_count
-from memory_service.domain.enums import ObservationKind, Visibility
+from memory_service.domain.enums import Visibility
 from memory_service.domain.ids import new_id
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
@@ -152,7 +152,6 @@ async def _ingest_conversation(
 ) -> dict[str, str]:
     """Every turn becomes an observation. Returns dia_id -> the text that was submitted."""
     uow_factory = container.services["uow_factory"]
-    memory = container.services["memory"]
     turns: dict[str, str] = {}
     for session_key, session in _sessions(conversation):
         when = conversation.get(f"{session_key}_date_time", "")
@@ -193,10 +192,9 @@ async def _ingest_conversation(
             # anchored on the workspace, not the user, so the questioner - a third context,
             # made a member of the workspace above - still sees every turn.
             async with uow_factory() as uow:
-                ack = await memory.submit_observation(
+                observed = await submit_observation(
                     uow,
                     _speaker_ctx(ctx, speaker),
-                    kind=ObservationKind.MESSAGE,
                     content=body,
                     # TENANT, because the benchmark's two speakers share one corpus and
                     # every question may draw on either. This was WORKSPACE, which meant the
@@ -205,7 +203,7 @@ async def _ingest_conversation(
                     occurred_at=occurred_at,
                 )
                 if source_ids is not None:
-                    source_ids[ack.observation_id] = dia_id
+                    source_ids[observed.observation_id] = dia_id
                 await uow.commit()
     await container.tasks.drain()
     await container.tasks.drain()
@@ -252,7 +250,7 @@ def _evidence_ranks(memories: Sequence[Any], evidence: Sequence[str]) -> list[in
     Scored against ``_memory_line`` rather than the raw body, because that is the text the
     prompt actually shows - date, speaker and all.
     """
-    ranked = [_content_tokens(_memory_line(m)) for m in memories]
+    ranked = [_content_tokens(_memory_line(m, "")) for m in memories]
     out: list[int | None] = []
     for text in evidence:
         needle = _content_tokens(text)
@@ -289,7 +287,7 @@ def _evidence_ranks_by_arm(
     an arm-alone column in an oracle table means.
     """
     lines = [
-        (_content_tokens(_memory_line(m)), set(getattr(m, "retrievers", None) or []))
+        (_content_tokens(_memory_line(m, "")), set(getattr(m, "retrievers", None) or []))
         for m in memories
     ]
     arms = sorted({a for _, names in lines for a in names})
@@ -336,7 +334,7 @@ def _evidence_reconstructed(memories: Sequence[Any], evidence: Sequence[str]) ->
         for ref in getattr(m, "evidence", None) or []:
             sid = getattr(ref, "source_id", None)
             if sid:
-                groups.setdefault(sid, set()).update(_content_tokens(_memory_line(m)))
+                groups.setdefault(sid, set()).update(_content_tokens(_memory_line(m, "")))
     if not evidence:
         return None
     hits = 0
@@ -818,42 +816,30 @@ async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "stric
     raise last if last else RuntimeError("unreachable")
 
 
-def _llm_ingestion(settings: Any) -> Any:
-    """Arm A1: let the ingestion path spend the model, and nothing else.
+def _model_uses(llm_ingestion: bool) -> tuple[str, ...]:
+    """The uses the bench tenant's policy lets the model run for.
 
-    The only use added is ``contextual_extraction``, the source-span selector in
+    The judge only, by default: it is the instrument, not the system under test. Arm A1
+    (``--llm-ingestion``) adds ``contextual_extraction``, the source-span selector in
     ``modules/memory/narrative.py``: the model picks sentence ranges from the turn and no
     generated text is stored, so A1 and A0 differ in *which spans become memories*, not in
-    whether the corpus contains model prose. Every other use the arm does not name stays off,
-    the judge's own use is kept (it is the instrument, not the system under test), and
-    ``uses`` lands in the corpus ledger key, so A1 cannot silently reuse A0's index.
+    whether the corpus contains model prose. The uses land in the corpus ledger key, so A1
+    cannot silently reuse A0's index.
     """
-    llm = settings.models.llm
-    if not llm.enabled:
-        raise SystemExit(
-            "--llm-ingestion needs a generative model: set models.llm.enabled=true and a "
-            "models.llm.model the gateway serves."
-        )
-    uses = sorted({*llm.uses, "contextual_extraction"})
-    return settings.model_copy(
-        update={
-            "models": settings.models.model_copy(
-                update={"llm": llm.model_copy(update={"uses": uses})}
-            )
-        }
-    )
+    return (*JUDGE_USES, "contextual_extraction") if llm_ingestion else JUDGE_USES
 
 
-def _ingestion_settings(settings: Any) -> dict[str, Any]:
+def _ingestion_settings(settings: Any, uses: Sequence[str]) -> dict[str, Any]:
     """Everything that shapes the corpus at ingest, for the corpus ledger's key and the
-    result's provenance: which model uses may run at ingestion, and threading."""
-    llm = settings.models.llm
+    result's provenance: whether the model can be reached, which uses may run at ingestion,
+    and threading."""
+    tuning = BENCH.llm_tuning()
     return {
         "llm": {
-            "enabled": str(llm.enabled),
-            "model": llm.model,
-            "uses": sorted(llm.uses),
-            "fast_uses": sorted(llm.fast_uses),
+            "enabled": str(settings.llm.enabled),
+            "model": tuning.model,
+            "uses": sorted(uses),
+            "fast_uses": sorted(tuning.fast_uses),
         },
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
@@ -879,7 +865,13 @@ async def run(
     raw = DATASET.read_bytes()
     data = json.loads(raw)[:conversations] if conversations else json.loads(raw)
 
-    settings = _llm_ingestion(_settings()) if llm_ingestion else _settings()
+    settings = _settings()
+    if llm_ingestion and not settings.llm.enabled:
+        raise SystemExit(
+            "--llm-ingestion needs a generative model: run with BENCH_LLM=on and BIFROST_URL "
+            "set (the Makefile's BENCH_LLM_ENV)."
+        )
+    uses = _model_uses(llm_ingestion)
     overrides = bench_overrides()
     if ablate:
         # An ablation answers "is this component earning its cost?" the only way that means
@@ -893,8 +885,8 @@ async def run(
     pacer = _Pacer(calls_per_minute)
     if judge and not getattr(llm, "enabled", False):
         raise SystemExit(
-            "--judge needs a generative model: set models.llm.enabled=true, "
-            "models.llm.enabled=true and a models.llm.model the gateway serves."
+            "--judge needs a generative model: run with BENCH_LLM=on and BIFROST_URL set "
+            "(the Makefile's BENCH_LLM_ENV)."
         )
     per_category: dict[int, dict[str, int]] = defaultdict(lambda: {"n": 0, "hit": 0})
     records: list[dict] = []
@@ -907,7 +899,7 @@ async def run(
     key = CorpusKey(
         dataset_sha256=hashlib.sha256(raw).hexdigest(),
         index_fingerprint=indexer.fingerprint,
-        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings)),
+        ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, uses)),
     )
     reused_conversations = 0
     try:
@@ -918,6 +910,7 @@ async def run(
         for index, conversation in enumerate(data):
             register_handlers(container)
             tenant = conversation_tenant(index) if reuse_corpus else TENANT
+            await pin_model_policy(container, tenant, uses)
             ctx = MemoryExecutionContext(
                 tenant_id=tenant, user_id=f"locomo-{index}", workspace_id="ws"
             )
@@ -1183,7 +1176,7 @@ async def run(
     # Abstention is the headline claim of this product, and this harness cannot measure it
     # in this configuration. The NLI cascade that decides "the evidence does not support this"
     # scores *claims*, which only exist once something has generated an answer; with
-    # `models.llm.enabled=false` it never runs. What is left is the retrieval-level gate in
+    # no gateway configured it never runs. What is left is the retrieval-level gate in
     # VerificationStage, which abstains only when nothing retrieved shares a content term with
     # the question — and LoCoMo's adversarial questions are deliberately about the same people
     # and topics as the conversation, so they always share terms. The gate cannot fire on
@@ -1208,7 +1201,7 @@ async def run(
     # to avoid.
     judged_rows = [r for r in records if r.get("judged")]
     judged_ok = [r for r in judged_rows if "error" not in (r["judged"] or {})]
-    llm_on = bool(getattr(settings.models.llm, "enabled", False)) and bool(judged_ok)
+    llm_on = settings.llm.enabled and bool(judged_ok)
     if judge and len(judged_ok) < len(judged_rows):
         caveats.append(
             f"{len(judged_rows) - len(judged_ok)} of {len(judged_rows)} judged calls failed; "
@@ -1219,7 +1212,7 @@ async def run(
     if not llm_on:
         caveats.append(
             "abstention_rate_on_adversarial is NOT a measurement: the NLI cascade scores "
-            "generated claims and models.llm.enabled=false, so only the lexical overlap gate "
+            "generated claims and no model gateway was configured, so only the lexical overlap gate "
             "can abstain, and LoCoMo adversarial questions always share terms with the "
             "conversation. Re-run with generation enabled to score category 5."
         )
@@ -1244,7 +1237,7 @@ async def run(
         "settings": {
             "retrieval": container.tuning.retrieval.model_dump(mode="json"),
             "context": container.tuning.context.model_dump(mode="json"),
-            "llm_model": settings.models.llm.model,
+            "llm_model": container.tuning.llm.model,
         },
         "answer_recall_at_k": round(total_hit / total_n, 4) if total_n else 0.0,
         "caveats": caveats,
@@ -1333,7 +1326,7 @@ async def run(
         },
         "spaces_fingerprint": container.dense_spaces.fingerprint(),
         "dense_arm": BENCH.dense,
-        "ingestion": _ingestion_settings(settings),
+        "ingestion": _ingestion_settings(settings, uses),
         "reuse_corpus": reuse_corpus,
         "reused_conversations": reused_conversations,
         "reask": reask,
@@ -1447,7 +1440,7 @@ def main() -> int:
         "--judge",
         action="store_true",
         help="generate an answer from each bundle and grade it with a model (LoCoMo's own "
-        "method); makes the adversarial category measurable. Needs models.llm configured.",
+        "method); makes the adversarial category measurable. Needs BENCH_LLM=on and BIFROST_URL.",
     )
     parser.add_argument(
         "--calls-per-minute",

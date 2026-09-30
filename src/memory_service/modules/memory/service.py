@@ -18,7 +18,6 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
     Lifetime,
     MemoryType,
-    ObservationKind,
     TemporalStatus,
     Visibility,
 )
@@ -26,16 +25,14 @@ from memory_service.domain.errors import Conflict, NotFound, ScopeDenied
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import content_hash, new_id
 from memory_service.domain.memory import CanonicalMemory, TemporalState
-from memory_service.domain.observation import Observation, ProcessingHints
+from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import validate_requested_visibility
-from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
     TASK_MEMORY_INDEX,
     build_memory,
-    created_event,
     keys_for,
     supersede,
 )
@@ -44,19 +41,12 @@ from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
-from memory_service.ports.webhooks import EventPublisher
 
 #: A statement is taken at its word more than an extraction is; below 1.0 so that
 #: corroboration can still raise it.
 STATED_CONFIDENCE = 0.9
 STATED_IMPORTANCE = 0.7
 STATED_CATEGORY = "stated"
-
-
-@dataclass(frozen=True)
-class ObservationAck:
-    observation_id: str
-    job_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -81,65 +71,8 @@ def _stated(
 
 
 class MemoryService:
-    def __init__(self, authz: AuthorizationService, events: EventPublisher | None = None) -> None:
+    def __init__(self, authz: AuthorizationService) -> None:
         self.authz = authz
-        self.events = events
-
-    async def submit_observation(
-        self,
-        uow: UnitOfWork,
-        ctx: MemoryExecutionContext,
-        *,
-        kind: ObservationKind,
-        content: str,
-        hints: ProcessingHints | None = None,
-        custom_metadata: dict[str, Any] | None = None,
-        occurred_at: datetime | None = None,
-        source_system: str | None = None,
-        source_id: str | None = None,
-        tool_run_id: str | None = None,
-    ) -> ObservationAck:
-        validate_requested_visibility(ctx, hints)
-        # A team's shared memory is written by its members. The anchor alone is a
-        # caller-supplied string; without this, anyone in the tenant could publish into any
-        # team and every member would read it.
-        await guard_workspace_visibility(uow, self.authz, ctx, getattr(hints, "visibility", None))
-        # Agents write back whatever their tools produced. A NUL byte anywhere in that text
-        # makes PostgreSQL reject the INSERT outright, so a single stray 0x00 in a tool result
-        # turned a write into a 500 instead of a stored observation. The document path has
-        # been sanitising since an uploaded file did the same thing; this one never was.
-        content = sanitise(content)
-        observation = Observation(
-            **ctx.provenance(),
-            kind=kind,
-            content=content,
-            # hashed *after* sanitising, so the same text submitted twice — once with a stray
-            # control character, once without — is recognised as the duplicate it is
-            content_hash=content_hash(content),
-            tool_run_id=tool_run_id,
-            source_system=source_system,
-            source_id=source_id,
-            hints=hints or ProcessingHints(),
-            custom_metadata=custom_metadata or {},
-            occurred_at=occurred_at or datetime.now(UTC),
-        )
-        await uow.observations.add(observation)
-        outbox_id = await uow.enqueue(
-            JobSpec(
-                task_name=TASK_PROCESS_OBSERVATION,
-                queue=Queue.CHAT_FAST,
-                payload={
-                    "tenant_id": ctx.tenant_id,
-                    "observation_id": observation.observation_id,
-                    "trace_id": ctx.trace_id,
-                },
-                idempotency_key=f"obs:{observation.observation_id}",
-                tenant_id=ctx.tenant_id,
-            )
-        )
-        return ObservationAck(
-            observation.observation_id, [f"obx_{outbox_id}"] if outbox_id is not None else []
-        )
 
     async def remember(
         self,
@@ -196,8 +129,6 @@ class MemoryService:
         await uow.memories.add(
             memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
         )
-        if self.events is not None:
-            await self.events.publish(uow, created_event(memory))
         job_ids = await self._index(uow, ctx, [memory], key=f"memidx:{memory_id}")
         return RememberAck(memory_id, deduplicated=False, job_ids=job_ids)
 
@@ -431,9 +362,7 @@ class MemoryService:
         if memory.temporal.status is not TemporalStatus.CURRENT:
             raise Conflict(f"memory {memory_id} is {memory.temporal.status.value}, not CURRENT")
         memory.system_metadata["retract_reason"] = reason
-        await retract(
-            uow, memory, now=datetime.now(UTC), events=self.events, data={"reason": reason}
-        )
+        await retract(uow, memory, now=datetime.now(UTC))
         await self._index(uow, ctx, [memory], key=f"memidx:retract:{memory_id}")
         return memory
 

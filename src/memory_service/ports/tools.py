@@ -24,9 +24,12 @@ from memory_service.domain.tools import (
 @runtime_checkable
 class ToolRepository(Protocol):
     # ------------------------------------------------------------------ catalog
-    async def upsert(self, descriptor: ToolDescriptor) -> tuple[ToolDescriptor, bool]:
-        """Insert or update by (tenant, workspace, name); a changed input schema bumps the
-        version. Returns the stored entry and whether anything changed."""
+    async def upsert(
+        self, descriptor: ToolDescriptor, *, fields: frozenset[str] | None = None
+    ) -> tuple[ToolDescriptor, bool]:
+        """Insert or update by (tenant, workspace, name); an update changes only ``fields``
+        (every catalog field when None), and a changed input schema bumps the version.
+        Returns the stored entry and whether anything changed."""
         ...
 
     async def ensure(self, tenant_id: str, name: str) -> ToolDescriptor:
@@ -99,6 +102,10 @@ class ToolRepository(Protocol):
     async def count_approval(
         self, tenant_id: str, agent_id: str, tool_name: str, arg_shape: str, verdict: str
     ) -> None: ...
+
+    async def approval_pattern(
+        self, tenant_id: str, agent_id: str, tool_name: str, arg_shape: str
+    ) -> ApprovalCounts | None: ...
 
     async def approval_patterns(
         self,

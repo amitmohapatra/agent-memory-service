@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,9 @@ def _block(row: ProfileBlockRow) -> ProfileBlock:
         version=row.version,
         source=row.source,  # type: ignore[arg-type]
         updated_at=row.updated_at,
+        source_query=row.source_query,
+        source_context=row.source_context,
+        refresh_due_at=row.refresh_due_at,
     )
 
 
@@ -60,6 +64,8 @@ class SqlProfileRepository:
         return _block(row) if row is not None else None
 
     async def put(self, block: ProfileBlock) -> ProfileBlock:
+        """Write the block (its text and its standing question); the version is the stored
+        one plus one."""
         stmt = insert(ProfileBlockRow).values(**{**block.model_dump(), "version": 1})
         stmt = stmt.on_conflict_do_update(
             index_elements=[
@@ -68,14 +74,49 @@ class SqlProfileRepository:
                 ProfileBlockRow.block,
             ],
             set_={
-                "text": stmt.excluded.text,
-                "source": stmt.excluded.source,
-                "updated_at": stmt.excluded.updated_at,
-                "version": ProfileBlockRow.version + 1,
-            },
+                name: getattr(stmt.excluded, name)
+                for name in (
+                    "text",
+                    "source",
+                    "updated_at",
+                    "source_query",
+                    "source_context",
+                    "refresh_due_at",
+                )
+            }
+            | {"version": ProfileBlockRow.version + 1},
         ).returning(ProfileBlockRow)
         row = (await self.s.scalars(stmt, execution_options={"populate_existing": True})).one()
         return _block(row)
+
+    async def claim_due(
+        self, now: datetime, *, limit: int, next_at: datetime
+    ) -> list[ProfileBlock]:
+        """Blocks whose standing question is due, oldest first, moved to ``next_at`` so a
+        second claim does not take them again (an indexed range read)."""
+        due = (
+            select(ProfileBlockRow.tenant_id, ProfileBlockRow.scope_key, ProfileBlockRow.block)
+            .where(
+                ProfileBlockRow.source_query.is_not(None),
+                ProfileBlockRow.refresh_due_at <= now,
+            )
+            .order_by(ProfileBlockRow.refresh_due_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+            .subquery()
+        )
+        stmt = (
+            update(ProfileBlockRow)
+            .where(
+                tuple_(
+                    ProfileBlockRow.tenant_id, ProfileBlockRow.scope_key, ProfileBlockRow.block
+                ).in_(select(due.c.tenant_id, due.c.scope_key, due.c.block))
+            )
+            .values(refresh_due_at=next_at)
+            .returning(ProfileBlockRow)
+        )
+        rows = (await self.s.scalars(stmt, execution_options={"populate_existing": True})).all()
+        return [_block(r) for r in rows]
 
 
 class SqlThreadSummaryRepository:

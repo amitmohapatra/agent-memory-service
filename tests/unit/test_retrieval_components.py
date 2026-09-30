@@ -51,7 +51,8 @@ def test_router_is_deterministic_and_sets_needs() -> None:
     assert a.needs_memories and not a.needs_knowledge and a.needs_conversation
     exact = r.route("open msg_01J8ZK7Q9V3W2X1Y0ZABCDEFGH", has_thread=False)
     assert exact.identifiers == ["msg_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"]
-    assert not exact.needs_conversation and not exact.needs_memories
+    # an identifier query still ranks memories and asks the graph about the thing it names
+    assert not exact.needs_conversation and exact.needs_memories and exact.needs_graph
     multi = r.route("compare FY25 and FY26 margins")
     assert multi.needs_graph and multi.query_type is QueryType.DOCUMENT_MULTI_HOP
 

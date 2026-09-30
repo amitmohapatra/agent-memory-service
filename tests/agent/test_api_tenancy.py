@@ -30,7 +30,7 @@ def app(make_settings):
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings = make_settings(
-        authentication={"mode": "api_key", "bootstrap_admin_key": BOOTSTRAP},
+        authentication={"bootstrap_admin_key": BOOTSTRAP},
         agent_credentials={"active_key_id": "p9b", "encryption_keys": {"p9b": ENVELOPE}},
     )
     return create_app(settings, overrides=_test_overrides(tasks="inline"))

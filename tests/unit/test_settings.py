@@ -5,10 +5,11 @@ from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.config.settings import Settings
 
 
-def test_defaults_are_cpu_first_with_credential_gated_auto_assistance() -> None:
+def test_defaults_are_cpu_first_and_the_model_is_off_without_a_gateway() -> None:
     s = Settings(_env_file=None)
-    assert s.models.llm.enabled == "auto" and s.models.llm.api_key is None
-    assert s.models.llm.wants("contextual_extraction")
+    assert not s.llm.enabled and s.llm.api_key is None
+    assert not s.llm.wants("contextual_extraction")
+    assert s.otel_endpoint is None and s.authentication.mode == "api_key"
     assert FROZEN_MODELS.dense.id == "ibm-granite/granite-embedding-small-english-r2"
     assert FROZEN_MODELS.dense.dimension == 384 and FROZEN_MODELS.dense.backend == "torch"
     assert RETRIEVAL.bm25 and RETRIEVAL.dense and RETRIEVAL.exact and RETRIEVAL.graph
@@ -53,7 +54,6 @@ def test_the_test_stand_ins_are_not_settings() -> None:
     from memory_service.config.settings import (
         AuthorizationSettings,
         CacheSettings,
-        EmbeddingSettings,
         SearchSettings,
         TaskSettings,
     )
@@ -61,7 +61,6 @@ def test_the_test_stand_ins_are_not_settings() -> None:
     for section in (CacheSettings, SearchSettings, TaskSettings, AuthorizationSettings):
         assert "provider" not in section.model_fields, section.__name__
     assert "qdrant_local_path" not in SearchSettings.model_fields
-    assert set(EmbeddingSettings.model_fields) == {"threads"}
 
 
 def _leaves(model: type, prefix: str = "") -> list[str]:
@@ -104,36 +103,70 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # They permit tenant/agent-owned VKs without storing provider credentials in plaintext.
     # 49 -> 50 for ``authentication.bootstrap_admin_key``: the one secret that onboards tenants
     # in api_key mode. A deployment fact, and the only one a shared deployment adds.
-    # 50 -> 51 for ``webhooks.allow_local_targets`` (ADR 0023): whether this deployment's
-    # webhook receivers may live on the local network. A topology fact (docker-compose
-    # development says yes, anything deployed says no and refuses the flag); the delivery
-    # tuning (timeout, attempts, disable threshold, subscription cap) is in constants.py.
-    assert len(leaves) <= 51, f"{len(leaves)} env fields: {leaves}"
-    for forbidden in ("prefetch_k", "final_k", "token_budget", "dimension", "model_path"):
+    # 51 -> 35 in the final overhaul: the webhooks flag went with the webhooks; the model's
+    # tuning (model names, fast uses, the use allow-list, tokens, timeout, retries), the
+    # Hindsight quota, the encoder threads, the service-wide rate limit and the exporter
+    # kind became constants or are derived (the model is on when BIFROST_URL is set, tracing
+    # when OTEL_EXPORTER_OTLP_ENDPOINT is, the authentication mode from the credentials).
+    assert len(leaves) <= 35, f"{len(leaves)} env fields: {leaves}"
+    for forbidden in (
+        "prefetch_k",
+        "final_k",
+        "token_budget",
+        "dimension",
+        "model_path",
+        "max_tokens",
+        "timeout_seconds",
+        "max_retries",
+        "uses",
+        "rate_limit_per_minute",
+        "threads",
+        "mode",
+    ):
         assert not [leaf for leaf in leaves if leaf.endswith(forbidden)], forbidden
 
 
 def test_prod_guards_reject_dev_only_providers() -> None:
     with pytest.raises(ValueError, match="trusted_dev"):
-        Settings(_env_file=None, service={"environment": "prod"})
+        Settings(
+            _env_file=None,
+            service={"environment": "prod"},
+            authentication={"trusted_dev_api_keys": ["dev-key"]},
+        )
     with pytest.raises(ValueError, match="blob.provider"):
         Settings(
             _env_file=None,
             service={"environment": "prod"},
-            authentication={"mode": "jwt"},
+            authentication={"jwt_jwks_url": "https://issuer/jwks"},
             blob={"provider": "filesystem"},
         )
 
 
-def test_llm_enabled_requires_a_model() -> None:
-    """An LLM that is on and has no model name is a startup failure, not a runtime one.
+def test_the_authentication_mode_follows_from_the_credentials_configured() -> None:
+    """A mode that had to agree with the credentials beside it was two settings for one
+    fact: the issuer's JWKS means jwt, the bootstrap key or no development keys means the
+    service's own issued keys, development keys alone mean trusted_dev."""
+    from memory_service.config.settings import AuthenticationSettings
 
-    The companion check — that `enabled` and a separate `provider` field agreed — is gone
-    with the field. Two settings that had to be kept in agreement were one setting.
-    """
-    with pytest.raises(ValueError, match="models.llm.model"):
-        Settings(_env_file=None, models={"llm": {"enabled": True, "model": None}})
-    assert Settings(_env_file=None, models={"llm": {"enabled": False}}).models.llm.enabled is False
+    assert AuthenticationSettings().mode == "api_key"
+    assert AuthenticationSettings(trusted_dev_api_keys=["k"]).mode == "trusted_dev"
+    assert (
+        AuthenticationSettings(trusted_dev_api_keys=["k"], bootstrap_admin_key="b" * 32).mode
+        == "api_key"
+    )
+    assert AuthenticationSettings(jwt_jwks_url="https://issuer/jwks").mode == "jwt"
+
+
+def test_the_platform_names_are_read_unprefixed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The model gateway and the trace endpoint are the platform's variables, read under the
+    names the harness and agent-runs read them by."""
+    monkeypatch.setenv("BIFROST_URL", "http://bifrost:8080/v1")
+    monkeypatch.setenv("BIFROST_VIRTUAL_KEY", "sk-bf-operator")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318/v1/traces")
+    s = Settings(_env_file=None)
+    assert s.llm.enabled and s.llm.base_url == "http://bifrost:8080/v1"
+    assert s.llm.operator_pays and "sk-bf-operator" not in str(s.redacted())
+    assert s.otel_endpoint == "http://collector:4318/v1/traces"
 
 
 def test_secrets_are_masked() -> None:
@@ -147,7 +180,7 @@ def test_secrets_are_masked() -> None:
         search={"qdrant_api_key": "qdrantsecret"},
         authorization={"openfga_api_token": "supersecret"},
         authentication={"trusted_dev_api_keys": ["devsecret"]},
-        models={"llm": {"api_key": "virtualkey"}},
+        bifrost_virtual_key="virtualkey",
         hindsight={"api_key": "hindsightsecret"},
     )
     dumped = str(s.redacted())
@@ -168,104 +201,19 @@ def test_secrets_are_masked() -> None:
     )
 
 
-# --------------------------------------------------- an LLM that would call nothing
-
-
-def test_the_operator_allow_list_defaults_to_every_use() -> None:
-    """Tenant policies narrow what the model may do; the deployment's own list starts open."""
-    from memory_service.config.settings import ALL_LLM_USES
-
-    s = Settings(_env_file=None, models={"llm": {"enabled": True, "model": "test/strong"}})
-    assert tuple(s.models.llm.uses) == ALL_LLM_USES
-    assert all(s.models.llm.wants(use) for use in ALL_LLM_USES)
-    assert not Settings(_env_file=None, models={"llm": {"enabled": False}}).models.llm.wants(
-        "summaries"
-    )
-
-
-def test_enabling_the_llm_with_an_empty_allow_list_is_refused() -> None:
-    """Opting in with nothing allowed is a contradiction, and it used to be silent: the
-    service started cleanly, reported ``"llm": "bifrost"`` on /version, and sent the gateway
-    nothing at all, and the only way to notice was that the token metrics never moved."""
-    with pytest.raises(ValidationError, match="nothing would call the model"):
-        Settings(
-            _env_file=None,
-            models={
-                "llm": {
-                    "enabled": True,
-                    "model": "gemini/gemini-3.6-flash",
-                    "uses": [],
-                }
-            },
-        )
-
-
-def test_naming_a_use_is_enough_to_be_accepted() -> None:
-    settings = Settings(
-        _env_file=None,
-        models={
-            "llm": {
-                "enabled": True,
-                "model": "gemini/gemini-3.6-flash",
-                "fast_model": "gemini/gemini-3.6-flash",
-                "uses": ["query_expansion", "summaries"],
-            }
-        },
-    )
-    llm = settings.models.llm
-    assert llm.wants("query_expansion") and llm.wants("summaries")
-    assert not llm.wants("reflection"), "a use you did not name stays deterministic"
-
-
-def test_an_enabled_fast_use_without_a_fast_model_is_refused() -> None:
-    """fast_model is a separate credential in practice — it defaults to a different
-    provider than model does, and ``fast_model or model`` in the adapter cannot rescue a
-    mismatch because that default is truthy. Setting model and forgetting fast_model sends
-    exactly the fast_uses somewhere the operator never chose."""
-    with pytest.raises(ValidationError, match="fast_model is unset"):
-        Settings(
-            _env_file=None,
-            models={
-                "llm": {
-                    "enabled": True,
-                    "model": "gemini/gemini-3.6-flash",
-                    "fast_model": None,
-                    "uses": ["query_expansion"],
-                }
-            },
-        )
-
-
-def test_a_slow_only_use_list_does_not_need_a_fast_model() -> None:
-    """The check is about overlap, not about fast_model always being set."""
-    settings = Settings(
-        _env_file=None,
-        models={
-            "llm": {
-                "enabled": True,
-                "model": "gemini/gemini-3.6-flash",
-                "fast_model": None,
-                "uses": ["summaries"],
-            }
-        },
-    )
-    assert settings.models.llm.wants("summaries")
-
-
 def test_a_short_bootstrap_key_is_refused_in_deployed_environments() -> None:
     """The one credential that onboards tenants and can administer any of them; a short
     operator-chosen value is guessable online. Laptops may use anything."""
     import pytest
-    from pydantic import ValidationError
 
     base = {
         "service": {"environment": "prod"},
-        "authentication": {"mode": "api_key", "bootstrap_admin_key": "short"},
+        "authentication": {"bootstrap_admin_key": "short"},
         "blob": {"provider": "gcs"},
     }
     with pytest.raises(ValidationError, match="at least 32 characters"):
         Settings(_env_file=None, **base)
-    ok = {**base, "authentication": {"mode": "api_key", "bootstrap_admin_key": "x" * 32}}
+    ok = {**base, "authentication": {"bootstrap_admin_key": "x" * 32}}
     assert Settings(_env_file=None, **ok).authentication.mode == "api_key"
-    dev = {"authentication": {"mode": "api_key", "bootstrap_admin_key": "short"}}
+    dev = {"authentication": {"bootstrap_admin_key": "short"}}
     assert Settings(_env_file=None, **dev).authentication.bootstrap_admin_key is not None

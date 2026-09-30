@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from memory_service.config.constants import MemoryIntelligenceSettings
+from memory_service.config.constants import LLM, MemoryIntelligenceSettings
 from memory_service.domain.enums import MemoryType
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.narrative import extract_narrative_units
@@ -45,7 +45,7 @@ async def test_multiple_topics_keep_antecedents_negation_and_source_identity():
         verbatim = next(c for c in candidates if c.category == "verbatim_turn")
         assert classified.visibility == (await native.classify(verbatim, CTX)).visibility
     assert gateway.route.call_count == 1
-    assert gateway.prompts()[0]["model"] == "test/fast"
+    assert gateway.prompts()[0]["model"] == "gemini/gemini-3.8-flash"
     messages = gateway.prompts()[0]["messages"]
     assert "ZERO-BASED" in messages[0]["content"]
     payload = json.loads(messages[1]["content"])
@@ -140,7 +140,8 @@ async def test_failed_or_empty_contextual_attempt_does_not_fan_out(failed):
         observation = _obs(MESSAGE)
         native = NativeMemoryIntelligence(MemoryIntelligenceSettings())
         assert await assisted.extract(observation, CTX) == await native.extract(observation, CTX)
-    assert gateway.route.call_count == 1
+    # one attempt, and a failing gateway's retries inside it (constants.LLM.max_retries)
+    assert gateway.route.call_count == (1 + LLM.max_retries if failed else 1)
 
 
 @pytest.mark.parametrize(

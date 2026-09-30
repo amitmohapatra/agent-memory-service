@@ -171,33 +171,32 @@ def _builder(
 
 
 @pytest.mark.parametrize(
-    "change",
+    ("change", "models"),
     [
-        {"model": "test/new-strong"},
-        {"fast_model": "test/new-fast"},
-        {"fast_uses": []},
-        {"base_url": "http://another-gateway.test/v1"},
-        {"api_key": "rotated-operator-key"},
-        {"max_tokens": 777},
+        ({"base_url": "http://another-gateway.test/v1"}, None),
+        ({"api_key": "rotated-operator-key"}, None),
+        ({}, {"query_expansion": "gemini/gemini-3.8-pro"}),
     ],
 )
-async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(change):
+async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(change, models):
+    """A bundle built with query expansion depends on the gateway, the key and the model the
+    tenant's policy names for the use: any of them changing is a different bundle."""
     from types import SimpleNamespace
 
-    from tests.support_llm import llm_settings
+    from tests.support_llm import bound_to, llm_settings
 
     cache = MemoryCache()
     provider = SimpleNamespace(enabled=True)
-    first = _builder(cache, assist=LLMAssist(provider, llm_settings(["query_expansion"])))
-    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings(["query_expansion"])))
-    changed = _builder(
-        cache, assist=LLMAssist(provider, llm_settings(["query_expansion"], **change))
-    )
+    first = _builder(cache, assist=LLMAssist(provider, llm_settings()))
+    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings()))
+    changed = _builder(cache, assist=LLMAssist(provider, llm_settings(**change)))
     try:
-        await first.build_api(CTX, QUERY)
-        await first.drain()
-        assert orjson.loads(await unchanged.build_api(CTX, QUERY))["cache_hit"] is True
-        assert orjson.loads(await changed.build_api(CTX, QUERY))["cache_hit"] is False
+        with bound_to("acme", "user:u1", uses=["query_expansion"]):
+            await first.build_api(CTX, QUERY, output="full")
+            await first.drain()
+            assert orjson.loads(await unchanged.build_api(CTX, QUERY, output="full"))["cache_hit"]
+        with bound_to("acme", "user:u1", uses=["query_expansion"], models=models):
+            assert not orjson.loads(await changed.build_api(CTX, QUERY, output="full"))["cache_hit"]
         assert changed.engine.calls == 1 and unchanged.engine.calls == 0
         assert "operator-key" not in changed._fingerprint
     finally:
@@ -212,8 +211,8 @@ def test_unused_model_configuration_does_not_fragment_native_cache():
     from tests.support_llm import llm_settings
 
     provider = SimpleNamespace(enabled=True)
-    first = _builder(assist=LLMAssist(provider, llm_settings([])))
-    changed = _builder(assist=LLMAssist(provider, llm_settings([], model="test/new")))
+    first = _builder(assist=LLMAssist(provider, llm_settings()))
+    changed = _builder(assist=LLMAssist(provider, llm_settings(base_url="http://other.test/v1")))
     assert first._fingerprint == changed._fingerprint
 
 
@@ -516,25 +515,41 @@ async def test_close_flushes_what_is_buffered() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_a_cache_hit_returns_the_stored_bytes() -> None:
+@pytest.mark.parametrize("output", ["prompt", "full"])
+async def test_a_cache_hit_returns_the_stored_bytes(output) -> None:
     cache = MemoryCache()
     builder = _builder(cache)
-    first = await builder.build_api(CTX, QUERY)
+    first = await builder.build_api(CTX, QUERY, output=output)
     await builder.drain()
-    stored = next(v for k, (v, _) in cache._data.items() if k.startswith("ctx:"))
+    prefix = "ctxp:" if output == "prompt" else "ctx:"
+    stored = next(v for k, (v, _) in cache._data.items() if k.startswith(prefix))
 
-    again = await builder.build_api(CTX, QUERY)
+    again = await builder.build_api(CTX, QUERY, output=output)
     assert again is stored, "a hit must be the stored bytes, not a parse and a re-serialisation"
-    body = orjson.loads(again)
-    assert body["cache_hit"] is True and orjson.loads(first)["cache_hit"] is False
-    assert body["rendered"] and body["query"] == QUERY
+    assert orjson.loads(again) == {
+        **orjson.loads(first),
+        **({"cache_hit": True} if output == "full" else {}),
+    }
+    assert orjson.loads(again)["rendered"]
+
+
+async def test_the_prompt_form_is_three_fields_and_debug_is_never_a_cache_hit() -> None:
+    cache = MemoryCache()
+    builder = _builder(cache)
+    prompt = orjson.loads(await builder.build_api(CTX, QUERY))
+    assert set(prompt) == {"rendered", "bundle_id", "token_estimate"}
+    await builder.drain()
+    debug = orjson.loads(await builder.build_api(CTX, QUERY, output="full", debug=True))
+    assert debug["cache_hit"] is False and "timings_ms" in debug["diagnostics"]
+    assert "diagnostics" not in orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
+    await builder.close()
 
 
 async def test_the_bytes_are_what_the_router_would_have_built() -> None:
     """``build_api`` replaces ``ContextResponse.model_validate(bundle_to_api(bundle))``; the
     content it sends must be identical to what that produced."""
     builder = _builder(MemoryCache())
-    payload = orjson.loads(await builder.build_api(CTX, QUERY))
+    payload = orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
     fresh = _builder(MemoryCache())
     expected = bundle_to_api(await fresh.build(CTX, QUERY))
     for key in ("query", "query_type", "evidence", "rendered", "token_budget", "cache_hit"):
@@ -549,16 +564,24 @@ async def test_the_bytes_are_what_the_router_would_have_built() -> None:
     ]
 
 
-async def test_a_bundle_cached_by_the_api_path_is_still_a_bundle() -> None:
-    """``/v1/verify`` looks a bundle up by id while it is cached; the stored API dict must
-    still validate as a ContextBundle."""
+async def test_a_built_bundle_leaves_its_handles_and_evidence_for_later_calls() -> None:
+    """``/v1/verify`` and the handle-taking calls read what a bundle carried by its id: the
+    record is kept for the scope the bundle was built for, and only for it."""
     cache = MemoryCache()
     builder = _builder(cache)
-    payload = orjson.loads(await builder.build_api(CTX, QUERY))
+    payload = orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
     await builder.drain()
-    found = await builder.cached(CTX, payload["bundle_id"])
-    assert isinstance(found, ContextBundle)
-    assert [i.item_id for i in found.memories] == [m["item_id"] for m in payload["memories"]]
+    record = await builder.records.load(CTX, payload["bundle_id"])
+    assert record is not None
+    assert (
+        record.handles
+        == payload["handles"]
+        == {f"m{i}": m["item_id"] for i, m in enumerate(payload["memories"], start=1)}
+    )
+    assert [e.citation for e in record.evidence] == list(payload["handles"])
+    other = MemoryExecutionContext(tenant_id="acme", user_id="u2")
+    assert await builder.records.load(other, payload["bundle_id"]) is None
+    assert "[m1]" in payload["rendered"] and "memory_id:" not in payload["rendered"]
 
 
 async def test_the_two_entry_points_share_one_cache() -> None:
@@ -566,7 +589,7 @@ async def test_the_two_entry_points_share_one_cache() -> None:
     builder = _builder(cache)
     await builder.build(CTX, QUERY)
     await builder.drain()
-    hit = await builder.build_api(CTX, QUERY)
+    hit = await builder.build_api(CTX, QUERY, output="full")
     assert orjson.loads(hit)["cache_hit"] is True
 
 
@@ -625,11 +648,13 @@ async def test_the_bytes_still_satisfy_the_documented_response_contract() -> Non
     contract. The check moves here: what the route sends must still be exactly a
     ContextResponse.
     """
-    from memory_service.api.routers.v1.retrieval import ContextResponse
+    from memory_service.api.routers.v1.retrieval import ContextResponse, PromptContextResponse
 
     builder = _builder(MemoryCache())
-    payload = orjson.loads(await builder.build_api(CTX, QUERY))
-    ContextResponse.model_validate(payload)
+    ContextResponse.model_validate(orjson.loads(await builder.build_api(CTX, QUERY, output="full")))
+    debug = await builder.build_api(CTX, QUERY, output="full", debug=True)
+    ContextResponse.model_validate(orjson.loads(debug))
+    PromptContextResponse.model_validate(orjson.loads(await builder.build_api(CTX, QUERY)))
 
 
 def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any) -> None:
@@ -686,7 +711,7 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
-    assert response.json()["cache_hit"] is False
+    assert set(response.json()) == {"rendered", "bundle_id", "token_estimate"}
 
 
 async def test_a_ranked_memory_under_the_relevance_floor_is_not_packed() -> None:

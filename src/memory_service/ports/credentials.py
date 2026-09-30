@@ -1,9 +1,8 @@
 """Protected model credentials; plaintext never belongs to a memory or job.
 
-A key is stored per ``(tenant_id, principal_id)``. Since ADR 0023 the principal may also be
-a workspace (``workspace:<id>``) or the tenant itself (``tenant``): a call resolves the most
-specific row that exists, so a team registers one Bifrost key and every agent of the
-workspace calls through it unless it has a key of its own.
+A key is stored at one of two levels: the agent's (``agent:<agent_id>``, whichever user it
+acts for - the harness registers it once, at startup) or the tenant's (``tenant``). A call
+resolves the most specific row that exists: the acting agent's key, else the tenant's.
 """
 
 from collections.abc import Sequence
@@ -13,28 +12,35 @@ from typing import Final, Protocol
 
 from pydantic import SecretStr
 
-WORKSPACE_PRINCIPAL_PREFIX: Final = "workspace:"
+AGENT_PRINCIPAL_PREFIX: Final = "agent:"
 TENANT_PRINCIPAL: Final = "tenant"
+
+
+def agent_level(principal_id: str) -> str | None:
+    """The agent level a principal resolves through: ``agent:<agent_id>`` for an agent, bound
+    to a user (``agent:u1/research``) or not; None for anyone else."""
+    if not principal_id.startswith(AGENT_PRINCIPAL_PREFIX):
+        return None
+    return (
+        AGENT_PRINCIPAL_PREFIX
+        + principal_id[len(AGENT_PRINCIPAL_PREFIX) :].rsplit("/", maxsplit=1)[-1]
+    )
 
 
 @dataclass(frozen=True)
 class ModelIdentity:
+    """Who a model call is for: the tenant and the acting principal."""
+
     tenant_id: str
     principal_id: str
-    workspace_id: str | None = None
 
     def levels(self) -> tuple["ModelIdentity", ...]:
-        """The rows a resolution reads, most specific first: the principal's own, then the
-        workspace's (when the call runs in one), then the tenant's."""
-        rows = [ModelIdentity(self.tenant_id, self.principal_id)]
-        if self.workspace_id:
-            rows.append(workspace_identity(self.tenant_id, self.workspace_id))
+        """The rows a resolution reads, most specific first: the agent's, then the
+        tenant's."""
+        agent = agent_level(self.principal_id)
+        rows = [ModelIdentity(self.tenant_id, agent)] if agent else []
         rows.append(tenant_identity(self.tenant_id))
-        return tuple(dict.fromkeys(rows))
-
-
-def workspace_identity(tenant_id: str, workspace_id: str) -> ModelIdentity:
-    return ModelIdentity(tenant_id, f"{WORKSPACE_PRINCIPAL_PREFIX}{workspace_id}")
+        return tuple(rows)
 
 
 def tenant_identity(tenant_id: str) -> ModelIdentity:
@@ -54,7 +60,7 @@ class StoredCredential:
 class ResolvedCredential:
     key: SecretStr = field(repr=False)
     revision: int
-    #: The row the key came from: the principal's own, the workspace's or the tenant's.
+    #: The row the key came from: the agent's or the tenant's.
     identity: ModelIdentity
 
 

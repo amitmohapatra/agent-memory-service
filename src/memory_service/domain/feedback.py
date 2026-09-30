@@ -1,10 +1,17 @@
-"""Feedback: human, judge and interrupt judgements on what the platform did (ADR 0023).
+"""Feedback: the learning signal - human, interrupt, judge and system judgements on what the
+platform did.
 
-The wire shape is ``trellis.contracts.Feedback`` (0.3.0) as is; this module does not import
-the contracts package because the service is usable on its own. Feedback is stored apart
-from memory content: a memory is what was learned, feedback is what a person thought of it.
-The projector (``modules.feedback``) turns a verdict on a memory into the existing revision
-machinery and records what it did in ``projection``.
+The wire shape is ``trellis.contracts.Feedback`` as is; this module does not import the
+contracts package because the service is usable on its own. Feedback is stored apart from
+memory content: a memory is what was learned, feedback is what someone thought of it. The
+projector (``modules.feedback``) turns a verdict into what it judges - a memory's standing, a
+run's outcome, a tool's statistics and approval patterns, a procedure - and records what it
+did in ``projection``.
+
+A run's outcome is a projection of its feedback: the harness sends RUN feedback with
+``source=system`` from the run's final status, ``/v1/verify`` writes it with ``source=judge``,
+and a person overrides both. ``OUTCOME_PRECEDENCE`` orders them; a verdict never replaces an
+outcome a higher-ranked source already gave.
 """
 
 from __future__ import annotations
@@ -25,11 +32,10 @@ EVIDENCE_REFS_MAX: Final = 50
 
 
 class FeedbackTargetKind(StrEnum):
+    #: a run: its outcome, and - through ``evidence_refs`` - the memories its answer cited
     RUN = "run"
-    ANSWER = "answer"
     MEMORY = "memory"
     TOOL_CALL = "tool_call"
-    BRIEF = "brief"
     PROCEDURE = "procedure"
 
 
@@ -43,8 +49,22 @@ class FeedbackVerdict(StrEnum):
 
 class FeedbackSource(StrEnum):
     HUMAN = "human"
-    JUDGE = "judge"
+    #: a person's answer to an interrupt (an approval, a review): a human verdict
     INTERRUPT = "interrupt"
+    #: the grounding judge (``POST /v1/verify``)
+    JUDGE = "judge"
+    #: derived from a run's final status by the harness
+    SYSTEM = "system"
+
+
+#: Who decides a run's outcome: a verdict replaces the stored outcome only when its source
+#: ranks at least as high (the last word wins within one rank).
+OUTCOME_PRECEDENCE: Final = {
+    FeedbackSource.SYSTEM: 1,
+    FeedbackSource.JUDGE: 2,
+    FeedbackSource.INTERRUPT: 3,
+    FeedbackSource.HUMAN: 3,
+}
 
 
 class ProjectionAction(StrEnum):
@@ -54,9 +74,7 @@ class ProjectionAction(StrEnum):
     MEMORY_REINFORCED = "memory_reinforced"
     MEMORY_RETRACTED = "memory_retracted"
     MEMORY_SUPERSEDED = "memory_superseded"
-    #: an answer verdict moved the confidence of the memories the answer cited
-    MEMORIES_ADJUSTED = "memories_adjusted"
-    #: a run verdict (or an answer verdict, when the run had no label) labelled the run
+    #: a run verdict labelled the run (and moved the confidence of the memories it cited)
     RUN_LABELLED = "run_labelled"
     #: a tool-call verdict counted toward the tool's statistics and approval patterns
     TOOL_CALL_COUNTED = "tool_call_counted"
@@ -101,7 +119,7 @@ class FeedbackProjection(BaseModel):
     action: ProjectionAction
     memory_id: str | None = Field(default=None, description="the memory the verdict landed on")
     memory_ids: list[str] = Field(
-        default_factory=list, description="the cited memories an answer verdict adjusted"
+        default_factory=list, description="the cited memories a run verdict adjusted"
     )
     run_id: str | None = Field(default=None, description="the run whose outcome was labelled")
     superseded_by: str | None = Field(

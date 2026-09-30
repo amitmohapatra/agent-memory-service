@@ -1,7 +1,7 @@
-"""The turn an agent actually takes: write what happened, ask for context, check an answer
-against it, look the memory up, and forget it. Nine operations - observations, memories,
-context, recall, verify, the job behind the write, and the graph - driven the way a framework
-adapter drives them, with no request built by hand.
+"""The turn an agent actually takes: write a memory, ask for context, check an answer
+against it, look the memory up, and forget it. The operations - memories, context, recall,
+verify, the job behind the write, and the graph - driven the way a framework adapter drives
+them, with no request built by hand.
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ async def _tenant(app, tenant_id: str = "acme"):
 
 
 @pytest.mark.covers(
-    "memory.submit_observation",
     "memory.remember",
     "memory.supersede_memory",
     "memory.list_memories",
@@ -57,10 +56,6 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     assert one.content == FACT and one.visibility == "USER"
     stored = next(m for m in await agent.advanced.memories.list() if m.memory_id == ack.memory_id)
 
-    # Observations are evidence for the service to learn from, asynchronously.
-    observed = await agent.observe("Priya prefers written status updates.", kind="EVENT")
-    assert observed.observation_id
-
     # A correction is a new version; the old one is closed, not deleted.
     updated = await agent.update(ack.memory_id, SECOND, reason="the team moved its review")
     assert updated.supersedes == ack.memory_id
@@ -85,49 +80,59 @@ async def test_an_agent_asks_for_context_then_has_its_answer_verified(app, runni
     await agent.remember(FACT, visibility="USER")
     await agent.remember(SECOND, visibility="USER")
 
-    bundle = await agent.context("who leads the payments platform team", token_budget=2000)
-    assert bundle.query_type and bundle.token_estimate <= bundle.token_budget
-    assert bundle.rendered, "the bundle is ready to prompt with, not a pile of rows"
-    assert any("Priya" in item.text for item in bundle.memories), bundle.memories
+    prompt = await agent.context("who leads the payments platform team", token_budget=2000)
+    assert prompt.bundle_id and prompt.token_estimate <= 2000
+    assert "Priya" in prompt.rendered, "the bundle is ready to prompt with, not a pile of rows"
+    assert "[m1]" in prompt.rendered, "evidence is cited by its per-bundle handle"
+
+    full = await agent.context(
+        "who leads the payments platform team", token_budget=2000, format="full"
+    )
+    assert full.query_type and full.token_estimate <= full.token_budget
+    assert any("Priya" in item.text for item in full.memories), full.memories
+    assert full.handles and all(h[0] in "mfsd" for h in full.handles)
 
     ranked = await agent.search("release review", limit=5)
     assert ranked and any("Thursday" in item.text for item in ranked)
-    assert len(ranked) <= 5
+    assert len(ranked) <= 5 and all(item.citation and item.kind for item in ranked)
 
-    report = await agent.verify("Priya Raman leads the payments platform team [1]", bundle=bundle)
+    report = await agent.verify(
+        "Priya Raman leads the payments platform team [m1]", bundle_id=prompt.bundle_id
+    )
     assert report.evidence_count >= 1
     assert report.supported + report.unsupported + report.contradicted + report.borderline >= 1
     # No key is configured in this suite, so the judge is never consulted: the model-free
     # path is the promise, and verify honours it.
     assert report.judge_consulted == 0 and report.llm_tokens == 0
 
+    with pytest.raises(MemoryError) as unknown:
+        await agent.verify("anything", bundle_id="ctx_never_built")
+    assert unknown.value.status == 404
 
-@pytest.mark.covers("graph.graph_query", "graph.search_entities", "graph.entity_profile")
+
+@pytest.mark.covers("graph.search_entities", "graph.entity_profile")
 async def test_an_agent_traverses_what_the_writes_made_of_the_entities(app, running) -> None:
     _, harness = await _tenant(app)
     agent = harness.bind(user_id="u1").agent("graph-bot")
     await agent.remember(FACT, visibility="USER")
 
-    answer = await agent.advanced.graph.query(
-        "who does Priya Raman report to", hops=1, layers=["entity"]
-    )
-
-    # The graph is built off the write path; what matters to the contract is that a query
-    # answers in the bundle's shape and stays inside this scope's visibility.
-    assert answer.visited >= 0
-    assert all(fact.subject and fact.layer == "entity" for fact in answer.facts)
-
     # Entities the write produced can be searched by name and opened as a profile.
     found = await agent.advanced.graph.entities("priya", limit=5)
     assert found and all(e.canonical_name.startswith("priya") for e in found), found
     profile = await agent.advanced.graph.entity(found[0].entity_id)
-    assert profile.entity.entity_id == found[0].entity_id
+    assert profile.entity.entity_id == found[0].entity_id and profile.neighborhood is None
+    # with a depth, the graph around it, inside this scope's visibility
+    around = await agent.advanced.graph.entity(found[0].entity_id, depth=1, layers=["entity"])
+    assert around.neighborhood is not None and around.neighborhood.visited >= 1
+    assert all(f.subject and f.layer == "entity" for f in around.neighborhood.facts)
     with pytest.raises(MemoryError) as missing:
         await agent.advanced.graph.entity("ent_never_written")
     assert missing.value.status == 404
 
 
-@pytest.mark.covers_error("retrieval.recall", "memory.get_memory", "memory.list_memories")
+@pytest.mark.covers_error(
+    "retrieval.recall", "retrieval.verify", "memory.get_memory", "memory.list_memories"
+)
 async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app, running) -> None:
     _, acme = await _tenant(app, "acme")
     _, globex = await _tenant(app, "globex")

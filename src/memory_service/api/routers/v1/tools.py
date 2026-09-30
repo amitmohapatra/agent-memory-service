@@ -1,5 +1,5 @@
-"""Public /v1/tools routes: the catalog, call records, run outcomes, tool hints and approval
-suggestions (TOOL_MEMORY.md).
+"""Public /v1/tools routes: the catalog, call records, tool hints and approval suggestions
+(TOOL_MEMORY.md).
 
 The service never executes a tool. ``record`` is what an adapter calls after it ran one;
 ``hints`` answers which tool, which plan, which next step and which arguments, from what
@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -33,13 +33,16 @@ from memory_service.domain.learning import (
 from memory_service.domain.tools import (
     SOURCE_MAX_CHARS,
     SideEffects,
+    ToolAnnotations,
     ToolDescriptor,
     ToolHints,
     ToolStats,
     ToolStatus,
 )
+from memory_service.modules.tools import approvals
 from memory_service.modules.tools.hints import HINTS_K_MAX
 from memory_service.modules.tools.service import CATALOG_MAX
+from trellis.memory.approval import MAX_EXPRESSION_CHARS, parse
 
 router = APIRouter()
 #: 404: WORKSPACE visibility naming a workspace that is not a team (modules/tenancy/gate.py)
@@ -122,25 +125,6 @@ class RecordResponse(BaseModel):
     recorded: bool = Field(description="False when an identical call was already recorded.")
 
 
-class OutcomeRequest(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [{"scope": _SCOPE, "success": True, "note": "user accepted the quote"}]
-        },
-    )
-
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    success: bool
-    note: str | None = Field(default=None, max_length=4000)
-
-
-class OutcomeResponse(BaseModel):
-    run_id: str
-    success: bool
-    source: str = Field(description="explicit (said by the run or a reviewer) or feedback")
-
-
 class CatalogEntry(BaseModel):
     """What a tool is and does."""
 
@@ -172,16 +156,39 @@ class CatalogEntry(BaseModel):
         max_length=50,
         description="dotted argument paths whose values never reach storage",
     )
+    annotations: ToolAnnotations = Field(
+        default_factory=ToolAnnotations,
+        description="the MCP annotations (readOnlyHint, destructiveHint, idempotentHint, "
+        "openWorldHint); the risk tier follows them when side_effects is not set",
+    )
+    approve_when: str | None = Field(
+        default=None,
+        max_length=MAX_EXPRESSION_CHARS,
+        description="ask a person before a call when this expression over the arguments is "
+        'true, e.g. `amount >= 1000 or shape == "amount:num:1e3"` '
+        "(trellis.memory.approval); an empty string removes it",
+    )
 
-    def to_domain(self) -> ToolDescriptor:
+    @field_validator("approve_when")
+    @classmethod
+    def _parses(cls, value: str | None) -> str | None:
+        if value:
+            parse(value)
+        return value or None
+
+    def to_domain(self) -> tuple[ToolDescriptor, frozenset[str]]:
+        """The entry and the fields this request sets: an existing entry keeps the others."""
         required = self.required
         if required is None:
             required = [str(r) for r in self.input_schema.get("required", []) or []]
-        return ToolDescriptor(
+        entry = ToolDescriptor(
             tenant_id="",
-            **self.model_dump(exclude={"required"}),
+            **self.model_dump(exclude={"required", "annotations"}),
+            annotations=self.annotations,
             required=required,
         )
+        fields = self.model_fields_set | {"description", "input_schema", "required"}
+        return entry, frozenset(fields - {"name"})
 
 
 class CatalogRequest(BaseModel):
@@ -255,6 +262,15 @@ class CatalogTool(BaseModel):
     source: str
     server: str | None
     examples: list[dict[str, Any]]
+    annotations: dict[str, bool] = Field(
+        description="the MCP annotations that were given (readOnlyHint, destructiveHint, "
+        "idempotentHint, openWorldHint)"
+    )
+    approve_when: str | None
+    risk: SideEffects = Field(
+        description="read (run), write (run and notify) or irreversible (ask): side_effects "
+        "when set, else the annotations"
+    )
     schema_hash: str
     workspace_id: str | None
     stats: ToolStatsBody = Field(default_factory=ToolStatsBody)
@@ -274,10 +290,13 @@ class CatalogTool(BaseModel):
                     "source",
                     "server",
                     "examples",
+                    "approve_when",
                     "schema_hash",
                     "workspace_id",
                 }
             ),
+            annotations=entry.annotations.model_dump(by_alias=True, exclude_none=True),
+            risk=entry.risk,
             input_schema=entry.input_schema or {"type": "object"},
             stats=ToolStatsBody.of(stats or ToolStats(tool_name=entry.name)),
         )
@@ -313,6 +332,7 @@ class HintsRequest(BaseModel):
 
 
 class ApprovalSuggestionBody(BaseModel):
+    id: str = Field(description="accept it with POST /v1/tools/approval-suggestions/{id}/accept")
     tool: str
     arg_shape: str = Field(
         description="argument names with their value kinds (numbers by magnitude)"
@@ -327,6 +347,7 @@ class ApprovalSuggestionBody(BaseModel):
     support: int
     approve_rate: float
     agent_id: str | None
+    accepted: bool = Field(description="the rule is already part of the tool's approve_when")
 
 
 class ApprovalSuggestionsResponse(BaseModel):
@@ -361,30 +382,6 @@ async def record_invocation(
         args_hash=invocation.args_hash,
         recorded=created,
     )
-
-
-@router.post(
-    "/runs/{run_id}/outcome",
-    response_model=OutcomeResponse,
-    tags=["tools"],
-    summary="Label an agent run successful or not (only successful runs validate a procedure)",
-    responses=_ERRORS,
-)
-async def set_run_outcome(
-    run_id: str,
-    request: Request,
-    body: OutcomeRequest,
-    container: ContainerDep,
-    _: ServicePrincipalDep,
-) -> OutcomeResponse:
-    ctx = build_context(request, container, body.scope)
-    service = container.services["tool_memory"]
-    async with container.services["uow_factory"]() as uow:
-        outcome = await service.set_outcome(
-            uow, ctx, run_id=run_id, success=body.success, note=body.note
-        )
-        await uow.commit()
-    return OutcomeResponse(run_id=outcome.run_id, success=outcome.success, source=outcome.source)
 
 
 @router.get(
@@ -468,9 +465,18 @@ async def approval_suggestions(
             min_support=APPROVAL_MIN_SUPPORT,
             limit=APPROVAL_SUGGESTIONS_MAX,
         )
+        names = sorted({c.tool for c in counts})
+        entries = {
+            e.name: e
+            for e in await uow.tools.catalog(
+                ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=len(names) + 1
+            )
+        }
     return ApprovalSuggestionsResponse(
         suggestions=[
             ApprovalSuggestionBody(
+                id=approvals.suggestion_id(c),
+                accepted=approvals.accepted(entries.get(c.tool), c.arg_shape),
                 tool=c.tool,
                 arg_shape=c.arg_shape,
                 suggestion=suggestion,
@@ -485,3 +491,19 @@ async def approval_suggestions(
             if (suggestion := c.suggestion()) is not None
         ]
     )
+
+
+@router.post(
+    "/tools/approval-suggestions/{suggestion_id}/accept",
+    response_model=CatalogTool,
+    tags=["tools"],
+    summary="Accept an approval suggestion: its rule is written into the tool's approve_when",
+    responses=error_responses(401, 403, 404, 409, 422, 503),
+)
+async def accept_approval_suggestion(
+    suggestion_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> CatalogTool:
+    async with container.services["uow_factory"]() as uow:
+        entry = await approvals.accept(uow, ctx, suggestion_id)
+        await uow.commit()
+    return CatalogTool.of(entry)
