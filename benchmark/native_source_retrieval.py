@@ -263,6 +263,8 @@ async def run(args) -> None:
         ],
     }
     try:
+        if args.reuse_corpus and args.adopt_corpus and not ledger.matches(key):
+            result["corpus_adopted"] = {"held": ledger.adopt(key), "as": asdict(key)}
         if args.reuse_corpus and not ledger.matches(key):
             refuse_silent_reingest(ledger, key, allowed=args.allow_reingest)
             # a fresh corpus: every conversation's tenant is cleared once, up front
@@ -417,6 +419,12 @@ def main() -> None:
         "--dump-arms",
         action="store_true",
         help="record every retriever's own ranking and the gold turns' ranks in it, per question",
+    )
+    parser.add_argument(
+        "--adopt-corpus",
+        action="store_true",
+        help="query-side arms: reuse a corpus whose ingestion settings differ (same dataset "
+        "and index); the artifact records what it held",
     )
     parser.add_argument(
         "--allow-reingest",

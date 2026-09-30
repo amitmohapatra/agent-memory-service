@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,7 +28,10 @@ from memory_service.modules.rag.indexer import MEMORIES
 from memory_service.ports.search import SearchFilter
 
 #: every conversation's tenant, so the arm's questions read one conversation and nothing else
-TENANT_PREFIX = "bench_conv"
+#: The conversation tenants' prefix. An arm that ingests its own corpus into the shared
+#: isolated Qdrant names its own (``BENCH_CORPUS_TENANT_PREFIX``): reset_store deletes by
+#: tenant, so two corpora under one prefix would delete each other's vectors.
+TENANT_PREFIX = os.environ.get("BENCH_CORPUS_TENANT_PREFIX") or "bench_conv"
 
 
 def conversation_tenant(index: int) -> str:
@@ -94,6 +98,19 @@ class CorpusLedger:
     def conversation(self, index: int) -> ConversationRecord | None:
         raw = self.data["conversations"].get(str(index))
         return ConversationRecord(**raw) if raw else None
+
+    def adopt(self, key: CorpusKey) -> dict[str, Any]:
+        """Take the held corpus as ``key``'s when only the ingestion settings differ (the same
+        dataset under the same index); returns the key it held, for the artifact to show."""
+        held = dict(self.data["key"])
+        wanted = asdict(key)
+        if {f: v for f, v in held.items() if f != "ingestion_sha256"} != {
+            f: v for f, v in wanted.items() if f != "ingestion_sha256"
+        }:
+            raise SystemExit(f"{self.path}: only an ingestion-settings difference can be adopted")
+        self.data["key"] = wanted
+        self._write()
+        return held
 
     def begin(self, key: CorpusKey) -> None:
         """A fresh corpus under ``key``; whatever the ledger said before is gone with it."""
