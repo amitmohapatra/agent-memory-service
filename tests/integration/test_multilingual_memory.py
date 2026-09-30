@@ -68,3 +68,41 @@ async def test_similar_transcripts_keep_both_sources_and_exact_repeats_reinforce
     }
     assert set(originals) == {first, corrected}
     assert originals[corrected].reinforcement_count > originals[first].reinforcement_count
+
+
+LANGUAGES = {
+    "Mein Büro befindet sich in Berlin.": "de",
+    "Mi oficina está en Madrid.": "es",
+    "मेरा कार्यालय दिल्ली में है।": "hi",
+    "我的办公室在北京。": "zh",
+    "私のオフィスは東京にあります。": "ja",
+}
+
+
+@pytest.mark.parametrize(("statement", "lang"), LANGUAGES.items())
+async def test_the_language_is_stored_on_the_observation_and_its_memories(
+    container, uow_factory, statement, lang
+):
+    from sqlalchemy import text
+
+    await _observe(container, uow_factory, U1, statement)
+    async with container.database.engine.connect() as conn:
+        stored = (
+            (
+                await conn.execute(
+                    text("SELECT lang FROM observations WHERE content = :c"), {"c": statement}
+                )
+            )
+            .scalars()
+            .all()
+        )
+        memories = (
+            (
+                await conn.execute(
+                    text("SELECT lang FROM memories WHERE content = :c"), {"c": statement}
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert stored == [lang] and memories and set(memories) == {lang}
