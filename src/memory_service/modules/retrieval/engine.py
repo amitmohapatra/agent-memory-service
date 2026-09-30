@@ -23,8 +23,6 @@ from memory_service.domain.memory import CanonicalMemory, unverified_representat
 from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.grounding.lexical import content_tokens
-from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
@@ -34,7 +32,6 @@ from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.search import (
-    AnchoredPrefetch,
     Retriever,
     SearchHit,
     SearchStore,
@@ -190,23 +187,6 @@ class QueryVectors:
 
 #: the collection a candidate kind is indexed in (graph facts and working memory are not)
 _COLLECTION_OF_KIND = {"memory": MEMORIES, "chunk": KNOWLEDGE, "summary": KNOWLEDGE}
-
-#: entity anchors read off a query; a question names a handful of things at most
-MAX_QUERY_ENTITIES = 6
-
-
-def query_entities(query: str) -> list[str]:
-    """The entities a query names, in the canonical form the index stores them in.
-
-    A sentence-initial "What" is capitalised like a name; a candidate with no content token
-    is a function word and anchors nothing.
-    """
-    out: list[str] = []
-    for name in extract_entities(query, max_entities=MAX_QUERY_ENTITIES):
-        canonical = canonical_entity(name)
-        if canonical and canonical not in out and content_tokens(canonical):
-            out.append(canonical)
-    return out
 
 
 class RetrievalEngine:
@@ -816,17 +796,6 @@ class RetrievalEngine:
         sparse = self.indexer.sparse.encode_query(query) if self.cfg.bm25 else None
         return QueryVectors(dense=dense, sparse=sparse, script=script)
 
-    def _anchors(self, query: str, encoded: QueryVectors, *, kind: str) -> list[AnchoredPrefetch]:
-        """The entity prefetch: memories sharing an entity with the query, as their own RRF
-        list, searched with the vector the query already has for the primary space."""
-        primary = self.indexer.spaces.primary_space.name
-        if not (self.cfg.entity_prefetch and kind == "memory" and primary in encoded.dense):
-            return []
-        entities = query_entities(query)
-        return (
-            [AnchoredPrefetch(vector=primary, must_any={"entities": entities})] if entities else []
-        )
-
     async def _hybrid(
         self,
         query: str,
@@ -858,7 +827,6 @@ class RetrievalEngine:
             prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
             rrf_k=self.cfg.hybrid_rrf_k,
             weights=self.cfg.hybrid_weights,
-            anchors=self._anchors(query, vectors, kind=kind),
         )
 
 

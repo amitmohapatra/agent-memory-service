@@ -79,20 +79,6 @@ class SearchFilter(BaseModel):
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
 
 
-class AnchoredPrefetch(BaseModel):
-    """One more RRF list: a dense space searched again under a narrower filter.
-
-    Records that share an anchor with the query (its entities) enter the fusion as their
-    own arm, so a memory about the right person outranks a memory that merely sounds
-    alike. The vector is one the query already has; the cost is one more prefetch.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    vector: VectorName
-    must_any: dict[str, list[str]]
-
-
 class SearchHit(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -228,7 +214,6 @@ class SearchStore(Protocol):
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
-        anchors: Sequence[AnchoredPrefetch] = (),
     ) -> list[SearchHit]:
         """Bounded hybrid fusion over every dense space given plus the sparse arm, each arm
         scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0."""

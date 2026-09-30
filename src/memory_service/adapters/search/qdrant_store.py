@@ -34,7 +34,6 @@ from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.search import (
     PAYLOAD_FIELDS,
-    AnchoredPrefetch,
     CollectionSpec,
     Retriever,
     SearchFilter,
@@ -119,7 +118,7 @@ async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
 
 
 #: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
-#: ``script`` is the record's Unicode script; ``entities`` anchors the entity prefetch.
+#: ``script`` is the record's Unicode script.
 _PAYLOAD_INDEXES = {
     "tenant_id": models.PayloadSchemaType.KEYWORD,
     "visibility_keys": models.PayloadSchemaType.KEYWORD,
@@ -127,7 +126,6 @@ _PAYLOAD_INDEXES = {
     "document_id": models.PayloadSchemaType.KEYWORD,
     "current": models.PayloadSchemaType.BOOL,
     "script": models.PayloadSchemaType.KEYWORD,
-    "entities": models.PayloadSchemaType.KEYWORD,
 }
 
 
@@ -177,23 +175,6 @@ def _fusion(rrf_k: int, weights: Sequence[float]) -> models.FusionQuery | models
 type _Arm = tuple[models.Prefetch, VectorName, float]
 
 
-def _anchor_filter(flt: SearchFilter, anchor: AnchoredPrefetch) -> models.Filter:
-    """The query filter with the anchor's condition added.
-
-    An anchor may only ADD. The base filter's ``must_any`` is what confines the query to the
-    caller's audience (``visibility_keys``), and a dict merge lets a colliding key replace it
-    instead of narrowing it: an anchor keyed ``visibility_keys`` would widen the arm to
-    whatever it listed, inside the store where that boundary is meant to be unconditional.
-    A collision is refused rather than silently resolved.
-    """
-    if collides := sorted(anchor.must_any.keys() & flt.must_any.keys()):
-        raise ValueError(
-            f"anchored prefetch would replace the query filter on {collides}: "
-            "an anchor may only add a condition"
-        )
-    return _filter(flt.model_copy(update={"must_any": {**flt.must_any, **anchor.must_any}}))
-
-
 def _arms(
     *,
     dense: Mapping[VectorName, Sequence[float]],
@@ -202,11 +183,8 @@ def _arms(
     qf: models.Filter,
     prefetch_limit: int,
     weights: Mapping[VectorName, float] | None,
-    anchors: Sequence[AnchoredPrefetch],
 ) -> list[_Arm]:
-    """Every arm of one hybrid query, in fusion order: the dense spaces, their anchored
-    companions, then BM25. An anchored arm is never weighted: it is the same vector as its
-    space, so a weight there would count that space twice."""
+    """Every arm of one hybrid query, in fusion order: the dense spaces, then BM25."""
     arms: list[_Arm] = [
         (
             models.Prefetch(query=list(vector), using=space.value, limit=prefetch_limit, filter=qf),
@@ -215,21 +193,6 @@ def _arms(
         )
         for space, vector in dense.items()
     ]
-    for anchor in anchors:
-        if anchor.vector not in dense:
-            raise ValueError(f"anchored prefetch on {anchor.vector} without its query vector")
-        arms.append(
-            (
-                models.Prefetch(
-                    query=list(dense[anchor.vector]),
-                    using=anchor.vector.value,
-                    limit=prefetch_limit,
-                    filter=_anchor_filter(flt, anchor),
-                ),
-                anchor.vector,
-                1.0,
-            )
-        )
     if sparse is not None and sparse.indices:
         arms.append(
             (
@@ -521,7 +484,6 @@ class QdrantSearchStore:
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
-        anchors: Sequence[AnchoredPrefetch] = (),
     ) -> list[SearchHit]:
         if rrf_k < 0:
             raise ValueError("rrf_k must be nonnegative")
@@ -533,7 +495,6 @@ class QdrantSearchStore:
             qf=qf,
             prefetch_limit=prefetch_limit,
             weights=weights,
-            anchors=anchors,
         )
         if not arms:
             return []

@@ -554,10 +554,6 @@ class RetrievalSettings(BaseModel):
     #: fitted offline from per-arm rank dumps (``benchmark/fit_rrf_weights.py``) and spent on
     #: depth. ``None`` is equal weights, which every measurement before the fit was made at.
     hybrid_weights: dict[VectorName, float] | None = None
-    #: Entity -> memory routing: memories sharing an entity with the query enter the fusion
-    #: as one more RRF list (``ports.search.AnchoredPrefetch``). Off until its judged arm
-    #: shows strict multi-hop does not lose by it.
-    entity_prefetch: bool = False
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(
@@ -571,9 +567,15 @@ class RetrievalSettings(BaseModel):
     # Explicit caller limits and document/mixed pools retain final_k. ContextSettings
     # packs this depth within the unchanged token budget. Zero restores final_k behavior.
     memory_recall_k: int = Field(default=100, ge=0, le=200)
-    # Experimental actor/topic decomposition for aggregate conversational questions.
-    # Off until paired evidence and answer measurements justify promotion.
-    memory_entity_search: bool = False
+    #: Actor/topic search for multi-hop memory questions: the people a question names are
+    #: searched again, each as their own subject, for the question's topic, and fused with
+    #: the original ranking (weighted twice). Measured over LoCoMo's 1,986 questions on one
+    #: corpus (docs/MEASUREMENTS.md, section 8.4): multi-hop complete coverage @50 +2.5 and
+    #: @100 +2.8 points, all-question recall @10/@50/@100 +0.6/+0.6/+0.4, no depth worse.
+    #: It fires only for English multi-hop cues over memory-only pools (250 of the 1,986) and
+    #: its extra encode and searches stop at the timeout below. The cost, paired per question
+    #: on the 2015 dev box: +122 ms median on those 250, all-question p95 503 -> 547 ms.
+    memory_entity_search: bool = True
     memory_entity_search_timeout_ms: int = Field(default=200, ge=1, le=500)
     parent_expansion: bool = True
     #: Source memories fetched to validate the derived memories in one result pool.

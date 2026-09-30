@@ -36,8 +36,8 @@ sequenceDiagram
             E->>EN: embed_query(query)
         end
     end
-    E->>E: BM25 sparse vector, entity anchors (optional)
-    E->>Q: query_points(prefetch=[dense_en?, dense_ml, anchored?, bm25], RRF(weights?))
+    E->>E: BM25 sparse vector
+    E->>Q: query_points(prefetch=[dense_en?, dense_ml, bm25], RRF(weights?))
     Q-->>E: fused hits (tenant + visibility filtered inside the store)
     E-->>API: candidates + diagnostics.query_script
     API-->>C: bundle (memories render date, weekday, resolved relative dates)
@@ -77,6 +77,22 @@ does **not** resolve weekday phrases such as `last Tuesday`: the parser that rea
 also reads the word "we" as a Wednesday and annotates absolute dates, and a date resolved to
 the wrong day is worse for a reader than one left alone (ADR 0024, decision 7).
 
+## Language on write, and the model where the rules cannot read
+
+`domain/language.py` decides a text's language without a model (the script, letters only one
+language of a shared script uses, function-word votes) and every observation, memory and chunk
+stores it as `lang` (migration 0018). It decides three things:
+
+| where | English | any other language |
+|---|---|---|
+| memory extraction | the rules, then narrative units for what they missed | typed facts in the message's language when a key can pay (`contextual_extraction`, fast tier); a slot is kept only when its value is copied from the cited sentence |
+| graph enrichment | rule entities; the model types relations between them | the model names both entities (verbatim in the text) and the relation (`relation_extraction`) |
+| query routing | the cue patterns | GENERAL_SEMANTIC, and query expansion when the read may use the model |
+
+The verbatim turn is kept in every language either way. Every prompt ends with the rule that
+text is returned in its source's language, never translated. Details:
+[LLM-USES.md](LLM-USES.md).
+
 ## Moving an existing tenant: the reindex path
 
 ```mermaid
@@ -90,8 +106,7 @@ flowchart LR
 ```
 
 The rebuild reads PostgreSQL (the source of truth), writes every READY document's chunks
-and summaries and every CURRENT memory with both vectors, the script tag, the entity
-anchors and the resolved dates. Until `--prune` runs, the previous generation is untouched,
+and summaries and every CURRENT memory with both vectors, the script tag and the resolved dates. Until `--prune` runs, the previous generation is untouched,
 so a rollback is a revert of the build and nothing else.
 
 ## Benchmarks that exercise it

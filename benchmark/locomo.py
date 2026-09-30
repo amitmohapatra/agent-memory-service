@@ -740,13 +740,18 @@ def _evidence_pointer(produced: str, rendered: str, question: str, status: str) 
     """The entities the question names that the rendered context also names, as a pointer
     for one re-ask; empty when the reader did not decline, the bundle reported no evidence,
     or the context never mentions what the question is about."""
-    from memory_service.modules.retrieval.engine import query_entities
+    from memory_service.modules.grounding.lexical import content_tokens
+    from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 
     if not _ABSTAIN.search(produced or "") or "INSUFFICIENT" in status:
         return ""
     lowered = rendered.casefold()
-    present = [entity for entity in query_entities(question) if entity in lowered]
-    return ", ".join(present)
+    named = dict.fromkeys(
+        canonical
+        for name in extract_entities(question, max_entities=6)
+        if (canonical := canonical_entity(name)) and content_tokens(canonical)
+    )
+    return ", ".join(entity for entity in named if entity in lowered)
 
 
 async def _answer(

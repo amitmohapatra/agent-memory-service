@@ -230,11 +230,11 @@ BENCH_DENSE ?= ensemble
 #:
 #:   step 2, fitted weights at half the candidate depth (the fit prints the JSON):
 #:     BENCH_EXTRA_ENV='-e BENCH_DEPTH=halved -e BENCH_HYBRID_WEIGHTS={"bm25":2.0,...}'
-#:   step 3, entity -> memory routing as one more RRF list:
-#:     BENCH_EXTRA_ENV='-e BENCH_ENTITY_PREFETCH=on'
+#:   the actor/topic memory search, pinned off for a control arm now that it ships on:
+#:     BENCH_EXTRA_ENV='-e BENCH_MEMORY_ENTITY_SEARCH=off'
 #:
-#: Each is off by default, the way its constant is: `hybrid_weights` stays None and
-#: `entity_prefetch` stays False until the arm that measured it clears its own gate.
+#: Unset, each leaves its constant alone: `hybrid_weights` stays None until the arm that
+#: measured it clears its own gate. (The entity prefetch arm measured nothing: removed.)
 
 #: The judged configuration: the gateway answers and grades, at the judged depth
 #: (benchmark/env.py: PREFETCH_K/FUSED_K/FINAL_K/MEMORIES_MAX/TOKEN_BUDGET, MAX_TOKENS,

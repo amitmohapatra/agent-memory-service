@@ -213,9 +213,6 @@ class BenchEnv:
     #: is the ARM, not a promotion - ``RetrievalSettings.hybrid_weights`` stays ``None`` until
     #: the arm run with these weights clears D6 step 2's gate.
     hybrid_weights: tuple[tuple[VectorName, float], ...] | None = None
-    #: Entity -> memory routing as one more RRF list (``BENCH_ENTITY_PREFETCH``), D6 step 3's
-    #: arm. ``None`` is unset, the way every other switch here reads unset.
-    entity_prefetch: bool | None = None
     #: Actor/topic decomposition for multi-hop memory questions (``BENCH_MEMORY_ENTITY_SEARCH``),
     #: the query-side arm of ``RetrievalSettings.memory_entity_search``.
     memory_entity_search: bool | None = None
@@ -234,7 +231,6 @@ class BenchEnv:
         }
         tuning: dict[str, Any] = {
             "hybrid_weights": _weights(os.environ.get("BENCH_HYBRID_WEIGHTS") or ""),
-            "entity_prefetch": _switch("BENCH_ENTITY_PREFETCH"),
             "memory_entity_search": _switch("BENCH_MEMORY_ENTITY_SEARCH"),
         }
         allowed = {
@@ -262,8 +258,6 @@ class BenchEnv:
         if self.hybrid_weights is not None:
             # the empty weighting IS equal weights, which the setting spells ``None``
             tuning["hybrid_weights"] = dict(self.hybrid_weights) or None
-        if self.entity_prefetch is not None:
-            tuning["entity_prefetch"] = self.entity_prefetch
         if self.memory_entity_search is not None:
             tuning["memory_entity_search"] = self.memory_entity_search
         depth = _DEPTH_RETRIEVAL.get(self.depth)
@@ -284,7 +278,7 @@ class BenchEnv:
         the weights has no docling artifacts either, and the artifacts such a run produces
         are already non-representative.
 
-        The two query-side arms (``BENCH_HYBRID_WEIGHTS``, ``BENCH_ENTITY_PREFETCH``) are
+        The two query-side arms (``BENCH_HYBRID_WEIGHTS``, ``BENCH_MEMORY_ENTITY_SEARCH``) are
         applied on TOP of whatever depth is selected, so an arm is one measured change and
         not a second one smuggled in with it.
         """

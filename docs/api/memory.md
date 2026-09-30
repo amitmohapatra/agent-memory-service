@@ -66,7 +66,7 @@ fact = await ctx.remember(
     memory_type="PREFERENCE",  # SEMANTIC · PREFERENCE · EPISODIC · PROCEDURAL · TASK · USER · TOOL · OUTCOME
     lifetime="LONG_TERM",  # SHORT_TERM · LONG_TERM
     visibility="USER",  # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORK · WORKSPACE · TENANT
-    entities=["weekly digest"],  # linked in the graph and anchored in search
+    entities=["weekly digest"],  # linked in the graph
 )
 print(fact.memory_id, fact.deduplicated)
 

@@ -11,8 +11,8 @@ upserts over what is there. Documents and memories that fail are reported, never
 silently. Also used by the failure-injection suite (``search_rebuild`` scenario).
 
 Moving an existing tenant onto the multilingual runtime is this tool twice: the rebuild
-writes every record with both dense vectors (``dense_en``, ``dense_ml``), its script tag,
-its entity anchors and its resolved dates into the collections the new fingerprint names,
+writes every record with both dense vectors (``dense_en``, ``dense_ml``), its script tag and
+its resolved dates into the collections the new fingerprint names,
 then ``--prune`` drops the single-vector generation nothing reads any more::
 
     make reindex-image REINDEX_ARGS="--drop"

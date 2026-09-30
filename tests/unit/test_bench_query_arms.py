@@ -1,9 +1,9 @@
 """The query-side arms of the accuracy programme, as switches a benchmark can turn on.
 
-D6 steps 2 and 3 each promote a shipped default - ``hybrid_weights`` away from equal weights,
-``entity_prefetch`` on - and each may only be promoted by an arm that measured it. So the arm
-lives here, in the benchmark's own environment, and the constant in ``config/constants.py``
-stays conservative until its gate says otherwise. Nothing here changes what the service does
+Each switch moves a shipped default - ``hybrid_weights`` away from equal weights,
+``memory_entity_search`` off for a control arm - and a default is only promoted by an arm that
+measured it. So the arm lives here, in the benchmark's own environment, and the constant in
+``config/constants.py`` changes only when its gate says so. Nothing here changes what the service does
 by default: an arm with no switch set hands ``Overrides`` a ``None`` retrieval tuning, which
 is exactly what every result already on disk was produced with.
 """
@@ -40,7 +40,7 @@ def test_fitted_weights_reach_the_tuning(monkeypatch: pytest.MonkeyPatch) -> Non
         RETRIEVAL.fused_k,
         RETRIEVAL.final_k,
     )
-    assert tuning.entity_prefetch is False
+    assert tuning.memory_entity_search is RETRIEVAL.memory_entity_search
 
 
 @pytest.mark.parametrize(
@@ -64,17 +64,17 @@ def test_a_weighting_that_cannot_be_applied_is_refused(
         BenchEnv.from_environ()
 
 
-def test_the_entity_prefetch_is_its_own_switch(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BENCH_ENTITY_PREFETCH", "on")
+def test_the_memory_entity_search_is_its_own_switch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BENCH_MEMORY_ENTITY_SEARCH", "off")
     env = BenchEnv.from_environ()
     tuning = env.overrides().retrieval
     assert tuning is not None
-    assert tuning.entity_prefetch is True
+    assert tuning.memory_entity_search is False
     assert tuning.hybrid_weights is None
 
 
 def test_an_unreadable_switch_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("BENCH_ENTITY_PREFETCH", "maybe")
+    monkeypatch.setenv("BENCH_MEMORY_ENTITY_SEARCH", "maybe")
     with pytest.raises(SystemExit):
         BenchEnv.from_environ()
 
@@ -82,20 +82,20 @@ def test_an_unreadable_switch_is_refused(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_a_switch_can_say_off_and_not_only_stay_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     """The control arm of a promoted constant: ``off`` must pin off, not mean "unset".
 
-    Once ``entity_prefetch`` or ``hybrid_weights`` is promoted, an arm that cannot spell the
-    old value measures the new default and files it as the control.
+    ``memory_entity_search`` is promoted: an arm that could not spell the old value would
+    measure the new default and file it as the control.
     """
-    monkeypatch.setenv("BENCH_ENTITY_PREFETCH", "off")
+    monkeypatch.setenv("BENCH_MEMORY_ENTITY_SEARCH", "off")
     monkeypatch.setenv("BENCH_HYBRID_WEIGHTS", "equal")
     tuning = BenchEnv.from_environ().overrides().retrieval
     assert tuning is not None
-    assert tuning.entity_prefetch is False
+    assert tuning.memory_entity_search is False
     assert tuning.hybrid_weights is None
     # and unset is not "off": it hands back None, the frozen constant untouched
-    monkeypatch.delenv("BENCH_ENTITY_PREFETCH")
+    monkeypatch.delenv("BENCH_MEMORY_ENTITY_SEARCH")
     monkeypatch.delenv("BENCH_HYBRID_WEIGHTS")
     unset = BenchEnv.from_environ()
-    assert (unset.entity_prefetch, unset.hybrid_weights) == (None, None)
+    assert (unset.memory_entity_search, unset.hybrid_weights) == (None, None)
     assert unset.overrides().retrieval is None
 
 

@@ -6,7 +6,7 @@ from qdrant_client import models  # noqa: TID251 - adapter wire contract
 
 from memory_service.modules.rag.indexer import KNOWLEDGE
 from memory_service.modules.retrieval.engine import rrf_fuse
-from memory_service.ports.search import AnchoredPrefetch, SparseVector, VectorName
+from memory_service.ports.search import SparseVector, VectorName
 from tests.unit import test_llm_retrieval as base
 from tests.unit.test_search_store_wire import FakeClient, _flt, _store
 
@@ -93,36 +93,3 @@ async def test_weighted_client_fusion_scales_each_list():
 
     fused = rrf_fuse([hits("dense_ml", "a"), hits("bm25", "b")], k=1, weights=[2.0, 1.0])
     assert [(rid, score) for rid, score, _, _ in fused] == [("a", 1.0), ("b", 0.5)]
-
-
-async def test_an_anchored_prefetch_narrows_the_filter_and_keeps_the_tenant():
-    client = FakeClient()
-    await _store(client).search_hybrid(
-        "c",
-        dense={VectorName.DENSE_ML: [0.2] * 4},
-        sparse=SparseVector(indices=[1], values=[1.0]),
-        flt=_flt(),
-        limit=5,
-        prefetch_limit=10,
-        anchors=[AnchoredPrefetch(vector=VectorName.DENSE_ML, must_any={"entities": ["caroline"]})],
-    )
-    kwargs = client.calls[-1][1]
-    assert [p.using for p in kwargs["prefetch"]] == ["dense_ml", "dense_ml", "bm25"]
-    anchored = kwargs["prefetch"][1].filter
-    conditions = {c.key: c for c in anchored.must}
-    assert conditions["tenant_id"].match.value == "acme"
-    assert conditions["entities"].match.any == ["caroline"]
-    assert kwargs["query"] == models.FusionQuery(fusion=models.Fusion.RRF)
-
-
-async def test_an_anchor_without_its_query_vector_is_refused():
-    with pytest.raises(ValueError, match="anchored prefetch"):
-        await _store(FakeClient()).search_hybrid(
-            "c",
-            dense={VectorName.DENSE_ML: [0.2] * 4},
-            sparse=None,
-            flt=_flt(),
-            limit=5,
-            prefetch_limit=10,
-            anchors=[AnchoredPrefetch(vector=VectorName.DENSE_EN, must_any={"entities": ["x"]})],
-        )

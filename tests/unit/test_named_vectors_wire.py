@@ -13,7 +13,6 @@ from qdrant_client import models  # noqa: TID251 - adapter wire contract
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 from memory_service.config.settings import SearchSettings
 from memory_service.ports.search import (
-    AnchoredPrefetch,
     CollectionSpec,
     SearchFilter,
     SearchRecord,
@@ -85,7 +84,8 @@ async def test_a_collection_gets_one_named_vector_per_space_and_the_filter_index
     )
     assert set(created["sparse_vectors_config"]) == {"bm25"}
     indexed = {kwargs["field"] for name, kwargs in client.calls if name == "create_payload_index"}
-    assert {"script", "entities", "tenant_id", "visibility_keys", "kind", "current"} <= indexed
+    assert {"script", "tenant_id", "visibility_keys", "kind", "current"} <= indexed
+    assert "entities" not in indexed, "nothing filters on entities since the prefetch went"
 
 
 async def test_an_upsert_writes_every_vector_the_record_carries() -> None:
@@ -152,42 +152,4 @@ async def test_no_arms_is_an_empty_answer_without_a_round_trip() -> None:
         )
         == []
     )
-    assert client.calls == []
-
-
-async def test_an_anchor_adds_a_condition_and_keeps_the_audience_filter() -> None:
-    store, client = _store()
-    await store.search_hybrid(
-        "c",
-        dense={VectorName.DENSE_ML: [0.2] * 4},
-        sparse=None,
-        flt=SearchFilter(tenant_id="acme", must_any={"visibility_keys": ["user:u1"]}),
-        limit=5,
-        prefetch_limit=8,
-        anchors=[AnchoredPrefetch(vector=VectorName.DENSE_ML, must_any={"entities": ["jon"]})],
-    )
-    anchored = client.calls[-1][1]["prefetch"][-1]
-    keys = [c.key for c in anchored.filter.must]
-    # the anchor narrows: the audience filter is still there, and the entity is now required
-    assert "visibility_keys" in keys and "entities" in keys and "tenant_id" in keys
-
-
-async def test_an_anchor_may_not_replace_the_audience_filter() -> None:
-    """An anchor reusing ``visibility_keys`` would widen the arm to whatever it listed, inside
-    the store where the boundary is meant to be unconditional."""
-    store, client = _store()
-    with pytest.raises(ValueError, match="may only add a condition"):
-        await store.search_hybrid(
-            "c",
-            dense={VectorName.DENSE_ML: [0.2] * 4},
-            sparse=None,
-            flt=SearchFilter(tenant_id="acme", must_any={"visibility_keys": ["user:u1"]}),
-            limit=5,
-            prefetch_limit=8,
-            anchors=[
-                AnchoredPrefetch(
-                    vector=VectorName.DENSE_ML, must_any={"visibility_keys": ["user:intruder"]}
-                )
-            ],
-        )
     assert client.calls == []

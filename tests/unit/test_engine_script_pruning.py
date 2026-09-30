@@ -1,5 +1,4 @@
-"""The engine encodes what the query's script calls for, says which script it saw, and
-anchors the entity prefetch only when asked to."""
+"""The engine encodes what the query's script calls for and says which script it saw."""
 
 # ruff: noqa: RUF001 - literal multilingual fixtures intentionally use non-Latin letters.
 
@@ -146,21 +145,7 @@ async def test_the_two_encoders_run_at_the_same_time() -> None:
     )
 
 
-async def test_the_entity_prefetch_anchors_memories_on_the_query_entities() -> None:
-    engine, _, _, store = await _parts(entity_prefetch=True)
-    await engine.retrieve(CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY)
-    anchors = store.hybrid_calls[-1]["anchors"]
-    assert [a.must_any for a in anchors] == [{"entities": ["berlin"]}]
-    assert anchors[0].vector is VectorName.DENSE_ML
-    # chunks are never anchored, and a query naming nothing anchors nothing
-    await engine.retrieve(CTX, "What opened in Berlin?", kinds=("chunk",), visibility=VISIBILITY)
-    assert store.hybrid_calls[-1]["anchors"] == []
-    await engine.retrieve(CTX, "what opened there", kinds=("memory",), visibility=VISIBILITY)
-    assert store.hybrid_calls[-1]["anchors"] == []
-
-
-async def test_the_entity_prefetch_is_off_unless_asked_for() -> None:
+async def test_the_shipped_fusion_is_unweighted() -> None:
     engine, _, _, store = await _parts()
     await engine.retrieve(CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY)
-    assert store.hybrid_calls[-1]["anchors"] == []
     assert store.hybrid_calls[-1]["weights"] is None

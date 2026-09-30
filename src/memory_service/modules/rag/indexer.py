@@ -20,7 +20,6 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
-from memory_service.modules.ingestion.context_graph import canonical_entity
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.connections import payload_edges
@@ -43,8 +42,6 @@ log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
-#: entity anchors a memory carries into the index; the query side extracts at most as many
-MAX_RECORD_ENTITIES = 12
 
 
 def memory_index_text(m: CanonicalMemory) -> str:
@@ -62,36 +59,6 @@ def memory_index_text(m: CanonicalMemory) -> str:
     subject = (m.subject or "").split(":", 1)[-1].strip()
     who = f" {subject}:" if subject and not subject.startswith(("thr_", "run_")) else ""
     return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
-
-
-def memory_entities(m: CanonicalMemory) -> list[str]:
-    """The entity anchors a memory is indexed under: its subject and the entities its
-    extraction named, in the canonical form the query side matches with.
-
-    A subject arrives scoped -- ``user:john``, not ``john`` -- and that prefix is a scheme,
-    not part of the name, which is why :func:`render` strips it before a reader sees it. The
-    query side cannot reproduce it: it reads names out of a question, so it offers ``john``.
-    Indexing only the scoped form meant the two halves of the entity prefetch never met. A
-    diagnostic over the LoCoMo corpus put numbers on it: of the 25 most-asked anchors every
-    one matched zero points as the query spells it, while 15 matched hundreds the moment the
-    name was scoped -- ``john`` 0 against ``user:john`` 1,153. Both forms are indexed now, so
-    an anchor matches whichever half of the system produced it.
-    """
-    names = [m.subject or "", *m.system_metadata.get("entities", [])]
-    out: list[str] = []
-    for name in names:
-        for variant in _name_variants(str(name)):
-            canonical = canonical_entity(variant)
-            if canonical and canonical not in out:
-                out.append(canonical)
-    return out[:MAX_RECORD_ENTITIES]
-
-
-def _name_variants(name: str) -> list[str]:
-    """The name as stored, and the bare name when a scheme prefixes it. An opaque id carries
-    no scheme (``thr_...``, ``run_...`` have no colon) and yields one form."""
-    bare = name.split(":", 1)[-1].strip() if ":" in name else ""
-    return [name, bare] if bare and bare != name else [name]
 
 
 class Indexer:
@@ -361,7 +328,6 @@ class Indexer:
                     "script": detect_script(c.text).value,
                     "text": c.text[:2000],
                     "text_hash": c.text_hash,
-                    "entities": [canonical_entity(e) for e in c.entities[:MAX_RECORD_ENTITIES]],
                     "token_estimate": c.token_estimate,
                 },
             )
@@ -432,8 +398,6 @@ class Indexer:
                             "reinforcement": m.reinforcement_count,
                             "observed_at": m.temporal.observed_at.isoformat(),
                             "script": detect_script(m.content).value,
-                            # anchors for the entity prefetch, matched inside the store
-                            "entities": memory_entities(m),
                             # relative dates the text names, resolved against observed_at
                             "dated_mentions": list(m.system_metadata.get("dated_mentions", [])),
                             "source_refs": [
