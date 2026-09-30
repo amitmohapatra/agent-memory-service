@@ -4,14 +4,22 @@ A review of storage placement, duplication and synchronisation across the five s
 Every quantity below is measured on this repository's own data (1,000 SciFact documents →
 1,303 chunks), not estimated. Prices are list-price assumptions and are labelled as such.
 
+**Status, 2026-10-01 (final overhaul).** The findings are kept as they were measured; what
+changed since is marked **Now:** in place and summarised in §7. In short: the cross-encoder
+reranker is gone (ranking is fusion + standing + a relevance floor), a two-phase payload
+read was built, measured slower and removed (MEASUREMENTS.md §8.7), `on_disk_payload` is on by default, retired collections are pruned by `reindex`, tool outputs
+over 4 KB and document originals live in the blob store (verified against a fake GCS server),
+and the memory-webhook and group tables are gone (migration 0021). Tuple revocation exists for
+workspace membership only; thread, document and memory tuples are still never deleted.
+
 ## 1. The map
 
 | Store | Holds | Measured |
 |---|---|---|
-| **PostgreSQL** | source of truth: documents, nodes, chunks, memories, observations, conversation, tool invocations, context edges | `chunks` 4.3 MB, `document_nodes` 3.6 MB, `context_edges` 3.2 MB per 1,000 docs |
+| **PostgreSQL** | source of truth: documents, nodes, chunks, memories, observations (internal: the `EVENT` messages' processing rows), conversation, tool invocations (inline ≤ 4 KB), context edges, profile blocks, thread summaries, procedures, feedback | `chunks` 4.3 MB, `document_nodes` 3.6 MB, `context_edges` 3.2 MB per 1,000 docs |
 | **Qdrant** | derived index: dense + sparse vectors, plus a payload copy of text and lineage | 1,536 B/chunk vector (384-dim f32) + ≤2,000 B payload |
 | **Dragonfly** | context bundles, authorization scopes | TTL 300 s, revision-keyed |
-| **Blob (GCS/filesystem)** | original uploads, archive segments | `archive_segments` 1.1 MB per 1,000 docs |
+| **Blob (GCS/filesystem)** | original uploads, archive segments, tool outputs > 4 KB | `archive_segments` 1.1 MB per 1,000 docs |
 | **OpenFGA** | relationship tuples for authorization | 50 tuples for 10 threads |
 
 ## 2. Duplication — which copies earn their keep
@@ -24,6 +32,11 @@ The reranker needs the *text* of each. Without the payload copy every query beco
 round trip plus a Postgres `WHERE chunk_id IN (...)` before reranking can start — on the hot
 path. The copy is truncated to 2,000 characters, so it is explicitly a rerank/display cache,
 not a substitute for the source. **Keep.**
+
+**Now:** there is no reranker; the payload copy is what the context packs, read once with
+the search (`PAYLOAD_FIELDS`). A two-phase read (ranking fields for the ~200-candidate pool,
+the full payload for the ~33 kept) was measured paired and was 15-20 ms slower at p50: the
+second round trip costs more than the bytes it saves (MEASUREMENTS.md §8.7).
 
 **Justified — `archive_segments`.** A compressed cold copy with its own checksum and
 verification path. That is the point of an archive. **Keep.**
@@ -69,7 +82,9 @@ tuples are still there, they still grow without bound, and a deleted user's gran
 live in the authorization store.** For a system whose isolation guarantees rest on OpenFGA,
 that is the most serious finding in this review.
 
-**A fourth, unmanaged: Qdrant collections accumulate.** 20 collections exist on this machine;
+**A fourth, formerly unmanaged: Qdrant collections accumulate.** **Now:** `reindex` reports
+the collections no live vector space uses and drops them when asked
+(`prune_retired_collections`, a dry run by default). 20 collections exist on this machine;
 the service uses 2. Every embedding/sparse fingerprint change creates a new pair and nothing
 ever drops the old ones. Each holds full vectors. There is a `drop_collection` call in
 `reindex --drop`, but nothing reclaims superseded generations on its own.
@@ -90,11 +105,11 @@ correctly for what suits it: large objects fetched rarely.
 **The real levers, in order of size:**
 
 1. **`reranker.candidate_k: 20`** — one request costs 1 embedding and 20 cross-encoder pairs;
-   the reranker is ~87% of per-request model cost. Halving this halves the compute bill.
-   Measure the recall consequence on an external corpus before choosing.
+   the reranker is ~87% of per-request model cost. **Now:** removed (MEASUREMENTS.md §3e); a
+   query costs its two encodes (dense English + multilingual) and the searches.
 2. **`on_disk_payload`** — keeps vectors in RAM and payload on disk. At 10M chunks this is the
-   difference between a small and a large Qdrant node. Already configurable, currently off
-   outside local mode.
+   difference between a small and a large Qdrant node. **Now:** on by default
+   (`SearchTuning.on_disk_payload`).
 3. **Orphaned collections** — 20 exist where 2 are used. Full vector sets, paid for, unread.
 4. **`context_edges`: 12,670 rows for 1,303 chunks — a ~10× fan-out**, and 3.2 MB per 1,000
    documents, comparable to the chunks themselves. Worth checking whether every edge kind
@@ -130,3 +145,18 @@ result files but have never been assembled into a total, and the throughput numb
 would feed it were measured on a 2015 dual-core CPU without AVX2 — roughly an order of
 magnitude off any current server. They must be re-measured on target hardware
 (`make bench-model-throughput`) before any figure is quoted.
+
+## 7. Where it stands now (2026-10-01)
+
+| finding | then | now |
+|---|---|---|
+| payload copy in Qdrant | kept, read in full for every candidate | kept, still read in full with the search: a two-phase read was measured slower and removed |
+| reranker cost | ~87% of per-request model cost | no reranker |
+| `on_disk_payload` | off outside local mode | on by default |
+| orphaned collections | 20 for 2 used | `reindex` reports and prunes retired ones |
+| authorization drift | no revocation anywhere | workspace membership revokes (and bumps the membership revision); thread/document/memory tuples are still never deleted - **open, must fix** |
+| `document_nodes.text` duplication | investigate | not measured since - **open** |
+| `context_edges` fan-out | measure | not measured since - **open** |
+| tool outputs | inline in PostgreSQL | inline ≤ 4 KB, larger ones in the blob store with a pointer |
+| blob provider | filesystem exercised, GCS untested | GCS exercised end to end against `fsouza/fake-gcs-server` (`tests/integration/test_gcs_blob.py`: chat archive with checksum verification and grace purge, document originals, tool outputs > 4 KB) |
+| removed tables | - | `webhook_subscriptions`, `webhook_deliveries`, `user_groups`, `user_group_members`, `standing_briefs` (migration 0021) |
