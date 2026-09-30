@@ -89,18 +89,27 @@ async def test_an_agent_asks_for_context_then_has_its_answer_verified(app, runni
     assert report.judge_consulted == 0 and report.llm_tokens == 0
 
 
-@pytest.mark.covers("graph.graph_query")
+@pytest.mark.covers("graph.graph_query", "graph.search_entities", "graph.entity_profile")
 async def test_an_agent_traverses_what_the_writes_made_of_the_entities(app, running) -> None:
     _, harness = await _tenant(app)
     agent = harness.bind(user_id="u1").agent("graph-bot")
     await agent.remember(FACT, visibility="USER")
 
-    answer = await agent.graph.query("who does Priya Raman report to", hops=1)
+    answer = await agent.graph.query("who does Priya Raman report to", hops=1, layers=["entity"])
 
     # The graph is built off the write path; what matters to the contract is that a query
     # answers in the bundle's shape and stays inside this scope's visibility.
     assert answer.visited >= 0
-    assert all(fact.subject for fact in answer.facts)
+    assert all(fact.subject and fact.layer == "entity" for fact in answer.facts)
+
+    # Entities the write produced can be searched by name and opened as a profile.
+    found = await agent.graph.entities("priya", limit=5)
+    assert found and all(e.canonical_name.startswith("priya") for e in found), found
+    profile = await agent.graph.entity(found[0].entity_id)
+    assert profile.entity.entity_id == found[0].entity_id
+    with pytest.raises(MemoryError) as missing:
+        await agent.graph.entity("ent_never_written")
+    assert missing.value.status == 404
 
 
 @pytest.mark.covers_error("retrieval.recall", "memory.get_memory", "memory.list_memories")

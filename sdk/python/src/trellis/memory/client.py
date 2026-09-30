@@ -19,7 +19,7 @@ import uuid
 import warnings
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Self
 
 import httpx
@@ -60,6 +60,8 @@ from trellis.memory.models import (
     MessageInfo,
     MessageKind,
     MessageRole,
+    ModelPolicy,
+    ModelUsage,
     ObservationAck,
     ObservationKind,
     Page,
@@ -227,14 +229,16 @@ class MemoryContext:
         *,
         token_budget: int | None = None,
         require_evidence: bool = False,
-        use_llm: bool = False,
+        use_llm: bool | None = None,
         **options: Any,
     ) -> ContextBundle:
         """Bounded, ranked context for this turn. With ``require_evidence=True`` an
         ``INSUFFICIENT`` evidence report raises :class:`InsufficientEvidence` instead of
-        returning a bundle the caller might answer from anyway."""
+        returning a bundle the caller might answer from anyway. ``use_llm`` omitted follows
+        the model policy's ``read_assist``; true or false overrides it for this read."""
         payload: dict[str, Any] = {"query": query, "scope": self._scope_payload(), **options}
-        payload["use_llm"] = use_llm
+        if use_llm is not None:
+            payload["use_llm"] = use_llm
         if token_budget is not None:
             payload["token_budget"] = token_budget
         data = await self._request("POST", "/v1/context", json=payload)
@@ -289,13 +293,14 @@ class MemoryContext:
         *,
         limit: int = 20,
         kinds: Sequence[RecallKind] | None = None,
-        use_llm: bool = False,
+        use_llm: bool | None = None,
         **options: Any,
     ) -> list[ContextItem]:
         """Ranked, scope-filtered evidence (chunks and memories) without bundle assembly.
         ``kinds`` narrows what is searched: chunk (document passages), memory, summary."""
         payload = {"query": query, "scope": self._scope_payload(), "limit": limit, **options}
-        payload["use_llm"] = use_llm
+        if use_llm is not None:
+            payload["use_llm"] = use_llm
         if kinds is not None:
             payload["kinds"] = list(kinds)
         data = await self._request("POST", "/v1/recall", json=payload)
@@ -310,13 +315,14 @@ class MemoryContext:
         items: Sequence[ContextItem | dict[str, Any]] | None = None,
         unused: Sequence[dict[str, Any]] | None = None,
         document_ids: Sequence[str] | None = None,
-        use_llm: bool = False,
+        use_llm: bool | None = None,
     ) -> GroundingReport:
         """Verify ``answer`` claim by claim (citation validation, NLI, judge for borderline
         claims, contradiction scan) against a ``bundle`` from :meth:`context`, explicit
         evidence ``items`` or a fresh retrieval for ``query`` under this scope."""
         payload: dict[str, Any] = {"answer": answer, "scope": self._scope_payload()}
-        payload["use_llm"] = use_llm
+        if use_llm is not None:
+            payload["use_llm"] = use_llm
         if bundle is not None:
             payload["items"] = bundle.evidence_items()
             payload["unused"] = [u.model_dump(mode="json") for u in bundle.evidence.unused]
@@ -810,15 +816,16 @@ class GraphAPI:
         as_of: datetime | None = None,
         valid_at: datetime | None = None,
         layers: Sequence[GraphLayer] | None = None,
-        use_llm: bool = False,
+        use_llm: bool | None = None,
     ) -> GraphAnswer:
         payload: dict[str, Any] = {
             "scope": self._ctx._scope_payload(),
             "query": query,
             "entities": entities or [],
             "hops": hops,
-            "use_llm": use_llm,
         }
+        if use_llm is not None:
+            payload["use_llm"] = use_llm
         if as_of is not None:
             payload["as_of"] = as_of.isoformat()
         if valid_at is not None:
@@ -1091,6 +1098,35 @@ class TenantAPI:
         data = await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
         return AgentKeyStatus.model_validate(data)
 
+    async def model_policy(self) -> ModelPolicy:
+        """The tenant's model policy: the uses its model key may pay for, and whether reads
+        are model-assisted when a request does not say."""
+        return ModelPolicy.model_validate(await self._request("GET", "/v1/model-key/policy"))
+
+    async def set_model_policy(
+        self, uses: Sequence[str], *, read_assist: bool, idempotency_key: str | None = None
+    ) -> ModelPolicy:
+        data = await self._request(
+            "PUT",
+            "/v1/model-key/policy",
+            json={"uses": list(uses), "read_assist": read_assist},
+            idempotency_key=idempotency_key,
+        )
+        return ModelPolicy.model_validate(data)
+
+    async def model_usage(
+        self, *, since: date | None = None, until: date | None = None
+    ) -> ModelUsage:
+        """Tokens and calls per day and use (default: the last 30 days)."""
+        params = {
+            name: value.isoformat()
+            for name, value in (("since", since), ("until", until))
+            if value is not None
+        }
+        return ModelUsage.model_validate(
+            await self._request("GET", "/v1/model-key/usage", params=params)
+        )
+
     async def reads(
         self, *, after: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
     ) -> list[ReadAuditRecord]:
@@ -1197,6 +1233,27 @@ class WorkspacesAPI:
             "DELETE", f"/v1/workspaces/{workspace_id}/model-key", idempotency_key=idempotency_key
         )
         return AgentKeyStatus.model_validate(data)
+
+    async def model_policy(self, workspace_id: str) -> ModelPolicy:
+        """The team's model policy; its agents without one of their own follow it."""
+        data = await self._tenant._request("GET", f"/v1/workspaces/{workspace_id}/model-key/policy")
+        return ModelPolicy.model_validate(data)
+
+    async def set_model_policy(
+        self,
+        workspace_id: str,
+        uses: Sequence[str],
+        *,
+        read_assist: bool,
+        idempotency_key: str | None = None,
+    ) -> ModelPolicy:
+        data = await self._tenant._request(
+            "PUT",
+            f"/v1/workspaces/{workspace_id}/model-key/policy",
+            json={"uses": list(uses), "read_assist": read_assist},
+            idempotency_key=idempotency_key,
+        )
+        return ModelPolicy.model_validate(data)
 
     async def get(self, workspace_id: str) -> WorkspaceInfo:
         return WorkspaceInfo.model_validate(

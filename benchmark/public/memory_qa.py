@@ -34,7 +34,7 @@ from memory_service.domain.enums import MessageRole
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
-from memory_service.modules.llm.cost import LLMTokens, start_llm_accounting
+from memory_service.modules.llm.cost import LLMTokens, llm_accounting
 
 TENANT = "public"
 NATIVE_CONFIGS = ("native", "bifrost")
@@ -60,11 +60,15 @@ def config_settings(base: Settings, config: str) -> Settings:
 
 @contextmanager
 def _accounting(costs: dict[str, Any], phase: str) -> Iterator[LLMTokens]:
-    counter = start_llm_accounting()
-    try:
-        yield counter
-    finally:
-        costs[phase] = {"input": counter.input, "output": counter.output, "total": counter.total}
+    with llm_accounting() as counter:
+        try:
+            yield counter
+        finally:
+            costs[phase] = {
+                "input": counter.input,
+                "output": counter.output,
+                "total": counter.total,
+            }
 
 
 def _role(turn_role: str) -> MessageRole:

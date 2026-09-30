@@ -339,27 +339,39 @@ def _wire_models(container: Container) -> None:
 
 
 def _wire_llm(container: Container) -> None:
-    """The generative model is optional and reachable only through the Bifrost gateway."""
+    """The generative model is optional and reachable only through the Bifrost gateway.
+
+    Model keys, per-level policies and the daily usage ledger are wired whatever the
+    configuration, so a tenant can register a key or a policy before the operator turns the
+    model on."""
     from memory_service.adapters.models.credential_cipher import AesCredentialCipher
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
+    from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
     from memory_service.modules.webhooks.service import WebhookService
 
+    uow_factory = container.services["uow_factory"]
     cipher = AesCredentialCipher(container.settings.agent_credentials)
-    credentials = ModelCredentials(container.services["uow_factory"], cipher)
+    credentials = ModelCredentials(uow_factory, cipher)
+    policies = ModelPolicies(uow_factory)
+    usage = LLMUsage(uow_factory)
     container.services["model_credentials"] = credentials
+    container.services["model_policies"] = policies
+    container.services["llm_usage"] = usage
     container.services["webhooks"] = WebhookService(
-        container.services["uow_factory"], cipher, container.settings.webhooks
+        uow_factory, cipher, container.settings.webhooks
     )
     cfg = container.settings.models.llm
     if not cfg.enabled:
         container.llm = DisabledLLM()
         container.services["llm_assist"] = LLMAssist.disabled()
         return
-    llm = BifrostLLM(cfg, log_source_text=constants.LOG_SOURCE_TEXT, credentials=credentials)
+    llm = BifrostLLM(
+        cfg, log_source_text=constants.LOG_SOURCE_TEXT, credentials=credentials, usage=usage
+    )
     container.llm = llm
-    container.services["llm_assist"] = LLMAssist(llm, cfg)
+    container.services["llm_assist"] = LLMAssist(llm, cfg, policies)
     if cfg.enabled == "auto" and not cfg.api_key:
         # Agent credentials are resolved only in their authenticated request/job scope.
         # An unauthenticated background health probe cannot represent their gateway access.
@@ -495,6 +507,7 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
         landing=LandingReflection(cfg) if cfg.consolidation_enabled else None,
         events=container.services.get("webhooks"),
+        assist=container.services["llm_assist"],
     )
     container.services["memory"] = MemoryService(container.services["authz"])
     if "webhooks" in container.services:

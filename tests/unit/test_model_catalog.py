@@ -13,8 +13,9 @@ from memory_service.adapters.models.llm import BifrostLLM
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_call_policy, model_identity
+from memory_service.modules.llm.policy import model_call_policy
 from memory_service.ports.credentials import ModelIdentity, ResolvedCredential
+from tests.support_llm import bound_to
 
 pytestmark = pytest.mark.unit
 
@@ -80,7 +81,7 @@ async def test_auto_without_a_key_or_with_read_denial_sends_no_http():
         assist = LLMAssist(provider, settings)
         try:
             assert not assist.wants("contextual_extraction")
-            with model_identity("tenant", "agent"):
+            with bound_to("tenant", "agent"):
                 assert await assist.complete("contextual_extraction", system="s", user="u") is None
                 with model_call_policy(False):
                     assert not assist.wants("query_expansion")
@@ -117,7 +118,7 @@ async def test_registered_key_auto_discovers_then_calls_with_no_mcp():
         provider = BifrostLLM(settings, client=client, credentials=credentials)
         assist = LLMAssist(provider, settings)
         try:
-            with model_identity("tenant", "agent"):
+            with bound_to("tenant", "agent"):
                 for _ in range(2):
                     assert (
                         await assist.complete("contextual_extraction", system="s", user="u")

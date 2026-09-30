@@ -22,11 +22,12 @@ from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichme
 from memory_service.modules.graph.summaries import EntitySummaries
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.native import _STOP as _STOP_WORDS
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
+from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.intelligence import Entity, GraphNeighborhood, Relation
 from memory_service.ports.uow import UnitOfWorkFactory
 
@@ -168,7 +169,7 @@ class GraphService:
                     continue
                 n += await self._enrich_memory(m, touched)
             for (principal, workspace_id), entity_ids in touched.items():
-                with model_identity(tenant_id, principal, workspace_id=workspace_id):
+                async with self.assist.bound(ModelIdentity(tenant_id, principal, workspace_id)):
                     await self.summaries.refresh(tenant_id, entity_ids)
         if n or removed:
             async with self.uow_factory() as uow:
@@ -181,7 +182,8 @@ class GraphService:
     ) -> int:
         """One memory's entities and relations; records the entities it touched per owner."""
         ctx = MemoryExecutionContext(tenant_id=m.tenant_id, user_id=m.scope.user_id)
-        with model_identity(m.tenant_id, m.owner_principal, workspace_id=m.scope.workspace_id):
+        owner = ModelIdentity(m.tenant_id, m.owner_principal, m.scope.workspace_id)
+        async with self.assist.bound(owner):
             entities, relations = await self.provider.enrich_memory(m, ctx)
         await self.store.upsert_entities(entities)
         await self.store.upsert_relations(relations)
@@ -209,25 +211,25 @@ class GraphService:
             else Scope(level=ScopeLevel.TENANT, tenant_id=tenant_id)
         )
         ctx = MemoryExecutionContext(tenant_id=tenant_id, user_id=document.owner_user_id)
-        with (
-            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
-            span("graph.enrich_document", tenant_id=tenant_id),
-            stage_seconds.labels("graph.enrich").time(),
-        ):
-            await self.store.delete_for_document(tenant_id, document_id)
-            entities, relations = await self.provider.enrich_document(
-                version,
-                nodes,
-                chunks,
-                ctx,
-                visibility_keys=keys,
-                document_title=document.title,
-                scope_key=scope.key(),
-            )
-            await self.store.upsert_entities(entities)
-            await self.store.upsert_relations(relations)
-            busiest = sorted(entities, key=lambda e: (-e.mention_count, e.entity_id))
-            await self.summaries.refresh(tenant_id, [e.entity_id for e in busiest])
+        async with self.assist.bound(document_identity(document)):
+            with (
+                span("graph.enrich_document", tenant_id=tenant_id),
+                stage_seconds.labels("graph.enrich").time(),
+            ):
+                await self.store.delete_for_document(tenant_id, document_id)
+                entities, relations = await self.provider.enrich_document(
+                    version,
+                    nodes,
+                    chunks,
+                    ctx,
+                    visibility_keys=keys,
+                    document_title=document.title,
+                    scope_key=scope.key(),
+                )
+                await self.store.upsert_entities(entities)
+                await self.store.upsert_relations(relations)
+                busiest = sorted(entities, key=lambda e: (-e.mention_count, e.entity_id))
+                await self.summaries.refresh(tenant_id, [e.entity_id for e in busiest])
         async with self.uow_factory() as uow:
             await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
             await uow.commit()

@@ -6,6 +6,7 @@ specific row that exists, so a team registers one Bifrost key and every agent of
 workspace calls through it unless it has a key of its own.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final, Protocol
@@ -59,6 +60,15 @@ class ResolvedCredential:
 
 class CredentialRepository(Protocol):
     async def get(self, identity: ModelIdentity) -> StoredCredential | None: ...
+
+    async def first(self, levels: Sequence[ModelIdentity]) -> StoredCredential | None:
+        """The row of the first level (most specific first) that has one, revoked or not:
+        one indexed read for the whole resolution."""
+        ...
+
+    async def tenants_with_keys(self) -> list[str]:
+        """Tenants with at least one live (non-revoked) key at any level."""
+        ...
 
     async def put(
         self, identity: ModelIdentity, *, key_id: str, ciphertext: bytes | None

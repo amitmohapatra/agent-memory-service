@@ -256,8 +256,9 @@ bundle.evidence  # what was found, what was missing, and the status
 
 Need just the search results? `await ctx.recall("...")` returns ranked items.
 
-Reads default to `use_llm=False`, independently of ingestion's model settings. Pass
-`use_llm=True` to permit the configured read helpers. Agent-owned virtual keys and persistent
+A read consults the model only when the tenant's model policy allows it (`read_assist`, on by
+default once a key is registered) or when the request says so: `use_llm=True` or `use_llm=False`
+overrides the policy for that call. Agent-owned virtual keys and persistent
 standing questions/pages are exposed through `ctx.set_model_key(...)` and `ctx.briefs`;
 see the [SDK examples](sdk/python/README.md) and
 [capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
@@ -548,19 +549,25 @@ MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 # The models are not settings: `make models` puts the frozen set in ./models (git-ignored)
 # and the service finds it there, or under /models in the image.
 
-# Automatic assistance requires an agent/operator key. False prohibits generation.
+# Automatic assistance requires a registered key (agent, workspace or tenant) or an operator
+# key. False prohibits generation.
 MEMORY__MODELS__LLM__ENABLED=auto
 ```
 
 ### About the LLM
 
-The default `enabled=auto` mode activates bounded ingestion assistance when the acting
-agent has a registered virtual key. No per-agent model/use configuration is needed: the
-service queries the gateway's authenticated model catalogue and selects a recognized
-eligible text model. Opaque aliases are not guessed. Catalogue discovery is cached per
-owner/key revision for five minutes and performs no generation. Reads remain model-free
-unless `use_llm=True`; `enabled=false` prohibits generation even for registered agents.
-Explicit `enabled=true` configuration below remains supported for operator-selected uses.
+The default `enabled=auto` mode uses the model wherever a key can pay for it: the acting
+agent's registered virtual key, else its workspace's, else its tenant's, else the operator's.
+Each tenant decides what its key is spent on with a model policy (`PUT /v1/model-key/policy`,
+per workspace too): the uses allowed and whether reads are assisted by default. A use runs only
+when the operator's allow-list (`MEMORY__MODELS__LLM__USES`, default every use) and the
+resolved policy both allow it. No per-agent model configuration is needed: the service queries
+the gateway's authenticated model catalogue and selects a recognized eligible text model.
+Opaque aliases are not guessed. Catalogue discovery is cached per owner/key revision for five
+minutes and performs no generation. `enabled=false` prohibits generation even for registered
+agents; `enabled=true` also permits keyless gateway calls for the operator-selected uses.
+Spend is visible per tenant: `GET /v1/model-key/usage` (tokens and calls per day and use) and
+`memory_llm_tokens_total{tenant,use,direction}`. See [docs/api/tenancy.md](docs/api/tenancy.md).
 
 
 The service runs without one. Native model calls go through

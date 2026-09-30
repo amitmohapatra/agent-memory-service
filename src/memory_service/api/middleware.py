@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from typing import Any
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -42,7 +43,7 @@ from memory_service.domain.enums import ErrorCode
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.ids import is_valid_id, new_id
 from memory_service.domain.tenancy import bare_credential
-from memory_service.modules.llm.cost import start_llm_accounting
+from memory_service.modules.llm.cost import LLMTokens, llm_accounting
 from memory_service.observability.logging import bind_log_context, clear_log_context, get_logger
 from memory_service.observability.metrics import http_request_seconds, http_requests_total
 from memory_service.observability.tracing import (
@@ -158,7 +159,22 @@ class CorrelationMiddleware:
 
         clear_log_context()
         bind_log_context(request_id=request_id, trace_id=trace_id, correlation_id=correlation_id)
-        llm_tokens = start_llm_accounting()
+        try:
+            with llm_accounting() as llm_tokens:
+                await self._serve(scope, receive, send, state, marks, llm_tokens)
+        finally:
+            clear_log_context()
+
+    async def _serve(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+        state: dict[str, Any],
+        marks: dict[str, str],
+        llm_tokens: LLMTokens,
+    ) -> None:
+        """The request inside its LLM accounting scope: metrics, logs and response headers."""
         started = time.perf_counter()
         recorded = False
 
@@ -208,8 +224,6 @@ class CorrelationMiddleware:
             if not recorded:
                 record(499 if isinstance(exc, asyncio.CancelledError) else 500)
             raise
-        finally:
-            clear_log_context()
 
 
 class RateLimitMiddleware:

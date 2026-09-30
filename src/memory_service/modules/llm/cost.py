@@ -1,13 +1,17 @@
-"""Per-request LLM token accounting.
+"""Per-request and per-job LLM token accounting.
 
-The API middleware opens an accounting scope before handing the request to the app; every
-gateway call made while serving it adds its usage to the same mutable counter (the object is
-shared across the tasks Starlette spawns, so child-task context copies still see it). The
-total is exposed as ``X-Trellis-LLM-Tokens`` and, per report, as ``llm_tokens``.
+The API middleware opens an accounting scope around each request and the job registry around
+each job; every gateway call made inside adds its usage to that scope's counter (the object is
+shared across the tasks Starlette spawns, so child-task context copies still see it). A
+request's total is exposed as ``X-Trellis-LLM-Tokens`` and, per report, as ``llm_tokens``; a
+job's is logged. Scopes nest: a job run inline inside a request counts on its own and leaves
+the request's counter as it was.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
@@ -25,11 +29,15 @@ class LLMTokens:
 _tokens: ContextVar[LLMTokens | None] = ContextVar("memory_llm_tokens", default=None)
 
 
-def start_llm_accounting() -> LLMTokens:
-    """Open a fresh counter for the current execution (request, job or test)."""
+@contextmanager
+def llm_accounting() -> Iterator[LLMTokens]:
+    """A fresh counter for the enclosed execution (request, job or test)."""
     counter = LLMTokens()
-    _tokens.set(counter)
-    return counter
+    token = _tokens.set(counter)
+    try:
+        yield counter
+    finally:
+        _tokens.reset(token)
 
 
 def record_llm_tokens(input_tokens: int | None, output_tokens: int | None) -> None:

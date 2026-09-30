@@ -6,12 +6,13 @@ domain models; repositories translate.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -23,7 +24,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -40,6 +41,31 @@ class AgentCredentialRow(Base):
     ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     revision: Mapped[int] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class LLMPolicyRow(Base):
+    """What the model may be used for at one level of the key hierarchy (ADR 0023)."""
+
+    __tablename__ = "llm_policies"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    principal_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    uses: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False)
+    read_assist: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(Integer)
+
+
+class LLMUsageDailyRow(Base):
+    """Tokens and calls per tenant, use and day; one upsert per gateway call."""
+
+    __tablename__ = "llm_usage_daily"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    use: Mapped[str] = mapped_column(String(40), primary_key=True)
+    tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    calls: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
 class BriefRow(Base):

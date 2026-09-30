@@ -1,6 +1,7 @@
 """Source lifecycle, audience isolation and replay on real PostgreSQL."""
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -207,6 +208,10 @@ async def test_source_changed_during_model_call_discards_insight(container, uow_
     class ConcurrentAssist:
         def wants(self, use):
             return True
+
+        @asynccontextmanager
+        async def bound(self, identity):
+            yield
 
         async def structured(self, *args, **kwargs):
             async with uow_factory() as uow:

@@ -1,8 +1,11 @@
 """ReflectionService: higher-level insights over a principal's recent memories.
 
 There is no native counterpart: reflection exists only when the ``reflection`` LLM use is
-enabled. For every (tenant, principal) with pending source revisions the model is
-asked for a few insights; each one becomes a memory of its own with evidence pointing at
+allowed. Only tenants a key can pay for are scanned (every tenant when the operator pays),
+and each (tenant, principal, audience) group runs bound to its owner, so the owner's key pays
+and the owner's policy decides; a group whose owner may not reflect is acknowledged without a
+model call. For every group with pending source revisions the model is asked for a few
+insights; each one becomes a memory of its own with evidence pointing at
 the source memories, and is indexed through the same ``memory.index`` job as any other
 memory. An unchanged source revision is not reconsidered by the periodic worker, and an
 insight whose normalized content already exists in the scope is not stored twice.
@@ -22,11 +25,11 @@ from memory_service.domain.enums import MemoryType
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_identity
 from memory_service.modules.memory.derived import _derived
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
+from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
@@ -101,53 +104,55 @@ class ReflectionService:
         self, *, now: datetime | None = None, tenant_id: str | None = None
     ) -> list[str]:
         """Process bounded pending revisions, including work older than a job restart."""
-        if not self.assist.wants("reflection"):
-            return []
         now = now or datetime.now(UTC)
-        async with self.uow_factory() as uow:
-            recent = await uow.memories.reflection_pending(
-                limit=self.scan_limit, tenant_id=tenant_id
-            )
-        sources: dict[tuple, list[CanonicalMemory]] = {}
-        for m in recent:
-            key = (
-                m.tenant_id,
-                m.owner_principal,
-                m.scope.key(),
-                tuple(
-                    sorted(
-                        m.system_metadata.get(
-                            "reflection_source_audience",
-                            m.system_metadata.get("visibility_keys", []),
-                        )
-                    )
-                ),
-            )
-            if not m.system_metadata.get("source_revisions"):
-                sources.setdefault(key, []).append(m)
         created: list[str] = []
         batches = 0
-        for key, mems in sources.items():
-            # Source order is oldest pending update first. Successful batches advance
-            # receipts even for empty insight lists, so a busy scope cannot hide its tail.
-            width = max(1, self.max_memories // 2)
-            pending_ids = {m.memory_id for m in mems}
-            for start in range(0, len(mems), width):
+        for tenant in await self.assist.payable_tenants(tenant_id):
+            async with self.uow_factory() as uow:
+                recent = await uow.memories.reflection_pending(
+                    limit=self.scan_limit, tenant_id=tenant
+                )
+            for key, mems in _groups(recent).items():
                 if batches >= self.max_batches:
                     return created
-                memories = await self._with_history(
-                    mems[start : start + width], exclude=pending_ids
-                )
-                if len(memories) < 2:
-                    # A lone source needs no model. A future fact can still retrieve it
-                    # through related(); it must not permanently block pending discovery.
-                    async with self.uow_factory() as uow:
-                        await uow.memories.mark_reflected(memories, at=now)
-                        await uow.commit()
-                    continue
-                created += await self.reflect(key[0], key[1], memories, now=now)
-                batches += 1
+                async with self.assist.bound(_owner(key[0], key[1], mems)):
+                    if not self.assist.wants("reflection"):
+                        # this owner may not reflect: acknowledge rather than rescan forever
+                        async with self.uow_factory() as uow:
+                            await uow.memories.mark_reflected(mems, at=now)
+                            await uow.commit()
+                        continue
+                    done, used = await self._reflect_group(
+                        key, mems, now=now, budget=self.max_batches - batches
+                    )
+                created += done
+                batches += used
         return created
+
+    async def _reflect_group(
+        self, key: tuple, mems: list[CanonicalMemory], *, now: datetime, budget: int
+    ) -> tuple[list[str], int]:
+        """One group's pending sources in bounded batches; returns (created, batches used).
+        Source order is oldest pending update first. Successful batches advance receipts
+        even for empty insight lists, so a busy scope cannot hide its tail."""
+        created: list[str] = []
+        batches = 0
+        width = max(1, self.max_memories // 2)
+        pending_ids = {m.memory_id for m in mems}
+        for start in range(0, len(mems), width):
+            if batches >= budget:
+                break
+            memories = await self._with_history(mems[start : start + width], exclude=pending_ids)
+            if len(memories) < 2:
+                # A lone source needs no model. A future fact can still retrieve it
+                # through related(); it must not permanently block pending discovery.
+                async with self.uow_factory() as uow:
+                    await uow.memories.mark_reflected(memories, at=now)
+                    await uow.commit()
+                continue
+            created += await self._reflect(key[0], key[1], memories, now=now)
+            batches += 1
+        return created, batches
 
     async def _with_history(
         self, fresh: list[CanonicalMemory], *, exclude: set[str] | None = None
@@ -193,6 +198,18 @@ class ReflectionService:
         *,
         now: datetime | None = None,
     ) -> list[str]:
+        """Reflect over one group of the principal's memories, bound to that principal."""
+        async with self.assist.bound(_owner(tenant_id, principal, memories)):
+            return await self._reflect(tenant_id, principal, memories, now=now)
+
+    async def _reflect(
+        self,
+        tenant_id: str,
+        principal: str,
+        memories: list[CanonicalMemory],
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
         memories = [m for m in memories if not unverified_representation(m.system_metadata)]
         if not memories or not self.assist.wants("reflection"):
             return []
@@ -221,14 +238,13 @@ class ReflectionService:
             prompt_size += line_size
         if len(included) < 2:
             return []
-        with model_identity(tenant_id, principal):
-            out = await self.assist.structured(
-                "reflection",
-                system=_SYSTEM.format(n=self.max_insights),
-                user=self._prompt(principal, included),
-                schema=_SCHEMA,
-                max_tokens=2048,
-            )
+        out = await self.assist.structured(
+            "reflection",
+            system=_SYSTEM.format(n=self.max_insights),
+            user=self._prompt(principal, included),
+            schema=_SCHEMA,
+            max_tokens=2048,
+        )
         if out is None:
             return []
         by_id = {m.memory_id: m for m in included}
@@ -364,3 +380,24 @@ def _context_for(
             agent_id=agent_id if separator else ident,
         )
     return MemoryExecutionContext(tenant_id=tenant_id, workspace_id=workspace_id)
+
+
+def _groups(recent: list[CanonicalMemory]) -> dict[tuple, list[CanonicalMemory]]:
+    """Pending asserted sources by (tenant, owner, scope, audience): the unit one model call
+    may combine without crossing an owner or an audience."""
+    groups: dict[tuple, list[CanonicalMemory]] = {}
+    for m in recent:
+        if m.system_metadata.get("source_revisions"):
+            continue
+        audience = m.system_metadata.get(
+            "reflection_source_audience", m.system_metadata.get("visibility_keys", [])
+        )
+        key = (m.tenant_id, m.owner_principal, m.scope.key(), tuple(sorted(audience)))
+        groups.setdefault(key, []).append(m)
+    return groups
+
+
+def _owner(tenant_id: str, principal: str, memories: list[CanonicalMemory]) -> ModelIdentity:
+    """Whose key pays: the principal, falling back to the team its memories belong to."""
+    workspace_id = next((m.scope.workspace_id for m in memories if m.scope.workspace_id), None)
+    return ModelIdentity(tenant_id, principal, workspace_id)

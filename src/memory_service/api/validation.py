@@ -80,3 +80,14 @@ CustomMetadata = Annotated[
 
 ToolJson = Annotated[dict[str, Any], AfterValidator(bounded_json(TOOL_JSON_MAX_BYTES))]
 ToolOutput = Annotated[Any, AfterValidator(bounded_json(TOOL_OUTPUT_MAX_BYTES))]
+
+#: The read-side model switch every read route shares. Omitted, the resolved model policy's
+#: ``read_assist`` decides (``PUT /v1/model-key/policy``); true or false overrides it for this
+#: request, and neither can enable a use the policy or the operator does not allow.
+UseLLM = Annotated[
+    bool | None,
+    Field(
+        description="Allow model assistance on this read. Omit to follow the model policy's "
+        "read_assist; ingestion is governed separately."
+    ),
+]

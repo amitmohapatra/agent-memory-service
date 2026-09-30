@@ -13,6 +13,7 @@ from typing import Protocol, Self, runtime_checkable
 from memory_service.ports.briefs import BriefRepository
 from memory_service.ports.credentials import CredentialRepository
 from memory_service.ports.feedback import FeedbackRepository
+from memory_service.ports.llm import LLMPolicyRepository, LLMUsageRepository
 from memory_service.ports.repositories import (
     AgentRunRepository,
     ArchiveRepository,
@@ -43,6 +44,8 @@ from memory_service.ports.webhooks import WebhookDeliveryRepository, WebhookRepo
 class UnitOfWork(Protocol):
     briefs: BriefRepository
     credentials: CredentialRepository
+    llm_policies: LLMPolicyRepository
+    llm_usage: LLMUsageRepository
     threads: ThreadRepository
     sessions: SessionRepository
     turns: TurnRepository

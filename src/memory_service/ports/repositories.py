@@ -375,9 +375,11 @@ class MemoryRepository(Protocol):
         """Mark memories past ``expires_at`` EXPIRED; returns (tenant_id, memory_id) pairs."""
         ...
 
-    async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
-        """Live CURRENT memories updated at or after ``since``, newest first, across tenants
-        (periodic jobs discover the scopes with fresh activity)."""
+    async def list_recent(
+        self, *, since: datetime, limit: int = 1000, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        """Live CURRENT memories updated at or after ``since``, newest first, in one tenant or
+        across all of them (periodic jobs discover the scopes with fresh activity)."""
         ...
 
     async def reflection_pending(

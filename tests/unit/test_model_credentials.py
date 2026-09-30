@@ -11,7 +11,7 @@ from memory_service.adapters.models.llm import _catalog_key
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured, ValidationFailed
 from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
-from memory_service.modules.llm.policy import current_model_identity, model_identity_of
+from memory_service.modules.llm.policy import current_model_identity, identity_of
 from memory_service.ports.credentials import (
     ModelIdentity,
     ResolvedCredential,
@@ -29,6 +29,12 @@ class _Repo:
 
     async def get(self, identity: ModelIdentity) -> StoredCredential | None:
         return self.rows.get((identity.tenant_id, identity.principal_id))
+
+    async def first(self, levels) -> StoredCredential | None:
+        return next(
+            (r for level in levels if (r := self.rows.get((level.tenant_id, level.principal_id)))),
+            None,
+        )
 
     async def put(self, identity: ModelIdentity, *, key_id: str, ciphertext: bytes | None):
         key = (identity.tenant_id, identity.principal_id)
@@ -100,8 +106,8 @@ def test_the_levels_walk_from_the_principal_to_the_tenant_without_repeats() -> N
         ModelIdentity("acme", "tenant"),
     )
     assert tenant_identity("acme").levels() == (ModelIdentity("acme", "tenant"),)
-    with model_identity_of(CTX):
-        assert current_model_identity() == identity
+    assert identity_of(CTX) == identity
+    assert current_model_identity() is None, "nothing is bound outside a request or job"
     with pytest.raises(ValidationFailed):
         agent_identity(CTX.model_copy(update={"agent_id": None}))
 

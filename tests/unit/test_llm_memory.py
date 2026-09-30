@@ -187,8 +187,12 @@ class _Memories:
         self.updated = []
         self.reflected = {}
 
-    async def list_recent(self, *, since, limit=1000):
-        return [m for m in self.recent if m.updated_at >= since][:limit]
+    async def list_recent(self, *, since, limit=1000, tenant_id=None):
+        return [
+            m
+            for m in self.recent
+            if m.updated_at >= since and (tenant_id is None or m.tenant_id == tenant_id)
+        ][:limit]
 
     async def reflection_pending(self, *, limit=1000, tenant_id=None):
         return [
@@ -381,7 +385,9 @@ async def test_reflection_is_a_no_op_when_gateway_fails_or_flag_off() -> None:
     assert await ReflectionService(lambda: uow).reflect_all() == []
 
 
-def test_reflect_job_is_registered_only_with_the_flag(make_settings) -> None:
+def test_model_jobs_are_registered_whenever_a_model_may_be_reached(make_settings) -> None:
+    """Whether a tenant may reflect is decided per identity inside the job (a key or policy
+    can appear at any time), so the jobs exist unless the model is prohibited outright."""
     from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
 
     def handlers(**llm):
@@ -394,11 +400,11 @@ def test_reflect_job_is_registered_only_with_the_flag(make_settings) -> None:
 
     off = handlers(enabled=False)
     assert "memory.reflect" not in off.handlers and "periodic.memory_reflect" not in off.periodic
-    enabled = {"enabled": True, "model": "test/strong"}
-    without_use = handlers(**enabled, uses=["summaries"])
-    assert "memory.reflect" not in without_use.handlers
-    on = handlers(**enabled, uses=["reflection"])
-    assert "memory.reflect" in on.handlers and "periodic.memory_reflect" in on.periodic
+    assert "memory.connect" not in off.handlers
+    for llm in ({"enabled": "auto"}, {"enabled": True, "model": "test/strong"}):
+        on = handlers(**llm)
+        assert {"memory.reflect", "memory.connect"} <= set(on.handlers)
+        assert {"periodic.memory_reflect", "periodic.memory_connect"} <= set(on.periodic)
 
 
 # --- dedup batching -----------------------------------------------------------------------

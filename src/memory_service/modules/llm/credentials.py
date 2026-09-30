@@ -69,16 +69,14 @@ class ModelCredentials:
         """The key of the most specific level that has a row. A revocation tombstone at that
         level refuses: a revoked agent never silently borrows the team's or operator's key."""
         async with self.uow_factory() as uow:
-            for level in identity.levels():
-                record = await uow.credentials.get(level)
-                if record is None:
-                    continue
-                if record.ciphertext is None:
-                    raise ProviderNotConfigured(
-                        "Model credential is revoked", details={"level": level.principal_id}
-                    )
-                return ResolvedCredential(self.cipher.decrypt(record), record.revision, level)
-        return None
+            record = await uow.credentials.first(identity.levels())
+        if record is None:
+            return None
+        if record.ciphertext is None:
+            raise ProviderNotConfigured(
+                "Model credential is revoked", details={"level": record.identity.principal_id}
+            )
+        return ResolvedCredential(self.cipher.decrypt(record), record.revision, record.identity)
 
     async def confirm(self, identity: ModelIdentity, resolved: ResolvedCredential | None) -> None:
         """The call ran under ``resolved``; refuse its result unless that is still the answer.

@@ -26,7 +26,7 @@ from memory_service.modules.grounding.cascade import (
     resolve_citation,
 )
 from memory_service.modules.grounding.lexical import conflicts, coverage
-from memory_service.modules.llm.cost import llm_tokens_used, start_llm_accounting
+from memory_service.modules.llm.cost import llm_accounting
 from memory_service.ports.models import NLIScore
 from tests.support_llm import mocked_gateway
 
@@ -227,17 +227,19 @@ def test_a_contradiction_must_be_decided_not_a_lean(
 async def test_borderline_band_uses_the_judge_and_falls_back_to_borderline() -> None:
     # ~50% token coverage -> entailment inside the (0.3, 0.7) band
     claim = "Restructuring savings explain the EBITDA growth reported for the year."
-    start_llm_accounting()
-    with mocked_gateway([{"supported": True, "reason": "savings are stated as the driver"}]) as gw:
-        report = await cascade(assist=gw.assist(uses=["grounding_judge"])).verify(claim, [E1])
-        assert gw.route.call_count == 1
-        prompt = gw.prompts()[0]["messages"][1]["content"]
-    # decomposition strips terminal punctuation: a claim is a proposition, not a sentence
-    assert prompt.startswith(f"Claim: {claim.rstrip('.')}") and "[1] Adjusted EBITDA" in prompt
-    c = report.claims[0]
-    assert c.verdict == "supported" and c.method == "judge" and "judge:" in c.notes[-1]
-    assert 0.3 <= c.support <= 0.7
-    assert report.judge_consulted == 1 and report.llm_tokens == 30 and llm_tokens_used() == 30
+    with llm_accounting() as counter:
+        with mocked_gateway(
+            [{"supported": True, "reason": "savings are stated as the driver"}]
+        ) as gw:
+            report = await cascade(assist=gw.assist(uses=["grounding_judge"])).verify(claim, [E1])
+            assert gw.route.call_count == 1
+            prompt = gw.prompts()[0]["messages"][1]["content"]
+        # decomposition strips terminal punctuation: a claim is a proposition, not a sentence
+        assert prompt.startswith(f"Claim: {claim.rstrip('.')}") and "[1] Adjusted EBITDA" in prompt
+        c = report.claims[0]
+        assert c.verdict == "supported" and c.method == "judge" and "judge:" in c.notes[-1]
+        assert 0.3 <= c.support <= 0.7
+        assert report.judge_consulted == 1 and report.llm_tokens == 30 and counter.total == 30
     with mocked_gateway([{"supported": False, "reason": "growth is not stated"}]) as gw:
         report = await cascade(assist=gw.assist(uses=["grounding_judge"])).verify(claim, [E1])
     assert report.claims[0].verdict == "unsupported" and report.claims[0].method == "judge"

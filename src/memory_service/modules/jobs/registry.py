@@ -11,6 +11,7 @@ from memory_service.config.constants import TASKS, WEBHOOKS
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
+from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.webhooks.service import (
@@ -19,7 +20,7 @@ from memory_service.modules.webhooks.service import (
     TASK_WEBHOOK_PURGE,
 )
 from memory_service.observability.logging import get_logger
-from memory_service.ports.tasks import JobSpec, Queue
+from memory_service.ports.tasks import JobSpec, Queue, TaskHandler
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
@@ -37,10 +38,44 @@ TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
 
 
+class _AccountedQueue:
+    """Registers every handler inside its own LLM accounting scope, so a job's model tokens
+    are counted and logged per job (and never leak into the request that ran it inline)."""
+
+    def __init__(self, queue: Any) -> None:
+        self._queue = queue
+
+    def register(self, name: str, queue: Queue, handler: TaskHandler, **kwargs: Any) -> None:
+        self._queue.register(name, queue, _accounted(name, handler), **kwargs)
+
+    def register_periodic(
+        self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
+    ) -> None:
+        self._queue.register_periodic(name, queue, _accounted(name, handler), cron=cron)
+
+
+def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
+    async def run(payload: dict[str, Any]) -> Any:
+        with llm_accounting() as tokens:
+            try:
+                return await handler(payload)
+            finally:
+                if tokens.total:
+                    log.info(
+                        "job.llm_tokens",
+                        task=name,
+                        tenant_id=payload.get("tenant_id"),
+                        input_tokens=tokens.input,
+                        output_tokens=tokens.output,
+                    )
+
+    return run
+
+
 def register_handlers(container: Container) -> None:
-    queue = container.tasks
-    if queue is None:
+    if container.tasks is None:
         return
+    queue = _AccountedQueue(container.tasks)
     uow_factory = container.services["uow_factory"]
 
     async def process_observation(payload: dict[str, Any]) -> None:
@@ -287,15 +322,15 @@ def register_handlers(container: Container) -> None:
     queue.register_periodic(
         "periodic.memory_forget", Queue.RECONCILE, memory_forget, cron="11 4 * * *"
     )
-    if container.settings.models.llm.wants("reflection"):
+    if container.settings.models.llm.enabled is not False:
+        # Registered whenever a model may be reached: whether one tenant may use it is
+        # decided per identity inside the job (a tenant key, workspace key or policy can
+        # appear at any time), and a job with nothing payable scans nothing. Connections are
+        # offset from reflection's hour so the two passes do not contend for one worker.
         queue.register(TASK_MEMORY_REFLECT, Queue.RECONCILE, memory_reflect, retries=0)
         queue.register_periodic(
             "periodic.memory_reflect", Queue.RECONCILE, memory_reflect, cron="53 */6 * * *"
         )
-    if container.settings.models.llm.wants("memory_connections"):
-        # Not registered at all when the use is off, so a deployment without a model key
-        # cannot schedule work that would do nothing. Offset from reflection's hour so the
-        # two consolidation passes do not contend for the same worker.
         queue.register(TASK_MEMORY_CONNECT, Queue.RECONCILE, memory_connect, retries=0)
         queue.register_periodic(
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"

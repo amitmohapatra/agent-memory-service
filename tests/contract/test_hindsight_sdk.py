@@ -18,7 +18,7 @@ from hindsight_client_api.models.dry_run_extraction_result import (  # noqa: E40
 from memory_service.adapters.models.hindsight import HindsightExtractor, _validated_texts
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.config.settings import HindsightSettings
-from memory_service.modules.llm.cost import llm_tokens_used, start_llm_accounting
+from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 from tests.support_hindsight import preview_server
 from tests.support_llm import mocked_gateway
@@ -38,33 +38,33 @@ FACT = {
 
 async def test_real_sdk_preview_keeps_local_identity_chronology_and_native_facts():
     obs = _obs(MESSAGE).model_copy(update={"occurred_at": datetime(2023, 5, 8, tzinfo=UTC)})
-    start_llm_accounting()
-    async with preview_server(facts=[FACT]) as server:
-        with mocked_gateway(failing=True) as gateway:
-            provider = NativeMemoryIntelligence(
-                MemoryIntelligenceSettings(),
-                assist=gateway.assist(uses=["contextual_extraction"]),
-                contextual_extractor=server.extractor,
-            )
-            candidates = await provider.extract(obs, CTX)
-        assert gateway.route.call_count == 0
-        assert len(server.requests) == 1
-        request = server.requests[0]
-        assert request["path"].endswith("/extraction-preview/memories/dry-run-extract")
-        assert request["body"]["content"] == MESSAGE
-        assert request["body"]["timestamp"].startswith("2023-05-08")
-        assert "agent_name" not in request["body"]
-        fact = next(c for c in candidates if c.category == "contextual_fact")
-        assert fact.subject == "user:u1" and fact.provider == "hindsight"
-        assert fact.valid_from is None and fact.valid_to is None and fact.entities == []
-        assert fact.evidence[0].source_id == obs.message_id
-        assert fact.evidence[0].observed_at == obs.occurred_at
-        raw = next(c for c in candidates if c.category == "verbatim_turn")
-        assert (await provider.classify(fact, CTX)).visibility == (
-            await provider.classify(raw, CTX)
-        ).visibility
-        assert any(c.category == "event" for c in candidates)
-    assert llm_tokens_used() == 42
+    with llm_accounting() as counter:
+        async with preview_server(facts=[FACT]) as server:
+            with mocked_gateway(failing=True) as gateway:
+                provider = NativeMemoryIntelligence(
+                    MemoryIntelligenceSettings(),
+                    assist=gateway.assist(uses=["contextual_extraction"]),
+                    contextual_extractor=server.extractor,
+                )
+                candidates = await provider.extract(obs, CTX)
+            assert gateway.route.call_count == 0
+            assert len(server.requests) == 1
+            request = server.requests[0]
+            assert request["path"].endswith("/extraction-preview/memories/dry-run-extract")
+            assert request["body"]["content"] == MESSAGE
+            assert request["body"]["timestamp"].startswith("2023-05-08")
+            assert "agent_name" not in request["body"]
+            fact = next(c for c in candidates if c.category == "contextual_fact")
+            assert fact.subject == "user:u1" and fact.provider == "hindsight"
+            assert fact.valid_from is None and fact.valid_to is None and fact.entities == []
+            assert fact.evidence[0].source_id == obs.message_id
+            assert fact.evidence[0].observed_at == obs.occurred_at
+            raw = next(c for c in candidates if c.category == "verbatim_turn")
+            assert (await provider.classify(fact, CTX)).visibility == (
+                await provider.classify(raw, CTX)
+            ).visibility
+            assert any(c.category == "event" for c in candidates)
+        assert counter.total == 42
 
 
 @pytest.mark.parametrize("status", [400, 429, 500, 503])

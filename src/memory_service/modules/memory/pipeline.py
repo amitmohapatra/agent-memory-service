@@ -28,7 +28,8 @@ from memory_service.domain.script import detect_script
 from memory_service.domain.webhooks import Event, WebhookEvent
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
-from memory_service.modules.llm.policy import model_identity_of
+from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
@@ -203,6 +204,7 @@ class ObservationPipeline:
         gate: AdmissionGate | None = None,
         landing: LandingReflection | None = None,
         events: EventPublisher | None = None,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
@@ -211,6 +213,8 @@ class ObservationPipeline:
         self.gate = gate
         self.landing = landing
         self.events = events
+        #: binds each observation's model work to its owner (key, policy, usage)
+        self.assist = assist or LLMAssist.disabled()
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -222,47 +226,47 @@ class ObservationPipeline:
         if observation.processed_at is not None:
             return []  # idempotent replay
         ctx = context_from_observation(observation)
-        with (
-            model_identity_of(ctx),
-            span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
-            stage_seconds.labels("memory.process").time(),
-        ):
-            # hints are applied before classification (so the provider sees the intended
-            # type) and again after it (explicit lifetime/visibility/importance always win)
-            candidates = [
-                self._apply_hints(
-                    await self.provider.classify(self._apply_hints(c, observation), ctx),
-                    observation,
+        async with self.assist.bound(identity_of(ctx)):
+            with (
+                span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
+                stage_seconds.labels("memory.process").time(),
+            ):
+                # hints are applied before classification (so the provider sees the intended
+                # type) and again after it (explicit lifetime/visibility/importance always win)
+                candidates = [
+                    self._apply_hints(
+                        await self.provider.classify(self._apply_hints(c, observation), ctx),
+                        observation,
+                    )
+                    for c in await self.provider.extract(observation, ctx)
+                ]
+                outcomes: list[ConsolidationOutcome] = []
+                hinted = (
+                    observation.hints.memory_type is not None
+                    or observation.hints.importance is not None
                 )
-                for c in await self.provider.extract(observation, ctx)
-            ]
-            outcomes: list[ConsolidationOutcome] = []
-            hinted = (
-                observation.hints.memory_type is not None
-                or observation.hints.importance is not None
-            )
-            async with self.uow_factory() as uow:
-                affected, created = await self._apply_all(
-                    uow, ctx, candidates, outcomes, hinted=hinted
-                )
-                if created and self.events is not None:
-                    await self._announce(uow, ctx, created)
-                if affected:
-                    await uow.enqueue(
-                        JobSpec(
-                            task_name=TASK_MEMORY_INDEX,
-                            queue=Queue.EMBEDDING,
-                            payload={"tenant_id": tenant_id, "memory_ids": sorted(affected)},
-                            idempotency_key=f"memidx:{observation_id}",
-                            tenant_id=tenant_id,
+                async with self.uow_factory() as uow:
+                    affected, created = await self._apply_all(
+                        uow, ctx, candidates, outcomes, hinted=hinted
+                    )
+                    if created and self.events is not None:
+                        await self._announce(uow, ctx, created)
+                    if affected:
+                        await uow.enqueue(
+                            JobSpec(
+                                task_name=TASK_MEMORY_INDEX,
+                                queue=Queue.EMBEDDING,
+                                payload={"tenant_id": tenant_id, "memory_ids": sorted(affected)},
+                                idempotency_key=f"memidx:{observation_id}",
+                                tenant_id=tenant_id,
+                            )
                         )
-                    )
-                    await bump_memory_revisions(
-                        uow, await uow.memories.get_many(tenant_id, sorted(affected))
-                    )
-                status = "PROCESSED" if candidates else "NO_MEMORY"
-                await uow.observations.mark_processed(tenant_id, observation_id, status=status)
-                await uow.commit()
+                        await bump_memory_revisions(
+                            uow, await uow.memories.get_many(tenant_id, sorted(affected))
+                        )
+                    status = "PROCESSED" if candidates else "NO_MEMORY"
+                    await uow.observations.mark_processed(tenant_id, observation_id, status=status)
+                    await uow.commit()
         for o in outcomes:
             memory_decisions_total.labels(o.decision.value).inc()
         log.info(

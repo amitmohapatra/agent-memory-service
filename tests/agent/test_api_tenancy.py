@@ -229,6 +229,41 @@ async def test_a_model_key_is_set_read_and_revoked_at_the_tenant_and_the_team(ap
     assert (await admin.tenant.model_key_status()).revoked is True
 
 
+@pytest.mark.covers(
+    "tenancy.tenant_policy",
+    "tenancy.set_tenant_policy",
+    "tenancy.workspace_policy",
+    "tenancy.set_workspace_policy",
+    "tenancy.tenant_usage",
+)
+async def test_a_tenant_admin_sets_the_model_policy_and_reads_the_usage(app, running) -> None:
+    platform = sdk(app, BOOTSTRAP)
+    acme = await platform.admin.create_tenant("Acme", tenant_id="acme")
+    admin = sdk(app, acme.admin_key.token)
+    await admin.tenant.workspaces.create("Finance", workspace_id="finance")
+
+    default = await admin.tenant.model_policy()
+    assert default.stored is False and default.read_assist is True and "summaries" in default.uses
+    narrowed = await admin.tenant.set_model_policy(["summaries"], read_assist=False)
+    assert narrowed.stored and narrowed.uses == ["summaries"] and narrowed.revision == 1
+    assert (await admin.tenant.model_policy()).read_assist is False
+
+    # the team's own policy is a separate record; the tenant's is untouched by it
+    assert (await admin.tenant.workspaces.model_policy("finance")).stored is False
+    team = await admin.tenant.workspaces.set_model_policy(
+        "finance", ["reflection", "summaries"], read_assist=True
+    )
+    assert team.uses == ["reflection", "summaries"]
+    assert (await admin.tenant.model_policy()).uses == ["summaries"]
+
+    with pytest.raises(MemoryError) as unknown_use:
+        await admin.tenant.set_model_policy(["mind_reading"], read_assist=True)
+    assert unknown_use.value.status == 422
+
+    usage = await admin.tenant.model_usage()
+    assert usage.days == [] and (usage.until - usage.since).days == 29
+
+
 @pytest.mark.covers_error(
     "admin.create_tenant",
     "admin.list_tenants",

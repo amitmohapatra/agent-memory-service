@@ -47,9 +47,9 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_identity
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
+from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
@@ -148,6 +148,11 @@ def _audience(memory: CanonicalMemory) -> tuple[Any, ...]:
     )
 
 
+def _owner(memory: CanonicalMemory) -> ModelIdentity:
+    """Whose key pays for a group: its owner, falling back to the team it belongs to."""
+    return ModelIdentity(memory.tenant_id, memory.owner_principal, memory.scope.workspace_id)
+
+
 def _subject_key(memory: CanonicalMemory) -> str:
     return re.sub(r"\s+", " ", (memory.subject or "").strip().casefold())
 
@@ -201,29 +206,34 @@ class ConnectionService:
 
         Returns the edges written (``kind``, ``left``, ``right``), which is what the tests and
         the job log assert on. Empty without a model key, and empty when every candidate pair
-        is already connected.
+        is already connected. Only tenants a key can pay for are scanned, and each group runs
+        bound to its owner: the owner's key pays and the owner's policy decides.
         """
-        if not self.assist.wants("memory_connections"):
-            return []
         now = now or datetime.now(UTC)
-        async with self.uow_factory() as uow:
-            recent = await uow.memories.list_recent(
-                since=now - timedelta(seconds=self.window_seconds), limit=self.scan_limit
-            )
-        groups: dict[tuple[Any, ...], list[CanonicalMemory]] = {}
-        for memory in recent:
-            if (tenant_id is None or memory.tenant_id == tenant_id) and _connectable(memory):
-                groups.setdefault(_audience(memory), []).append(memory)
         written: list[dict[str, Any]] = []
         batches = 0
-        for group, memories in sorted(groups.items(), key=lambda item: str(item[0])):
-            if batches >= self.max_batches:
-                break
-            pairs = self.candidate_pairs(await self._with_history(group, memories))
-            if not pairs:
-                continue
-            batches += 1
-            written += await self.connect(group[0], pairs, now=now)
+        for tenant in await self.assist.payable_tenants(tenant_id):
+            async with self.uow_factory() as uow:
+                recent = await uow.memories.list_recent(
+                    since=now - timedelta(seconds=self.window_seconds),
+                    limit=self.scan_limit,
+                    tenant_id=tenant,
+                )
+            groups: dict[tuple[Any, ...], list[CanonicalMemory]] = {}
+            for memory in recent:
+                if _connectable(memory):
+                    groups.setdefault(_audience(memory), []).append(memory)
+            for group, memories in sorted(groups.items(), key=lambda item: str(item[0])):
+                if batches >= self.max_batches:
+                    break
+                async with self.assist.bound(_owner(memories[0])):
+                    if not self.assist.wants("memory_connections"):
+                        continue
+                    pairs = self.candidate_pairs(await self._with_history(group, memories))
+                    if not pairs:
+                        continue
+                    batches += 1
+                    written += await self._connect(group[0], pairs, now=now)
         if written:
             log.info("memory.connected", count=len(written))
         return written
@@ -310,19 +320,29 @@ class ConnectionService:
         *,
         now: datetime | None = None,
     ) -> list[dict[str, Any]]:
-        """Ask for one verdict per pair and write the edges it accepts."""
+        """Ask for one verdict per pair and write the edges it accepts, bound to the owner."""
+        if not pairs:
+            return []
+        async with self.assist.bound(_owner(pairs[0][0])):
+            return await self._connect(tenant_id, pairs, now=now)
+
+    async def _connect(
+        self,
+        tenant_id: str,
+        pairs: list[tuple[CanonicalMemory, CanonicalMemory]],
+        *,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         if not pairs or not self.assist.wants("memory_connections"):
             return []
         now = now or datetime.now(UTC)
-        principal = pairs[0][0].owner_principal
-        with model_identity(tenant_id, principal):
-            out = await self.assist.structured(
-                "memory_connections",
-                system=_SYSTEM,
-                user=self._prompt(pairs),
-                schema=_SCHEMA,
-                max_tokens=1024,
-            )
+        out = await self.assist.structured(
+            "memory_connections",
+            system=_SYSTEM,
+            user=self._prompt(pairs),
+            schema=_SCHEMA,
+            max_tokens=1024,
+        )
         if out is None:
             return []
         accepted = self._accepted(out, pairs)

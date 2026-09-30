@@ -1,7 +1,9 @@
 """One encrypted key or revocation tombstone per tenant and owner principal."""
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +30,34 @@ class SqlCredentialRepository:
             AgentCredentialRow, (identity.tenant_id, identity.principal_id)
         )
         return _record(row) if row is not None else None
+
+    async def first(self, levels: Sequence[ModelIdentity]) -> StoredCredential | None:
+        if not levels:
+            return None
+        order = [level.principal_id for level in levels]
+        rows = (
+            await self.session.scalars(
+                select(AgentCredentialRow).where(
+                    AgentCredentialRow.tenant_id == levels[0].tenant_id,
+                    AgentCredentialRow.principal_id.in_(order),
+                )
+            )
+        ).all()
+        by_level = {row.principal_id: row for row in rows}
+        found = next((by_level[p] for p in order if p in by_level), None)
+        return _record(found) if found is not None else None
+
+    async def tenants_with_keys(self) -> list[str]:
+        return list(
+            (
+                await self.session.scalars(
+                    select(AgentCredentialRow.tenant_id)
+                    .where(AgentCredentialRow.ciphertext.is_not(None))
+                    .distinct()
+                    .order_by(AgentCredentialRow.tenant_id)
+                )
+            ).all()
+        )
 
     async def put(
         self, identity: ModelIdentity, *, key_id: str, ciphertext: bytes | None

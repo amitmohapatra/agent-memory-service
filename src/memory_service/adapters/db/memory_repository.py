@@ -490,20 +490,23 @@ class SqlMemoryRepository:
             await self._invalidate_dependents(tenant, [i for t, i in out if t == tenant])
         return out
 
-    async def list_recent(self, *, since: datetime, limit: int = 1000) -> list[CanonicalMemory]:
-        rows = (
-            await self.s.scalars(
-                select(MemoryRow)
-                .where(
-                    MemoryRow.updated_at >= since,
-                    MemoryRow.deleted_at.is_(None),
-                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
-                    or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
-                )
-                .order_by(MemoryRow.updated_at.desc(), MemoryRow.memory_id.desc())
-                .limit(limit)
+    async def list_recent(
+        self, *, since: datetime, limit: int = 1000, tenant_id: str | None = None
+    ) -> list[CanonicalMemory]:
+        statement = (
+            select(MemoryRow)
+            .where(
+                MemoryRow.updated_at >= since,
+                MemoryRow.deleted_at.is_(None),
+                MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > datetime.now(UTC)),
             )
-        ).all()
+            .order_by(MemoryRow.updated_at.desc(), MemoryRow.memory_id.desc())
+            .limit(limit)
+        )
+        if tenant_id is not None:
+            statement = statement.where(MemoryRow.tenant_id == tenant_id)
+        rows = (await self.s.scalars(statement)).all()
         return [_to_domain(r) for r in rows]
 
     async def reflection_pending(

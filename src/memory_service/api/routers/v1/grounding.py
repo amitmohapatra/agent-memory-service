@@ -15,10 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
 from memory_service.api.schemas.context import GroundingReportBody
+from memory_service.api.validation import UseLLM
 from memory_service.domain.errors import NotFound, ProviderNotConfigured
 from memory_service.domain.memory import unverified_representation
 from memory_service.modules.grounding.cascade import Evidence, EvidenceKind, bundle_evidence
-from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 422, 503)
@@ -119,10 +119,7 @@ class VerifyRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_VERIFY_EXAMPLE]})
 
-    use_llm: bool = Field(
-        default=False,
-        description="Allow configured LLM assistance on this read, independently of ingestion.",
-    )
+    use_llm: UseLLM = None
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     answer: str = Field(..., min_length=1, max_length=8_000, examples=[_ANSWER])
     bundle_id: str | None = Field(default=None, max_length=64, examples=[None])
@@ -177,7 +174,7 @@ async def verify(
     request: Request, body: VerifyRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> VerifyResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity_of(ctx):
+    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
         cascade = container.services.get("grounding")
         if cascade is None:
             raise ProviderNotConfigured("the NLI classifier is disabled in this process")

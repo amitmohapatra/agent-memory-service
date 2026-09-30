@@ -15,7 +15,7 @@ from memory_service.domain.errors import Conflict, NotFound, ProviderNotConfigur
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_call_policy, model_identity
+from memory_service.modules.llm.policy import identity_of, model_call_policy
 from memory_service.ports.context import ContextReader
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
@@ -62,11 +62,18 @@ class BriefService:
         self.builder = builder
         self.assist = assist
 
+    async def _require_model(self, ctx: MemoryExecutionContext, spec: BriefSpec) -> None:
+        """An assisted brief needs the briefs use for its owner: allowed and payable."""
+        if not spec.use_llm:
+            return
+        async with self.assist.bound(identity_of(ctx)):
+            if not self.assist.wants("briefs"):
+                raise ProviderNotConfigured("The briefs model use is not enabled")
+
     async def create(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, spec: BriefSpec
     ) -> StoredBrief:
-        if spec.use_llm and not self.assist.wants("briefs"):
-            raise ProviderNotConfigured("The briefs model use is not enabled")
+        await self._require_model(ctx, spec)
         brief = StoredBrief(context=ctx, spec=spec)
         await uow.briefs.add(brief)
         await uow.enqueue(_job(brief))
@@ -75,8 +82,7 @@ class BriefService:
     async def update(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, brief_id: str, spec: BriefSpec
     ) -> StoredBrief:
-        if spec.use_llm and not self.assist.wants("briefs"):
-            raise ProviderNotConfigured("The briefs model use is not enabled")
+        await self._require_model(ctx, spec)
         old = await self.owned(uow, ctx, brief_id)
         now = datetime.now(UTC)
         brief = old.model_copy(
@@ -137,10 +143,11 @@ class BriefService:
         generated = False
         generation_profile = None
         if brief.spec.use_llm and sources:
-            with model_call_policy(True), model_identity(tenant_id, brief.context.principal_id):
-                text, generation_profile = await self._synthesis_for(
-                    brief, sources, bundle.revision_fingerprint
-                )
+            async with self.assist.bound(identity_of(brief.context)):
+                with model_call_policy(True):
+                    text, generation_profile = await self._synthesis_for(
+                        brief, sources, bundle.revision_fingerprint
+                    )
             generated = True
         output = BriefOutput(
             text=text,

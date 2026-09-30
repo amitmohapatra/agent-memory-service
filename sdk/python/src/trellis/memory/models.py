@@ -8,7 +8,7 @@ are kept in step with the service by a test in the service repository.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,6 +21,39 @@ class AgentKeyStatus(BaseModel):
     revoked: bool
     revision: int
     updated_at: datetime | None = None
+
+
+class ModelPolicy(BaseModel):
+    """What the model may be used for at one level (tenant or workspace). ``stored=False``:
+    the level has none, so the next level's (or the default - every use, reads assisted)
+    applies."""
+
+    model_config = ConfigDict(extra="allow")
+
+    stored: bool
+    uses: list[str]
+    read_assist: bool
+    revision: int
+    updated_at: datetime | None = None
+
+
+class ModelUsageDay(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    day: date
+    use: str
+    tokens: int
+    calls: int
+
+
+class ModelUsage(BaseModel):
+    """The tenant's model tokens and calls per day and use."""
+
+    model_config = ConfigDict(extra="allow")
+
+    since: date
+    until: date
+    days: list[ModelUsageDay] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- vocabularies

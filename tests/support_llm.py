@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
-from dataclasses import dataclass
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass, replace
 from typing import Any
 
 import httpx
@@ -29,6 +29,8 @@ from memory_service.adapters.models.llm import BifrostLLM
 from memory_service.config.constants import LLMTransport
 from memory_service.config.settings import LLMSettings, LLMUse
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.policy import DEFAULT_ACCESS, ModelBinding, bind
+from memory_service.ports.credentials import ModelIdentity
 
 BASE = "http://bifrost.test/v1"
 #: retries without sleeping: these tests count calls, not seconds
@@ -92,3 +94,13 @@ def mocked_gateway(
         else:
             route.mock(return_value=httpx.Response(200, json=chat_response("{}")))
         yield Gateway(route=route)
+
+
+def bound_to(
+    tenant_id: str, principal_id: str, workspace_id: str | None = None, *, has_key: bool = True
+) -> AbstractContextManager[None]:
+    """Bind model work to an identity without resolving it from the database: the default
+    policy, and (by default) a key that can pay - what ``LLMAssist.bound`` yields for an
+    owner that registered one."""
+    access = replace(DEFAULT_ACCESS, has_key=has_key)
+    return bind(ModelBinding(ModelIdentity(tenant_id, principal_id, workspace_id), access))

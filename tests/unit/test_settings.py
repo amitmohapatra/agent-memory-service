@@ -171,14 +171,22 @@ def test_secrets_are_masked() -> None:
 # --------------------------------------------------- an LLM that would call nothing
 
 
-def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
-    """Opting in per use is the design; the silence was not.
+def test_the_operator_allow_list_defaults_to_every_use() -> None:
+    """Tenant policies narrow what the model may do; the deployment's own list starts open."""
+    from memory_service.config.settings import ALL_LLM_USES
 
-    ``uses`` defaults to empty and ``wants()`` requires membership, so
-    ``enabled=true`` on its own started cleanly, reported ``"llm": "bifrost"`` on
-    /version, and sent the gateway nothing at all. All ten paths quietly took their
-    native fallback, and the only way to notice was that the token metrics never moved.
-    """
+    s = Settings(_env_file=None, models={"llm": {"enabled": True, "model": "test/strong"}})
+    assert tuple(s.models.llm.uses) == ALL_LLM_USES
+    assert all(s.models.llm.wants(use) for use in ALL_LLM_USES)
+    assert not Settings(_env_file=None, models={"llm": {"enabled": False}}).models.llm.wants(
+        "summaries"
+    )
+
+
+def test_enabling_the_llm_with_an_empty_allow_list_is_refused() -> None:
+    """Opting in with nothing allowed is a contradiction, and it used to be silent: the
+    service started cleanly, reported ``"llm": "bifrost"`` on /version, and sent the gateway
+    nothing at all, and the only way to notice was that the token metrics never moved."""
     with pytest.raises(ValidationError, match="nothing would call the model"):
         Settings(
             _env_file=None,
@@ -186,6 +194,7 @@ def test_enabling_the_llm_without_naming_any_uses_is_refused() -> None:
                 "llm": {
                     "enabled": True,
                     "model": "gemini/gemini-3.6-flash",
+                    "uses": [],
                 }
             },
         )

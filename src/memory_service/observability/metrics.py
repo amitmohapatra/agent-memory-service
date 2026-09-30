@@ -111,8 +111,9 @@ llm_assist_total = Counter(
 )
 llm_tokens_total = Counter(
     "memory_llm_tokens_total",
-    "LLM tokens by use and direction (input|output)",
-    ["use", "direction"],
+    "LLM tokens by tenant, use and direction (input|output); tenant is 'operator' for "
+    "calls no request or job identity owns",
+    ["tenant", "use", "direction"],
     registry=REGISTRY,
 )
 grounding_claims_total = Counter(

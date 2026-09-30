@@ -45,6 +45,9 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
 | `GET` / `PUT` / `DELETE /v1/workspaces/{id}/model-key` | the workspace's key, used by its agents | `t.workspaces.model_key_status(id)`, `.set_model_key(id, vk)`, `.revoke_model_key(id)` |
 | `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.model_key_status()`, `ctx.set_model_key(vk)`, `ctx.revoke_model_key()` |
+| `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…)` |
+| `GET` / `PUT /v1/workspaces/{id}/model-key/policy` | the workspace's model policy, followed by its agents | `t.workspaces.model_policy(id)`, `.set_model_policy(id, uses, read_assist=…)` |
+| `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
 
 ## Onboarding a team, in full
@@ -117,6 +120,34 @@ status = await ctx.set_model_key("vk-…")  # the acting agent's own key
 print(status.registered, status.revision)
 print(await t.model_key_status())  # the tenant level, metadata only
 ```
+
+## Model policies: what a key may be spent on
+
+A policy narrows what the model is used for, at the tenant or workspace level, and resolves the
+way keys do: the most specific level that has a row wins. With no row anywhere the default is
+every use, reads assisted. A use runs only when all three agree:
+
+```
+the operator's allow-list (MEMORY__MODELS__LLM__USES)  ∩  the resolved policy's uses  ∧  a key that can pay
+```
+
+`read_assist` decides whether a read (`/v1/context`, `/v1/recall`, `/v1/verify`,
+`/v1/graph/query`) consults the model when the request does not set `use_llm`; an explicit
+`use_llm` overrides it for that request only. Background work — extraction, reflection,
+connections, summaries — runs bound to the owner of the data, so the owner's key pays and the
+owner's policy decides; a periodic job scans only tenants that hold a live key (every tenant when
+the operator's key pays). Changing a policy invalidates the assisted read output built under it.
+
+```python
+await t.set_model_policy(["contextual_extraction", "summaries"], read_assist=False)
+await t.workspaces.set_model_policy("finance", ["reflection", "summaries"], read_assist=True)
+for day in (await t.model_usage()).days:  # one row per day and use
+    print(day.day, day.use, day.tokens, day.calls)
+```
+
+Every successful gateway call adds its tokens to the tenant's day (`GET /v1/model-key/usage`) and
+to `memory_llm_tokens_total{tenant,use,direction}`; a request reports its own spend in
+`X-Trellis-LLM-Tokens`, and a background job logs its spend as `job.llm_tokens`.
 
 ## The read audit
 

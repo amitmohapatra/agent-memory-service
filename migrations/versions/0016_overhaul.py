@@ -4,10 +4,13 @@
   session end and turn completion): nothing ever read them.
 - Entity search and summaries: a prefix index on the canonical name, a most-mentioned index,
   and the fingerprint of the facts an entity summary was written from.
+- Per-tenant model policies (llm_policies, resolved like keys: agent, workspace, tenant) and
+  the daily usage ledger (llm_usage_daily, one upsert per gateway call).
 """
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0016_overhaul"
 down_revision = "0015_feedback_and_webhooks"
@@ -34,9 +37,28 @@ def upgrade() -> None:
         "graph_entities",
         ["tenant_id", sa.text("mention_count DESC"), "entity_id"],
     )
+    op.create_table(
+        "llm_policies",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("principal_id", sa.String(512), primary_key=True),
+        sa.Column("uses", postgresql.ARRAY(sa.String(40)), nullable=False),
+        sa.Column("read_assist", sa.Boolean(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("revision", sa.Integer(), nullable=False),
+    )
+    op.create_table(
+        "llm_usage_daily",
+        sa.Column("tenant_id", sa.String(200), primary_key=True),
+        sa.Column("day", sa.Date(), primary_key=True),
+        sa.Column("use", sa.String(40), primary_key=True),
+        sa.Column("tokens", sa.BigInteger(), nullable=False),
+        sa.Column("calls", sa.BigInteger(), nullable=False),
+    )
 
 
 def downgrade() -> None:
+    op.drop_table("llm_usage_daily")
+    op.drop_table("llm_policies")
     op.drop_index("ix_graph_entities_tenant_mentions", table_name="graph_entities")
     op.drop_index("ix_graph_entities_name_prefix", table_name="graph_entities")
     op.drop_column("graph_entities", "summary_source")

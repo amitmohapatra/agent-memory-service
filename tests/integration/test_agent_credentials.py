@@ -12,10 +12,10 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.ids import new_id
 from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
-from memory_service.modules.llm.policy import current_model_identity, model_identity
-from memory_service.ports.credentials import ModelIdentity
+from memory_service.modules.llm.policy import current_model_identity
+from memory_service.ports.credentials import ModelIdentity, tenant_identity
 from tests.integration.test_memory import _observe
-from tests.support_llm import chat_response, mocked_gateway
+from tests.support_llm import bound_to, chat_response, mocked_gateway
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 from tests.unit.test_narrative_memory import MESSAGE
 
@@ -80,7 +80,7 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
         assist.provider.credentials = credentials
 
         async def call(ctx):
-            with model_identity(ctx.tenant_id, ctx.principal_id):
+            with bound_to(ctx.tenant_id, ctx.principal_id):
                 return await assist.complete(
                     "reflection", system="Service-owned instructions", user=ctx.user_id
                 )
@@ -121,7 +121,7 @@ async def test_rotated_inflight_response_is_discarded(container, uow_factory):
 
         gateway.route.mock(side_effect=rotate_during_response)
         try:
-            with model_identity(ALICE.tenant_id, ALICE.principal_id):
+            with bound_to(ALICE.tenant_id, ALICE.principal_id):
                 assert (
                     await assist.complete(
                         "reflection", system="Service instructions", user="source"
@@ -189,6 +189,19 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
         configured.provider.credentials = credentials
         assist = container.services["llm_assist"]
         assist.provider, assist.settings = configured.provider, configured.settings
+        assist.policies = container.services["model_policies"]
+
+        async def reads_unassisted() -> None:
+            async with container.services["uow_factory"]() as uow:
+                await container.services["model_policies"].set(
+                    uow,
+                    tenant_identity(headers["X-Trellis-Tenant"]),
+                    uses=["query_expansion"],
+                    read_assist=False,
+                )
+                await uow.commit()
+
+        client.portal.call(reads_unassisted)
         try:
             for index, key in enumerate(["vk-first-test", "vk-second-test"], start=1):
                 assert (
@@ -269,7 +282,7 @@ async def test_document_indexing_uses_recorded_agent_owner_after_key_rotation(
         indexer.assist = assist
         try:
             # Simulate a job running under an unrelated worker's ambient context.
-            with model_identity(BOB.tenant_id, BOB.principal_id):
+            with bound_to(BOB.tenant_id, BOB.principal_id):
                 await indexer.index_document(ALICE.tenant_id, doc_id, force=True)
                 assert current_model_identity() == agent_identity(BOB)
             assert gateway.route.call_count > 0
@@ -333,7 +346,7 @@ async def test_revocation_after_transient_failure_prevents_the_next_http_attempt
 
         gateway.route.mock(side_effect=revoke_after_first_send)
         try:
-            with model_identity(ALICE.tenant_id, ALICE.principal_id):
+            with bound_to(ALICE.tenant_id, ALICE.principal_id):
                 assert (
                     await assist.complete("reflection", system="Instructions", user="source")
                     is None
@@ -361,7 +374,7 @@ async def test_operator_fallback_stops_when_agent_policy_changes_during_backoff(
 
         gateway.route.mock(side_effect=change_policy)
         try:
-            with model_identity(ALICE.tenant_id, ALICE.principal_id):
+            with bound_to(ALICE.tenant_id, ALICE.principal_id):
                 assert (
                     await assist.complete("reflection", system="Instructions", user="source")
                     is None

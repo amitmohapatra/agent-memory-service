@@ -32,13 +32,13 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import archive_bytes_total, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.blob import BlobStore
-from memory_service.ports.intelligence import DocumentParser
+from memory_service.ports.intelligence import DocumentParser, ParsedDocument
 from memory_service.ports.repositories import ArchiveSegment
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
@@ -268,92 +268,59 @@ class IngestionService:
         if content_hash(data) != document.checksum:
             raise CorruptSource("staged bytes do not match the document checksum")
 
-        with (
-            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
-            span("ingest.parse", tenant_id=tenant_id),
-            stage_seconds.labels("ingest.parse").time(),
-        ):
-            parser = (
-                self.parser
-                if document.media_type in self.parser.supported_media_types
-                else self.fallback
-            )
-            if parser is None:
-                raise ValidationFailed(f"no parser for {document.media_type}")
-            try:
-                parsed = await parser.parse(
-                    document_id=document_id,
-                    tenant_id=tenant_id,
-                    filename=document.filename,
-                    media_type=document.media_type,
-                    data=data,
+        async with self.assist.bound(document_identity(document)):
+            with (
+                span("ingest.parse", tenant_id=tenant_id),
+                stage_seconds.labels("ingest.parse").time(),
+            ):
+                parsed = await self._parse(document, data)
+                chunks = chunk_nodes(
+                    parsed.nodes,
+                    document_title=parsed.title,
+                    max_tokens=self.cfg.max_chunk_tokens,
+                    min_tokens=self.cfg.min_chunk_tokens,
+                    overlap_tokens=self.cfg.chunk_overlap_tokens,
+                    contextual=self.cfg.contextual_chunks,
                 )
-            except (CorruptSource, ValidationFailed):
-                async with self.uow_factory() as uow:
-                    await uow.documents.set_status(
-                        tenant_id, document_id, status="FAILED", error="parse failed"
+                if self.assist.wants("chunk_context"):
+                    chunks = await situate_chunks(
+                        self.assist, chunks, parsed.nodes, document_title=parsed.title
                     )
-                    await uow.commit()
-                raise
-            except DependencyUnavailable:
-                raise
-            except Exception as exc:
+                version = parsed.version.model_copy(
+                    update={
+                        "node_count": len(parsed.nodes),
+                        "chunk_count": len(chunks),
+                        "page_count": parsed.page_count,
+                    }
+                )
                 async with self.uow_factory() as uow:
+                    await uow.documents.replace_version_content(tenant_id, document_id)
+                    await uow.documents.add_version(version)
+                    await uow.documents.add_nodes(parsed.nodes)
+                    await uow.documents.add_chunks(chunks)
+                    await uow.documents.add_edges(parsed.edges)
                     await uow.documents.set_status(
                         tenant_id,
                         document_id,
-                        status="FAILED",
-                        error=f"{type(exc).__name__}: {exc}"[:500],
+                        status="READY",
+                        current_version_id=version.document_version_id,
+                    )
+                    await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
+                    await uow.enqueue(
+                        JobSpec(
+                            task_name=TASK_DOCUMENT_INDEX,
+                            queue=Queue.EMBEDDING,
+                            payload={
+                                "tenant_id": tenant_id,
+                                "document_id": document_id,
+                                "document_version_id": version.document_version_id,
+                            },
+                            idempotency_key=f"index:{version.document_version_id}",
+                            lock=f"document:{document_id}",
+                            tenant_id=tenant_id,
+                        )
                     )
                     await uow.commit()
-                raise CorruptSource(f"parser error: {type(exc).__name__}") from exc
-            chunks = chunk_nodes(
-                parsed.nodes,
-                document_title=parsed.title,
-                max_tokens=self.cfg.max_chunk_tokens,
-                min_tokens=self.cfg.min_chunk_tokens,
-                overlap_tokens=self.cfg.chunk_overlap_tokens,
-                contextual=self.cfg.contextual_chunks,
-            )
-            if self.assist.wants("chunk_context"):
-                chunks = await situate_chunks(
-                    self.assist, chunks, parsed.nodes, document_title=parsed.title
-                )
-            version = parsed.version.model_copy(
-                update={
-                    "node_count": len(parsed.nodes),
-                    "chunk_count": len(chunks),
-                    "page_count": parsed.page_count,
-                }
-            )
-            async with self.uow_factory() as uow:
-                await uow.documents.replace_version_content(tenant_id, document_id)
-                await uow.documents.add_version(version)
-                await uow.documents.add_nodes(parsed.nodes)
-                await uow.documents.add_chunks(chunks)
-                await uow.documents.add_edges(parsed.edges)
-                await uow.documents.set_status(
-                    tenant_id,
-                    document_id,
-                    status="READY",
-                    current_version_id=version.document_version_id,
-                )
-                await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
-                await uow.enqueue(
-                    JobSpec(
-                        task_name=TASK_DOCUMENT_INDEX,
-                        queue=Queue.EMBEDDING,
-                        payload={
-                            "tenant_id": tenant_id,
-                            "document_id": document_id,
-                            "document_version_id": version.document_version_id,
-                        },
-                        idempotency_key=f"index:{version.document_version_id}",
-                        lock=f"document:{document_id}",
-                        tenant_id=tenant_id,
-                    )
-                )
-                await uow.commit()
         log.info(
             "document.parsed",
             tenant_id=tenant_id,
@@ -365,6 +332,45 @@ class IngestionService:
         )
         await self.archive_raw_file(tenant_id, document_id)
         return {"nodes": len(parsed.nodes), "chunks": len(chunks), "edges": len(parsed.edges)}
+
+    async def _parse(self, document: Document, data: bytes) -> ParsedDocument:
+        """Parse with the parser for the media type; a failure marks the document FAILED."""
+        tenant_id, document_id = document.tenant_id, document.document_id
+        parser = (
+            self.parser
+            if document.media_type in self.parser.supported_media_types
+            else self.fallback
+        )
+        if parser is None:
+            raise ValidationFailed(f"no parser for {document.media_type}")
+        try:
+            parsed = await parser.parse(
+                document_id=document_id,
+                tenant_id=tenant_id,
+                filename=document.filename,
+                media_type=document.media_type,
+                data=data,
+            )
+        except (CorruptSource, ValidationFailed):
+            async with self.uow_factory() as uow:
+                await uow.documents.set_status(
+                    tenant_id, document_id, status="FAILED", error="parse failed"
+                )
+                await uow.commit()
+            raise
+        except DependencyUnavailable:
+            raise
+        except Exception as exc:
+            async with self.uow_factory() as uow:
+                await uow.documents.set_status(
+                    tenant_id,
+                    document_id,
+                    status="FAILED",
+                    error=f"{type(exc).__name__}: {exc}"[:500],
+                )
+                await uow.commit()
+            raise CorruptSource(f"parser error: {type(exc).__name__}") from exc
+        return parsed
 
     # -- raw file archive -------------------------------------------------------
     async def archive_raw_file(self, tenant_id: str, document_id: str) -> str | None:

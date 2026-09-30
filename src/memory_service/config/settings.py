@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, get_args
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -202,6 +202,8 @@ LLMUse = Literal[
     "chunk_context",
     "grounding_judge",
 ]
+#: Every use: the operator allow-list's default and the default tenant policy (ADR 0023).
+ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)
 
 
 class AgentCredentialSettings(BaseModel):
@@ -235,10 +237,15 @@ class HindsightSettings(BaseModel):
 class LLMSettings(BaseModel):
     """Generative access gates. Native calls use Bifrost; Hindsight extraction
     uses its server's model configuration. Model provider keys stay outside this service.
+
+    Whether one call may consult the model is decided per identity (``LLMAssist.wants``):
+    this allow-list, intersected with the tenant's policy for the resolved principal, and
+    only when a key (the principal's, its workspace's, its tenant's or the operator's) can
+    pay for it.
     """
 
-    #: Auto requires a registered agent key or an operator key at call time. False is
-    #: a deployment-wide prohibition. True retains explicit operator use selection.
+    #: Auto requires a registered agent/workspace/tenant key or an operator key at call time.
+    #: False is a deployment-wide prohibition. True also permits keyless gateway calls.
     enabled: bool | Literal["auto"] = "auto"
     base_url: str = Field(
         default="http://localhost:8090/v1", description="Bifrost OpenAI-compatible endpoint"
@@ -256,9 +263,9 @@ class LLMSettings(BaseModel):
         description="cheap model for fast_uses (classification-sized calls)",
     )
     uses: list[LLMUse] = Field(
-        default_factory=list,
-        description="which uses may consult the model; explicitly assisted briefs require "
-        "a valid model result, while native paths remain available",
+        default_factory=lambda: list(ALL_LLM_USES),
+        description="the operator allow-list: which uses may consult the model at all "
+        "(default every use); a tenant policy can narrow it, never widen it",
     )
     fast_uses: list[LLMUse] = Field(
         default_factory=lambda: [
@@ -280,10 +287,14 @@ class LLMSettings(BaseModel):
         return value
 
     def wants(self, use: LLMUse) -> bool:
-        uses = self.uses
-        if self.enabled == "auto" and "uses" not in self.model_fields_set:
-            uses = ["contextual_extraction", "reflection", "briefs", "query_expansion"]
-        return self.enabled is not False and use in uses
+        """Whether the deployment allows ``use`` at all (before any tenant policy)."""
+        return self.enabled is not False and use in self.uses
+
+    @property
+    def operator_pays(self) -> bool:
+        """A call may proceed without a registered key: the operator key pays, or an
+        explicitly enabled gateway accepts keyless calls."""
+        return self.enabled is True or self.api_key is not None
 
 
 class ModelSettings(BaseModel):

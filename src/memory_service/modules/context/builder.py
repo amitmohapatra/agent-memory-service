@@ -234,9 +234,8 @@ class ContextBuilder:
         )
         self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
-        #: Multi-hop decomposition. Inert unless the read allowed model calls (``use_llm`` on
-        #: POST /v1/context) and the operator enabled the use, so the default read path is
-        #: unchanged: one predicate, no model call.
+        #: Multi-hop decomposition. Inert unless the read allowed model calls (``use_llm``, or
+        #: the policy's ``read_assist``) and the operator and policy allow the use.
         self.decomposer = QueryDecomposer(self.assist)
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
@@ -247,8 +246,8 @@ class ContextBuilder:
         self._flusher: asyncio.Task[None] | None = None
         self._flush_now = asyncio.Event()
         self._flush_lock = asyncio.Lock()
-        # Nothing in it changes for the life of the process - the tuning is frozen, the
-        # embedding fingerprint is fixed at construction, the LLM uses are wired once - and
+        # Nothing in it changes for the life of the process - the tuning is frozen and the
+        # embedding fingerprint is fixed at construction (model use is per request) - and
         # it was recomputed per request: two model_dump_json() calls and a hash, before the
         # cache key it feeds could even be formed.
         self._fingerprint = self._config_fingerprint()
@@ -260,10 +259,6 @@ class ContextBuilder:
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
         ]
-        # bundles built with model assistance must not be served to a deployment without it
-        model_profile = self.assist.cache_fingerprint(CACHED_MODEL_USES)
-        if model_profile:
-            parts.append(model_profile)
         return stable_key(*parts)
 
     async def _lookup(
@@ -298,6 +293,10 @@ class ContextBuilder:
             revision_fp,
             self._fingerprint,
             str(model_calls_allowed()),
+            # per request, not per process: which uses are active depends on the bound
+            # identity's key and policy, and a bundle built with model assistance must not
+            # be served to a caller without it (or the reverse)
+            self.assist.cache_fingerprint(CACHED_MODEL_USES),
             str(budget),
             ",".join(document_ids or []),
         )

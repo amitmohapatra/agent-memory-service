@@ -22,7 +22,7 @@ from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.ingestion.context_graph import canonical_entity
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_identity
+from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.connections import payload_edges
 from memory_service.modules.rag.spaces import DenseSpace, DenseSpaces
 from memory_service.observability.logging import get_logger
@@ -203,49 +203,51 @@ class Indexer:
             nodes = await uow.documents.list_nodes(tenant_id, document_id)
         if not chunks or document is None:
             return 0
-        with (
-            model_identity(tenant_id, document.model_principal, workspace_id=document.workspace_id),
-            span("index.document", tenant_id=tenant_id),
-            stage_seconds.labels("index.document").time(),
-        ):
-            n = await self._index_chunks(
-                chunks,
-                visibility_keys=keys,
-                document_title=document.title,
-                thread_id=document.thread_id,
-            )
-            # hierarchical summaries (M9): one per section/subsection/document, indexed as
-            # kind="summary" records so GLOBAL_SUMMARY questions can find them
-            extractive = build_summaries(nodes, all_chunks, title=document.title)
-            summaries = extractive
-            if self.assist.wants("summaries"):
-                summaries = await abstractive_summaries(
-                    self.assist, nodes, all_chunks, summaries, title=document.title
+        async with self.assist.bound(document_identity(document)):
+            with (
+                span("index.document", tenant_id=tenant_id),
+                stage_seconds.labels("index.document").time(),
+            ):
+                n = await self._index_chunks(
+                    chunks,
+                    visibility_keys=keys,
+                    document_title=document.title,
+                    thread_id=document.thread_id,
                 )
-            await self._index_summaries(
-                summaries,
-                nodes=nodes,
-                tenant_id=tenant_id,
-                document=document,
-                visibility_keys=keys,
-                generated_ids={nid for nid, value in summaries.items() if value != extractive[nid]},
-            )
-            async with self.uow_factory() as uow:
-                # SQL summaries feed parent expansion, which has no generated-provenance
-                # column. Keep that evidence extractive; generated search representations
-                # above carry their provider label and cannot prove their own claims.
-                await uow.documents.set_node_summaries(tenant_id, extractive)
-                await uow.documents.mark_chunks_indexed(
-                    [c.chunk_id for c in chunks],
-                    fingerprint=self.fingerprint,
-                    indexed_at=datetime.now(UTC),
+                # hierarchical summaries (M9): one per section/subsection/document, indexed as
+                # kind="summary" records so GLOBAL_SUMMARY questions can find them
+                extractive = build_summaries(nodes, all_chunks, title=document.title)
+                summaries = extractive
+                if self.assist.wants("summaries"):
+                    summaries = await abstractive_summaries(
+                        self.assist, nodes, all_chunks, summaries, title=document.title
+                    )
+                await self._index_summaries(
+                    summaries,
+                    nodes=nodes,
+                    tenant_id=tenant_id,
+                    document=document,
+                    visibility_keys=keys,
+                    generated_ids={
+                        nid for nid, value in summaries.items() if value != extractive[nid]
+                    },
                 )
-                await uow.commit()
-            stale = await self._purge_superseded(
-                tenant_id,
-                document_id,
-                keep={c.chunk_id for c in all_chunks} | {f"sum_{nid}" for nid in summaries},
-            )
+                async with self.uow_factory() as uow:
+                    # SQL summaries feed parent expansion, which has no generated-provenance
+                    # column. Keep that evidence extractive; generated search representations
+                    # above carry their provider label and cannot prove their own claims.
+                    await uow.documents.set_node_summaries(tenant_id, extractive)
+                    await uow.documents.mark_chunks_indexed(
+                        [c.chunk_id for c in chunks],
+                        fingerprint=self.fingerprint,
+                        indexed_at=datetime.now(UTC),
+                    )
+                    await uow.commit()
+                stale = await self._purge_superseded(
+                    tenant_id,
+                    document_id,
+                    keep={c.chunk_id for c in all_chunks} | {f"sum_{nid}" for nid in summaries},
+                )
         log.info(
             "index.document_done",
             tenant_id=tenant_id,

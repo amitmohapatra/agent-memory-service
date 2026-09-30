@@ -105,11 +105,14 @@ retries, circuit breaker), traced (`llm.chat` spans with model/tokens/latency), 
 Provider SDK imports are banned under `src/` by Ruff and `tests/unit/test_architecture.py`.
 
 Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMAssist` is
-the single entry point modules use: a use is consulted only when its flag is in
-`models.llm.uses` (contextual_extraction, relation_extraction,
-entity_resolution, conflict_adjudication, summaries, reflection, memory_connections,
-query_expansion, query_decomposition, chunk_context) and any failure returns `None`, so the
-module continues with its native result. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
+the single entry point modules use. A request or job first binds the identity that owns the
+work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hierarchies); a use
+is then consulted only when the operator allow-list `models.llm.uses` and the resolved tenant
+policy both allow it and a key can pay (contextual_extraction, relation_extraction,
+entity_resolution, conflict_adjudication, summaries, reflection, memory_connections, briefs,
+query_expansion, query_decomposition, chunk_context, grounding_judge). Any failure returns
+`None`, so the module continues with its native result. Every successful call is counted in
+`llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;
 see [the capability audit](RESEARCH-RAG-2026-09-25.md).
 

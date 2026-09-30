@@ -17,11 +17,11 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.validation import UseLLM
 from memory_service.config.constants import GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, RelationStatus
 from memory_service.modules.graph.service import GraphService
-from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 from memory_service.ports.intelligence import Entity, Relation
 
 router = APIRouter()
@@ -39,7 +39,7 @@ class GraphQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_EXAMPLE]})
 
     scope: ScopeBody = Field(default_factory=ScopeBody)
-    use_llm: bool = False
+    use_llm: UseLLM = None
     query: str | None = Field(
         default=None, max_length=4000, description="free text; entities are resolved from it"
     )
@@ -132,7 +132,7 @@ async def graph_query(
 ) -> GraphQueryResponse:
     ctx = build_context(request, container, body.scope)
     graph: GraphService = container.services["graph"]
-    with model_call_policy(body.use_llm), model_identity_of(ctx):
+    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
         answer = await graph.query(
             ctx,
             query=body.query,

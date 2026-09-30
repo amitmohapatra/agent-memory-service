@@ -25,6 +25,8 @@ TABLES = [
     # Registered model keys: a tombstone keeps climbing its revision, so a test asserting
     # "this agent registers its first key" saw revision 4 from a previous run's rows.
     "agent_credentials",
+    "llm_policies",
+    "llm_usage_daily",
     "user_group_members",
     "user_groups",
     "workspace_members",

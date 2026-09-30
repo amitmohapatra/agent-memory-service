@@ -51,6 +51,7 @@ from memory_service.ports.credentials import (
     ModelIdentity,
     ResolvedCredential,
 )
+from memory_service.ports.llm import LLMUsageRecorder
 from memory_service.ports.models import LLMCompletion, LLMMessage, ProviderInfo
 
 log = get_logger(__name__)
@@ -179,6 +180,7 @@ class BifrostLLM:
         client: httpx.AsyncClient | None = None,
         transport: LLMTransport = LLM_TRANSPORT,
         credentials: CredentialResolver | None = None,
+        usage: LLMUsageRecorder | None = None,
     ) -> None:
         if not settings.enabled:
             raise ProviderNotConfigured("models.llm.enabled must be true")
@@ -186,6 +188,7 @@ class BifrostLLM:
             raise ProviderNotConfigured("models.llm.model is required")
         self.settings = settings
         self.credentials = credentials
+        self.usage = usage
         self.model = settings.model
         self.fast_model = settings.fast_model or settings.model
         self.log_source_text = log_source_text
@@ -446,8 +449,19 @@ class BifrostLLM:
                 # tripping on it would take out the uses that are working.
                 self._failure(use, "empty_output")
                 raise
-            self._success(use, data, time.perf_counter() - started, current, model, source)
+            tokens = self._success(use, data, time.perf_counter() - started, current, model, source)
+        await self._record_usage(use, tokens)
         return completion
+
+    async def _record_usage(self, use: str, tokens: int) -> None:
+        """Count the call against its tenant's day: one upsert, never fatal to the call."""
+        identity = current_model_identity()
+        if self.usage is None or identity is None:
+            return
+        try:
+            await self.usage.record(identity.tenant_id, use, tokens)
+        except Exception as exc:
+            log.warning("llm.usage_not_recorded", use=use, error=type(exc).__name__)
 
     @asynccontextmanager
     async def _call_options(self) -> AsyncIterator[Options]:
@@ -490,16 +504,19 @@ class BifrostLLM:
         current: Any,
         model: str,
         messages: Sequence[LLMMessage],
-    ) -> None:
+    ) -> int:
+        """Record a successful call; returns its total tokens."""
         usage = data.get("usage") or {}
         in_tok = usage.get("prompt_tokens")
         out_tok = usage.get("completion_tokens")
+        identity = current_model_identity()
+        tenant = identity.tenant_id if identity is not None else "operator"
         llm_requests_total.labels(use, "ok").inc()
         llm_seconds.labels(use).observe(elapsed)
         if in_tok:
-            llm_tokens_total.labels(use, "input").inc(int(in_tok))
+            llm_tokens_total.labels(tenant, use, "input").inc(int(in_tok))
         if out_tok:
-            llm_tokens_total.labels(use, "output").inc(int(out_tok))
+            llm_tokens_total.labels(tenant, use, "output").inc(int(out_tok))
         record_llm_tokens(in_tok, out_tok)
         current.set_attribute("llm.input_tokens", int(in_tok or 0))
         current.set_attribute("llm.output_tokens", int(out_tok or 0))
@@ -520,6 +537,7 @@ class BifrostLLM:
             fields["prompt"] = [m.content for m in messages]
             fields["response"] = _text_or_none(data)
         log.info("llm.call", **fields)
+        return int(in_tok or 0) + int(out_tok or 0)
 
     def _failure(self, use: str, outcome: str) -> None:
         """Record a failed call under the outcome that caused it.

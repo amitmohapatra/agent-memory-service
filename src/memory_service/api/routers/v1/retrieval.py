@@ -17,6 +17,7 @@ from memory_service.api.schemas.context import (
     ConversationWindowBody,
     EvidenceReportBody,
 )
+from memory_service.api.validation import UseLLM
 from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
@@ -25,7 +26,6 @@ from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.context.builder import bundle_to_api, candidate_to_item
 from memory_service.modules.grounding.cascade import attach
-from memory_service.modules.llm.policy import model_call_policy, model_identity_of
 
 
 def _audit(
@@ -87,10 +87,7 @@ _CONTEXT_EXAMPLE: dict[str, Any] = {
 class RecallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_RECALL_EXAMPLE]})
 
-    use_llm: bool = Field(
-        default=False,
-        description="Allow configured LLM assistance on this read, independently of ingestion.",
-    )
+    use_llm: UseLLM = None
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -185,10 +182,7 @@ class RecallResponse(BaseModel):
 class ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CONTEXT_EXAMPLE]})
 
-    use_llm: bool = Field(
-        default=False,
-        description="Allow configured LLM assistance on this read, independently of ingestion.",
-    )
+    use_llm: UseLLM = None
     scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
     query: str = Field(
         ...,
@@ -285,7 +279,7 @@ async def recall(
     request: Request, body: RecallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecallResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity_of(ctx):
+    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
         engine = container.services["retrieval"]
         result = await engine.retrieve(
             ctx,
@@ -326,7 +320,7 @@ async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> Response | ContextResponse:
     ctx = build_context(request, container, body.scope)
-    with model_call_policy(body.use_llm), model_identity_of(ctx):
+    async with container.services["llm_assist"].reading(ctx, use_llm=body.use_llm):
         builder = container.services["context_builder"]
         if not body.answer:
             # One serialisation for the whole request: a cache hit is the stored bytes, a miss is

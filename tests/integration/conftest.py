@@ -24,6 +24,8 @@ TABLES = [
     "feedback",
     "standing_briefs",
     "agent_credentials",
+    "llm_policies",
+    "llm_usage_daily",
     "tool_invocations",
     "run_outcomes",
     "tools",
