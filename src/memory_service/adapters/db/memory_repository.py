@@ -29,6 +29,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.language import detect_language
 from memory_service.domain.memory import (
     UNVERIFIED_MEMORY_CATEGORIES,
     CanonicalMemory,
@@ -104,6 +105,7 @@ def _to_domain(r: MemoryRow) -> CanonicalMemory:
         updated_at=r.updated_at,
         revision=r.revision,
         deleted_at=r.deleted_at,
+        lang=r.lang or "",
     )
 
 
@@ -249,6 +251,7 @@ class SqlMemoryRepository:
                 created_at=memory.created_at,
                 updated_at=memory.updated_at,
                 revision=memory.revision,
+                lang=memory.lang,
             )
         )
         await self.s.flush()
@@ -302,6 +305,7 @@ class SqlMemoryRepository:
         expires_raw = sm.pop("expires_at", None)
         sm.pop("visibility_keys", None)
         r.content = memory.content
+        r.lang = detect_language(memory.content)
         r.normalized_hash = memory.normalized_hash
         r.subject = memory.subject
         r.predicate = memory.predicate

@@ -41,6 +41,19 @@ from memory_service.ports.models import LLMMessage, LLMProvider
 
 log = get_logger(__name__)
 
+#: Appended to every system prompt: the service stores text in any language and a model
+#: must never be the step that translates it. Labels a schema fixes (query types, snake_case
+#: predicates, field names) are not text and stay as specified.
+SOURCE_LANGUAGE_RULE = (
+    "The source may be in any language. Write every text you return in the language of "
+    "the source it comes from, never translated; enumerated labels and field names stay "
+    "exactly as specified."
+)
+
+
+def with_language_rule(system: str) -> str:
+    return f"{system}\n\n{SOURCE_LANGUAGE_RULE}"
+
 
 class LLMAssist:
     def __init__(
@@ -146,7 +159,10 @@ class LLMAssist:
         started = time.perf_counter()
         try:
             out = await self.provider.structured(
-                [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+                [
+                    LLMMessage(role="system", content=with_language_rule(system)),
+                    LLMMessage(role="user", content=user),
+                ],
                 schema=schema,
                 max_tokens=max_tokens,
                 use=use,
@@ -172,7 +188,10 @@ class LLMAssist:
             return None
         try:
             out = await self.provider.complete(
-                [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+                [
+                    LLMMessage(role="system", content=with_language_rule(system)),
+                    LLMMessage(role="user", content=user),
+                ],
                 max_tokens=max_tokens,
                 use=use,
             )

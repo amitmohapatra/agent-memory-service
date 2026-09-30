@@ -20,6 +20,7 @@ from typing import Any
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import Representation
 from memory_service.domain.ids import content_hash
+from memory_service.domain.language import is_english
 from memory_service.domain.text import SENTENCE_BREAK, token_units
 from memory_service.modules.ingestion.context_graph import extract_entities
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
@@ -325,7 +326,9 @@ def situated_candidates(
     chunks: Sequence[Chunk], nodes: Sequence[DocumentNode], *, max_chunks: int
 ) -> list[int]:
     """Indexes of the chunks whose deterministic header lost context: parts of a node that
-    was split (first), then tables; bounded to ``max_chunks``."""
+    was split (first), then tables, then chunks not in English (the header's salient
+    entities come from English-shaped rules, so it situates them poorly); bounded to
+    ``max_chunks``."""
     by_node = {n.node_id: n for n in nodes}
     parts_per_node: dict[str, int] = {}
     for c in chunks:
@@ -338,7 +341,9 @@ def situated_candidates(
         and c.node_id in by_node
         and by_node[c.node_id].representation is Representation.TABLE
     ]
-    return [*split, *tables][:max_chunks]
+    chosen = {*split, *tables}
+    foreign = [i for i, c in enumerate(chunks) if i not in chosen and not is_english(c.lang)]
+    return [*split, *tables, *foreign][:max_chunks]
 
 
 async def situate_chunks(

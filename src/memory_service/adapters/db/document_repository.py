@@ -96,6 +96,7 @@ def _chunk(r: ChunkRow) -> Chunk:
         entities=list(r.entities or []),
         indexed_at=r.indexed_at,
         index_fingerprint=r.index_fingerprint,
+        lang=r.lang or "",
     )
 
 
@@ -309,6 +310,7 @@ class SqlDocumentRepository:
                     section_path=c.section_path,
                     token_estimate=c.token_estimate,
                     entities=list(c.entities),
+                    lang=c.lang,
                 )
                 for c in chunks
             ]

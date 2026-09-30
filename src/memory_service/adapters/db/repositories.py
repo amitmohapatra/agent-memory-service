@@ -580,6 +580,7 @@ class SqlObservationRepository:
                 occurred_at=o.occurred_at,
                 created_at=o.created_at,
                 processed_at=o.processed_at,
+                lang=o.lang,
             )
         )
         await self.s.flush()
@@ -615,6 +616,7 @@ class SqlObservationRepository:
             occurred_at=r.occurred_at,
             created_at=r.created_at,
             processed_at=r.processed_at,
+            lang=r.lang or "",
         )
 
     async def get(self, tenant_id: str, observation_id: str) -> Observation | None:

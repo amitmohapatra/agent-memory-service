@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.domain.enums import (
     Lifetime,
@@ -14,6 +14,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.ids import new_id
+from memory_service.domain.language import detect_language
 
 
 class ProcessingHints(BaseModel):
@@ -82,6 +83,14 @@ class Observation(BaseModel):
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     processed_at: datetime | None = None
+    #: ISO 639-1 code of ``content`` (``domain.language``); derived when not given
+    lang: str = ""
+
+    @model_validator(mode="after")
+    def _language(self) -> Observation:
+        if not self.lang:
+            self.lang = detect_language(self.content)
+        return self
 
     @property
     def agent_authored(self) -> bool:

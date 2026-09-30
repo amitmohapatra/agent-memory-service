@@ -31,6 +31,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import content_hash
+from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
@@ -40,6 +41,8 @@ from memory_service.modules.memory.narrative import (
     eligible_for_contextual_extraction,
     extract_narrative_units,
 )
+from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
+from memory_service.modules.memory.source_facts import extract_source_facts
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
     ContextualExtractor,
@@ -504,13 +507,19 @@ class NativeMemoryIntelligence:
         evidence: list[EvidenceRef],
         sentences: list[str],
     ) -> list[MemoryCandidate]:
-        """Model-extracted facts for the sentences no rule matched (empty when not wanted)."""
+        """Model-extracted facts for the sentences no rule matched (empty when not wanted).
+
+        English: the narrative units of the sentences no rule parsed. Any other language
+        (``Observation.lang``): typed facts in that language, since no rule can parse it.
+        """
         if (
             observation.kind is not ObservationKind.MESSAGE
             or observation.agent_authored
             or not self.assist.wants("contextual_extraction")
         ):
             return []
+        if not is_english(observation.lang):
+            return await self._source_facts(ctx, evidence, sentences)
         eligible = {
             index
             for index, sentence in enumerate(sentences)
@@ -540,6 +549,35 @@ class NativeMemoryIntelligence:
                 provider=provider,
             )
             for content in units or []
+        ]
+
+    async def _source_facts(
+        self,
+        ctx: MemoryExecutionContext,
+        evidence: list[EvidenceRef],
+        sentences: list[str],
+    ) -> list[MemoryCandidate]:
+        eligible = {
+            index
+            for index, sentence in enumerate(sentences)
+            if not _QUESTION.search(sentence) and not ACKNOWLEDGEMENT.match(sentence)
+        }
+        facts = await extract_source_facts(self.assist, sentences, eligible)
+        return [
+            MemoryCandidate(
+                content=fact.text,
+                memory_type=fact.memory_type,
+                lifetime=_LIFETIME_BY_TYPE.get(fact.memory_type, Lifetime.LONG_TERM),
+                subject=_user_subject(ctx),
+                predicate=fact.predicate,
+                object=fact.object,
+                evidence=evidence,
+                importance=_IMPORTANCE_BY_TYPE.get(fact.memory_type, 0.5),
+                confidence=SOURCE_FACT_CONFIDENCE,
+                category="source_fact",
+                provider="llm",
+            )
+            for fact in facts or []
         ]
 
     async def _contextual_units(

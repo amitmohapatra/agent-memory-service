@@ -411,7 +411,10 @@ async def test_source_logging_still_records_the_response_when_there_is_one() -> 
 
 @pytest.mark.bifrost
 async def test_live_bifrost_roundtrip() -> None:
-    """Hits the running gateway. Needs MEMORY__MODELS__LLM__ENABLED=true plus model and key."""
+    """Hits the running gateway: opt-in (``MEMORY_TEST_LIVE_LLM=1``, it spends tokens) and
+    needs MEMORY__MODELS__LLM__ENABLED=true plus model and key."""
+    if os.environ.get("MEMORY_TEST_LIVE_LLM") != "1":
+        pytest.skip("live LLM tests are opt-in: MEMORY_TEST_LIVE_LLM=1")
     settings = Settings().models.llm
     if settings.enabled is not True or not settings.api_key or settings.model in (None, "auto"):
         pytest.skip("Bifrost not configured (MEMORY__MODELS__LLM__*)")

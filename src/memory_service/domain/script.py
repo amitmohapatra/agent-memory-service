@@ -78,8 +78,8 @@ def script_of(char: str) -> Script:
     return _BY_NAME.get(words[0], Script.OTHER) if words else Script.OTHER
 
 
-def detect_script(text: str, *, sample: int = SAMPLE_LETTERS) -> Script:
-    """The dominant script of ``text`` by letter count over its first ``sample`` letters."""
+def script_counts(text: str, *, sample: int = SAMPLE_LETTERS) -> dict[Script, int]:
+    """Letters per script over the first ``sample`` letters of ``text``."""
     counts: dict[Script, int] = {}
     seen = 0
     for char in text:
@@ -90,6 +90,16 @@ def detect_script(text: str, *, sample: int = SAMPLE_LETTERS) -> Script:
         seen += 1
         if seen >= sample:
             break
+    return counts
+
+
+def dominant(counts: dict[Script, int]) -> Script:
+    """The script with the most letters; a tie goes to the earlier member of ``Script``."""
     if not counts:
         return Script.NONE
     return max(counts, key=lambda found: (counts[found], -_ORDER[found]))
+
+
+def detect_script(text: str, *, sample: int = SAMPLE_LETTERS) -> Script:
+    """The dominant script of ``text`` by letter count over its first ``sample`` letters."""
+    return dominant(script_counts(text, sample=sample))

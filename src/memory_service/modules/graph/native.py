@@ -26,6 +26,7 @@ from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import layer_for
 from memory_service.domain.ids import stable_key
+from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.graph.document_facts import DocumentIE, Fact, LexEntity, sentences
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
@@ -45,6 +46,12 @@ _GENERIC = frozenset(_GENERIC_WORDS.split())
 LLM_RELATION_MAX_CONFIDENCE = 0.8
 LLM_MAX_RELATIONS_PER_MEMORY = 8
 LLM_MAX_PAIRS_PER_DOCUMENT = 12
+#: Chunks of a document not in English read by the model for relations: the document IE is
+#: English-shaped and finds few entities there. One call each, the longest chunks first.
+LLM_MAX_OPEN_CHUNKS_PER_DOCUMENT = 6
+#: A name of an ideographic script is often two characters (東京, 田中); Latin needs three.
+_MIN_NAME_CHARS = 2
+_MAX_NAME_CHARS = 80
 _LLM_MAX_TEXT = 1200
 _LLM_MAX_SENTENCE = 300
 _PREDICATE_RE = re.compile(r"[a-z][a-z0-9_]{1,39}")
@@ -75,6 +82,14 @@ _MEMORY_RELATIONS_SYSTEM = (
     "entities. Use entity names exactly as listed; never introduce other entities. Predicates "
     "are short lowercase snake_case verb phrases (works_at, leads, reports_to, located_in, "
     "part_of, uses). Return an empty list when the text states no relation."
+)
+_OPEN_RELATIONS_SYSTEM = (
+    "You extract relations for a knowledge graph from one text. Return the typed relations "
+    "the text states explicitly between two named things (people, organisations, places, "
+    "products, projects, events). subject and object are names copied exactly as the text "
+    "writes them. Predicates are short lowercase English snake_case verb phrases (works_at, "
+    "lives_in, leads, reports_to, located_in, part_of, uses, member_of). Return an empty "
+    "list when the text states no relation."
 )
 _DOCUMENT_RELATIONS_SYSTEM = (
     "You extract relations for a knowledge graph. For each numbered pair of entities and the "
@@ -128,6 +143,31 @@ def accept_relations[E](
         seen.add(sig)
         accepted.append((subject, pred, obj, llm_confidence(item.get("confidence"))))
     return accepted
+
+
+async def open_relations(assist: LLMAssist, text: str) -> list[tuple[str, str, str, float]]:
+    """Relations between names the model reads out of ``text`` itself (text the English
+    entity rules cannot parse). Both ends must occur verbatim in the text: a translated or
+    invented name never becomes an entity. ``(subject, predicate, object, confidence)``."""
+    source = text[:_LLM_MAX_TEXT]
+    folded = source.casefold()
+
+    def verbatim(name: str) -> str | None:
+        clean = " ".join(name.split())
+        if not _MIN_NAME_CHARS <= len(clean) <= _MAX_NAME_CHARS:
+            return None
+        return clean if clean.casefold() in folded else None
+
+    out = await assist.structured(
+        "relation_extraction",
+        system=_OPEN_RELATIONS_SYSTEM,
+        user=f"Text: {source}",
+        schema=_RELATIONS_SCHEMA,
+        max_tokens=400,
+    )
+    return accept_relations(
+        out, verbatim, key=canonical_entity, max_relations=LLM_MAX_RELATIONS_PER_MEMORY
+    )
 
 
 @dataclass
@@ -239,9 +279,40 @@ _SECTION_NUMBER = re.compile(r"^\s*(?:\d+(?:\.\d+)*\.?|[A-Z]\.|[IVX]+\.)\s+")
 
 def _usable_entity(name: str) -> bool:
     canon = canonical_entity(name)
-    if canon in _GENERIC or len(canon) < 3:
+    if canon in _GENERIC or len(canon) < (3 if canon.isascii() else _MIN_NAME_CHARS):
         return False
     return not re.fullmatch(r"[\d.,%]+", canon)
+
+
+def _model_relation(
+    memory: CanonicalMemory,
+    keys: Sequence[str],
+    subject: Entity,
+    pred: str,
+    obj: Entity,
+    confidence: float,
+) -> Relation:
+    """A relation the model read out of a memory, bound to that memory's time and scope."""
+    return Relation(
+        relation_id=relation_id_for(
+            memory.tenant_id, subject.entity_id, pred, obj.entity_id, memory.memory_id
+        ),
+        tenant_id=memory.tenant_id,
+        subject_id=subject.entity_id,
+        predicate=pred,
+        object_id=obj.entity_id,
+        scope_key=memory.scope.key(),
+        visibility_keys=list(keys),
+        valid_from=memory.temporal.valid_from,
+        valid_to=memory.temporal.valid_to,
+        observed_at=memory.temporal.observed_at,
+        status="CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED",
+        confidence=min(confidence, memory.confidence),
+        evidence=list(memory.evidence),
+        memory_id=memory.memory_id,
+        fact_text=fact_text_for(subject.name, pred, obj.name, memory.temporal.observed_at),
+        attributes={"memory_type": memory.memory_type.value, "extraction": "llm"},
+    )
 
 
 class NativeGraphEnrichment:
@@ -313,7 +384,15 @@ class NativeGraphEnrichment:
         # writer declared (a stated memory's ``entities``) come first.
         named = extract_entities(strip_turn_prefix(memory.content), max_entities=8)
         declared = [str(e) for e in memory.system_metadata.get("entities") or []]
-        for name in dict.fromkeys([*declared, *named]):
+        # Text the English entity rules cannot read: the model names the entities and the
+        # relations between them in one call (both ends verbatim from the text).
+        opened = (
+            await open_relations(self.assist, strip_turn_prefix(memory.content))
+            if not is_english(memory.lang) and self.assist.wants("relation_extraction")
+            else []
+        )
+        opened_names = [name for s, _, o, _ in opened for name in (s, o)]
+        for name in dict.fromkeys([*declared, *named, *opened_names]):
             if not _usable_entity(name):
                 continue
             e = ent(name)
@@ -343,16 +422,24 @@ class NativeGraphEnrichment:
                     attributes={"memory_type": memory.memory_type.value},
                 )
             )
-        if (
+        extracted: list[Relation] = []
+        if opened:
+            extracted = [
+                _model_relation(memory, keys, ent(a), pred, ent(b), confidence)
+                for a, pred, b, confidence in opened
+                if _usable_entity(a) and _usable_entity(b)
+            ]
+        elif (
             len(entities) >= 2
             and all(r.predicate == "mentions" for r in relations)
             and self.assist.wants("relation_extraction")
         ):
-            known = {r.relation_id for r in relations}
-            for r in await self._memory_relations(memory, list(entities.values()), keys):
-                if r.relation_id not in known:
-                    known.add(r.relation_id)
-                    relations.append(r)
+            extracted = await self._memory_relations(memory, list(entities.values()), keys)
+        known = {r.relation_id for r in relations}
+        for r in extracted:
+            if r.relation_id not in known:
+                known.add(r.relation_id)
+                relations.append(r)
         return list(entities.values()), relations
 
     async def _memory_relations(
@@ -380,28 +467,8 @@ class NativeGraphEnrichment:
             key=lambda e: e.entity_id,
             max_relations=LLM_MAX_RELATIONS_PER_MEMORY,
         )
-        status = "CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED"
         return [
-            Relation(
-                relation_id=relation_id_for(
-                    memory.tenant_id, subject.entity_id, pred, obj.entity_id, memory.memory_id
-                ),
-                tenant_id=memory.tenant_id,
-                subject_id=subject.entity_id,
-                predicate=pred,
-                object_id=obj.entity_id,
-                scope_key=memory.scope.key(),
-                visibility_keys=list(keys),
-                valid_from=memory.temporal.valid_from,
-                valid_to=memory.temporal.valid_to,
-                observed_at=memory.temporal.observed_at,
-                status=status,
-                confidence=min(confidence, memory.confidence),
-                evidence=list(memory.evidence),
-                memory_id=memory.memory_id,
-                fact_text=fact_text_for(subject.name, pred, obj.name, memory.temporal.observed_at),
-                attributes={"memory_type": memory.memory_type.value, "extraction": "llm"},
-            )
+            _model_relation(memory, keys, subject, pred, obj, confidence)
             for subject, pred, obj, confidence in accepted
         ]
 
@@ -670,6 +737,42 @@ class NativeGraphEnrichment:
                     confidence=confidence,
                     attributes={"page": pc.chunk.page, "extraction": "llm"},
                 )
+        if self.assist.wants("relation_extraction"):
+            foreign = sorted(
+                (c for c in chunks if not is_english(c.lang)),
+                key=lambda c: (-len(c.text), c.chunk_id),
+            )[:LLM_MAX_OPEN_CHUNKS_PER_DOCUMENT]
+            for c in foreign:
+                ev = [chunk_ref(c)]
+                snippet = c.text.strip().replace("\n", " ")[:200]
+                for a, pred, b, confidence in await open_relations(self.assist, c.text):
+                    if not (_usable_entity(a) and _usable_entity(b)):
+                        continue
+                    ends = []
+                    for name in (a, b):
+                        e = make_entity(tenant, scope_key, name, visibility_keys=keys, evidence=ev)
+                        e = entities.setdefault(e.entity_id, e)
+                        rel(
+                            e,
+                            "mentioned_in",
+                            doc_entity,
+                            "doc",
+                            ev,
+                            text=f"{e.name} is mentioned in {document_title or version.document_id}",
+                            confidence=0.7,
+                            attributes={"page": c.page},
+                        )
+                        ends.append(e)
+                    rel(
+                        ends[0],
+                        pred,
+                        ends[1],
+                        "llm:" + c.chunk_id,
+                        ev,
+                        text=f"{ends[0].name} {pred.replace('_', ' ')} {ends[1].name} — {snippet}",
+                        confidence=confidence,
+                        attributes={"page": c.page, "extraction": "llm"},
+                    )
         return list(entities.values()), list(relations.values())
 
     async def _document_relations(

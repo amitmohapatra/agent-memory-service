@@ -274,11 +274,13 @@ class RetrievalEngine:
                         identifiers=[*routed.identifiers, *expansion.identifiers],
                         signals=routed.signals,
                         has_thread=has_thread,
+                        lang=routed.lang,
                     )
                 if expansion.terms:
                     search_text = f"{routed.query} {' '.join(expansion.terms)}"
                 diagnostics["query_expansion"] = expansion.terms
         diagnostics["query_type"] = routed.query_type.value
+        diagnostics["query_lang"] = routed.lang
         diagnostics["signals"] = routed.signals
         with (
             span("retrieval", tenant_id=ctx.tenant_id, query_type=routed.query_type.value),

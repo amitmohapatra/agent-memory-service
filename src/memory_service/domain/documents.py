@@ -11,10 +11,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.domain.enums import ArchiveStatus, ContextGraphEdge, Representation
 from memory_service.domain.ids import new_id
+from memory_service.domain.language import detect_language
 
 
 class Document(BaseModel):
@@ -111,6 +112,14 @@ class Chunk(BaseModel):
     index_fingerprint: str | None = Field(
         default=None, description="embedding|sparse fingerprint the chunk was last indexed with"
     )
+    #: ISO 639-1 code of ``text`` (``domain.language``); derived when not given
+    lang: str = ""
+
+    @model_validator(mode="after")
+    def _language(self) -> Chunk:
+        if not self.lang:
+            self.lang = detect_language(self.text)
+        return self
 
 
 class ContextEdge(BaseModel):

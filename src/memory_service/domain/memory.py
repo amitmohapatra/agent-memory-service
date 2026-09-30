@@ -19,6 +19,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.ids import new_id
+from memory_service.domain.language import detect_language
 from memory_service.domain.predicates import predicate_label
 
 UNVERIFIED_MEMORY_CATEGORIES = ("contextual_fact", "assisted", "reflection")
@@ -154,6 +155,8 @@ class CanonicalMemory(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     revision: int = 1
     deleted_at: datetime | None = None
+    #: ISO 639-1 code of ``content`` (``domain.language``); derived when not given
+    lang: str = ""
 
     @model_validator(mode="after")
     def _custom_type_consistency(self) -> CanonicalMemory:
@@ -161,6 +164,8 @@ class CanonicalMemory(BaseModel):
             raise ValueError("custom_type is required when memory_type=CUSTOM")
         if self.scope.tenant_id != self.tenant_id:
             raise ValueError("scope.tenant_id must match tenant_id")
+        if not self.lang:
+            self.lang = detect_language(self.content)
         return self
 
 

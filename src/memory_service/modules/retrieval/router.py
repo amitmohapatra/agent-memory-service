@@ -2,6 +2,12 @@
 
 Rules classify familiar forms. An unclassified question still searches known entities;
 English keyword recognition is not an eligibility requirement for graph traversal.
+
+The cue patterns are English. A question in another language (``domain.language``) is never
+routed by them - an incidental "since" or "in 2024" inside a German sentence is not an
+English temporal cue - so only the language-independent signal (an identifier) applies and
+everything else is GENERAL_SEMANTIC: every dense space, the graph by entity name, and, when
+the read may consult the model, query expansion (``RetrievalEngine``).
 """
 
 from __future__ import annotations
@@ -10,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 
 from memory_service.domain.enums import QueryType
+from memory_service.domain.language import detect_language, is_english
 
 _ID = re.compile(
     r"\b(?:thr|ses|trn|msg|doc|chk|mem|obs|run|job|nod|sum_nod|rel|ent)_[0-9A-Za-z]{10,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[A-Z]{2,6}-\d{2,7}\b"
@@ -85,6 +92,8 @@ class RoutedQuery:
     needs_knowledge: bool = True
     needs_graph: bool = False
     needs_summaries: bool = False
+    #: the question's language (``domain.language``)
+    lang: str = "en"
 
 
 class QueryRouter:
@@ -94,16 +103,18 @@ class QueryRouter:
     def route(self, query: str, *, has_thread: bool = True) -> RoutedQuery:
         q = query.strip()
         ids = _ID.findall(q)
+        lang = detect_language(q)
+        english = is_english(lang)
         signals = {
             "identifier": bool(ids),
-            "conversation": bool(_CONVERSATION.search(q)),
-            "user_memory": bool(_USER_MEMORY.search(q)),
-            "decision": bool(_DECISION.search(q)),
-            "temporal": bool(_TEMPORAL.search(q)),
-            "global": bool(_GLOBAL.search(q)),
-            "multi_hop": bool(_MULTI_HOP.search(q) or _MULTI_HOP_NAMED.search(q)),
-            "entity": bool(_ENTITY.search(q)),
-            "doc_local": bool(_DOC_LOCAL.search(q)),
+            "conversation": english and bool(_CONVERSATION.search(q)),
+            "user_memory": english and bool(_USER_MEMORY.search(q)),
+            "decision": english and bool(_DECISION.search(q)),
+            "temporal": english and bool(_TEMPORAL.search(q)),
+            "global": english and bool(_GLOBAL.search(q)),
+            "multi_hop": english and bool(_MULTI_HOP.search(q) or _MULTI_HOP_NAMED.search(q)),
+            "entity": english and bool(_ENTITY.search(q)),
+            "doc_local": english and bool(_DOC_LOCAL.search(q)),
         }
         if signals["identifier"]:
             qt = QueryType.EXACT_IDENTIFIER
@@ -125,7 +136,9 @@ class QueryRouter:
             qt = QueryType.DOCUMENT_LOCAL
         else:
             qt = QueryType.GENERAL_SEMANTIC
-        return self.routed(q, qt, identifiers=ids, signals=signals, has_thread=has_thread)
+        return self.routed(
+            q, qt, identifiers=ids, signals=signals, has_thread=has_thread, lang=lang
+        )
 
     def routed(
         self,
@@ -135,6 +148,7 @@ class QueryRouter:
         identifiers: list[str],
         signals: dict[str, bool],
         has_thread: bool = True,
+        lang: str = "en",
     ) -> RoutedQuery:
         """The RoutedQuery for an already decided type (rules, or a model when they could not)."""
         return RoutedQuery(
@@ -166,4 +180,5 @@ class QueryRouter:
                 QueryType.DECISION,
             ),
             needs_summaries=qt is QueryType.GLOBAL_SUMMARY,
+            lang=lang,
         )

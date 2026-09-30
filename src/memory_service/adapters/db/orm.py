@@ -286,6 +286,7 @@ class ObservationRow(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     processed_at: Mapped[datetime | None]
     status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING")
+    lang: Mapped[str | None] = mapped_column(String(8))
 
     __table_args__ = (
         Index("ix_observations_tenant_created", "tenant_id", "created_at"),
@@ -541,6 +542,7 @@ class ChunkRow(Base):
     entities: Mapped[dict[str, Any]] = mapped_column(JSONB, default=list, server_default="[]")
     indexed_at: Mapped[datetime | None]
     index_fingerprint: Mapped[str | None] = mapped_column(String(100))
+    lang: Mapped[str | None] = mapped_column(String(8))
 
     __table_args__ = (
         Index("ix_chunks_version", "document_version_id", "node_id", "ordinal"),
@@ -632,6 +634,7 @@ class MemoryRow(Base):
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     deleted_at: Mapped[datetime | None]
+    lang: Mapped[str | None] = mapped_column(String(8))
 
     __table_args__ = (
         Index(
