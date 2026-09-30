@@ -33,7 +33,7 @@ vendor: ## Refresh the vendored copy of bifrost-sdk (generated; never edit it in
 
 .PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-storage \
-        load-test bench-model-throughput bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
+        load-test bench-model-throughput bench-context-latency bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -133,6 +133,7 @@ BENCH_DB_DOCS ?= $(BENCH_DB_HOST)/memory_bench_docs
 BENCH_DB_CONV ?= $(BENCH_DB_HOST)/memory_bench_conv
 BENCH_DB_DEGEN ?= $(BENCH_DB_HOST)/memory_bench_degen
 BENCH_DB_GOLDEN ?= $(BENCH_DB_HOST)/memory_bench_golden
+BENCH_DB_PERF ?= $(BENCH_DB_HOST)/memory_bench_perf
 #: Phase 7 (M2 + M4) owns its own databases, so an arm of this phase never competes with a
 #: corpus another phase left behind and the source harness's dedicated-name rule is satisfied
 #: by the default rather than by remembering to override it.
@@ -210,8 +211,11 @@ define bench-run
 	  -e MEMORY__SEARCH__QDRANT_GRPC_PORT=$(BENCH_QDRANT_GRPC_PORT) \
 	  -e BENCH_DENSE=$(BENCH_DENSE) \
 	  $(2) \
-	  --entrypoint sh memory-service-memory-api -c '$(BENCH_PRELUDE) $(3)'
+	  --entrypoint sh $(BENCH_IMAGE) -c '$(BENCH_PRELUDE) $(3)'
 endef
+
+#: The runtime image the benchmarks run in (the repository is mounted over its /app).
+BENCH_IMAGE ?= memory-service-memory-api
 
 #: The image predates the temporal normaliser, so the one pure-Python dependency it lacks is
 #: installed into the throwaway container the way `model-test` installs pytest; nothing is
@@ -251,7 +255,7 @@ bench-db: ## Create and migrate the benchmark databases (idempotent, safe to re-
 	@# Benchmarks used to assume `memory_bench` already existed, so on any machine that had
 	@# not had it created by hand the first benchmark failed with a connection error that
 	@# said nothing about the cause. Each benchmark owns one database; see BENCH_DB_* above.
-	@for db in memory_bench_docs memory_bench_conv memory_bench_degen memory_bench_golden \
+	@for db in memory_bench_docs memory_bench_conv memory_bench_degen memory_bench_golden memory_bench_perf \
 	          p7_locomo p7_retrieval p7_locomo_llm; do \
 	  docker exec $(PG_CONTAINER) psql -U memory -d postgres -tAc \
 	    "SELECT 1 FROM pg_database WHERE datname='$$db'" | grep -q 1 \
@@ -320,6 +324,14 @@ bench-runtime-retrieval: bench-db ## SciFact and XQuAD through the runtime store
 	$(call bench-run,$(BENCH_DB_P7_DOCS),-e BENCH_GRAPH_ENRICHMENT=disabled $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.runtime_retrieval $(RUNTIME_ARGS))
 
 RUNTIME_ARGS ?= --suite scifact --output benchmark/results/phase7/runtime_scifact.json
+
+bench-context-latency: bench-db ## /v1/context (with and without tools) and /v1/recall p50/p95, model off, real encoders
+	@# The read path's latency gate (spec 4.10: p95 < 300 ms): a LoCoMo conversation recorded
+	@# turn by turn, the golden documents and a tool catalog; every measured request misses
+	@# the caches, and the stage split of every context is kept (benchmark/context_latency.py).
+	$(call bench-run,$(BENCH_DB_PERF),-e BENCH_CACHE=dragonfly -e MEMORY__CACHE__URL=redis://host.docker.internal:6379/9 $(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.context_latency $(CONTEXT_LATENCY_ARGS))
+
+CONTEXT_LATENCY_ARGS ?= --label baseline
 
 bench-budget: ## Read the accuracy key's usage (BENCH_BUDGET_KEY_ID); BUDGET_ARGS='guard --projected-usd 0.2' refuses an unaffordable arm
 	$(PY) python -m benchmark.budget $(BUDGET_ARGS)

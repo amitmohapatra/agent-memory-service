@@ -216,6 +216,9 @@ class BenchEnv:
     #: Entity -> memory routing as one more RRF list (``BENCH_ENTITY_PREFETCH``), D6 step 3's
     #: arm. ``None`` is unset, the way every other switch here reads unset.
     entity_prefetch: bool | None = None
+    #: Actor/topic decomposition for multi-hop memory questions (``BENCH_MEMORY_ENTITY_SEARCH``),
+    #: the query-side arm of ``RetrievalSettings.memory_entity_search``.
+    memory_entity_search: bool | None = None
 
     @classmethod
     def from_environ(cls) -> BenchEnv:
@@ -232,6 +235,7 @@ class BenchEnv:
         tuning: dict[str, Any] = {
             "hybrid_weights": _weights(os.environ.get("BENCH_HYBRID_WEIGHTS") or ""),
             "entity_prefetch": _switch("BENCH_ENTITY_PREFETCH"),
+            "memory_entity_search": _switch("BENCH_MEMORY_ENTITY_SEARCH"),
         }
         allowed = {
             "search": ("qdrant", "memory"),
@@ -260,6 +264,8 @@ class BenchEnv:
             tuning["hybrid_weights"] = dict(self.hybrid_weights) or None
         if self.entity_prefetch is not None:
             tuning["entity_prefetch"] = self.entity_prefetch
+        if self.memory_entity_search is not None:
+            tuning["memory_entity_search"] = self.memory_entity_search
         depth = _DEPTH_RETRIEVAL.get(self.depth)
         if not tuning:
             return depth

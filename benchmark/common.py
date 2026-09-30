@@ -197,8 +197,8 @@ def provenance(**extra: Any) -> dict[str, Any]:
 
 
 def write_result(name: str, payload: dict[str, Any]) -> Path:
-    RESULTS.mkdir(parents=True, exist_ok=True)
     path = RESULTS / name
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )

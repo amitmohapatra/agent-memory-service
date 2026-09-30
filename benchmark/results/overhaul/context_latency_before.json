@@ -1,0 +1,263 @@
+{
+  "context_response_bytes": {
+    "max": 108760.0,
+    "p50": 99971.0,
+    "p95": 105925.0,
+    "p99": 108287.0,
+    "samples": 60
+  },
+  "corpus": {
+    "documents": 4,
+    "seed_seconds": 172.2,
+    "tools": 8,
+    "turns": 300
+  },
+  "label": "before",
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "c337b91e21697ee626612e4e5ea9932299b143c6",
+    "host_load": {
+      "load_per_core": 1.08,
+      "loadavg_15m": 3.63,
+      "loadavg_1m": 4.33,
+      "loadavg_5m": 3.65
+    },
+    "llm": {
+      "enabled": "auto",
+      "fast_model": "auto",
+      "model": "auto",
+      "provider": "bifrost",
+      "uses": [
+        "contextual_extraction",
+        "relation_extraction",
+        "entity_resolution",
+        "conflict_adjudication",
+        "summaries",
+        "reflection",
+        "memory_connections",
+        "briefs",
+        "query_expansion",
+        "query_decomposition",
+        "chunk_context",
+        "grounding_judge",
+        "procedure_abstraction"
+      ]
+    },
+    "machine": "x86_64",
+    "memory_gb": 6.8,
+    "models": {},
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-30T08:46:11.421309+00:00"
+  },
+  "providers": {
+    "authorization": "memory",
+    "cache": "dragonfly",
+    "embedding": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+    "llm": "off",
+    "search": "qdrant"
+  },
+  "relevance_floor": {
+    "evidence_items": 131,
+    "floors": {
+      "0.00": {
+        "evidence_kept": 1.0,
+        "items_per_question": 32.9,
+        "other_kept": 1.0,
+        "questions_with_evidence": 1.0
+      },
+      "0.10": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.15": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.20": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.25": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.30": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.35": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.40": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.45": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      },
+      "0.50": {
+        "evidence_kept": 0.0,
+        "items_per_question": 0.0,
+        "other_kept": 0.0,
+        "questions_with_evidence": 0.0
+      }
+    },
+    "other_items": 4313,
+    "questions": 135,
+    "questions_with_evidence_at_all": 113,
+    "rendered_chars_mean": 18308.5
+  },
+  "requests": 60,
+  "series": {
+    "cached": {
+      "max": 506.67,
+      "p50": 24.47,
+      "p95": 112.78,
+      "p99": 271.45,
+      "samples": 60
+    },
+    "context": {
+      "max": 1681.12,
+      "p50": 278.89,
+      "p95": 481.95,
+      "p99": 1232.49,
+      "samples": 60
+    },
+    "context_tools": {
+      "max": 834.29,
+      "p50": 344.07,
+      "p95": 509.41,
+      "p99": 634.84,
+      "samples": 60
+    },
+    "recall": {
+      "max": 2482.25,
+      "p50": 222.32,
+      "p95": 441.22,
+      "p99": 628.74,
+      "samples": 60
+    }
+  },
+  "stages_ms": {
+    "context": {
+      "encode": {
+        "mean": 94.1,
+        "p95": 146.8
+      },
+      "expansion": {
+        "mean": 23.6,
+        "p95": 39.1
+      },
+      "graph": {
+        "mean": 13.0,
+        "p95": 23.4
+      },
+      "retrieve": {
+        "mean": 259.7,
+        "p95": 410.7
+      },
+      "scope": {
+        "mean": 13.6,
+        "p95": 32.4
+      },
+      "search": {
+        "mean": 106.6,
+        "p95": 143.2
+      },
+      "sections": {
+        "mean": 0.0,
+        "p95": 0.0
+      },
+      "verify": {
+        "mean": 17.1,
+        "p95": 34.7
+      },
+      "visibility": {
+        "mean": 0.3,
+        "p95": 0.6
+      },
+      "window": {
+        "mean": 36.8,
+        "p95": 48.0
+      }
+    },
+    "context_tools": {
+      "encode": {
+        "mean": 91.3,
+        "p95": 144.7
+      },
+      "expansion": {
+        "mean": 25.5,
+        "p95": 41.5
+      },
+      "graph": {
+        "mean": 13.4,
+        "p95": 31.4
+      },
+      "retrieve": {
+        "mean": 269.6,
+        "p95": 427.9
+      },
+      "scope": {
+        "mean": 17.5,
+        "p95": 57.4
+      },
+      "search": {
+        "mean": 115.8,
+        "p95": 237.9
+      },
+      "sections": {
+        "mean": 0.0,
+        "p95": 0.0
+      },
+      "tools": {
+        "mean": 41.0,
+        "p95": 61.7
+      },
+      "verify": {
+        "mean": 18.3,
+        "p95": 32.8
+      },
+      "visibility": {
+        "mean": 0.1,
+        "p95": 0.3
+      },
+      "window": {
+        "mean": 22.3,
+        "p95": 58.7
+      }
+    }
+  },
+  "transport": "in-process ASGI (no network hop)"
+}
