@@ -53,3 +53,10 @@ def downgrade() -> None:
         ["tenant_id", "alias"],
         unique=False,
     )
+    # 0006 created this one too, and its own downgrade drops it
+    op.create_index(
+        "ix_graph_entity_aliases_entity",
+        "graph_entity_aliases",
+        ["tenant_id", "entity_id"],
+        unique=False,
+    )
