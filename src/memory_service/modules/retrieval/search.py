@@ -36,8 +36,9 @@ from memory_service.modules.retrieval.engine import (
 from memory_service.ports.uow import UnitOfWorkFactory
 
 SearchKind = Literal["memory", "chunk", "summary", "message"]
-#: What a search reads when the caller names no kinds.
-DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("memory", "chunk")
+#: What a search reads when the caller names no kinds. The order is the order the engine
+#: interleaves the per-kind rankings in, so document passages lead (as /v1/recall always did).
+DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
 _WORD: Final = re.compile(r"\w+")
