@@ -1,10 +1,13 @@
 """SearchStore port. Qdrant by default; rebuildable from canonical PostgreSQL data.
 
-The port speaks in terms of *records* with named dense vectors, a sparse vector and
-filterable payloads. A collection carries one dense vector per *space* (``VectorName``): the
-English specialist and the multilingual encoder each own a space, and a query searches the
-spaces its script calls for. Fusion (RRF) is performed by the store when it supports it
-natively; the fallback is a bounded client-side RRF over per-retriever candidate lists.
+The port speaks in terms of *records* with named dense vectors, a sparse vector, a
+late-interaction multi-vector and filterable payloads. A collection carries one dense vector
+per *space* (``VectorName``): the English specialist and the multilingual encoder each own a
+space, and a query searches the spaces its script calls for. A memory also carries a second
+*key* per space - its text read with the turn it answers (``*_ctx``) - so a reply is found
+both by what it says and by what it was said to. Fusion (RRF) is performed by the store when
+it supports it natively; the fallback is a bounded client-side RRF over per-retriever
+candidate lists.
 """
 
 from __future__ import annotations
@@ -26,6 +29,21 @@ class VectorName(StrEnum):
     DENSE_ML = "dense_ml"
     #: client-side BM25 term frequencies with the store's IDF modifier
     BM25 = "bm25"
+    #: the late-interaction (ColBERT) token vectors, scored by MaxSim
+    COLBERT = "colbert"
+    #: the contextual keys of a memory: its text with the turn it answers (ADR 0025)
+    DENSE_EN_CTX = "dense_en_ctx"
+    DENSE_ML_CTX = "dense_ml_ctx"
+    BM25_CTX = "bm25_ctx"
+
+    @property
+    def context(self) -> VectorName:
+        """This space's contextual key (``dense_ml`` -> ``dense_ml_ctx``)."""
+        return VectorName(f"{self.value}_ctx")
+
+
+#: the spaces whose vectors are sparse
+SPARSE_NAMES = frozenset({VectorName.BM25, VectorName.BM25_CTX})
 
 
 class Retriever(StrEnum):
@@ -34,6 +52,10 @@ class Retriever(StrEnum):
     DENSE_EN = "dense_en"
     DENSE_ML = "dense_ml"
     BM25 = "bm25"
+    COLBERT = "colbert"
+    DENSE_EN_CTX = "dense_en_ctx"
+    DENSE_ML_CTX = "dense_ml_ctx"
+    BM25_CTX = "bm25_ctx"
     EXACT = "exact"
     FUSION = "fusion"
 
@@ -59,9 +81,14 @@ class SearchRecord(BaseModel):
     record_id: str
     collection: str
     tenant_id: str
-    #: one vector per dense space the collection carries, keyed by its wire name
+    #: one vector per dense space the collection carries, keyed by its wire name (the
+    #: contextual keys ``*_ctx`` included, on a collection that has them)
     dense: dict[VectorName, list[float]] = Field(default_factory=dict)
     sparse: SparseVector | None = None
+    #: the BM25 vector of the contextual key, on a collection that has one
+    sparse_context: SparseVector | None = None
+    #: the late-interaction token vectors (``VectorName.COLBERT``), on a collection with them
+    late: list[list[float]] | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -104,6 +131,10 @@ class CollectionSpec(BaseModel):
     dense: dict[VectorName, int] = Field(default_factory=dict)
     sparse: bool = True
     sparse_idf: bool = Field(default=True, description="server-side IDF modifier (BM25)")
+    #: a second BM25 vector for the contextual key (``bm25_ctx``)
+    sparse_context: bool = False
+    #: the width of the late-interaction token vectors; ``None`` is no late interaction
+    late: int | None = None
     on_disk: bool = False
     on_disk_payload: bool = Field(
         default=True,
@@ -220,10 +251,27 @@ class SearchStore(Protocol):
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
+        late: Sequence[Sequence[float]] | None = None,
     ) -> list[SearchHit]:
         """Bounded hybrid fusion over every dense space given plus the sparse arm, each arm
-        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0. Hits carry
-        ``PAYLOAD_FIELDS`` (a two-phase read was measured slower: MEASUREMENTS.md 8.7)."""
+        scoring ``weight / (rrf_k + one-based rank)``; a missing weight is 1.0. ``late`` adds
+        the late-interaction arm: MaxSim over the union of the other arms' candidates. Hits
+        carry ``PAYLOAD_FIELDS`` (a two-phase read was measured slower: MEASUREMENTS.md 8.7)."""
+        ...
+
+    async def search_arms(
+        self,
+        collection: str,
+        *,
+        dense: Mapping[VectorName, Sequence[float]],
+        sparse: Mapping[VectorName, SparseVector],
+        late: Sequence[Sequence[float]] | None,
+        flt: SearchFilter,
+        limit: int,
+    ) -> dict[VectorName, list[SearchHit]]:
+        """Every arm's own ranking, unfused, in one round trip: the caller fuses them (the
+        memories' learned fusion reads each arm's rank). ``late`` ranks the union of the
+        other arms' candidates by MaxSim. An arm with nothing to search is absent."""
         ...
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]: ...

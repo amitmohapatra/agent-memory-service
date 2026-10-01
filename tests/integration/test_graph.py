@@ -190,6 +190,7 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory, monke
     # A graph hit must recover the source even when semantic/lexical retrieval misses it.
     # Exercise the real graph, canonical SQL, post-stage cut and final context packing.
     monkeypatch.setattr(engine, "_hybrid", AsyncMock(return_value=[]))
+    monkeypatch.setattr(engine, "_memories", AsyncMock(return_value=[]))
     bundle = await container.services["context_builder"].build(ctx, "who works for Globex?")
     recovered = next(m for m in bundle.memories if m.item_id == current[0].memory_id)
     assert recovered.expansion_edge == "GRAPH_EVIDENCE"

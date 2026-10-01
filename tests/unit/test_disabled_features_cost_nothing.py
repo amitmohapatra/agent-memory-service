@@ -65,9 +65,15 @@ def test_every_memory_env_var_maps_to_a_real_setting() -> None:
     assert not unknown, f"variables no setting reads: {unknown}"
 
 
-def test_reranking_left_no_configuration_behind() -> None:
-    """The reranker was measured worse and removed: no flag, no depth, no frozen model."""
-    assert "rerank" not in type(RETRIEVAL).model_fields
-    assert "rerank_k" not in type(RETRIEVAL).model_fields
-    wiring = (ROOT / "src/memory_service/adapters/wiring.py").read_text()
-    assert "rerank" not in wiring
+def test_reranking_is_part_of_the_memory_ranking_not_a_switch() -> None:
+    """A reranker *replacing* the fusion was measured worse and removed (ADR 0012). The two
+    that came back (ADR 0025) are features of the memories' learned fusion: there is no
+    flag that turns reranking on for anything else, and nothing outside the memory path
+    reads them."""
+    fields = type(RETRIEVAL).model_fields
+    assert "rerank" not in fields
+    assert not [name for name in fields if "rerank" in name and fields[name].annotation is bool]
+    engine = (ROOT / "src/memory_service/modules/retrieval/engine.py").read_text()
+    # read by `_memories` (its pool) and `_rerank` (the call), and nowhere else
+    assert engine.count("self._rerank(") == 1
+    assert engine.count("self.rerankers") == 5

@@ -25,13 +25,15 @@ from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
+from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer, memory_key_text
+from memory_service.modules.retrieval import learned_fusion
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
+from memory_service.ports.models import Reranker
 from memory_service.ports.search import (
     Retriever,
     SearchFilter,
@@ -235,6 +237,8 @@ class QueryVectors:
     dense: dict[VectorName, list[float]]
     sparse: SparseVector | None
     script: Script
+    #: the query's late-interaction token vectors, when the deployment has that arm
+    late: list[list[float]] | None = None
 
 
 #: the collection a candidate kind is indexed in (graph facts and working memory are not)
@@ -257,6 +261,7 @@ class RetrievalEngine:
         settings: RetrievalSettings,
         router: QueryRouter | None = None,
         assist: LLMAssist | None = None,
+        rerankers: Sequence[Reranker] = (),
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
@@ -265,6 +270,8 @@ class RetrievalEngine:
         self.cfg = settings
         self.router = router or QueryRouter(semantic_graph=settings.semantic_graph)
         self.assist = assist or LLMAssist.disabled()
+        #: the memories' cross-encoders, in ``learned_fusion.FEATURES`` order
+        self.rerankers = tuple(rerankers)
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
         # extra retrievers (M10 strategies): their hit lists are RRF-fused with the hybrid list
@@ -596,7 +603,20 @@ class RetrievalEngine:
         at: PointInTime | None = None,
     ) -> list[Candidate]:
         """Ranked candidates of one kind: the store's hybrid search, fused with any extra
-        chunk retrievers. One of these runs per wanted kind, concurrently."""
+        chunk retrievers, or for memories the learned fusion (``_memories``). One of these
+        runs per wanted kind, concurrently."""
+        if kind == "memory":
+            return by_standing(
+                await self._memories(
+                    routed.query,
+                    search_text,
+                    visibility,
+                    encoded=encoded,
+                    diagnostics=diagnostics,
+                    observed=observed,
+                    at=at,
+                )
+            )
         hits = await self._hybrid(
             search_text,
             visibility,
@@ -630,9 +650,96 @@ class RetrievalEngine:
             )
             for h in hits
         ]
-        if kind != "memory":
-            return candidates
-        return by_standing(with_adjacent_turns(candidates, self.cfg.adjacent_turn_weight))
+        return candidates
+
+    async def _memories(
+        self,
+        question: str,
+        search_text: str,
+        visibility: VisibilitySpecification,
+        *,
+        encoded: QueryVectors,
+        diagnostics: dict[str, Any],
+        observed: ObservedRange | None,
+        at: PointInTime | None,
+    ) -> list[Candidate]:
+        """The memories ranked by ``learned_fusion``: every arm in one round trip, two first
+        stages, both rerankers over their pool at once, one learned score (ADR 0025)."""
+        collection, flt = self._scope("memory", visibility, None, observed, at, None)
+        sparse = {}
+        if encoded.sparse is not None:
+            sparse = {VectorName.BM25: encoded.sparse, VectorName.BM25_CTX: encoded.sparse}
+        with stage_seconds.labels("retrieval.memory_arms").time():
+            arms = await self.store.search_arms(
+                collection,
+                dense={
+                    **encoded.dense,
+                    **{name.context: vector for name, vector in encoded.dense.items()},
+                },
+                sparse=sparse,
+                late=encoded.late,
+                flt=flt,
+                limit=self.cfg.memory_arm_depth,
+            )
+        pool = learned_fusion.ArmPool.of(arms)
+        if not pool.hits:
+            return []
+        a = learned_fusion.first_stage(pool, learned_fusion.FIRST_A)
+        b = learned_fusion.first_stage(pool, learned_fusion.FIRST_B)
+        chosen = learned_fusion.rerank_pool(a, b, self.cfg.memory_rerank_k)
+        texts = [_memory_text(pool.hits[rid].payload) for rid in chosen]
+        with stage_seconds.labels("retrieval.memory_rerank").time():
+            reranked = await self._rerank(question, texts, diagnostics)
+        rows = learned_fusion.features(
+            pool, chosen, a=a, b=b, reranked=reranked, query=question or search_text
+        )
+        complete = bool(reranked) and all(scores is not None for scores in reranked)
+        ranked = learned_fusion.order(pool, chosen, rows, b, reranked=complete)
+        diagnostics["memory_fusion"] = {
+            "arms": {name.value: len(hits) for name, hits in arms.items()},
+            "pool": len(chosen),
+            "reranked": [scores is not None for scores in reranked],
+        }
+        depth = max(self.cfg.fused_k, derived_k(self.cfg.memory_recall_k))
+        return [
+            Candidate(
+                record_id=rid,
+                kind=str(pool.hits[rid].payload.get("kind") or "memory"),
+                text=str(pool.hits[rid].payload.get("text", "")),
+                score=score,
+                retrievers=sorted(name.value for name, ranks in pool.ranks.items() if rid in ranks),
+                payload=pool.hits[rid].payload,
+            )
+            for rid, score in ranked[:depth]
+        ]
+
+    async def _rerank(
+        self, question: str, texts: list[str], diagnostics: dict[str, Any]
+    ) -> list[list[float] | None]:
+        """Every reranker's scores over ``texts``, the rerankers run at once, each on its own
+        runner. One that fails or misses the deadline gives ``None``, and the query is
+        ranked by the model fitted without rerankers (``learned_fusion``)."""
+        if not self.rerankers or not texts:
+            return [None] * len(self.rerankers)
+        tasks = [asyncio.ensure_future(r.score(question, texts)) for r in self.rerankers]
+        out: list[list[float] | None] = []
+        try:
+            async with asyncio.timeout(self.cfg.memory_rerank_timeout_ms / 1000):
+                await asyncio.wait(tasks)
+        except TimeoutError:
+            pass
+        failed = []
+        for reranker, task in zip(self.rerankers, tasks, strict=True):
+            if task.done() and not task.cancelled() and task.exception() is None:
+                out.append(list(task.result()))
+                continue
+            failed.append(reranker.name)
+            _discard(task)
+            out.append(None)
+        if failed:
+            diagnostics["rerank_unavailable"] = failed
+            log.warning("retrieval.rerank_unavailable", rerankers=failed)
+        return out
 
     async def _entity_search(
         self,
@@ -898,13 +1005,24 @@ class RetrievalEngine:
         encode, not two. The spaces it does need are encoded concurrently.
         """
         script = detect_script(query)
-        dense = (
-            await self.indexer.spaces.embed_query(query, script=script, known=known)
-            if self.cfg.dense
-            else {}
+        late_encoder = self.indexer.late
+        late_task = (
+            asyncio.ensure_future(late_encoder.embed_query(query))
+            if late_encoder is not None and self.cfg.dense
+            else None
         )
+        try:
+            dense = (
+                await self.indexer.spaces.embed_query(query, script=script, known=known)
+                if self.cfg.dense
+                else {}
+            )
+            late = await late_task if late_task is not None else None
+        finally:
+            if late_task is not None:
+                _discard(late_task)
         sparse = self.indexer.sparse.encode_query(query) if self.cfg.bm25 else None
-        return QueryVectors(dense=dense, sparse=sparse, script=script)
+        return QueryVectors(dense=dense, sparse=sparse, script=script, late=late)
 
     async def _hybrid(
         self,
@@ -918,6 +1036,31 @@ class RetrievalEngine:
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
     ) -> list[SearchHit]:
+        collection, flt = self._scope(kind, visibility, document_ids, observed, at, subject)
+        vectors = encoded if encoded is not None else await self._encode(query)
+        memory_depth = derived_k(self.cfg.memory_recall_k) if kind == "memory" else 0
+        return await self.store.search_hybrid(
+            collection,
+            dense=vectors.dense,
+            sparse=vectors.sparse,
+            flt=flt,
+            limit=max(self.cfg.fused_k, memory_depth),
+            prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
+            rrf_k=self.cfg.hybrid_rrf_k,
+            weights=self.cfg.hybrid_weights,
+            late=vectors.late,
+        )
+
+    def _scope(
+        self,
+        kind: str,
+        visibility: VisibilitySpecification,
+        document_ids: Sequence[str] | None,
+        observed: ObservedRange | None,
+        at: PointInTime | None,
+        subject: str | None,
+    ) -> tuple[str, SearchFilter]:
+        """The collection a kind is searched in, and the filter the store applies first."""
         collection = self.indexer.collection(_COLLECTION_OF_KIND.get(kind, KNOWLEDGE))
         flt = visibility.search_filter(kind=kind)
         if observed is not None:
@@ -932,18 +1075,18 @@ class RetrievalEngine:
             flt = flt.model_copy(
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
-        vectors = encoded if encoded is not None else await self._encode(query)
-        memory_depth = derived_k(self.cfg.memory_recall_k) if kind == "memory" else 0
-        return await self.store.search_hybrid(
-            collection,
-            dense=vectors.dense,
-            sparse=vectors.sparse,
-            flt=flt,
-            limit=max(self.cfg.fused_k, memory_depth),
-            prefetch_limit=max(self.cfg.prefetch_k, memory_depth),
-            rrf_k=self.cfg.hybrid_rrf_k,
-            weights=self.cfg.hybrid_weights,
-        )
+        return collection, flt
+
+
+def _memory_text(payload: dict[str, Any]) -> str:
+    """A memory as it was indexed under its own key, rebuilt from its search payload: what
+    the rerankers read."""
+    return memory_key_text(
+        observed=str(payload.get("observed_at") or ""),
+        subject=payload.get("subject"),
+        memory_type=str(payload.get("memory_type") or "semantic"),
+        content=str(payload.get("text", "")),
+    )
 
 
 def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:
@@ -959,32 +1102,6 @@ def _source_id(candidate: Candidate) -> str | None:
     refs = candidate.payload.get("source_refs") or []
     first = refs[0] if refs and isinstance(refs[0], dict) else {}
     return str(first["source_id"]) if first.get("source_id") else None
-
-
-def with_adjacent_turns(candidates: list[Candidate], weight: float) -> list[Candidate]:
-    """Each memory gains ``weight`` times the best fused score of the turn before its own and
-    of the turn after it, among the candidates already pooled (``adjacent_turn_weight``).
-    Evidence is usually a run of turns, and a reply that matches weakly on its own is
-    lifted by the question beside it that matches well. Scores are read before any is
-    changed, so the order of the pool cannot matter. Not re-sorted: ``by_standing`` is."""
-    if weight <= 0:
-        return candidates
-    best: dict[str, float] = {}
-    best_after: dict[str, float] = {}
-    for c in candidates:
-        if own := _source_id(c):
-            best[own] = max(best.get(own, 0.0), c.score)
-        if before := c.payload.get("preceding_source_id"):
-            best_after[str(before)] = max(best_after.get(str(before), 0.0), c.score)
-    if not best_after:
-        return candidates
-    for c in candidates:
-        own = _source_id(c)
-        before = c.payload.get("preceding_source_id")
-        lift = best.get(str(before), 0.0) if before else 0.0
-        lift += best_after.get(own, 0.0) if own else 0.0
-        c.score += weight * lift
-    return candidates
 
 
 def by_standing(candidates: list[Candidate]) -> list[Candidate]:

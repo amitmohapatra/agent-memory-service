@@ -14,6 +14,10 @@
 >
 > `splade` survives as the one genuinely uncovered capability. The rest of this document is
 > kept as the record of why they were built.
+>
+> **Superseded again, in part (ADR 0025, 2026-10-01).** A late-interaction arm is back on
+> every collection, and two cross-encoders are back as *features* of the memories' learned
+> ranking - never as a replacement for the fusion, which is what was measured worse here.
 
 ## Decision
 - **Every advanced strategy is off by default and additive.** A strategy is an *extra

@@ -141,6 +141,7 @@ BENCH_DB_P7_CONV ?= $(BENCH_DB_HOST)/p7_locomo
 BENCH_DB_P7_DOCS ?= $(BENCH_DB_HOST)/p7_retrieval
 #: arm A1 changes the write path, so it gets its own corpus and its own database (spec 2.9)
 BENCH_DB_P7_LLM ?= $(BENCH_DB_HOST)/p7_locomo_llm
+BENCH_DB_P9_LME ?= $(BENCH_DB_HOST)/p9_longmemeval
 
 #: The same server as BENCH_DB_HOST, reached from the *host* rather than from inside a
 #: container: migrations run on the host with the project's own alembic, benchmarks run
@@ -351,6 +352,14 @@ bench-longmemeval: bench-db ## LongMemEval-S (cleaned), judged, real models (ins
 	$(call bench-run,$(BENCH_DB_CONV),$(BENCH_LLM_ENV),/opt/venv/bin/python -m benchmark.public --suite longmemeval --configs native $(LME_ARGS))
 
 LME_ARGS ?=
+
+bench-longmemeval-retrieval: bench-db ## LongMemEval-S evidence recall through the read path, no LLM (inside the runtime image)
+	@# Turn- and session-level recall@10/20/50/100 of the context builder's memories, per
+	@# question type (benchmark/longmemeval_retrieval.py). Every haystack is ingested from an
+	@# empty store: --questions takes a stratified sample (seed 7) where all 470 do not fit.
+	$(call bench-run,$(BENCH_DB_P9_LME),$(BENCH_EXTRA_ENV),/opt/venv/bin/python -m benchmark.longmemeval_retrieval --data benchmark/data/longmemeval/longmemeval_s_cleaned.json $(LMER_ARGS))
+
+LMER_ARGS ?= --output benchmark/results/phase10/longmemeval_retrieval.json
 
 bench-golden: bench-db ## Hierarchical-corpus retrieval with real models (sections, tables, footnotes)
 	@# The instrument for the expansion flags. A flat corpus cannot measure them: SciFact

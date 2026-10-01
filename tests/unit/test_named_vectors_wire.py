@@ -63,6 +63,11 @@ class _Client:
         self.calls.append(("query_points", kwargs))
         return type("Result", (), {"points": []})()
 
+    async def query_batch_points(self, **kwargs: Any) -> Any:
+        self.calls.append(("query_batch_points", kwargs))
+        point = type("P", (), {"id": "x", "score": 1.0, "payload": {"record_id": "r1"}})()
+        return [type("Result", (), {"points": [point]})() for _ in kwargs["requests"]]
+
 
 def _store() -> tuple[QdrantSearchStore, _Client]:
     store = QdrantSearchStore(SearchSettings())
@@ -153,3 +158,104 @@ async def test_no_arms_is_an_empty_answer_without_a_round_trip() -> None:
         == []
     )
     assert client.calls == []
+
+
+async def test_a_memory_collection_gets_both_keys_and_the_late_vectors() -> None:
+    store, client = _store()
+    await store.ensure_collection(
+        CollectionSpec(
+            name="c",
+            dense={VectorName.DENSE_ML: 8, VectorName.DENSE_ML_CTX: 8},
+            sparse_context=True,
+            late=64,
+        )
+    )
+    created = next(kwargs for name, kwargs in client.calls if name == "create_collection")
+    assert set(created["vectors_config"]) == {"dense_ml", "dense_ml_ctx", "colbert"}
+    assert set(created["sparse_vectors_config"]) == {"bm25", "bm25_ctx"}
+    late = created["vectors_config"]["colbert"]
+    assert late.size == 64 and late.on_disk is True
+    assert late.multivector_config.comparator == models.MultiVectorComparator.MAX_SIM
+    # rescoring only: no graph is built for the token vectors
+    assert late.hnsw_config.m == 0 and late.datatype == models.Datatype.FLOAT16
+
+
+async def test_a_record_carries_its_context_key_and_token_vectors() -> None:
+    store, client = _store()
+    await store.upsert(
+        [
+            SearchRecord(
+                record_id="r1",
+                collection="c",
+                tenant_id="acme",
+                dense={VectorName.DENSE_ML: [0.2] * 4, VectorName.DENSE_ML_CTX: [0.3] * 4},
+                sparse=SparseVector(indices=[1], values=[1.0]),
+                sparse_context=SparseVector(indices=[2], values=[1.0]),
+                late=[[1.0, 0.0], [0.0, 1.0]],
+            )
+        ]
+    )
+    point = client.calls[-1][1]["points"][0]
+    assert set(point.vector) == {"dense_ml", "dense_ml_ctx", "bm25", "bm25_ctx", "colbert"}
+    assert point.vector["colbert"] == [[1.0, 0.0], [0.0, 1.0]]
+
+
+async def test_the_late_arm_rescores_the_union_of_the_other_arms() -> None:
+    store, client = _store()
+    await store.search_hybrid(
+        "c",
+        dense={VectorName.DENSE_ML: [0.2] * 4},
+        sparse=SparseVector(indices=[1], values=[1.0]),
+        flt=SearchFilter(tenant_id="acme"),
+        limit=5,
+        prefetch_limit=8,
+        weights={VectorName.DENSE_ML: 2.0, VectorName.BM25: 2.0, VectorName.COLBERT: 3.0},
+        late=[[1.0, 0.0]],
+    )
+    kwargs = client.calls[-1][1]
+    arms = kwargs["prefetch"]
+    assert [p.using for p in arms] == ["dense_ml", "bm25", "colbert"]
+    assert [p.using for p in arms[2].prefetch] == ["dense_ml", "bm25"]
+    assert arms[2].query == [[1.0, 0.0]] and arms[2].limit == 8
+    assert kwargs["query"].rrf.weights == [2.0, 2.0, 3.0]
+
+
+async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
+    store, client = _store()
+    out = await store.search_arms(
+        "c",
+        dense={VectorName.DENSE_ML: [0.2] * 4, VectorName.DENSE_ML_CTX: [0.2] * 4},
+        sparse={
+            VectorName.BM25: SparseVector(indices=[1], values=[1.0]),
+            VectorName.BM25_CTX: SparseVector(indices=[], values=[]),
+        },
+        late=[[1.0, 0.0]],
+        flt=SearchFilter(tenant_id="acme"),
+        limit=7,
+    )
+    [(_, kwargs)] = [call for call in client.calls if call[0] == "query_batch_points"]
+    requests = kwargs["requests"]
+    # an empty sparse query is no arm; the late arm rescores the union of the others
+    assert [r.using for r in requests] == ["dense_ml", "dense_ml_ctx", "bm25", "colbert"]
+    assert [p.using for p in requests[3].prefetch] == ["dense_ml", "dense_ml_ctx", "bm25"]
+    assert all(r.limit == 7 for r in requests)
+    assert list(out) == [
+        VectorName.DENSE_ML,
+        VectorName.DENSE_ML_CTX,
+        VectorName.BM25,
+        VectorName.COLBERT,
+    ]
+    assert out[VectorName.COLBERT][0].retriever.value == "colbert"
+
+
+async def test_a_dense_space_cannot_be_asked_for_as_a_sparse_arm() -> None:
+    store, _ = _store()
+    with pytest.raises(ValueError, match="not a sparse space"):
+        await store.search_arms(
+            "c",
+            dense={},
+            sparse={VectorName.DENSE_ML: SparseVector(indices=[1], values=[1.0])},
+            late=None,
+            flt=SearchFilter(tenant_id="acme"),
+            limit=7,
+        )

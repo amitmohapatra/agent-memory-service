@@ -140,6 +140,84 @@ class NLIModel(BaseModel):
         return self.model_path or local_model_path(self.local_dir) or self.id
 
 
+class LateInteractionModel(BaseModel):
+    """The late-interaction (ColBERT) encoder: one 64-wide vector per token, scored by MaxSim.
+
+    mxbai-edge-colbert-v0-32m (mixedbread, Germany; Apache-2.0), the publisher's own ONNX
+    export, FP32. The tokenisation is the checkpoint's own (``onnx_config.json``: the
+    ``[Q]``/``[D]`` marker after ``[CLS]``, lower-casing, punctuation dropped from documents,
+    no query expansion); reproduced here it scores within 0.011 of PyLate on every LoCoMo
+    question of conversation 0 with an identical top 10. Its int8 graph changed the top 10 of
+    every one of those questions and is not shipped (ADR 0025).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = "mixedbread-ai/mxbai-edge-colbert-v0-32m"
+    local_dir: str = "mxbai-edge-colbert-v0-32m"
+    model_path: str | None = None
+    revision: str | None = "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+    license: str = "Apache-2.0"
+    runtime: Literal["onnx"] = "onnx"
+    graph_file: str = "model.onnx"
+    dimension: int = 64
+    batch_size: int = Field(default=8, ge=1)
+    #: as ``DenseModel.threads``
+    threads: int = 2
+
+    @property
+    def source(self) -> str:
+        return self.model_path or local_model_path(self.local_dir) or self.id
+
+
+class RerankerModel(BaseModel):
+    """A cross-encoder that reads the question and one candidate together.
+
+    Two are shipped and run side by side over the memories' candidate pool, each on its own
+    runner (ADR 0025): an English one and a multilingual one, whose disagreements the
+    learned fusion weighs. The quantised graphs are the publishers' own exports.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    local_dir: str
+    model_path: str | None = None
+    revision: str | None = None
+    license: str = "Apache-2.0"
+    runtime: Literal["onnx"] = "onnx"
+    graph_file: str = "onnx/model_quantized.onnx"
+    #: question and candidate together; memories are short, and 256 is what was measured
+    max_length: int = Field(default=256, ge=32, le=512)
+    #: Pairs per forward pass. Small, because a batch is padded to its longest pair: 8
+    #: scored 45 LoCoMo pairs in 1112 ms where one batch of all 45 took 1316 ms (2 threads).
+    batch_size: int = Field(default=8, ge=1)
+    threads: int = 2
+
+    @property
+    def source(self) -> str:
+        return self.model_path or local_model_path(self.local_dir) or self.id
+
+
+#: The memories' two rerankers, in the order the learned fusion's features name them.
+RERANKERS: tuple[RerankerModel, ...] = (
+    # mmarco-mMiniLMv2-L12-H384-v1: Microsoft's multilingual MiniLM fine-tuned on the
+    # translated MS MARCO (mMARCO) by the sentence-transformers project; Apache-2.0
+    RerankerModel(
+        id="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+        local_dir="mmarco-mMiniLMv2-L12-H384-v1",
+        revision="1427fd652930e4ba29e8149678df786c240d8825",
+        graph_file="onnx/model_quint8_avx2.onnx",
+    ),
+    # mxbai-rerank-xsmall-v1: mixedbread (Germany), English, Apache-2.0
+    RerankerModel(
+        id="mixedbread-ai/mxbai-rerank-xsmall-v1",
+        local_dir="mxbai-rerank-xsmall-v1",
+        revision="b5c6e9da73abc3711f593f705371cdbe9e0fe422",
+    ),
+)
+
+
 class FrozenModels(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -168,6 +246,10 @@ class FrozenModels(BaseModel):
     )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()
+    #: the late-interaction arm of every collection
+    colbert: LateInteractionModel = LateInteractionModel()
+    #: the memories' cross-encoders (``RERANKERS``)
+    rerankers: tuple[RerankerModel, ...] = RERANKERS
 
 
 FROZEN_MODELS = FrozenModels()
@@ -489,7 +571,8 @@ class MemoryIntelligenceSettings(BaseModel):
     #:
     #: Offline LoCoMo A/B (turn-level BM25 + one 384-d dense encoder, weighted RRF; the
     #: service-faithful baseline reads 0.664): recall@10 +0.047 on its own, 183 questions
-    #: better and 114 worse; +0.072 with ``RetrievalSettings.adjacent_turn_weight``.
+    #: better and 114 worse. Since ADR 0025 it is the memory's second key, beside its own
+    #: text, and the turn it names is its neighbour in the learned fusion's lift.
     #: Changing it changes what is indexed: ``make reindex``.
     index_preceding_turn: bool = True
     preceding_turn_max_chars: int = Field(default=500, ge=0)
@@ -591,22 +674,30 @@ class RetrievalSettings(BaseModel):
     #: +0.0176, better on 55 questions and worse on 20; all-answerable recall@10/20/50/100
     #: 0.651/0.719/0.813/0.817 -> 0.666/0.730/0.819/0.821, for +7.8 ms p50. An arm missing
     #: from the mapping weighs 1.0, so a single-encoder deployment still fuses correctly.
+    #:
+    #: ``colbert`` is the late-interaction arm (ADR 0025): MaxSim over the union of the
+    #: other arms' candidates, at 2.0. Offline over SciFact's 300 questions the fusion reads
+    #: nDCG@10 0.746 -> 0.759 and recall@10 0.872 -> 0.883 with it. These weights serve the
+    #: documents and the episodes; the memories are ranked by the learned fusion.
     hybrid_weights: dict[VectorName, float] | None = Field(
         default_factory=lambda: {
             VectorName.BM25: 2.0,
             VectorName.DENSE_EN: 0.5,
             VectorName.DENSE_ML: 2.0,
+            VectorName.COLBERT: 2.0,
         }
     )
-    #: Each memory candidate gains this share of the fused score of the turns adjacent to
-    #: its own in the same conversation (the turn before and the turn after), when those
-    #: are in the fused pool too. Evidence for a question is usually a run of turns, and a
-    #: turn that matches weakly on its own is pulled up by a neighbour that matches well.
-    #: Applied before ``by_standing``, over the pool the store already returned, so it
-    #: costs no query. 0 turns it off. Offline LoCoMo A/B with the preceding turn indexed
-    #: (``MemoryIntelligenceSettings.index_preceding_turn``): recall@10 0.711 -> 0.736 at
-    #: 0.25; 0.5 gives back half of that.
-    adjacent_turn_weight: float = Field(default=0.25, ge=0.0, le=1.0)
+    #: The memories are ranked by ``modules/retrieval/learned_fusion.py`` (ADR 0025): each
+    #: arm's own top this-many, read unfused in one round trip.
+    memory_arm_depth: int = Field(default=100, ge=10, le=500)
+    #: The top this-many of each of its two first stages are what the rerankers read: ~26
+    #: candidates on LoCoMo. Reranking is most of a memory search's time and grows with it;
+    #: leave-one-conversation-out recall@10 0.842 at 30, 0.841 at 20, 0.825 at 15. The
+    #: coefficients are fitted at this value, so it moves only with a refit.
+    memory_rerank_k: int = Field(default=20, ge=1, le=100)
+    #: The rerankers' deadline. Past it a reranker's feature is a constant for the query and
+    #: the ranking is the learned fusion of everything else (``learned_fusion``).
+    memory_rerank_timeout_ms: int = Field(default=1500, ge=1, le=10_000)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

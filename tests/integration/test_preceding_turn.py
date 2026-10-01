@@ -65,3 +65,21 @@ async def test_a_turn_from_another_session_is_not_its_context(container, uow_fac
     )
     [reply] = await _verbatim(container, uow_factory, REPLY)
     assert "preceding_turn" not in reply.system_metadata
+
+
+async def test_a_reply_is_found_by_its_own_words_and_by_the_question_it_answers(
+    container, uow_factory
+) -> None:
+    """Two keys (ADR 0025): the reply alone, and the reply read after its question. A word
+    only the question said reaches the reply through the second key and not the first."""
+    await _say(container, uow_factory, ASK, "Did you go camping last weekend?")
+    await _say(container, uow_factory, REPLY, "Yes, with my kids at the lake, we loved it.")
+    [reply] = await _verbatim(container, uow_factory, REPLY)
+    engine = container.services["retrieval"]
+    result = await engine.retrieve(REPLY, "camping", kinds=("memory",))
+    assert reply.memory_id in {c.record_id for c in result.candidates}
+    [hit] = [c for c in result.candidates if c.record_id == reply.memory_id]
+    assert "bm25_ctx" in hit.retrievers and "bm25" not in hit.retrievers
+    own = await engine.retrieve(REPLY, "kids at the lake", kinds=("memory",))
+    [hit] = [c for c in own.candidates if c.record_id == reply.memory_id]
+    assert {"bm25", "bm25_ctx"} <= set(hit.retrievers)

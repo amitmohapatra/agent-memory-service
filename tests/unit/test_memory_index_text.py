@@ -15,7 +15,7 @@ from memory_service.domain.ids import content_hash
 from memory_service.domain.observation import Observation
 from memory_service.modules.memory.native import NativeMemoryIntelligence
 from memory_service.modules.memory.pipeline import build_memory
-from memory_service.modules.rag.indexer import memory_index_text
+from memory_service.modules.rag.indexer import memory_context_text, memory_index_text
 
 NOW = datetime(2023, 5, 25, 10, 0, tzinfo=UTC)
 
@@ -63,7 +63,8 @@ async def test_opaque_subjects_are_not_repeated_into_the_text() -> None:
 
 async def test_a_verbatim_turn_is_indexed_with_the_turn_it_answers() -> None:
     """A reply rarely restates its question, and a bare question is never a memory of its
-    own, so the question's words reach the index only beside the reply."""
+    own, so the question's words reach the index only beside the reply: the second key. The
+    first key is the reply alone, which the multi-hop and temporal questions need."""
     ctx = MemoryExecutionContext(tenant_id="acme", user_id="caroline", workspace_id="ws1")
     native = NativeMemoryIntelligence(MemoryIntelligenceSettings())
     reply = "Yes, last weekend with my kids, we loved it."
@@ -84,9 +85,12 @@ async def test_a_verbatim_turn_is_indexed_with_the_turn_it_answers() -> None:
     ]
     verbatim = [m for m in memories if m.system_metadata.get("category") == "verbatim_turn"]
     assert verbatim, [m.system_metadata.get("category") for m in memories]
-    text = memory_index_text(verbatim[0])
+    text = memory_context_text(verbatim[0])
     assert text.startswith("melanie: Did you go camping?\n["), text
     assert text.endswith(reply), text
+    own = memory_index_text(verbatim[0])
+    assert text.endswith(own) and own.startswith("["), own
+    assert "camping" not in own
     # the content - what is rendered and returned - is the reply alone
     assert verbatim[0].content == reply
     # extracted facts stay exact

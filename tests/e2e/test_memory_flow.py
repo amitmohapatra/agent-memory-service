@@ -144,13 +144,18 @@ async def test_sdk_remember_recall_forget(app, client) -> None:
     await ctx.remember("Always answer in British English.", memory_type="PREFERENCE")
     items = await ctx.search("favourite editor", kinds=["memory"], limit=5)
     assert items and any("neovim" in i.text for i in items)
-    fav = next(i for i in items if "neovim" in i.text)
-    got = await ctx.advanced.memories.get(fav.id)
-    assert got.memory_id == fav.id and got.memory_type == "PREFERENCE"
+    # The preference extracted from the turn has the turn's very words, and a search returns
+    # one of two equal texts from one source turn (engine._dedup): which of the two ranks
+    # first is the ranking's business, not this flow's. The typed memory is listed.
+    prefs = await ctx.advanced.memories.list(memory_types=["PREFERENCE"])
+    got = next(m for m in prefs if "neovim" in m.content)
+    assert got.memory_type == "PREFERENCE"
     assert got.visibility == "USER" and got.lifetime == "LONG_TERM"
-    await ctx.forget(fav.id)
+    fav = got.memory_id
+    await ctx.forget(fav)
     # by id: the verbatim turn the fact was read out of may still say it (see above)
-    assert fav.id not in {i.id for i in await ctx.search("favourite editor", kinds=["memory"])}
+    assert fav not in {i.id for i in await ctx.search("favourite editor", kinds=["memory"])}
+    assert fav not in {m.memory_id for m in await ctx.advanced.memories.list()}
     bundle = await ctx.context("how should I phrase the answer?", format="full")
     assert any("British English" in m.text for m in bundle.memories)
     await memory.aclose()

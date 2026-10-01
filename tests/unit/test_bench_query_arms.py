@@ -127,4 +127,5 @@ def test_the_fitted_weighting_is_the_shipped_default() -> None:
         VectorName.BM25: 2.0,
         VectorName.DENSE_EN: 0.5,
         VectorName.DENSE_ML: 2.0,
+        VectorName.COLBERT: 2.0,
     }
