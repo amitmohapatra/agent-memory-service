@@ -141,6 +141,8 @@ async def search(container: Any, tenant: str, query: str, arm: str, timing: Timi
         prefetch_limit=PREFETCH,
         rrf_k=RETRIEVAL.hybrid_rrf_k,
         weights=RETRIEVAL.hybrid_weights,
+        # the late-interaction arm (ADR 0025): what the engine's own hybrid search passes
+        late=vectors.late,
     )
     timing.search_ms.append((time.perf_counter() - started) * 1000)
     return [str(hit.payload.get("document_id")) for hit in hits]
