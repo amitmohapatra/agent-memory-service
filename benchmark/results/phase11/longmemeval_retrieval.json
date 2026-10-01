@@ -1,0 +1,392 @@
+{
+  "provenance": {
+    "timestamp": "2026-10-01T22:43:55.848501+00:00",
+    "git_commit": "73814ad2eb87275ba4f012ceaafecbc493498183",
+    "host_load": {
+      "loadavg_1m": 2.57,
+      "loadavg_5m": 1.47,
+      "loadavg_15m": 1.33,
+      "load_per_core": 0.64
+    },
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 15.7,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "5.3.0",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
+      "onnxruntime": "1.30.0",
+      "docling": "not-installed"
+    },
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  },
+  "index_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v3-snowball-k1.2-b0.75|li-9780e0094e30|mk2",
+  "retrieval": {
+    "max_query_chars": 2048,
+    "exact": true,
+    "bm25": true,
+    "dense": true,
+    "graph": true,
+    "semantic_graph": true,
+    "rrf_k": 60,
+    "hybrid_rrf_k": 1,
+    "hybrid_weights": {
+      "bm25": 2.0,
+      "dense_en": 0.5,
+      "dense_ml": 2.0,
+      "colbert": 2.0
+    },
+    "memory_arm_depth": 100,
+    "memory_pool_k": 30,
+    "prefetch_k": 100,
+    "fused_k": 100,
+    "final_k": 50,
+    "memory_recall_k": 100,
+    "memory_entity_search": true,
+    "memory_entity_search_timeout_ms": 200,
+    "query_expansion_timeout_ms": 250,
+    "parent_expansion": true,
+    "derived_source_k": 6,
+    "max_chunks_per_document": 0,
+    "neighbor_expansion": true,
+    "definition_expansion": true,
+    "expansion_budget_items": 8,
+    "evidence_verification": true,
+    "escalation_max_rounds": 2,
+    "abstain_when_insufficient": true,
+    "subject_evidence_check": true
+  },
+  "questions": 18,
+  "paid_llm_calls": 0,
+  "limitations": [
+    "Evidence recall of the context builder's memories, not answer accuracy.",
+    "Abstention questions are excluded: they have no evidence turn.",
+    "Sequential, one question at a time; in-process authorization and cache."
+  ],
+  "completed": 18,
+  "turn_recall": {
+    "all": {
+      "questions": 18,
+      "at": {
+        "10": {
+          "recall": 0.8425925925925926,
+          "complete": 0.7777777777777778
+        },
+        "20": {
+          "recall": 0.925925925925926,
+          "complete": 0.8888888888888888
+        },
+        "50": {
+          "recall": 0.925925925925926,
+          "complete": 0.8888888888888888
+        },
+        "100": {
+          "recall": 0.925925925925926,
+          "complete": 0.8888888888888888
+        }
+      }
+    },
+    "knowledge-update": {
+      "questions": 3,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "multi-session": {
+      "questions": 5,
+      "at": {
+        "10": {
+          "recall": 0.6333333333333333,
+          "complete": 0.4
+        },
+        "20": {
+          "recall": 0.7333333333333333,
+          "complete": 0.6
+        },
+        "50": {
+          "recall": 0.7333333333333333,
+          "complete": 0.6
+        },
+        "100": {
+          "recall": 0.7333333333333333,
+          "complete": 0.6
+        }
+      }
+    },
+    "single-session-assistant": {
+      "questions": 2,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "single-session-preference": {
+      "questions": 1,
+      "at": {
+        "10": {
+          "recall": 0.0,
+          "complete": 0.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "single-session-user": {
+      "questions": 2,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "temporal-reasoning": {
+      "questions": 5,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    }
+  },
+  "session_recall": {
+    "all": {
+      "questions": 18,
+      "at": {
+        "10": {
+          "recall": 0.9444444444444444,
+          "complete": 0.8888888888888888
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "knowledge-update": {
+      "questions": 3,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "multi-session": {
+      "questions": 5,
+      "at": {
+        "10": {
+          "recall": 0.8,
+          "complete": 0.6
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "single-session-assistant": {
+      "questions": 2,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "single-session-preference": {
+      "questions": 1,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "single-session-user": {
+      "questions": 2,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    },
+    "temporal-reasoning": {
+      "questions": 5,
+      "at": {
+        "10": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "20": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "50": {
+          "recall": 1.0,
+          "complete": 1.0
+        },
+        "100": {
+          "recall": 1.0,
+          "complete": 1.0
+        }
+      }
+    }
+  },
+  "latency_ms": {
+    "p50": 131.36,
+    "p95": 170.88,
+    "p99": 267.08,
+    "max": 267.08,
+    "samples": 18
+  }
+}

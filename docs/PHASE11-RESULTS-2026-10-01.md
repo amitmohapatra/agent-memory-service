@@ -88,6 +88,24 @@ What it took: the arms return ids and scores only and each point's payload is re
 search's Python time), and the Qdrant client no longer walks every query vector looking for
 inference objects it is never sent.
 
-## LongMemEval
+## LongMemEval: does a ranking fitted on LoCoMo transfer?
 
-See the section appended below when the sample completes.
+`benchmark.longmemeval_retrieval`, LongMemEval-S (cleaned), a stratified sample of 18
+answerable questions (seed 7), each haystack (~50 sessions, ~500 turns) ingested from an
+empty store. Same coefficients as LoCoMo, unchanged. Artifact:
+`benchmark/results/phase11/longmemeval_retrieval.json`.
+
+| type (n) | turn @10 | turn @20 | session @10 | session @20 |
+|---|---|---|---|---|
+| all (18) | **0.843** | **0.926** | **0.944** | **1.000** |
+| knowledge-update (3) | 1.000 | 1.000 | 1.000 | 1.000 |
+| temporal-reasoning (5) | 1.000 | 1.000 | 1.000 | 1.000 |
+| single-session-user (2) | 1.000 | 1.000 | 1.000 | 1.000 |
+| single-session-assistant (2) | 1.000 | 1.000 | 1.000 | 1.000 |
+| single-session-preference (1) | 0.000 | 1.000 | 1.000 | 1.000 |
+| multi-session (5) | 0.633 | 0.733 | 0.800 | 1.000 |
+
+Every question's evidence sessions are in the first twenty memories; the miss is turns of
+multi-session questions, whose evidence is spread over several sessions. Context build p50
+131 ms, p95 171 ms. Eighteen questions is a sample, not an estimate to the point: the
+harness and `make bench-longmemeval-retrieval` run all 470 where the hardware allows.
