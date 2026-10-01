@@ -136,6 +136,18 @@ class LLMAssist:
             settings.api_key.get_secret_value() if settings.api_key else "",
         )
 
+    async def model(self, use: LLMUse) -> str:
+        """The model ``use`` calls under the current binding: the policy's or the service's,
+        with ``auto`` resolved through the gateway (still ``auto`` if it cannot be)."""
+        configured = model_for(use)
+        resolve = getattr(self.provider, "resolve_model", None)
+        if configured != "auto" or resolve is None:
+            return configured
+        try:
+            return await resolve(use)
+        except Exception:
+            return configured
+
     @staticmethod
     def tokens_used() -> int:
         """LLM tokens (input + output) consumed so far in the current request/job."""

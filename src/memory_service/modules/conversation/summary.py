@@ -20,7 +20,6 @@ from memory_service.domain.enums import MessageKind
 from memory_service.domain.profile import ThreadSummary
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import model_for
 from memory_service.observability.logging import get_logger
 from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.tasks import JobSpec, Queue
@@ -133,7 +132,7 @@ class ThreadSummaries:
                 if self.assist.wants("summaries"):
                     written = await self._abstractive(previous, messages)
                     if written is not None:
-                        return written, model_for("summaries")
+                        return written, await self.assist.model("summaries")
         return rolled(previous, messages), EXTRACTIVE
 
     async def _abstractive(self, previous: str, messages: Sequence[Message]) -> str | None:

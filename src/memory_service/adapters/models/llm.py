@@ -231,6 +231,11 @@ class BifrostLLM:
         )
 
     # ------------------------------------------------------------------ port
+    async def resolve_model(self, use: str) -> str:
+        """The model a call for ``use`` goes to now (``auto`` resolved through the gateway),
+        for a caller that records which model wrote something."""
+        return await self._resolve_model(use)
+
     async def _resolve_model(self, use: str) -> str:
         configured = model_for(use, self.tuning)
         if configured != "auto":
