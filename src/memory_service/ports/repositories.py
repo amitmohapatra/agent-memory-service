@@ -7,7 +7,7 @@ Repositories speak domain models only. Identity/scope queries always hit indexed
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -143,6 +143,13 @@ class ObservationRepository(Protocol):
     async def add(self, observation: Observation) -> None: ...
     async def get(self, tenant_id: str, observation_id: str) -> Observation | None: ...
     async def mark_processed(self, tenant_id: str, observation_id: str, *, status: str) -> None: ...
+    async def preceding_message(
+        self, observation: Observation, *, within: timedelta
+    ) -> Observation | None:
+        """The message submitted just before ``observation`` in the same conversation: same
+        tenant, workspace and thread, occurring no more than ``within`` before it."""
+        ...
+
     async def list_unprocessed(
         self, *, older_than: datetime, limit: int = 500
     ) -> list[Observation]: ...

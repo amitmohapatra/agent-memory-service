@@ -50,6 +50,7 @@ dependencies = [
   "opentelemetry-instrumentation-sqlalchemy>=0.65b0",
   "pyjwt[crypto]>=2.10",
   "dateparser>=1.2",
+  "snowballstemmer>=3",
 ]
 
 [project.optional-dependencies]

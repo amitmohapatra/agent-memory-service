@@ -1,0 +1,126 @@
+{
+  "harness": "benchmark.native_source_retrieval, all 10 LoCoMo conversations, no LLM",
+  "dense_arm": "english only (BENCH_DENSE=english); stand-in encoder bge-small-en-v1.5 ONNX under the English slot, Hugging Face unreachable",
+  "representative": false,
+  "base_commit": "4fa614b",
+  "new_commit": "449c580",
+  "completed_questions": [
+    1986,
+    1986
+  ],
+  "failed_questions": [
+    0,
+    0
+  ],
+  "paired": {
+    "all_answerable": {
+      "n": 1525,
+      "recall@10": [
+        0.6601,
+        0.7311
+      ],
+      "recall@20": [
+        0.7469,
+        0.7965
+      ],
+      "recall@50": [
+        0.8252,
+        0.8664
+      ],
+      "recall@100": [
+        0.8788,
+        0.9074
+      ],
+      "at10_better_worse": [
+        200,
+        95
+      ]
+    },
+    "single_hop": {
+      "n": 830,
+      "recall@10": [
+        0.7331,
+        0.8711
+      ],
+      "recall@20": [
+        0.8211,
+        0.9142
+      ],
+      "recall@50": [
+        0.8878,
+        0.9513
+      ],
+      "recall@100": [
+        0.9343,
+        0.9678
+      ]
+    },
+    "multi_hop": {
+      "n": 282,
+      "recall@10": [
+        0.4394,
+        0.4244
+      ],
+      "recall@20": [
+        0.5477,
+        0.547
+      ],
+      "recall@50": [
+        0.6785,
+        0.6896
+      ],
+      "recall@100": [
+        0.7558,
+        0.7945
+      ]
+    },
+    "temporal": {
+      "n": 321,
+      "recall@10": [
+        0.7474,
+        0.7422
+      ],
+      "recall@20": [
+        0.8087,
+        0.8061
+      ],
+      "recall@50": [
+        0.8692,
+        0.8863
+      ],
+      "recall@100": [
+        0.9115,
+        0.9229
+      ]
+    },
+    "open_domain": {
+      "n": 92,
+      "recall@10": [
+        0.3736,
+        0.3693
+      ],
+      "recall@20": [
+        0.473,
+        0.4661
+      ],
+      "recall@50": [
+        0.5578,
+        0.5728
+      ],
+      "recall@100": [
+        0.6403,
+        0.6544
+      ]
+    }
+  },
+  "latency_ms_base": {
+    "p50": 75.8,
+    "p95": 135.1,
+    "p99": 163.1
+  },
+  "latency_ms_new": {
+    "p50": 76.5,
+    "p95": 139.8,
+    "p99": 166.0
+  }
+}

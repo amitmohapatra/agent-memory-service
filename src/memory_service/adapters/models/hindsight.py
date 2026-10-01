@@ -25,29 +25,30 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def _connect(settings: HindsightSettings) -> Hindsight:
+    try:
+        from hindsight_client import Hindsight
+    except ImportError as exc:
+        raise DependencyUnavailable("Hindsight extraction needs the [hindsight] extra") from exc
+    if settings.base_url is None:
+        raise DependencyUnavailable("MEMORY__HINDSIGHT__BASE_URL is not set")
+    return Hindsight(
+        base_url=settings.base_url,
+        api_key=settings.api_key.get_secret_value() if settings.api_key else None,
+        timeout=HINDSIGHT.timeout_seconds,
+        max_attempts=1,
+    )
+
+
 class HindsightExtractor:
     """One bounded attempt per eligible message; outages preserve native ingestion."""
 
     name = "hindsight"
 
     def __init__(self, settings: HindsightSettings, *, client: Hindsight | None = None) -> None:
-        if client is None:
-            try:
-                from hindsight_client import Hindsight
-            except ImportError as exc:
-                raise DependencyUnavailable(
-                    "Hindsight extraction needs the [hindsight] extra"
-                ) from exc
-
-            if settings.base_url is None:
-                raise DependencyUnavailable("MEMORY__HINDSIGHT__BASE_URL is not set")
-            client = Hindsight(
-                base_url=settings.base_url,
-                api_key=settings.api_key.get_secret_value() if settings.api_key else None,
-                timeout=HINDSIGHT.timeout_seconds,
-                max_attempts=1,
-            )
-        self._client = client
+        # Bound once and never None, so the type holds whether or not the optional
+        # [hindsight] extra is installed where it is checked.
+        self._client: Hindsight = client if client is not None else _connect(settings)
         self._slots = asyncio.Semaphore(HINDSIGHT.max_concurrency)
 
     async def close(self) -> None:

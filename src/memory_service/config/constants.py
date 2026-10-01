@@ -19,6 +19,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Literal, Self
 
@@ -105,7 +106,7 @@ class SparseModel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: Literal["bm25"] = "bm25"
-    version: str = "v2-unicode"
+    version: str = "v3-snowball"
 
 
 class NLIModel(BaseModel):
@@ -479,6 +480,20 @@ class MemoryIntelligenceSettings(BaseModel):
     keep_verbatim_turns: bool = True
     #: Longest turn kept verbatim. Beyond this the turn is truncated rather than dropped.
     verbatim_max_chars: int = Field(default=2000, ge=200)
+    #: Index a verbatim turn together with the message said just before it in the same
+    #: conversation (same workspace and thread, within ``preceding_turn_window``). A reply
+    #: rarely restates its question - "Yes, last weekend with my kids" answers "Did you go
+    #: camping?" - and a bare question is never kept as a memory of its own, so without
+    #: this the question's words are in no index at all. Index text only: the memory's
+    #: content, payload text and rendering are unchanged. Language-agnostic.
+    #:
+    #: Offline LoCoMo A/B (turn-level BM25 + one 384-d dense encoder, weighted RRF; the
+    #: service-faithful baseline reads 0.664): recall@10 +0.047 on its own, 183 questions
+    #: better and 114 worse; +0.072 with ``RetrievalSettings.adjacent_turn_weight``.
+    #: Changing it changes what is indexed: ``make reindex``.
+    index_preceding_turn: bool = True
+    preceding_turn_max_chars: int = Field(default=500, ge=0)
+    preceding_turn_window: timedelta = timedelta(hours=6)
     # forgetting: importance x recency x access decay
     forgetting_half_life_days: float = Field(default=30.0, gt=0.0)
     forgetting_archive_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
@@ -576,6 +591,15 @@ class RetrievalSettings(BaseModel):
             VectorName.DENSE_ML: 2.0,
         }
     )
+    #: Each memory candidate gains this share of the fused score of the turns adjacent to
+    #: its own in the same conversation (the turn before and the turn after), when those
+    #: are in the fused pool too. Evidence for a question is usually a run of turns, and a
+    #: turn that matches weakly on its own is pulled up by a neighbour that matches well.
+    #: Applied before ``by_standing``, over the pool the store already returned, so it
+    #: costs no query. 0 turns it off. Offline LoCoMo A/B with the preceding turn indexed
+    #: (``MemoryIntelligenceSettings.index_preceding_turn``): recall@10 0.711 -> 0.736 at
+    #: 0.25; 0.5 gives back half of that.
+    adjacent_turn_weight: float = Field(default=0.25, ge=0.0, le=1.0)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

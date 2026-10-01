@@ -2,7 +2,7 @@
 
 The client emits term frequencies with BM25 saturation (k1, b); Qdrant multiplies by IDF
 computed over the collection (``Modifier.IDF``). Tokenisation is deterministic (lowercase,
-alnum tokens, English stop words, light suffix stemming) so it needs no model download; the
+alnum tokens, English stop words, Snowball English stemming) so it needs no model download; the
 same tokeniser is used for queries and documents. Term ids are 32-bit hashes.
 """
 
@@ -11,6 +11,9 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Sequence
+from functools import lru_cache
+
+import snowballstemmer
 
 from memory_service.domain.text import unicode_tokens
 from memory_service.ports.models import ProviderInfo
@@ -25,37 +28,18 @@ than too very can will would should could may might must shall into onto over
 under about above below between during before after also
 """
 _STOP = frozenset(_STOP_WORDS.split())
-_SUFFIXES = (
-    "ization",
-    "isation",
-    "ations",
-    "ation",
-    "ments",
-    "ment",
-    "ness",
-    "ings",
-    "ing",
-    "ies",
-    "ied",
-    "ers",
-    "er",
-    "ed",
-    "es",
-    "s",
-    "ly",
-)
+#: Snowball (Porter2) English. The suffix list it replaced conflated far less: it left every
+#: four-letter plural alone (``pets``/``pet``, ``cars``/``car``) and split the stem of a word
+#: from its inflections (``dance``/``dancing``, ``love``/``loved``, ``stress``/``stressed``,
+#: ``run``/``running``), so a question and the turn answering it shared no term.
+_STEMMER = snowballstemmer.stemmer("english")
 
 
+@lru_cache(maxsize=65536)
 def stem(token: str) -> str:
-    if len(token) <= 4:
-        return token
-    for suf in _SUFFIXES:
-        if token.endswith(suf) and len(token) - len(suf) >= 3:
-            base = token[: -len(suf)]
-            if suf in ("ies", "ied"):
-                return base + "y"
-            return base
-    return token
+    # Pure Python and about ten times the old suffix loop per call; a vocabulary repeats,
+    # so the cache brings indexing back to the cost of a dictionary lookup per token.
+    return str(_STEMMER.stemWord(token))
 
 
 def tokenize(text: str) -> list[str]:
@@ -105,4 +89,4 @@ class Bm25SparseEncoder:
         return SparseVector(indices=[i for i, _ in items], values=[v for _, v in items])
 
     def fingerprint(self) -> str:
-        return f"bm25-v2-unicode-k{self.k1}-b{self.b}"
+        return f"bm25-v3-snowball-k{self.k1}-b{self.b}"

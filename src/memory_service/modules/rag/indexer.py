@@ -68,7 +68,14 @@ def memory_index_text(m: CanonicalMemory) -> str:
     when = m.temporal.observed_at.date().isoformat()
     subject = (m.subject or "").split(":", 1)[-1].strip()
     who = f" {subject}:" if subject and not subject.startswith(("thr_", "run_")) else ""
-    return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
+    text = f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
+    # A verbatim turn is indexed with the message it answers, which a reply rarely restates
+    # (MemoryIntelligenceSettings.index_preceding_turn). Extracted facts stay exact.
+    prior = m.system_metadata.get("preceding_turn") or {}
+    if m.system_metadata.get("category") == "verbatim_turn" and (said := prior.get("text")):
+        speaker = str(prior.get("speaker") or "").split(":", 1)[-1].strip()
+        return f"{speaker}: {said}\n{text}" if speaker else f"{said}\n{text}"
+    return text
 
 
 EPISODE_PREFIX = "epi_"
@@ -457,6 +464,17 @@ class Indexer:
                                 ref.model_dump(mode="json", exclude_none=True) for ref in m.evidence
                             ],
                             "text": m.content[:2000],
+                            # the conversation's previous turn, which retrieval reads to
+                            # score a turn with its neighbours (adjacent_turn_weight)
+                            **(
+                                {"preceding_source_id": prior_source}
+                                if (
+                                    prior_source := (
+                                        m.system_metadata.get("preceding_turn") or {}
+                                    ).get("source_id")
+                                )
+                                else {}
+                            ),
                             # so identical memories group in the store's payload rather than
                             # being rehashed on every retrieval (see engine._dedup)
                             "text_hash": content_hash(m.content),

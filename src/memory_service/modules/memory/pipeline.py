@@ -18,6 +18,7 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
+    ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
@@ -182,6 +183,7 @@ def build_memory(
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": [mention.as_dict() for mention in dated],
+            **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
         },
         created_at=now,
         updated_at=now,
@@ -236,6 +238,7 @@ class ObservationPipeline:
         if observation.processed_at is not None:
             return []  # idempotent replay
         ctx = context_from_observation(observation)
+        preceding = await self._preceding_turn(observation)
         async with self.assist.bound(identity_of(ctx)):
             with (
                 span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
@@ -250,6 +253,10 @@ class ObservationPipeline:
                     )
                     for c in await self.provider.extract(observation, ctx)
                 ]
+                if preceding is not None:
+                    candidates = [
+                        c.model_copy(update={"preceding_turn": preceding}) for c in candidates
+                    ]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -375,6 +382,24 @@ class ObservationPipeline:
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
         return affected
+
+    async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
+        """The conversation's previous message, which the indexer puts beside a verbatim turn
+        and retrieval uses to find a turn's neighbours (``index_preceding_turn``)."""
+        if not self.cfg.index_preceding_turn or observation.kind is not ObservationKind.MESSAGE:
+            return None
+        async with self.uow_factory() as uow:
+            prior = await uow.observations.preceding_message(
+                observation, within=self.cfg.preceding_turn_window
+            )
+        if prior is None:
+            return None
+        return {
+            # the same identity _evidence gives the prior turn's own memories
+            "source_id": prior.message_id or prior.observation_id,
+            "speaker": prior.user_id or prior.agent_id or "",
+            "text": prior.content.strip()[: self.cfg.preceding_turn_max_chars],
+        }
 
     @staticmethod
     def _new_memory(

@@ -11,6 +11,7 @@ Thresholds are hard, like every other gate. Writes ``benchmark/results/tool_gate
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from benchmark.common import RESULTS, provenance
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
+from memory_service.domain.tools import RunOutcome
 
 pytestmark = pytest.mark.eval
 
@@ -64,7 +66,17 @@ async def _replay(container, service, run: dict) -> None:
                     Visibility.AGENT_GROUP if ctx.agent_id == "ops-agent" else Visibility.RUN
                 ),
             )
-        await service.set_outcome(uow, ctx, run_id=run["run_id"], success=run["success"])
+        # The run's label, as a system verdict on the run sets it (feedback's _label_run):
+        # the outcome route this replay used was removed, and the label is a store write.
+        await uow.tools.set_outcome(
+            RunOutcome(
+                tenant_id=ctx.tenant_id,
+                run_id=run["run_id"],
+                success=run["success"],
+                source="system",
+                recorded_at=datetime.now(UTC),
+            )
+        )
         await uow.commit()
 
 

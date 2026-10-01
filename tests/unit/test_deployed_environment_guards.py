@@ -23,7 +23,8 @@ pytestmark = pytest.mark.unit
 def _settings(environment: str, **auth):
     return Settings(
         service={"environment": environment},
-        authentication={"mode": "trusted_dev", **auth},
+        # the mode follows from what is configured: development keys are trusted_dev
+        authentication={"trusted_dev_api_keys": ["dev-key"], **auth},
         blob={"provider": "filesystem"},
     )
 
