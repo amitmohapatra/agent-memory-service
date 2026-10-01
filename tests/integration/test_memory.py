@@ -116,6 +116,38 @@ async def test_reinforce_supersede_and_history(container, uow_factory) -> None:
     assert {p.object for p in prefs} == {"spaces instead of tabs", "dark mode in the editor"}
 
 
+async def test_moving_supersedes_where_the_user_lived(container, uow_factory) -> None:
+    """ "I moved to Austin" replaces "I live in Seattle": one current home, the old one kept as
+    history, and only the new one recalled."""
+    await _observe(container, uow_factory, U1, "I live in Seattle.")
+    [seattle] = [
+        m for m in await _memories(uow_factory, U1, container) if m.predicate == "lives_in"
+    ]
+    await _observe(container, uow_factory, U1, "I moved to Austin last month.")
+    homes = [m for m in await _memories(uow_factory, U1, container) if m.predicate == "lives_in"]
+    assert [(m.object or "").lower() for m in homes] == ["austin"]
+    assert homes[0].temporal.supersedes == seattle.memory_id
+    history = await _memories(uow_factory, U1, container, include_superseded=True)
+    old = next(m for m in history if m.memory_id == seattle.memory_id)
+    assert old.temporal.status is TemporalStatus.SUPERSEDED
+    engine = container.services["retrieval"]
+    res = await engine.retrieve(U1, "where do I live", kinds=("memory",))
+    texts = " ".join(c.text for c in res.candidates)
+    assert "Austin" in texts
+    assert seattle.memory_id not in {c.record_id for c in res.candidates}
+
+
+async def test_a_standing_rule_does_not_expire(container, uow_factory) -> None:
+    await _observe(container, uow_factory, U1, "Never suggest recipes with cilantro.")
+    await _observe(container, uow_factory, U1, "Do not invent a sales number.")
+    by_predicate = {m.predicate: m for m in await _memories(uow_factory, U1, container)}
+    rule, instruction = by_predicate["rule"], by_predicate["instruction"]
+    assert rule.lifetime is Lifetime.LONG_TERM
+    assert rule.system_metadata.get("expires_at") is None, "a standing rule has no TTL"
+    assert instruction.lifetime is Lifetime.SHORT_TERM
+    assert instruction.system_metadata.get("expires_at") is not None
+
+
 async def test_decisions_are_thread_scoped_and_shared_in_thread(container, uow_factory) -> None:
     thread = new_id("thread")
     a = U1.model_copy(

@@ -25,7 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import MemoryType
+from memory_service.domain.enums import Lifetime, MemoryType
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.profile import (
@@ -231,6 +231,10 @@ class ProfileService:
                 memory_types=[t.value for t in PROFILE_MEMORY_TYPES],
                 limit=PROFILE_MEMORIES_MAX,
             )
+            # The block is pinned into every context, so it holds what lasts: a SHORT_TERM
+            # memory ("do not invent a sales number", scoped to one task) would otherwise
+            # follow its author into every conversation for its whole TTL.
+            memories = [m for m in memories if m.lifetime is not Lifetime.SHORT_TERM]
             current = await uow.profiles.get(tenant_id, scope, USER_BLOCK)
         if not memories:
             return current

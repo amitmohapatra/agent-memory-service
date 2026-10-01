@@ -99,6 +99,17 @@ def test_recall_and_context_over_http(client) -> None:
     )
     assert r.json()["evidence"]["status"] == "INSUFFICIENT"
     assert "## Evidence status\nINSUFFICIENT" in r.json()["rendered"]
+    # the prompt form says so too, so a caller that reads only it can abstain
+    for query, status in (
+        ("Who won the 1998 football championship?", "INSUFFICIENT"),
+        ("What is the Adjusted EBITDA definition in the FY26 report?", None),
+    ):
+        prompt = client.post("/v1/context", headers=H, json={"scope": scope, "query": query}).json()
+        assert set(prompt) >= {"rendered", "bundle_id", "token_estimate", "evidence_status"}
+        if status:
+            assert prompt["evidence_status"] == status
+        else:
+            assert prompt["evidence_status"] != "INSUFFICIENT"
     assert (
         "## Recent conversation" in bundle["rendered"]
         and "increased to EUR 98" in bundle["rendered"]

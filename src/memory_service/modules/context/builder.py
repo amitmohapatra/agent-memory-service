@@ -1017,6 +1017,10 @@ def prompt_of(api: dict[str, Any]) -> dict[str, Any]:
     """The prompt form of a bundle: the rendering, the bundle's handle and size, and - when
     tools were given - the tools that fit, best first."""
     body = {name: api[name] for name in PROMPT_FIELDS}
+    # Whether the memory holds evidence for the question: a caller that only reads the
+    # prompt form must still be able to tell "nothing to go on" from a full context, and
+    # answer "I don't know" instead of guessing (INSUFFICIENT).
+    body["evidence_status"] = (api.get("evidence") or {}).get("status", "COMPLETE")
     if api.get("tools") is not None:
         body["tool_candidates"] = [c["name"] for c in api["tools"]["candidates"]]
     return body

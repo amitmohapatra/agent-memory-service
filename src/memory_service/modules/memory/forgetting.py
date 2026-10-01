@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from memory_service.config.constants import MemoryIntelligenceSettings
-from memory_service.domain.enums import TemporalStatus
+from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
@@ -43,11 +43,26 @@ def forgetting_score(memory: CanonicalMemory, *, now: datetime, half_life_days: 
     return round(max(memory.importance, 0.0) * recency * access, 6)
 
 
+#: Categories automatic forgetting leaves alone (``forgetting_protect_core``).
+PROTECTED_CATEGORIES = frozenset({"verbatim_turn", "rule"})
+#: Kinds whose LONG_TERM memories it leaves alone: what the user said about themselves.
+PROTECTED_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
+
+
+def protected(memory: CanonicalMemory) -> bool:
+    """Whether automatic forgetting must keep this memory however long it sat unused."""
+    if memory.system_metadata.get("category") in PROTECTED_CATEGORIES:
+        return True
+    return memory.memory_type in PROTECTED_TYPES and memory.lifetime is Lifetime.LONG_TERM
+
+
 @dataclass
 class ForgettingReport:
     scanned: int = 0
     archived: int = 0
     kept: int = 0
+    #: of ``kept``, those kept because they are protected rather than by their score
+    protected: int = 0
     evicted_working: int = 0
     min_score: float | None = None
     threshold: float = 0.0
@@ -88,6 +103,10 @@ class ForgettingService:
             )
             report.scanned = len(rows)
             for m in rows:
+                if self.cfg.forgetting_protect_core and protected(m):
+                    report.kept += 1
+                    report.protected += 1
+                    continue
                 s = self.score(m, now=now)
                 report.min_score = s if report.min_score is None else min(report.min_score, s)
                 if s >= self.cfg.forgetting_archive_threshold:

@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
@@ -41,6 +41,9 @@ from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
+
+if TYPE_CHECKING:
+    from memory_service.modules.memory.forgetting import ForgettingService
 
 #: A statement is taken at its word more than an extraction is; below 1.0 so that
 #: corroboration can still raise it.
@@ -365,6 +368,21 @@ class MemoryService:
         await retract(uow, memory, now=datetime.now(UTC))
         await self._index(uow, ctx, [memory], key=f"memidx:retract:{memory_id}")
         return memory
+
+    async def restore(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        memory_id: str,
+        forgetting: ForgettingService,
+    ) -> CanonicalMemory:
+        """Bring back a memory automatic forgetting archived: CURRENT and searchable again.
+        The same people who may forget a memory may restore it. A memory that is not
+        archived is returned as it is; one that was deleted stays deleted (404)."""
+        memory = await self.get_memory(uow, ctx, memory_id)
+        await self._require_owner(ctx, memory, "restore")
+        restored = await forgetting.restore(uow, ctx.tenant_id, memory_id)
+        return restored or memory
 
     async def forget(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, memory_id: str

@@ -499,6 +499,13 @@ class MemoryIntelligenceSettings(BaseModel):
     forgetting_archive_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
     forgetting_min_idle_days: float = Field(default=30.0, ge=0.0)
     forgetting_batch: int = Field(default=500, ge=1)
+    #: Keep out of automatic forgetting what months-long recall depends on: the user's own
+    #: lasting facts and preferences (their name, their dog's name, "never suggest
+    #: cilantro") and the verbatim turns every other memory is evidence from. Scored by
+    #: importance x recency x use, a never-recalled turn fell under the threshold in about
+    #: forty idle days and a never-recalled user fact in about ninety. They can still be
+    #: forgotten explicitly (DELETE /v1/memories/{id}) and by tenant retention.
+    forgetting_protect_core: bool = True
 
 
 MEMORY_INTELLIGENCE = MemoryIntelligenceSettings()
