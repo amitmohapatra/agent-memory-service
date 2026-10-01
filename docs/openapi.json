@@ -17758,6 +17758,51 @@
               }
             }
           },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/keys/self",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
           "429": {
             "content": {
               "application/problem+json": {

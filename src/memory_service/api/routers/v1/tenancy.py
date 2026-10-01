@@ -105,7 +105,7 @@ async def issue_key(
 @router.get(
     "/keys/self",
     response_model=KeySelfResponse,
-    responses=error_responses(401, 403, 503),
+    responses=error_responses(401, 403, 422, 503),
     summary="Who the calling key is (401 unknown, revoked or expired; 403 refused)",
     description="The introspection other services of the platform authenticate a key by: "
     "send the key as any call sends it and read who it is. Any key may ask about itself.",

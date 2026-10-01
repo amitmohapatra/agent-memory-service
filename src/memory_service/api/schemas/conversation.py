@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import ScopeBody
 from memory_service.api.validation import CustomMetadata
@@ -122,6 +122,14 @@ class MessageIn(BaseModel):
         default=None, max_length=400, examples=["1726300000.000100"]
     )
     parent_message_id: str | None = None
+
+    @model_validator(mode="after")
+    def _an_event_says_something(self) -> MessageIn:
+        """An EVENT is only what it says happened: an empty one has nothing to learn from
+        (``/v1/observations``, which EVENT replaced, refused it too)."""
+        if self.role is MessageRole.EVENT and not self.content.strip():
+            raise ValueError("an EVENT message needs content")
+        return self
 
 
 #: Messages one request appends.
