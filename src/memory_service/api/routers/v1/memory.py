@@ -430,3 +430,21 @@ async def forget_memory(
     async with container.services["uow_factory"]() as uow:
         await _service(container).forget(uow, ctx, memory_id)
         await uow.commit()
+
+
+@router.post(
+    "/memories/{memory_id}/restore",
+    response_model=MemoryResponse,
+    tags=["memory"],
+    summary="Restore a memory automatic forgetting archived (CURRENT and searchable again)",
+    responses=_READ_ERRORS,
+)
+async def restore_memory(
+    memory_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> MemoryResponse:
+    async with container.services["uow_factory"]() as uow:
+        memory = await _service(container).restore(
+            uow, ctx, memory_id, container.services["forgetting"]
+        )
+        await uow.commit()
+    return MemoryResponse(**memory_to_api(memory))

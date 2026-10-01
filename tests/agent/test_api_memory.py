@@ -156,3 +156,37 @@ async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app
     with pytest.raises(MemoryError) as listed:
         await globex.bind(tenant_id="acme", user_id="u1").advanced.memories.list()
     assert listed.value.status == 403
+
+
+@pytest.mark.covers("memory.restore_memory", "memory.get_memory")
+@pytest.mark.covers_error("memory.restore_memory")
+async def test_a_memory_forgetting_archived_is_restored(app, running) -> None:
+    """Automatic forgetting archives a memory nobody used (it leaves search, the row stays);
+    the agent that owns it brings it back, and another tenant cannot."""
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    _, harness = await _tenant(app)
+    agent = harness.bind(user_id="u1").agent("onboarding-bot")
+    ack = await agent.remember(SECOND, visibility="USER")
+    forgetting = app.state.container.services["forgetting"]
+
+    async def sweep_a_year_later():
+        return await forgetting.sweep(now=datetime.now(UTC) + timedelta(days=365))
+
+    report = running.portal.call(sweep_a_year_later)
+    assert ack.memory_id in report.archived_ids
+    archived = await agent.advanced.memories.get(ack.memory_id)
+    assert archived.temporal_status == "ARCHIVED"
+
+    restored = await agent.advanced.memories.restore(ack.memory_id)
+    assert restored.memory_id == ack.memory_id and restored.temporal_status == "CURRENT"
+    assert (await agent.advanced.memories.restore(ack.memory_id)).temporal_status == "CURRENT"
+
+    _, other = await _tenant(app, "globex")
+    with pytest.raises(MemoryError) as theirs:
+        await (
+            other.bind(user_id="u1")
+            .agent("onboarding-bot")
+            .advanced.memories.restore(ack.memory_id)
+        )
+    assert theirs.value.status == 404

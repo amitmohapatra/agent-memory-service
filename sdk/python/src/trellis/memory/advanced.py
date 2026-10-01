@@ -271,6 +271,17 @@ class MemoriesAPI:
             await self._ctx._request("GET", f"/v1/memories/{memory_id}")
         )
 
+    async def restore(self, memory_id: str) -> MemoryResult:
+        """Bring back a memory automatic forgetting archived: current and searchable again.
+        Restoring one that is not archived returns it unchanged."""
+        return MemoryResult.model_validate(
+            await self._ctx._request(
+                "POST",
+                f"/v1/memories/{memory_id}/restore",
+                idempotency_key=f"restore-{memory_id}",
+            )
+        )
+
     async def list(
         self,
         *,
