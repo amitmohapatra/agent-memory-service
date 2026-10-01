@@ -291,6 +291,33 @@ def _collection_vectors(
     return vectors, sparse or None
 
 
+def _arm_prefetches(
+    dense: Mapping[VectorName, Sequence[float]],
+    sparse: Mapping[VectorName, SparseVector],
+    late: Sequence[Sequence[float]] | None,
+    qf: models.Filter,
+    limit: int,
+) -> list[tuple[VectorName, models.Prefetch]]:
+    """One prefetch per arm ``search_arms`` reads: each dense space, each non-empty sparse
+    space, then the late-interaction arm over the union of the others."""
+    arms: list[tuple[VectorName, models.Prefetch]] = [
+        (name, models.Prefetch(query=list(vector), using=name.value, limit=limit, filter=qf))
+        for name, vector in dense.items()
+    ]
+    for name, vector in sparse.items():
+        if name not in SPARSE_NAMES:
+            raise ValueError(f"{name} is not a sparse space")
+        if vector.indices:
+            query = models.SparseVector(indices=vector.indices, values=vector.values)
+            arms.append(
+                (name, models.Prefetch(query=query, using=name.value, limit=limit, filter=qf))
+            )
+    if late and arms:
+        inner = [prefetch for _, prefetch in arms]
+        arms.append((VectorName.COLBERT, _late_prefetch(late, inner, qf, limit)))
+    return arms
+
+
 class QdrantSearchStore:
     info = ProviderInfo(
         name="qdrant",
@@ -635,21 +662,7 @@ class QdrantSearchStore:
         limit: int,
     ) -> dict[VectorName, list[SearchHit]]:
         qf = _filter(flt)
-        arms: list[tuple[VectorName, models.Prefetch]] = [
-            (name, models.Prefetch(query=list(vector), using=name.value, limit=limit, filter=qf))
-            for name, vector in dense.items()
-        ]
-        for name, vector in sparse.items():
-            if name not in SPARSE_NAMES:
-                raise ValueError(f"{name} is not a sparse space")
-            if vector.indices:
-                query = models.SparseVector(indices=vector.indices, values=vector.values)
-                arms.append(
-                    (name, models.Prefetch(query=query, using=name.value, limit=limit, filter=qf))
-                )
-        if late and arms:
-            inner = [prefetch for _, prefetch in arms]
-            arms.append((VectorName.COLBERT, _late_prefetch(late, inner, qf, limit)))
+        arms = _arm_prefetches(dense, sparse, late, qf, limit)
         if not arms:
             return {}
         requests = [
@@ -659,7 +672,7 @@ class QdrantSearchStore:
                 using=prefetch.using,
                 filter=qf,
                 limit=limit,
-                # ids and scores only: see the payload read below
+                # ids and scores only: see _payloads
                 with_payload=False,
             )
             for _, prefetch in arms
@@ -676,26 +689,7 @@ class QdrantSearchStore:
                 raise DependencyUnavailable(
                     f"qdrant arms query failed: {type(exc).__name__}: {exc}"
                 ) from exc
-            # The arms overlap: ~800 hits a query are ~350 points. Payloads come back once per
-            # point, not once per hit - turning a payload from protobuf into a dict is client
-            # CPU under the GIL, and at ~800 a query it was most of a memory search's Python
-            # time and what capped one worker's throughput.
-            ids = list(dict.fromkeys(str(p.id) for response in responses for p in response.points))
-            try:
-                points = await _read(
-                    "retrieve",
-                    lambda: self._client.retrieve(
-                        collection_name=self._name(collection),
-                        ids=ids,
-                        with_payload=_PAYLOAD,
-                        with_vectors=False,
-                    ),
-                )
-            except Exception as exc:
-                raise DependencyUnavailable(
-                    f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
-                ) from exc
-        payloads = {str(p.id): dict(p.payload or {}) for p in points}
+            payloads = await self._payloads(collection, responses)
         out: dict[VectorName, list[SearchHit]] = {}
         for (name, _), response in zip(arms, responses, strict=True):
             retriever = Retriever.for_vector(name)
@@ -712,6 +706,30 @@ class QdrantSearchStore:
             hits.sort(key=lambda hit: (-hit.score, hit.record_id))  # see search_hybrid
             out[name] = hits
         return out
+
+    async def _payloads(self, collection: str, responses: Sequence[Any]) -> dict[str, dict]:
+        """Every point's payload, read once.
+
+        The arms overlap: ~800 hits a query are ~350 points. Turning a payload from protobuf
+        into a dict is client CPU under the GIL, and read with every hit it was most of a
+        memory search's Python time and what capped one worker's throughput.
+        """
+        ids = list(dict.fromkeys(str(p.id) for response in responses for p in response.points))
+        try:
+            points = await _read(
+                "retrieve",
+                lambda: self._client.retrieve(
+                    collection_name=self._name(collection),
+                    ids=ids,
+                    with_payload=_PAYLOAD,
+                    with_vectors=False,
+                ),
+            )
+        except Exception as exc:
+            raise DependencyUnavailable(
+                f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        return {str(p.id): dict(p.payload or {}) for p in points}
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
         if not record_ids:

@@ -1,6 +1,6 @@
-"""The tensor path of the ColBERT encoder, against a fake session and a small real tokenizer:
-what is fed, what is kept, what comes back. The real graph was compared with PyLate (ADR
-0025)."""
+"""The tensor path of the ColBERT encoder, against a fake session and a word-level fake
+tokenizer (as ``test_onnx_encoder``: the suite runs without the ``models`` extra): what is
+fed, what is kept, what comes back. The real graph was compared with PyLate (ADR 0025)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from tokenizers import Tokenizer
-from tokenizers.models import WordLevel
-from tokenizers.pre_tokenizers import Whitespace
-from tokenizers.processors import TemplateProcessing
 
 from memory_service.adapters.models.late_interaction import ColbertGraph, HashLateInteraction
 from memory_service.domain.errors import DependencyUnavailable
@@ -32,15 +28,20 @@ CONFIG = {
 }
 
 
-def _tokenizer() -> Tokenizer:
-    tok = Tokenizer(WordLevel(VOCAB, unk_token="[PAD]"))
-    tok.pre_tokenizer = Whitespace()
-    tok.post_processor = TemplateProcessing(
-        single="[CLS] $A [SEP]",
-        pair="[CLS] $A [SEP] $B:1 [SEP]:1",
-        special_tokens=[("[CLS]", 1), ("[SEP]", 2)],
-    )
-    return tok
+class _Tokenizer:
+    """Whitespace words to ids, wrapped in ``[CLS] ... [SEP]`` as a BERT tokenizer does."""
+
+    def token_to_id(self, word: str) -> int | None:
+        return VOCAB.get(word)
+
+    def encode_batch(self, texts: list[str]) -> list[SimpleNamespace]:
+        return [
+            SimpleNamespace(ids=[1, *(VOCAB.get(w, 0) for w in text.split()), 2]) for text in texts
+        ]
+
+
+def _tokenizer() -> _Tokenizer:
+    return _Tokenizer()
 
 
 class _Session:
