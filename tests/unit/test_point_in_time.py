@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -141,13 +142,11 @@ def test_an_episode_is_one_record_per_thread_and_leads_with_its_dates() -> None:
 
 async def test_every_message_in_a_window_shares_one_episode_job() -> None:
     enqueued = []
-    uow = SimpleNamespace(enqueue=lambda spec: _record(enqueued, spec))
+    uow: Any = SimpleNamespace(enqueue=lambda spec: _record(enqueued, spec))
     start = 1_000 * EPISODE_INDEX_DELAY_SECONDS
-    await enqueue_episode_index(uow, "t", "thr_1", now=start + 1)  # type: ignore[arg-type]
-    await enqueue_episode_index(uow, "t", "thr_1", now=start + 2)  # type: ignore[arg-type]
-    await enqueue_episode_index(  # type: ignore[arg-type]
-        uow, "t", "thr_1", now=start + EPISODE_INDEX_DELAY_SECONDS
-    )
+    await enqueue_episode_index(uow, "t", "thr_1", now=start + 1)
+    await enqueue_episode_index(uow, "t", "thr_1", now=start + 2)
+    await enqueue_episode_index(uow, "t", "thr_1", now=start + EPISODE_INDEX_DELAY_SECONDS)
     keys = [spec.idempotency_key for spec in enqueued]
     assert keys[0] == keys[1] != keys[2]
     assert {spec.task_name for spec in enqueued} == {TASK_EPISODE_INDEX}

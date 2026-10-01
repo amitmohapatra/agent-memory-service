@@ -307,37 +307,10 @@ class RetrievalEngine:
             query = query[: self.cfg.max_query_chars]
         has_thread = ctx.thread_id is not None
         routed = self.router.route(query, has_thread=has_thread)
-        search_text = routed.query
         diagnostics: dict[str, Any] = {}
-        # the written query's encoding, started before the model is asked to expand it and
-        # used whenever the expansion leaves the search text as it was
-        speculative: asyncio.Future[QueryVectors] | None = None
-        if (
-            self.assist.wants("query_expansion")
-            and routed.query_type is QueryType.GENERAL_SEMANTIC
-            and not any(routed.signals.values())
-        ):
-            if query_embedding is None:
-                speculative = asyncio.ensure_future(self._encode(routed.query))
-            try:
-                expansion = await self._bounded_expansion(routed.query, diagnostics)
-            except BaseException:
-                if speculative is not None:
-                    _discard(speculative)
-                raise
-            if expansion is not None:
-                if expansion.query_type is not None:
-                    routed = self.router.routed(
-                        routed.query,
-                        expansion.query_type,
-                        identifiers=[*routed.identifiers, *expansion.identifiers],
-                        signals=routed.signals,
-                        has_thread=has_thread,
-                        lang=routed.lang,
-                    )
-                if expansion.terms:
-                    search_text = f"{routed.query} {' '.join(expansion.terms)}"
-                diagnostics["query_expansion"] = expansion.terms
+        routed, search_text, speculative = await self._expanded(
+            routed, has_thread=has_thread, encode=query_embedding is None, diagnostics=diagnostics
+        )
         diagnostics["query_type"] = routed.query_type.value
         diagnostics["query_lang"] = routed.lang
         diagnostics["signals"] = routed.signals
@@ -757,6 +730,46 @@ class RetrievalEngine:
         for group, scores in zip(groups.values(), found, strict=True):
             for c in group:
                 c.similarity = scores.get(c.record_id)
+
+    async def _expanded(
+        self,
+        routed: RoutedQuery,
+        *,
+        has_thread: bool,
+        encode: bool,
+        diagnostics: dict[str, Any],
+    ) -> tuple[RoutedQuery, str, asyncio.Future[QueryVectors] | None]:
+        """The route and search text after model-assisted expansion (when no rule fired),
+        and the written query's encoding when ``encode``: started before the model is asked
+        and the one to use whenever the expansion leaves the search text as it was."""
+        if not (
+            self.assist.wants("query_expansion")
+            and routed.query_type is QueryType.GENERAL_SEMANTIC
+            and not any(routed.signals.values())
+        ):
+            return routed, routed.query, None
+        speculative = asyncio.ensure_future(self._encode(routed.query)) if encode else None
+        try:
+            expansion = await self._bounded_expansion(routed.query, diagnostics)
+        except BaseException:
+            if speculative is not None:
+                _discard(speculative)
+            raise
+        search_text = routed.query
+        if expansion is not None:
+            if expansion.query_type is not None:
+                routed = self.router.routed(
+                    routed.query,
+                    expansion.query_type,
+                    identifiers=[*routed.identifiers, *expansion.identifiers],
+                    signals=routed.signals,
+                    has_thread=has_thread,
+                    lang=routed.lang,
+                )
+            if expansion.terms:
+                search_text = f"{routed.query} {' '.join(expansion.terms)}"
+            diagnostics["query_expansion"] = expansion.terms
+        return routed, search_text, speculative
 
     async def _bounded_expansion(
         self, query: str, diagnostics: dict[str, Any]

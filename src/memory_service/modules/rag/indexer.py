@@ -15,16 +15,17 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.script import detect_script
+from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.conversation.summary import (
     SUMMARY_MAX_CHARS,
     SUMMARY_SOURCE_MESSAGES,
     digest,
 )
-from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.connections import payload_edges
@@ -492,42 +493,11 @@ class Indexer:
         await self.ensure_collections()
         collection = self.collection(MEMORIES)
         record_id = episode_id(thread_id)
-        async with self.uow_factory() as uow:
-            thread = await uow.threads.get(tenant_id, thread_id)
-            summary = await uow.summaries.latest(tenant_id, thread_id) if thread else None
-            covered = summary.covers_to_sequence if summary else 0
-            head = (
-                await uow.messages.list_after(tenant_id, thread_id, after_sequence=0, limit=1)
-                if thread
-                else []
-            )
-            # what the summary does not cover yet, as the extractive digest (no model): a
-            # thread shorter than one summary period is still an episode
-            tail = (
-                await uow.messages.list_after(
-                    tenant_id, thread_id, after_sequence=covered, limit=SUMMARY_SOURCE_MESSAGES
-                )
-                if thread
-                else []
-            )
-            if summary is not None and not tail:
-                # everything is summarised: the episode ends at the last message it covers
-                tail_end = await uow.messages.list_after(
-                    tenant_id, thread_id, after_sequence=max(covered - 1, 0), limit=1
-                )
-            else:
-                tail_end = tail[-1:]
-        lines = digest(tail)
-        while lines and sum(len(line) + 1 for line in lines) > SUMMARY_MAX_CHARS:
-            lines.pop(0)
-        body = "\n".join(part for part in ((summary.text if summary else ""), *lines) if part)
-        if thread is None or not body.strip():
+        source = await self._episode_source(tenant_id, thread_id)
+        if source is None:
             await self.store.delete(collection, [record_id])
             return False
-        first = head[0].occurred_at if head else None
-        last = tail_end[0].occurred_at if tail_end else None
-        observed_to = last or (summary.created_at if summary else datetime.now(UTC))
-        observed_from = first or observed_to
+        thread, body, observed_from, observed_to = source
         text = episode_index_text(body, thread.title, observed_from, observed_to)
         keys = (
             [f"user:{tenant_id}/{thread.owner_user_id}"]
@@ -561,6 +531,37 @@ class Indexer:
             )
         log.info("index.episode_done", tenant_id=tenant_id, chars=len(text))
         return True
+
+    async def _episode_source(
+        self, tenant_id: str, thread_id: str
+    ) -> tuple[Thread, str, datetime, datetime] | None:
+        """The thread, its episode body and the span of its messages; ``None`` when the
+        thread is gone or has nothing visible to recall."""
+        async with self.uow_factory() as uow:
+            thread = await uow.threads.get(tenant_id, thread_id)
+            if thread is None:
+                return None
+            summary = await uow.summaries.latest(tenant_id, thread_id)
+            covered = summary.covers_to_sequence if summary else 0
+            head = await uow.messages.list_after(tenant_id, thread_id, after_sequence=0, limit=1)
+            # what the summary does not cover yet, as the extractive digest (no model): a
+            # thread shorter than one summary period is still an episode
+            tail = await uow.messages.list_after(
+                tenant_id, thread_id, after_sequence=covered, limit=SUMMARY_SOURCE_MESSAGES
+            )
+            # with everything summarised, the episode ends at the last message it covers
+            end = tail[-1:] or await uow.messages.list_after(
+                tenant_id, thread_id, after_sequence=max(covered - 1, 0), limit=1
+            )
+        lines = digest(tail)
+        while lines and sum(len(line) + 1 for line in lines) > SUMMARY_MAX_CHARS:
+            lines.pop(0)
+        body = "\n".join(part for part in ((summary.text if summary else ""), *lines) if part)
+        if not body.strip():
+            return None
+        observed_to = end[0].occurred_at if end else datetime.now(UTC)
+        observed_from = head[0].occurred_at if head else observed_to
+        return thread, body, observed_from, observed_to
 
     async def _dense_for_chunks(
         self, chunks: Sequence[Chunk], texts: list[str]

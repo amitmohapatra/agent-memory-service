@@ -137,7 +137,7 @@ JobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "RETRYING", "CA
 DocumentStatus = Literal["STAGED", "READY", "FAILED"]
 ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
 #: What ``search`` reads: memories, document passages, document summaries, thread messages.
-SearchKind = Literal["memory", "chunk", "summary", "message"]
+SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
 #: An unused evidence item's kind: a bundle item's representation or a record kind.
 EvidenceKind = Literal[
     "CHUNK",
@@ -331,6 +331,10 @@ class SearchItem(BaseModel):
     citation: str
     document_id: str | None = None
     page: int | None = None
+    #: the conversation an ``episode`` item is
+    thread_id: str | None = None
+    #: true when a later memory replaced this one (only ``as_of``/``known_at`` return those)
+    superseded: bool | None = None
     #: ranking detail, only with ``debug=True``
     debug: dict[str, Any] | None = None
 
