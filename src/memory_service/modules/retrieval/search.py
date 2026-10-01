@@ -6,13 +6,16 @@ needs to use a result and cite it, nothing else. Ranking detail (scores, retriev
 attributes) is attached only when asked for (``debug``).
 
 Kinds: ``memory`` (what was learned or stated), ``chunk`` (document passages), ``summary``
-(document summaries) and ``message`` (this thread's history). A time range keeps only what was
+(document summaries), ``episode`` (earlier conversations, one per thread: its summary and a
+digest of what followed, across every thread the caller's user owns) and ``message`` (this
+thread's history). A time range keeps only what was
 observed within it, and it filters before anything is ranked: the store applies it to
 memories, and a message outside it is never scored.
 """
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import re
 from collections.abc import Sequence
@@ -30,12 +33,13 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.retrieval.engine import (
     Candidate,
     ObservedRange,
+    PointInTime,
     RetrievalEngine,
     RetrievalResult,
 )
 from memory_service.ports.uow import UnitOfWorkFactory
 
-SearchKind = Literal["memory", "chunk", "summary", "message"]
+SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
 #: What a search reads when the caller names no kinds. The order is the order the engine
 #: interleaves the per-kind rankings in, so document passages lead (as /v1/recall always did).
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
@@ -47,6 +51,7 @@ _CITATION: Final = {
     "chunk": "chunk_id",
     "memory": "memory_id",
     "summary": "summary_id",
+    "episode": "episode_id",
     "fact": "relation_id",
     "message": "message_id",
 }
@@ -58,7 +63,7 @@ class SearchItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: str
-    kind: str = Field(description="memory, chunk, summary or message")
+    kind: str = Field(description="memory, chunk, summary, episode or message")
     text: str
     observed_on: str | None = Field(
         default=None, description="the day it was observed (YYYY-MM-DD), when known"
@@ -66,6 +71,14 @@ class SearchItem(BaseModel):
     citation: str = Field(description="stable citation key, e.g. memory_id:mem_…")
     document_id: str | None = None
     page: int | None = None
+    thread_id: str | None = Field(
+        default=None, description="the conversation an episode is (its messages: /v1/threads)"
+    )
+    superseded: bool | None = Field(
+        default=None,
+        description="true when a later memory replaced this one (only a search with as_of "
+        "or known_at returns those)",
+    )
     debug: dict[str, Any] | None = Field(
         default=None, description="ranking detail; only with debug=true"
     )
@@ -106,6 +119,8 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
         citation=citation(c.kind, c.record_id),
         document_id=c.payload.get("document_id"),
         page=int(page) if isinstance(page, int | float) else None,
+        thread_id=c.payload.get("thread_id") if c.kind == "episode" else None,
+        superseded=True if c.kind == "memory" and c.payload.get("current") is False else None,
         debug={
             "score": c.score,
             "retrievers": c.retrievers,
@@ -161,34 +176,42 @@ class Searcher:
         kinds: Sequence[SearchKind] = DEFAULT_KINDS,
         limit: int,
         observed: ObservedRange | None = None,
+        at: PointInTime | None = None,
         document_ids: Sequence[str] | None = None,
         debug: bool = False,
         text_chars: int | None = None,
     ) -> SearchResult:
         wanted = set(kinds)
         ranked = [k for k in kinds if k != "message"]
-        retrieved: RetrievalResult | None = None
         items: list[SearchItem] = []
-        if ranked:
+
+        async def ranked_search() -> RetrievalResult | None:
+            if not ranked:
+                return None
             async with self.assist.reading(ctx):
-                retrieved = await self.engine.retrieve(
+                return await self.engine.retrieve(
                     ctx,
                     query,
                     limit=limit,
                     kinds=tuple(ranked),
                     document_ids=document_ids,
                     observed=observed,
+                    at=at,
                 )
+
+        async def history() -> list[SearchItem]:
+            if "message" not in wanted:
+                return []
+            return await self._messages(ctx, query, observed, debug=debug, text_chars=text_chars)
+
+        # independent reads (the index and this thread's history): neither waits on the other
+        retrieved, messages = await asyncio.gather(ranked_search(), history())
+        if retrieved is not None:
             items = [
                 candidate_item(c, debug=debug, text_chars=text_chars)
                 for c in retrieved.candidates
                 if c.kind in wanted
             ]
-        messages = (
-            await self._messages(ctx, query, observed, debug=debug, text_chars=text_chars)
-            if "message" in wanted
-            else []
-        )
         merged = [
             item
             for pair in itertools.zip_longest(items, messages)

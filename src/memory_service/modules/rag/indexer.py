@@ -15,11 +15,17 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
+from memory_service.modules.conversation.summary import (
+    SUMMARY_MAX_CHARS,
+    SUMMARY_SOURCE_MESSAGES,
+    digest,
+)
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.connections import payload_edges
@@ -42,6 +48,10 @@ log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
+#: The open ends of a memory's valid and knowledge time, written as instants so a range
+#: filter can read them: a store range filter never matches a field that is absent.
+TIME_MIN = datetime(1900, 1, 1, tzinfo=UTC)
+TIME_MAX = datetime(9999, 12, 31, tzinfo=UTC)
 
 
 def memory_index_text(m: CanonicalMemory) -> str:
@@ -66,6 +76,46 @@ def memory_index_text(m: CanonicalMemory) -> str:
         speaker = str(prior.get("speaker") or "").split(":", 1)[-1].strip()
         return f"{speaker}: {said}\n{text}" if speaker else f"{said}\n{text}"
     return text
+
+
+EPISODE_PREFIX = "epi_"
+
+
+def episode_id(thread_id: str) -> str:
+    """A thread's one episode record: re-indexing a newer summary replaces it."""
+    return f"{EPISODE_PREFIX}{thread_id}"
+
+
+def episode_index_text(
+    summary: str, title: str | None, observed_from: datetime, observed_to: datetime
+) -> str:
+    """The episode's dates and title lead its text, for the reason ``memory_index_text``
+    dates a memory: a "last month" question has to be able to match it lexically."""
+    start, end = observed_from.date().isoformat(), observed_to.date().isoformat()
+    when = start if start == end else f"{start} to {end}"
+    name = f" {' '.join(title.split())[:200]}:" if title and title.strip() else ""
+    return f"[{when}] conversation{name} {summary.strip()}"
+
+
+#: Memory states the search index holds: the live ones, and the ones a later memory replaced
+#: (history for point-in-time search). Everything else is out of the index.
+INDEXED_STATUSES = frozenset({"CURRENT", "SUPERSEDED"})
+
+
+def memory_time_payload(m: CanonicalMemory) -> dict[str, str]:
+    """A memory's valid time and the end of its knowledge time, as filterable instants.
+
+    An unknown start of validity is open (the fact holds as far back as anything asks),
+    as is an unknown end. Knowledge ends when the memory was superseded: both supersede
+    paths stamp ``updated_at`` at that moment (a later edit of a superseded row would move
+    it later, which only ever widens what ``known_at`` returns)."""
+    t = m.temporal
+    superseded = t.status.value == "SUPERSEDED"
+    return {
+        "valid_from": (t.valid_from or TIME_MIN).isoformat(),
+        "valid_to": (t.valid_to or TIME_MAX).isoformat(),
+        "known_to": (m.updated_at if superseded else TIME_MAX).isoformat(),
+    }
 
 
 class Indexer:
@@ -344,17 +394,19 @@ class Indexer:
         return len(records)
 
     async def index_memories(self, tenant_id: str, memory_ids: Sequence[str]) -> int:
-        """Upsert CURRENT memories into the memories collection; remove every other state
-        (superseded, expired, retracted, forgotten) so only live intelligence is searchable.
-        Superseded memories stay in PostgreSQL for temporal/audit queries."""
+        """Upsert CURRENT memories into the memories collection, and SUPERSEDED ones as
+        history (``current: false``); remove every other state (expired, contradicted,
+        retracted, forgotten). Every ordinary search filters ``current``, so history is
+        read only by a search that asks for a point in time (``as_of``: what was true then;
+        ``known_at``: what had been learned by then)."""
         await self.ensure_collections()
         async with self.uow_factory() as uow:
             memories = await uow.memories.get_many(tenant_id, memory_ids)
         found = {m.memory_id for m in memories}
-        live = [m for m in memories if m.temporal.status.value == "CURRENT"]
-        gone = [m.memory_id for m in memories if m.temporal.status.value != "CURRENT"] + [
-            i for i in memory_ids if i not in found
-        ]
+        live = [m for m in memories if m.temporal.status.value in INDEXED_STATUSES]
+        gone = [
+            m.memory_id for m in memories if m.temporal.status.value not in INDEXED_STATUSES
+        ] + [i for i in memory_ids if i not in found]
         collection = self.collection(MEMORIES)
         if gone:
             await self.store.delete(collection, gone)
@@ -390,7 +442,8 @@ class Indexer:
                             # did. They were roughly a tenth of every point's payload,
                             # which is resident memory as soon as the memories collection
                             # keeps its payload in RAM. `current` stays: it is a filter.
-                            "current": True,
+                            "current": m.temporal.status.value == "CURRENT",
+                            **memory_time_payload(m),
                             "subject": m.subject,
                             "predicate": m.predicate,
                             "object": (m.object or "")[:300],
@@ -440,6 +493,93 @@ class Indexer:
             await uow.commit()
         log.info("index.memories_done", tenant_id=tenant_id, upserted=n, removed=len(gone))
         return n
+
+    async def index_episode(self, tenant_id: str, thread_id: str) -> bool:
+        """Upsert a thread's one searchable episode (its latest summary, then a digest of
+        the messages after it), or remove the episode when the thread is gone or has no
+        visible messages. True when an episode is indexed.
+
+        An episode is what lets a later conversation find an earlier one ("what did we
+        decide last month?"); the extracted memories alone lose the thread's narrative.
+
+        Its audience is the thread's owning user (``user:`` key: that user and the agents
+        acting for them, in any thread), because reaching across threads is the point and
+        the owner can already read every message the summary is folded from. A thread with
+        no owning user keeps the thread's own audience, readable only inside it. Nothing
+        reads episodes unless a search names the ``episode`` kind.
+        """
+        await self.ensure_collections()
+        collection = self.collection(MEMORIES)
+        record_id = episode_id(thread_id)
+        source = await self._episode_source(tenant_id, thread_id)
+        if source is None:
+            await self.store.delete(collection, [record_id])
+            return False
+        thread, body, observed_from, observed_to = source
+        text = episode_index_text(body, thread.title, observed_from, observed_to)
+        keys = (
+            [f"user:{tenant_id}/{thread.owner_user_id}"]
+            if thread.owner_user_id
+            else [f"thread:{tenant_id}/{thread_id}"]
+        )
+        with span("index.episode", tenant_id=tenant_id):
+            dense = await self.embed_cached([text], [f"{content_hash(text)}:epi1"])
+            sparse = self.sparse.encode_documents([text])
+            await self.store.upsert(
+                [
+                    SearchRecord(
+                        record_id=record_id,
+                        collection=collection,
+                        tenant_id=tenant_id,
+                        dense=_vectors_at(dense, 0),
+                        sparse=sparse[0],
+                        payload={
+                            "kind": "episode",
+                            "visibility_keys": keys,
+                            "thread_id": thread_id,
+                            "current": True,
+                            "observed_at": observed_to.isoformat(),
+                            "observed_from": observed_from.isoformat(),
+                            "script": detect_script(body).value,
+                            "text": text[:4000],
+                            "text_hash": content_hash(text),
+                        },
+                    )
+                ]
+            )
+        log.info("index.episode_done", tenant_id=tenant_id, chars=len(text))
+        return True
+
+    async def _episode_source(
+        self, tenant_id: str, thread_id: str
+    ) -> tuple[Thread, str, datetime, datetime] | None:
+        """The thread, its episode body and the span of its messages; ``None`` when the
+        thread is gone or has nothing visible to recall."""
+        async with self.uow_factory() as uow:
+            thread = await uow.threads.get(tenant_id, thread_id)
+            if thread is None:
+                return None
+            summary = await uow.summaries.latest(tenant_id, thread_id)
+            covered = summary.covers_to_sequence if summary else 0
+            head = await uow.messages.list_after(tenant_id, thread_id, after_sequence=0, limit=1)
+            # what the summary does not cover yet, as the extractive digest (no model): a
+            # thread shorter than one summary period is still an episode
+            tail = await uow.messages.list_after(
+                tenant_id, thread_id, after_sequence=covered, limit=SUMMARY_SOURCE_MESSAGES
+            )
+            # with everything summarised, the episode ends at the last message it covers
+            end = tail[-1:] or await uow.messages.list_after(
+                tenant_id, thread_id, after_sequence=max(covered - 1, 0), limit=1
+            )
+        lines = digest(tail)
+        while lines and sum(len(line) + 1 for line in lines) > SUMMARY_MAX_CHARS:
+            lines.pop(0)
+        body = "\n".join(part for part in ((summary.text if summary else ""), *lines) if part)
+        if not body.strip():
+            return None
+        observed_to = end[0].occurred_at if end else datetime.now(UTC)
+        observed_from = head[0].occurred_at if head else observed_to
+        return thread, body, observed_from, observed_to
 
     async def _dense_for_chunks(
         self, chunks: Sequence[Chunk], texts: list[str]

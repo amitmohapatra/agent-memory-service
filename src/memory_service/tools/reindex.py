@@ -30,10 +30,10 @@ from typing import Any
 from sqlalchemy import select
 
 from memory_service.__about__ import __version__
-from memory_service.adapters.db.orm import DocumentRow, MemoryRow
+from memory_service.adapters.db.orm import DocumentRow, MemoryRow, ThreadRow
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
+from memory_service.modules.rag.indexer import INDEXED_STATUSES, KNOWLEDGE, MEMORIES
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -44,6 +44,7 @@ class ReindexReport:
     documents: int = 0
     chunks: int = 0
     memories: int = 0
+    episodes: int = 0
     dropped: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
@@ -56,6 +57,7 @@ class ReindexReport:
             "documents": self.documents,
             "chunks": self.chunks,
             "memories": self.memories,
+            "episodes": self.episodes,
             "dropped": self.dropped,
             "failures": self.failures,
         }
@@ -89,13 +91,19 @@ async def rebuild_search_index(
             DocumentRow.status == "READY", DocumentRow.deleted_at.is_(None)
         )
         mems = select(MemoryRow.tenant_id, MemoryRow.memory_id).where(
-            MemoryRow.temporal_status == "CURRENT", MemoryRow.deleted_at.is_(None)
+            MemoryRow.temporal_status.in_(sorted(INDEXED_STATUSES)),
+            MemoryRow.deleted_at.is_(None),
+        )
+        threads = select(ThreadRow.tenant_id, ThreadRow.thread_id).where(
+            ThreadRow.deleted_at.is_(None)
         )
         if tenant_id:
             docs = docs.where(DocumentRow.tenant_id == tenant_id)
             mems = mems.where(MemoryRow.tenant_id == tenant_id)
+            threads = threads.where(ThreadRow.tenant_id == tenant_id)
         doc_rows = list((await session.execute(docs)).all())
         mem_rows = list((await session.execute(mems)).all())
+        thread_rows = list((await session.execute(threads)).all())
     for tenant, document_id in doc_rows:
         try:
             report.chunks += await indexer.index_document(tenant, document_id, force=True)
@@ -113,6 +121,11 @@ async def rebuild_search_index(
                 report.memories += await indexer.index_memories(tenant, batch)
             except Exception as exc:
                 report.failures.append(f"memories {tenant} [{start}:{start + len(batch)}]: {exc}")
+    for tenant, thread_id in thread_rows:
+        try:
+            report.episodes += int(await indexer.index_episode(tenant, thread_id))
+        except Exception as exc:
+            report.failures.append(f"episode {tenant}/{thread_id}: {type(exc).__name__}: {exc}")
     log.info("reindex.done", **report.as_dict())
     return report
 

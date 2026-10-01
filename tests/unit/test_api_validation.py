@@ -53,7 +53,7 @@ def test_unknown_recall_kind_is_rejected_not_dropped(client: TestClient) -> None
         "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["fact"]}
     )
     assert "body.kinds.0" in _locs(r)
-    assert "'memory', 'chunk', 'summary' or 'message'" in r.text
+    assert "'memory', 'chunk', 'summary', 'episode' or 'message'" in r.text
 
 
 def test_recall_kinds_must_name_at_least_one_kind(client: TestClient) -> None:
@@ -305,7 +305,9 @@ def test_search_kinds_are_the_record_kinds_and_the_history() -> None:
     from memory_service.modules.retrieval.search import SearchKind
 
     assert (
-        _values(SearchKind) == _values(sdk.SearchKind) == {"memory", "chunk", "summary", "message"}
+        _values(SearchKind)
+        == _values(sdk.SearchKind)
+        == {"memory", "chunk", "summary", "episode", "message"}
     )
 
 

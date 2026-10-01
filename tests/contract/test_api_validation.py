@@ -24,7 +24,10 @@ def test_recall_with_an_unknown_kind_is_422(client: TestClient) -> None:
     error = r.json()
     assert error["code"] == "VALIDATION"
     assert error["details"]["errors"][0]["loc"] == ["body", "kinds", "0"]
-    assert "'memory', 'chunk', 'summary' or 'message'" in error["details"]["errors"][0]["msg"]
+    assert (
+        "'memory', 'chunk', 'summary', 'episode' or 'message'"
+        in error["details"]["errors"][0]["msg"]
+    )
 
 
 def test_tool_record_with_an_unknown_visibility_is_422(client: TestClient) -> None:

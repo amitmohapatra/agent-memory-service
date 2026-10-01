@@ -329,12 +329,16 @@ class MemoryContext:
         kinds: Sequence[SearchKind] | None = None,
         time_from: datetime | None = None,
         time_to: datetime | None = None,
+        as_of: datetime | None = None,
+        known_at: datetime | None = None,
         document_ids: Sequence[str] | None = None,
         debug: bool = False,
     ) -> list[SearchItem]:
         """Ranked items for ``query``: memories and document passages by default; ``kinds``
-        also reads document summaries and this thread's messages. ``time_from``/``time_to``
-        keep what was observed within the range (before anything is ranked)."""
+        also reads document summaries, earlier conversations (``episode``) and this
+        thread's messages. ``time_from``/``time_to`` keep what was observed within the range
+        (before anything is ranked). ``as_of`` reads memories as they were true then and
+        ``known_at`` as they were known then, including ones replaced since."""
         payload: dict[str, Any] = {
             "query": query,
             "scope": self.scope_payload(),
@@ -343,7 +347,12 @@ class MemoryContext:
         }
         if kinds is not None:
             payload["kinds"] = list(kinds)
-        for name, when in (("time_from", time_from), ("time_to", time_to)):
+        for name, when in (
+            ("time_from", time_from),
+            ("time_to", time_to),
+            ("as_of", as_of),
+            ("known_at", known_at),
+        ):
             if when is not None:
                 payload[name] = when.isoformat()
         if document_ids is not None:

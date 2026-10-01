@@ -127,6 +127,10 @@ _PAYLOAD_INDEXES = {
     "current": models.PayloadSchemaType.BOOL,
     "script": models.PayloadSchemaType.KEYWORD,
     "observed_at": models.PayloadSchemaType.DATETIME,
+    # a memory's valid time and the end of its knowledge time (``as_of`` / ``known_at``)
+    "valid_from": models.PayloadSchemaType.DATETIME,
+    "valid_to": models.PayloadSchemaType.DATETIME,
+    "known_to": models.PayloadSchemaType.DATETIME,
 }
 
 

@@ -30,7 +30,12 @@ from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.conversation.summary import SUMMARY_EVERY, enqueue_refresh
+from memory_service.modules.conversation.summary import (
+    SUMMARY_EVERY,
+    TASK_EPISODE_INDEX,
+    enqueue_episode_index,
+    enqueue_refresh,
+)
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -163,6 +168,18 @@ class ConversationService:
         await self.authz.require(ctx, "can_write", "thread", thread_id)
         await uow.threads.soft_delete(ctx.tenant_id, thread_id)
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
+        # durably, in this transaction: the job finds the thread gone and removes its
+        # searchable episode, so a deleted conversation cannot be recalled from another.
+        # Its own key, so a pending window job for the thread cannot absorb it.
+        await uow.enqueue(
+            JobSpec(
+                task_name=TASK_EPISODE_INDEX,
+                queue=Queue.SUMMARY,
+                payload={"tenant_id": ctx.tenant_id, "thread_id": thread_id},
+                idempotency_key=f"episode:{ctx.tenant_id}:{thread_id}:deleted",
+                tenant_id=ctx.tenant_id,
+            )
+        )
         await self.hot.invalidate(ctx.tenant_id, thread_id)
 
     # -- messages ---------------------------------------------------------------
@@ -314,6 +331,9 @@ class ConversationService:
                     ctx.thread_id,
                     principal_id=ctx.principal_id,
                 )
+            elif kind is MessageKind.VISIBLE:
+                # between summaries the episode still follows the thread (a digest, no model)
+                await enqueue_episode_index(uow, ctx.tenant_id, ctx.thread_id)
             revision = await uow.threads.touch(ctx.tenant_id, ctx.thread_id)
             await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, ctx.thread_id)
             ack = MessageAck(

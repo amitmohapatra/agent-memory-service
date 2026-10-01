@@ -49,6 +49,7 @@ READERS = (
     "modules/context/expansion.py",
     "modules/graph/retrieval.py",
     "modules/rag/indexer.py",
+    "modules/retrieval/search.py",
 )
 
 #: Keys nobody reads through ``payload[...]``: the store's own identity fields, which it needs

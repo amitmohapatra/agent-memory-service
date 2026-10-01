@@ -12,6 +12,7 @@ The pushed context carries the latest summary and only the messages after it.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Sequence
 from typing import Any, Final
 
@@ -28,6 +29,11 @@ from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 log = get_logger(__name__)
 
 TASK_SUMMARY_REFRESH: Final = "summary.refresh"
+#: Re-index a thread's searchable episode (``Indexer.index_episode``). Never calls a model.
+TASK_EPISODE_INDEX: Final = "episode.index"
+#: A thread with new messages has its episode re-indexed this long after the first of them,
+#: at most once per window: a burst of turns costs one embedding, not one per message.
+EPISODE_INDEX_DELAY_SECONDS: Final = 120
 #: A thread's summary is refreshed every this many messages.
 SUMMARY_EVERY: Final = 20
 #: The most messages one refresh folds in (a thread that ran far ahead of its summary
@@ -83,6 +89,25 @@ async def enqueue_refresh(uow: UnitOfWork, tenant_id: str, thread_id: str, **own
     )
 
 
+async def enqueue_episode_index(
+    uow: UnitOfWork, tenant_id: str, thread_id: str, *, now: float | None = None
+) -> None:
+    """Re-index the thread's episode once the current window closes. The key names the
+    window, so every message inside it shares one job, and that job runs after the window
+    has ended: the last message of a window is never left out of the episode."""
+    window = int((time.time() if now is None else now) // EPISODE_INDEX_DELAY_SECONDS)
+    await uow.enqueue(
+        JobSpec(
+            task_name=TASK_EPISODE_INDEX,
+            queue=Queue.SUMMARY,
+            payload={"tenant_id": tenant_id, "thread_id": thread_id},
+            idempotency_key=f"episode:{tenant_id}:{thread_id}:{window}",
+            schedule_in_seconds=EPISODE_INDEX_DELAY_SECONDS,
+            tenant_id=tenant_id,
+        )
+    )
+
+
 class ThreadSummaries:
     def __init__(self, uow_factory: UnitOfWorkFactory, assist: LLMAssist) -> None:
         self.uow_factory = uow_factory
@@ -96,6 +121,10 @@ class ThreadSummaries:
         principal_id: str | None = None,
     ) -> ThreadSummary | None:
         async with self.uow_factory() as uow:
+            # a deleted thread is folded no further (and pays no model for it): the job that
+            # follows a delete exists only to take its episode out of the index
+            if await uow.threads.get(tenant_id, thread_id) is None:
+                return None
             previous = await uow.summaries.latest(tenant_id, thread_id)
             covered = previous.covers_to_sequence if previous else 0
             new = await uow.messages.list_after(

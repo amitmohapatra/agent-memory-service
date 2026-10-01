@@ -23,6 +23,7 @@ from memory_service.domain.context_bundle import ProcedureView, ProfileBlockView
 from memory_service.domain.enums import QueryType
 from memory_service.domain.tools import ToolHints
 from memory_service.modules.context.sections import ToolsRequest
+from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
 
 
@@ -103,15 +104,26 @@ class RecallRequest(BaseModel):
     kinds: list[SearchKind] = Field(
         default_factory=lambda: list(DEFAULT_KINDS),
         min_length=1,
-        max_length=4,
+        max_length=5,
         description="What to search: memory (what was learned or stated), chunk (document "
-        "passages), summary (document summaries), message (this thread's history).",
+        "passages), summary (document summaries), episode (earlier conversations of this "
+        "user, one per thread), message (this thread's history).",
         examples=[["chunk", "memory"]],
     )
     time_from: datetime | None = Field(
         default=None, description="only what was observed since (filters before ranking)"
     )
     time_to: datetime | None = Field(default=None, description="only what was observed until")
+    as_of: datetime | None = Field(
+        default=None,
+        description="memories as they were true at this moment, including ones later "
+        "replaced (valid time)",
+    )
+    known_at: datetime | None = Field(
+        default=None,
+        description="memories as they were known at this moment: learned by then and not yet "
+        "replaced (knowledge time, for audit)",
+    )
     document_ids: list[str] | None = Field(
         default=None,
         max_length=100,
@@ -239,6 +251,7 @@ async def recall(
         kinds=body.kinds,
         limit=body.limit,
         observed=(body.time_from, body.time_to) if body.time_from or body.time_to else None,
+        at=PointInTime(as_of=body.as_of, known_at=body.known_at),
         document_ids=body.document_ids,
         debug=body.debug,
     )
