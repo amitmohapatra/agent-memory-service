@@ -320,6 +320,11 @@ class QdrantSearchStore:
                 # every call this client makes goes over gRPC on 6334.
                 prefer_grpc=True,
                 grpc_port=settings.qdrant_grpc_port,
+                # Not a request for inference: this service sends vectors only, never a
+                # ``models.Document``. Off, the client walks every request looking for one -
+                # every float of every query vector, ~22 ms of CPU under the GIL per memory
+                # search with seven arms and a 48x64 late-interaction query.
+                cloud_inference=True,
             )
             self._local = False
         self._known: set[str] = set()
@@ -654,7 +659,8 @@ class QdrantSearchStore:
                 using=prefetch.using,
                 filter=qf,
                 limit=limit,
-                with_payload=_PAYLOAD,
+                # ids and scores only: see the payload read below
+                with_payload=False,
             )
             for _, prefetch in arms
         ]
@@ -670,9 +676,39 @@ class QdrantSearchStore:
                 raise DependencyUnavailable(
                     f"qdrant arms query failed: {type(exc).__name__}: {exc}"
                 ) from exc
+            # The arms overlap: ~800 hits a query are ~350 points. Payloads come back once per
+            # point, not once per hit - turning a payload from protobuf into a dict is client
+            # CPU under the GIL, and at ~800 a query it was most of a memory search's Python
+            # time and what capped one worker's throughput.
+            ids = list(dict.fromkeys(str(p.id) for response in responses for p in response.points))
+            try:
+                points = await _read(
+                    "retrieve",
+                    lambda: self._client.retrieve(
+                        collection_name=self._name(collection),
+                        ids=ids,
+                        with_payload=_PAYLOAD,
+                        with_vectors=False,
+                    ),
+                )
+            except Exception as exc:
+                raise DependencyUnavailable(
+                    f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
+                ) from exc
+        payloads = {str(p.id): dict(p.payload or {}) for p in points}
         out: dict[VectorName, list[SearchHit]] = {}
         for (name, _), response in zip(arms, responses, strict=True):
-            hits = [self._hit(p, Retriever.for_vector(name)) for p in response.points]
+            retriever = Retriever.for_vector(name)
+            hits = [
+                SearchHit(
+                    record_id=str(payload.get("record_id", p.id)),
+                    score=float(p.score),
+                    retriever=retriever,
+                    payload=payload,
+                )
+                for p in response.points
+                if (payload := payloads.get(str(p.id))) is not None
+            ]
             hits.sort(key=lambda hit: (-hit.score, hit.record_id))  # see search_hybrid
             out[name] = hits
         return out

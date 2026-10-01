@@ -65,8 +65,12 @@ class _Client:
 
     async def query_batch_points(self, **kwargs: Any) -> Any:
         self.calls.append(("query_batch_points", kwargs))
-        point = type("P", (), {"id": "x", "score": 1.0, "payload": {"record_id": "r1"}})()
+        point = type("P", (), {"id": "x", "score": 1.0, "payload": None})()
         return [type("Result", (), {"points": [point]})() for _ in kwargs["requests"]]
+
+    async def retrieve(self, **kwargs: Any) -> Any:
+        self.calls.append(("retrieve", kwargs))
+        return [type("P", (), {"id": i, "payload": {"record_id": "r1"}})() for i in kwargs["ids"]]
 
 
 def _store() -> tuple[QdrantSearchStore, _Client]:
@@ -239,6 +243,10 @@ async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
     assert [r.using for r in requests] == ["dense_ml", "dense_ml_ctx", "bm25", "colbert"]
     assert [p.using for p in requests[3].prefetch] == ["dense_ml", "dense_ml_ctx", "bm25"]
     assert all(r.limit == 7 for r in requests)
+    # ids and scores from the arms; each point's payload read once, afterwards
+    assert all(r.with_payload is False for r in requests)
+    [(_, read)] = [call for call in client.calls if call[0] == "retrieve"]
+    assert read["ids"] == ["x"]
     assert list(out) == [
         VectorName.DENSE_ML,
         VectorName.DENSE_ML_CTX,
@@ -246,6 +254,7 @@ async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
         VectorName.COLBERT,
     ]
     assert out[VectorName.COLBERT][0].retriever.value == "colbert"
+    assert out[VectorName.COLBERT][0].record_id == "r1"
 
 
 async def test_a_dense_space_cannot_be_asked_for_as_a_sparse_arm() -> None:
