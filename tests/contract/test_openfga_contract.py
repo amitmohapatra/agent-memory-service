@@ -194,16 +194,13 @@ async def test_a_subject_type_the_model_does_not_define_is_an_empty_scope(
     await provider.close()
 
 
-async def test_workspace_revocation_is_immediate_for_groups_and_their_users(
+async def test_workspace_revocation_is_immediate_for_its_members(
     openfga_url: str, openfga_store: str
 ) -> None:
-    """A user reads a workspace through a group; ending either link ends the access.
+    """A member reads a workspace as a viewer; removing the membership ends the access.
 
-    ``modules/tenancy`` removes a group from a workspace (tuple ``group:<t>/<g>#member`` on
-    ``workspace:<t>/<w>``) and removes a user from a group (``user:<u>`` member of
-    ``group:<t>/<g>``). The real OpenFGA must agree with the reference provider that each
-    removal alone is enough - ``viewer`` is the relation ``AuthorizedScope.workspace_ids``
-    resolves, so a stale answer here is a cross-team read.
+    ``viewer`` is the relation ``AuthorizedScope.workspace_ids`` resolves, so a stale answer
+    here is a cross-team read. (Groups were removed; members are users and agents.)
     """
     from memory_service.adapters.authz.openfga_provider import OpenFGAAuthorizationProvider
     from memory_service.config.settings import AuthorizationSettings
@@ -214,26 +211,21 @@ async def test_workspace_revocation_is_immediate_for_groups_and_their_users(
             provider="openfga", openfga_api_url=openfga_url, openfga_store_id=openfga_store
         )
     )
-    admitted = R(user="group:acme/counsel#member", relation="member", object="workspace:acme/legal")
-    in_group = R(user="user:lawyer1", relation="member", object="group:acme/counsel")
+    user = R(user="user:lawyer1", relation="member", object="workspace:acme/legal")
     direct = R(user="agent:bot", relation="member", object="workspace:acme/legal")
-    await provider.write([admitted, in_group, direct])
+    await provider.write([user, direct])
     assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == [
         "workspace:acme/legal"
-    ], "a member reads as a viewer, through the group"
+    ], "a member reads as a viewer"
     assert await provider.list_objects("agent:bot", "viewer", "workspace") == [
         "workspace:acme/legal"
     ]
 
-    await provider.write([], [admitted])  # the group leaves the workspace
+    await provider.write([], [user])  # the user leaves the workspace
     assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == []
     assert await provider.list_objects("agent:bot", "viewer", "workspace") == [
         "workspace:acme/legal"
     ], "unrelated grants survive a revocation"
-
-    await provider.write([admitted], [in_group])  # the group is back; the user has left it
-    assert await provider.list_objects("user:lawyer1", "viewer", "workspace") == []
-    assert await provider.list_objects("user:lawyer1", "member", "group") == []
 
     await provider.write([], [direct])
     assert await provider.list_objects("agent:bot", "viewer", "workspace") == []

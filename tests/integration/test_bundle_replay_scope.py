@@ -1,7 +1,7 @@
 """A bundle handle only resolves for the scope that built it.
 
-`POST /v1/verify` accepts a `bundle_id` instead of a query, and `ContextBuilder.cached` looked
-that handle up under the TENANT alone. A same-tenant caller holding another principal's handle
+`POST /v1/verify` accepts a `bundle_id` instead of a query, and the replay (now the bundle's
+record, `BundleRecords.load`) used to look that handle up under the TENANT alone. A same-tenant caller holding another principal's handle
 was served that principal's bundle with no re-check: a cross-principal read of evidence ids,
 counts, and a supported/contradicted oracle over someone else's memories.
 
@@ -37,7 +37,7 @@ async def test_the_caller_that_built_it_can_replay_it(container) -> None:
     alice = _ctx("alice")
     bundle_id = await _build(container, alice)
     assert bundle_id
-    assert await container.services["context_builder"].cached(alice, bundle_id) is not None
+    assert await container.services["bundle_records"].load(alice, bundle_id) is not None
 
 
 async def test_another_user_in_the_same_tenant_cannot(container) -> None:
@@ -45,7 +45,7 @@ async def test_another_user_in_the_same_tenant_cannot(container) -> None:
     alice = _ctx("alice")
     bundle_id = await _build(container, alice)
     mallory = _ctx("mallory")
-    assert await container.services["context_builder"].cached(mallory, bundle_id) is None, (
+    assert await container.services["bundle_records"].load(mallory, bundle_id) is None, (
         "another principal replayed alice's bundle"
     )
 
@@ -55,18 +55,19 @@ async def test_an_agent_run_cannot_replay_the_users_bundle(container) -> None:
     alice = _ctx("alice")
     bundle_id = await _build(container, alice)
     agent = _ctx("alice", agent_id="plansmart", agent_run_id="run_1")
-    assert await container.services["context_builder"].cached(agent, bundle_id) is None
+    assert await container.services["bundle_records"].load(agent, bundle_id) is None
 
 
 async def test_an_unknown_handle_is_simply_absent(container) -> None:
-    assert await container.services["context_builder"].cached(_ctx("alice"), "nope") is None
+    assert await container.services["bundle_records"].load(_ctx("alice"), "nope") is None
 
 
-@pytest.mark.parametrize("kind", [RevisionKind.USER, RevisionKind.MEMBERSHIP])
-async def test_replay_rechecks_content_and_authorization_revisions(container, kind) -> None:
+async def test_the_record_outlives_a_content_change(container) -> None:
+    """Unlike the bundle cache, the record keeps resolving after the memory changes: an agent
+    that just updated ``m1`` goes on to forget ``m2`` (``modules/context/handles.py``)."""
     alice = _ctx("alice")
     bundle_id = await _build(container, alice)
     async with container.services["uow_factory"]() as uow:
-        await uow.revisions.bump(alice.tenant_id, kind, alice.user_id)
+        await uow.revisions.bump(alice.tenant_id, RevisionKind.USER, alice.user_id)
         await uow.commit()
-    assert await container.services["context_builder"].cached(alice, bundle_id) is None
+    assert await container.services["bundle_records"].load(alice, bundle_id) is not None

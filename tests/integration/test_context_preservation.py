@@ -168,7 +168,7 @@ async def test_global_summary_and_the_durable_thread_summary(container, uow_fact
     summaries = [c for c in res.candidates if c.kind == "summary"]
     assert summaries and any(c.text.startswith("ACME FY26:") for c in summaries)
     exact = await engine.retrieve(U1, f"show {summaries[0].record_id}")
-    assert [c.record_id for c in exact.candidates] == [summaries[0].record_id]
+    assert exact.candidates[0].record_id == summaries[0].record_id  # the exact hit leads
     # conversation: the thread's durable summary covers the older turns; the window follows it
     thread = new_id("thread")
     ctx = U1.model_copy(

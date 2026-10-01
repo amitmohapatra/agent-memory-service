@@ -3,7 +3,6 @@ follows the tenant policy's read_assist."""
 
 import pytest
 
-from memory_service.ports.credentials import tenant_identity
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
@@ -18,9 +17,10 @@ def _read_assist(client, enabled: bool) -> None:
         async with container.services["uow_factory"]() as uow:
             await container.services["model_policies"].set(
                 uow,
-                tenant_identity("acme"),
+                "acme",
                 uses=["query_expansion", "entity_resolution"],
                 read_assist=enabled,
+                models={},
             )
             await uow.commit()
 

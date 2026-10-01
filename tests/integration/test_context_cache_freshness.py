@@ -90,6 +90,13 @@ async def test_indexing_moves_the_revisions_again_so_a_bundle_cached_mid_write_i
     )
 
 
+async def _served(builder, ctx, query: str) -> bool:
+    """Whether ``query`` would be served from the bundle cache right now: the cache decision
+    alone (the revisions are part of the key), without building on a miss."""
+    found = await builder._lookup(ctx, query, builder.cfg.token_budget, None, None, True)
+    return found.bundle is not None
+
+
 async def test_the_bundle_is_rebuilt_once_the_memory_is_indexed(container) -> None:
     ctx = _ctx()
     builder = container.services["context_builder"]
@@ -189,7 +196,7 @@ async def test_forgetting_tenant_memory_invalidates_other_readers_before_and_aft
     first = await builder.build(U2, "my timezone?")
     await builder.drain()
     assert first.memories
-    assert await builder.cached(U2, first.bundle_id) is not None
+    assert await _served(builder, U2, "my timezone?")
     assert (await builder.build(U2, "my timezone!")).cache_hit
     await builder.drain()
     memories = await _memories(uow_factory, U1, container)
@@ -198,14 +205,17 @@ async def test_forgetting_tenant_memory_invalidates_other_readers_before_and_aft
             await container.services["memory"].forget(uow, U1, memory.memory_id)
         await uow.commit()
     # No worker/index/graph revision may mask the synchronous invalidation.
-    assert await builder.cached(U2, first.bundle_id) is None
+    assert not await _served(builder, U2, "my timezone?")
     mid_write = await builder.build(U2, "my timezone?")
     await builder.drain()
     assert not mid_write.cache_hit
     await container.tasks.drain()
-    assert await builder.cached(U2, mid_write.bundle_id) is None
+    assert not await _served(builder, U2, "my timezone?")
     final = await builder.build(U2, "my timezone!")
     assert not final.cache_hit and not final.memories
+
+
+QUESTION = "what did we decide about the dashboard?"
 
 
 async def test_threadless_reader_of_shared_thread_loses_replay_immediately_on_forget(
@@ -229,16 +239,16 @@ async def test_threadless_reader_of_shared_thread_loses_replay_immediately_on_fo
         hints=ProcessingHints(visibility=Visibility.THREAD),
     )
     builder = container.services["context_builder"]
-    bundle = await builder.build(U2, "what did we decide about the dashboard?")
+    bundle = await builder.build(U2, QUESTION)
     await builder.drain()
     assert bundle.memories
-    assert await builder.cached(U2, bundle.bundle_id) is not None
+    assert await _served(builder, U2, QUESTION)
     memories = await _memories(uow_factory, author, container)
     async with uow_factory() as uow:
         for memory in memories:
             await container.services["memory"].forget(uow, author, memory.memory_id)
         await uow.commit()
-    assert await builder.cached(U2, bundle.bundle_id) is None
+    assert not await _served(builder, U2, QUESTION)
 
 
 async def test_private_memory_in_a_thread_invalidates_owners_threadless_replay(
@@ -254,7 +264,7 @@ async def test_private_memory_in_a_thread_invalidates_owners_threadless_replay(
         await uow.commit()
     builder = container.services["context_builder"]
     query = "what was said about the dashboard?"
-    empty = await builder.build(U1, query)
+    await builder.build(U1, query)
     await builder.drain()
     await _observe(
         container,
@@ -263,14 +273,14 @@ async def test_private_memory_in_a_thread_invalidates_owners_threadless_replay(
         "The dashboard deployment moved to Friday.",
         hints=ProcessingHints(visibility=Visibility.PRIVATE, memory_type=MemoryType.OBSERVATION),
     )
-    assert await builder.cached(U1, empty.bundle_id) is None
+    assert not await _served(builder, U1, query)
     bundle = await builder.build(U1, query)
     await builder.drain()
-    assert bundle.memories and await builder.cached(U1, bundle.bundle_id) is not None
+    assert bundle.memories and await _served(builder, U1, query)
     memories = await _memories(uow_factory, author, container)
     assert memories and all(m.scope.user_id is None for m in memories)
     async with uow_factory() as uow:
         for memory in memories:
             await container.services["memory"].forget(uow, author, memory.memory_id)
         await uow.commit()
-    assert await builder.cached(U1, bundle.bundle_id) is None
+    assert not await _served(builder, U1, query)

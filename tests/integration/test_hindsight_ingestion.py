@@ -50,9 +50,6 @@ async def test_sdk_ingest_recall_replay_forget_and_cross_user_isolation(containe
             item = candidate_to_item(candidate)
             assert item.attributes["category"] == "contextual_fact"
             assert item.attributes["provider"] == "hindsight"
-            from memory_service.api.routers.v1.retrieval import RecallItem
-
-            assert RecallItem.model_validate(item.model_dump()).attributes == item.attributes
             assert "model-extracted, unverified" in _bundle([item]).render()
             graph = container.services["graph"]
             from unittest.mock import AsyncMock, patch

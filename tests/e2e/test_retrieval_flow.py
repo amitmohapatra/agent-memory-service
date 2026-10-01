@@ -68,7 +68,7 @@ def test_recall_and_context_over_http(client) -> None:
         json={"scope": scope, "query": f"open {top['id']}", "debug": True},
     )
     assert r.json()["query_type"] == "EXACT_IDENTIFIER"
-    assert [x["id"] for x in r.json()["items"]] == [top["id"]]
+    assert r.json()["items"][0]["id"] == top["id"]  # the exact hit leads
 
     r = client.post(
         "/v1/context",
@@ -87,9 +87,7 @@ def test_recall_and_context_over_http(client) -> None:
     }
     assert bundle["summaries"] and "## Summaries" in bundle["rendered"]
     assert bundle["thread_summary"] is None  # a short thread has no durable summary yet
-    # recall exposes the same report; an unrelated question is INSUFFICIENT
-    r = client.post("/v1/recall", headers=H, json={"scope": scope, "query": Q})
-    assert r.json()["evidence"]["status"] == "COMPLETE"
+    # an unrelated question is INSUFFICIENT (recall items carry no evidence report)
     r = client.post(
         "/v1/context",
         headers=H,

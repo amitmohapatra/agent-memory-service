@@ -84,7 +84,7 @@ async def test_message_search_profile_and_tool_search_tools(container, uow_facto
     history = await _call(
         container, "memory_search", {"query": "paper", "kinds": ["message"], "k": 5}
     )
-    assert [h["text"] for h in history] == ["We need A4 paper."]
+    assert [h["text"] for h in history] == ["USER: We need A4 paper."]  # the speaker leads
     assert {h["kind"] for h in history} == {"message"}
 
     written = await _call(

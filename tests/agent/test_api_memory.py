@@ -144,6 +144,9 @@ async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app
     with pytest.raises(MemoryError) as cross:
         await globex.bind(tenant_id="acme", user_id="u1").search("payments")
     assert cross.value.status == 403
+    with pytest.raises(MemoryError) as judged:
+        await globex.bind(tenant_id="acme", user_id="u1").verify("x", bundle_id="ctx_any")
+    assert judged.value.status == 403
 
     # ... and cannot read the memory by id either: not found, never someone else's content.
     with pytest.raises(MemoryError) as hidden:

@@ -196,13 +196,12 @@ async def test_engine_pipeline_exact_fusion_and_kinds(container, uow_factory) ->
     async with uow_factory() as uow:
         chunks = await uow.documents.list_chunks("acme", doc_id)
     target = next(c for c in chunks if "increased to EUR 98" in c.text)
-    # exact identifier -> O(1) lookup, no hybrid search
+    # exact identifier -> O(1) lookup; it leads, and the hybrid search still follows (a
+    # question naming a thing is answered by evidence that need not contain the id)
     exact = await engine.retrieve(OWNER, f"show {target.chunk_id}")
     assert exact.routed.query_type is QueryType.EXACT_IDENTIFIER
-    assert [c.record_id for c in exact.candidates] == [target.chunk_id]
-    assert (
-        exact.candidates[0].retrievers == ["exact"] and "fused_candidates" not in exact.diagnostics
-    )
+    assert exact.candidates[0].record_id == target.chunk_id
+    assert "exact" in exact.candidates[0].retrievers and exact.diagnostics["exact_hits"] == 1
     # exact lookup respects visibility
     assert (await engine.retrieve(OTHER_TENANT, f"show {target.chunk_id}")).candidates == []
     # multi-hop question: hybrid fusion, bounded to limit

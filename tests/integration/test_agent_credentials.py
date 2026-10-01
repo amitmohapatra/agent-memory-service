@@ -13,7 +13,7 @@ from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.ids import new_id
 from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
 from memory_service.modules.llm.policy import current_model_identity
-from memory_service.ports.credentials import ModelIdentity, tenant_identity
+from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
 from tests.support_llm import bound_to, chat_response, mocked_gateway
 from tests.unit.test_agent_credential_cipher import TEST_KEY
@@ -22,6 +22,11 @@ from tests.unit.test_narrative_memory import MESSAGE
 pytestmark = pytest.mark.integration
 ALICE = MemoryExecutionContext(tenant_id="acme", user_id="alice", agent_id="research")
 BOB = ALICE.model_copy(update={"user_id": "bob"})
+#: another agent: an agent's key is its own, whichever user a run is for
+WRITER = ALICE.model_copy(update={"agent_id": "writer"})
+#: the binding ``mocked_gateway().assist`` gives the test's own work; a call must leave it as
+#: it found it (no request's identity leaks into the caller)
+AMBIENT = ModelIdentity("test", "service:test")
 
 
 def service(uow_factory):
@@ -47,8 +52,10 @@ async def test_storage_rotation_revocation_and_tenant_owner_isolation(container,
     resolved_first = await credentials.resolve(agent_identity(ALICE))
     assert resolved_first is not None
     assert resolved_first.key.get_secret_value() == "vk-alice-test"
-    assert resolved_first.identity == ModelIdentity("acme", ALICE.principal_id)
-    assert await credentials.resolve(agent_identity(BOB)) is None
+    assert resolved_first.identity == ModelIdentity("acme", "agent:research")
+    shared = await credentials.resolve(agent_identity(BOB))  # the same agent for another user
+    assert shared is not None and shared.key.get_secret_value() == "vk-alice-test"
+    assert await credentials.resolve(agent_identity(WRITER)) is None
     assert (
         await credentials.resolve(agent_identity(ALICE.model_copy(update={"tenant_id": "rival"})))
         is None
@@ -74,7 +81,7 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
 ):
     credentials = service(uow_factory)
     await save(credentials, uow_factory, ALICE, "vk-alice-test")
-    await save(credentials, uow_factory, BOB, "vk-bob-test")
+    await save(credentials, uow_factory, WRITER, "vk-bob-test")
     with mocked_gateway(["accepted"]) as gateway:
         assist = gateway.assist(["reflection"])
         assist.provider.credentials = credentials
@@ -86,8 +93,8 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
                 )
 
         try:
-            assert await asyncio.gather(call(ALICE), call(BOB)) == ["accepted", "accepted"]
-            assert current_model_identity() is None
+            assert await asyncio.gather(call(ALICE), call(WRITER)) == ["accepted", "accepted"]
+            assert current_model_identity() == AMBIENT
             seen = {request.request.headers["x-bf-vk"] for request in gateway.route.calls}
             assert seen == {"vk-alice-test", "vk-bob-test"}
             for call_record in gateway.route.calls:
@@ -157,9 +164,12 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
         json={**body, "virtual_key": "vk-different-test"},
     )
     assert conflict.status_code == 409 and "vk-different-test" not in conflict.text
-    other = client.get(
+    # the agent's key serves every user it runs for; another agent has none
+    same_agent = client.get(
         "/v1/agents/model-key?agent_id=research", headers={**headers, "X-Trellis-User": "bob"}
     )
+    assert same_agent.status_code == 200 and same_agent.json()["registered"]
+    other = client.get("/v1/agents/model-key?agent_id=writer", headers=headers)
     assert other.status_code == 200 and not other.json()["registered"]
     revoked = client.delete("/v1/agents/model-key?agent_id=research", headers=headers)
     assert revoked.status_code == 200 and revoked.json()["revoked"]
@@ -195,9 +205,10 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
             async with container.services["uow_factory"]() as uow:
                 await container.services["model_policies"].set(
                     uow,
-                    tenant_identity(headers["X-Trellis-Tenant"]),
+                    headers["X-Trellis-Tenant"],
                     uses=["query_expansion"],
                     read_assist=True,
+                    models={},
                 )
                 await uow.commit()
 
@@ -256,7 +267,7 @@ async def test_background_ingestion_uses_owner_key_and_never_hindsight_operator_
                 assert headers["authorization"] == (
                     "Bearer vk-job-test" if registered else "Bearer vk-test"
                 )
-                assert current_model_identity() is None
+                assert current_model_identity() == AMBIENT
             finally:
                 await provider.assist.provider.close()
 
@@ -280,9 +291,11 @@ async def test_document_indexing_uses_recorded_agent_owner_after_key_rotation(
         indexer.assist = assist
         try:
             # Simulate a job running under an unrelated worker's ambient context.
-            with bound_to(BOB.tenant_id, BOB.principal_id):
+            with bound_to(WRITER.tenant_id, WRITER.principal_id):
                 await indexer.index_document(ALICE.tenant_id, doc_id, force=True)
-                assert current_model_identity() == agent_identity(BOB)
+                assert current_model_identity() == ModelIdentity(
+                    WRITER.tenant_id, WRITER.principal_id
+                )
             assert gateway.route.call_count > 0
             assert {call.request.headers["x-bf-vk"] for call in gateway.route.calls} == {
                 "vk-index-current-test"
@@ -321,7 +334,7 @@ async def test_user_scoped_reflection_preserves_bound_agent_and_current_key(cont
             async with uow_factory() as uow:
                 insight = await uow.memories.get(ALICE.tenant_id, created[0])
                 assert insight.owner_principal == ALICE.principal_id
-            assert current_model_identity() is None
+            assert current_model_identity() == AMBIENT
         finally:
             await assist.provider.close()
 
@@ -388,7 +401,6 @@ async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_config
     import respx
 
     from memory_service.adapters.wiring import _wire_llm, _wire_memory
-    from memory_service.config.settings import LLMSettings
     from tests.integration.test_memory import _memories
     from tests.support_llm import BASE
     from tests.unit.test_narrative_memory import UNITS
@@ -396,7 +408,7 @@ async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_config
     container.settings.agent_credentials = AgentCredentialSettings(
         active_key_id="test", encryption_keys={"test": TEST_KEY}
     )
-    container.settings.models.llm = LLMSettings(base_url=BASE)
+    container.settings.bifrost_url = BASE
     _wire_llm(container)
     _wire_memory(container)
     credentials = container.services["model_credentials"]
@@ -416,8 +428,8 @@ async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_config
         memories = await _memories(uow_factory, ALICE, container)
         assert any("She did not restart the database." in memory.content for memory in memories)
         assert completion.calls.last.request.headers["x-bf-vk"] == "vk-auto-ingest"
-        # A different owner and then the revoked owner retain sources without a model call.
-        await _observe(container, uow_factory, BOB, MESSAGE)
+        # A different agent and then the revoked agent retain sources without a model call.
+        await _observe(container, uow_factory, WRITER, MESSAGE)
         await save(credentials, uow_factory, ALICE, None)
         await _observe(container, uow_factory, ALICE, MESSAGE + " A new incident followed.")
         assert catalog.call_count == completion.call_count == 1

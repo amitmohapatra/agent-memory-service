@@ -112,12 +112,16 @@ async def test_retrieval_expands_a_derived_memory_to_its_sources(container, uow_
     engine = container.services["retrieval"]
     result = await engine.retrieve(U1, f"show {summary.memory_id}", kinds=("memory",))
     assert {m.memory_id for m in base} <= {c.record_id for c in result.candidates}
-    assert result.diagnostics["derived_sources"] == 2
-    assert all(
-        c.expansion_edge == "DERIVED_SOURCE"
-        for c in result.candidates
-        if c.record_id in {m.memory_id for m in base}
+    # the exact hit leads; the hybrid search that always follows finds the sources too
+    assert result.candidates[0].record_id == summary.memory_id
+    # the expansion fetches whichever sources the search did not bring
+    diagnostics: dict = {}
+    expanded = await engine._expand_derived_sources(
+        U1, result.candidates[:1], result.visibility, diagnostics
     )
+    assert diagnostics["derived_sources"] == 2
+    assert {c.record_id for c in expanded[1:]} == {m.memory_id for m in base}
+    assert all(c.expansion_edge == "DERIVED_SOURCE" for c in expanded[1:])
 
 
 async def test_source_changed_during_model_call_discards_insight(container, uow_factory):

@@ -24,7 +24,7 @@ from memory_service.adapters.models.llm import (
     LLMCallFailed,
     LLMOutputInvalid,
 )
-from memory_service.config.constants import LLMTransport
+from memory_service.config.constants import LLMTransport, LLMTuning
 from memory_service.config.settings import LLMSettings, Settings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
@@ -48,26 +48,22 @@ TRANSPORT = LLMTransport(
 )
 
 
+#: Models and retries are code constants (``constants.LLM``); the tests name the models so
+#: the gateway's ``/models`` discovery (``auto``) is not part of every request.
+TUNING = LLMTuning(model="openai/gpt-4.1", fast_model="openai/gpt-4.1-mini", max_retries=2)
+
+
 class BifrostLLM(_BifrostLLM):
-    """The adapter under test with the test transport as its default."""
+    """The adapter under test with the test transport and tuning as its defaults."""
 
     def __init__(self, settings: LLMSettings, **kwargs: Any) -> None:
         kwargs.setdefault("transport", TRANSPORT)
+        kwargs.setdefault("tuning", TUNING)
         super().__init__(settings, **kwargs)
 
 
-def _settings(**overrides: object) -> LLMSettings:
-    base: dict[str, object] = {
-        "enabled": True,
-        "base_url": BASE,
-        "api_key": SecretStr("vk-test"),
-        "model": "openai/gpt-4.1",
-        "fast_model": "openai/gpt-4.1-mini",
-        "max_retries": 2,
-        "uses": ["query_expansion", "summaries"],
-    }
-    base.update(overrides)
-    return LLMSettings(**base)  # type: ignore[arg-type]
+def _settings() -> LLMSettings:
+    return LLMSettings(base_url=BASE, api_key=SecretStr("vk-test"))
 
 
 def _chat(content: str, *, model: str = "openai/gpt-4.1", usage: bool = True) -> dict:
@@ -100,16 +96,11 @@ async def test_disabled_raises_provider_not_configured() -> None:
 
 def test_construction_guards() -> None:
     with pytest.raises(ProviderNotConfigured):
-        BifrostLLM(LLMSettings(enabled=False))
-    with pytest.raises(ProviderNotConfigured):
-        BifrostLLM(LLMSettings(enabled=True, provider="bifrost", model=None))
+        BifrostLLM(LLMSettings())
 
 
-def test_an_enabled_llm_must_name_a_model() -> None:
-    with pytest.raises(ValueError, match="model"):
-        Settings(models={"llm": {"enabled": True, "model": None}})  # type: ignore[arg-type]
-    defaults = LLMSettings()
-    assert defaults.model == defaults.fast_model == "auto"
+def test_models_default_to_gateway_discovery() -> None:
+    assert LLMTuning().model == LLMTuning().fast_model == "auto"
 
 
 @respx.mock
@@ -199,7 +190,7 @@ async def test_retries_transient_status_then_succeeds() -> None:
 @respx.mock
 async def test_retries_are_bounded_and_non_retryable_status_fails_fast() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(502))
-    llm = BifrostLLM(_settings(max_retries=1))
+    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=1))
     with pytest.raises(DependencyUnavailable, match="502"):
         await llm.complete(_messages())
     assert route.call_count == 2
@@ -214,7 +205,9 @@ async def test_retries_are_bounded_and_non_retryable_status_fails_fast() -> None
 async def test_timeouts_and_circuit_breaker() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(side_effect=httpx.ReadTimeout("slow"))
     llm = BifrostLLM(
-        _settings(max_retries=0), transport=replace(TRANSPORT, circuit_failure_threshold=2)
+        _settings(),
+        tuning=replace(TUNING, max_retries=0),
+        transport=replace(TRANSPORT, circuit_failure_threshold=2),
     )
     for _ in range(2):
         with pytest.raises(DependencyUnavailable, match="unreachable"):
@@ -233,7 +226,7 @@ async def test_bad_payloads_fail_loudly() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, text="<html>")
     )
-    llm = BifrostLLM(_settings(max_retries=0))
+    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
     with pytest.raises(DependencyUnavailable, match="non-JSON"):
         await llm.complete(_messages())
     route.return_value = httpx.Response(200, json={"choices": []})
@@ -279,13 +272,12 @@ async def test_ping_uses_models_endpoint() -> None:
 @respx.mock
 async def test_assist_falls_back_to_none_on_any_failure() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(500))
-    llm = BifrostLLM(_settings(max_retries=0))
+    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
     assist = LLMAssist(llm, _settings())
-    assert assist.wants("query_expansion") and not assist.wants("reflection")
+    # unbound, the operator's key pays and every use is open; the tenant policy narrows it
+    assert assist.wants("query_expansion") and assist.wants("reflection")
     out = await assist.structured("query_expansion", system="s", user="u", schema=SCHEMA)
     assert out is None and route.call_count == 1
-    assert await assist.structured("reflection", system="s", user="u", schema=SCHEMA) is None
-    assert route.call_count == 1  # a use that is not enabled never calls the gateway
     route.return_value = httpx.Response(200, json=_chat('{"worthy": true}'))
     assert await assist.structured("summaries", system="s", user="u", schema=SCHEMA) == {
         "worthy": True
@@ -318,7 +310,7 @@ async def test_a_rate_limit_tells_the_caller_how_long_to_wait() -> None:
             },
         )
     )
-    llm = BifrostLLM(_settings(max_retries=0))
+    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
 
     with pytest.raises(DependencyUnavailable) as raised:
         await llm.complete(_messages(), use="summaries")
@@ -334,7 +326,7 @@ async def test_a_rate_limit_with_no_advice_says_nothing_rather_than_guessing() -
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(429, json={"error": {"code": "429", "message": "slow down"}})
     )
-    llm = BifrostLLM(_settings(max_retries=0))
+    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
 
     with pytest.raises(DependencyUnavailable) as raised:
         await llm.complete(_messages(), use="summaries")
@@ -412,13 +404,13 @@ async def test_source_logging_still_records_the_response_when_there_is_one() -> 
 @pytest.mark.bifrost
 async def test_live_bifrost_roundtrip() -> None:
     """Hits the running gateway: opt-in (``MEMORY_TEST_LIVE_LLM=1``, it spends tokens) and
-    needs MEMORY__MODELS__LLM__ENABLED=true plus model and key."""
+    needs BIFROST_URL plus a virtual key; the model is discovered through the gateway."""
     if os.environ.get("MEMORY_TEST_LIVE_LLM") != "1":
         pytest.skip("live LLM tests are opt-in: MEMORY_TEST_LIVE_LLM=1")
-    settings = Settings().models.llm
-    if settings.enabled is not True or not settings.api_key or settings.model in (None, "auto"):
-        pytest.skip("Bifrost not configured (MEMORY__MODELS__LLM__*)")
-    llm = BifrostLLM(settings)
+    settings = Settings().llm
+    if not settings.enabled or not settings.api_key:
+        pytest.skip("Bifrost not configured (BIFROST_URL, BIFROST_VIRTUAL_KEY)")
+    llm = _BifrostLLM(settings)
     if not await llm.ping():
         pytest.skip(f"Bifrost not reachable at {settings.base_url}")
     # max_tokens=8 was enough when every model emitted text immediately. A reasoning model

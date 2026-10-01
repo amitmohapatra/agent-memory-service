@@ -9,7 +9,12 @@ import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Visibility
-from memory_service.domain.feedback import Feedback, FeedbackTargetKind, FeedbackVerdict
+from memory_service.domain.feedback import (
+    Feedback,
+    FeedbackSource,
+    FeedbackTargetKind,
+    FeedbackVerdict,
+)
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY
 from memory_service.domain.tools import ToolDescriptor
 from memory_service.modules.tools.learning import ToolLearning
@@ -67,8 +72,33 @@ async def _run_once(container, *, run: str, quote: str, sku: str, success: bool 
             step=1,
             latency_ms=90.0,
         )
-        await service.set_outcome(uow, ctx, run_id=run, success=success)
         await uow.commit()
+    await _label(container, ctx, run=run, success=success)
+
+
+async def _label(container, ctx: MemoryExecutionContext, *, run: str, success: bool) -> None:
+    """The run's outcome: RUN feedback from its final status (what the harness sends),
+    projected right away rather than by the queued job."""
+    feedback = container.services["feedback"]
+    async with container.services["uow_factory"]() as uow:
+        stored, _ = await feedback.submit(
+            uow,
+            ctx,
+            Feedback(
+                tenant_id=ctx.tenant_id,
+                target_kind=FeedbackTargetKind.RUN,
+                target_id=run,
+                verdict=FeedbackVerdict.CONFIRM if success else FeedbackVerdict.REJECT,
+                source=FeedbackSource.SYSTEM,
+            ),
+        )
+        await uow.commit()
+    await feedback.project(ctx.tenant_id, stored.feedback_id)
+
+
+def _entries(*entries: ToolDescriptor) -> list[tuple[ToolDescriptor, frozenset[str]]]:
+    """Catalog entries as a publisher sends them: every field."""
+    return [(entry, frozenset(ToolDescriptor.model_fields)) for entry in entries]
 
 
 async def _procedures(container, ctx: MemoryExecutionContext):
@@ -107,12 +137,12 @@ async def test_the_catalog_versions_a_changed_schema_and_a_workspace_shadows_the
         side_effects="read",
     )
     async with uow_factory() as uow:
-        [first] = await service.put_catalog(uow, tenant_wide, [entry])
-        [same] = await service.put_catalog(uow, tenant_wide, [entry])
+        [first] = await service.put_catalog(uow, tenant_wide, _entries(entry))
+        [same] = await service.put_catalog(uow, tenant_wide, _entries(entry))
         changed = entry.model_copy(update={"input_schema": {"type": "object", "properties": {}}})
-        [second] = await service.put_catalog(uow, tenant_wide, [changed])
+        [second] = await service.put_catalog(uow, tenant_wide, _entries(changed))
         [own] = await service.put_catalog(
-            uow, _ctx(), [entry.model_copy(update={"side_effects": "write"})]
+            uow, _ctx(), _entries(entry.model_copy(update={"side_effects": "write"}))
         )
         await uow.commit()
         in_workspace = await uow.tools.by_name("acme", PRICING, workspace_id="ws1")
@@ -156,11 +186,7 @@ async def test_relabelling_a_run_relearns_its_pattern(container, uow_factory) ->
     ctx = _ctx()
     assert await _procedures(container, ctx)
     for i in range(2):
-        async with uow_factory() as uow:
-            await container.services["tool_memory"].set_outcome(
-                uow, _ctx(f"run_{i}"), run_id=f"run_{i}", success=False
-            )
-            await uow.commit()
+        await _label(container, _ctx(f"run_{i}"), run=f"run_{i}", success=False)
     assert await learning.learn() == 4
     assert await _procedures(container, ctx) == [], "no successful run: retired"
 
@@ -233,7 +259,7 @@ async def test_redacted_arguments_never_reach_storage(container, uow_factory) ->
     ctx = _ctx("run_secret")
     async with uow_factory() as uow:
         await service.put_catalog(
-            uow, ctx, [ToolDescriptor(tenant_id="", name=CRM, redact=["auth.token"])]
+            uow, ctx, _entries(ToolDescriptor(tenant_id="", name=CRM, redact=["auth.token"]))
         )
         stored, _ = await service.record(
             uow,
@@ -275,7 +301,7 @@ async def test_a_typed_argument_links_the_call_to_the_entity_and_its_id(
         argument_entity_types={"supplier_id": "ORG"},
     )
     async with uow_factory() as uow:
-        await service.put_catalog(uow, ctx, [lookup, order])
+        await service.put_catalog(uow, ctx, _entries(lookup, order))
         await service.record(
             uow,
             ctx,
@@ -305,9 +331,13 @@ async def test_a_typed_argument_links_the_call_to_the_entity_and_its_id(
         ctx, "order 500 sheets from Acme Paper", available=["erp-create_po"], k=3, scope_keys=keys
     )
     assert hints.next == "erp-create_po"
-    assert hints.prefill["supplier_id"].value == "SUP-42"
-    assert hints.prefill["supplier_id"].source == "graph"
-    assert hints.prefill["amount"].value == "500" and hints.prefill["amount"].source == "task"
+    # prefill is keyed ``tool.arg``
+    supplier, amount = (
+        hints.prefill["erp-create_po.supplier_id"],
+        hints.prefill["erp-create_po.amount"],
+    )
+    assert supplier.value == "SUP-42" and supplier.source == "graph"
+    assert amount.value == "500" and amount.source == "task"
     assert hints.missing == []
 
 

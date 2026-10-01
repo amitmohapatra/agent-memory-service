@@ -144,8 +144,14 @@ def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestCli
     # on the line itself or on the section heading it sits under, so a design section is
     # marked once rather than line by line.
     marker = re.compile(r"(?i)\bremoved\b|not implemented|\bplanned\b|\bfuture\b|\bproposed\b")
+    # ADRs and dated plans/handoffs/results are historical records of what was decided
+    # then; they are not instructions for the API as it is now.
+    dated = re.compile(r"\d{4}-\d{2}-\d{2}")
     offenders: list[str] = []
     for page in sorted(docs.rglob("*.md")):
+        relative = page.relative_to(docs)
+        if relative.parts[0] == "adr" or dated.search(page.name):
+            continue
         section_exempt = False
         for number, line in enumerate(page.read_text().splitlines(), start=1):
             if line.startswith("#"):

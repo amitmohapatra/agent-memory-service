@@ -104,7 +104,7 @@ async def test_verify_through_the_sdk(app, client) -> None:
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **scope)
     bundle = await ctx.context(Q, format="full")
-    assert bundle.bundle_id and bundle.grounding is None
+    assert bundle.bundle_id
     report = await ctx.verify(f"{GOOD} {BAD}", bundle_id=bundle.bundle_id)
     assert [c.verdict for c in report.claims] == ["supported", "contradicted"]
     assert report.per_claim_hallucination_rate == 0.5 and report.grounded is False

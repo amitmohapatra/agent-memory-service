@@ -149,9 +149,8 @@ async def test_sdk_remember_recall_forget(app, client) -> None:
     assert got.memory_id == fav.id and got.memory_type == "PREFERENCE"
     assert got.visibility == "USER" and got.lifetime == "LONG_TERM"
     await ctx.forget(fav.id)
-    assert not any(
-        "neovim" in i.text for i in await ctx.search("favourite editor", kinds=["memory"])
-    )
+    # by id: the verbatim turn the fact was read out of may still say it (see above)
+    assert fav.id not in {i.id for i in await ctx.search("favourite editor", kinds=["memory"])}
     bundle = await ctx.context("how should I phrase the answer?", format="full")
     assert any("British English" in m.text for m in bundle.memories)
     await memory.aclose()

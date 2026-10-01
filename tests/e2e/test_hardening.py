@@ -16,12 +16,13 @@ H = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"
 
 @pytest.fixture
 def limited(make_settings, tmp_path, monkeypatch):
-    # The burst allowance and the body cap are constants of the package, not settings
-    # (config/constants.py); the test lowers them the only way an operator cannot.
+    # The rate, the burst allowance and the body cap are constants of the package, not
+    # settings (config/constants.py; a tenant's quota narrows the rate); the test lowers them
+    # the only way an operator cannot.
+    monkeypatch.setattr(constants, "RATE_LIMIT_PER_MINUTE", 5)
     monkeypatch.setattr(constants, "RATE_LIMIT_BURST", 0)
     monkeypatch.setattr(constants, "MAX_BODY_BYTES", 2048)
     settings = make_settings(
-        service={"rate_limit_per_minute": 5},
         blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
     )
     app = create_app(settings, overrides=_test_overrides(tasks="inline", blob=None))

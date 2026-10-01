@@ -77,7 +77,7 @@ async def test_observation_becomes_memories_and_is_recallable(container, uow_fac
     assert candidate_to_item(retrieved).evidence == tz.evidence
     # exact identifier lookup by memory id, with visibility enforced
     exact = await engine.retrieve(U1, f"show {tz.memory_id}")
-    assert [c.record_id for c in exact.candidates] == [tz.memory_id]
+    assert exact.candidates[0].record_id == tz.memory_id  # the exact hit leads
     assert candidate_to_item(exact.candidates[0]).evidence == tz.evidence
     assert (await engine.retrieve(U2, f"show {tz.memory_id}")).candidates == []
     # another user sees nothing of u1's user-level memories

@@ -23,7 +23,7 @@ async def test_an_agent_lists_its_memory_tools_and_uses_them(app, running) -> No
     _, harness = await _tenant(app)
     agent = harness.bind(user_id="u1", thread_id="thr_pull").agent("buyer")
     tools = await agent.agent_tools()
-    assert len(tools) == 9 and all(t.input_schema["type"] == "object" for t in tools)
+    assert len(tools) == 6 and all(t.input_schema["type"] == "object" for t in tools)
 
     stored = await agent.call_agent_tool(
         "memory_remember", {"content": "Deliveries go to dock 4", "kind": "SEMANTIC"}

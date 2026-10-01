@@ -9,6 +9,7 @@ from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.errors import ScopeDenied, ValidationFailed
 from memory_service.domain.feedback import (
     Feedback,
+    FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
     ProjectionAction,
@@ -238,11 +239,12 @@ async def test_listing_pages_newest_first_through_the_keyset(container, uow_fact
     assert seen == list(reversed(ids))
 
 
-async def test_an_answer_verdict_moves_the_cited_memories_and_labels_the_run(
+async def test_a_run_verdict_moves_the_cited_memories_and_labels_the_run(
     container, uow_factory
 ) -> None:
-    """Confirmed: every cited memory gains confidence and a reinforcement, and the run that
-    answered is labelled successful. Rejected: they lose confidence. An explicit label wins."""
+    """Confirmed: every memory the run's answer cited gains confidence and a reinforcement,
+    and the run is labelled successful. Rejected: they lose confidence. A person's label
+    outranks the judge's (``OUTCOME_PRECEDENCE``)."""
     memory = await _first_memory(container, uow_factory)
     agent = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_answer_1"})
     cited = [{"source_type": "memory", "source_id": memory.memory_id}]
@@ -250,13 +252,14 @@ async def test_an_answer_verdict_moves_the_cited_memories_and_labels_the_run(
         container,
         uow_factory,
         agent,
-        target_kind=FeedbackTargetKind.ANSWER,
-        target_id="ans_1",
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_answer_1",
         verdict=FeedbackVerdict.CONFIRM,
+        source=FeedbackSource.JUDGE,
         evidence_refs=cited,
     )
     assert confirmed.projection is not None
-    assert confirmed.projection.action is ProjectionAction.MEMORIES_ADJUSTED
+    assert confirmed.projection.action is ProjectionAction.RUN_LABELLED
     assert confirmed.projection.memory_ids == [memory.memory_id]
     assert confirmed.projection.run_id == "run_answer_1"
     async with uow_factory() as uow:
@@ -266,39 +269,46 @@ async def test_an_answer_verdict_moves_the_cited_memories_and_labels_the_run(
         min(1.0, memory.confidence + 0.05)
     )
     assert raised.reinforcement_count == memory.reinforcement_count + 1
-    assert outcome is not None and outcome.success and outcome.source == "feedback"
+    assert outcome is not None and outcome.success and outcome.source == "judge"
 
-    async with uow_factory() as uow:
-        await container.services["tool_memory"].set_outcome(
-            uow, agent, run_id="run_answer_1", success=True
-        )
-        await uow.commit()
+    await _submit(
+        container,
+        uow_factory,
+        agent,
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_answer_1",
+        verdict=FeedbackVerdict.APPROVE,
+        source=FeedbackSource.HUMAN,
+    )
     rejected = await _submit(
         container,
         uow_factory,
         agent,
-        target_kind=FeedbackTargetKind.ANSWER,
-        target_id="ans_2",
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_answer_1",
         verdict=FeedbackVerdict.REJECT,
+        source=FeedbackSource.JUDGE,
         evidence_refs=cited,
     )
-    assert rejected.projection is not None and rejected.projection.run_id is None
+    assert rejected.projection is not None
+    assert rejected.projection.action is ProjectionAction.NONE
+    assert rejected.projection.memory_ids == [memory.memory_id]
     async with uow_factory() as uow:
         lowered = await uow.memories.get("acme", memory.memory_id)
         kept = await uow.tools.outcome("acme", "run_answer_1")
     assert lowered is not None and lowered.confidence == pytest.approx(raised.confidence - 0.05)
-    assert kept is not None and kept.success and kept.source == "explicit"
+    assert kept is not None and kept.success and kept.source == "human"
 
 
-async def test_an_answer_may_only_cite_memories_its_reviewer_can_read(
+async def test_a_run_verdict_may_only_cite_memories_its_reviewer_can_read(
     container, uow_factory
 ) -> None:
     memory = await _first_memory(container, uow_factory)
     service = container.services["feedback"]
     record = Feedback(
         tenant_id="acme",
-        target_kind=FeedbackTargetKind.ANSWER,
-        target_id="ans_x",
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_x",
         verdict=FeedbackVerdict.REJECT,
         evidence_refs=[{"source_type": "memory", "source_id": memory.memory_id}],
     )
@@ -307,7 +317,7 @@ async def test_an_answer_may_only_cite_memories_its_reviewer_can_read(
             await service.submit(uow, BOB, record)
 
 
-async def test_a_verdict_on_a_run_is_its_explicit_outcome(container, uow_factory) -> None:
+async def test_a_verdict_on_a_run_is_its_outcome(container, uow_factory) -> None:
     corrected = await _submit(
         container,
         uow_factory,
@@ -321,4 +331,4 @@ async def test_a_verdict_on_a_run_is_its_explicit_outcome(container, uow_factory
     assert corrected.projection.action is ProjectionAction.RUN_LABELLED
     async with uow_factory() as uow:
         outcome = await uow.tools.outcome("acme", "run_judged")
-    assert outcome is not None and outcome.success is False and outcome.source == "explicit"
+    assert outcome is not None and outcome.success is False and outcome.source == "human"

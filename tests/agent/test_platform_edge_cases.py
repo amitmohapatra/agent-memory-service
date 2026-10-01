@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.api.app import create_app
+from memory_service.config import constants
 from tests.agent.conftest import BOOTSTRAP, sdk
 from tests.conftest import PG_AVAILABLE, _test_overrides
 from trellis.memory import MemoryError
@@ -188,7 +189,7 @@ async def test_a_key_only_caller_is_metered_by_its_tenant_s_quota(app, running) 
     acme_key = await sdk(app, acme.admin_key.token).tenant.keys.issue("service", "h")
     globex_key = await sdk(app, globex.admin_key.token).tenant.keys.issue("service", "h")
     body = {"scope": {"user_id": "u1"}, "query": "anything"}
-    default = str(app.state.settings.service.rate_limit_per_minute)
+    default = str(constants.RATE_LIMIT_PER_MINUTE)
 
     def limit_for(token: str) -> str:
         r = running.post("/v1/recall", headers={"X-API-Key": token}, json=body)
