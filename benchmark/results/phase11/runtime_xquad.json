@@ -1,0 +1,721 @@
+{
+  "complete": true,
+  "dataset": {
+    "commit": "7d30520c717524000f0d9d2f9c10a069acd9d285",
+    "files": {
+      "ar": {
+        "bytes": 1582988,
+        "sha256": "abdabd7afed5c635d99cca0f3f0d0c9d9ed0bc77451e963c2e4e0638c29e486d",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.ar.json"
+      },
+      "de": {
+        "bytes": 669810,
+        "sha256": "990b5d746746ed65ed4702ea5f35f99ffa4e2f1c390c07d003642acd937916f9",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.de.json"
+      },
+      "el": {
+        "bytes": 1918889,
+        "sha256": "821cf0f88e73fa258fd2f548b19b6ec39f7025059e16f6f9fc8cd797c9c3663e",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.el.json"
+      },
+      "en": {
+        "bytes": 609383,
+        "sha256": "e4c57d1c9143aaa1c5d265ba5987a65f4e69528d2a98f29d6e75019b10344f29",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.en.json"
+      },
+      "es": {
+        "bytes": 684322,
+        "sha256": "dcbae93ec3a9f4b9e78fd834a171d6f96c1a875e10e15b7530b7e4ef4971e37e",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.es.json"
+      },
+      "hi": {
+        "bytes": 1680538,
+        "sha256": "df2cce3532b37e9beb8979704b5c9a4bf874358f105395a298b89427b43b9d24",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.hi.json"
+      },
+      "ro": {
+        "bytes": 661158,
+        "sha256": "94f8d54e93ad2b7dd2e76dd921a666b5b8eff2d4379df9f179c42b445f09643f",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.ro.json"
+      },
+      "ru": {
+        "bytes": 1896368,
+        "sha256": "208d5b1aa154c52b1b5c5eda16281e455e8fd198cdb9af3f469f0d6037d973bf",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.ru.json"
+      },
+      "th": {
+        "bytes": 1809143,
+        "sha256": "5cdda11d0e1e075f7872abf4e6ae830388ce7f617964d542308e9ae4257e0f43",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.th.json"
+      },
+      "tr": {
+        "bytes": 729506,
+        "sha256": "92179a564774b7696100d144c1e10870d0a966b6fccbdd254a65b9d2ab1971cc",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.tr.json"
+      },
+      "vi": {
+        "bytes": 911401,
+        "sha256": "f619a1eb11fb42d3ab0834259e488a65f585447ef6154437bfb7199d85161a04",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.vi.json"
+      },
+      "zh": {
+        "bytes": 808652,
+        "sha256": "691d0b3359bc6b8faa8de931dfdfe21d50a65861ae348e32a0d1a0190b0c8835",
+        "url": "https://raw.githubusercontent.com/google-deepmind/xquad/7d30520c717524000f0d9d2f9c10a069acd9d285/xquad.zh.json"
+      }
+    },
+    "source": "google-deepmind/xquad"
+  },
+  "encoders": {
+    "dense_en": "onnx-granite-embedding-small-english-r2-model-d384",
+    "dense_ml": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384"
+  },
+  "gate": {
+    "measured": {
+      "mean_recall@10": 0.9959
+    },
+    "pass": true,
+    "thresholds": {
+      "mean_recall@10": 0.98
+    }
+  },
+  "languages": [
+    "en",
+    "hi",
+    "ar",
+    "zh",
+    "de",
+    "el",
+    "es",
+    "ro",
+    "ru",
+    "th",
+    "tr",
+    "vi"
+  ],
+  "limitations": [
+    "Retrieval through the shipped store path on one record per document; no parsing, chunking, graph expansion or reader.",
+    "Test-set measurement on public data that selected the models; not a held-out estimate.",
+    "Latencies are sequential single-query timings on a shared host; read host_load beside them."
+  ],
+  "llm_calls": 0,
+  "mean_same_language_recall@10": {
+    "english": 0.9765,
+    "ensemble": 0.9959
+  },
+  "per_language": {
+    "ar": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.0933,
+          "encode_ms": {
+            "max": 19.36,
+            "p50": 9.25,
+            "p95": 11.45,
+            "p99": 12.88,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9412,
+          "search_ms": {
+            "max": 19.76,
+            "p50": 7.64,
+            "p95": 9.75,
+            "p99": 10.9,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9412,
+          "encode_ms": {
+            "max": 17.63,
+            "p50": 9.99,
+            "p95": 12.57,
+            "p99": 13.85,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9882,
+          "search_ms": {
+            "max": 22.78,
+            "p50": 12.05,
+            "p95": 15.55,
+            "p99": 18.79,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "abdabd7afed5c635d99cca0f3f0d0c9d9ed0bc77451e963c2e4e0638c29e486d",
+      "documents": 240,
+      "query_scripts": {
+        "arabic": 1189,
+        "latin": 1
+      },
+      "questions": 1190
+    },
+    "de": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.8126,
+          "encode_ms": {
+            "max": 27.77,
+            "p50": 15.59,
+            "p95": 20.7,
+            "p99": 23.46,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.984,
+          "search_ms": {
+            "max": 23.83,
+            "p50": 9.57,
+            "p95": 12.73,
+            "p99": 14.26,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9832,
+          "encode_ms": {
+            "max": 30.24,
+            "p50": 15.38,
+            "p95": 21.19,
+            "p99": 23.87,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9975,
+          "search_ms": {
+            "max": 24.67,
+            "p50": 12.13,
+            "p95": 16.08,
+            "p99": 18.34,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "990b5d746746ed65ed4702ea5f35f99ffa4e2f1c390c07d003642acd937916f9",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "el": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.279,
+          "encode_ms": {
+            "max": 17.36,
+            "p50": 9.58,
+            "p95": 12.04,
+            "p99": 13.51,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9496,
+          "search_ms": {
+            "max": 85.1,
+            "p50": 9.66,
+            "p95": 12.59,
+            "p99": 14.79,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9454,
+          "encode_ms": {
+            "max": 17.46,
+            "p50": 9.76,
+            "p95": 12.72,
+            "p99": 14.92,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9933,
+          "search_ms": {
+            "max": 28.55,
+            "p50": 14.98,
+            "p95": 19.17,
+            "p99": 23.26,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "821cf0f88e73fa258fd2f548b19b6ec39f7025059e16f6f9fc8cd797c9c3663e",
+      "documents": 240,
+      "query_scripts": {
+        "greek": 1178,
+        "latin": 12
+      },
+      "questions": 1190
+    },
+    "en": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 1.0,
+          "encode_ms": {
+            "max": 20.73,
+            "p50": 12.73,
+            "p95": 15.97,
+            "p99": 18.4,
+            "samples": 1190
+          },
+          "same_language_recall@10": 1.0,
+          "search_ms": {
+            "max": 12.35,
+            "p50": 7.05,
+            "p95": 8.82,
+            "p99": 10.1,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 1.0,
+          "encode_ms": {
+            "max": 21.7,
+            "p50": 13.28,
+            "p95": 16.71,
+            "p99": 18.56,
+            "samples": 1190
+          },
+          "same_language_recall@10": 1.0,
+          "search_ms": {
+            "max": 14.16,
+            "p50": 9.15,
+            "p95": 11.47,
+            "p99": 12.77,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "e4c57d1c9143aaa1c5d265ba5987a65f4e69528d2a98f29d6e75019b10344f29",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "es": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.9067,
+          "encode_ms": {
+            "max": 33.14,
+            "p50": 15.14,
+            "p95": 19.75,
+            "p99": 22.7,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.995,
+          "search_ms": {
+            "max": 19.08,
+            "p50": 9.86,
+            "p95": 13.12,
+            "p99": 15.35,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.995,
+          "encode_ms": {
+            "max": 30.88,
+            "p50": 15.87,
+            "p95": 20.75,
+            "p99": 23.77,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9983,
+          "search_ms": {
+            "max": 45.9,
+            "p50": 12.7,
+            "p95": 16.86,
+            "p99": 19.72,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "dcbae93ec3a9f4b9e78fd834a171d6f96c1a875e10e15b7530b7e4ef4971e37e",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "hi": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.1311,
+          "encode_ms": {
+            "max": 37.6,
+            "p50": 10.72,
+            "p95": 13.43,
+            "p99": 15.32,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9773,
+          "search_ms": {
+            "max": 147.12,
+            "p50": 9.62,
+            "p95": 12.27,
+            "p99": 14.17,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.958,
+          "encode_ms": {
+            "max": 20.67,
+            "p50": 11.69,
+            "p95": 14.41,
+            "p99": 16.2,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9924,
+          "search_ms": {
+            "max": 46.92,
+            "p50": 15.19,
+            "p95": 19.48,
+            "p99": 22.62,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "df2cce3532b37e9beb8979704b5c9a4bf874358f105395a298b89427b43b9d24",
+      "documents": 240,
+      "query_scripts": {
+        "devanagari": 1189,
+        "latin": 1
+      },
+      "questions": 1190
+    },
+    "ro": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.8714,
+          "encode_ms": {
+            "max": 30.75,
+            "p50": 16.63,
+            "p95": 23.02,
+            "p99": 26.7,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9849,
+          "search_ms": {
+            "max": 20.5,
+            "p50": 10.41,
+            "p95": 14.26,
+            "p99": 17.08,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9807,
+          "encode_ms": {
+            "max": 33.0,
+            "p50": 16.78,
+            "p95": 23.19,
+            "p99": 26.18,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9975,
+          "search_ms": {
+            "max": 29.67,
+            "p50": 13.08,
+            "p95": 17.56,
+            "p99": 21.22,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "94f8d54e93ad2b7dd2e76dd921a666b5b8eff2d4379df9f179c42b445f09643f",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "ru": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.1546,
+          "encode_ms": {
+            "max": 54.46,
+            "p50": 10.69,
+            "p95": 13.89,
+            "p99": 29.82,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9521,
+          "search_ms": {
+            "max": 46.93,
+            "p50": 7.52,
+            "p95": 10.57,
+            "p99": 14.56,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9782,
+          "encode_ms": {
+            "max": 15.84,
+            "p50": 9.68,
+            "p95": 12.29,
+            "p99": 13.66,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9992,
+          "search_ms": {
+            "max": 22.38,
+            "p50": 10.87,
+            "p95": 14.2,
+            "p99": 16.84,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "208d5b1aa154c52b1b5c5eda16281e455e8fd198cdb9af3f469f0d6037d973bf",
+      "documents": 240,
+      "query_scripts": {
+        "cyrillic": 1184,
+        "latin": 6
+      },
+      "questions": 1190
+    },
+    "th": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.1605,
+          "encode_ms": {
+            "max": 38.6,
+            "p50": 11.67,
+            "p95": 13.94,
+            "p99": 16.41,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9824,
+          "search_ms": {
+            "max": 18.84,
+            "p50": 10.27,
+            "p95": 13.03,
+            "p99": 15.96,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.958,
+          "encode_ms": {
+            "max": 40.19,
+            "p50": 12.68,
+            "p95": 15.0,
+            "p99": 17.98,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.995,
+          "search_ms": {
+            "max": 29.34,
+            "p50": 15.96,
+            "p95": 20.23,
+            "p99": 23.75,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "5cdda11d0e1e075f7872abf4e6ae830388ce7f617964d542308e9ae4257e0f43",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 16,
+        "thai": 1174
+      },
+      "questions": 1190
+    },
+    "tr": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.6328,
+          "encode_ms": {
+            "max": 32.89,
+            "p50": 17.69,
+            "p95": 24.43,
+            "p99": 27.74,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9689,
+          "search_ms": {
+            "max": 62.47,
+            "p50": 9.31,
+            "p95": 12.74,
+            "p99": 15.76,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9328,
+          "encode_ms": {
+            "max": 32.6,
+            "p50": 18.0,
+            "p95": 24.3,
+            "p99": 27.53,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9916,
+          "search_ms": {
+            "max": 36.49,
+            "p50": 12.17,
+            "p95": 16.45,
+            "p99": 19.47,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "92179a564774b7696100d144c1e10870d0a966b6fccbdd254a65b9d2ab1971cc",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "vi": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.5546,
+          "encode_ms": {
+            "max": 52.05,
+            "p50": 21.04,
+            "p95": 29.65,
+            "p99": 36.25,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9899,
+          "search_ms": {
+            "max": 25.3,
+            "p50": 12.97,
+            "p95": 17.57,
+            "p99": 21.17,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.937,
+          "encode_ms": {
+            "max": 46.36,
+            "p50": 21.56,
+            "p95": 31.29,
+            "p99": 36.18,
+            "samples": 1190
+          },
+          "same_language_recall@10": 1.0,
+          "search_ms": {
+            "max": 29.43,
+            "p50": 16.74,
+            "p95": 22.2,
+            "p99": 25.93,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "f619a1eb11fb42d3ab0834259e488a65f585447ef6154437bfb7199d85161a04",
+      "documents": 240,
+      "query_scripts": {
+        "latin": 1190
+      },
+      "questions": 1190
+    },
+    "zh": {
+      "arms": {
+        "english": {
+          "cross_language_recall@10": 0.1471,
+          "encode_ms": {
+            "max": 25.32,
+            "p50": 8.12,
+            "p95": 11.36,
+            "p99": 15.82,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9924,
+          "search_ms": {
+            "max": 15.93,
+            "p50": 6.31,
+            "p95": 8.74,
+            "p99": 10.58,
+            "samples": 1190
+          }
+        },
+        "ensemble": {
+          "cross_language_recall@10": 0.9807,
+          "encode_ms": {
+            "max": 19.75,
+            "p50": 8.13,
+            "p95": 10.97,
+            "p99": 15.24,
+            "samples": 1190
+          },
+          "same_language_recall@10": 0.9983,
+          "search_ms": {
+            "max": 17.52,
+            "p50": 9.1,
+            "p95": 11.95,
+            "p99": 13.53,
+            "samples": 1190
+          }
+        }
+      },
+      "dataset_sha256": "691d0b3359bc6b8faa8de931dfdfe21d50a65861ae348e32a0d1a0190b0c8835",
+      "documents": 240,
+      "query_scripts": {
+        "han": 1171,
+        "latin": 19
+      },
+      "questions": 1190
+    }
+  },
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "719951c9dfd37455c25bbe5a6fc57e7c938d475b",
+    "host_load": {
+      "load_per_core": 0.65,
+      "loadavg_15m": 2.2,
+      "loadavg_1m": 2.6,
+      "loadavg_5m": 2.4
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "packages": {
+      "docling": "not-installed",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "5.3.0",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "timestamp": "2026-10-01T22:15:55.887468+00:00"
+  },
+  "retrieval": {
+    "hybrid_rrf_k": 1,
+    "hybrid_weights": {
+      "bm25": 2.0,
+      "colbert": 2.0,
+      "dense_en": 0.5,
+      "dense_ml": 2.0
+    }
+  },
+  "source_sha256": "6a6d8e67615e9f66b3edb1dd03d37d0d1f5dff833a7690d64c81e5244e19c6ae",
+  "spaces_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+  "sparse": "bm25-v3-snowball-k1.2-b0.75",
+  "suite": "xquad",
+  "total_seconds": 2020.0
+}

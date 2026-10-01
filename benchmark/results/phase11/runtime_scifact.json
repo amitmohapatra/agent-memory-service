@@ -1,0 +1,133 @@
+{
+  "arms": {
+    "english": {
+      "encode_ms": {
+        "max": 27.28,
+        "p50": 14.94,
+        "p95": 21.97,
+        "p99": 25.12,
+        "samples": 300
+      },
+      "metrics": {
+        "ndcg@10": 0.753,
+        "queries": 300,
+        "recall@10": 0.8672
+      },
+      "search_ms": {
+        "max": 117.12,
+        "p50": 12.64,
+        "p95": 22.54,
+        "p99": 31.79,
+        "samples": 300
+      }
+    },
+    "ensemble": {
+      "encode_ms": {
+        "max": 26.81,
+        "p50": 14.48,
+        "p95": 19.72,
+        "p99": 20.68,
+        "samples": 300
+      },
+      "metrics": {
+        "ndcg@10": 0.7564,
+        "queries": 300,
+        "recall@10": 0.8919
+      },
+      "search_ms": {
+        "max": 26.28,
+        "p50": 16.28,
+        "p95": 21.88,
+        "p99": 25.5,
+        "samples": 300
+      }
+    }
+  },
+  "complete": true,
+  "dataset": {
+    "licence": "CC BY-NC 4.0 \u2014 benchmark use",
+    "name": "BeIR/scifact",
+    "source": "https://huggingface.co/datasets/BeIR/scifact",
+    "split": "test"
+  },
+  "dataset_sha256": "2e7603669b902c0bbd0c7fd916026d9301120b4a0947d88ba9d1b6ce46158bb6",
+  "documents": 5183,
+  "encoders": {
+    "dense_en": "onnx-granite-embedding-small-english-r2-model-d384",
+    "dense_ml": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384"
+  },
+  "gate": {
+    "measured": {
+      "ndcg@10": 0.7564,
+      "recall@10": 0.8919
+    },
+    "pass": false,
+    "thresholds": {
+      "ndcg@10": 0.7557,
+      "recall@10": 0.8926
+    }
+  },
+  "index_seconds": 1133.8,
+  "limitations": [
+    "Retrieval through the shipped store path on one record per document; no parsing, chunking, graph expansion or reader.",
+    "Test-set measurement on public data that selected the models; not a held-out estimate.",
+    "Latencies are sequential single-query timings on a shared host; read host_load beside them."
+  ],
+  "llm_calls": 0,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "719951c9dfd37455c25bbe5a6fc57e7c938d475b",
+    "host_load": {
+      "load_per_core": 0.77,
+      "loadavg_15m": 2.21,
+      "loadavg_1m": 3.07,
+      "loadavg_5m": 2.32
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "packages": {
+      "docling": "not-installed",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "5.3.0",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "timestamp": "2026-10-01T21:41:55.670230+00:00"
+  },
+  "queries": 300,
+  "retrieval": {
+    "hybrid_rrf_k": 1,
+    "hybrid_weights": {
+      "bm25": 2.0,
+      "colbert": 2.0,
+      "dense_en": 0.5,
+      "dense_ml": 2.0
+    }
+  },
+  "source_sha256": "6a6d8e67615e9f66b3edb1dd03d37d0d1f5dff833a7690d64c81e5244e19c6ae",
+  "spaces_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+  "sparse": "bm25-v3-snowball-k1.2-b0.75",
+  "suite": "scifact",
+  "total_seconds": 1152.6
+}
