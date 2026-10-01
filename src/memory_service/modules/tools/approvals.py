@@ -52,6 +52,16 @@ def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, sha
     return f"not ({clause})" if base == "true" else f"({base}) and not ({clause})"
 
 
+def offered(counts: ApprovalCounts, entry: ToolDescriptor | None) -> Suggestion | None:
+    """The rule these decisions support that may be offered for this tool. Never "approve
+    automatically" for an irreversible tool: however often a deletion or a payment was
+    approved, the next one is still asked about. "Always ask" is offered for any tier."""
+    suggestion = counts.suggestion()
+    if suggestion == "auto_approve" and entry is not None and entry.risk == "irreversible":
+        return None
+    return suggestion
+
+
 def accepted(entry: ToolDescriptor | None, shape: str) -> bool:
     """Whether the rule for this shape is already part of the tool's expression."""
     return bool(entry and entry.approve_when and when_shape(shape) in entry.approve_when)
@@ -64,12 +74,14 @@ async def accept(uow: UnitOfWork, ctx: MemoryExecutionContext, identifier: str) 
     if agent_id != (ctx.agent_id or ""):
         raise NotFound("no such approval suggestion")
     counts = await uow.tools.approval_pattern(ctx.tenant_id, agent_id, tool, shape)
-    suggestion = counts.suggestion() if counts is not None else None
-    if suggestion is None:
+    if counts is None or counts.suggestion() is None:
         raise Conflict("the decisions no longer support this suggestion")
     entry = await uow.tools.by_name(
         ctx.tenant_id, tool, workspace_id=ctx.workspace_id
     ) or await uow.tools.ensure(ctx.tenant_id, tool)
+    suggestion = offered(counts, entry)
+    if suggestion is None:
+        raise Conflict(f"{tool} is irreversible: its calls are always asked about")
     if accepted(entry, shape):
         return entry
     expression = compose(entry.approve_when, entry.risk, suggestion, shape)

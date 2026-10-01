@@ -488,7 +488,7 @@ async def approval_suggestions(
                 agent_id=c.agent_id or None,
             )
             for c in counts
-            if (suggestion := c.suggestion()) is not None
+            if (suggestion := approvals.offered(c, entries.get(c.tool))) is not None
         ]
     )
 
