@@ -101,3 +101,27 @@ async def test_the_user_block_is_kept_from_what_the_user_said_and_an_edit_is_kep
     with pytest.raises(Conflict):
         async with uow_factory() as uow:
             await profile.edit(uow, ANN, "user", "phone number", "x")
+
+
+async def test_a_standing_rule_said_in_conversation_is_pinned_in_the_user_block(
+    container, uow_factory
+) -> None:
+    """ "Never suggest recipes with cilantro" said once reaches the pinned user block, which
+    every context carries; a one-off instruction does not."""
+    from benchmark.common import submit_observation  # noqa: PLC0415 - test helper
+
+    from memory_service.modules.jobs.registry import register_handlers  # noqa: PLC0415
+
+    register_handlers(container)
+    for said in ("Never suggest recipes with cilantro.", "Do not invent a sales number."):
+        async with uow_factory() as uow:
+            await submit_observation(uow, ANN, content=said)
+            await uow.commit()
+        for _ in range(3):  # process -> index -> profile.refresh
+            await container.tasks.drain()
+    profile: ProfileService = container.services["profile"]
+    async with uow_factory() as uow:
+        [block] = await profile.blocks(uow, ANN)
+    assert block.block == "user"
+    assert "cilantro" in block.text
+    assert "sales number" not in block.text

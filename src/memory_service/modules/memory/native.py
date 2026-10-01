@@ -220,10 +220,28 @@ _WORKS_AT = re.compile(r"\bi\s+work\s+(?:at|for)\s+([A-Z][\w&.\- ]{1,40}?)[.!]?$
 _LIVES_IN = re.compile(
     r"\bi(?:'m| am)?\s+(?:live|living|based)\s+in\s+([A-Z][\w,.\- ]{1,40}?)[.!]?$", re.IGNORECASE
 )
+#: "I moved to Austin" / "I've just relocated to Berlin last month": where the user lives
+#: now, so it supersedes the lives_in it replaces (lives_in is single-valued). The place is
+#: a capitalised name, case-sensitively, and not "a new team" or "the marketing team".
+_MOVED_TO = re.compile(
+    r"\bi(?:'ve| have)?\s+(?:just\s+|recently\s+|finally\s+)?(?:moved|relocated)\s+"
+    r"(?:back\s+)?to\s+(?-i:(?!(?:a|an|the|my|our|his|her|their|another|new|next)\b))"
+    r"((?-i:[A-Z])[\w\-]*(?:,?\s+(?-i:[A-Z])[\w\-]*){0,3})"
+    r"(?:\s+(?:last|this|in|on|a|about|recently|two|three|few)\b.*)?[.!]?$",
+    re.IGNORECASE,
+)
 _PREFERENCE = re.compile(
     r"\b(?:i|we)\s+(?:really\s+|strongly\s+|always\s+|usually\s+)?"
     r"(prefer|like|love|hate|dislike|avoid|want|need|don't like|do not like|don't want|"
     r"can't stand|never use|always use|only use)\s+(.+)",
+    re.IGNORECASE,
+)
+#: An imperative that says it is standing: "always ...", "never ...", "don't ever ...",
+#: "from now on ...". Unlike a bare imperative ("do not invent a sales number"), the
+#: sentence itself says it outlives the task, so it is kept as a lasting rule.
+_STANDING_RULE = re.compile(
+    r"^(?:please\s+)?(?:(?:always|never)\b|(?:don't|do not)\s+ever\b|"
+    r"(?:from now on|going forward|in (?:the )?future)\b[,:]?)\s*(.+)",
     re.IGNORECASE,
 )
 _PREF_PLEASE = re.compile(
@@ -770,7 +788,7 @@ class NativeMemoryIntelligence:
                 category="attribute",
                 **common,
             )
-        if m := _LIVES_IN.search(s):
+        if m := _LIVES_IN.search(s) or _MOVED_TO.search(s):
             return MemoryCandidate(
                 content=s,
                 memory_type=MemoryType.USER,
@@ -802,6 +820,28 @@ class NativeMemoryIntelligence:
                 importance=0.7,
                 confidence=0.8,
                 category="preference",
+                **common,
+            )
+        if rule := _STANDING_RULE.match(s):
+            # A standing rule ("Never suggest recipes with cilantro", "Always write Python
+            # with strict type hints") says so in its own words, so it is durable on sight:
+            # a lasting PREFERENCE the user profile is kept from, not a seven-day
+            # instruction that lapses unless restated.
+            return MemoryCandidate(
+                content=s,
+                memory_type=MemoryType.PREFERENCE,
+                lifetime=Lifetime.LONG_TERM,
+                subject=user,
+                predicate="rule",
+                # the whole rule ("never suggest ..."), or what follows a marker the cleaner
+                # drops as a time phrase ("from now on, reply in German")
+                object=(
+                    _clean_object(re.sub(r"^please\s+", "", s, flags=re.IGNORECASE))
+                    or _clean_object(rule.group(1))
+                )[:300],
+                importance=0.8,
+                confidence=0.85,
+                category="rule",
                 **common,
             )
         if m := _PREF_PLEASE.match(s):

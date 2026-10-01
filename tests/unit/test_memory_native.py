@@ -192,7 +192,7 @@ def test_a_header_eats_neither_a_caption_nor_the_first_clause_of_prose() -> None
         ("I prefer concise answers.", MemoryType.PREFERENCE, "prefers", "concise answers"),
         ("I don't like verbose output.", MemoryType.PREFERENCE, "dislikes", "verbose output"),
         ("My favourite editor is neovim.", MemoryType.PREFERENCE, "favourite_editor", "neovim"),
-        ("Please never use emojis.", MemoryType.PREFERENCE, "instruction", "never use emojis"),
+        ("Please never use emojis.", MemoryType.PREFERENCE, "rule", "never use emojis"),
         ("We decided to use PostgreSQL.", MemoryType.SEMANTIC, "decided", "use postgresql"),
         (
             "Revenue was EUR 412 million in FY26.",
@@ -347,10 +347,11 @@ async def test_an_imperative_is_short_lived_and_a_restated_one_is_not(native) ->
     of LONG_TERM's 1.0 - and restating one renews it. What gets repeated survives; what was
     scoped to one task lapses on its own.
     """
-    for text in ("Do not invent a sales number.", "Always answer in metric units."):
+    for text in ("Do not invent a sales number.", "Stop adding emojis.", "Keep it short."):
         cand = (await _extract(native, text))[0]
         assert cand.predicate == "instruction", text
         assert cand.lifetime is Lifetime.SHORT_TERM, f"{text} must not be durable on sight"
+    # ...unless the sentence itself says it is standing: see the standing-rule test below
 
     # a real preference is untouched: it states something about the person, not the task
     pref = (await _extract(native, "I prefer concise answers."))[0]
@@ -390,3 +391,49 @@ async def test_generated_rewrite_cannot_merge_into_source(
     stored = build_memory(previous, CTX, now=datetime.now(UTC))
     result = await native.consolidate(incoming, [stored], CTX)
     assert result.decision == DedupDecision.CREATE
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Never suggest recipes with cilantro.",
+        "Always write code in Python with strict type hinting.",
+        "Please always cc my manager on invoices.",
+        "Don't ever book red-eye flights.",
+        "From now on, reply in German.",
+        "In the future, send the summary as bullet points.",
+    ],
+)
+async def test_a_standing_rule_is_durable_on_sight(native, text: str) -> None:
+    """A rule that says it is standing ("always", "never", "from now on") is kept as a lasting
+    preference the user profile is built from, not a seven-day instruction."""
+    [cand] = await _extract(native, text)
+    assert cand.predicate == "rule" and cand.category == "rule", text
+    assert cand.memory_type is MemoryType.PREFERENCE
+    assert cand.lifetime is Lifetime.LONG_TERM, f"{text} must outlive the task"
+    assert cand.object and "please" not in cand.object.lower()
+
+
+@pytest.mark.parametrize(
+    ("text", "place"),
+    [
+        ("I moved to Austin.", "austin"),
+        ("I've just moved to New York City last month.", "new york city"),
+        ("I relocated to Berlin, Germany.", "berlin, germany"),
+        ("I moved back to Seattle in May.", "seattle"),
+        ("I moved to The Hague.", "the hague"),
+        ("I live in Seattle.", "seattle"),
+    ],
+)
+async def test_moving_somewhere_is_where_the_user_lives(native, text: str, place: str) -> None:
+    [cand] = [c for c in await _extract(native, text) if c.predicate == "lives_in"]
+    assert cand.memory_type is MemoryType.USER and cand.lifetime is Lifetime.LONG_TERM
+    assert (cand.object or "").lower() == place
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["I moved to a new team.", "I moved to the marketing team.", "I moved to another desk."],
+)
+async def test_moving_to_something_that_is_not_a_place_is_not_a_home(native, text: str) -> None:
+    assert not [c for c in await _extract(native, text) if c.predicate == "lives_in"]
