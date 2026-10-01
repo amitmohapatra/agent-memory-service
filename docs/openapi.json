@@ -4748,6 +4748,11 @@
             "description": "only with debug",
             "title": "Diagnostics"
           },
+          "evidence_status": {
+            "$ref": "#/components/schemas/EvidenceStatus",
+            "default": "COMPLETE",
+            "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+          },
           "rendered": {
             "description": "prompt-ready; items are cited by handle ([m1], [d2]...)",
             "title": "Rendered",

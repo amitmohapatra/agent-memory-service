@@ -453,6 +453,8 @@ class PromptContext(BaseModel):
     token_estimate: int
     #: the tools that fit the task, best first (only when ``tools`` were given)
     tool_candidates: list[str] | None = None
+    #: INSUFFICIENT: the memory holds nothing for this question - say you do not know
+    evidence_status: EvidenceStatus = "COMPLETE"
     #: the build's diagnostics (only with ``debug=True``)
     diagnostics: dict[str, Any] | None = None
 

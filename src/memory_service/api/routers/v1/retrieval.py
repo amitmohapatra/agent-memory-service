@@ -20,7 +20,7 @@ from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ProcedureView, ProfileBlockView, ThreadSummaryView
-from memory_service.domain.enums import QueryType
+from memory_service.domain.enums import EvidenceStatus, QueryType
 from memory_service.domain.tools import ToolHints
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
@@ -196,6 +196,12 @@ class PromptContextResponse(BaseModel):
     token_estimate: int
     tool_candidates: list[str] | None = Field(
         default=None, description="the tools that fit the task, best first (only with tools)"
+    )
+    evidence_status: EvidenceStatus = Field(
+        default=EvidenceStatus.COMPLETE,
+        description="COMPLETE, INCOMPLETE (evidence for part of the question, or about "
+        "someone else) or INSUFFICIENT (nothing to go on: answer that you do not know "
+        "rather than guess)",
     )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
 
