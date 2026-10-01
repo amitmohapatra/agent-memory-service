@@ -87,9 +87,6 @@ class Overrides:
     #: ``hash``: per-token hashed vectors in the late-interaction arm (non-representative);
     #: ``disabled``: no late-interaction arm. The hash embedding implies ``hash`` here.
     late_interaction: Literal["hash", "disabled"] | None = None
-    #: ``lexical``: word overlap in place of the memories' two cross-encoders
-    #: (non-representative); ``disabled``: none. The hash embedding implies ``lexical``.
-    rerankers: Literal["lexical", "disabled"] | None = None
     #: ``lexical``: token coverage mapped onto NLI scores (never representative)
     nli: Literal["lexical", "disabled"] | None = None
     #: the text parser instead of docling
@@ -119,7 +116,6 @@ class Overrides:
             ("embedding", self.embedding or (self.dense_model and self.dense_model.id)),
             ("multilingual_dense", self.multilingual_dense),
             ("late_interaction", self.late_interaction),
-            ("rerankers", self.rerankers),
             ("nli", self.nli),
             ("document_parser", self.document_parser),
             ("graph_enrichment", self.graph_enrichment),
@@ -180,8 +176,6 @@ class Container:
     sparse: Any = None
     #: the late-interaction encoder, or None
     late: Any = None
-    #: the memories' cross-encoders
-    rerankers: tuple[Any, ...] = ()
     nli: Any = None
     llm: Any = None
     memory_intelligence: Any = None
@@ -253,7 +247,6 @@ class Container:
         ``DenseSpaces.close()`` closes every space it holds, the primary included.
         """
         models = [("dense_spaces", self.dense_spaces), ("nli", self.nli), ("late", self.late)]
-        models += [(f"reranker{i}", r) for i, r in enumerate(self.rerankers)]
         for name, model in models:
             closer = getattr(model, "close", None)
             if closer is None:

@@ -25,7 +25,7 @@ from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer, memory_key_text
+from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval import learned_fusion
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
@@ -33,7 +33,6 @@ from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
-from memory_service.ports.models import Reranker
 from memory_service.ports.search import (
     Retriever,
     SearchFilter,
@@ -261,7 +260,6 @@ class RetrievalEngine:
         settings: RetrievalSettings,
         router: QueryRouter | None = None,
         assist: LLMAssist | None = None,
-        rerankers: Sequence[Reranker] = (),
     ) -> None:
         self.uow_factory = uow_factory
         self.authz = authz
@@ -270,8 +268,6 @@ class RetrievalEngine:
         self.cfg = settings
         self.router = router or QueryRouter(semantic_graph=settings.semantic_graph)
         self.assist = assist or LLMAssist.disabled()
-        #: the memories' cross-encoders, in ``learned_fusion.FEATURES`` order
-        self.rerankers = tuple(rerankers)
         # pipeline stages appended by later milestones (graph M8, expansion/verification M9)
         self.post_stages: dict[str, Any] = {}
         # extra retrievers (M10 strategies): their hit lists are RRF-fused with the hybrid list
@@ -664,7 +660,8 @@ class RetrievalEngine:
         at: PointInTime | None,
     ) -> list[Candidate]:
         """The memories ranked by ``learned_fusion``: every arm in one round trip, two first
-        stages, both rerankers over their pool at once, one learned score (ADR 0025)."""
+        stages, one learned score over their pooled heads (ADR 0025). No model call beyond
+        the query's encoders, so a memory search costs what the arms cost."""
         collection, flt = self._scope("memory", visibility, None, observed, at, None)
         sparse = {}
         if encoded.sparse is not None:
@@ -686,19 +683,12 @@ class RetrievalEngine:
             return []
         a = learned_fusion.first_stage(pool, learned_fusion.FIRST_A)
         b = learned_fusion.first_stage(pool, learned_fusion.FIRST_B)
-        chosen = learned_fusion.rerank_pool(a, b, self.cfg.memory_rerank_k)
-        texts = [_memory_text(pool.hits[rid].payload) for rid in chosen]
-        with stage_seconds.labels("retrieval.memory_rerank").time():
-            reranked = await self._rerank(question, texts, diagnostics)
-        rows = learned_fusion.features(
-            pool, chosen, a=a, b=b, reranked=reranked, query=question or search_text
-        )
-        complete = bool(reranked) and all(scores is not None for scores in reranked)
-        ranked = learned_fusion.order(pool, chosen, rows, b, reranked=complete)
+        chosen = learned_fusion.scoring_pool(a, b, self.cfg.memory_pool_k)
+        rows = learned_fusion.features(pool, chosen, a=a, b=b, query=question or search_text)
+        ranked = learned_fusion.order(pool, chosen, rows, b)
         diagnostics["memory_fusion"] = {
             "arms": {name.value: len(hits) for name, hits in arms.items()},
             "pool": len(chosen),
-            "reranked": [scores is not None for scores in reranked],
         }
         depth = max(self.cfg.fused_k, derived_k(self.cfg.memory_recall_k))
         return [
@@ -712,34 +702,6 @@ class RetrievalEngine:
             )
             for rid, score in ranked[:depth]
         ]
-
-    async def _rerank(
-        self, question: str, texts: list[str], diagnostics: dict[str, Any]
-    ) -> list[list[float] | None]:
-        """Every reranker's scores over ``texts``, the rerankers run at once, each on its own
-        runner. One that fails or misses the deadline gives ``None``, and the query is
-        ranked by the model fitted without rerankers (``learned_fusion``)."""
-        if not self.rerankers or not texts:
-            return [None] * len(self.rerankers)
-        tasks = [asyncio.ensure_future(r.score(question, texts)) for r in self.rerankers]
-        out: list[list[float] | None] = []
-        try:
-            async with asyncio.timeout(self.cfg.memory_rerank_timeout_ms / 1000):
-                await asyncio.wait(tasks)
-        except TimeoutError:
-            pass
-        failed = []
-        for reranker, task in zip(self.rerankers, tasks, strict=True):
-            if task.done() and not task.cancelled() and task.exception() is None:
-                out.append(list(task.result()))
-                continue
-            failed.append(reranker.name)
-            _discard(task)
-            out.append(None)
-        if failed:
-            diagnostics["rerank_unavailable"] = failed
-            log.warning("retrieval.rerank_unavailable", rerankers=failed)
-        return out
 
     async def _entity_search(
         self,
@@ -1076,17 +1038,6 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         return collection, flt
-
-
-def _memory_text(payload: dict[str, Any]) -> str:
-    """A memory as it was indexed under its own key, rebuilt from its search payload: what
-    the rerankers read."""
-    return memory_key_text(
-        observed=str(payload.get("observed_at") or ""),
-        subject=payload.get("subject"),
-        memory_type=str(payload.get("memory_type") or "semantic"),
-        content=str(payload.get("text", "")),
-    )
 
 
 def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:

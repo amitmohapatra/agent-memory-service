@@ -120,19 +120,6 @@ def _frozen() -> tuple[Model, ...]:
             revision=colbert.revision,
             graph=colbert.graph_file,
         ),
-        *(
-            Model(
-                spec.local_dir,
-                spec.id,
-                "reranker",
-                "a cross-encoder of the memories' learned fusion (onnx graph)",
-                default=True,
-                runtime=spec.runtime,
-                revision=spec.revision,
-                graph=spec.graph_file,
-            )
-            for spec in FROZEN_MODELS.rerankers
-        ),
     )
 
 

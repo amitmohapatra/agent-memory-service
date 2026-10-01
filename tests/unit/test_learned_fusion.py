@@ -35,10 +35,6 @@ HITS = {
 
 def test_the_coefficients_name_every_feature_and_nothing_else() -> None:
     assert set(lf.COEFFICIENTS) == set(lf.FEATURES)
-    assert set(lf.COEFFICIENTS_WITHOUT_RERANKERS) == set(lf.FEATURES)
-    # the fallback is the model without rerankers: it cannot read them
-    assert lf.COEFFICIENTS_WITHOUT_RERANKERS["rerank_multilingual"] == 0.0
-    assert lf.COEFFICIENTS_WITHOUT_RERANKERS["rerank_english"] == 0.0
 
 
 def test_neighbours_are_read_from_the_preceding_turn_each_memory_names() -> None:
@@ -78,11 +74,11 @@ def test_a_key_scores_nothing_below_its_depth(monkeypatch: pytest.MonkeyPatch) -
 def test_the_pool_is_each_first_stages_top_without_repeats() -> None:
     a = {"x": 3.0, "y": 2.0, "z": 1.0}
     b = {"z": 3.0, "x": 2.0, "y": 1.0}
-    assert lf.rerank_pool(a, b, 1) == ["x", "z"]
-    assert lf.rerank_pool(a, b, 3) == ["x", "y", "z"]
+    assert lf.scoring_pool(a, b, 1) == ["x", "z"]
+    assert lf.scoring_pool(a, b, 3) == ["x", "y", "z"]
 
 
-def test_features_normalise_each_reranker_and_flag_a_time_for_a_when_question() -> None:
+def test_features_read_ranks_neighbours_and_a_time_for_a_when_question() -> None:
     pool = lf.ArmPool.of(_arms({VectorName.BM25: ["a", "b", "c"]}, HITS))
     a = {"a": 3.0, "b": 2.0, "c": 1.0}
     b = {"a": 1.0, "b": 2.0, "c": 3.0}
@@ -91,19 +87,17 @@ def test_features_normalise_each_reranker_and_flag_a_time_for_a_when_question() 
         ["a", "b", "c"],
         a=a,
         b=b,
-        reranked=[[0.0, 5.0, 10.0], None],
         query="When did we meet?",
     )
     col = {name: [row[i] for row in rows] for i, name in enumerate(lf.FEATURES)}
-    assert col["rerank_multilingual"] == pytest.approx([0.0, 0.5, 1.0])
-    assert col["rerank_english"] == [0.0, 0.0, 0.0]
+    assert col["bm25"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
     assert col["first_a"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
     assert col["first_b"] == pytest.approx([1 / 4, 1 / 3, 1 / 2])
     assert col["when"] == [1.0, 1.0, 1.0]
     assert col["when_time"] == [0.0, 0.0, 1.0]  # only "c" names a time ("last week")
     # the best first-stage-A score among the turns either side
     assert col["neighbour"] == [2.0, 3.0, 2.0]
-    plain = lf.features(pool, ["c"], a=a, b=b, reranked=[None, None], query="Who is Caroline?")
+    plain = lf.features(pool, ["c"], a=a, b=b, query="Who is Caroline?")
     assert plain[0][lf.FEATURES.index("when_time")] == 0.0
 
 
@@ -116,12 +110,10 @@ def test_the_order_is_the_scored_pool_then_the_rest_below_it() -> None:
     assert ranked[2][1] < min(score for _, score in ranked[:2])
 
 
-def test_without_rerankers_a_candidate_leading_every_arm_ranks_first() -> None:
-    """The fallback model is fitted without the reranker features; the full model with them
-    left at zero is not that model (its rank features correct for the rerankers)."""
+def test_a_candidate_leading_every_arm_ranks_first() -> None:
     best = [0.5] * len(lf.FEATURES)
     worse = [1 / 3] * len(lf.FEATURES)
     for row in (best, worse):
-        for name in ("rerank_multilingual", "rerank_english", "when", "when_time", "neighbour"):
+        for name in ("when", "when_time", "neighbour"):
             row[lf.FEATURES.index(name)] = 0.0
-    assert lf.probability(best, reranked=False) > lf.probability(worse, reranked=False)
+    assert lf.probability(best) > lf.probability(worse)

@@ -346,33 +346,21 @@ def _wire_models(container: Container) -> None:
     container.dense_spaces = spaces
     container.embedding = spaces.primary
     container.sparse = Bm25SparseEncoder()
-    _wire_late_and_rerankers(container)
+    _wire_late(container)
 
 
-def _wire_late_and_rerankers(container: Container) -> None:
-    """The late-interaction arm and the memories' two cross-encoders (ADR 0025). The real
-    graphs must load; the stand-ins are chosen only by an override, and the hash embedding
-    implies them, so a hermetic container runs the same path with nothing to load."""
+def _wire_late(container: Container) -> None:
+    """The late-interaction arm (ADR 0025). The real graph must load; the stand-in is chosen
+    only by an override, and the hash embedding implies it, so a hermetic container runs the
+    same path with nothing to load."""
     from memory_service.adapters.models.late_interaction import HashLateInteraction, OnnxColbert
-    from memory_service.adapters.models.reranker import LexicalReranker, OnnxReranker
 
     stand_in = container.overrides
-    hashed = stand_in.embedding == "hash"
-    threads = _model_threads(container)
-    late = stand_in.late_interaction or ("hash" if hashed else None)
+    late = stand_in.late_interaction or ("hash" if stand_in.embedding == "hash" else None)
     if late == "hash":
         container.late = HashLateInteraction()
     elif late is None:
-        container.late = OnnxColbert(FROZEN_MODELS.colbert, threads=threads)
-    rerankers = stand_in.rerankers or ("lexical" if hashed else None)
-    if rerankers == "lexical":
-        container.rerankers = tuple(
-            LexicalReranker(spec.local_dir) for spec in FROZEN_MODELS.rerankers
-        )
-    elif rerankers is None:
-        container.rerankers = tuple(
-            OnnxReranker(spec, threads=threads) for spec in FROZEN_MODELS.rerankers
-        )
+        container.late = OnnxColbert(FROZEN_MODELS.colbert, threads=_model_threads(container))
 
 
 def _wire_llm(container: Container) -> None:
@@ -479,7 +467,6 @@ def _wire_retrieval(container: Container) -> None:
         indexer,
         settings=tuning.retrieval,
         assist=container.services["llm_assist"],
-        rerankers=container.rerankers,
     )
     container.services["retrieval"] = engine
     working = EphemeralMemory(

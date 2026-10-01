@@ -1,6 +1,6 @@
-"""The tensor paths of the ColBERT encoder and the cross-encoders, against fake sessions and
-a small real tokenizer: what is fed, what is kept, what comes back. The real graphs are
-compared with PyLate and with the offline reranker scores in the model suite."""
+"""The tensor path of the ColBERT encoder, against a fake session and a small real tokenizer:
+what is fed, what is kept, what comes back. The real graph was compared with PyLate (ADR
+0025)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from tokenizers.pre_tokenizers import Whitespace
 from tokenizers.processors import TemplateProcessing
 
 from memory_service.adapters.models.late_interaction import ColbertGraph, HashLateInteraction
-from memory_service.adapters.models.reranker import LexicalReranker, RerankerGraph
 from memory_service.domain.errors import DependencyUnavailable
 
 pytestmark = pytest.mark.unit
@@ -111,44 +110,3 @@ async def test_the_hash_stand_in_is_deterministic_and_unit_length() -> None:
     assert first[0] == again and len(again) == 2
     assert np.allclose(np.linalg.norm(np.asarray(again), axis=1), 1.0)
     assert late.fingerprint() == "hash-li-v1-d8"
-
-
-class _Logits:
-    def __init__(self, inputs: tuple[str, ...], value: float | None = None) -> None:
-        self._inputs = inputs
-        self.value = value
-        self.fed: list[dict] = []
-
-    def get_inputs(self):
-        return [SimpleNamespace(name=n) for n in self._inputs]
-
-    def run(self, _outputs, feed):
-        self.fed.append(feed)
-        if self.value is not None:
-            return [np.full((feed["input_ids"].shape[0], 1), self.value, dtype=np.float32)]
-        # the logit is the number of real tokens in the pair
-        return [feed["attention_mask"].sum(axis=1, keepdims=True).astype(np.float32)]
-
-
-def test_a_reranker_feeds_the_pairs_it_declares_and_reads_the_first_logit() -> None:
-    session = _Logits(("input_ids", "attention_mask", "token_type_ids"))
-    graph = RerankerGraph(_tokenizer(), session, pad_id=0)
-    scores = graph.score("hello", ["world", "hello world ."])
-    assert scores == [5.0, 7.0]
-    fed = session.fed[0]
-    assert set(fed) == {"input_ids", "attention_mask", "token_type_ids"}
-    assert fed["token_type_ids"].tolist()[0] == [0, 0, 0, 1, 1, 0, 0]
-    assert graph.score("hello", []) == []
-
-
-def test_a_reranker_refuses_unknown_inputs_and_non_finite_scores() -> None:
-    with pytest.raises(DependencyUnavailable):
-        RerankerGraph(_tokenizer(), _Logits(("input_ids", "pixel_values")), pad_id=0)
-    graph = RerankerGraph(_tokenizer(), _Logits(("input_ids",), value=float("nan")), pad_id=0)
-    with pytest.raises(ValueError, match="non-finite"):
-        graph.score("hello", ["world"])
-
-
-async def test_the_lexical_stand_in_scores_word_overlap() -> None:
-    scores = await LexicalReranker().score("When did we go camping?", ["camping trip", "none"])
-    assert scores[0] > scores[1] == 0.0

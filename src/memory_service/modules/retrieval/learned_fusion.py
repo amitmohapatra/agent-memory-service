@@ -1,5 +1,5 @@
-"""The memories' ranking: every arm read unfused, two first stages, two rerankers, and a
-logistic regression over all of it (ADR 0025).
+"""The memories' ranking: every arm read unfused, two first stages, and a logistic regression
+over both (ADR 0025).
 
 A memory search reads seven ranked lists from the store in one round trip - BM25 and both
 dense spaces over each of the two keys (the memory alone, and the memory read with the turn
@@ -12,26 +12,24 @@ the turns either side of it in the same conversation):
 * ``FIRST_B``: BM25 and the multilingual space only, the late arm three times heavier, the
   lift smaller and over the late arm too.
 
-Each catches evidence the other ranks low, so the top ``rerank_k`` of each, together, is the
-pool the two cross-encoders read. Every candidate in it is then described by sixteen numbers
-- its reciprocal rank in each arm and each first stage, each reranker's min-max-normalised
-score, the best first-stage score of its neighbours, and whether a "when" question meets a
-candidate that names a time - and ``COEFFICIENTS`` turns them into one score. The pool is
-ordered by that score; everything else the arms found follows it, in ``FIRST_B`` order.
+Each catches evidence the other ranks low, so the top ``pool_k`` of each, together, is the
+pool the learned score orders. Every candidate in it is described by twelve numbers - its
+reciprocal rank in each arm and each first stage, the best first-stage score of its
+neighbours, and whether a "when" question meets a candidate that names a time - and
+``COEFFICIENTS`` turns them into one score. The pool is ordered by that score; everything
+else the arms found follows it, in ``FIRST_B`` order.
 
-``COEFFICIENTS`` were fitted on LoCoMo's ten conversations at ``rerank_k`` 20 (39,223
-candidate rows, 1,818 of them evidence). Evaluated leave-one-conversation-out, so no
-conversation is scored by a model that saw it, recall@10 is 0.841 against 0.724 for the
-hybrid search before this ADR (0.842 at a pool of 30, a third more reranking; 0.825 at 15);
-the same coefficients, unchanged, are what LongMemEval is scored with.
+No cross-encoder: two were measured (``mmarco-mMiniLMv2``, ``mxbai-rerank-xsmall``) and lift
+recall@10 by about two and a half points, at 2.4 CPU-seconds a query - forty-eight cores at
+the 20 requests a second the service is sized for. Without them a memory search costs
+0.17 CPU-seconds.
 
-A query whose rerankers did not both answer (a failure, or the deadline) is scored by
-``COEFFICIENTS_WITHOUT_RERANKERS`` instead, fitted the same way on the other twelve features:
-leave-one-conversation-out recall@10 0.815. Leaving the reranker features at zero under the
-full model would not be that: its rank features carry negative weights that correct for how
-closely they track the rerankers and the late arm, and alone they rank backwards.
+``COEFFICIENTS`` were fitted on LoCoMo's ten conversations (58,193 candidate rows, 1,913 of
+them evidence). Evaluated leave-one-conversation-out, so no conversation is scored by a
+model that saw it, recall@10 is 0.815 against 0.724 for the hybrid search before this ADR.
+The same coefficients, unchanged, are what LongMemEval is scored with.
 
-The models assume the late-interaction arm; every container wires one (the hash stand-in in
+The model assumes the late-interaction arm; every container wires one (the hash stand-in in
 the hermetic suite).
 
 Pure functions over hits and scores: the store and the models are the engine's business.
@@ -103,8 +101,6 @@ FEATURES: tuple[str, ...] = (
     "dense_en",
     "first_a",
     "first_b",
-    "rerank_multilingual",
-    "rerank_english",
     "neighbour",
     "when",
     "when_time",
@@ -112,40 +108,20 @@ FEATURES: tuple[str, ...] = (
 #: Fitted with scikit-learn's ``LogisticRegression(C=1, class_weight="balanced")``. The
 #: intercept moves every candidate of a query alike and is kept only so ``probability`` is one.
 COEFFICIENTS: Mapping[str, float] = {
-    "dense_ml_ctx": 1.37321,
-    "dense_ml": -0.87603,
-    "bm25_ctx": 2.209165,
-    "bm25": -0.591547,
-    "colbert": 5.684734,
-    "dense_en_ctx": -1.022189,
-    "dense_en": -2.670238,
-    "first_a": 0.180237,
-    "first_b": -3.490345,
-    "rerank_multilingual": 3.159218,
-    "rerank_english": 3.223979,
-    "neighbour": 0.585822,
-    "when": -1.06351,
-    "when_time": 1.710719,
+    "dense_ml_ctx": 2.022573,
+    "dense_ml": 1.32985,
+    "bm25_ctx": 2.323338,
+    "bm25": -0.368609,
+    "colbert": 13.997494,
+    "dense_en_ctx": -1.82581,
+    "dense_en": -2.027476,
+    "first_a": 1.352318,
+    "first_b": -6.065822,
+    "neighbour": 0.484646,
+    "when": -1.483238,
+    "when_time": 1.794904,
 }
-INTERCEPT = -5.125282
-#: The same fit without the two reranker features (see the module docstring).
-COEFFICIENTS_WITHOUT_RERANKERS: Mapping[str, float] = {
-    "dense_ml_ctx": 1.896579,
-    "dense_ml": 1.311079,
-    "bm25_ctx": 2.102633,
-    "bm25": -0.508826,
-    "colbert": 11.843689,
-    "dense_en_ctx": -1.819893,
-    "dense_en": -2.044268,
-    "first_a": 1.353033,
-    "first_b": -4.230909,
-    "rerank_multilingual": 0.0,
-    "rerank_english": 0.0,
-    "neighbour": 0.422424,
-    "when": -1.407196,
-    "when_time": 1.822492,
-}
-INTERCEPT_WITHOUT_RERANKERS = -2.38687
+INTERCEPT = -2.234446
 
 
 @dataclass
@@ -222,7 +198,7 @@ def first_stage(pool: ArmPool, stage: FirstStage) -> dict[str, float]:
     return lifted
 
 
-def rerank_pool(a: Mapping[str, float], b: Mapping[str, float], k: int) -> list[str]:
+def scoring_pool(a: Mapping[str, float], b: Mapping[str, float], k: int) -> list[str]:
     """The top ``k`` of each first stage, the first stage's order kept, without repeats."""
     return list(dict.fromkeys([*_ranked(a)[:k], *_ranked(b)[:k]]))
 
@@ -233,17 +209,14 @@ def features(
     *,
     a: Mapping[str, float],
     b: Mapping[str, float],
-    reranked: Sequence[Sequence[float] | None],
     query: str,
 ) -> list[list[float]]:
-    """``FEATURES`` for each candidate. ``reranked`` is each reranker's scores over
-    ``candidates`` (multilingual, English), or ``None`` for one that gave none."""
+    """``FEATURES`` for each candidate."""
     rank_a = {rid: n for n, rid in enumerate(_ranked(a), start=1)}
     rank_b = {rid: n for n, rid in enumerate(_ranked(b), start=1)}
     when = 1.0 if WHEN.search(query) else 0.0
-    normalised = [_min_max(scores, len(candidates)) for scores in reranked]
     rows = []
-    for j, rid in enumerate(candidates):
+    for rid in candidates:
         neighbours = [a[n] for n in (pool.previous.get(rid), pool.following.get(rid)) if n]
         text = str(pool.hits[rid].payload.get("text", ""))
         row = {
@@ -256,8 +229,6 @@ def features(
             "dense_en": pool.reciprocal(VectorName.DENSE_EN, rid),
             "first_a": 1.0 / (1 + rank_a[rid]),
             "first_b": 1.0 / (1 + rank_b[rid]),
-            "rerank_multilingual": normalised[0][j] if normalised else 0.0,
-            "rerank_english": normalised[1][j] if len(normalised) > 1 else 0.0,
             "neighbour": max(neighbours, default=0.0),
             "when": when,
             "when_time": when * (1.0 if TIME.search(text) else 0.0),
@@ -266,22 +237,8 @@ def features(
     return rows
 
 
-def _min_max(scores: Sequence[float] | None, n: int) -> list[float]:
-    """Scores mapped onto [0, 1] within this query; a missing reranker is all zeros."""
-    if scores is None or len(scores) != n or n == 0:
-        return [0.0] * n
-    low, high = min(scores), max(scores)
-    return [(s - low) / (high - low + 1e-9) for s in scores]
-
-
-def probability(row: Sequence[float], *, reranked: bool = True) -> float:
-    """The learned score; ``reranked=False`` is the model fitted without the rerankers."""
-    weights, z = (
-        (COEFFICIENTS, INTERCEPT)
-        if reranked
-        else (COEFFICIENTS_WITHOUT_RERANKERS, INTERCEPT_WITHOUT_RERANKERS)
-    )
-    z += sum(weights[name] * x for name, x in zip(FEATURES, row, strict=True))
+def probability(row: Sequence[float]) -> float:
+    z = INTERCEPT + sum(COEFFICIENTS[name] * x for name, x in zip(FEATURES, row, strict=True))
     return 1.0 / (1.0 + math.exp(-max(-60.0, min(60.0, z))))
 
 
@@ -290,17 +247,11 @@ def order(
     candidates: Sequence[str],
     rows: Sequence[Sequence[float]],
     b: Mapping[str, float],
-    *,
-    reranked: bool = True,
 ) -> list[tuple[str, float]]:
-    """The final ranking with a score each: the reranked pool by probability, then every
-    other record the arms found in ``FIRST_B`` order, each scored below the whole pool.
-    ``reranked`` says whether every reranker scored the pool (``probability``)."""
+    """The final ranking with a score each: the pool by probability, then every other
+    record the arms found in ``FIRST_B`` order, each scored below the whole pool."""
     scored = sorted(
-        (
-            (rid, probability(row, reranked=reranked))
-            for rid, row in zip(candidates, rows, strict=True)
-        ),
+        ((rid, probability(row)) for rid, row in zip(candidates, rows, strict=True)),
         key=lambda item: (-item[1], item[0]),
     )
     floor = min((p for _, p in scored), default=1.0)

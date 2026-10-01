@@ -170,54 +170,6 @@ class LateInteractionModel(BaseModel):
         return self.model_path or local_model_path(self.local_dir) or self.id
 
 
-class RerankerModel(BaseModel):
-    """A cross-encoder that reads the question and one candidate together.
-
-    Two are shipped and run side by side over the memories' candidate pool, each on its own
-    runner (ADR 0025): an English one and a multilingual one, whose disagreements the
-    learned fusion weighs. The quantised graphs are the publishers' own exports.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    id: str
-    local_dir: str
-    model_path: str | None = None
-    revision: str | None = None
-    license: str = "Apache-2.0"
-    runtime: Literal["onnx"] = "onnx"
-    graph_file: str = "onnx/model_quantized.onnx"
-    #: question and candidate together; memories are short, and 256 is what was measured
-    max_length: int = Field(default=256, ge=32, le=512)
-    #: Pairs per forward pass. Small, because a batch is padded to its longest pair: 8
-    #: scored 45 LoCoMo pairs in 1112 ms where one batch of all 45 took 1316 ms (2 threads).
-    batch_size: int = Field(default=8, ge=1)
-    threads: int = 2
-
-    @property
-    def source(self) -> str:
-        return self.model_path or local_model_path(self.local_dir) or self.id
-
-
-#: The memories' two rerankers, in the order the learned fusion's features name them.
-RERANKERS: tuple[RerankerModel, ...] = (
-    # mmarco-mMiniLMv2-L12-H384-v1: Microsoft's multilingual MiniLM fine-tuned on the
-    # translated MS MARCO (mMARCO) by the sentence-transformers project; Apache-2.0
-    RerankerModel(
-        id="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
-        local_dir="mmarco-mMiniLMv2-L12-H384-v1",
-        revision="1427fd652930e4ba29e8149678df786c240d8825",
-        graph_file="onnx/model_quint8_avx2.onnx",
-    ),
-    # mxbai-rerank-xsmall-v1: mixedbread (Germany), English, Apache-2.0
-    RerankerModel(
-        id="mixedbread-ai/mxbai-rerank-xsmall-v1",
-        local_dir="mxbai-rerank-xsmall-v1",
-        revision="b5c6e9da73abc3711f593f705371cdbe9e0fe422",
-    ),
-)
-
-
 class FrozenModels(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -248,8 +200,6 @@ class FrozenModels(BaseModel):
     nli: NLIModel = NLIModel()
     #: the late-interaction arm of every collection
     colbert: LateInteractionModel = LateInteractionModel()
-    #: the memories' cross-encoders (``RERANKERS``)
-    rerankers: tuple[RerankerModel, ...] = RERANKERS
 
 
 FROZEN_MODELS = FrozenModels()
@@ -690,14 +640,10 @@ class RetrievalSettings(BaseModel):
     #: The memories are ranked by ``modules/retrieval/learned_fusion.py`` (ADR 0025): each
     #: arm's own top this-many, read unfused in one round trip.
     memory_arm_depth: int = Field(default=100, ge=10, le=500)
-    #: The top this-many of each of its two first stages are what the rerankers read: ~26
-    #: candidates on LoCoMo. Reranking is most of a memory search's time and grows with it;
-    #: leave-one-conversation-out recall@10 0.842 at 30, 0.841 at 20, 0.825 at 15. The
-    #: coefficients are fitted at this value, so it moves only with a refit.
-    memory_rerank_k: int = Field(default=20, ge=1, le=100)
-    #: The rerankers' deadline. Past it a reranker's feature is a constant for the query and
-    #: the ranking is the learned fusion of everything else (``learned_fusion``).
-    memory_rerank_timeout_ms: int = Field(default=1500, ge=1, le=10_000)
+    #: The top this-many of each of its two first stages are what the learned score orders
+    #: (``learned_fusion``); the rest follow in first-stage order. The coefficients are
+    #: fitted at this value, so it moves only with a refit.
+    memory_pool_k: int = Field(default=30, ge=1, le=100)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

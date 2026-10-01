@@ -68,23 +68,13 @@ def memory_index_text(m: CanonicalMemory) -> str:
     query ("when did Caroline ...") cannot lexically match a fact whose index text has no
     date, and a dense query is pulled toward the wrong person when the subject is absent.
 
-    This is the memory's own key, and what its rerankers read. The turn it answers is the
-    second key (``memory_context_text``).
+    This is the memory's own key; the turn it answers is the second key
+    (``memory_context_text``).
     """
-    return memory_key_text(
-        observed=m.temporal.observed_at.date().isoformat(),
-        subject=m.subject,
-        memory_type=m.memory_type.value,
-        content=m.content,
-    )
-
-
-def memory_key_text(*, observed: str, subject: str | None, memory_type: str, content: str) -> str:
-    """``memory_index_text`` from its parts, which a search hit's payload also carries: the
-    rerankers read a candidate exactly as it was indexed, without a database round trip."""
-    name = (subject or "").split(":", 1)[-1].strip()
-    who = f" {name}:" if name and not name.startswith(("thr_", "run_")) else ""
-    return f"[{observed[:10]}]{who} {memory_type.lower()}: {content}"
+    when = m.temporal.observed_at.date().isoformat()
+    subject = (m.subject or "").split(":", 1)[-1].strip()
+    who = f" {subject}:" if subject and not subject.startswith(("thr_", "run_")) else ""
+    return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
 
 
 def memory_context_text(m: CanonicalMemory) -> str:
