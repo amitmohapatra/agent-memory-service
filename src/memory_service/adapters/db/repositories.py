@@ -644,6 +644,34 @@ class SqlObservationRepository:
             .values(processed_at=func.now(), status=status)
         )
 
+    async def preceding_message(
+        self, observation: Observation, *, within: timedelta
+    ) -> Observation | None:
+        # Submission order, not occurred_at: every turn of an imported session can carry
+        # the same occurred_at, and created_at is what keeps them in the order they were said.
+        row = (
+            await self.s.execute(
+                select(ObservationRow)
+                .where(
+                    ObservationRow.tenant_id == observation.tenant_id,
+                    ObservationRow.kind == ObservationKind.MESSAGE.value,
+                    ObservationRow.observation_id != observation.observation_id,
+                    ObservationRow.created_at < observation.created_at,
+                    ObservationRow.occurred_at <= observation.occurred_at,
+                    ObservationRow.occurred_at >= observation.occurred_at - within,
+                    ObservationRow.workspace_id.is_(None)
+                    if observation.workspace_id is None
+                    else ObservationRow.workspace_id == observation.workspace_id,
+                    ObservationRow.thread_id.is_(None)
+                    if observation.thread_id is None
+                    else ObservationRow.thread_id == observation.thread_id,
+                )
+                .order_by(ObservationRow.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return self._to_domain(row) if row is not None else None
+
     async def list_unprocessed(
         self, *, older_than: datetime, limit: int = 500
     ) -> list[Observation]:

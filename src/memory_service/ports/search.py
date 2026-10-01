@@ -150,6 +150,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "observed_at",
     "owner_principal",
     "page",
+    "preceding_source_id",
     "predicate",
     "record_id",
     "reinforcement",

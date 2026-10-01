@@ -59,3 +59,37 @@ async def test_opaque_subjects_are_not_repeated_into_the_text() -> None:
     text = memory_index_text(decision)
     assert text.startswith(f"[{decision.temporal.observed_at.date().isoformat()}] "), text
     assert "thr_1" not in text, text
+
+
+async def test_a_verbatim_turn_is_indexed_with_the_turn_it_answers() -> None:
+    """A reply rarely restates its question, and a bare question is never a memory of its
+    own, so the question's words reach the index only beside the reply."""
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="caroline", workspace_id="ws1")
+    native = NativeMemoryIntelligence(MemoryIntelligenceSettings())
+    reply = "Yes, last weekend with my kids, we loved it."
+    obs = Observation(
+        tenant_id="acme",
+        kind=ObservationKind.MESSAGE,
+        content=reply,
+        content_hash=content_hash(reply),
+        user_id="caroline",
+        workspace_id="ws1",
+        principal_id=ctx.principal_id,
+        message_id="msg_2",
+    )
+    prior = {"source_id": "msg_1", "speaker": "melanie", "text": "Did you go camping?"}
+    memories = [
+        build_memory(c.model_copy(update={"preceding_turn": prior}), ctx, now=NOW)
+        for c in [await native.classify(c, ctx) for c in await native.extract(obs, ctx)]
+    ]
+    verbatim = [m for m in memories if m.system_metadata.get("category") == "verbatim_turn"]
+    assert verbatim, [m.system_metadata.get("category") for m in memories]
+    text = memory_index_text(verbatim[0])
+    assert text.startswith("melanie: Did you go camping?\n["), text
+    assert text.endswith(reply), text
+    # the content - what is rendered and returned - is the reply alone
+    assert verbatim[0].content == reply
+    # extracted facts stay exact
+    for m in memories:
+        if m is not verbatim[0]:
+            assert "camping" not in memory_index_text(m), memory_index_text(m)

@@ -583,7 +583,9 @@ class RetrievalEngine:
             )
             for h in hits
         ]
-        return by_standing(candidates) if kind == "memory" else candidates
+        if kind != "memory":
+            return candidates
+        return by_standing(with_adjacent_turns(candidates, self.cfg.adjacent_turn_weight))
 
     async def _entity_search(
         self,
@@ -845,6 +847,38 @@ def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:
     when = datetime.fromisoformat(str(raw))
     start, end = observed
     return (start is None or when >= start) and (end is None or when <= end)
+
+
+def _source_id(candidate: Candidate) -> str | None:
+    refs = candidate.payload.get("source_refs") or []
+    first = refs[0] if refs and isinstance(refs[0], dict) else {}
+    return str(first["source_id"]) if first.get("source_id") else None
+
+
+def with_adjacent_turns(candidates: list[Candidate], weight: float) -> list[Candidate]:
+    """Each memory gains ``weight`` times the best fused score of the turn before its own and
+    of the turn after it, among the candidates already pooled (``adjacent_turn_weight``).
+    Evidence is usually a run of turns, and a reply that matches weakly on its own is
+    lifted by the question beside it that matches well. Scores are read before any is
+    changed, so the order of the pool cannot matter. Not re-sorted: ``by_standing`` is."""
+    if weight <= 0:
+        return candidates
+    best: dict[str, float] = {}
+    best_after: dict[str, float] = {}
+    for c in candidates:
+        if own := _source_id(c):
+            best[own] = max(best.get(own, 0.0), c.score)
+        if before := c.payload.get("preceding_source_id"):
+            best_after[str(before)] = max(best_after.get(str(before), 0.0), c.score)
+    if not best_after:
+        return candidates
+    for c in candidates:
+        own = _source_id(c)
+        before = c.payload.get("preceding_source_id")
+        lift = best.get(str(before), 0.0) if before else 0.0
+        lift += best_after.get(own, 0.0) if own else 0.0
+        c.score += weight * lift
+    return candidates
 
 
 def by_standing(candidates: list[Candidate]) -> list[Candidate]:

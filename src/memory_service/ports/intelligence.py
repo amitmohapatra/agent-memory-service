@@ -60,6 +60,11 @@ class MemoryCandidate(BaseModel):
     provider_ref: str | None = Field(
         default=None, description="the external provider's own id for this memory, if any"
     )
+    preceding_turn: dict[str, str] | None = Field(
+        default=None,
+        description="the message said just before this one in the same conversation: its "
+        "source_id, speaker and text (set by the pipeline, never by a provider)",
+    )
 
 
 class ContextualExtractor(Protocol):
