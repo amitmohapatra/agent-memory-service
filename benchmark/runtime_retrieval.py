@@ -76,7 +76,8 @@ def tenant_keys(tenant: str) -> list[str]:
 async def index_corpus(
     container: Any, tenant: str, ids: Sequence[str], texts: Sequence[str]
 ) -> float:
-    """Every document as one record under ``tenant``, both vectors and the script tag."""
+    """Every document as one record under ``tenant``: every vector indexing writes for a
+    chunk (both dense spaces, BM25, the late-interaction tokens) and the script tag."""
     indexer = container.services["indexer"]
     await indexer.ensure_collections()
     collection = indexer.collection(KNOWLEDGE)
@@ -87,6 +88,8 @@ async def index_corpus(
         batch = texts[start : start + INDEX_BATCH]
         dense = await indexer.embed_cached(batch, [content_hash(t) + ":rt" for t in batch])
         sparse = container.sparse.encode_documents(batch)
+        # the late-interaction vectors indexing writes for every chunk (ADR 0025)
+        late = await indexer.embed_late(batch)
         await container.search.upsert(
             [
                 SearchRecord(
@@ -95,6 +98,7 @@ async def index_corpus(
                     tenant_id=tenant,
                     dense={space: vectors[i] for space, vectors in dense.items()},
                     sparse=sparse[i],
+                    late=late[i] if late else None,
                     payload={
                         "kind": "chunk",
                         "visibility_keys": tenant_keys(tenant),
