@@ -12,14 +12,21 @@ pytestmark = pytest.mark.unit
 
 
 def _hit(
-    rid: str, *, source: str | None = None, before: str | None = None, text: str = ""
+    rid: str,
+    *,
+    source: str | None = None,
+    before: str | None = None,
+    text: str = "",
+    who: str = "user:caroline",
+    day: str = "2023-05-08",
+    score: float = 1.0,
 ) -> SearchHit:
-    payload: dict = {"text": text or rid}
+    payload: dict = {"text": text or rid, "subject": who, "observed_at": f"{day}T13:56:00+00:00"}
     if source:
         payload["source_refs"] = [{"source_type": "message", "source_id": source}]
     if before:
         payload["preceding_source_id"] = before
-    return SearchHit(record_id=rid, score=1.0, retriever=Retriever.FUSION, payload=payload)
+    return SearchHit(record_id=rid, score=score, retriever=Retriever.FUSION, payload=payload)
 
 
 def _arms(order: dict[VectorName, list[str]], hits: dict[str, SearchHit]):
@@ -27,9 +34,9 @@ def _arms(order: dict[VectorName, list[str]], hits: dict[str, SearchHit]):
 
 
 HITS = {
-    "a": _hit("a", source="m1"),
+    "a": _hit("a", source="m1", who="user:melanie"),
     "b": _hit("b", source="m2", before="m1"),
-    "c": _hit("c", source="m3", before="m2", text="we met last week"),
+    "c": _hit("c", source="m3", before="m2", text="we met last week", day="2023-06-01"),
 }
 
 
@@ -90,9 +97,13 @@ def test_features_read_ranks_neighbours_and_a_time_for_a_when_question() -> None
         query="When did we meet?",
     )
     col = {name: [row[i] for row in rows] for i, name in enumerate(lf.FEATURES)}
-    assert col["bm25"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
-    assert col["first_a"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
-    assert col["first_b"] == pytest.approx([1 / 4, 1 / 3, 1 / 2])
+    assert col["rank_bm25"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
+    assert col["rank_first_a"] == pytest.approx([1 / 2, 1 / 3, 1 / 4])
+    assert col["rank_first_b"] == pytest.approx([1 / 4, 1 / 3, 1 / 2])
+    assert col["arms_top10"] == pytest.approx([1 / 7] * 3)
+    # a and b share a day: its best first-stage score is a's (the peak); c is alone
+    assert col["session_best"] == pytest.approx([1.0, 1.0, 1 / 3])
+    assert col["session_top"] == pytest.approx([2 / 30, 2 / 30, 1 / 30])
     assert col["when"] == [1.0, 1.0, 1.0]
     assert col["when_time"] == [0.0, 0.0, 1.0]  # only "c" names a time ("last week")
     # the best first-stage-A score among the turns either side
@@ -104,7 +115,7 @@ def test_features_read_ranks_neighbours_and_a_time_for_a_when_question() -> None
 def test_the_order_is_the_scored_pool_then_the_rest_below_it() -> None:
     pool = lf.ArmPool.of(_arms({VectorName.BM25: ["a", "b", "c"]}, HITS))
     rows = [[0.0] * len(lf.FEATURES), [0.0] * len(lf.FEATURES)]
-    rows[1][lf.FEATURES.index("colbert")] = 1.0  # "b" is the better candidate
+    rows[1][lf.FEATURES.index("rank_colbert")] = 1.0  # "b" is the better candidate
     ranked = lf.order(pool, ["a", "b"], rows, {"a": 1.0, "b": 2.0, "c": 3.0})
     assert [rid for rid, _ in ranked] == ["b", "a", "c"]
     assert ranked[2][1] < min(score for _, score in ranked[:2])
@@ -117,3 +128,29 @@ def test_a_candidate_leading_every_arm_ranks_first() -> None:
         for name in ("when", "when_time", "neighbour"):
             row[lf.FEATURES.index(name)] = 0.0
     assert lf.probability(best) > lf.probability(worse)
+
+
+def test_each_arms_own_score_is_scaled_within_the_pool() -> None:
+    hits = {
+        "a": _hit("a", score=10.0),
+        "b": _hit("b", score=6.0),
+        "c": _hit("c", score=2.0),
+    }
+    pool = lf.ArmPool.of({VectorName.BM25: [hits["a"], hits["b"]], VectorName.COLBERT: [hits["c"]]})
+    a = {"a": 3.0, "b": 2.0, "c": 1.0}
+    rows = lf.features(pool, ["a", "b", "c"], a=a, b=a, query="what?")
+    col = {name: [row[i] for row in rows] for i, name in enumerate(lf.FEATURES)}
+    # "c" is below the BM25 arm's depth: it scores the arm's lowest (6), not nothing
+    assert col["score_bm25"] == pytest.approx([1.0, 0.0, 0.0])
+    assert col["score_dense_ml"] == [0.0, 0.0, 0.0]  # an arm that returned nothing
+
+
+def test_a_question_naming_a_person_marks_that_persons_memories() -> None:
+    pool = lf.ArmPool.of(_arms({VectorName.BM25: ["a", "b", "c"]}, HITS))
+    a = {"a": 3.0, "b": 2.0, "c": 1.0}
+    rows = lf.features(pool, ["a", "b"], a=a, b=a, query="What did Melanie paint?")
+    col = {name: [row[i] for row in rows] for i, name in enumerate(lf.FEATURES)}
+    assert col["speaker_named"] == [1.0, 0.0]
+    assert col["any_named"] == [1.0, 1.0]
+    nobody = lf.features(pool, ["a"], a=a, b=a, query="What was painted?")
+    assert nobody[0][lf.FEATURES.index("any_named")] == 0.0
