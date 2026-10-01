@@ -114,7 +114,7 @@ class Transport:
 
     @staticmethod
     def scope_params(scope: Scope) -> dict[str, str]:
-        """Lineage for body-less (GET/DELETE) routes; security fields stay in headers."""
+        """Lineage for body-less routes; security fields stay in headers."""
         fields = (
             "thread_id",
             "session_id",
@@ -204,7 +204,9 @@ class Transport:
             merged[_REQUEST_ID] = secrets.token_hex(16)
         if scope is not None:
             merged.update({k.lower(): v for k, v in self.scope_headers(scope).items()})
-            if json is None and method.upper() in ("GET", "DELETE"):
+            # a body-less call (GET, DELETE, or a POST like accepting an approval
+            # suggestion) has nowhere else to carry its lineage
+            if json is None and files is None and data is None:
                 params = {**self.scope_params(scope), **(params or {})}
         trace_headers(scope, merged)
         if idempotency_key:
