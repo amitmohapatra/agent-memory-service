@@ -68,7 +68,7 @@ async def test_index_job_writes_hybrid_records(container, uow_factory) -> None:
     # the shipped ensemble's receipt (~150 characters) fits the column the stand-in's does
     ensemble = (
         "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-"
-        "embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v2-unicode-k1.2-b0.75"
+        "embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v3-snowball-k1.2-b0.75"
     )
     async with uow_factory() as uow:
         await uow.documents.mark_chunks_indexed(

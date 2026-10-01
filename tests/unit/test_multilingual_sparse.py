@@ -36,15 +36,33 @@ def test_canonical_unicode_and_combining_marks_are_preserved():
     assert "東京" in tokenize("東京に住む")
 
 
-def test_ascii_terms_keep_legacy_behavior_and_stemming_does_not_mangle_other_scripts():
-    assert tokenize("The servers are running in Berlin.") == ["serv", "runn", "berlin"]
+def test_ascii_terms_are_snowball_stemmed_and_other_scripts_are_not_mangled():
+    assert tokenize("The servers are running in Berlin.") == ["server", "run", "berlin"]
     assert "κόσμος".casefold() in tokenize("κόσμος")
     assert tokenize(" ") == [] and tokenize("🙂 !!!") == []
-    assert tokenize("Привет servers") == ["привет", "serv"]
+    assert tokenize("Привет servers") == ["привет", "server"]
+
+
+@pytest.mark.parametrize(
+    ("asked", "said"),
+    [
+        ("pets", "pet"),
+        ("cars", "car"),
+        ("dancing", "dance"),
+        ("loved", "love"),
+        ("stressed", "stress"),
+        ("running", "run"),
+        ("hiking", "hike"),
+        ("adopted", "adoption"),
+    ],
+)
+def test_a_question_and_its_answer_share_a_term_across_inflections(asked: str, said: str):
+    """Every pair here shared no term under the suffix list Snowball replaced."""
+    assert tokenize(asked) == tokenize(said)
 
 
 def test_output_is_linear_and_the_vector_space_version_changes():
     text = "北京" * 5000
     assert len(tokenize(text)) <= 2 * len(text)
     assert len(tokenize("क" + "\u093e" * 10000)) == 1
-    assert Bm25SparseEncoder().fingerprint().startswith("bm25-v2-unicode-")
+    assert Bm25SparseEncoder().fingerprint().startswith("bm25-v3-snowball-")

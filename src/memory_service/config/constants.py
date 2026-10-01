@@ -105,7 +105,7 @@ class SparseModel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: Literal["bm25"] = "bm25"
-    version: str = "v2-unicode"
+    version: str = "v3-snowball"
 
 
 class NLIModel(BaseModel):
