@@ -103,7 +103,9 @@ async def test_expansion_reroutes_and_widens_search_but_keeps_the_original_query
     assert res.routed.query == QUERY
     assert res.diagnostics["query_type"] == "ENTITY_RELATION"
     assert res.diagnostics["query_expansion"] == ["headcount", "restructuring", "plant"]
-    assert embedding.queries == [f"{QUERY} headcount restructuring plant"]
+    # the written query is encoded while the model is asked (in case it misses its deadline);
+    # the terms it returned change the search text, so that one is encoded and searched
+    assert embedding.queries == [QUERY, f"{QUERY} headcount restructuring plant"]
     assert {c.record_id for c in res.candidates} >= {"chk_restructuring"}
 
 
@@ -160,4 +162,29 @@ async def test_bounds_terms_capped_and_query_truncated_and_exact_needs_ids(parts
     assert len(sent) <= len("Query: ") + 500
     assert res.routed.query_type is QueryType.GENERAL_SEMANTIC
     assert res.diagnostics["query_expansion"] == [f"term{i}" for i in range(6)]
-    assert embedding.queries[0].endswith(" term0 term1 term2 term3 term4 term5")
+    assert embedding.queries[-1].endswith(" term0 term1 term2 term3 term4 term5")
+
+
+async def test_a_slow_expansion_is_abandoned_at_its_deadline(parts) -> None:
+    """The model call is on the read path; past ``query_expansion_timeout_ms`` the query is
+    searched as written, with the encoding that ran while the model was asked."""
+    import asyncio
+    import time
+
+    _, embedding, _ = parts
+    with mocked_gateway([{"query_type": None, "terms": ["late"], "identifiers": []}]) as gw:
+        engine = _engine(parts, gw.assist(uses=["query_expansion"]))
+        engine.cfg = engine.cfg.model_copy(update={"query_expansion_timeout_ms": 50})
+
+        async def slow(query: str):
+            await asyncio.sleep(5)
+
+        engine._expand_query = slow  # type: ignore[method-assign]
+        started = time.perf_counter()
+        res = await engine.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
+        elapsed = time.perf_counter() - started
+    assert elapsed < 2, "the search waited for the model past its deadline"
+    assert res.diagnostics["query_expansion_timeout"] is True
+    assert "query_expansion" not in res.diagnostics
+    assert embedding.queries == [QUERY], "the written query is encoded once, not twice"
+    assert res.candidates

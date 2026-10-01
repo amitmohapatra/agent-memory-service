@@ -586,6 +586,12 @@ class RetrievalSettings(BaseModel):
     #: on the 2015 dev box: +122 ms median on those 250, all-question p95 503 -> 547 ms.
     memory_entity_search: bool = True
     memory_entity_search_timeout_ms: int = Field(default=200, ge=1, le=500)
+    #: Model-assisted query expansion sits on the read path, in front of the search, and the
+    #: model call behind it is bounded only by ``LLMTuning`` (30 s and two retries): one slow
+    #: answer was the whole of a retrieval's latency budget. Past this deadline the query is
+    #: searched as written. The written query is encoded while the model is asked, so an
+    #: expansion that misses the deadline or adds no terms costs nothing beyond the wait.
+    query_expansion_timeout_ms: int = Field(default=250, ge=1, le=5000)
     parent_expansion: bool = True
     #: Source memories fetched to validate the derived memories in one result pool.
     derived_source_k: int = Field(default=6, ge=0, le=16)

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from memory_service.config.constants import TASKS
 from memory_service.domain.revisions import RevisionKind
-from memory_service.modules.conversation.summary import TASK_SUMMARY_REFRESH
+from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.cost import llm_accounting
@@ -217,11 +217,21 @@ def register_handlers(container: Container) -> None:
             await connections.connect_all()
 
     async def summary_refresh(payload: dict[str, Any]) -> None:
-        """Fold a thread's new messages into its durable summary."""
+        """Fold a thread's new messages into its durable summary, then index it as the
+        thread's searchable episode (removed instead when the thread is gone)."""
         await container.services["thread_summaries"].refresh(
             payload["tenant_id"],
             payload["thread_id"],
             principal_id=payload.get("principal_id"),
+        )
+        await container.services["indexer"].index_episode(
+            payload["tenant_id"], payload["thread_id"]
+        )
+
+    async def episode_index(payload: dict[str, Any]) -> None:
+        """Re-index a thread's searchable episode; removes it once the thread is deleted."""
+        await container.services["indexer"].index_episode(
+            payload["tenant_id"], payload["thread_id"]
         )
 
     async def profile_refresh(payload: dict[str, Any]) -> None:
@@ -346,6 +356,7 @@ def register_handlers(container: Container) -> None:
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
     queue.register(TASK_SUMMARY_REFRESH, Queue.SUMMARY, summary_refresh, retries=3)
+    queue.register(TASK_EPISODE_INDEX, Queue.SUMMARY, episode_index, retries=3)
     queue.register(TASK_PROFILE_REFRESH, Queue.SUMMARY, profile_refresh, retries=3)
     queue.register(TASK_PROFILE_QUERY, Queue.SUMMARY, profile_query, retries=1)
     queue.register_periodic(

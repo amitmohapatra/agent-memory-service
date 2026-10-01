@@ -34,6 +34,7 @@ from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.search import (
     Retriever,
+    SearchFilter,
     SearchHit,
     SearchStore,
     SparseVector,
@@ -181,6 +182,52 @@ type ObservedRange = tuple[datetime | None, datetime | None]
 
 
 @dataclass(frozen=True)
+class PointInTime:
+    """Search memories as of a moment instead of now (bi-temporal).
+
+    ``as_of``: what was true then (valid time). ``known_at``: what had been learned by then
+    and not yet replaced (knowledge time: the audit question "what did we know on 1 Sep?").
+    Either alone or both. Memories only: document passages carry no valid time, and an
+    episode summarises its whole thread, so neither is narrowed by it."""
+
+    as_of: datetime | None = None
+    known_at: datetime | None = None
+
+    def __bool__(self) -> bool:
+        return self.as_of is not None or self.known_at is not None
+
+
+def _narrowed(
+    within: dict[str, tuple[datetime | None, datetime | None]],
+    key: str,
+    start: datetime | None,
+    end: datetime | None,
+) -> dict[str, tuple[datetime | None, datetime | None]]:
+    """``within`` with ``key`` intersected with ``[start, end]``."""
+    old_start, old_end = within.get(key, (None, None))
+    if old_start is not None and (start is None or old_start > start):
+        start = old_start
+    if old_end is not None and (end is None or old_end < end):
+        end = old_end
+    return {**within, key: (start, end)}
+
+
+def point_in_time_filter(flt: SearchFilter, at: PointInTime) -> SearchFilter:
+    """The memory filter for ``at``: history is in, then cut to the moment asked about.
+    Without ``at`` it is the ordinary ``current`` filter."""
+    if not at:
+        return flt.model_copy(update={"must": {**flt.must, "current": True}})
+    within = dict(flt.within)
+    if at.as_of is not None:
+        within = _narrowed(within, "valid_from", None, at.as_of)
+        within = _narrowed(within, "valid_to", at.as_of, None)
+    if at.known_at is not None:
+        within = _narrowed(within, "observed_at", None, at.known_at)
+        within = _narrowed(within, "known_to", at.known_at, None)
+    return flt.model_copy(update={"within": within})
+
+
+@dataclass(frozen=True)
 class QueryVectors:
     """What one query was encoded into: a vector per dense space its script is searched in,
     the sparse vector, and the script that decided the spaces."""
@@ -191,7 +238,12 @@ class QueryVectors:
 
 
 #: the collection a candidate kind is indexed in (graph facts and working memory are not)
-_COLLECTION_OF_KIND = {"memory": MEMORIES, "chunk": KNOWLEDGE, "summary": KNOWLEDGE}
+_COLLECTION_OF_KIND = {
+    "memory": MEMORIES,
+    "episode": MEMORIES,
+    "chunk": KNOWLEDGE,
+    "summary": KNOWLEDGE,
+}
 
 
 class RetrievalEngine:
@@ -232,10 +284,13 @@ class RetrievalEngine:
         visibility: VisibilitySpecification | None = None,
         query_embedding: tuple[str, list[float]] | None = None,
         observed: ObservedRange | None = None,
+        at: PointInTime | None = None,
     ) -> RetrievalResult:
         """Ranked candidates for ``query``. ``observed`` keeps only what was observed within
         the range, filtered in the store before ranking (a record with no observation time,
-        a document passage, is out)."""
+        a document passage, is out). ``at`` searches memories as of a past moment
+        (``PointInTime``) instead of now."""
+        at = at or PointInTime()
         explicit_limit = limit is not None
         limit = limit or self.cfg.final_k
         selected_documents = frozenset(document_ids or ())
@@ -254,12 +309,22 @@ class RetrievalEngine:
         routed = self.router.route(query, has_thread=has_thread)
         search_text = routed.query
         diagnostics: dict[str, Any] = {}
+        # the written query's encoding, started before the model is asked to expand it and
+        # used whenever the expansion leaves the search text as it was
+        speculative: asyncio.Future[QueryVectors] | None = None
         if (
             self.assist.wants("query_expansion")
             and routed.query_type is QueryType.GENERAL_SEMANTIC
             and not any(routed.signals.values())
         ):
-            expansion = await self._expand_query(routed.query)
+            if query_embedding is None:
+                speculative = asyncio.ensure_future(self._encode(routed.query))
+            try:
+                expansion = await self._bounded_expansion(routed.query, diagnostics)
+            except BaseException:
+                if speculative is not None:
+                    _discard(speculative)
+                raise
             if expansion is not None:
                 if expansion.query_type is not None:
                     routed = self.router.routed(
@@ -291,7 +356,12 @@ class RetrievalEngine:
                 if query_embedding and query_embedding[0] == search_text
                 else None
             )
-            encode_task = asyncio.ensure_future(self._encode(search_text, known=reused))
+            if speculative is not None and search_text == routed.query:
+                encode_task = speculative
+            else:
+                if speculative is not None:
+                    _discard(speculative)
+                encode_task = asyncio.ensure_future(self._encode(search_text, known=reused))
             encoded: QueryVectors | None = None
             prefetched: dict[str, asyncio.Future[Any]] = {}
             try:
@@ -335,7 +405,7 @@ class RetrievalEngine:
                     kind
                     for kind in wanted
                     if (kind != "chunk" or routed.needs_knowledge)
-                    and (kind != "memory" or routed.needs_memories)
+                    and (kind not in ("memory", "episode") or routed.needs_memories)
                 ]
                 with timings.stage("encode"):
                     encoded = await encode_task
@@ -355,6 +425,7 @@ class RetrievalEngine:
                                 encoded=encoded,
                                 diagnostics=diagnostics,
                                 observed=observed,
+                                at=at,
                             )
                             for kind in wanted
                         )
@@ -370,6 +441,7 @@ class RetrievalEngine:
                 candidates = _within_selection(candidates, selected_documents, selected_kinds)
                 if (
                     self.cfg.memory_entity_search
+                    and not at
                     and routed.query_type is not QueryType.EXACT_IDENTIFIER
                     and not selected_documents
                     and not explicit_limit
@@ -548,6 +620,7 @@ class RetrievalEngine:
         encoded: QueryVectors,
         diagnostics: dict[str, Any],
         observed: ObservedRange | None = None,
+        at: PointInTime | None = None,
     ) -> list[Candidate]:
         """Ranked candidates of one kind: the store's hybrid search, fused with any extra
         chunk retrievers. One of these runs per wanted kind, concurrently."""
@@ -558,6 +631,7 @@ class RetrievalEngine:
             document_ids=document_ids,
             encoded=encoded,
             observed=observed,
+            at=at,
         )
         retrievers_of: dict[str, list[str]] = {h.record_id: [h.retriever] for h in hits}
         if kind == "chunk" and self.retrievers and observed is None:
@@ -683,6 +757,22 @@ class RetrievalEngine:
         for group, scores in zip(groups.values(), found, strict=True):
             for c in group:
                 c.similarity = scores.get(c.record_id)
+
+    async def _bounded_expansion(
+        self, query: str, diagnostics: dict[str, Any]
+    ) -> QueryExpansion | None:
+        """``_expand_query`` within ``query_expansion_timeout_ms``; ``None`` past it."""
+        try:
+            return await asyncio.wait_for(
+                self._expand_query(query), self.cfg.query_expansion_timeout_ms / 1000
+            )
+        except TimeoutError:
+            diagnostics["query_expansion_timeout"] = True
+            log.info(
+                "retrieval.query_expansion_timeout",
+                timeout_ms=self.cfg.query_expansion_timeout_ms,
+            )
+            return None
 
     async def _expand_query(self, query: str) -> QueryExpansion | None:
         """Model-assisted routing + lexical expansion when no rule fired. The original query
@@ -811,15 +901,18 @@ class RetrievalEngine:
         encoded: QueryVectors | None = None,
         subject: str | None = None,
         observed: ObservedRange | None = None,
+        at: PointInTime | None = None,
     ) -> list[SearchHit]:
-        collection = self.indexer.collection(MEMORIES if kind == "memory" else KNOWLEDGE)
+        collection = self.indexer.collection(_COLLECTION_OF_KIND.get(kind, KNOWLEDGE))
         flt = visibility.search_filter(kind=kind)
         if observed is not None:
             flt = flt.model_copy(update={"within": {"observed_at": observed}})
         if kind == "memory":
-            flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
+            flt = point_in_time_filter(flt, at or PointInTime())
             if subject is not None:
                 flt = flt.model_copy(update={"must": {**flt.must, "subject": subject}})
+        elif kind == "episode":
+            flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
         if document_ids:
             flt = flt.model_copy(
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
@@ -916,13 +1009,14 @@ def _within_selection(
 
 
 def _cap_evidence(candidates: list[Candidate], limit: int) -> list[Candidate]:
-    """Keep at most ``limit`` *ranked* evidence items (chunks/memories) after post-stages.
+    """Keep at most ``limit`` *ranked* evidence items (chunks/memories/episodes) after
+    post-stages.
     Expansions, escalated companions, facts and summaries ride along uncounted: they are
     bounded by their own budgets and exist precisely to complete the ranked evidence."""
     out: list[Candidate] = []
     evidence = 0
     for c in candidates:
-        if c.kind in ("chunk", "memory") and c.expansion_edge is None:
+        if c.kind in ("chunk", "memory", "episode") and c.expansion_edge is None:
             if evidence >= limit:
                 continue
             evidence += 1

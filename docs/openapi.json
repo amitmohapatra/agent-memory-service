@@ -4907,6 +4907,19 @@
           }
         ],
         "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "memories as they were true at this moment, including ones later replaced (valid time)",
+            "title": "As Of"
+          },
           "debug": {
             "default": false,
             "description": "add each item's ranking detail",
@@ -4933,7 +4946,7 @@
             "title": "Document Ids"
           },
           "kinds": {
-            "description": "What to search: memory (what was learned or stated), chunk (document passages), summary (document summaries), message (this thread's history).",
+            "description": "What to search: memory (what was learned or stated), chunk (document passages), summary (document summaries), episode (earlier conversations of this user, one per thread), message (this thread's history).",
             "examples": [
               [
                 "chunk",
@@ -4945,14 +4958,28 @@
                 "memory",
                 "chunk",
                 "summary",
+                "episode",
                 "message"
               ],
               "type": "string"
             },
-            "maxItems": 4,
+            "maxItems": 5,
             "minItems": 1,
             "title": "Kinds",
             "type": "array"
+          },
+          "known_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "memories as they were known at this moment: learned by then and not yet replaced (knowledge time, for audit)",
+            "title": "Known At"
           },
           "limit": {
             "default": 20,
@@ -5617,7 +5644,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "memory, chunk, summary or message",
+            "description": "memory, chunk, summary, episode or message",
             "title": "Kind",
             "type": "string"
           },
@@ -5644,9 +5671,33 @@
             ],
             "title": "Page"
           },
+          "superseded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true when a later memory replaced this one (only a search with as_of or known_at returns those)",
+            "title": "Superseded"
+          },
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the conversation an episode is (its messages: /v1/threads)",
+            "title": "Thread Id"
           }
         },
         "required": [

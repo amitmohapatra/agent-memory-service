@@ -140,6 +140,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "connections",
     "contradicts",
     "contributors",
+    "current",
     "dated_mentions",
     "derived",
     "document_id",
@@ -161,6 +162,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "tenant_id",
     "text",
     "text_hash",
+    "thread_id",
     "visibility",
 )
 

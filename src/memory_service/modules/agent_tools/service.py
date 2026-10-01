@@ -28,6 +28,7 @@ from memory_service.domain.pulls import (
     PULL_SETTLE,
     AgentPull,
 )
+from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
 from memory_service.modules.tools.patterns import task_pattern
 from memory_service.observability.logging import get_logger
@@ -69,11 +70,17 @@ class MemorySearchArgs(_Args):
     query: str = Field(..., min_length=1, max_length=2000, description="what to look for")
     kinds: list[SearchKind] | None = Field(
         default=None,
-        description="memory, chunk (document passages), summary, message (this conversation); "
-        "default memory and chunk",
+        description="memory, chunk (document passages), summary, episode (earlier "
+        "conversations), message (this conversation); default memory and chunk",
     )
     time_from: datetime | None = Field(default=None, description="observed since")
     time_to: datetime | None = Field(default=None, description="observed until")
+    as_of: datetime | None = Field(
+        default=None, description="what was true at this moment (includes replaced memories)"
+    )
+    known_at: datetime | None = Field(
+        default=None, description="what had been learned by this moment"
+    )
     k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)
 
 
@@ -262,6 +269,7 @@ class AgentTools:
             kinds=args.kinds or DEFAULT_KINDS,
             limit=args.k,
             observed=observed,
+            at=PointInTime(as_of=args.as_of, known_at=args.known_at),
             text_chars=TEXT_CHARS,
         )
         return [item.model_dump(mode="json", exclude_none=True) for item in found.items]
