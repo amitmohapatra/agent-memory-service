@@ -227,6 +227,10 @@ class ArmPool:
             return listed[rid]
         return min(listed.values(), default=0.0)
 
+    def top10(self, rid: str) -> float:
+        """The share of ``ARMS`` that rank ``rid`` in their top ten."""
+        return sum(1 for name in ARMS if self.ranks.get(name, {}).get(rid, 11) <= 10) / len(ARMS)
+
     def speaker(self, rid: str) -> str:
         """Who the memory is about: its subject's name, lower-cased (``user:caroline``)."""
         return str(self.hits[rid].payload.get("subject") or "").split(":", 1)[-1].lower()
@@ -291,9 +295,46 @@ def features(
     rank_a = {rid: n for n, rid in enumerate(ranked_a, start=1)}
     rank_b = {rid: n for n, rid in enumerate(_ranked(b), start=1)}
     when = 1.0 if WHEN.search(query) else 0.0
+    named = _named(pool, query)
+    best, counted = _sessions(pool, a, ranked_a)
+    peak = max(a.values(), default=0.0) or 1.0
+    raw = {name: [pool.score(name, rid) for rid in candidates] for name in ARMS}
+    span = {name: (min(v), max(v)) for name, v in raw.items() if v}
+    rows = []
+    for j, rid in enumerate(candidates):
+        text = str(pool.hits[rid].payload.get("text", ""))
+        day = pool.session(rid)
+        row = {
+            **{f"rank_{name.value}": pool.reciprocal(name, rid) for name in ARMS},
+            "rank_first_a": 1.0 / (1 + rank_a[rid]),
+            "rank_first_b": 1.0 / (1 + rank_b[rid]),
+            **{f"score_{name.value}": _scaled(raw[name][j], span[name]) for name in ARMS},
+            **_neighbours(pool, rid, a, span[VectorName.COLBERT]),
+            "when": when,
+            "when_time": when * (1.0 if TIME.search(text) else 0.0),
+            "arms_top10": pool.top10(rid),
+            "session_best": best.get(day, 0.0) / peak,
+            "session_top": counted.get(day, 0) / SESSION_TOP,
+            "speaker_named": 1.0 if pool.speaker(rid) in named else 0.0,
+            "any_named": 1.0 if named else 0.0,
+            "length": math.log1p(len(text)) / 6,
+        }
+        rows.append([row[name] for name in FEATURES])
+    return rows
+
+
+def _named(pool: ArmPool, query: str) -> set[str]:
+    """The people the question names, among the subjects of everything the arms found."""
     lowered = query.lower()
     speakers = {pool.speaker(rid) for rid in pool.hits} - {""}
-    named = {s for s in speakers if re.search(rf"\b{re.escape(s)}\b", lowered)}
+    return {s for s in speakers if re.search(rf"\b{re.escape(s)}\b", lowered)}
+
+
+def _sessions(
+    pool: ArmPool, a: Mapping[str, float], ranked_a: Sequence[str]
+) -> tuple[dict[str, float], dict[str, int]]:
+    """Per session (day): the best first-stage-A score among A's top ``SESSION_DEPTH``, and
+    how many of A's top ``SESSION_TOP`` it holds."""
     best: dict[str, float] = defaultdict(float)
     counted: dict[str, int] = defaultdict(int)
     top = set(ranked_a[:SESSION_TOP])
@@ -301,36 +342,19 @@ def features(
         day = pool.session(rid)
         best[day] = max(best[day], a[rid])
         counted[day] += rid in top
-    peak = max(a.values(), default=0.0) or 1.0
-    raw = {name: [pool.score(name, rid) for rid in candidates] for name in ARMS}
-    span = {name: (min(v), max(v)) for name, v in raw.items() if v}
-    rows = []
-    for j, rid in enumerate(candidates):
-        around = [n for n in (pool.previous.get(rid), pool.following.get(rid)) if n]
-        text = str(pool.hits[rid].payload.get("text", ""))
-        row = {
-            **{f"rank_{name.value}": pool.reciprocal(name, rid) for name in ARMS},
-            "rank_first_a": 1.0 / (1 + rank_a[rid]),
-            "rank_first_b": 1.0 / (1 + rank_b[rid]),
-            **{f"score_{name.value}": _scaled(raw[name][j], span[name]) for name in ARMS},
-            "neighbour": max((a[n] for n in around), default=0.0),
-            "neighbour_colbert": _scaled(
-                max(pool.score(VectorName.COLBERT, n) for n in around), span[VectorName.COLBERT]
-            )
-            if around
-            else 0.0,
-            "when": when,
-            "when_time": when * (1.0 if TIME.search(text) else 0.0),
-            "arms_top10": sum(1 for name in ARMS if pool.ranks.get(name, {}).get(rid, 11) <= 10)
-            / len(ARMS),
-            "session_best": best.get(pool.session(rid), 0.0) / peak,
-            "session_top": counted.get(pool.session(rid), 0) / SESSION_TOP,
-            "speaker_named": 1.0 if pool.speaker(rid) in named else 0.0,
-            "any_named": 1.0 if named else 0.0,
-            "length": math.log1p(len(text)) / 6,
-        }
-        rows.append([row[name] for name in FEATURES])
-    return rows
+    return best, counted
+
+
+def _neighbours(
+    pool: ArmPool, rid: str, a: Mapping[str, float], late_span: tuple[float, float]
+) -> dict[str, float]:
+    """The best first-stage-A score and the best late-interaction score of the turns either
+    side of ``rid``; zeros for a memory with no neighbour among the hits."""
+    around = [n for n in (pool.previous.get(rid), pool.following.get(rid)) if n]
+    if not around:
+        return {"neighbour": 0.0, "neighbour_colbert": 0.0}
+    late = max(pool.score(VectorName.COLBERT, n) for n in around)
+    return {"neighbour": max(a[n] for n in around), "neighbour_colbert": _scaled(late, late_span)}
 
 
 def _scaled(value: float, span: tuple[float, float]) -> float:
