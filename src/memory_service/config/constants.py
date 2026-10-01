@@ -560,9 +560,22 @@ class RetrievalSettings(BaseModel):
     # preserves Qdrant's historical default (zero-based k=2); tune explicitly, not silently.
     hybrid_rrf_k: int = Field(default=1, ge=0, le=1000)
     #: Weight of each hybrid arm (``dense_en``, ``dense_ml``, ``bm25``) in the store's RRF,
-    #: fitted offline from per-arm rank dumps (``benchmark/fit_rrf_weights.py``) and spent on
-    #: depth. ``None`` is equal weights, which every measurement before the fit was made at.
-    hybrid_weights: dict[VectorName, float] | None = None
+    #: fitted offline from per-arm rank dumps (``benchmark/fit_rrf_weights.py``) for the
+    #: shipped encoders (``benchmark/results/phase9/rrf_weight_fit_ensemble.json``).
+    #: ``None`` is equal weights, which every measurement before the fit was made at.
+    #:
+    #: Measured over LoCoMo's 1,986 questions against equal weights at the same depth
+    #: (``docs/PHASE9-RESULTS-2026-09-29.md``, item 1): recall@10 +0.0143, multi-hop@10
+    #: +0.0176, better on 55 questions and worse on 20; all-answerable recall@10/20/50/100
+    #: 0.651/0.719/0.813/0.817 -> 0.666/0.730/0.819/0.821, for +7.8 ms p50. An arm missing
+    #: from the mapping weighs 1.0, so a single-encoder deployment still fuses correctly.
+    hybrid_weights: dict[VectorName, float] | None = Field(
+        default_factory=lambda: {
+            VectorName.BM25: 2.0,
+            VectorName.DENSE_EN: 0.5,
+            VectorName.DENSE_ML: 2.0,
+        }
+    )
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

@@ -70,7 +70,7 @@ def test_the_memory_entity_search_is_its_own_switch(monkeypatch: pytest.MonkeyPa
     tuning = env.overrides().retrieval
     assert tuning is not None
     assert tuning.memory_entity_search is False
-    assert tuning.hybrid_weights is None
+    assert tuning.hybrid_weights == RETRIEVAL.hybrid_weights
 
 
 def test_an_unreadable_switch_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,3 +119,12 @@ def test_a_weighted_arm_at_the_halved_depth_carries_both(monkeypatch: pytest.Mon
     assert tuning is not None
     assert tuning.prefetch_k == HALVED_RETRIEVAL.prefetch_k
     assert tuning.hybrid_weights == {VectorName.BM25: 1.5}
+
+
+def test_the_fitted_weighting_is_the_shipped_default() -> None:
+    """Unset arms measure the fitted weights; ``equal`` is the only way back to the old fusion."""
+    assert RETRIEVAL.hybrid_weights == {
+        VectorName.BM25: 2.0,
+        VectorName.DENSE_EN: 0.5,
+        VectorName.DENSE_ML: 2.0,
+    }

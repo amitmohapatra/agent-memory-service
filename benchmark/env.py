@@ -217,9 +217,8 @@ class BenchEnv:
     dense: Literal["ensemble", "english"] = "ensemble"
     #: The store's RRF weight per hybrid arm, from ``BENCH_HYBRID_WEIGHTS`` as the JSON object
     #: the offline fit prints (``{"bm25": 2.0, "dense_en": 1.0, "dense_ml": 0.5}``), or
-    #: ``equal`` for the empty weighting. ``None`` is unset: the frozen constant stands. This
-    #: is the ARM, not a promotion - ``RetrievalSettings.hybrid_weights`` stays ``None`` until
-    #: the arm run with these weights clears D6 step 2's gate.
+    #: ``equal`` for the empty weighting. ``None`` is unset: the frozen constant stands, which
+    #: is the fitted weighting since its promotion; ``equal`` is the pre-fit control arm.
     hybrid_weights: tuple[tuple[VectorName, float], ...] | None = None
     #: Actor/topic decomposition for multi-hop memory questions (``BENCH_MEMORY_ENTITY_SEARCH``),
     #: the query-side arm of ``RetrievalSettings.memory_entity_search``.

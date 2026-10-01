@@ -148,7 +148,11 @@ async def test_the_two_encoders_run_at_the_same_time() -> None:
     )
 
 
-async def test_the_shipped_fusion_is_unweighted() -> None:
+async def test_the_shipped_fusion_carries_the_fitted_weights() -> None:
     engine, _, _, store = await _parts()
     await engine.retrieve(CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY)
-    assert store.hybrid_calls[-1]["weights"] is None
+    assert store.hybrid_calls[-1]["weights"] == {
+        VectorName.BM25: 2.0,
+        VectorName.DENSE_EN: 0.5,
+        VectorName.DENSE_ML: 2.0,
+    }
