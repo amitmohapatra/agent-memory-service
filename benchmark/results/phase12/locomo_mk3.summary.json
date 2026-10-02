@@ -1,0 +1,867 @@
+{
+ "provenance": {
+  "timestamp": "2026-10-02T10:52:20.697986+00:00",
+  "git_commit": "7cc11778a85e66eafe2c81f1f114cb1a957c1a2f",
+  "host_load": {
+   "loadavg_1m": 0.22,
+   "loadavg_5m": 0.11,
+   "loadavg_15m": 0.76,
+   "load_per_core": 0.06
+  },
+  "python": "3.13.14",
+  "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "cpu_count": 4,
+  "memory_gb": 15.7,
+  "packages": {
+   "fastapi": "0.141.1",
+   "sqlalchemy": "2.0.53",
+   "qdrant-client": "1.19.0",
+   "procrastinate": "3.9.0",
+   "zstandard": "0.25.0",
+   "sentence-transformers": "5.3.0",
+   "torch": "2.11.0",
+   "transformers": "5.3.0",
+   "onnxruntime": "1.30.0",
+   "docling": "not-installed"
+  },
+  "models": {
+   "bekko-embedding-v1-a8m": {
+    "repo": "hotchpotch/bekko-embedding-v1-a8m",
+    "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+   },
+   "granite-embedding-small-english-r2": {
+    "repo": "ibm-granite/granite-embedding-small-english-r2",
+    "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+   }
+  },
+  "llm": {
+   "enabled": false,
+   "provider": "disabled"
+  }
+ },
+ "source_manifest": {
+  "__about__.py": "56b5e91c3bb77ab933c25fd65eba883419bdc5691cc94cb9dc840e8f4e3674eb",
+  "__init__.py": "287df98daa8f5f95f2ca8b86842f27f12b69cacd1ecbf788f78900ca7757ee68",
+  "__main__.py": "8c645bc391dd6feb6784100d7804d9a02757c0c0ad21f62204339a73097212b5",
+  "adapters/__init__.py": "a20caaa5e6dd2ddb9215312cd464b8dfe630c3ed9e4d3aebce8f47a662eb49ba",
+  "adapters/authz/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "adapters/authz/memory_provider.py": "bafacbe5d95dcaf323acb827d9c60e853828d7e8a6d45573b2d7486bd5874025",
+  "adapters/authz/model.py": "6116cfd88d0a3e24fc3d491cd243f6ebdee83afd450bc7f466b358d6be676a7f",
+  "adapters/authz/openfga_provider.py": "896471fa2c7c17c0ac24ecdc0c3b6dc8bedd7333399993cfb313841a9cb1fbf0",
+  "adapters/blob/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "adapters/blob/filesystem.py": "62d04ef6226d27689e5d33258c1a956ef05a1b81540a12287379a8c261c1184f",
+  "adapters/blob/gcs.py": "f4963810289260947f3cebc684df2915b0ab67b7f06e05e2ee2e0084da22aa38",
+  "adapters/blob/memory.py": "67ed3779f3ce72061d9e611e26af6b776ba25b3b13fe490bfcc50212e09e0b9b",
+  "adapters/cache/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+  "adapters/cache/memory_cache.py": "98020d24f8ee22098024bf27b89bcd38b1e375ee740eeca1eb3c0be11c5ac360",
+  "adapters/cache/redis_cache.py": "a703a217c7b0467b038f3f78790cda78ea3e02a55751a7e07db9bfc3678d7362",
+  "adapters/db/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+  "adapters/db/credential_repository.py": "ef87107b0443aa957cfeea9ade0e1ec6978342292773d4c0fea3e8576b2258dd",
+  "adapters/db/document_repository.py": "283948c861f175175f118f9fd78ede81056445db456778234b6e48c431ff7665",
+  "adapters/db/engine.py": "36212074a77807429a410b479f611aa3c3a2b66962d61f1d44ded1932f18a382",
+  "adapters/db/feedback_repository.py": "60b776274eb713fe7abd5a4d3c9b211b20c785ecf97bfddcf507d14c00586b65",
+  "adapters/db/llm_repository.py": "d1c4e2539053c246cb5754965ebc4fdd95b16d23182f12e30dc92dd27e7f550b",
+  "adapters/db/memory_repository.py": "b7df2416b48278130213f57a3d22886a6d5cc27eba1d0eab79701af847e4dd0b",
+  "adapters/db/orm.py": "86763a1c20f301b9a3a8c31ca2920e22719b32eb44bf83341d40e2f8624e256a",
+  "adapters/db/profile_repository.py": "dc4bbb740e8062e4e9a7ea18c59a5c63661166a92f317826b78eac8732874e5e",
+  "adapters/db/pull_repository.py": "6e91f119aa4f953edb6a0fc6985167f68954120743fc07cf89ed573efb56efb8",
+  "adapters/db/repositories.py": "cecd7789814234eb6502dde9748d5046c33530e303c62d5a8e097da4d310a00b",
+  "adapters/db/tenancy_repository.py": "ad165d29a8fe7ec3cb3a137ab7bd4433111978ffd792158d28d7465b74518573",
+  "adapters/db/tool_repository.py": "a682ce549201328406cdbeb8a19aee02d76d1f14f807b11bb0dccc74441b4e8d",
+  "adapters/db/uow.py": "3915ddcee835c6720e204a563f7338f479f3952559261494511a610b39ac91de",
+  "adapters/graph/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "adapters/graph/memory_store.py": "7f24b09e1fc81f18c4041e8a051349873eb5ddff9b8538673bfb95dc618c16d9",
+  "adapters/graph/postgres_store.py": "ebdedb89170ed8bfbcdf0584aaf74a54fa70460403c5808cda6fb5a8f130596b",
+  "adapters/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "adapters/models/_precision.py": "9402fa49a79b3efcf10dedaa6788c7919cb7422ee9e4d3b924bf19b40b78b90e",
+  "adapters/models/_runner.py": "b48008ef58f71373ab9f3f045888e434c3d2b5215b6aacddf939c7fd453e97f5",
+  "adapters/models/catalog.py": "61975f6a0fbdf40d17bd7871262e1df486e2c917d49cbcc6a169fd94a2e5b29d",
+  "adapters/models/credential_cipher.py": "b00d9d38b197fe4773412ab6366a4984201ced3a4e5a1588c42851da76874cd9",
+  "adapters/models/embeddings.py": "3f3058e483c053be9b06d8908f4e6cf94ad334883a24273a43d2df07ae59eb79",
+  "adapters/models/hindsight.py": "ae4085a62b2ea04db72c2f8401d737276a6f4a6a172ac5325049cec7da7ce77f",
+  "adapters/models/late_interaction.py": "6337c4302d91814d9c8840569a63b1a0831e5dcb234a2df4f78c1db179b250d7",
+  "adapters/models/llm.py": "b200af39586e5fdedd62319379d757b87843747fbfb42d5dbc3b584f5b770c9b",
+  "adapters/models/nli.py": "1ddaac7e83aca5d61937dd3ad36a64dc34d6568ffc8d50595f44d4bb145138cf",
+  "adapters/models/onnx_nli.py": "eff520010cc194f0521b3ab1a5255758a22487c4bb080188fe96f98e77783bb5",
+  "adapters/models/sparse.py": "bf6245553bf50174390a7aa56d1cb45dd70b45151c16b178bfae5c5fe92557af",
+  "adapters/parsers/__init__.py": "e49fcea63529547fe884ac6d4a840fa2d59e8bd74ed1a98ee1b9fa942a0b54bf",
+  "adapters/parsers/builtin.py": "ab27fd0336a868c232c309247d57a458c3d68ff2d2851e09477c5f5f52d3a3e3",
+  "adapters/parsers/docling_parser.py": "ebd486af31603ed8876ed9e712c8484aed1d130da6e9f730d0e013ac36b57fca",
+  "adapters/search/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "adapters/search/qdrant_store.py": "e83de45baf666a20c7e10d98ccc69f8e751efbc2f4b709cd207c2ed85b4d3eaa",
+  "adapters/tasks/__init__.py": "de392f814a77bab9625264baa771f25502598904efba481f907e5e57999e5ff4",
+  "adapters/tasks/inline_queue.py": "3f59540aa7aa0c593bd6ef7a6593d266f6cab17e8c3ea8140d8cf48a94aadee1",
+  "adapters/tasks/procrastinate_queue.py": "5c7d48c24776cffdceedb4a384f365a7d38e48df6db186bfce09f4e533199dee",
+  "adapters/tasks/procrastinate_schema.py": "6906c2397b7c0e8eeb16d02990069ea9f1dbf6f3fa74e17be1ee574ae65a54f8",
+  "adapters/wiring.py": "de91c47b32b449e65dfdc62035636dcbe05c01f3179e095c96627814444932df",
+  "api/__init__.py": "0d54f8df8c2ef4869eecf37a0c82d83cc82ca05a4bd8a70e8d29cba77944dada",
+  "api/app.py": "3c59abb23b42d14b426a77c06948a064aff2b2b0f3ca2a4b717cf37a9522883d",
+  "api/deps.py": "15ef9f3e538b2844ed25af6ab2a00eac6e9cbcab51d50359196283512be323b0",
+  "api/errors.py": "d5c388acef231aeeb0663a44a5f79c48c0cdb31b3eb6b989d93bf695dc78d39a",
+  "api/headers.py": "415e46628deb3743b78a45140b24c9cdc1df7ad8275d951c9f705d794514851a",
+  "api/idempotent.py": "8c1390ff2a44cca1e6f964d1fc6d59905062bcd5828a2b499eb693bbdb6bc0f3",
+  "api/middleware.py": "e7d933f6bcbdbc493785a84e85e0d4dbea64f639e28be6e4b3a23c06d5c3a35d",
+  "api/openapi.py": "5e5bd2f5306aaa7367cba12fd8615626931cac00fc0eda414f8e11eda42096ff",
+  "api/pagination.py": "47803ebfcd0346dd912cc6fce471ca2345b6003a8f1065f9f3cd6b2a4692f01b",
+  "api/routers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "api/routers/ops.py": "8ceff82029caadceba54bf4228ba13250acb510da988a14c8af55ad2e876baac",
+  "api/routers/v1/__init__.py": "fca743a31fd7853fff93bc2b27144ce91968ecab463caa29f829329cd7a58e71",
+  "api/routers/v1/admin.py": "e9ccdbc81ec473262c9b6dc78b7a97a9407be94c8d5bdede05f2025df02994c5",
+  "api/routers/v1/agent_tools.py": "d40c2fb74eacf9056da92918e54e76ffc90f8f88d896619b49b02515520ef284",
+  "api/routers/v1/conversation.py": "b65ebb31ff4254aeb6f4f9f55e26213cfed55a747bb4df4c7fc60425e5991ba3",
+  "api/routers/v1/feedback.py": "d61a3bd171ea47568a62d8790edd89baa99d115e90be5642c754e4413cd213b7",
+  "api/routers/v1/files.py": "774e2208dffb0187e4644b663f0f32d8aaa078172dbd5a96379e04286dc58007",
+  "api/routers/v1/graph.py": "1a76e107bf786ffc5c1da48f107323c82c5911fcd901fd3bfd9cca6177f27b13",
+  "api/routers/v1/grounding.py": "8e4fffc9c3a0fd01c66339bb28c1c2e72b23281c799013a4553394c7fecba96d",
+  "api/routers/v1/memory.py": "fa05967dacd94e906a75bbbfdd56fe0fbd8297961b64c205a68583ef64d75bd4",
+  "api/routers/v1/model_keys.py": "1fc9d32ff42ad507d27c3adfa152ca4e5f4e693087efa8fdcdfbbf4151f5fb80",
+  "api/routers/v1/profile.py": "71583efd01ae909f9975e10f6ea538bd59f0b5f1224a2fdff36f60c8bf2d8569",
+  "api/routers/v1/retrieval.py": "4e237896a77732b7fe1266b2eb6ab83bcff7babdbf9d0c4e04e0b23364b78e0e",
+  "api/routers/v1/tenancy.py": "0f62b719bdf63769109e5a678ee1218c2db4920a7602cc0e809a507e2bdbab4b",
+  "api/routers/v1/tools.py": "13b6c21655eaaf930e20c830cdbf29729081d5a62d5cdc68344464028cf8b4cd",
+  "api/schemas/__init__.py": "47299586bd5a73ad4ee241e1f7dc80fb3c822e4a7c626377869863945b09e381",
+  "api/schemas/context.py": "598e026b777397512c41ff5273ce0f437ac5e63f6ab8621fa066bc51f7bdd72e",
+  "api/schemas/conversation.py": "a9db4dadd722f9928a02fc9565e4e699fa50295768c753481d2ffb50602b4fe7",
+  "api/schemas/feedback.py": "cb4f5bbf6cba408a2cbad87b5b3326792543ed4a3e81729a787a968b15d36752",
+  "api/schemas/tenancy.py": "8440bcce56e8b52c4d563501c73caf8476f2446a1f2343cc62eeeaae7655631d",
+  "api/validation.py": "4096c9a423000708f0d744b1bf815bff939f01c004720d19b37a7d16a99668a8",
+  "application/__init__.py": "f20af94c09dfa5782a3cdfd504a5dbdf10010ef2c980204e2bfc52129494cebb",
+  "application/container.py": "a7ab7ade89110a728bc622630833126832cc660f37f8afd39bfe6fe428efc61e",
+  "config/__init__.py": "f78d14f5800a118f6490702defd8fdab0883ab564d3f0f8a7f6981668acc39d3",
+  "config/constants.py": "80f4de8d342cad89f3c2fa64ec91c1eb7fc4737dd697250f8919c84c4f12d310",
+  "config/registry.py": "6609f90aed855ee92a9b7bb49d1c302c80e8d686fb100d3227410fd4ec897f89",
+  "config/settings.py": "ecd426450a6024a60b5f272a050c19c6a6a17cb2f5cec700182dae87fd9178e9",
+  "domain/__init__.py": "9eb3d163f520849537b8d56e56b14080a1e38370e00baadceaa38b77535ac62d",
+  "domain/audit.py": "c1c9074c37d100ff1eaee8d0523f9406a5c56ec61e9cfd98552f3152c75c7401",
+  "domain/context.py": "a131ab8002ed3cbce87a9e1d42599e919187987de0425bdc9c0c184a514f1f20",
+  "domain/context_bundle.py": "745fe435efeb8e910621c116c6c9d46dd9a57b0fe8a62db4a76035c45407b803",
+  "domain/conversation.py": "bcbcfc1b35eaf9687b22c09428aa85345b47a55889d4d1973923b4afb80c3316",
+  "domain/documents.py": "38f54bf01a5786dda87ba8b3b8b126e670347893815db059d075b57774934d4b",
+  "domain/enums.py": "bd2b5836d94a9f2bc34c4b13e8817862afa9f6c5696c07b756f2c6e329a7b5eb",
+  "domain/errors.py": "bca5b052659ac2d268e8bea055c5d8de427b778a38c5feb12bbe43a89c276d60",
+  "domain/evidence.py": "0dd461800b1666a166a380f27d1da255954659bf8d369b8ba3261163e9c0e672",
+  "domain/feedback.py": "e5266ae8f403163e6f5e099ad66ac817998dd318457500a781c0be6afd450efb",
+  "domain/fiscal.py": "4e9cef01f5be72a936ed2d674773c40a6811d5b539b668f8134517dd1c788663",
+  "domain/glossary.py": "c68bda8013f92111bcc4fda117b63aaf6d32ccd148b8bfe45afa0f5d1d10fc5e",
+  "domain/graph.py": "f08313824c76f69c3cd6b5ce0aa24203083dfcfaee9e26994bffde0e0b6ed2f9",
+  "domain/grounding.py": "27391d0cc454cd34327b2785b32d3f880201e8bc94289855dba601e51a351977",
+  "domain/ids.py": "0718f78421585ffd80771754988b5cbacd7a35eb095a9a507e7dceefe797370d",
+  "domain/language.py": "67c0a6aece54ec8d84044c427bade93270dd35ea915dc246fbb59738bc04b6c2",
+  "domain/learning.py": "a0c156da955aa9f8f25d39d3772c3884859eced98d3fe18ed5ff99abc1a06687",
+  "domain/memory.py": "ce5edbab03267932d8bd66f27eb9923f65a015e639d63258d132fc4bcc87beae",
+  "domain/observation.py": "b8bf469a5672cab804395a9ea9e30cc0d0abf6c9d0aeadc3d2716a527f970735",
+  "domain/predicates.py": "02beaecf5e46324c3568d6ed6bfa5bda708dbddfcd37afdb06f4ff85eba88ab0",
+  "domain/profile.py": "74b73742cfee104dbd0029766d1de89011ed69d3ecd7d80426dff9d521a1dcc0",
+  "domain/provenance.py": "5b7dfdac182453fae93caf20f52716d0e9ec53bb8d239cebb6d2c9821ffa76f0",
+  "domain/pulls.py": "06d944abd0262aa882756fb922db7f4734b03d2c301ebb7371abcd65c259b58b",
+  "domain/revisions.py": "bfabd4a1c7c9af857598859299001959b5504fe61ff5913eff59494fd873ddf0",
+  "domain/script.py": "25ad8ecd784b6e629179e6803c8c0d2f4905871c7d9ca61b1241a617f31c9fa3",
+  "domain/tenancy.py": "71ab67c290721a839ccf04a3f72ac19d3976c15f7a6f69ce7818de9081944bc4",
+  "domain/text.py": "6631998101541ca99baba0434471a6cf28e4afd3d6ea819ddf37b4c3135bd4cf",
+  "domain/tools.py": "30f7ccf20dbab30bd81220c07a6e140a7e7abacb968cd964553b50310918a461",
+  "modules/__init__.py": "026968e4e7c11b7404b675511777afac253f588b1747b0389988ac088be11eb9",
+  "modules/agent_tools/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/agent_tools/service.py": "38b77bfe21dc7c3fa8678bbb8d23b62722fb6382fffadc833fc97dab4a8e06ba",
+  "modules/archive/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/archive/segments.py": "2918dbbd84bb8046c08183f291e74854ae2798497b6112f78ca5a751b2418307",
+  "modules/archive/service.py": "417a56aa72b767669fd5868d6bf1011fd78ad8fd98618d8835d5fb732950a9a9",
+  "modules/audit/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/audit/service.py": "54685dbe03ee1eee2a252444fab9fa3e9675139c3022c5a9f1ce35da0aefaa5e",
+  "modules/auth/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/auth/authentication.py": "eaaccc52fa67aecf37568355b232aaa1cc420b267e7fcb00dd5d37ac4d4b19d3",
+  "modules/auth/keys.py": "08840a2bb9ba952b488e6ca4b295028d52ffea594f099bb967f541926c6be110",
+  "modules/authz/__init__.py": "961269d42a779bd35293a05ed895ad3c5e18826ce4384cea9307e4721b6ff988",
+  "modules/authz/scope.py": "baf17582813a7d78c69aaef13e5158645c05944ac5d9a9e61cb52c9af8568d8a",
+  "modules/authz/service.py": "b6aeff5e287f1b24018d2dfbf508ec4cfcad8af2d0d626cc25c295765bd2637b",
+  "modules/authz/visibility.py": "2d752048848b80fa250ae39b323e521d88050ccd88b19f87cf765a2aa729d002",
+  "modules/context/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/context/builder.py": "8e74db0c2d8ef7d1728139213ab23ad8f2d48e1fd2bd12461845321e36a10bd8",
+  "modules/context/evidence.py": "2f20e24080a77d5359f35cfdfb3389bd383cc96ecd93d5cae496a8761933cd16",
+  "modules/context/expansion.py": "47dec36877a7aee8502b0548b9e6b6b260f705c9a6b20e227afb78475fa13dff",
+  "modules/context/handles.py": "37848e197aa9a8a09db38458138292d029c59f064caae8d493398641ac96bc35",
+  "modules/context/sections.py": "df6cc75abf9d41e1b7b5e6494836a90dca07435bef2634a052e04f0bcbdae237",
+  "modules/context/semantic_cache.py": "d40cdc23cac1940c00b1c61ed588a90d2c08e933aafdf7554c287fdebda0519b",
+  "modules/context/summaries.py": "8ad6229e2d4e5c3f5413108de92da14effe97dbcace08c37210274432afdf96f",
+  "modules/conversation/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/conversation/service.py": "6d5c1005933c5ed2234037697be98453ab6b5d37e173e6b480a73a902c216663",
+  "modules/conversation/summary.py": "2f03855707e26bacb3eeaf1c35391da000bcb6d57b6e62abec86f679e272d6ea",
+  "modules/feedback/__init__.py": "f95d22031c3f81c1dde4d33bd7a316126ac8ccb8d5af2f3852aa596e82b82300",
+  "modules/feedback/service.py": "f29b30d05d231b6922d358bad6370d8cb64b0041e5f427fa30b2bfccf3bba7fb",
+  "modules/graph/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/graph/document_facts.py": "7b0b1ea88f6df285940363b6d0673c398f661b37d0e8b0f139f3c29ba756219b",
+  "modules/graph/invalidation.py": "8028c0623ba386ffb868162719d11a71797ebf02dd238451e8ed5ccf74b78050",
+  "modules/graph/native.py": "527a39e950280339ecc8b71eb6b93d25e0139fd7a93567f030dde26c2930a735",
+  "modules/graph/retrieval.py": "18172ddddca2541eec78b8b327b5b8203e94f1ba2cbe9344fe71390d38bb4484",
+  "modules/graph/service.py": "07d6be156994705362164825f539de5e4bd5d6e4023bd28957888363fa86363c",
+  "modules/graph/summaries.py": "eb1c5db9531bab4715e15f0ca153f2815679b103ab7f19af27ccb3ddc0fd8ba5",
+  "modules/grounding/__init__.py": "496ae8c89542f86a12ddd5a8a091440d58d8b0a0867c8930ac03a9577c2c07d8",
+  "modules/grounding/cascade.py": "69b1845ef55bbc9c66e64b9ea55d3b88dba693c2ddf4f075971057af48d50686",
+  "modules/grounding/judge.py": "d8bb3e6c65b3e848f2e2801e161a1c7a98b6eb34e92f29c081fd9c59bf44fadc",
+  "modules/grounding/lexical.py": "3c99069b277ad3df613d0c21e1b1693faa88dc830daa75afbad174055d230cf7",
+  "modules/idempotency/__init__.py": "78c29627fff658644e43923a1a02323d560961a04cb585f945ac8ab1be12a6ee",
+  "modules/idempotency/service.py": "c0a933de1e21e9c69bf21672c2e7a11153444d6ef6d24e047193487dbdf8766b",
+  "modules/ingestion/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/ingestion/chunking.py": "961da72a0a9b5c102d4138ec2f9195a74fa8b1ec5ff92ac97b17c8cd8c3af6af",
+  "modules/ingestion/context_graph.py": "29f5e3714187f1c8d7053cb4762a6f701de3ffc74c1f2d298c95c0717a72ec01",
+  "modules/ingestion/hierarchy.py": "0182181303985b41b6406af2954fcc6c622ceaa3a456ce4e64e6d6ae7c951f58",
+  "modules/ingestion/service.py": "b9f3992fd64a02d13617936e4a3c9c21934268f0f07b186f887cd3a6922834b0",
+  "modules/jobs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/jobs/names.py": "d67d6d7e65c48999d638f9f73a95594611a2183bca0cf100dc3dbba9d276a1c3",
+  "modules/jobs/registry.py": "9a1a97779538b834e0addc5d5703314c992d8defa1bd9d761151a4feb3328ecb",
+  "modules/llm/__init__.py": "7cc5a839b41ba5a8fa90501cd26fce77c2d7fba9ac7e7df0d3e832ccb7c17229",
+  "modules/llm/assist.py": "38f001a2b1cc709b268fd1302db80cd8be6919617107c29be6b2e7ae0035e353",
+  "modules/llm/cost.py": "09dc4d4b815d4c27bd8e8847a9695e0faa754ace6c8794e0603122d809d02086",
+  "modules/llm/credentials.py": "ab9cd325f50584d01f129b48fa157f2299638ef34e3a3fd403a3f89b48bdf0e6",
+  "modules/llm/policies.py": "c1fd5811cf30f15e48008bc926ed93b2351cd2e9c69656573dd41be5e4e104ea",
+  "modules/llm/policy.py": "9d172735342e91ea81b2a562907174d5a18aaa95561a42ce8727fc2ac9812e7d",
+  "modules/memory/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/memory/admission.py": "e1a6e92d3cae6d365eb5892a75df86764db21bc4afddfcf498477baa16964c76",
+  "modules/memory/connections.py": "2478934c70ec5a41abe074395809cd3f25931d3e65360ac1429a56459b48382a",
+  "modules/memory/derived.py": "055530aecf7fcb8df3c5f8fdfe61476d66ddb9f69c44dea49fda80597e1310fa",
+  "modules/memory/ephemeral.py": "ce238792c09627b8af5db4182951578679d069b21b200f4d89b9ae643305dd04",
+  "modules/memory/forgetting.py": "f93622303b2a6e798a38688a6aeb19be966750e37e9b660dff53384408c6edac",
+  "modules/memory/narrative.py": "4cacf2d3a48dc09fa417f838f1bc868349dec64d0d750f13f54d304c7c70ce10",
+  "modules/memory/native.py": "1aa1332a7e5debe061c06897c0266a6e1a5019fcfd10688e5628ff71674ce744",
+  "modules/memory/pipeline.py": "fd15f3f749f1773a7d738958676530660dd0b4529d1aee7431621928dbf763d6",
+  "modules/memory/reflection.py": "13be97afa383bf6ed637c1d48cdbb0944c5b03e4af3afe1b4d63c532d06f7e40",
+  "modules/memory/revisions.py": "1275a7ddb0756a8ce6174c62498e597ec926edbf15fd26b87b32af17a5482146",
+  "modules/memory/service.py": "b99b175bb5fd538fa04b4598b258b20730f131e9b167aa61e64067510cd59023",
+  "modules/memory/source_facts.py": "ea32658ebbad9ec32b0d96568fafb1e9e977c668adfb7e0a0d41d23141db707c",
+  "modules/memory/temporal.py": "a3a44fad085db6f7369ff4077e10622ea0d4c17055e641d4cf1ff84fd792a539",
+  "modules/profile/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/profile/service.py": "b2eef32b433fb11a3ef634e3805be80b3384aa5548a3efbc24ae63155f18ec9b",
+  "modules/rag/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/rag/indexer.py": "873393efffdd362414a7fb95ee6bfb446cc607aed2806a7bfc1a985e6be2761c",
+  "modules/rag/spaces.py": "8ec2ba6c78976953badff5df81090dc5c3ca91eeefe9fee40071ad53ca7e5b80",
+  "modules/retrieval/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/retrieval/engine.py": "7baf9c47452345b5840fdb3957af94353305684427a55afaf540e3e8d866a708",
+  "modules/retrieval/memory_queries.py": "737cdcee4544fdf4260d371aab8303b1bb16b739fad72e617f5313473a4852e2",
+  "modules/retrieval/memory_ranking.py": "c6aaf4b1b02af9f5f1e42c4fbd4fc32b2bd92ed92f9f0c397c382f9ee1331eeb",
+  "modules/retrieval/router.py": "6b44e102e0c1d4038bd460cace9f798df63b592bd2afbc445e619b75d7b01877",
+  "modules/retrieval/search.py": "d20a1e7282d94077257b49258782f806f969bfa9ccd14be84908b6388f13acae",
+  "modules/tenancy/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/tenancy/gate.py": "d608565f8f48287f0d495f80fcd0beab4fa3d366511433322ddc9715cf90372d",
+  "modules/tenancy/registry.py": "a12fd57810630792c96ff615677502e2f31bc544d76e054177a6ff2d99f7919b",
+  "modules/tenancy/retention.py": "c1e93c69d22a2519bb27fd7772b143d627f3d039f29b14968aef07ed6482cd8a",
+  "modules/tenancy/service.py": "cbdb908cd70479f4ac65857784992919873a9de0550597cc12fb677faf12ed36",
+  "modules/tools/__init__.py": "386c3ada1b7a36619d21dc58aa36a721d6ee9e2c7f47234e8f0a5a621f537fee",
+  "modules/tools/approvals.py": "4e019f413f296fc8243e0a2e0a29b0c12b434994803e126e910db4aa7c87d5d3",
+  "modules/tools/edges.py": "89d8ae7abf1547125132943335c109e3666fc455108c54e5694b92d635e303a8",
+  "modules/tools/hints.py": "9f71efb8cea8d18d57cd720ed486e07e324c288f049fd87ae4187ab6b904b533",
+  "modules/tools/index.py": "ad2f5ac4797efe4f590b756b521cb6d720ec012d0584d027f9590e3b5877f837",
+  "modules/tools/learning.py": "1a10382237a2415a866a5abdf1e45082bccdc25741fef2454eb99d7900c9a410",
+  "modules/tools/patterns.py": "c30f52472e1613f2c90cc93a8bf35f7266c220b457b69a7d333846f3d233b54a",
+  "modules/tools/procedures.py": "dc9e50769594183c33216aa8be9eb6f441115b32dc1ed96254e43fa676138641",
+  "modules/tools/service.py": "9ee3e92725d849e1d2afdfa43f3e0e8d50691356037b1aa28ae507da5ce533b2",
+  "modules/tools/trajectories.py": "d28b2a18af45e1ff9c8bd34a7288defa4ae913625871c984302f21185b73fbb7",
+  "modules/working_memory/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "modules/working_memory/hot_thread.py": "0fd8fb54b9616ca2fc154fcf9bd55ca807f944e7d5d21cd8976e5f9305c498dd",
+  "observability/__init__.py": "7bbea3c67749f67993b4d668c68cc4bdeaf02283d351bed00d0eb2daf909e41e",
+  "observability/logging.py": "eec7473ab6229d8fdcc3486630c7396f27a5f0b12d4f98a80df6fed983c1c8fd",
+  "observability/metrics.py": "8fac2bd906b1a6d3179f6096f62adc6341603c7b9faad3773ef60de51a91cdea",
+  "observability/timings.py": "f69731636ed06d7df0edf3d2bae975c9af298ac50018f456f3c05646bd13b804",
+  "observability/tracing.py": "1a22b42f297840f63702225c6ae358b20d715d2c6b66d26d6c441d9e155c1508",
+  "ports/__init__.py": "a6f76273b96edb8d60f6b7875b9be5a8eb6a767542ad8c073db8e53adab872ae",
+  "ports/authorization.py": "aed5313a172bfcb995b61358dc157b95f7ea5cfcbf11ddf1c454b0e3a840e6b7",
+  "ports/blob.py": "53328b9af91734d622efb711d9a775b84f0453695339b1a0e715d5908fe74004",
+  "ports/cache.py": "5adc3463b7b14d9480f891728dcf29dcdb7c974777695a5d9121d0944d91a74b",
+  "ports/context.py": "53a0c5b35c466d21826fffa8faf084c3a99f999628b2a17c882651bd60e1f269",
+  "ports/credentials.py": "a8018025c9b05e4e614191945d6bcad183802812b9363ba88214c9e9fed0c189",
+  "ports/feedback.py": "dd98ac4a09389c5bb490d10021812cf6f5b45b35cc4fdabf8306c050f1ad4bf8",
+  "ports/intelligence.py": "e8df2da83ee0ec3a289fa7a5f58b9c96f118280556c0929b7dfaa583793c6bff",
+  "ports/llm.py": "51e831d20b6bce707db91e571aff41a222f32acc2bfc0dcfc935aa3d0bb3832b",
+  "ports/models.py": "3adf57d0f6d8e6a006d9a6a6df713887bc5655696f980658f7bcef0bb34ea0c6",
+  "ports/profile.py": "13e216f21595794eaf1d1c1485ad7dd8f343f8fa711cbcecd819843581db8f1d",
+  "ports/pulls.py": "c3f8bcf3d25571a5f55535e52aaa7eae0c6dbf379fd7e9f47557cc221c96b3fc",
+  "ports/repositories.py": "710b9d96a29152565338ffda139d4e4600cb7f53636142f31c513ba2823c49d9",
+  "ports/search.py": "e3d9aa43e1f7dd958df4200bd54bb9a3a54f7b8246c2819fea152f20c7312e35",
+  "ports/tasks.py": "1c5b8149047e18adf2b5db150d53daed3e9f3f74fd0446192d51385e418d2143",
+  "ports/tenancy.py": "7d0de6a6e234927cdac94aa0db0526552328924fe14dfb3ea9eb5d651b82150f",
+  "ports/tools.py": "92cc0644589bf5439e566c56c70d3446af5a11cff2f8ed0b6af5eb5997743fc5",
+  "ports/uow.py": "f715e97c4861322e761018500a18d091a7cf9163dfd420eeec48b63d1a031e84",
+  "tools/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "tools/download_models.py": "2c043a93bebc082aab5472fffdc8ad7b87cd1628ef6ecbafaaa69313e8d48e17",
+  "tools/ensure_queue_schema.py": "f49894dad1043956586322b6ae3138508cc3bb3b84509aefd0133f57f56adbf3",
+  "tools/export_openapi.py": "52b18818c1414da6ea55e055c3be94ee5c8108db94dcb3b0f8a6e5834300adff",
+  "tools/onboard.py": "5c5f8a06eeb4da608060912d9a51af23e9c38c240a1ffc4a14e75d4b94d21778",
+  "tools/reindex.py": "9e083bcb664106842d30da5afe717fd14022cfd7f00231daa448bd3ca913d4ce",
+  "worker.py": "c257100bbc86ecb0d9d9c8e7100347d278444de6ce3547712d71922cb58bdf88",
+  "benchmark/native_source_retrieval.py": "7e10291a1430c4c7e01c1ef7819ede67f4eaea76d71f622abd675f93d54cbd94"
+ },
+ "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+ "spec": null,
+ "encoders": {
+  "dense_en": "onnx-granite-embedding-small-english-r2-model-d384",
+  "dense_ml": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384"
+ },
+ "spaces_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+ "index_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v3-snowball-k1.2-b0.75|li-9780e0094e30|mk3",
+ "retrieval": {
+  "max_query_chars": 2048,
+  "retail_glossary": false,
+  "exact": true,
+  "bm25": true,
+  "dense": true,
+  "graph": true,
+  "semantic_graph": true,
+  "rrf_k": 60,
+  "hybrid_rrf_k": 1,
+  "hybrid_weights": {
+   "bm25": 2.0,
+   "dense_en": 0.5,
+   "dense_ml": 2.0,
+   "colbert": 2.0
+  },
+  "memory_arm_depth": 100,
+  "prefetch_k": 100,
+  "fused_k": 100,
+  "final_k": 50,
+  "memory_recall_k": 100,
+  "memory_entity_search": true,
+  "memory_entity_search_timeout_ms": 200,
+  "query_expansion_timeout_ms": 250,
+  "parent_expansion": true,
+  "derived_source_k": 6,
+  "max_chunks_per_document": 0,
+  "neighbor_expansion": true,
+  "definition_expansion": true,
+  "expansion_budget_items": 8,
+  "evidence_verification": true,
+  "escalation_max_rounds": 2,
+  "abstain_when_insufficient": true,
+  "subject_evidence_check": true
+ },
+ "context": {
+  "token_budget": 8000,
+  "conversation_max_messages": 20,
+  "conversation_token_budget": 2000,
+  "memories_max": 100,
+  "knowledge_max": 12,
+  "graph_facts_max": 12,
+  "summaries_max": 4,
+  "access_flush_seconds": 2.0,
+  "access_flush_max_ids": 200
+ },
+ "dense_arm": "ensemble",
+ "semantic_graph": true,
+ "reuse_corpus": true,
+ "paid_llm_calls": 0,
+ "answer_accuracy": null,
+ "expected_questions": 1986,
+ "limitations": [
+  "Exact source-ID coverage; fragments count as source presence, not full answers.",
+  "Transitive source lineage is reported separately; ancestry does not prove answer support.",
+  "Not generated-answer accuracy or adversarial abstention accuracy.",
+  "Sequential context-builder latency; PostgreSQL and remote Qdrant included, HTTP excluded.",
+  "In-process authorization/cache and lexical NLI; not full production load latency."
+ ],
+ "corpora": [
+  {
+   "conversation": 0,
+   "tenant": "bench_conv_0",
+   "reused": true,
+   "canonical_memories": 559,
+   "observed_turns": 419,
+   "directly_represented_turns": 414,
+   "annotated_answerable_questions": 150,
+   "all_gold_sources_present": 150,
+   "missing_source_ids": [
+    "D10:15",
+    "D15:18",
+    "D15:22",
+    "D15:27",
+    "D15:6"
+   ]
+  },
+  {
+   "conversation": 1,
+   "tenant": "bench_conv_1",
+   "reused": true,
+   "canonical_memories": 447,
+   "observed_turns": 369,
+   "directly_represented_turns": 361,
+   "annotated_answerable_questions": 81,
+   "all_gold_sources_present": 81,
+   "missing_source_ids": [
+    "D12:17",
+    "D13:14",
+    "D13:19",
+    "D15:4",
+    "D16:4",
+    "D17:21",
+    "D5:14",
+    "D7:1"
+   ]
+  },
+  {
+   "conversation": 2,
+   "tenant": "bench_conv_2",
+   "reused": true,
+   "canonical_memories": 846,
+   "observed_turns": 663,
+   "directly_represented_turns": 661,
+   "annotated_answerable_questions": 152,
+   "all_gold_sources_present": 152,
+   "missing_source_ids": [
+    "D21:11",
+    "D27:7"
+   ]
+  },
+  {
+   "conversation": 3,
+   "tenant": "bench_conv_3",
+   "reused": true,
+   "canonical_memories": 770,
+   "observed_turns": 629,
+   "directly_represented_turns": 622,
+   "annotated_answerable_questions": 199,
+   "all_gold_sources_present": 196,
+   "missing_source_ids": [
+    "D14:21",
+    "D23:25",
+    "D25:1",
+    "D26:10",
+    "D27:24",
+    "D28:24",
+    "D7:11"
+   ]
+  },
+  {
+   "conversation": 4,
+   "tenant": "bench_conv_4",
+   "reused": true,
+   "canonical_memories": 869,
+   "observed_turns": 680,
+   "directly_represented_turns": 660,
+   "annotated_answerable_questions": 178,
+   "all_gold_sources_present": 178,
+   "missing_source_ids": [
+    "D11:21",
+    "D12:16",
+    "D12:19",
+    "D14:15",
+    "D14:19",
+    "D15:28",
+    "D15:8",
+    "D17:15",
+    "D18:12",
+    "D1:10",
+    "D1:6",
+    "D20:18",
+    "D25:11",
+    "D25:13",
+    "D26:22",
+    "D26:5",
+    "D2:12",
+    "D3:10",
+    "D3:12",
+    "D3:20"
+   ]
+  },
+  {
+   "conversation": 5,
+   "tenant": "bench_conv_5",
+   "reused": true,
+   "canonical_memories": 844,
+   "observed_turns": 675,
+   "directly_represented_turns": 669,
+   "annotated_answerable_questions": 123,
+   "all_gold_sources_present": 122,
+   "missing_source_ids": [
+    "D18:20",
+    "D18:3",
+    "D20:33",
+    "D23:26",
+    "D26:4",
+    "D4:16"
+   ]
+  },
+  {
+   "conversation": 6,
+   "tenant": "bench_conv_6",
+   "reused": true,
+   "canonical_memories": 830,
+   "observed_turns": 689,
+   "directly_represented_turns": 659,
+   "annotated_answerable_questions": 150,
+   "all_gold_sources_present": 148,
+   "missing_source_ids": [
+    "D13:9",
+    "D14:16",
+    "D14:7",
+    "D14:9",
+    "D15:5",
+    "D16:12",
+    "D18:15",
+    "D1:11",
+    "D1:19",
+    "D1:32",
+    "D21:11",
+    "D21:14",
+    "D21:5",
+    "D23:7",
+    "D23:9",
+    "D24:16",
+    "D28:20",
+    "D28:29",
+    "D29:11",
+    "D31:12",
+    "D4:11",
+    "D4:7",
+    "D6:10",
+    "D6:16",
+    "D7:16",
+    "D7:9",
+    "D8:33",
+    "D8:9",
+    "D9:13",
+    "D9:20"
+   ]
+  },
+  {
+   "conversation": 7,
+   "tenant": "bench_conv_7",
+   "reused": true,
+   "canonical_memories": 753,
+   "observed_turns": 681,
+   "directly_represented_turns": 611,
+   "annotated_answerable_questions": 191,
+   "all_gold_sources_present": 190,
+   "missing_source_ids": [
+    "D10:3",
+    "D10:7",
+    "D13:10",
+    "D13:12",
+    "D13:18",
+    "D13:23",
+    "D13:4",
+    "D13:6",
+    "D13:8",
+    "D14:11",
+    "D14:14",
+    "D14:16",
+    "D14:9",
+    "D15:7",
+    "D17:9",
+    "D19:13",
+    "D19:14",
+    "D19:4",
+    "D1:12",
+    "D1:14",
+    "D1:4",
+    "D20:18",
+    "D20:24",
+    "D20:3",
+    "D20:5",
+    "D21:17",
+    "D21:5",
+    "D22:22",
+    "D22:28",
+    "D22:7",
+    "D23:21",
+    "D23:24",
+    "D23:28",
+    "D23:5",
+    "D24:13",
+    "D25:11",
+    "D25:14",
+    "D26:5",
+    "D27:4",
+    "D28:12",
+    "D28:25",
+    "D28:27",
+    "D29:13",
+    "D29:15",
+    "D29:17",
+    "D29:20",
+    "D29:29",
+    "D2:10",
+    "D2:12",
+    "D2:18",
+    "D2:27",
+    "D2:29",
+    "D2:6",
+    "D2:8",
+    "D30:9",
+    "D3:10",
+    "D3:5",
+    "D4:15",
+    "D4:17",
+    "D4:31",
+    "D4:37",
+    "D4:41",
+    "D4:8",
+    "D7:12",
+    "D7:17",
+    "D7:19",
+    "D8:13",
+    "D8:3",
+    "D8:7",
+    "D9:11"
+   ]
+  },
+  {
+   "conversation": 8,
+   "tenant": "bench_conv_8",
+   "reused": true,
+   "canonical_memories": 629,
+   "observed_turns": 509,
+   "directly_represented_turns": 500,
+   "annotated_answerable_questions": 156,
+   "all_gold_sources_present": 155,
+   "missing_source_ids": [
+    "D13:13",
+    "D1:10",
+    "D20:16",
+    "D22:21",
+    "D22:3",
+    "D24:13",
+    "D24:4",
+    "D5:12",
+    "D8:13"
+   ]
+  },
+  {
+   "conversation": 9,
+   "tenant": "bench_conv_9",
+   "reused": true,
+   "canonical_memories": 737,
+   "observed_turns": 568,
+   "directly_represented_turns": 563,
+   "annotated_answerable_questions": 156,
+   "all_gold_sources_present": 154,
+   "missing_source_ids": [
+    "D10:1",
+    "D25:14",
+    "D25:3",
+    "D28:19",
+    "D4:16"
+   ]
+  }
+ ],
+ "summary": {
+  "temporal": {
+   "questions": 321,
+   "at": {
+    "10": {
+     "recall": 0.8522845275181723,
+     "complete": 0.8286604361370716
+    },
+    "20": {
+     "recall": 0.8974558670820353,
+     "complete": 0.8785046728971962
+    },
+    "50": {
+     "recall": 0.9405503634475598,
+     "complete": 0.9314641744548287
+    },
+    "100": {
+     "recall": 0.9582035306334371,
+     "complete": 0.9470404984423676
+    }
+   }
+  },
+  "all_answerable": {
+   "questions": 1536,
+   "at": {
+    "10": {
+     "recall": 0.7997870358707179,
+     "complete": 0.736328125
+    },
+    "20": {
+     "recall": 0.8548717663525737,
+     "complete": 0.7955729166666666
+    },
+    "50": {
+     "recall": 0.9103566439139618,
+     "complete": 0.8587239583333334
+    },
+    "100": {
+     "recall": 0.9362895708813497,
+     "complete": 0.89453125
+    }
+   }
+  },
+  "open_domain": {
+   "questions": 92,
+   "at": {
+    "10": {
+     "recall": 0.5106031543052003,
+     "complete": 0.43478260869565216
+    },
+    "20": {
+     "recall": 0.5983056265984655,
+     "complete": 0.5108695652173914
+    },
+    "50": {
+     "recall": 0.6541211346198559,
+     "complete": 0.5434782608695652
+    },
+    "100": {
+     "recall": 0.7251569402464544,
+     "complete": 0.6086956521739131
+    }
+   }
+  },
+  "multi_hop": {
+   "questions": 282,
+   "at": {
+    "10": {
+     "recall": 0.5712082632435376,
+     "complete": 0.3120567375886525
+    },
+    "20": {
+     "recall": 0.6623720406755121,
+     "complete": 0.41843971631205673
+    },
+    "50": {
+     "recall": 0.7885768108752431,
+     "complete": 0.5709219858156028
+    },
+    "100": {
+     "recall": 0.8487340746019357,
+     "complete": 0.6808510638297872
+    }
+   }
+  },
+  "single_hop": {
+   "questions": 841,
+   "at": {
+    "10": {
+     "recall": 0.8880301228695997,
+     "complete": 0.8763376932223543
+    },
+    "20": {
+     "recall": 0.9312326595323027,
+     "complete": 0.9215219976218787
+    },
+    "50": {
+     "recall": 0.9676971858898138,
+     "complete": 0.9619500594530321
+    },
+    "100": {
+     "recall": 0.9803804994054697,
+     "complete": 0.9774078478002378
+    }
+   }
+  }
+ },
+ "lineage_summary": {
+  "temporal": {
+   "questions": 321,
+   "at": {
+    "10": {
+     "recall": 0.8522845275181723,
+     "complete": 0.8286604361370716
+    },
+    "20": {
+     "recall": 0.8974558670820353,
+     "complete": 0.8785046728971962
+    },
+    "50": {
+     "recall": 0.9405503634475598,
+     "complete": 0.9314641744548287
+    },
+    "100": {
+     "recall": 0.9582035306334371,
+     "complete": 0.9470404984423676
+    }
+   }
+  },
+  "all_answerable": {
+   "questions": 1536,
+   "at": {
+    "10": {
+     "recall": 0.7997870358707179,
+     "complete": 0.736328125
+    },
+    "20": {
+     "recall": 0.8548717663525737,
+     "complete": 0.7955729166666666
+    },
+    "50": {
+     "recall": 0.9103566439139618,
+     "complete": 0.8587239583333334
+    },
+    "100": {
+     "recall": 0.9362895708813497,
+     "complete": 0.89453125
+    }
+   }
+  },
+  "open_domain": {
+   "questions": 92,
+   "at": {
+    "10": {
+     "recall": 0.5106031543052003,
+     "complete": 0.43478260869565216
+    },
+    "20": {
+     "recall": 0.5983056265984655,
+     "complete": 0.5108695652173914
+    },
+    "50": {
+     "recall": 0.6541211346198559,
+     "complete": 0.5434782608695652
+    },
+    "100": {
+     "recall": 0.7251569402464544,
+     "complete": 0.6086956521739131
+    }
+   }
+  },
+  "multi_hop": {
+   "questions": 282,
+   "at": {
+    "10": {
+     "recall": 0.5712082632435376,
+     "complete": 0.3120567375886525
+    },
+    "20": {
+     "recall": 0.6623720406755121,
+     "complete": 0.41843971631205673
+    },
+    "50": {
+     "recall": 0.7885768108752431,
+     "complete": 0.5709219858156028
+    },
+    "100": {
+     "recall": 0.8487340746019357,
+     "complete": 0.6808510638297872
+    }
+   }
+  },
+  "single_hop": {
+   "questions": 841,
+   "at": {
+    "10": {
+     "recall": 0.8880301228695997,
+     "complete": 0.8763376932223543
+    },
+    "20": {
+     "recall": 0.9312326595323027,
+     "complete": 0.9215219976218787
+    },
+    "50": {
+     "recall": 0.9676971858898138,
+     "complete": 0.9619500594530321
+    },
+    "100": {
+     "recall": 0.9803804994054697,
+     "complete": 0.9774078478002378
+    }
+   }
+  }
+ },
+ "completed_questions": 1986,
+ "complete": true,
+ "failed_questions": 0,
+ "latency_ms": {
+  "p50": 129.64,
+  "p95": 278.82,
+  "p99": 315.65,
+  "max": 525.44,
+  "samples": 1986
+ }
+}

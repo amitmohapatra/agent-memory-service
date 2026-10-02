@@ -52,14 +52,32 @@ context build p50 151 ms, p95 336 ms (192 / 345 with the learned ranking).
 That is lower than the 0.829 the learned ranking showed on the corpus it was fitted on, and
 it is the number that carries to a corpus nobody fitted it on.
 
+### ColBERT over the context key (mk3)
+
+The late-interaction arm over the memory's context key too, fused at 2, with the session rule
+at 0.3 (both chosen on LongMemEval; offline LoCoMo 0.790 -> 0.807, LongMemEval 0.888 ->
+0.898). Through the service after a reindex (7,787 memories, no failures;
+`benchmark/results/phase12/locomo_mk3.summary.json`): LoCoMo recall@10 **0.800** (single-hop
+0.888, temporal 0.852, multi-hop 0.571, open-domain 0.511), @20 0.855, @50 0.910; context
+build p50 130 ms, p95 279 ms on an otherwise idle host. Its cost, measured on the same host:
+
+| | measured |
+|---|---|
+| store time per memory search (`search_arms`, 200 LoCoMo questions, with / without the arm) | p50 71.7 / 66.7 ms, p95 91.3 / 82.1 ms: **+5 ms p50, +9 ms p95** |
+| query encoding | none: the query's token vectors are already computed for the first late arm |
+| ingest, one more late encode per memory (399 context keys) | **30 ms CPU**, 17 ms wall per memory |
+| disk, the `colbert_ctx` vector storage | 169.9 MB for 7,787 memories: **~22 KB per memory** (half precision, allocation included) |
+
+A third key (the turn read with the turns either side) was measured and is not shipped: its
+late arm lifted LoCoMo (0.807 -> 0.820 at x4) and cost LongMemEval (0.898 -> 0.864); at the
+only weight that cost LongMemEval nothing (x1) it read +0.004.
+
 ## Consequences
 
-- No reindex: the arms and the payload are unchanged; `preceding_source_id` is no longer
-  read at query time (the projection drops it) but is still written.
+- The context key's late vectors change the key layout to `mk3`: a reindex (`make reindex`).
+  `preceding_source_id` is no longer read at query time (the projection drops it) but is
+  still written.
 - The coefficients, the two first stages and `memory_pool_k` are gone; there is nothing to
   refit.
-- Offline, two more keys read the same way add to it without fitting: the late-interaction
-  arm over the memory's context key, and a window key (the turn read with the turns either
-  side). They need new vectors and a reindex and are measured before they ship.
 - LoCoMo's remaining misses are multi-hop and open-domain questions whose evidence is spread
   over sessions. No ranking of single turns joins them; facts written at ingest can.
