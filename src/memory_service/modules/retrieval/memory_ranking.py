@@ -1,4 +1,4 @@
-"""The memories' ranking: reciprocal-rank fusion of every arm, and three rules (ADR 0026).
+"""The memories' ranking: reciprocal-rank fusion of every arm, and four rules (ADR 0026).
 
 A memory search reads eight ranked lists from the store in one round trip - BM25 and both
 dense spaces over each of the two keys (the memory alone, and the memory read with the turn
@@ -8,17 +8,21 @@ arms, ``LATE`` over the memory's own key and ``LATE_CONTEXT`` over its context k
 token-level matching is what separates the right turn from its paraphrases, and both corpora
 it was checked on chose those weights on their own.
 
-Then three rules, each a fact about conversations rather than about one benchmark:
+Then four rules, each a fact about conversations rather than about one benchmark:
 
 * **session** - evidence comes in runs: every memory gains ``SESSION`` times the best fused
   score in its session (the day it was said on);
 * **speaker** - a question that names a person is about that person's memories;
-* **time** - a "when" question is answered by a memory that names a time.
+* **time** - a "when" question is answered by a memory that names a time;
+* **period** - a question that names a period ("in June", "on 1 February, 2023", "last
+  month") is answered by a memory said in it or about a day in it (``periods``).
 
 Nothing here is fitted. ``K``, ``LATE``, ``LATE_CONTEXT`` and ``SESSION`` were chosen on
 LongMemEval and scored on LoCoMo, and the other way round, and kept only where both
 agreed; ``SPEAKER`` and ``TIME`` are round values neither corpus tuned (LongMemEval names
-no speakers to test one on). The learned ranking this replaces (ADR 0025) read 0.841 on
+no speakers to test one on). ``PERIOD`` is the middle of the range LongMemEval is indifferent
+to (0 to 5; it costs LongMemEval at 8), offline +0.9 on LoCoMo overall and +6.8 on its
+questions that name a period. The learned ranking this replaces (ADR 0025) read 0.841 on
 LoCoMo, the corpus it was fitted on, and 0.852 on LongMemEval, which it had not seen, where
 plain fusion reads 0.868.
 
@@ -30,7 +34,9 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 
+from memory_service.modules.retrieval import periods
 from memory_service.ports.search import SearchHit, VectorName
 
 #: the reciprocal-rank constant: a rank-1 hit scores 1/11, a rank-10 one 1/20
@@ -46,6 +52,8 @@ SESSION_DEPTH = 50
 #: what the speaker and time rules add, in units of a rank-1 hit in one arm
 SPEAKER = 1.0
 TIME = 1.0
+#: what a memory in the period the question names gains (``periods``), in the same units
+PERIOD = 3.0
 
 #: "when ...", "what year ...", "how long ...", "before"/"after": a question about time
 WHEN = re.compile(
@@ -103,22 +111,27 @@ def fused(pool: ArmPool) -> dict[str, float]:
     return out
 
 
-def ranked(pool: ArmPool, query: str) -> list[tuple[str, float]]:
-    """Every record the arms found, best first, with its final score."""
+def ranked(pool: ArmPool, query: str, now: date | None = None) -> list[tuple[str, float]]:
+    """Every record the arms found, best first, with its final score. ``now`` anchors a
+    question's relative periods ("last month"); today when not given."""
     base = fused(pool)
     unit = 1.0 / (K + 1)
     best = _session_best(pool, base)
     named = _named(pool, query)
     when = bool(WHEN.search(query))
+    named_periods = periods.query_periods(query, now or datetime.now(UTC).date())
     scores = {}
     for rid, score in base.items():
+        payload = pool.hits[rid].payload
         speaks = bool(named) and pool.speaker(rid) in named
-        timed = when and bool(TIMED.search(str(pool.hits[rid].payload.get("text", ""))))
+        timed = when and bool(TIMED.search(str(payload.get("text", ""))))
+        dated = bool(named_periods) and periods.within(named_periods, periods.memory_days(payload))
         scores[rid] = (
             score
             + SESSION * best.get(pool.session(rid), 0.0)
             + (SPEAKER * unit if speaks else 0.0)
             + (TIME * unit if timed else 0.0)
+            + (PERIOD * unit if dated else 0.0)
         )
     return sorted(scores.items(), key=lambda item: (-item[1], item[0]))
 

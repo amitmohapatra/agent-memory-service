@@ -66,3 +66,18 @@ def test_a_memory_leading_the_late_arm_outranks_one_leading_a_single_arm() -> No
 def test_the_context_keys_late_arm_fuses_at_late_context() -> None:
     pool = _pool({VectorName.COLBERT_CTX: ["a"]}, HITS)
     assert mr.fused(pool)["a"] == pytest.approx(mr.LATE_CONTEXT / (mr.K + 1))
+
+
+def test_a_memory_in_the_period_the_question_names_is_lifted() -> None:
+    june = _hit("j", day="2023-06-10")
+    told = _hit("t", day="2023-07-02")
+    told.payload["dated_mentions"] = [{"text": "last month", "date": "2023-06-01..2023-06-30"}]
+    hits = {"j": june, "t": told, "x": _hit("x", day="2023-09-01")}
+    pool = _pool({VectorName.BM25: ["x", "j", "t"]}, hits)
+    plain = dict(mr.ranked(pool, "What did Melanie do?"))
+    june_q = dict(mr.ranked(pool, "What did Melanie do in June?"))
+    unit = 1 / (mr.K + 1)
+    # said in June, and said in July about June, are both in the period; September is not
+    assert june_q["j"] - plain["j"] == pytest.approx(mr.PERIOD * unit)
+    assert june_q["t"] - plain["t"] == pytest.approx(mr.PERIOD * unit)
+    assert june_q["x"] == pytest.approx(plain["x"])
