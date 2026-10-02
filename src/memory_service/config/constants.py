@@ -375,7 +375,12 @@ class LLMTuning:
     model: str = "auto"
     #: the cheap model, for the classification-sized uses below
     fast_model: str = "auto"
-    fast_uses: tuple[str, ...] = ("contextual_extraction", "query_expansion", "chunk_context")
+    fast_uses: tuple[str, ...] = (
+        "contextual_extraction",
+        "query_expansion",
+        "chunk_context",
+        "memory_restatement",
+    )
     #: A reasoning model spends its output budget thinking before it emits anything, so too
     #: small a ceiling returns 200 OK with an empty string.
     max_tokens: int = 1024

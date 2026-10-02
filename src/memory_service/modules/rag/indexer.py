@@ -74,7 +74,10 @@ def memory_index_text(m: CanonicalMemory) -> str:
     when = m.temporal.observed_at.date().isoformat()
     subject = (m.subject or "").split(":", 1)[-1].strip()
     who = f" {subject}:" if subject and not subject.startswith(("thr_", "run_")) else ""
-    return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}"
+    # a turn restated to stand on its own is searched with it (ADR 0027); the turn is kept
+    restated = m.system_metadata.get("restatement")
+    tail = f"\n{restated}" if isinstance(restated, str) and restated else ""
+    return f"[{when}]{who} {m.memory_type.value.lower()}: {m.content}{tail}"
 
 
 def memory_context_text(m: CanonicalMemory) -> str:
