@@ -25,6 +25,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.ports.search import VectorName
 
 # ---------------------------------------------------------------------------
@@ -539,6 +540,9 @@ class MemoryIntelligenceSettings(BaseModel):
     #: forty idle days and a never-recalled user fact in about ninety. They can still be
     #: forgotten explicitly (DELETE /v1/memories/{id}) and by tenant retention.
     forgetting_protect_core: bool = True
+    #: the deployment's retail calendar (``RetailSettings``): fiscal phrases in a memory are
+    #: resolved against it at ingest; None resolves calendar dates only
+    fiscal_calendar: FiscalCalendar | None = None
 
 
 MEMORY_INTELLIGENCE = MemoryIntelligenceSettings()
@@ -602,6 +606,9 @@ class RetrievalSettings(BaseModel):
     max_query_chars: int = Field(
         default=2048, ge=64, description="query text beyond this is truncated before retrieval"
     )
+    #: Search a query's retail planning shorthand with its expansion too ("WOS" and "weeks of
+    #: supply"; ``domain.glossary``). Set by ``RetailSettings.glossary``.
+    retail_glossary: bool = False
     exact: bool = True
     bm25: bool = True
     dense: bool = True

@@ -27,6 +27,7 @@ from memory_service.config.constants import (
 )
 from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
+from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -138,11 +139,19 @@ class Tuning:
     llm: LLMTuning
 
     @classmethod
-    def resolve(cls, overrides: Overrides) -> Tuning:
+    def resolve(cls, overrides: Overrides, retail_calendar: str | None = None) -> Tuning:
+        memory_intelligence = overrides.memory_intelligence or constants.MEMORY_INTELLIGENCE
+        retrieval = overrides.retrieval or constants.RETRIEVAL
+        if retail_calendar is not None:
+            # a retailer: its calendar for fiscal phrases, its shorthand for queries
+            memory_intelligence = memory_intelligence.model_copy(
+                update={"fiscal_calendar": parse_calendar(retail_calendar)}
+            )
+            retrieval = retrieval.model_copy(update={"retail_glossary": True})
         return cls(
-            retrieval=overrides.retrieval or constants.RETRIEVAL,
+            retrieval=retrieval,
             context=overrides.context or constants.CONTEXT,
-            memory_intelligence=overrides.memory_intelligence or constants.MEMORY_INTELLIGENCE,
+            memory_intelligence=memory_intelligence,
             documents=overrides.documents or constants.DOCUMENTS,
             graph=overrides.graph or constants.GRAPH,
             archive=overrides.archive or constants.ARCHIVE,
@@ -272,7 +281,7 @@ async def build_container(
         settings=settings,
         version=version,
         overrides=overrides,
-        tuning=Tuning.resolve(overrides),
+        tuning=Tuning.resolve(overrides, settings.retail_calendar),
     )
     await wire_adapters(container)
     return container

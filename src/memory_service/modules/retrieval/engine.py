@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any
 
 from memory_service.config.constants import RetrievalSettings, derived_k
+from memory_service.domain import glossary
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
@@ -966,6 +967,11 @@ class RetrievalEngine:
         specialist only sees Latin-script text, so a Cyrillic or Thai question pays one
         encode, not two. The spaces it does need are encoded concurrently.
         """
+        if self.cfg.retail_glossary:
+            expanded = glossary.expand(query)
+            # vectors cached for the text as asked are not the vectors of its expansion
+            known = known if expanded == query else None
+            query = expanded
         script = detect_script(query)
         late_encoder = self.indexer.late
         late_task = (

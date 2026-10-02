@@ -23,6 +23,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.errors import Conflict, NotFound, ScopeDenied
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.ids import content_hash, new_id
 from memory_service.domain.memory import CanonicalMemory, TemporalState
 from memory_service.domain.observation import ProcessingHints
@@ -74,8 +75,12 @@ def _stated(
 
 
 class MemoryService:
-    def __init__(self, authz: AuthorizationService) -> None:
+    def __init__(
+        self, authz: AuthorizationService, *, fiscal: FiscalCalendar | None = None
+    ) -> None:
         self.authz = authz
+        #: the deployment's retail calendar, which a stated memory's fiscal phrases resolve in
+        self.fiscal = fiscal
 
     async def remember(
         self,
@@ -116,7 +121,7 @@ class MemoryService:
             provider="statement",
             category=STATED_CATEGORY,
         )
-        memory = build_memory(candidate, ctx, now=now).model_copy(
+        memory = build_memory(candidate, ctx, now=now, fiscal=self.fiscal).model_copy(
             update={"memory_id": memory_id, "custom_metadata": custom_metadata or {}}
         )
         scope_key = memory.scope.key()
