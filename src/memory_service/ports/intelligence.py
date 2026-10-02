@@ -65,6 +65,11 @@ class MemoryCandidate(BaseModel):
         description="the message said just before this one in the same conversation: its "
         "source_id, speaker and text (set by the pipeline, never by a provider)",
     )
+    restatement: str | None = Field(
+        default=None,
+        description="a verbatim turn restated to stand on its own, appended to its index key "
+        "(set by the pipeline from the model, never by a provider)",
+    )
 
 
 class ContextualExtractor(Protocol):

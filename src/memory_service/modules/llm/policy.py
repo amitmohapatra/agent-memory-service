@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from memory_service.config.constants import LLM, LLMTuning
-from memory_service.config.settings import ALL_LLM_USES
+from memory_service.config.settings import ALL_LLM_USES, OPT_IN_LLM_USES
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Document
 from memory_service.ports.credentials import ModelIdentity
@@ -28,9 +28,11 @@ class ModelAccess:
     models: Mapping[str, str] = field(default_factory=dict)
 
 
-#: No policy row at any level: every use, and reads assisted. Without a key this allows
-#: nothing in automatic mode, because nothing can pay (``LLMAssist.wants``).
-DEFAULT_ACCESS = ModelAccess(uses=frozenset(ALL_LLM_USES), read_assist=True, has_key=False)
+#: No policy row at any level: every use but the opt-in ones, and reads assisted. Without a
+#: key this allows nothing in automatic mode, because nothing can pay (``LLMAssist.wants``).
+DEFAULT_ACCESS = ModelAccess(
+    uses=frozenset(ALL_LLM_USES) - OPT_IN_LLM_USES, read_assist=True, has_key=False
+)
 
 
 @dataclass(frozen=True)

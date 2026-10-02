@@ -199,6 +199,9 @@ LLMUse = Literal[
     "memory_connections",
     "query_expansion",
     "chunk_context",
+    #: Restate a conversation turn so it stands on its own, appended to its index key
+    #: (``modules.memory.restatement``, ADR 0027).
+    "memory_restatement",
     "grounding_judge",
     #: Distil a stored procedure's title and strategy from the runs that followed it (the
     #: tool learning job); the miner's own rendering is kept without it.
@@ -206,6 +209,9 @@ LLMUse = Literal[
 ]
 #: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)
+#: Uses a tenant turns on in its policy rather than gets by default: each costs a model call
+#: per conversation message, which registering a key must not start on its own.
+OPT_IN_LLM_USES: frozenset[LLMUse] = frozenset({"memory_restatement"})
 
 
 class AgentCredentialSettings(BaseModel):

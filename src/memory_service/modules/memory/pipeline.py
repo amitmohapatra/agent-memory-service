@@ -33,6 +33,7 @@ from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.observability.logging import get_logger
@@ -186,6 +187,7 @@ def build_memory(
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": dated,
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
+            **({"restatement": candidate.restatement} if candidate.restatement else {}),
         },
         created_at=now,
         updated_at=now,
@@ -259,6 +261,7 @@ class ObservationPipeline:
                     candidates = [
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
+                candidates = await self._restated(observation, candidates, preceding)
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -384,6 +387,31 @@ class ObservationPipeline:
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
         return affected
+
+    async def _restated(
+        self,
+        observation: Observation,
+        candidates: list[MemoryCandidate],
+        preceding: dict[str, str] | None,
+    ) -> list[MemoryCandidate]:
+        """The verbatim turn among ``candidates`` with its restatement, when the model may
+        write one (``memory_restatement``); every other candidate as it was."""
+        turns = [c for c in candidates if c.category == "verbatim_turn"]
+        if not turns or observation.kind is not ObservationKind.MESSAGE:
+            return candidates
+        said = await restate(
+            self.assist,
+            text=observation.content,
+            speaker=observation.user_id or observation.agent_id or "",
+            said_at=observation.occurred_at,
+            before=preceding,
+        )
+        if said is None:
+            return candidates
+        return [
+            c.model_copy(update={"restatement": said}) if c.category == "verbatim_turn" else c
+            for c in candidates
+        ]
 
     async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
         """The conversation's previous message, which the indexer puts beside a verbatim turn

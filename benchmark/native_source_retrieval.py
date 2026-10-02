@@ -28,7 +28,7 @@ import memory_service
 from benchmark.arms import dump_arms
 from benchmark.common import dedicated_database, isolated_qdrant, provenance, reset_store
 from benchmark.corpus import CorpusKey, CorpusLedger, conversation_tenant, ensure_conversation
-from benchmark.env import BENCH, bench_overrides, bench_retrieval
+from benchmark.env import BENCH, JUDGE_USES, bench_overrides, bench_retrieval, pin_model_policy
 from benchmark.harness import stats
 from benchmark.locomo import (
     CATEGORY_NAMES,
@@ -187,9 +187,11 @@ def refuse_silent_reingest(ledger: CorpusLedger, key: CorpusKey, *, allowed: boo
 
 def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, Any]:
     """Everything that shapes the corpus at ingest, for the corpus ledger's key. The model is
-    never reachable here (``run``), so no use can shape the corpus."""
+    reachable only for the uses ``--ingest-uses`` names (``run``), and they are in the key, so
+    a corpus written with them is never reused as one written without."""
+    uses = sorted(args.ingest_uses or [])
     return {
-        "llm": {"enabled": str(settings.llm.enabled), "model": None, "uses": []},
+        "llm": {"enabled": str(settings.llm.enabled), "model": None, "uses": uses},
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
     }
@@ -198,8 +200,14 @@ def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, An
 async def run(args) -> None:
     settings = _settings()
     database = _guard(settings)
-    # no environment can authorize model calls: the gateway is not configured at all
-    settings = settings.model_copy(update={"bifrost_url": None, "bifrost_virtual_key": None})
+    if args.ingest_uses:
+        # the model writes only what the named ingest uses write, through the gateway
+        # (BENCH_LLM=on, BIFROST_URL, BIFROST_VIRTUAL_KEY); every tenant is pinned to them
+        if not settings.llm.enabled:
+            raise SystemExit("--ingest-uses needs BENCH_LLM=on and BIFROST_URL set")
+    else:
+        # no environment can authorize model calls: the gateway is not configured at all
+        settings = settings.model_copy(update={"bifrost_url": None, "bifrost_virtual_key": None})
     base_overrides = bench_overrides()
     overrides = replace(
         base_overrides,
@@ -272,6 +280,8 @@ async def run(args) -> None:
             )
             print(f"ingesting conversation {number + 1}/{len(dataset)}", flush=True)
             if args.reuse_corpus:
+                if args.ingest_uses:
+                    await pin_model_policy(container, tenant, (*JUDGE_USES, *args.ingest_uses))
                 _, source_ids, reused = await ensure_conversation(
                     container,
                     ctx,
@@ -284,6 +294,8 @@ async def run(args) -> None:
             else:
                 await reset_store(container, TENANT)
                 source_ids = {}
+                if args.ingest_uses:
+                    await pin_model_policy(container, tenant, (*JUDGE_USES, *args.ingest_uses))
                 await _ingest_conversation(
                     container, ctx, conversation["conversation"], source_ids=source_ids
                 )
@@ -403,6 +415,13 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--conversations", type=int)
+    parser.add_argument(
+        "--ingest-uses",
+        type=lambda raw: [u for u in raw.split(",") if u],
+        default=[],
+        help="model uses allowed at ingest, comma separated (e.g. memory_restatement); needs "
+        "BENCH_LLM=on and the gateway, and is part of the corpus key",
+    )
     parser.add_argument("--semantic-graph", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--reuse-corpus",

@@ -37,6 +37,7 @@ is not finished).
 | 0024 | The multilingual runtime and its accuracy programme (Memory Service M2 + M4) | **landing with M2/M4** — the record and `docs/MULTILINGUAL-RUNTIME.md` arrive with that work |
 | [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
+| [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; off unless a model is configured |
 
 ## Where the numbers behind these decisions are
 
