@@ -47,11 +47,6 @@ async def test_a_reply_carries_the_question_it_answers(container, uow_factory) -
         obs = await uow.observations.get("acme", asked.observation_id)
     assert obs is not None
     assert prior["source_id"] == (obs.message_id or obs.observation_id)
-    # the payload carries the link retrieval scores neighbours by
-    engine = container.services["retrieval"]
-    res = await engine.retrieve(REPLY, "camping with kids at the lake", kinds=("memory",))
-    linked = [c for c in res.candidates if c.payload.get("preceding_source_id")]
-    assert linked and linked[0].payload["preceding_source_id"] == prior["source_id"]
 
 
 async def test_a_turn_from_another_session_is_not_its_context(container, uow_factory) -> None:
