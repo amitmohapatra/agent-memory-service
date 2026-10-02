@@ -682,7 +682,9 @@ class RetrievalEngine:
         pool = memory_ranking.ArmPool.of(arms)
         if not pool.hits:
             return []
-        ranked = memory_ranking.ranked(pool, question or search_text)
+        # a question searched as of a moment reads "last month" from that moment
+        anchor = at.as_of.date() if at is not None and at.as_of is not None else None
+        ranked = memory_ranking.ranked(pool, question or search_text, anchor)
         diagnostics["memory_fusion"] = {
             "arms": {name.value: len(hits) for name, hits in arms.items()},
             "pool": len(pool.hits),
