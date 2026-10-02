@@ -100,34 +100,44 @@
   "noise_entities": 0,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "f988c26c25facf8671cb1adb4cb5add93ad6da26",
+    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
+    "host_load": {
+      "load_per_core": 1.57,
+      "loadavg_15m": 4.66,
+      "loadavg_1m": 6.3,
+      "loadavg_5m": 5.5
+    },
     "llm": {
-      "enabled": "auto",
-      "fast_model": "auto",
-      "gateway_version": "<!doctype html>\n<html lang=\"en\" suppressHydrationWarning>\n\t<head>\n\t\t<meta charse",
-      "model": "auto",
-      "provider": "bifrost",
-      "uses": []
+      "enabled": false,
+      "provider": "disabled"
     },
     "machine": "x86_64",
-    "memory_gb": null,
-    "models": {},
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
     "packages": {
       "docling": "not-installed",
       "fastapi": "0.141.1",
-      "fastembed": "not-installed",
-      "onnxruntime": "not-installed",
+      "onnxruntime": "1.30.0",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
-      "sentence-transformers": "not-installed",
+      "sentence-transformers": "5.3.0",
       "sqlalchemy": "2.0.53",
-      "torch": "not-installed",
-      "transformers": "not-installed",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
       "zstandard": "0.25.0"
     },
-    "platform": "macOS-12.7.6-x86_64-i386-64bit",
-    "python": "3.12.14",
-    "timestamp": "2026-09-27T19:51:39.077814+00:00"
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "timestamp": "2026-10-02T09:01:15.728070+00:00"
   },
   "provider": "native",
   "query_hit_rate": 1.0
