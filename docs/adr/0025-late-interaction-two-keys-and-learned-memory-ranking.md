@@ -1,6 +1,7 @@
 # ADR 0025: Late interaction, two keys per memory, and a learned memory ranking
 
-Date: 2026-10-01. Status: accepted. Supersedes the `colbert` part of ADR 0012.
+Date: 2026-10-01. Status: accepted. Supersedes the `colbert` part of ADR 0012. Decision 3
+(the learned ranking) is superseded by ADR 0026: its coefficients did not transfer between corpora.
 Results: `docs/PHASE11-RESULTS-2026-10-01.md`.
 
 ## Context

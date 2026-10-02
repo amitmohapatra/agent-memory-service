@@ -27,7 +27,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
-from memory_service.modules.retrieval import learned_fusion
+from memory_service.modules.retrieval import memory_ranking
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
@@ -660,9 +660,9 @@ class RetrievalEngine:
         observed: ObservedRange | None,
         at: PointInTime | None,
     ) -> list[Candidate]:
-        """The memories ranked by ``learned_fusion``: every arm in one round trip, two first
-        stages, one learned score over their pooled heads (ADR 0025). No model call beyond
-        the query's encoders, so a memory search costs what the arms cost."""
+        """The memories ranked by ``memory_ranking``: every arm in one round trip, fused by
+        reciprocal rank, then the session, speaker and time rules (ADR 0026). No model call
+        beyond the query's encoders, so a memory search costs what the arms cost."""
         collection, flt = self._scope("memory", visibility, None, observed, at, None)
         sparse = {}
         if encoded.sparse is not None:
@@ -679,17 +679,13 @@ class RetrievalEngine:
                 flt=flt,
                 limit=self.cfg.memory_arm_depth,
             )
-        pool = learned_fusion.ArmPool.of(arms)
+        pool = memory_ranking.ArmPool.of(arms)
         if not pool.hits:
             return []
-        a = learned_fusion.first_stage(pool, learned_fusion.FIRST_A)
-        b = learned_fusion.first_stage(pool, learned_fusion.FIRST_B)
-        chosen = learned_fusion.scoring_pool(a, b, self.cfg.memory_pool_k)
-        rows = learned_fusion.features(pool, chosen, a=a, b=b, query=question or search_text)
-        ranked = learned_fusion.order(pool, chosen, rows, b)
+        ranked = memory_ranking.ranked(pool, question or search_text)
         diagnostics["memory_fusion"] = {
             "arms": {name.value: len(hits) for name, hits in arms.items()},
-            "pool": len(chosen),
+            "pool": len(pool.hits),
         }
         depth = max(self.cfg.fused_k, derived_k(self.cfg.memory_recall_k))
         return [

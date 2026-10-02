@@ -43,7 +43,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "memory_service"
 #: Every file that reads a payload off a search hit. The projection is derived from these and
 #: from nothing else, so a new reader either adds its key here or gets None in production.
 READERS = (
-    "modules/retrieval/learned_fusion.py",
+    "modules/retrieval/memory_ranking.py",
     "modules/retrieval/engine.py",
     "modules/context/builder.py",
     "modules/context/evidence.py",

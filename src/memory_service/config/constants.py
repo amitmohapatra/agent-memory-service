@@ -523,7 +523,7 @@ class MemoryIntelligenceSettings(BaseModel):
     #: Offline LoCoMo A/B (turn-level BM25 + one 384-d dense encoder, weighted RRF; the
     #: service-faithful baseline reads 0.664): recall@10 +0.047 on its own, 183 questions
     #: better and 114 worse. Since ADR 0025 it is the memory's second key, beside its own
-    #: text, and the turn it names is its neighbour in the learned fusion's lift.
+    #: text.
     #: Changing it changes what is indexed: ``make reindex``.
     index_preceding_turn: bool = True
     preceding_turn_max_chars: int = Field(default=500, ge=0)
@@ -635,7 +635,7 @@ class RetrievalSettings(BaseModel):
     #: ``colbert`` is the late-interaction arm (ADR 0025): MaxSim over the union of the
     #: other arms' candidates, at 2.0. Offline over SciFact's 300 questions the fusion reads
     #: nDCG@10 0.746 -> 0.759 and recall@10 0.872 -> 0.883 with it. These weights serve the
-    #: documents and the episodes; the memories are ranked by the learned fusion.
+    #: documents and the episodes; the memories are ranked by ``memory_ranking``.
     hybrid_weights: dict[VectorName, float] | None = Field(
         default_factory=lambda: {
             VectorName.BM25: 2.0,
@@ -644,13 +644,9 @@ class RetrievalSettings(BaseModel):
             VectorName.COLBERT: 2.0,
         }
     )
-    #: The memories are ranked by ``modules/retrieval/learned_fusion.py`` (ADR 0025): each
+    #: The memories are ranked by ``modules/retrieval/memory_ranking.py`` (ADR 0026): each
     #: arm's own top this-many, read unfused in one round trip.
     memory_arm_depth: int = Field(default=100, ge=10, le=500)
-    #: The top this-many of each of its two first stages are what the learned score orders
-    #: (``learned_fusion``); the rest follow in first-stage order. The coefficients are
-    #: fitted at this value, so it moves only with a refit.
-    memory_pool_k: int = Field(default=30, ge=1, le=100)
     #: Derived from ``final_k``; see ``derived_k``. Set explicitly only to pin a depth that
     #: is not the shipped one (``benchmark/env.py`` pins the judged 200/200/100).
     prefetch_k: int = Field(

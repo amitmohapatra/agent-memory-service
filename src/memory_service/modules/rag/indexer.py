@@ -533,7 +533,7 @@ class Indexer:
                             ],
                             "text": m.content[:2000],
                             # the conversation's previous turn, which retrieval reads to
-                            # score a turn with its neighbours (learned_fusion's lift)
+                            # read a turn with its neighbours
                             **(
                                 {"preceding_source_id": prior_source}
                                 if (
