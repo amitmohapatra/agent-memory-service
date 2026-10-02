@@ -45,7 +45,7 @@ base 0.769 / 0.883; + session 0.782 / 0.888; + speaker 0.778 / 0.883; + time 0.7
 ## Evidence
 
 Through the service, LoCoMo, all ten conversations, 1,536 answerable questions, the corpus
-re-used from Phase 11 (`/var/tmp/p12/locomo_general.json`): recall@10 **0.778** (single-hop
+re-used from Phase 11 (`benchmark/results/phase12/locomo_general.summary.json`): recall@10 **0.778** (single-hop
 0.853, temporal 0.843, multi-hop 0.562, open-domain 0.537), @20 0.847, @50 0.907, @100 0.935;
 context build p50 151 ms, p95 336 ms (192 / 345 with the learned ranking).
 
