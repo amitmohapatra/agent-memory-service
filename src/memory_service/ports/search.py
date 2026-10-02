@@ -35,6 +35,8 @@ class VectorName(StrEnum):
     DENSE_EN_CTX = "dense_en_ctx"
     DENSE_ML_CTX = "dense_ml_ctx"
     BM25_CTX = "bm25_ctx"
+    #: the late-interaction vectors of the contextual key (ADR 0026)
+    COLBERT_CTX = "colbert_ctx"
 
     @property
     def context(self) -> VectorName:
@@ -56,6 +58,7 @@ class Retriever(StrEnum):
     DENSE_EN_CTX = "dense_en_ctx"
     DENSE_ML_CTX = "dense_ml_ctx"
     BM25_CTX = "bm25_ctx"
+    COLBERT_CTX = "colbert_ctx"
     EXACT = "exact"
     FUSION = "fusion"
 
@@ -89,6 +92,8 @@ class SearchRecord(BaseModel):
     sparse_context: SparseVector | None = None
     #: the late-interaction token vectors (``VectorName.COLBERT``), on a collection with them
     late: list[list[float]] | None = None
+    #: the late-interaction vectors of the contextual key, on a collection that has one
+    late_context: list[list[float]] | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
 
 

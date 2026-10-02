@@ -175,13 +175,15 @@ async def test_a_memory_collection_gets_both_keys_and_the_late_vectors() -> None
         )
     )
     created = next(kwargs for name, kwargs in client.calls if name == "create_collection")
-    assert set(created["vectors_config"]) == {"dense_ml", "dense_ml_ctx", "colbert"}
+    # both keys carry token vectors (ADR 0026)
+    assert set(created["vectors_config"]) == {"dense_ml", "dense_ml_ctx", "colbert", "colbert_ctx"}
     assert set(created["sparse_vectors_config"]) == {"bm25", "bm25_ctx"}
-    late = created["vectors_config"]["colbert"]
-    assert late.size == 64 and late.on_disk is True
-    assert late.multivector_config.comparator == models.MultiVectorComparator.MAX_SIM
-    # rescoring only: no graph is built for the token vectors
-    assert late.hnsw_config.m == 0 and late.datatype == models.Datatype.FLOAT16
+    for name in ("colbert", "colbert_ctx"):
+        late = created["vectors_config"][name]
+        assert late.size == 64 and late.on_disk is True
+        assert late.multivector_config.comparator == models.MultiVectorComparator.MAX_SIM
+        # rescoring only: no graph is built for the token vectors
+        assert late.hnsw_config.m == 0 and late.datatype == models.Datatype.FLOAT16
 
 
 async def test_a_record_carries_its_context_key_and_token_vectors() -> None:
@@ -196,12 +198,21 @@ async def test_a_record_carries_its_context_key_and_token_vectors() -> None:
                 sparse=SparseVector(indices=[1], values=[1.0]),
                 sparse_context=SparseVector(indices=[2], values=[1.0]),
                 late=[[1.0, 0.0], [0.0, 1.0]],
+                late_context=[[0.0, 1.0]],
             )
         ]
     )
     point = client.calls[-1][1]["points"][0]
-    assert set(point.vector) == {"dense_ml", "dense_ml_ctx", "bm25", "bm25_ctx", "colbert"}
+    assert set(point.vector) == {
+        "dense_ml",
+        "dense_ml_ctx",
+        "bm25",
+        "bm25_ctx",
+        "colbert",
+        "colbert_ctx",
+    }
     assert point.vector["colbert"] == [[1.0, 0.0], [0.0, 1.0]]
+    assert point.vector["colbert_ctx"] == [[0.0, 1.0]]
 
 
 async def test_the_late_arm_rescores_the_union_of_the_other_arms() -> None:
@@ -239,9 +250,16 @@ async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
     )
     [(_, kwargs)] = [call for call in client.calls if call[0] == "query_batch_points"]
     requests = kwargs["requests"]
-    # an empty sparse query is no arm; the late arm rescores the union of the others
-    assert [r.using for r in requests] == ["dense_ml", "dense_ml_ctx", "bm25", "colbert"]
-    assert [p.using for p in requests[3].prefetch] == ["dense_ml", "dense_ml_ctx", "bm25"]
+    # an empty sparse query is no arm; each late arm rescores the union of the others
+    assert [r.using for r in requests] == [
+        "dense_ml",
+        "dense_ml_ctx",
+        "bm25",
+        "colbert",
+        "colbert_ctx",
+    ]
+    for late in requests[3:]:
+        assert [p.using for p in late.prefetch] == ["dense_ml", "dense_ml_ctx", "bm25"]
     assert all(r.limit == 7 for r in requests)
     # ids and scores from the arms; each point's payload read once, afterwards
     assert all(r.with_payload is False for r in requests)
@@ -252,6 +270,7 @@ async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
         VectorName.DENSE_ML_CTX,
         VectorName.BM25,
         VectorName.COLBERT,
+        VectorName.COLBERT_CTX,
     ]
     assert out[VectorName.COLBERT][0].retriever.value == "colbert"
     assert out[VectorName.COLBERT][0].record_id == "r1"

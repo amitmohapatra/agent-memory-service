@@ -1,11 +1,12 @@
 """The memories' ranking: reciprocal-rank fusion of every arm, and three rules (ADR 0026).
 
-A memory search reads seven ranked lists from the store in one round trip - BM25 and both
+A memory search reads eight ranked lists from the store in one round trip - BM25 and both
 dense spaces over each of the two keys (the memory alone, and the memory read with the turn
-it answers), and the late-interaction arm over their union. They are fused by reciprocal
-rank, ``1 / (K + rank)``, every arm at weight one except the late-interaction arm at
-``LATE``: token-level matching is what separates the right turn from its paraphrases, and
-both corpora it was checked on chose that weight on their own.
+it answers), and the late-interaction arm over their union, once per key. They are fused by
+reciprocal rank, ``1 / (K + rank)``, every arm at weight one except the late-interaction
+arms, ``LATE`` over the memory's own key and ``LATE_CONTEXT`` over its context key:
+token-level matching is what separates the right turn from its paraphrases, and both corpora
+it was checked on chose those weights on their own.
 
 Then three rules, each a fact about conversations rather than about one benchmark:
 
@@ -14,11 +15,12 @@ Then three rules, each a fact about conversations rather than about one benchmar
 * **speaker** - a question that names a person is about that person's memories;
 * **time** - a "when" question is answered by a memory that names a time.
 
-Nothing here is fitted. ``K``, ``LATE`` and ``SESSION`` were chosen on LongMemEval and scored
-on LoCoMo, and the other way round, and kept only where both agreed; ``SPEAKER`` and ``TIME``
-are round values neither corpus tuned (LongMemEval names no speakers to test one on). The
-learned ranking this replaces (ADR 0025) read 0.841 on LoCoMo, the corpus it was fitted on,
-and 0.852 on LongMemEval, which it had not seen, where plain fusion reads 0.868.
+Nothing here is fitted. ``K``, ``LATE``, ``LATE_CONTEXT`` and ``SESSION`` were chosen on
+LongMemEval and scored on LoCoMo, and the other way round, and kept only where both
+agreed; ``SPEAKER`` and ``TIME`` are round values neither corpus tuned (LongMemEval names
+no speakers to test one on). The learned ranking this replaces (ADR 0025) read 0.841 on
+LoCoMo, the corpus it was fitted on, and 0.852 on LongMemEval, which it had not seen, where
+plain fusion reads 0.868.
 
 Pure functions over hits: the store and the models are the engine's business.
 """
@@ -33,10 +35,12 @@ from memory_service.ports.search import SearchHit, VectorName
 
 #: the reciprocal-rank constant: a rank-1 hit scores 1/11, a rank-10 one 1/20
 K = 10
-#: the late-interaction arm's weight; every other arm weighs one
+#: the late-interaction arm's weight over the memory's own key, and over its context key;
+#: every other arm weighs one
 LATE = 6.0
+LATE_CONTEXT = 2.0
 #: share of its session's best fused score every memory gains
-SESSION = 0.2
+SESSION = 0.3
 #: the sessions' best scores are read from the fused top this-many
 SESSION_DEPTH = 50
 #: what the speaker and time rules add, in units of a rank-1 hit in one arm
@@ -91,8 +95,9 @@ class ArmPool:
 def fused(pool: ArmPool) -> dict[str, float]:
     """Weighted reciprocal-rank fusion of every arm."""
     out = dict.fromkeys(pool.hits, 0.0)
+    weights = {VectorName.COLBERT: LATE, VectorName.COLBERT_CTX: LATE_CONTEXT}
     for name, ranks in pool.ranks.items():
-        weight = LATE if name is VectorName.COLBERT else 1.0
+        weight = weights.get(name, 1.0)
         for rid, rank in ranks.items():
             out[rid] += weight / (K + rank)
     return out

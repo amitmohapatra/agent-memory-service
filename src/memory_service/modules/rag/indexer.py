@@ -160,9 +160,9 @@ class Indexer:
         """The one encoder that stands for a text where a single vector is wanted."""
         return self.spaces.primary
 
-    #: The memories' key layout: ``mk2`` is two keys per memory (ADR 0025). A layout change
-    #: is a new collection, like a model change.
-    MEMORY_KEYS = "mk2"
+    #: The memories' key layout: ``mk2`` is two keys per memory (ADR 0025), ``mk3`` the late
+    #: vectors of both (ADR 0026). A layout change is a new collection, like a model change.
+    MEMORY_KEYS = "mk3"
 
     @property
     def fingerprint(self) -> str:
@@ -477,6 +477,7 @@ class Indexer:
                 sparse_ctx = self.sparse.encode_documents([contexts[i] for i in differs])
                 where = {i: n for n, i in enumerate(differs)}
                 late = await self.embed_late(texts)
+                late_ctx = await self.embed_late([contexts[i] for i in differs])
                 records = [
                     SearchRecord(
                         record_id=m.memory_id,
@@ -496,6 +497,9 @@ class Indexer:
                         sparse=sparse[i],
                         sparse_context=sparse_ctx[where[i]] if i in where else sparse[i],
                         late=late[i] if late else None,
+                        late_context=(late_ctx[where[i]] if late_ctx and i in where else late[i])
+                        if late
+                        else None,
                         payload={
                             "kind": "memory",
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
@@ -608,6 +612,7 @@ class Indexer:
                         sparse=sparse[0],
                         sparse_context=sparse[0],
                         late=late[0] if late else None,
+                        late_context=late[0] if late else None,
                         payload={
                             "kind": "episode",
                             "visibility_keys": keys,

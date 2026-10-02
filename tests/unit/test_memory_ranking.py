@@ -61,3 +61,8 @@ def test_a_named_person_and_a_when_question_lift_their_memories() -> None:
 def test_a_memory_leading_the_late_arm_outranks_one_leading_a_single_arm() -> None:
     pool = _pool({VectorName.BM25: ["a", "b"], VectorName.COLBERT: ["b", "a"]}, HITS)
     assert next(rid for rid, _ in mr.ranked(pool, "anything")) == "b"
+
+
+def test_the_context_keys_late_arm_fuses_at_late_context() -> None:
+    pool = _pool({VectorName.COLBERT_CTX: ["a"]}, HITS)
+    assert mr.fused(pool)["a"] == pytest.approx(mr.LATE_CONTEXT / (mr.K + 1))

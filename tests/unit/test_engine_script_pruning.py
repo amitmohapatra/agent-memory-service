@@ -111,6 +111,7 @@ async def _parts(delay: float = 0.0, **settings):
                     sparse=sparse[i],
                     sparse_context=sparse[i] if kind == "memory" else None,
                     late=late[i],
+                    late_context=late[i] if kind == "memory" else None,
                     payload={
                         "kind": kind,
                         "record_id": f"{rid}_{kind}",
@@ -185,7 +186,7 @@ async def test_the_shipped_fusion_carries_the_fitted_weights() -> None:
 
 
 async def test_a_memory_search_reads_every_arm_of_both_keys_for_its_script() -> None:
-    """The memories' learned fusion reads each arm unfused: both keys of each space the
+    """The memories' ranking reads each arm unfused: both keys of each space the
     script calls for, and both BM25 keys; a Cyrillic query still pays no English arm."""
     engine, _, _, store = await _parts()
     result = await engine.retrieve(

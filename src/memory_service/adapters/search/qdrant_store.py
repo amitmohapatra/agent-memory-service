@@ -237,6 +237,7 @@ def _late_prefetch(
     inner: list[models.Prefetch],
     qf: models.Filter,
     limit: int,
+    using: VectorName = VectorName.COLBERT,
 ) -> models.Prefetch:
     """The late-interaction arm: MaxSim over the union of the other arms' candidates.
 
@@ -248,7 +249,7 @@ def _late_prefetch(
     return models.Prefetch(
         prefetch=inner,
         query=[list(row) for row in late],
-        using=VectorName.COLBERT.value,
+        using=using.value,
         limit=limit,
         filter=qf,
     )
@@ -264,9 +265,13 @@ def _collection_vectors(
         )
         for space, width in spec.dense.items()
     }
-    if spec.late:
-        vectors[VectorName.COLBERT.value] = models.VectorParams(
-            size=spec.late,
+    # the contextual keys' collection carries the late vectors of both keys (ADR 0026)
+    late_names = [VectorName.COLBERT] if spec.late else []
+    if spec.late and spec.sparse_context:
+        late_names.append(VectorName.COLBERT_CTX)
+    for name in late_names:
+        vectors[name.value] = models.VectorParams(
+            size=spec.late or 0,
             distance=models.Distance.COSINE,
             multivector_config=models.MultiVectorConfig(
                 comparator=models.MultiVectorComparator.MAX_SIM
@@ -315,6 +320,14 @@ def _arm_prefetches(
     if late and arms:
         inner = [prefetch for _, prefetch in arms]
         arms.append((VectorName.COLBERT, _late_prefetch(late, inner, qf, limit)))
+        # a search over the contextual keys reads the context key's late vectors too
+        if any(name.value.endswith("_ctx") for name, _ in arms):
+            arms.append(
+                (
+                    VectorName.COLBERT_CTX,
+                    _late_prefetch(late, inner, qf, limit, VectorName.COLBERT_CTX),
+                )
+            )
     return arms
 
 
@@ -450,6 +463,8 @@ class QdrantSearchStore:
                 )
             if r.late:
                 vector[VectorName.COLBERT.value] = [list(row) for row in r.late]
+            if r.late_context:
+                vector[VectorName.COLBERT_CTX.value] = [list(row) for row in r.late_context]
             payload = {**r.payload, "record_id": r.record_id, "tenant_id": r.tenant_id}
             by_collection.setdefault(self._name(r.collection), []).append(
                 models.PointStruct(id=point_id(r.record_id), vector=vector, payload=payload)
