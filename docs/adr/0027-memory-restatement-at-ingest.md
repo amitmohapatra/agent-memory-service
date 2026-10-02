@@ -1,6 +1,6 @@
 # ADR 0027: A conversation turn restated at ingest, searched with the turn
 
-Date: 2026-10-02. Status: accepted (off unless a model is configured).
+Date: 2026-10-02. Status: accepted (opt-in per tenant policy).
 
 ## Context
 
@@ -34,7 +34,10 @@ merged by rank, lowered it to 0.568. The LoCoMo paper finds the same for "observ
 4. **Through the gateway only.** It is an ordinary `LLMAssist` use: it runs when the bound
    agent's or tenant's virtual key (or the operator's) can pay and the tenant's policy allows
    it, on the model the policy names for it (a fast use by default) - OpenAI, Gemini or a
-   local model behind Bifrost alike. Without a model nothing changes.
+   local model behind Bifrost alike. It is **opt-in**: the default policy (no policy row)
+   leaves it out, so registering a key does not start a model call per message on its own;
+   a tenant names it in its policy (`PUT /v1/model-key/policy`, `uses`). Without a model nothing
+   changes.
 
 ## Evidence
 

@@ -209,6 +209,9 @@ LLMUse = Literal[
 ]
 #: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)
+#: Uses a tenant turns on in its policy rather than gets by default: each costs a model call
+#: per conversation message, which registering a key must not start on its own.
+OPT_IN_LLM_USES: frozenset[LLMUse] = frozenset({"memory_restatement"})
 
 
 class AgentCredentialSettings(BaseModel):

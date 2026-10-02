@@ -15,7 +15,8 @@ every capitalised name, occurs in what the model was shown (the turn, the turn b
 speakers) - a date the model computed from the session date is the one exception - so a
 hallucinated person, place or quantity never enters the index. It goes through the Bifrost
 gateway like every other use: which model (an OpenAI, Gemini or local one) is the tenant's
-policy, and whose key pays is the bound identity's.
+policy, and whose key pays is the bound identity's. It is opt-in (``OPT_IN_LLM_USES``): a
+tenant's policy names it, because it costs a model call per conversation message.
 """
 
 from __future__ import annotations
