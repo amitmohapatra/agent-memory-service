@@ -108,7 +108,10 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # Hindsight quota, the encoder threads, the service-wide rate limit and the exporter
     # kind became constants or are derived (the model is on when BIFROST_URL is set, tracing
     # when OTEL_EXPORTER_OTLP_ENDPOINT is, the authentication mode from the credentials).
-    assert len(leaves) <= 35, f"{len(leaves)} env fields: {leaves}"
+    # 35 -> 36 for ``retail_calendar``: which fiscal calendar the customer reports in is a
+    # fact about the customer, like ``tenant_claim``, not a tuning - two retailers on 4-5-4
+    # and 4-4-5 calendars mean different days by the same "last week".
+    assert len(leaves) <= 36, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",

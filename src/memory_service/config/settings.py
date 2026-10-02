@@ -28,8 +28,10 @@ import os
 from functools import lru_cache
 from typing import Any, ClassVar, Literal, get_args
 
-from pydantic import AliasChoices, BaseModel, Field, SecretStr, model_validator
+from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from memory_service.domain.fiscal import parse_calendar
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -289,6 +291,20 @@ class Settings(BaseSettings):
     search: SearchSettings = SearchSettings()
     hindsight: HindsightSettings = HindsightSettings()
     agent_credentials: AgentCredentialSettings = AgentCredentialSettings()
+    #: A retailer's fiscal calendar (``MEMORY__RETAIL_CALENDAR=454``): ``454``, ``445`` or
+    #: ``544``, then optionally the month the year ends in and ``end`` when a year is named by
+    #: the calendar year it ends in (``445-12``, ``454-01-end``); NRF's is ``454``. A fact about
+    #: the customer, not a tuning: with it, "last week", "LY", "wk 32", "Q3" and "FW26" in a
+    #: memory resolve to days in that calendar, and a query's planning shorthand ("WOS",
+    #: "ST%") is searched with its expansion (``domain.fiscal``, ``domain.glossary``).
+    retail_calendar: str | None = None
+
+    @field_validator("retail_calendar")
+    @classmethod
+    def _valid_calendar(cls, value: str | None) -> str | None:
+        if value is not None:
+            parse_calendar(value)
+        return value
 
     @property
     def llm(self) -> LLMSettings:

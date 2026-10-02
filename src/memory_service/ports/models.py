@@ -56,6 +56,20 @@ class EmbeddingProvider(Protocol):
 
 
 @runtime_checkable
+class LateInteractionEncoder(Protocol):
+    """Token-level vectors for MaxSim (ColBERT): one unit vector per kept token."""
+
+    info: ProviderInfo
+    dimension: int
+
+    async def embed_documents(self, texts: Sequence[str]) -> list[list[list[float]]]: ...
+
+    async def embed_query(self, text: str) -> list[list[float]]: ...
+
+    def fingerprint(self) -> str: ...
+
+
+@runtime_checkable
 class SparseEncoder(Protocol):
     """Produces sparse vectors (BM25 term frequencies, SPLADE, miniCOIL)."""
 

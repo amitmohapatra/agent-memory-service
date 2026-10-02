@@ -27,6 +27,7 @@ from memory_service.config.constants import (
 )
 from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
+from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -84,6 +85,9 @@ class Overrides:
     #: ``disabled``: the English encoder alone, searched for every script - the
     #: single-encoder arm the ensemble is measured against
     multilingual_dense: Literal["disabled"] | None = None
+    #: ``hash``: per-token hashed vectors in the late-interaction arm (non-representative);
+    #: ``disabled``: no late-interaction arm. The hash embedding implies ``hash`` here.
+    late_interaction: Literal["hash", "disabled"] | None = None
     #: ``lexical``: token coverage mapped onto NLI scores (never representative)
     nli: Literal["lexical", "disabled"] | None = None
     #: the text parser instead of docling
@@ -112,6 +116,7 @@ class Overrides:
             ("graph_store", self.graph_store),
             ("embedding", self.embedding or (self.dense_model and self.dense_model.id)),
             ("multilingual_dense", self.multilingual_dense),
+            ("late_interaction", self.late_interaction),
             ("nli", self.nli),
             ("document_parser", self.document_parser),
             ("graph_enrichment", self.graph_enrichment),
@@ -134,11 +139,19 @@ class Tuning:
     llm: LLMTuning
 
     @classmethod
-    def resolve(cls, overrides: Overrides) -> Tuning:
+    def resolve(cls, overrides: Overrides, retail_calendar: str | None = None) -> Tuning:
+        memory_intelligence = overrides.memory_intelligence or constants.MEMORY_INTELLIGENCE
+        retrieval = overrides.retrieval or constants.RETRIEVAL
+        if retail_calendar is not None:
+            # a retailer: its calendar for fiscal phrases, its shorthand for queries
+            memory_intelligence = memory_intelligence.model_copy(
+                update={"fiscal_calendar": parse_calendar(retail_calendar)}
+            )
+            retrieval = retrieval.model_copy(update={"retail_glossary": True})
         return cls(
-            retrieval=overrides.retrieval or constants.RETRIEVAL,
+            retrieval=retrieval,
             context=overrides.context or constants.CONTEXT,
-            memory_intelligence=overrides.memory_intelligence or constants.MEMORY_INTELLIGENCE,
+            memory_intelligence=memory_intelligence,
             documents=overrides.documents or constants.DOCUMENTS,
             graph=overrides.graph or constants.GRAPH,
             archive=overrides.archive or constants.ARCHIVE,
@@ -170,6 +183,8 @@ class Container:
     dense_spaces: Any = None
     embedding: Any = None
     sparse: Any = None
+    #: the late-interaction encoder, or None
+    late: Any = None
     nli: Any = None
     llm: Any = None
     memory_intelligence: Any = None
@@ -240,8 +255,8 @@ class Container:
         an ablation, on the hosts where the thread budget is the thing being measured.
         ``DenseSpaces.close()`` closes every space it holds, the primary included.
         """
-        for name in ("dense_spaces", "nli"):
-            model = getattr(self, name, None)
+        models = [("dense_spaces", self.dense_spaces), ("nli", self.nli), ("late", self.late)]
+        for name, model in models:
             closer = getattr(model, "close", None)
             if closer is None:
                 continue
@@ -266,7 +281,7 @@ async def build_container(
         settings=settings,
         version=version,
         overrides=overrides,
-        tuning=Tuning.resolve(overrides),
+        tuning=Tuning.resolve(overrides, settings.retail_calendar),
     )
     await wire_adapters(container)
     return container

@@ -35,6 +35,8 @@ is not finished).
 | [0022](0022-trellis-names-and-api-conventions.md) | Trellis names and API conventions: `trellis.memory`, `X-Trellis-*` headers, RFC 9457 problem details, `traceparent`, operation ids — with the old spellings kept as aliases for one release | accepted; amends 0005 and 0021 |
 | [0023](0023-m3-lite-feedback-team-keys-pagination-webhooks.md) | M3-lite: `POST /v1/feedback` with a projector, team and workspace model keys, cursor pagination, and signed outbound webhooks | accepted; amends 0012, 0021, 0022 |
 | 0024 | The multilingual runtime and its accuracy programme (Memory Service M2 + M4) | **landing with M2/M4** — the record and `docs/MULTILINGUAL-RUNTIME.md` arrive with that work |
+| [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
+| [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
 
 ## Where the numbers behind these decisions are
 

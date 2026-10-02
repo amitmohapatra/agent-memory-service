@@ -2,8 +2,13 @@
 
 Collections carry one named dense vector per space (``dense_en``, ``dense_ml``) and a named
 sparse vector (``bm25``) with Qdrant's server-side IDF modifier, so BM25 scoring happens in
-the store. Hybrid search uses ``query_points`` with one prefetch per arm fused by native RRF,
-weighted when the fitted weights say so. Every query carries a tenant filter and a
+the store; the memories collection adds each of those a second time for the contextual key
+(``*_ctx``), and both collections carry the late-interaction token vectors (``colbert``,
+MaxSim, half precision, on disk, no HNSW graph: the arm only ever rescores the union of the
+other arms' candidates, so the graph would be built and never walked). Hybrid search uses
+``query_points`` with one prefetch per arm fused by native RRF, weighted when the fitted
+weights say so; the memories' learned fusion reads every arm unfused through one
+``query_batch_points``. Every query carries a tenant filter and a
 ``visibility_keys`` MatchAny filter that Qdrant applies before ranking.
 
 A server is addressed over gRPC (``prefer_grpc``): the query path sends vectors and receives
@@ -34,6 +39,7 @@ from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.search import (
     PAYLOAD_FIELDS,
+    SPARSE_NAMES,
     CollectionSpec,
     Retriever,
     SearchFilter,
@@ -190,8 +196,10 @@ def _arms(
     qf: models.Filter,
     prefetch_limit: int,
     weights: Mapping[VectorName, float] | None,
+    late: Sequence[Sequence[float]] | None = None,
 ) -> list[_Arm]:
-    """Every arm of one hybrid query, in fusion order: the dense spaces, then BM25."""
+    """Every arm of one hybrid query, in fusion order: the dense spaces, BM25, then the
+    late-interaction arm over the union of the others."""
     arms: list[_Arm] = [
         (
             models.Prefetch(query=list(vector), using=space.value, limit=prefetch_limit, filter=qf),
@@ -213,6 +221,113 @@ def _arms(
                 _weight(weights, VectorName.BM25),
             )
         )
+    if late and arms:
+        arms.append(
+            (
+                _late_prefetch(late, [arm for arm, _, _ in arms], qf, prefetch_limit),
+                VectorName.COLBERT,
+                _weight(weights, VectorName.COLBERT),
+            )
+        )
+    return arms
+
+
+def _late_prefetch(
+    late: Sequence[Sequence[float]],
+    inner: list[models.Prefetch],
+    qf: models.Filter,
+    limit: int,
+    using: VectorName = VectorName.COLBERT,
+) -> models.Prefetch:
+    """The late-interaction arm: MaxSim over the union of the other arms' candidates.
+
+    A rescoring of that union rather than a search of its own. The token vectors carry no
+    HNSW graph (``m=0``), so a search of its own would be a scan of the tenant's every point
+    at MaxSim cost; over the union it is bounded by the arms' depth whatever the tenant's
+    size, and on LoCoMo the union already holds nearly every turn the full scan ranks first.
+    """
+    return models.Prefetch(
+        prefetch=inner,
+        query=[list(row) for row in late],
+        using=using.value,
+        limit=limit,
+        filter=qf,
+    )
+
+
+def _collection_vectors(
+    spec: CollectionSpec,
+) -> tuple[dict[str, models.VectorParams], dict[str, models.SparseVectorParams] | None]:
+    """The named dense, late-interaction and sparse vectors a collection is created with."""
+    vectors = {
+        space.value: models.VectorParams(
+            size=width, distance=models.Distance.COSINE, on_disk=spec.on_disk
+        )
+        for space, width in spec.dense.items()
+    }
+    # the contextual keys' collection carries the late vectors of both keys (ADR 0026)
+    late_names = [VectorName.COLBERT] if spec.late else []
+    if spec.late and spec.sparse_context:
+        late_names.append(VectorName.COLBERT_CTX)
+    for name in late_names:
+        vectors[name.value] = models.VectorParams(
+            size=spec.late or 0,
+            distance=models.Distance.COSINE,
+            multivector_config=models.MultiVectorConfig(
+                comparator=models.MultiVectorComparator.MAX_SIM
+            ),
+            # rescoring only (see _late_prefetch): no graph to build
+            hnsw_config=models.HnswConfigDiff(m=0),
+            # Half precision moves no ranking measured here and halves the largest thing a
+            # point holds (a 512-token chunk is 512 vectors).
+            datatype=models.Datatype.FLOAT16,
+            on_disk=True,
+        )
+    sparse_names = [VectorName.BM25] if spec.sparse else []
+    if spec.sparse and spec.sparse_context:
+        sparse_names.append(VectorName.BM25_CTX)
+    sparse = {
+        name.value: models.SparseVectorParams(
+            modifier=models.Modifier.IDF if spec.sparse_idf else None,
+            index=models.SparseIndexParams(on_disk=spec.on_disk),
+        )
+        for name in sparse_names
+    }
+    return vectors, sparse or None
+
+
+def _arm_prefetches(
+    dense: Mapping[VectorName, Sequence[float]],
+    sparse: Mapping[VectorName, SparseVector],
+    late: Sequence[Sequence[float]] | None,
+    qf: models.Filter,
+    limit: int,
+) -> list[tuple[VectorName, models.Prefetch]]:
+    """One prefetch per arm ``search_arms`` reads: each dense space, each non-empty sparse
+    space, then the late-interaction arm over the union of the others."""
+    arms: list[tuple[VectorName, models.Prefetch]] = [
+        (name, models.Prefetch(query=list(vector), using=name.value, limit=limit, filter=qf))
+        for name, vector in dense.items()
+    ]
+    for name, vector in sparse.items():
+        if name not in SPARSE_NAMES:
+            raise ValueError(f"{name} is not a sparse space")
+        if vector.indices:
+            query = models.SparseVector(indices=vector.indices, values=vector.values)
+            arms.append(
+                (name, models.Prefetch(query=query, using=name.value, limit=limit, filter=qf))
+            )
+    if late and arms:
+        inner = [prefetch for _, prefetch in arms]
+        arms.append((VectorName.COLBERT, _late_prefetch(late, inner, qf, limit)))
+        # a search over the contextual keys reads the context key's late vectors too
+        if any(name.value.endswith("_ctx") for name, _ in arms):
+            arms.append(
+                (
+                    VectorName.COLBERT_CTX,
+                    _late_prefetch(late, inner, qf, limit, VectorName.COLBERT_CTX),
+                )
+            )
     return arms
 
 
@@ -245,6 +360,11 @@ class QdrantSearchStore:
                 # every call this client makes goes over gRPC on 6334.
                 prefer_grpc=True,
                 grpc_port=settings.qdrant_grpc_port,
+                # Not a request for inference: this service sends vectors only, never a
+                # ``models.Document``. Off, the client walks every request looking for one -
+                # every float of every query vector, ~22 ms of CPU under the GIL per memory
+                # search with seven arms and a 48x64 late-interaction query.
+                cloud_inference=True,
             )
             self._local = False
         self._known: set[str] = set()
@@ -259,22 +379,7 @@ class QdrantSearchStore:
         try:
             exists = await self._client.collection_exists(name)
             if not exists:
-                vectors = {
-                    space.value: models.VectorParams(
-                        size=width, distance=models.Distance.COSINE, on_disk=spec.on_disk
-                    )
-                    for space, width in spec.dense.items()
-                }
-                sparse = (
-                    {
-                        VectorName.BM25.value: models.SparseVectorParams(
-                            modifier=models.Modifier.IDF if spec.sparse_idf else None,
-                            index=models.SparseIndexParams(on_disk=spec.on_disk),
-                        )
-                    }
-                    if spec.sparse
-                    else None
-                )
+                vectors, sparse = _collection_vectors(spec)
                 try:
                     await self._client.create_collection(
                         collection_name=name,
@@ -352,6 +457,14 @@ class QdrantSearchStore:
                 vector[VectorName.BM25.value] = models.SparseVector(
                     indices=r.sparse.indices, values=r.sparse.values
                 )
+            if r.sparse_context is not None:
+                vector[VectorName.BM25_CTX.value] = models.SparseVector(
+                    indices=r.sparse_context.indices, values=r.sparse_context.values
+                )
+            if r.late:
+                vector[VectorName.COLBERT.value] = [list(row) for row in r.late]
+            if r.late_context:
+                vector[VectorName.COLBERT_CTX.value] = [list(row) for row in r.late_context]
             payload = {**r.payload, "record_id": r.record_id, "tenant_id": r.tenant_id}
             by_collection.setdefault(self._name(r.collection), []).append(
                 models.PointStruct(id=point_id(r.record_id), vector=vector, payload=payload)
@@ -491,6 +604,7 @@ class QdrantSearchStore:
         prefetch_limit: int,
         rrf_k: int = 1,
         weights: Mapping[VectorName, float] | None = None,
+        late: Sequence[Sequence[float]] | None = None,
     ) -> list[SearchHit]:
         if rrf_k < 0:
             raise ValueError("rrf_k must be nonnegative")
@@ -502,6 +616,7 @@ class QdrantSearchStore:
             qf=qf,
             prefetch_limit=prefetch_limit,
             weights=weights,
+            late=late,
         )
         if not arms:
             return []
@@ -550,6 +665,86 @@ class QdrantSearchStore:
         hits = [self._hit(p, Retriever.FUSION) for p in res.points]
         hits.sort(key=lambda hit: (-hit.score, hit.record_id))
         return hits
+
+    async def search_arms(
+        self,
+        collection: str,
+        *,
+        dense: Mapping[VectorName, Sequence[float]],
+        sparse: Mapping[VectorName, SparseVector],
+        late: Sequence[Sequence[float]] | None,
+        flt: SearchFilter,
+        limit: int,
+    ) -> dict[VectorName, list[SearchHit]]:
+        qf = _filter(flt)
+        arms = _arm_prefetches(dense, sparse, late, qf, limit)
+        if not arms:
+            return {}
+        requests = [
+            models.QueryRequest(
+                prefetch=prefetch.prefetch,
+                query=prefetch.query,
+                using=prefetch.using,
+                filter=qf,
+                limit=limit,
+                # ids and scores only: see _payloads
+                with_payload=False,
+            )
+            for _, prefetch in arms
+        ]
+        with span("search.arms"), stage_seconds.labels("retrieval.arms").time():
+            try:
+                responses = await _read(
+                    "arms",
+                    lambda: self._client.query_batch_points(
+                        collection_name=self._name(collection), requests=requests
+                    ),
+                )
+            except Exception as exc:
+                raise DependencyUnavailable(
+                    f"qdrant arms query failed: {type(exc).__name__}: {exc}"
+                ) from exc
+            payloads = await self._payloads(collection, responses)
+        out: dict[VectorName, list[SearchHit]] = {}
+        for (name, _), response in zip(arms, responses, strict=True):
+            retriever = Retriever.for_vector(name)
+            hits = [
+                SearchHit(
+                    record_id=str(payload.get("record_id", p.id)),
+                    score=float(p.score),
+                    retriever=retriever,
+                    payload=payload,
+                )
+                for p in response.points
+                if (payload := payloads.get(str(p.id))) is not None
+            ]
+            hits.sort(key=lambda hit: (-hit.score, hit.record_id))  # see search_hybrid
+            out[name] = hits
+        return out
+
+    async def _payloads(self, collection: str, responses: Sequence[Any]) -> dict[str, dict]:
+        """Every point's payload, read once.
+
+        The arms overlap: ~800 hits a query are ~350 points. Turning a payload from protobuf
+        into a dict is client CPU under the GIL, and read with every hit it was most of a
+        memory search's Python time and what capped one worker's throughput.
+        """
+        ids = list(dict.fromkeys(str(p.id) for response in responses for p in response.points))
+        try:
+            points = await _read(
+                "retrieve",
+                lambda: self._client.retrieve(
+                    collection_name=self._name(collection),
+                    ids=ids,
+                    with_payload=_PAYLOAD,
+                    with_vectors=False,
+                ),
+            )
+        except Exception as exc:
+            raise DependencyUnavailable(
+                f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        return {str(p.id): dict(p.payload or {}) for p in points}
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
         if not record_ids:

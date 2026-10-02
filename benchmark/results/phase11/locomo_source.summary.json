@@ -1,0 +1,595 @@
+{
+  "provenance": {
+    "timestamp": "2026-10-01T19:47:51.347955+00:00",
+    "git_commit": "f97a97257eeb0dd74742af8834aeb6b11f369bbe",
+    "host_load": {
+      "loadavg_1m": 0.81,
+      "loadavg_5m": 0.3,
+      "loadavg_15m": 0.11,
+      "load_per_core": 0.2
+    },
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v50-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 15.7,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "5.3.0",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
+      "onnxruntime": "1.30.0",
+      "docling": "not-installed"
+    },
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  },
+  "dataset_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+  "index_fingerprint": "dense_en=onnx-granite-embedding-small-english-r2-model-d384+dense_ml=onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384|bm25-v3-snowball-k1.2-b0.75|li-9780e0094e30|mk2",
+  "retrieval": {
+    "max_query_chars": 2048,
+    "exact": true,
+    "bm25": true,
+    "dense": true,
+    "graph": true,
+    "semantic_graph": true,
+    "rrf_k": 60,
+    "hybrid_rrf_k": 1,
+    "hybrid_weights": {
+      "bm25": 2.0,
+      "dense_en": 0.5,
+      "dense_ml": 2.0,
+      "colbert": 2.0
+    },
+    "memory_arm_depth": 100,
+    "memory_pool_k": 30,
+    "prefetch_k": 100,
+    "fused_k": 100,
+    "final_k": 50,
+    "memory_recall_k": 100,
+    "memory_entity_search": true,
+    "memory_entity_search_timeout_ms": 200,
+    "query_expansion_timeout_ms": 250,
+    "parent_expansion": true,
+    "derived_source_k": 6,
+    "max_chunks_per_document": 0,
+    "neighbor_expansion": true,
+    "definition_expansion": true,
+    "expansion_budget_items": 8,
+    "evidence_verification": true,
+    "escalation_max_rounds": 2,
+    "abstain_when_insufficient": true,
+    "subject_evidence_check": true
+  },
+  "summary": {
+    "temporal": {
+      "questions": 321,
+      "at": {
+        "10": {
+          "recall": 0.8787642782969886,
+          "complete": 0.8535825545171339
+        },
+        "20": {
+          "recall": 0.9068016614745587,
+          "complete": 0.8847352024922118
+        },
+        "50": {
+          "recall": 0.9322429906542056,
+          "complete": 0.9158878504672897
+        },
+        "100": {
+          "recall": 0.9592419522326064,
+          "complete": 0.9470404984423676
+        }
+      }
+    },
+    "all_answerable": {
+      "questions": 1536,
+      "at": {
+        "10": {
+          "recall": 0.8286709491142118,
+          "complete": 0.765625
+        },
+        "20": {
+          "recall": 0.8637713049421821,
+          "complete": 0.8001302083333334
+        },
+        "50": {
+          "recall": 0.9023665015851003,
+          "complete": 0.84765625
+        },
+        "100": {
+          "recall": 0.9305823874397912,
+          "complete": 0.88671875
+        }
+      }
+    },
+    "open_domain": {
+      "questions": 92,
+      "at": {
+        "10": {
+          "recall": 0.5821611253196931,
+          "complete": 0.4891304347826087
+        },
+        "20": {
+          "recall": 0.6082693947144076,
+          "complete": 0.5217391304347826
+        },
+        "50": {
+          "recall": 0.6543875455320468,
+          "complete": 0.5543478260869565
+        },
+        "100": {
+          "recall": 0.7044059521041619,
+          "complete": 0.5869565217391305
+        }
+      }
+    },
+    "multi_hop": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.6076705235579816,
+          "complete": 0.3475177304964539
+        },
+        "20": {
+          "recall": 0.6827728371541362,
+          "complete": 0.4148936170212766
+        },
+        "50": {
+          "recall": 0.7810211308951511,
+          "complete": 0.5531914893617021
+        },
+        "100": {
+          "recall": 0.848649643666441,
+          "complete": 0.6737588652482269
+        }
+      }
+    },
+    "single_hop": {
+      "questions": 841,
+      "at": {
+        "10": {
+          "recall": 0.9106222750693619,
+          "complete": 0.9024970273483948
+        },
+        "20": {
+          "recall": 0.9359889021006738,
+          "complete": 0.9274673008323424
+        },
+        "50": {
+          "recall": 0.9587792310741181,
+          "complete": 0.9524375743162902
+        },
+        "100": {
+          "recall": 0.9718588981371383,
+          "complete": 0.9678953626634959
+        }
+      }
+    }
+  },
+  "lineage_summary": {
+    "temporal": {
+      "questions": 321,
+      "at": {
+        "10": {
+          "recall": 0.8787642782969886,
+          "complete": 0.8535825545171339
+        },
+        "20": {
+          "recall": 0.9068016614745587,
+          "complete": 0.8847352024922118
+        },
+        "50": {
+          "recall": 0.9322429906542056,
+          "complete": 0.9158878504672897
+        },
+        "100": {
+          "recall": 0.9592419522326064,
+          "complete": 0.9470404984423676
+        }
+      }
+    },
+    "all_answerable": {
+      "questions": 1536,
+      "at": {
+        "10": {
+          "recall": 0.8286709491142118,
+          "complete": 0.765625
+        },
+        "20": {
+          "recall": 0.8637713049421821,
+          "complete": 0.8001302083333334
+        },
+        "50": {
+          "recall": 0.9023665015851003,
+          "complete": 0.84765625
+        },
+        "100": {
+          "recall": 0.9305823874397912,
+          "complete": 0.88671875
+        }
+      }
+    },
+    "open_domain": {
+      "questions": 92,
+      "at": {
+        "10": {
+          "recall": 0.5821611253196931,
+          "complete": 0.4891304347826087
+        },
+        "20": {
+          "recall": 0.6082693947144076,
+          "complete": 0.5217391304347826
+        },
+        "50": {
+          "recall": 0.6543875455320468,
+          "complete": 0.5543478260869565
+        },
+        "100": {
+          "recall": 0.7044059521041619,
+          "complete": 0.5869565217391305
+        }
+      }
+    },
+    "multi_hop": {
+      "questions": 282,
+      "at": {
+        "10": {
+          "recall": 0.6076705235579816,
+          "complete": 0.3475177304964539
+        },
+        "20": {
+          "recall": 0.6827728371541362,
+          "complete": 0.4148936170212766
+        },
+        "50": {
+          "recall": 0.7810211308951511,
+          "complete": 0.5531914893617021
+        },
+        "100": {
+          "recall": 0.848649643666441,
+          "complete": 0.6737588652482269
+        }
+      }
+    },
+    "single_hop": {
+      "questions": 841,
+      "at": {
+        "10": {
+          "recall": 0.9106222750693619,
+          "complete": 0.9024970273483948
+        },
+        "20": {
+          "recall": 0.9359889021006738,
+          "complete": 0.9274673008323424
+        },
+        "50": {
+          "recall": 0.9587792310741181,
+          "complete": 0.9524375743162902
+        },
+        "100": {
+          "recall": 0.9718588981371383,
+          "complete": 0.9678953626634959
+        }
+      }
+    }
+  },
+  "completed_questions": 1986,
+  "complete": true,
+  "failed_questions": 0,
+  "latency_ms": {
+    "p50": 191.81,
+    "p95": 345.15,
+    "p99": 411.83,
+    "max": 1859.94,
+    "samples": 1986
+  },
+  "limitations": [
+    "Exact source-ID coverage; fragments count as source presence, not full answers.",
+    "Transitive source lineage is reported separately; ancestry does not prove answer support.",
+    "Not generated-answer accuracy or adversarial abstention accuracy.",
+    "Sequential context-builder latency; PostgreSQL and remote Qdrant included, HTTP excluded.",
+    "In-process authorization/cache and lexical NLI; not full production load latency."
+  ],
+  "corpora": [
+    {
+      "conversation": 0,
+      "tenant": "bench_conv_0",
+      "reused": true,
+      "canonical_memories": 559,
+      "observed_turns": 419,
+      "directly_represented_turns": 414,
+      "annotated_answerable_questions": 150,
+      "all_gold_sources_present": 150,
+      "missing_source_ids": [
+        "D10:15",
+        "D15:18",
+        "D15:22",
+        "D15:27",
+        "D15:6"
+      ]
+    },
+    {
+      "conversation": 1,
+      "tenant": "bench_conv_1",
+      "reused": true,
+      "canonical_memories": 447,
+      "observed_turns": 369,
+      "directly_represented_turns": 361,
+      "annotated_answerable_questions": 81,
+      "all_gold_sources_present": 81,
+      "missing_source_ids": [
+        "D12:17",
+        "D13:14",
+        "D13:19",
+        "D15:4",
+        "D16:4",
+        "D17:21",
+        "D5:14",
+        "D7:1"
+      ]
+    },
+    {
+      "conversation": 2,
+      "tenant": "bench_conv_2",
+      "reused": true,
+      "canonical_memories": 846,
+      "observed_turns": 663,
+      "directly_represented_turns": 661,
+      "annotated_answerable_questions": 152,
+      "all_gold_sources_present": 152,
+      "missing_source_ids": [
+        "D21:11",
+        "D27:7"
+      ]
+    },
+    {
+      "conversation": 3,
+      "tenant": "bench_conv_3",
+      "reused": true,
+      "canonical_memories": 770,
+      "observed_turns": 629,
+      "directly_represented_turns": 622,
+      "annotated_answerable_questions": 199,
+      "all_gold_sources_present": 196,
+      "missing_source_ids": [
+        "D14:21",
+        "D23:25",
+        "D25:1",
+        "D26:10",
+        "D27:24",
+        "D28:24",
+        "D7:11"
+      ]
+    },
+    {
+      "conversation": 4,
+      "tenant": "bench_conv_4",
+      "reused": true,
+      "canonical_memories": 869,
+      "observed_turns": 680,
+      "directly_represented_turns": 660,
+      "annotated_answerable_questions": 178,
+      "all_gold_sources_present": 178,
+      "missing_source_ids": [
+        "D11:21",
+        "D12:16",
+        "D12:19",
+        "D14:15",
+        "D14:19",
+        "D15:28",
+        "D15:8",
+        "D17:15",
+        "D18:12",
+        "D1:10",
+        "D1:6",
+        "D20:18",
+        "D25:11",
+        "D25:13",
+        "D26:22",
+        "D26:5",
+        "D2:12",
+        "D3:10",
+        "D3:12",
+        "D3:20"
+      ]
+    },
+    {
+      "conversation": 5,
+      "tenant": "bench_conv_5",
+      "reused": true,
+      "canonical_memories": 844,
+      "observed_turns": 675,
+      "directly_represented_turns": 669,
+      "annotated_answerable_questions": 123,
+      "all_gold_sources_present": 122,
+      "missing_source_ids": [
+        "D18:20",
+        "D18:3",
+        "D20:33",
+        "D23:26",
+        "D26:4",
+        "D4:16"
+      ]
+    },
+    {
+      "conversation": 6,
+      "tenant": "bench_conv_6",
+      "reused": true,
+      "canonical_memories": 830,
+      "observed_turns": 689,
+      "directly_represented_turns": 659,
+      "annotated_answerable_questions": 150,
+      "all_gold_sources_present": 148,
+      "missing_source_ids": [
+        "D13:9",
+        "D14:16",
+        "D14:7",
+        "D14:9",
+        "D15:5",
+        "D16:12",
+        "D18:15",
+        "D1:11",
+        "D1:19",
+        "D1:32",
+        "D21:11",
+        "D21:14",
+        "D21:5",
+        "D23:7",
+        "D23:9",
+        "D24:16",
+        "D28:20",
+        "D28:29",
+        "D29:11",
+        "D31:12",
+        "D4:11",
+        "D4:7",
+        "D6:10",
+        "D6:16",
+        "D7:16",
+        "D7:9",
+        "D8:33",
+        "D8:9",
+        "D9:13",
+        "D9:20"
+      ]
+    },
+    {
+      "conversation": 7,
+      "tenant": "bench_conv_7",
+      "reused": false,
+      "canonical_memories": 753,
+      "observed_turns": 681,
+      "directly_represented_turns": 611,
+      "annotated_answerable_questions": 191,
+      "all_gold_sources_present": 190,
+      "missing_source_ids": [
+        "D10:3",
+        "D10:7",
+        "D13:10",
+        "D13:12",
+        "D13:18",
+        "D13:23",
+        "D13:4",
+        "D13:6",
+        "D13:8",
+        "D14:11",
+        "D14:14",
+        "D14:16",
+        "D14:9",
+        "D15:7",
+        "D17:9",
+        "D19:13",
+        "D19:14",
+        "D19:4",
+        "D1:12",
+        "D1:14",
+        "D1:4",
+        "D20:18",
+        "D20:24",
+        "D20:3",
+        "D20:5",
+        "D21:17",
+        "D21:5",
+        "D22:22",
+        "D22:28",
+        "D22:7",
+        "D23:21",
+        "D23:24",
+        "D23:28",
+        "D23:5",
+        "D24:13",
+        "D25:11",
+        "D25:14",
+        "D26:5",
+        "D27:4",
+        "D28:12",
+        "D28:25",
+        "D28:27",
+        "D29:13",
+        "D29:15",
+        "D29:17",
+        "D29:20",
+        "D29:29",
+        "D2:10",
+        "D2:12",
+        "D2:18",
+        "D2:27",
+        "D2:29",
+        "D2:6",
+        "D2:8",
+        "D30:9",
+        "D3:10",
+        "D3:5",
+        "D4:15",
+        "D4:17",
+        "D4:31",
+        "D4:37",
+        "D4:41",
+        "D4:8",
+        "D7:12",
+        "D7:17",
+        "D7:19",
+        "D8:13",
+        "D8:3",
+        "D8:7",
+        "D9:11"
+      ]
+    },
+    {
+      "conversation": 8,
+      "tenant": "bench_conv_8",
+      "reused": false,
+      "canonical_memories": 629,
+      "observed_turns": 509,
+      "directly_represented_turns": 500,
+      "annotated_answerable_questions": 156,
+      "all_gold_sources_present": 155,
+      "missing_source_ids": [
+        "D13:13",
+        "D1:10",
+        "D20:16",
+        "D22:21",
+        "D22:3",
+        "D24:13",
+        "D24:4",
+        "D5:12",
+        "D8:13"
+      ]
+    },
+    {
+      "conversation": 9,
+      "tenant": "bench_conv_9",
+      "reused": false,
+      "canonical_memories": 737,
+      "observed_turns": 568,
+      "directly_represented_turns": 563,
+      "annotated_answerable_questions": 156,
+      "all_gold_sources_present": 154,
+      "missing_source_ids": [
+        "D10:1",
+        "D25:14",
+        "D25:3",
+        "D28:19",
+        "D4:16"
+      ]
+    }
+  ]
+}

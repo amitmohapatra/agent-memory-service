@@ -77,6 +77,15 @@ async def _ingest(container, uow_factory, ctx, name: str, body: str) -> str:
 
 
 @pytest.fixture
+def container_overrides() -> dict:
+    """No late-interaction arm here. ``colbert``'s claim is one of the proofs below, and the
+    hermetic stand-in for that arm matches words - which is exactly what the distractor is
+    built to exploit, so with it these proofs would measure the stand-in. The real arm
+    (ADR 0025) is measured where real weights run: SciFact and LoCoMo."""
+    return {"late_interaction": "disabled"}
+
+
+@pytest.fixture
 async def corpus(container, uow_factory):
     """The adversarial documents, buried in a real corpus, with every candidate flag OFF.
 

@@ -346,6 +346,21 @@ def _wire_models(container: Container) -> None:
     container.dense_spaces = spaces
     container.embedding = spaces.primary
     container.sparse = Bm25SparseEncoder()
+    _wire_late(container)
+
+
+def _wire_late(container: Container) -> None:
+    """The late-interaction arm (ADR 0025). The real graph must load; the stand-in is chosen
+    only by an override, and the hash embedding implies it, so a hermetic container runs the
+    same path with nothing to load."""
+    from memory_service.adapters.models.late_interaction import HashLateInteraction, OnnxColbert
+
+    stand_in = container.overrides
+    late = stand_in.late_interaction or ("hash" if stand_in.embedding == "hash" else None)
+    if late == "hash":
+        container.late = HashLateInteraction()
+    elif late is None:
+        container.late = OnnxColbert(FROZEN_MODELS.colbert, threads=_model_threads(container))
 
 
 def _wire_llm(container: Container) -> None:
@@ -439,6 +454,7 @@ def _wire_retrieval(container: Container) -> None:
         container.dense_spaces,
         container.sparse,
         container.cache,
+        late=container.late,
         batch_size=dense.batch_size,
         embedding_cache_ttl=constants.CACHE.embedding_ttl_seconds,
         assist=container.services["llm_assist"],
@@ -520,7 +536,9 @@ def _wire_memory(container: Container) -> None:
         working=container.services.get("ephemeral_memory"),
         assist=container.services["llm_assist"],
     )
-    container.services["memory"] = MemoryService(container.services["authz"])
+    container.services["memory"] = MemoryService(
+        container.services["authz"], fiscal=container.tuning.memory_intelligence.fiscal_calendar
+    )
     container.services["feedback"] = FeedbackService(
         container.services["uow_factory"], container.services["authz"], container.services["memory"]
     )

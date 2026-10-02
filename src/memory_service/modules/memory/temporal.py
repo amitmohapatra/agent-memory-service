@@ -36,7 +36,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
 
-from memory_service.domain.script import Script
+from memory_service.domain.fiscal import FiscalCalendar, resolve_fiscal_mentions
+from memory_service.domain.script import Script, detect_script
 
 #: The dateparser languages tried for a script: the twelve the service is measured in, plus
 #: the other languages commonly written in the same script. Fewer languages is faster and
@@ -148,3 +149,21 @@ def _trimmed(phrase: str, skip: frozenset[str]) -> str:
     while words and words[0].casefold().strip(".,;:") in skip:
         words.pop(0)
     return " ".join(words)
+
+
+def dated_mentions(
+    text: str, *, base: datetime, fiscal: FiscalCalendar | None = None
+) -> list[dict[str, str]]:
+    """Every relative date ``text`` names, as the payload stores them: the fiscal phrases
+    first when the deployment has a retail calendar ("last week" is then a fiscal week, not
+    seven days back), then the calendar-date phrases they do not already cover."""
+    out = (
+        [m.as_dict() for m in resolve_fiscal_mentions(text, base=base, calendar=fiscal)]
+        if fiscal is not None
+        else []
+    )
+    covered = {m["text"].casefold() for m in out}
+    for mention in resolve_dated_mentions(text, base=base, script=detect_script(text)):
+        if mention.text.casefold() not in covered and len(out) < MAX_MENTIONS:
+            out.append(mention.as_dict())
+    return out

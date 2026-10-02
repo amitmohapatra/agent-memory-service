@@ -23,9 +23,9 @@ from memory_service.domain.enums import (
     TemporalStatus,
     Visibility,
 )
+from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
 from memory_service.domain.observation import Observation
-from memory_service.domain.script import detect_script
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
@@ -34,7 +34,7 @@ from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.revisions import bump_memory_revisions
-from memory_service.modules.memory.temporal import resolve_dated_mentions
+from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import memory_decisions_total, stage_seconds
 from memory_service.observability.tracing import span
@@ -138,7 +138,11 @@ def _is_echo(candidate: MemoryCandidate) -> bool:
 
 
 def build_memory(
-    candidate: MemoryCandidate, ctx: MemoryExecutionContext, *, now: datetime
+    candidate: MemoryCandidate,
+    ctx: MemoryExecutionContext,
+    *,
+    now: datetime,
+    fiscal: FiscalCalendar | None = None,
 ) -> CanonicalMemory:
     scope = scope_for(candidate, ctx)
     vis = candidate.visibility or Visibility.PRIVATE
@@ -152,9 +156,7 @@ def build_memory(
     )
     # "last Tuesday" resolved against the day it was said, once, here - the renderer and
     # the reader get the date beside the phrase instead of doing the arithmetic themselves
-    dated = resolve_dated_mentions(
-        candidate.content, base=observed_at, script=detect_script(candidate.content)
-    )
+    dated = dated_mentions(candidate.content, base=observed_at, fiscal=fiscal)
     return CanonicalMemory(
         tenant_id=ctx.tenant_id,
         scope=scope,
@@ -182,7 +184,7 @@ def build_memory(
             "entities": list(candidate.entities),
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
-            "dated_mentions": [mention.as_dict() for mention in dated],
+            "dated_mentions": dated,
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
         },
         created_at=now,
@@ -401,15 +403,15 @@ class ObservationPipeline:
             "text": prior.content.strip()[: self.cfg.preceding_turn_max_chars],
         }
 
-    @staticmethod
     def _new_memory(
+        self,
         cand: MemoryCandidate,
         ctx: MemoryExecutionContext,
         *,
         now: datetime,
         admission: AdmissionDecision | None,
     ) -> CanonicalMemory:
-        memory = build_memory(cand, ctx, now=now)
+        memory = build_memory(cand, ctx, now=now, fiscal=self.cfg.fiscal_calendar)
         if admission is not None:
             memory.system_metadata["admission"] = admission.model_dump(mode="json")
         return memory

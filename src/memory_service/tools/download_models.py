@@ -60,9 +60,14 @@ class Model:
     #: "torch" loads safetensors through sentence-transformers; "onnx" fetches the graph only
     runtime: str = "torch"
     revision: str | None = None
+    #: The one graph an ONNX model runs, when its repository publishes several (fp32, int8,
+    #: per-ISA quantisations): only that one is fetched, beside the configuration.
+    graph: str | None = None
 
     @property
     def allow(self) -> list[str]:
+        if self.graph:
+            return ["*.json", "*.txt", "*.model", self.graph]
         return ONNX_ALLOW if self.runtime == "onnx" else ALLOW
 
     @property
@@ -76,6 +81,7 @@ def _frozen() -> tuple[Model, ...]:
 
     dense, dense_ml = FROZEN_MODELS.dense, FROZEN_MODELS.dense_ml
     nli = FROZEN_MODELS.nli
+    colbert = FROZEN_MODELS.colbert
     return (
         Model(
             dense.local_dir,
@@ -103,6 +109,16 @@ def _frozen() -> tuple[Model, ...]:
             default=True,
             runtime=nli.runtime,
             revision=nli.revision,
+        ),
+        Model(
+            colbert.local_dir,
+            colbert.id,
+            "late-interaction",
+            f"the late-interaction (ColBERT) arm, {colbert.dimension}-dim tokens (onnx graph)",
+            default=True,
+            runtime=colbert.runtime,
+            revision=colbert.revision,
+            graph=colbert.graph_file,
         ),
     )
 

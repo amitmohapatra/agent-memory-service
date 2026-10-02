@@ -66,8 +66,12 @@ def test_every_memory_env_var_maps_to_a_real_setting() -> None:
 
 
 def test_reranking_left_no_configuration_behind() -> None:
-    """The reranker was measured worse and removed: no flag, no depth, no frozen model."""
+    """The reranker was measured worse and removed: no flag, no depth, no frozen model. Two
+    cross-encoders were measured again as features of the memories' learned ranking (ADR
+    0025): +2.5 points of recall@10 for 2.4 CPU-seconds a query, which the 20 requests a
+    second the service is sized for cannot afford on CPU, so they stayed out."""
     assert "rerank" not in type(RETRIEVAL).model_fields
     assert "rerank_k" not in type(RETRIEVAL).model_fields
     wiring = (ROOT / "src/memory_service/adapters/wiring.py").read_text()
     assert "rerank" not in wiring
+    assert "rerank" not in (ROOT / "src/memory_service/config/constants.py").read_text()

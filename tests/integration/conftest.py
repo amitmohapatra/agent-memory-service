@@ -107,7 +107,7 @@ def integration_overrides(**changes) -> Overrides:
 
 
 @pytest.fixture
-async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
+async def container(make_settings, tmp_path, request) -> AsyncIterator[Container]:
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings: Settings = integration_settings(
@@ -115,7 +115,16 @@ async def container(make_settings, tmp_path) -> AsyncIterator[Container]:
     )
     # blob=None: the filesystem store the settings point at tmp_path, which the archive
     # tests read from disk and corrupt on purpose; the memory stand-in has no files
-    c = await build_container(settings, __version__, overrides=integration_overrides(blob=None))
+    # A module may define a ``container_overrides`` fixture: stand-in choices (``Overrides``
+    # fields) for its own container. Looked up rather than required, because modules outside
+    # this directory import this fixture by name.
+    try:
+        changes = request.getfixturevalue("container_overrides")
+    except pytest.FixtureLookupError:
+        changes = {}
+    c = await build_container(
+        settings, __version__, overrides=integration_overrides(blob=None, **changes)
+    )
     async with c.database.engine.begin() as conn:
         # a reset, not a hot path: on a loaded host it may outlast the statement timeout
         await conn.execute(text("SET LOCAL statement_timeout = 0"))

@@ -14,6 +14,11 @@
 >
 > `splade` survives as the one genuinely uncovered capability. The rest of this document is
 > kept as the record of why they were built.
+>
+> **Superseded again, in part (ADR 0025, 2026-10-01).** A late-interaction arm is back on
+> every collection. Cross-encoders were measured again as features of the memories' learned
+> ranking: they helped, and cost more CPU than a 20-request-a-second CPU service has, so
+> they stay out.
 
 ## Decision
 - **Every advanced strategy is off by default and additive.** A strategy is an *extra

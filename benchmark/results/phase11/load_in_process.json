@@ -1,0 +1,61 @@
+{
+  "harness": "in-process open-loop Poisson arrivals on the context builder, LoCoMo questions over the ten conversation tenants, salted so the bundle cache always misses; CPU from /proc",
+  "host": "4 vCPU Intel Xeon 2.1 GHz, WEB_CONCURRENCY=2 (two ORT threads per model)",
+  "one_process_offered_10": {
+    "offered_rps": 10.0,
+    "sent": 531,
+    "completed": 531,
+    "errors": 0,
+    "achieved_rps": 8.85,
+    "drain_s": 0.0,
+    "p50_ms": 365,
+    "p95_ms": 814,
+    "p99_ms": 1002,
+    "cpu_s_per_request": {
+      "service": 0.145,
+      "qdrant": 0.039,
+      "postgres": 0.011,
+      "total": 0.196
+    },
+    "cpus": 4
+  },
+  "two_processes_offered_8_each": [
+    {
+      "offered_rps": 8.0,
+      "sent": 433,
+      "completed": 433,
+      "errors": 0,
+      "achieved_rps": 7.2,
+      "drain_s": 0.0,
+      "p50_ms": 395,
+      "p95_ms": 909,
+      "p99_ms": 1046,
+      "cpu_s_per_request": {
+        "service": 0.14,
+        "qdrant": 0.077,
+        "postgres": 0.016,
+        "total": 0.233
+      },
+      "cpus": 4
+    },
+    {
+      "offered_rps": 8.0,
+      "sent": 432,
+      "completed": 432,
+      "errors": 0,
+      "achieved_rps": 7.18,
+      "drain_s": 0.0,
+      "p50_ms": 411,
+      "p95_ms": 990,
+      "p99_ms": 1130,
+      "cpu_s_per_request": {
+        "service": 0.139,
+        "qdrant": 0.077,
+        "postgres": 0.026,
+        "total": 0.242
+      },
+      "cpus": 4
+    }
+  ],
+  "note": "with two processes each one's qdrant/postgres CPU counts both processes' load; per request it is half of what each reports"
+}

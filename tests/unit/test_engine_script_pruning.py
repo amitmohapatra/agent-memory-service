@@ -10,6 +10,7 @@ import time
 import pytest
 
 from memory_service.adapters.models.embeddings import HashEmbedding
+from memory_service.adapters.models.late_interaction import HashLateInteraction
 from memory_service.adapters.models.sparse import Bm25SparseEncoder
 from memory_service.adapters.search.qdrant_store import QdrantSearchStore
 from memory_service.config.constants import RetrievalSettings
@@ -57,10 +58,15 @@ class _RecordingStore(QdrantSearchStore):
     def __init__(self) -> None:
         super().__init__(SearchSettings(), local_path=":memory:")
         self.hybrid_calls: list[dict] = []
+        self.arms_calls: list[dict] = []
 
     async def search_hybrid(self, collection, **kwargs):  # type: ignore[override]
         self.hybrid_calls.append(kwargs)
         return await super().search_hybrid(collection, **kwargs)
+
+    async def search_arms(self, collection, **kwargs):  # type: ignore[override]
+        self.arms_calls.append(kwargs)
+        return await super().search_arms(collection, **kwargs)
 
 
 async def _parts(delay: float = 0.0, **settings):
@@ -72,11 +78,20 @@ async def _parts(delay: float = 0.0, **settings):
             DenseSpace(VectorName.DENSE_ML, multilingual),
         ]
     )
-    indexer = Indexer(_NoUoW(), store, spaces, Bm25SparseEncoder(), None)  # type: ignore[arg-type]
+    indexer = Indexer(
+        _NoUoW(),  # type: ignore[arg-type]
+        store,
+        spaces,
+        Bm25SparseEncoder(),
+        None,
+        late=HashLateInteraction(),
+    )
     await indexer.ensure_collections()
     texts = list(TEXTS.values())
     dense = await indexer.embed_cached(texts, [f"h{n}" for n in range(len(texts))])
     sparse = indexer.sparse.encode_documents(texts)
+    late = await indexer.embed_late(texts)
+    assert late is not None
     for kind, base in (("chunk", KNOWLEDGE), ("memory", MEMORIES)):
         await store.upsert(
             [
@@ -84,8 +99,19 @@ async def _parts(delay: float = 0.0, **settings):
                     record_id=f"{rid}_{kind}",
                     collection=indexer.collection(base),
                     tenant_id="t",
-                    dense={space: vectors[i] for space, vectors in dense.items()},
+                    dense={
+                        **{space: vectors[i] for space, vectors in dense.items()},
+                        # a memory's second key, which indexing writes (here its own text)
+                        **(
+                            {space.context: vectors[i] for space, vectors in dense.items()}
+                            if kind == "memory"
+                            else {}
+                        ),
+                    },
                     sparse=sparse[i],
+                    sparse_context=sparse[i] if kind == "memory" else None,
+                    late=late[i],
+                    late_context=late[i] if kind == "memory" else None,
                     payload={
                         "kind": kind,
                         "record_id": f"{rid}_{kind}",
@@ -150,9 +176,31 @@ async def test_the_two_encoders_run_at_the_same_time() -> None:
 
 async def test_the_shipped_fusion_carries_the_fitted_weights() -> None:
     engine, _, _, store = await _parts()
-    await engine.retrieve(CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY)
+    await engine.retrieve(CTX, "What opened in Berlin?", kinds=("chunk",), visibility=VISIBILITY)
     assert store.hybrid_calls[-1]["weights"] == {
         VectorName.BM25: 2.0,
         VectorName.DENSE_EN: 0.5,
         VectorName.DENSE_ML: 2.0,
+        VectorName.COLBERT: 2.0,
     }
+
+
+async def test_a_memory_search_reads_every_arm_of_both_keys_for_its_script() -> None:
+    """The memories' ranking reads each arm unfused: both keys of each space the
+    script calls for, and both BM25 keys; a Cyrillic query still pays no English arm."""
+    engine, _, _, store = await _parts()
+    result = await engine.retrieve(
+        CTX, "What opened in Berlin?", kinds=("memory",), visibility=VISIBILITY
+    )
+    latin = store.arms_calls[-1]
+    assert set(latin["dense"]) == {
+        VectorName.DENSE_EN,
+        VectorName.DENSE_EN_CTX,
+        VectorName.DENSE_ML,
+        VectorName.DENSE_ML_CTX,
+    }
+    assert set(latin["sparse"]) == {VectorName.BM25, VectorName.BM25_CTX}
+    assert not store.hybrid_calls
+    assert result.candidates[0].record_id == "chk_berlin_memory"
+    await engine.retrieve(CTX, "Офис в Москве", kinds=("memory",), visibility=VISIBILITY)
+    assert set(store.arms_calls[-1]["dense"]) == {VectorName.DENSE_ML, VectorName.DENSE_ML_CTX}
