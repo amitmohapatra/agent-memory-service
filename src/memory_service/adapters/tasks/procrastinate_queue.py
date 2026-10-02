@@ -226,8 +226,20 @@ class ProcrastinateTaskQueue:
     async def run_until_idle(
         self, queues: list[Queue] | None = None, *, concurrency: int = 4
     ) -> None:
-        """Process everything currently queued, then return (tests / batch jobs)."""
-        await self.run_worker(queues, concurrency=concurrency, wait=False)
+        """Process everything currently queued, then return (tests / batch jobs).
+
+        Without the periodic deferrer: a drain has nothing to schedule, and procrastinate's
+        deferrer swallows the cancellation that ends the worker while it defers, then sleeps
+        until the next cron tick - so the worker's shutdown waited out that sleep and an
+        intermittent drain hung for minutes."""
+        from procrastinate.periodic import PeriodicRegistry
+
+        registry = self.app.periodic_registry
+        self.app.periodic_registry = PeriodicRegistry()
+        try:
+            await self.run_worker(queues, concurrency=concurrency, wait=False)
+        finally:
+            self.app.periodic_registry = registry
 
 
 def handler(fn: Callable[[dict[str, Any]], Awaitable[Any]]) -> TaskHandler:
