@@ -70,6 +70,13 @@ Offline, LoCoMo conversation 1 (150 answerable questions), turns restated by a 2
 | turn + restatement as an extra key | 0.851 | 0.612 | 0.914 |
 | **turn + restatement as the turn's own key** | **0.858** | **0.617** | **0.943** |
 
+Through the service (`native_source_retrieval --ingest-uses memory_restatement`), the same
+conversation restated by the same 2B model behind a gateway stand-in, with the facts and
+relations of the final prompt, read 0.838 -> 0.842 (multi-hop 0.557 -> 0.586, open-domain
+0.545 -> 0.591, temporal 1.000 -> 0.973, one question), and 0.900 -> 0.897 at 20: within
+noise. The 2B model leaves pronouns in and writes facts without names; two of 419 calls
+returned invalid JSON and kept the turn as it was.
+
 One conversation is a noisy estimate (about three points); the full-corpus run and the
 through-the-service run with a gateway model are what this ADR is re-measured by. A 2B
 model is the floor: it resolves few dates and writes no facts; a hosted model through the
