@@ -98,4 +98,6 @@ def test_a_fiscal_phrase_replaces_the_calendar_reading_of_the_same_words() -> No
     assert by_text["last week"] == "2026-08-23..2026-08-29 (FY2026 W30)"
     assert by_text["three days ago"] == "2026-08-30"
     plain = dated_mentions("Markdowns started last week.", base=SAID)
-    assert [m["text"] for m in plain] == ["last week"] and ".." not in plain[0]["date"]
+    # without a retail calendar, the calendar week (Monday to Sunday) before
+    assert [m["text"] for m in plain] == ["last week"]
+    assert plain[0]["date"] == "2026-08-24..2026-08-30"

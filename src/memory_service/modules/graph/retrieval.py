@@ -25,6 +25,7 @@ from memory_service.domain.graph import BOOKKEEPING_LAYERS
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
+from memory_service.modules.retrieval import memory_ranking
 from memory_service.modules.retrieval.engine import Candidate, memory_candidate
 from memory_service.modules.retrieval.router import RoutedQuery
 from memory_service.observability.logging import get_logger
@@ -41,6 +42,14 @@ graph_budget_expired_total = Counter(
     "was answered without graph facts",
     registry=REGISTRY,
 )
+
+#: The graph as one more ranked list of memories, fused by reciprocal rank with the ranking
+#: so far: a memory at rank r there and rank g in the traversal scores
+#: ``1/(K + r) + GRAPH_WEIGHT/(K + g)``. 0 keeps the graph's memories appended after the
+#: ranked ones.
+GRAPH_WEIGHT = 0.0
+#: memories of the traversal that may enter the ranking (the fetch is bounded by this)
+GRAPH_MEMORY_DEPTH = 20
 
 _MULTI_HOP_TYPES = {
     QueryType.DOCUMENT_MULTI_HOP,
@@ -80,6 +89,43 @@ def _distinct(relations: list[Relation]) -> list[Relation]:
         seen.add(key)
         out.append(r)
     return out
+
+
+def _memory_order(ranked: list[Relation], depth: int) -> list[str]:
+    """The memories the ranked relations point at, in their order, at most ``depth``."""
+    order: list[str] = []
+    for relation in ranked:
+        pointers = itertools.chain(
+            [relation.memory_id] if relation.memory_id else [],
+            (ev.source_id for ev in relation.evidence if ev.source_type == "memory"),
+        )
+        order.extend(p for p in pointers if p not in order)
+        if len(order) >= depth:
+            break
+    return order[:depth]
+
+
+def _resort_memories(candidates: list[Candidate], added: list[Candidate], order: list[str]) -> None:
+    """Fuse by rank the memories as ranked so far (weight one) with the traversal's order
+    (``GRAPH_WEIGHT``), and put them back in the places memories held; the traversal's new
+    ones that do not fit go right after them. Ranks, not scores: by this stage a memory's
+    score is in whichever units the last fusion used."""
+    slots = [i for i, c in enumerate(candidates) if c.kind == "memory"]
+    memories = [candidates[i] for i in slots] + added
+    graph_rank = {rid: rank for rank, rid in enumerate(order, 1)}
+    k = memory_ranking.K
+    fused: dict[str, float] = {}
+    for rank, c in enumerate(memories, 1):
+        fused[c.record_id] = (1.0 / (k + rank) if rank <= len(slots) else 0.0) + (
+            GRAPH_WEIGHT / (k + graph_rank[c.record_id]) if c.record_id in graph_rank else 0.0
+        )
+        if c.record_id in graph_rank:
+            c.retrievers = sorted({*c.retrievers, "graph"})
+    memories.sort(key=lambda c: -fused[c.record_id])
+    for i, c in zip(slots, memories, strict=False):
+        candidates[i] = c
+    after = slots[-1] + 1 if slots else len(candidates)
+    candidates[after:after] = memories[len(slots) :]
 
 
 def fact_candidate(r: Relation, names: dict[str, str]) -> Candidate:
@@ -250,6 +296,10 @@ class GraphStage:
                 )
                 candidates[first_fact:first_fact] = added
                 diagnostics["graph"]["expansion_chunks"] = len(added)
+            if GRAPH_WEIGHT > 0:
+                await self._fuse_memories(ctx, ranked, candidates, visibility, as_of=as_of)
+                diagnostics["graph"]["fused"] = True
+                return candidates
             # Conversation relations point at memories, not document chunks. Resolve both
             # the direct foreign key and explicit memory evidence, with a separate hard
             # bound so one high-degree entity cannot monopolise the context or database.
@@ -276,6 +326,26 @@ class GraphStage:
                 candidates[first_fact:first_fact] = added
                 diagnostics["graph"]["expansion_memories"] = len(added)
         return candidates
+
+    async def _fuse_memories(
+        self,
+        ctx: MemoryExecutionContext,
+        ranked: list[Relation],
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        *,
+        as_of: datetime | None,
+    ) -> None:
+        """The traversal's memories as one more ranked list: each gains its reciprocal rank
+        in it (in the memory arms' units), the ones no arm found are read and compete on
+        that alone, and the memories are re-sorted in the places memories held."""
+        order = _memory_order(ranked, GRAPH_MEMORY_DEPTH)
+        if not order:
+            return
+        present = {c.record_id for c in candidates}
+        new = [rid for rid in order if rid not in present]
+        added = await self._expand_memories(ctx, new, visibility, as_of=as_of) if new else []
+        _resort_memories(candidates, added, order)
 
     async def _expand_memories(
         self,
