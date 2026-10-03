@@ -13,7 +13,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.modules.memory.pipeline import build_memory
-from memory_service.modules.memory.restatement import USE, grounded, restate
+from memory_service.modules.memory.restatement import USE, Restated, grounded, restate
 from memory_service.modules.rag.indexer import memory_index_text
 from memory_service.ports.intelligence import MemoryCandidate
 
@@ -41,7 +41,11 @@ async def test_the_model_sees_the_turn_the_turn_before_it_and_the_day() -> None:
     await restate(assist, text=TURN, speaker="caroline", said_at=SAID, before=BEFORE)  # type: ignore[arg-type]
     [(use, kwargs)] = assist.calls
     sent = json.loads(kwargs["user"])
-    assert use == USE and kwargs["schema"]["required"] == ["restatement", "facts"]
+    assert use == USE and kwargs["schema"]["required"] == [
+        "restatement",
+        "facts",
+        "relations",
+    ]
     assert sent["said_on"] == "2023-05-08" and sent["weekday"] == "Monday"
     assert sent["previous_turn"] == {"speaker": "melanie", "text": BEFORE["text"]}
     assert sent["turn"] == {"speaker": "caroline", "text": TURN}
@@ -59,9 +63,36 @@ async def test_grounded_lines_are_kept_and_invented_ones_dropped() -> None:
         }
     )
     said = await restate(assist, text=TURN, speaker="caroline", said_at=SAID, before=BEFORE)  # type: ignore[arg-type]
-    assert said == (
+    assert said == Restated(
         "Caroline went camping at the lake with her kids around 2023-05-06. "
         "Caroline's kids loved camping at the lake."
+    )
+
+
+async def test_relations_are_kept_only_when_both_ends_were_said() -> None:
+    assist = _Assist(
+        {
+            "restatement": "",
+            "facts": [],
+            "relations": [
+                {"subject": "Caroline", "predicate": "Went Camping At", "object": "the lake"},
+                {"subject": "Caroline", "predicate": "camped_with", "object": "her kids"},
+                {"subject": "Caroline", "predicate": "camped_with", "object": "her kids"},
+                {"subject": "Caroline", "predicate": "visited", "object": "Yosemite"},
+                {"subject": "Caroline", "predicate": "went on!", "object": "the lake"},
+                {"subject": "Caroline", "predicate": "camped_on", "object": "2023-05-06"},
+            ],
+        }
+    )
+    said = await restate(assist, text=TURN, speaker="caroline", said_at=SAID, before=BEFORE)  # type: ignore[arg-type]
+    # an invented place and a malformed predicate are dropped, a computed date is kept
+    assert said == Restated(
+        "",
+        [
+            ("Caroline", "went_camping_at", "the lake"),
+            ("Caroline", "camped_with", "her kids"),
+            ("Caroline", "camped_on", "2023-05-06"),
+        ],
     )
 
 
@@ -71,13 +102,15 @@ async def test_no_model_no_output_and_nothing_to_say_are_none() -> None:
     assert off.calls == []
     failed = _Assist(None)
     assert await restate(failed, text=TURN, speaker="c", said_at=SAID, before=None) is None  # type: ignore[arg-type]
-    empty = _Assist({"restatement": "", "facts": []})
+    empty = _Assist({"restatement": "", "facts": [], "relations": []})
     assert await restate(empty, text="Thanks!", speaker="c", said_at=SAID, before=None) is None  # type: ignore[arg-type]
 
 
 def test_a_computed_date_is_grounded_but_an_invented_number_is_not() -> None:
     source = "caroline: I went to a support group yesterday"
     assert grounded("Caroline went to a support group on 2023-05-07, a Sunday.", source)
+    assert grounded("Caroline went to a support group on Sunday, May 7, 2023.", source)
+    assert grounded("Caroline went to a support group on the 7th of May.", source)
     assert not grounded("Caroline went to 2 support groups.", source)
     assert not grounded("Caroline went with Melanie to a support group.", source)
 
@@ -98,3 +131,25 @@ def test_the_restatement_is_appended_to_the_turns_own_key() -> None:
     assert key.endswith(f"{TURN}\nCaroline went camping at the lake with her kids.")
     plain = build_memory(candidate.model_copy(update={"restatement": None}), ctx, now=SAID)
     assert memory_index_text(plain).endswith(TURN)
+
+
+def test_the_relations_are_stored_on_the_turn_for_the_graph() -> None:
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="caroline", workspace_id="ws")
+    candidate = MemoryCandidate(
+        content=TURN,
+        memory_type=MemoryType.EPISODIC,
+        lifetime=Lifetime.LONG_TERM,
+        category="verbatim_turn",
+        evidence=[EvidenceRef(source_type="message", source_id="m2", observed_at=SAID)],
+        restatement_relations=[("Caroline", "camped_at", "the lake")],
+    )
+    memory = build_memory(candidate, ctx, now=SAID)
+    assert memory.system_metadata["restatement_relations"] == [
+        ["Caroline", "camped_at", "the lake"]
+    ]
+    assert (
+        "restatement_relations"
+        not in build_memory(
+            candidate.model_copy(update={"restatement_relations": []}), ctx, now=SAID
+        ).system_metadata
+    )

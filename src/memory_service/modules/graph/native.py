@@ -284,6 +284,23 @@ def _usable_entity(name: str) -> bool:
     return not re.fullmatch(r"[\d.,%]+", canon)
 
 
+#: what a relation written with a turn's restatement is believed at: the open extractor's
+RESTATED_CONFIDENCE = 0.6
+
+
+def _restated_relations(memory: CanonicalMemory) -> list[tuple[str, str, str, float]]:
+    """The relations the restatement stored on a verbatim turn, as the open extractor's."""
+    out: list[tuple[str, str, str, float]] = []
+    for item in memory.system_metadata.get("restatement_relations") or []:
+        if (
+            isinstance(item, (list, tuple))
+            and len(item) == 3
+            and all(isinstance(x, str) for x in item)
+        ):
+            out.append((item[0], item[1], item[2], RESTATED_CONFIDENCE))
+    return out
+
+
 def _model_relation(
     memory: CanonicalMemory,
     keys: Sequence[str],
@@ -348,6 +365,16 @@ class NativeGraphEnrichment:
         subject: Entity | None = None
         if memory.subject:
             subject = ent(memory.subject, canonical_entity(memory.subject))
+        #: the speaker's bare name ("caroline" for user:caroline)
+        speaker = canonical_entity(memory.subject.split(":", 1)[-1]) if memory.subject else ""
+
+        def person(name: str) -> Entity:
+            # the speaker named by the model is the speaker's own node, not a THING that a
+            # question naming them would resolve to in preference to it
+            if subject is not None and canonical_entity(name) == speaker:
+                return subject
+            return ent(name)
+
         obj_text = (memory.object or "").strip()
         if subject is not None and memory.predicate and obj_text and len(obj_text) <= 80:
             obj = ent(obj_text, canonical_entity(obj_text))
@@ -391,7 +418,11 @@ class NativeGraphEnrichment:
             if not is_english(memory.lang) and self.assist.wants("relation_extraction")
             else []
         )
-        opened_names = [name for s, _, o, _ in opened for name in (s, o)]
+        # and the relations the restatement wrote with the turn (``memory_restatement``)
+        restated = _restated_relations(memory)
+        opened_names = [name for s, _, o, _ in opened for name in (s, o)] + [
+            name for s, _, o, _ in restated for name in (s, o) if canonical_entity(name) != speaker
+        ]
         for name in dict.fromkeys([*declared, *named, *opened_names]):
             if not _usable_entity(name):
                 continue
@@ -423,10 +454,12 @@ class NativeGraphEnrichment:
                 )
             )
         extracted: list[Relation] = []
-        if opened:
+        if opened or restated:
+            # the model's relations: read out of non-English text here, or written with the
+            # turn's restatement at ingest (``memory_restatement``, one call for both)
             extracted = [
-                _model_relation(memory, keys, ent(a), pred, ent(b), confidence)
-                for a, pred, b, confidence in opened
+                _model_relation(memory, keys, person(a), pred, ent(b), confidence)
+                for a, pred, b, confidence in [*opened, *restated]
                 if _usable_entity(a) and _usable_entity(b)
             ]
         elif (

@@ -22,15 +22,19 @@ merged by rank, lowered it to 0.568. The LoCoMo paper finds the same for "observ
 1. **A new model use, `memory_restatement`** (`modules/memory/restatement.py`). For a
    conversation message, the model is shown the turn, the turn before it, the speakers and
    the date it was said, and returns a standalone restatement (names for pronouns, absolute
-   dates for relative ones, who/what/where/with whom/when/why) and up to three facts.
+   dates for relative ones, who/what/where/with whom/when/why), up to three facts, and up
+   to four relations (person, snake_case predicate, object): one call for all three.
 2. **Appended to the turn's own index key** (`memory_index_text`), never replacing it: the
    memory's content, payload text and rendering stay the turn verbatim; the restatement is
    stored as `system_metadata["restatement"]` and only searched. No new vector, no new
    collection, no new fusion weight.
 3. **Untrusted output is checked**: a line is kept only when every number and every
-   capitalised name in it occurs in what the model was shown (computed dates excepted), and
-   lengths are bounded. A weak model can add less; it cannot add an invented person, place or
-   quantity.
+   capitalised name in it occurs in what the model was shown, and lengths are bounded (a
+   computed date - "2023-05-07", "May 7, 2023", "the 7th of May" - is
+   the one exception). A relation is kept only when every word of its person and its object
+   (pronoun-like function words and computed dates aside) occurs in what the model was
+   shown, and its predicate is short snake_case. A weak model can add less; it cannot add an
+   invented person, place or quantity.
 4. **Through the gateway only.** It is an ordinary `LLMAssist` use: it runs when the bound
    agent's or tenant's virtual key (or the operator's) can pay and the tenant's policy allows
    it, on the model the policy names for it (a fast use by default) - OpenAI, Gemini or a
@@ -38,6 +42,21 @@ merged by rank, lowered it to 0.568. The LoCoMo paper finds the same for "observ
    leaves it out, so registering a key does not start a model call per message on its own;
    a tenant names it in its policy (`PUT /v1/model-key/policy`, `uses`). Without a model nothing
    changes.
+5. **The relations link the turn in the knowledge graph.** They are stored as
+   `system_metadata["restatement_relations"]`; graph enrichment (`modules/graph/native.py`)
+   writes each as a model-extracted relation (confidence at most 0.6, `extraction: llm`)
+   bound to the turn, and links the turn to each object it names, as the open extractor does
+   for non-English text. The English rules found typed facts only in sentences shaped like
+   "I work at X"; a casual turn ("we took the kids to a pottery class") now reaches the graph
+   too, with no second model call. The speaker the model names is the speaker's own node.
+6. **Turns stored before the model could restate them** are restated by a tool, exactly as
+   ingest would (bound to each turn's owner, so their key pays and their policy decides),
+   then re-indexed and re-linked: `python -m memory_service.tools.restate --tenant acme
+   [--limit N] [--force]`. The turn's content is unchanged, so nothing derived from it is
+   invalidated.
+7. **Which model, per use.** The tenant's policy names the gateway model for each use
+   (`PUT /v1/model-key/policy`, `models: {"memory_restatement": "openai/gpt-4.1-mini"}`);
+   a use it does not name calls the service's fast model (`LLMTuning.fast_model`).
 
 ## Evidence
 
@@ -58,8 +77,8 @@ gateway writes both.
 
 ## Consequences
 
-- One model call per conversation message at ingest (a few hundred tokens in, under a
-  hundred out); none at query time.
+- One model call per conversation message at ingest (a few hundred tokens in, about a
+  hundred and fifty out with the relations); none at query time.
 - The index text of a restated turn changes; turns indexed before the model was configured
   keep their key until they are re-indexed.
 - `benchmark.native_source_retrieval --ingest-uses memory_restatement` (with `BENCH_LLM=on`
