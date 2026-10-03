@@ -468,7 +468,10 @@ class FeedbackAPI:
     """Judgements on what the platform did - the learning signal: a verdict on a memory
     reinforces, retracts or corrects it; on a run it decides the run's outcome (a person over
     the judge over the run's own status) and moves the confidence of the memories it cites;
-    on a tool call it counts toward approval patterns; on a procedure it can retire it."""
+    on a tool call it counts toward approval patterns; on a procedure it can retire it.
+
+    A vote waits for a tenant admin (``review.state == "pending"``) before it changes
+    anything; ``pending``, ``approve`` and ``dismiss`` are the review queue."""
 
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
@@ -561,6 +564,32 @@ class FeedbackAPI:
         return Page[Feedback](
             items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
             next_cursor=data.get("next_cursor"),
+        )
+
+    async def pending(self, *, limit: int = 100, cursor: str | None = None) -> Page[Feedback]:
+        """The review queue (the tenant's administrator key): verdicts that change nothing
+        until approved, newest first, each with its author's ``author_record``."""
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        data = await self._ctx._request("GET", "/v1/feedback/pending", params=params)
+        return Page[Feedback](
+            items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
+            next_cursor=data.get("next_cursor"),
+        )
+
+    async def approve(self, feedback_id: str, *, note: str | None = None) -> Feedback:
+        """Apply a pending verdict as if it had just arrived (the tenant's administrator key)."""
+        return await self._review(feedback_id, "approve", note)
+
+    async def dismiss(self, feedback_id: str, *, note: str | None = None) -> Feedback:
+        """Keep a pending verdict for statistics; it is never applied."""
+        return await self._review(feedback_id, "dismiss", note)
+
+    async def _review(self, feedback_id: str, action: str, note: str | None) -> Feedback:
+        body = {"note": note} if note is not None else {}
+        return Feedback.model_validate(
+            await self._ctx._request("POST", f"/v1/feedback/{feedback_id}/{action}", json=body)
         )
 
 

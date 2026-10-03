@@ -2,7 +2,8 @@
 
 A profile block with a standing question is kept answering it from what its scope may read;
 feedback is a verdict on something the platform did - a memory it reinforces or retracts, a
-run whose outcome follows the highest-ranked source that judged it.
+run whose outcome follows the highest-ranked source that judged it. A vote changes nothing
+until the tenant's administrator approves it (ADR 0028).
 """
 
 from __future__ import annotations
@@ -18,12 +19,23 @@ FACT = "The payments platform team runs its release review on Thursdays at 15:00
 QUESTION = "when does the payments platform team review releases"
 
 
+#: the tenant administrator client of each harness, by the harness client
+ADMINS: dict[int, object] = {}
+
+
 async def _harness(app, tenant_id: str = "acme"):
     platform = sdk(app, BOOTSTRAP)
     tenant = await platform.admin.create_tenant(tenant_id.title(), tenant_id=tenant_id)
     admin = sdk(app, tenant.admin_key.token)
     service = await admin.tenant.keys.issue("service", f"{tenant_id}-harness")
-    return sdk(app, service.token)
+    harness = sdk(app, service.token)
+    ADMINS[id(harness)] = admin.bind(tenant_id=tenant_id)
+    return harness
+
+
+def _reviewer(harness):  # type: ignore[no-untyped-def]
+    """The tenant's administrator, who reviews the votes a harness's users cast."""
+    return ADMINS[id(harness)]
 
 
 @pytest.mark.covers("profile.edit_profile_block", "profile.get_profile")
@@ -68,8 +80,14 @@ async def test_a_verdict_on_a_memory_is_stored_and_projected(app, running) -> No
     )
     assert replay.feedback_id == confirmed.feedback_id
 
+    # a vote waits for the tenant's administrator, and changes nothing until approved
+    assert confirmed.review is not None and confirmed.review.state == "pending"
     one = await user.feedback.get(confirmed.feedback_id)
     assert one.feedback_id == confirmed.feedback_id and one.verdict == "confirm"
+    assert one.projection is None
+    approved = await _reviewer(harness).feedback.approve(confirmed.feedback_id)
+    assert approved.review is not None and approved.review.state == "approved"
+    one = await user.feedback.get(confirmed.feedback_id)
     assert one.projection is not None and one.projection.action == "memory_reinforced"
 
     corrected = await user.feedback(
@@ -97,15 +115,64 @@ async def test_a_run_s_outcome_follows_the_highest_ranked_verdict(app, running) 
 
     system = await run.feedback("run", "run_outcome_1", "confirm", source="system")
     assert (await run.feedback.get(system.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
+    # a client that says "judge" is not the service's judge: its word waits like a vote
     judge = await run.feedback("run", "run_outcome_1", "reject", source="judge", score=0.2)
+    assert judge.review is not None and judge.review.state == "pending"
+    await _reviewer(harness).feedback.approve(judge.feedback_id)
     assert (await run.feedback.get(judge.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
     human = await run.feedback("run", "run_outcome_1", "confirm", source="human")
+    await _reviewer(harness).feedback.approve(human.feedback_id)
     assert (await run.feedback.get(human.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
     late = await run.feedback("run", "run_outcome_1", "reject", source="system")
     projection = (await run.feedback.get(late.feedback_id)).projection
     assert projection is not None and projection.action == "none", (
         "the run's own status does not override a person"
     )
+
+
+@pytest.mark.covers(
+    "feedback.pending_feedback", "feedback.approve_feedback", "feedback.dismiss_feedback"
+)
+@pytest.mark.covers_error(
+    "feedback.pending_feedback", "feedback.approve_feedback", "feedback.dismiss_feedback"
+)
+async def test_votes_wait_in_a_queue_only_the_tenant_administrator_reviews(app, running) -> None:
+    harness = await _harness(app)
+    admin = _reviewer(harness)
+    user = harness.bind(user_id="u1")
+    await user.remember(FACT, visibility="USER")
+    memory = next(m for m in await user.advanced.memories.list() if FACT in m.content)
+    up = await user.feedback("memory", memory.memory_id, "confirm")
+    down = await user.feedback("run", "run_voted", "reject", comment="wrong answer")
+
+    queue = await admin.feedback.pending()
+    assert [f.feedback_id for f in queue.items] == [down.feedback_id, up.feedback_id]
+    assert queue.items[0].author_record == {"pending": 2, "approved": 0, "dismissed": 0}
+
+    # the service key that cast the votes may not review them
+    for review in (user.feedback.pending(), user.feedback.approve(up.feedback_id)):
+        with pytest.raises(MemoryError) as refused:
+            await review
+        assert refused.value.status == 403
+
+    await admin.feedback.approve(up.feedback_id, note="matches the release calendar")
+    dismissed = await admin.feedback.dismiss(down.feedback_id, note="the answer was right")
+    assert dismissed.review is not None and dismissed.review.state == "dismissed"
+    assert dismissed.review.note == "the answer was right"
+    assert dismissed.projection is not None and dismissed.projection.action == "none"
+    assert (await admin.feedback.pending()).items == []
+
+    # decided once: a second decision is refused, an unknown verdict is not found
+    with pytest.raises(MemoryError) as twice:
+        await admin.feedback.approve(down.feedback_id)
+    assert twice.value.status == 409
+    with pytest.raises(MemoryError) as unknown:
+        await admin.feedback.dismiss("fb_missing")
+    assert unknown.value.status == 404
+
+    # what the tenant's administrator says needs no review
+    own = await admin.feedback("run", "run_admin", "confirm")
+    assert own.review is None
 
 
 @pytest.mark.covers_error(

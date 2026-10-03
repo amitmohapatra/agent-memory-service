@@ -333,6 +333,11 @@ def _has_role(principal: ServicePrincipal, roles: tuple[KeyRole, ...]) -> bool:
     return role in {r.value for r in roles}
 
 
+def is_tenant_administrator(principal: ServicePrincipal) -> bool:
+    """Whether the credential is a tenant's administrator (or the platform's)."""
+    return _has_role(principal, (KeyRole.ADMIN, KeyRole.PLATFORM))
+
+
 def require_role(*roles: KeyRole) -> Any:
     async def dependency(principal: ServicePrincipalDep) -> ServicePrincipal:
         if not _has_role(principal, roles):

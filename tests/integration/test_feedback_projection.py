@@ -1,4 +1,5 @@
-"""Feedback on a memory changes the memory through the revision machinery, exactly once."""
+"""Feedback on a memory changes the memory through the revision machinery, exactly once; a
+vote changes nothing until a tenant admin approves it (ADR 0028)."""
 
 from __future__ import annotations
 
@@ -6,13 +7,14 @@ import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
-from memory_service.domain.errors import ScopeDenied, ValidationFailed
+from memory_service.domain.errors import Conflict, ScopeDenied, ValidationFailed
 from memory_service.domain.feedback import (
     Feedback,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
     ProjectionAction,
+    ReviewState,
 )
 from memory_service.domain.revisions import RevisionKind
 from tests.integration.test_memory import _memories, _observe
@@ -20,6 +22,18 @@ from tests.integration.test_memory import _memories, _observe
 pytestmark = pytest.mark.integration
 ALICE = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
 BOB = MemoryExecutionContext(tenant_id="acme", user_id="bob", workspace_id="ops")
+#: a tenant admin, whose word needs no review
+ROOT = MemoryExecutionContext(tenant_id="acme", user_id="root")
+#: who reviews through the API: the tenant's administrator credential
+REVIEWER = "key:acme-admin"
+
+
+async def _admin(container, uow_factory) -> None:
+    async with uow_factory() as uow:
+        await container.services["authz"].grant_membership(
+            "acme", "root", admin=True, revisions=uow.revisions
+        )
+        await uow.commit()
 
 
 async def _first_memory(container, uow_factory):
@@ -34,13 +48,21 @@ async def _first_memory(container, uow_factory):
     return memories[0]
 
 
-async def _submit(container, uow_factory, ctx, **fields) -> Feedback:
+async def _submit(container, uow_factory, ctx, *, approve: bool = True, **fields) -> Feedback:
+    """Submit; a vote that waits for review is approved by a tenant admin first (``approve``),
+    so it lands as it did before review existed."""
     service = container.services["feedback"]
     record = Feedback(tenant_id=ctx.tenant_id, **fields)
     async with uow_factory() as uow:
         stored, created = await service.submit(uow, ctx, record)
         await uow.commit()
     assert created
+    if stored.pending and approve:
+        async with uow_factory() as uow:
+            await service.review(
+                uow, "acme", stored.feedback_id, approve=True, reviewed_by=REVIEWER
+            )
+            await uow.commit()
     await container.tasks.drain()  # feedback.project (+ memory.index it enqueues)
     await container.tasks.drain()
     async with uow_factory() as uow:
@@ -332,3 +354,143 @@ async def test_a_verdict_on_a_run_is_its_outcome(container, uow_factory) -> None
     async with uow_factory() as uow:
         outcome = await uow.tools.outcome("acme", "run_judged")
     assert outcome is not None and outcome.success is False and outcome.source == "human"
+
+
+async def test_a_vote_waits_for_review_and_changes_nothing_until_approved(
+    container, uow_factory
+) -> None:
+    memory = await _first_memory(container, uow_factory)
+    service = container.services["feedback"]
+    vote = await _submit(
+        container,
+        uow_factory,
+        ALICE,
+        approve=False,
+        target_kind=FeedbackTargetKind.MEMORY,
+        target_id=memory.memory_id,
+        verdict=FeedbackVerdict.CONFIRM,
+    )
+    assert vote.review is not None and vote.review.state is ReviewState.PENDING
+    assert vote.projection is None
+    async with uow_factory() as uow:
+        untouched = await uow.memories.get("acme", memory.memory_id)
+    assert untouched is not None and untouched.confidence == memory.confidence
+
+    async with uow_factory() as uow:
+        [(queued, record)] = await service.pending(uow, "acme")
+    assert queued.feedback_id == vote.feedback_id
+    assert record == {"pending": 1, "approved": 0, "dismissed": 0}
+
+    async with uow_factory() as uow:
+        approved = await service.review(
+            uow,
+            "acme",
+            vote.feedback_id,
+            approve=True,
+            reviewed_by=REVIEWER,
+            note="checked against the source",
+        )
+        await uow.commit()
+    assert approved.review is not None and approved.review.reviewed_by == REVIEWER
+    await container.tasks.drain()
+    await container.tasks.drain()
+    async with uow_factory() as uow:
+        reinforced = await uow.memories.get("acme", memory.memory_id)
+        applied = await service.get(uow, ALICE, vote.feedback_id)
+        assert await service.pending(uow, "acme") == []
+    assert reinforced is not None and reinforced.confidence > memory.confidence
+    assert applied.projection is not None
+    assert applied.projection.action is ProjectionAction.MEMORY_REINFORCED
+    # reviewed once: a second decision is a conflict, not a second application
+    with pytest.raises(Conflict):
+        async with uow_factory() as uow:
+            await service.review(uow, "acme", vote.feedback_id, approve=False, reviewed_by=REVIEWER)
+
+
+async def test_a_dismissed_vote_is_kept_and_never_applied(container, uow_factory) -> None:
+    memory = await _first_memory(container, uow_factory)
+    service = container.services["feedback"]
+    agent = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_voted"})
+    vote = await _submit(
+        container,
+        uow_factory,
+        agent,
+        approve=False,
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_voted",
+        verdict=FeedbackVerdict.REJECT,
+        evidence_refs=[{"source_type": "memory", "source_id": memory.memory_id}],
+    )
+    assert vote.pending
+    async with uow_factory() as uow:
+        await service.review(
+            uow,
+            "acme",
+            vote.feedback_id,
+            approve=False,
+            reviewed_by=REVIEWER,
+            note="answer was right",
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    async with uow_factory() as uow:
+        kept = await service.get(uow, agent, vote.feedback_id)
+        unchanged = await uow.memories.get("acme", memory.memory_id)
+        outcome = await uow.tools.outcome("acme", "run_voted")
+        # the author's record now shows the dismissal to whoever reviews their next vote
+        counts = await uow.feedback.review_counts("acme", user_id="alice", agent_id="helper")
+    assert kept.review is not None and kept.review.state is ReviewState.DISMISSED
+    assert kept.review.note == "answer was right"
+    assert kept.projection is not None and kept.projection.action is ProjectionAction.NONE
+    assert unchanged is not None and unchanged.confidence == memory.confidence
+    assert outcome is None
+    assert counts["dismissed"] == 1
+
+
+async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
+    """The judge's own verdict, a run reporting its own status, an owner's edit of a memory
+    and what a tenant admin says need no review."""
+    memory = await _first_memory(container, uow_factory)
+    service = container.services["feedback"]
+    run = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_self"})
+    await _admin(container, uow_factory)
+    cases = [
+        (
+            run,
+            {
+                "target_kind": "run",
+                "target_id": "run_self",
+                "verdict": "confirm",
+                "source": "system",
+            },
+            {},
+        ),
+        (
+            ALICE,
+            {"target_kind": "run", "target_id": "run_other", "verdict": "confirm"},
+            {"trusted": True},
+        ),
+        (ROOT, {"target_kind": "run", "target_id": "run_admin", "verdict": "reject"}, {}),
+        (ALICE, {"target_kind": "memory", "target_id": memory.memory_id, "verdict": "reject"}, {}),
+    ]
+    for ctx, fields, kwargs in cases:
+        async with uow_factory() as uow:
+            stored, _ = await service.submit(
+                uow, ctx, Feedback(tenant_id="acme", **fields), **kwargs
+            )
+            await uow.commit()
+        assert stored.review is None, fields
+    # a run's status reported by anyone but that run waits like any other vote
+    async with uow_factory() as uow:
+        stored, _ = await service.submit(
+            uow,
+            run,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_someone_else",
+                verdict=FeedbackVerdict.REJECT,
+                source=FeedbackSource.SYSTEM,
+            ),
+        )
+    assert stored.pending

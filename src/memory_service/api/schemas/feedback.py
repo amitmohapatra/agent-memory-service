@@ -18,6 +18,7 @@ from memory_service.domain.feedback import (
     Feedback,
     FeedbackEvidenceRef,
     FeedbackProjection,
+    FeedbackReview,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
@@ -108,10 +109,33 @@ class FeedbackResponse(BaseModel):
     projection: FeedbackProjection | None = Field(
         default=None, description="what the projector did; null until it has run"
     )
+    review: FeedbackReview | None = Field(
+        default=None,
+        description="null: applied as it arrived; else pending (changes nothing until a tenant "
+        "admin approves it), approved or dismissed",
+    )
+    author_record: dict[str, int] | None = Field(
+        default=None,
+        description="in the review queue only: how this author's verdicts fared in review "
+        "(pending, approved, dismissed)",
+    )
 
     @classmethod
-    def of(cls, feedback: Feedback) -> FeedbackResponse:
-        return cls.model_validate(feedback.model_dump())
+    def of(
+        cls, feedback: Feedback, author_record: dict[str, int] | None = None
+    ) -> FeedbackResponse:
+        return cls.model_validate({**feedback.model_dump(), "author_record": author_record})
+
+
+class FeedbackReviewRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"note": "Checked against the signed contract."}]},
+    )
+
+    note: str | None = Field(
+        default=None, max_length=COMMENT_MAX_CHARS, description="why, for the record"
+    )
 
 
 class FeedbackListResponse(BaseModel):

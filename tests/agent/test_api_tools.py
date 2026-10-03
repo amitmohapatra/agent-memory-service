@@ -99,7 +99,7 @@ async def _one_successful_run(agent, quote: str = "Q-1183") -> str:
 
 @pytest.mark.covers("tools.record_invocation", "feedback.submit_feedback")
 async def test_an_agent_records_its_calls_and_reports_how_the_run_ended(app, running) -> None:
-    _, harness = await _harness(app)
+    admin, harness = await _harness(app)
     agent = harness.bind(user_id="u1").agent("quote-bot")
 
     recorded = await agent.record_tool(
@@ -122,6 +122,8 @@ async def test_an_agent_records_its_calls_and_reports_how_the_run_ended(app, run
     # A person's verdict outranks the run's own status: the run corrected to a failure stops
     # validating anything mined from it.
     corrected = await agent.feedback("run", run_id, "reject", comment="rolled back")
+    assert corrected.review is not None and corrected.review.state == "pending"
+    await admin.bind(tenant_id="acme").feedback.approve(corrected.feedback_id)
     assert (await agent.feedback.get(corrected.feedback_id)).projection.action == "run_labelled"  # type: ignore[union-attr]
 
 

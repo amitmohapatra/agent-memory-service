@@ -1,18 +1,21 @@
-"""Feedback: submit a judgement, read it back, list what was said about one target."""
+"""Feedback: submit a judgement, read it back, list what was said about one target, and
+review the verdicts that wait for a tenant admin (ADR 0028)."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Body, Query, Request, Response
 
 from memory_service.api.deps import (
+    AdministeredTenantDep,
     ContainerDep,
     HeaderContextDep,
     ScopeBody,
     ServicePrincipalDep,
     build_context,
+    is_tenant_administrator,
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
@@ -21,6 +24,7 @@ from memory_service.api.schemas.feedback import (
     FeedbackListResponse,
     FeedbackRequest,
     FeedbackResponse,
+    FeedbackReviewRequest,
 )
 from memory_service.domain.feedback import FeedbackTargetKind
 from memory_service.modules.feedback.service import FeedbackService
@@ -53,13 +57,18 @@ def _service(container) -> FeedbackService:  # type: ignore[no-untyped-def]
         "admin), the rule that governs forgetting. The record is stored and projected "
         "asynchronously: on a "
         "memory, confirm/approve reinforce it, reject retracts it, correct/edit write a "
-        "corrected memory that supersedes it. A retry with the same `feedback_id` returns "
+        "corrected memory that supersedes it. A verdict that would change what was learned "
+        "on a person's or an agent's word (a confirm of a memory, a verdict on a run or a "
+        "procedure) is stored with `review.state=pending` and changes nothing until a tenant "
+        "admin approves it; an owner's reject/correct/edit of a memory, a run reporting its "
+        "own status, a tool-call decision and what a tenant admin says are applied as they "
+        "arrive. A retry with the same `feedback_id` returns "
         "the stored record with status 200 (with `Idempotency-Key`, the original 201 is "
         "replayed)."
     ),
 )
 async def submit_feedback(
-    request: Request, body: FeedbackRequest, container: ContainerDep, _: ServicePrincipalDep
+    request: Request, body: FeedbackRequest, container: ContainerDep, principal: ServicePrincipalDep
 ) -> Response:
     ctx = build_context(
         request,
@@ -75,7 +84,10 @@ async def submit_feedback(
     feedback = body.to_domain(ctx)
 
     async def write(uow):  # type: ignore[no-untyped-def]
-        stored, created = await _service(container).submit(uow, ctx, feedback)
+        # the tenant's administrator credential is the reviewer's own: no queue for it
+        stored, created = await _service(container).submit(
+            uow, ctx, feedback, trusted=is_tenant_administrator(principal)
+        )
         return 201 if created else 200, FeedbackResponse.of(stored).model_dump(mode="json"), None
 
     # ``feedback_id`` already makes the write idempotent (a retry gets the stored record and
@@ -124,6 +136,42 @@ async def list_feedback(
 
 
 @router.get(
+    "/feedback/pending",
+    response_model=FeedbackListResponse,
+    responses=_ERRORS,
+    summary="The review queue: verdicts that change nothing until approved, newest first",
+    description=(
+        "The tenant's administrator credential. Each verdict carries `author_record`: how its "
+        "author's verdicts fared in review (pending, approved, dismissed)."
+    ),
+)
+async def pending_feedback(
+    request: Request,
+    response: Response,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> FeedbackListResponse:
+    position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
+    before = (position["created_at"], position["feedback_id"]) if position else None
+    async with container.services["uow_factory"]() as uow:
+        queued = await _service(container).pending(uow, tenant_id, before=before, limit=limit + 1)
+    items, next_cursor = page(
+        queued,
+        limit=limit,
+        position=lambda q: {
+            "created_at": q[0].created_at.isoformat(),
+            "feedback_id": q[0].feedback_id,
+        },
+    )
+    link_next(request, response, next_cursor)
+    return FeedbackListResponse(
+        feedback=[FeedbackResponse.of(f, record) for f, record in items], next_cursor=next_cursor
+    )
+
+
+@router.get(
     "/feedback/{feedback_id}",
     response_model=FeedbackResponse,
     responses=_ERRORS,
@@ -134,3 +182,73 @@ async def get_feedback(
 ) -> FeedbackResponse:
     async with container.services["uow_factory"]() as uow:
         return FeedbackResponse.of(await _service(container).get(uow, ctx, feedback_id))
+
+
+async def _review(
+    request: Request,
+    container: Any,
+    tenant_id: str,
+    feedback_id: str,
+    body: FeedbackReviewRequest | None,
+    *,
+    approve: bool,
+) -> FeedbackResponse:
+    principal = request.state.service_principal
+    async with container.services["uow_factory"]() as uow:
+        reviewed = await _service(container).review(
+            uow,
+            tenant_id,
+            feedback_id,
+            approve=approve,
+            reviewed_by=f"key:{principal.service_id}",
+            note=body.note if body else None,
+        )
+        await uow.commit()
+    return FeedbackResponse.of(reviewed)
+
+
+_REVIEW_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: the note is optional, and so is the body
+ReviewBody = Annotated[
+    FeedbackReviewRequest | None,
+    Body(
+        openapi_examples={
+            "with a note": {"value": {"note": "Checked against the signed contract."}},
+            "without": {"value": {}},
+        }
+    ),
+]
+
+
+@router.post(
+    "/feedback/{feedback_id}/approve",
+    response_model=FeedbackResponse,
+    responses=_REVIEW_ERRORS,
+    summary="Approve a pending verdict: it is applied as if it had just arrived",
+    description="The tenant's administrator credential. 409 when it is not pending.",
+)
+async def approve_feedback(
+    request: Request,
+    feedback_id: str,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    body: ReviewBody = None,
+) -> FeedbackResponse:
+    return await _review(request, container, tenant_id, feedback_id, body, approve=True)
+
+
+@router.post(
+    "/feedback/{feedback_id}/dismiss",
+    response_model=FeedbackResponse,
+    responses=_REVIEW_ERRORS,
+    summary="Dismiss a pending verdict: kept for statistics, never applied",
+    description="The tenant's administrator credential. 409 when it is not pending.",
+)
+async def dismiss_feedback(
+    request: Request,
+    feedback_id: str,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    body: ReviewBody = None,
+) -> FeedbackResponse:
+    return await _review(request, container, tenant_id, feedback_id, body, approve=False)

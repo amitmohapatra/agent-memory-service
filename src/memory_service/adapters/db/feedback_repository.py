@@ -5,13 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import literal, select, tuple_, update
+from sqlalchemy import func, literal, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import FeedbackRow
-from memory_service.domain.feedback import Feedback, FeedbackProjection, FeedbackTargetKind
+from memory_service.domain.feedback import (
+    Feedback,
+    FeedbackProjection,
+    FeedbackReview,
+    FeedbackTargetKind,
+    ReviewState,
+)
 
 
 def _to_domain(r: FeedbackRow) -> Feedback:
@@ -36,8 +42,25 @@ def _to_domain(r: FeedbackRow) -> Feedback:
             "metadata": dict(r.metadata_ or {}),
             "created_at": r.created_at,
             "projection": r.projection,
+            "review": {
+                "state": r.review_state,
+                "reviewed_by": r.reviewed_by,
+                "reviewed_at": r.reviewed_at,
+                "note": r.review_note,
+            }
+            if r.review_state
+            else None,
         }
     )
+
+
+def _review_columns(review: FeedbackReview | None) -> dict[str, Any]:
+    return {
+        "review_state": review.state.value if review else None,
+        "reviewed_by": review.reviewed_by if review else None,
+        "reviewed_at": review.reviewed_at if review else None,
+        "review_note": review.note if review else None,
+    }
 
 
 class SqlFeedbackRepository:
@@ -46,7 +69,10 @@ class SqlFeedbackRepository:
 
     async def add(self, feedback: Feedback) -> bool:
         values: dict[str, Any] = {
-            **feedback.model_dump(mode="json", exclude={"metadata", "projection", "created_at"}),
+            **feedback.model_dump(
+                mode="json", exclude={"metadata", "projection", "created_at", "review"}
+            ),
+            **_review_columns(feedback.review),
             "metadata_": feedback.metadata,
             "created_at": feedback.created_at,
             "projection": feedback.projection.model_dump(mode="json")
@@ -80,6 +106,24 @@ class SqlFeedbackRepository:
             FeedbackRow.target_kind == target_kind.value,
             FeedbackRow.target_id == target_id,
         )
+        return await self._page(stmt, before=before, limit=limit)
+
+    async def list_pending(
+        self,
+        tenant_id: str,
+        *,
+        before: tuple[datetime, str] | None = None,
+        limit: int = 100,
+    ) -> list[Feedback]:
+        stmt = select(FeedbackRow).where(
+            FeedbackRow.tenant_id == tenant_id,
+            FeedbackRow.review_state == ReviewState.PENDING.value,
+        )
+        return await self._page(stmt, before=before, limit=limit)
+
+    async def _page(
+        self, stmt: Any, *, before: tuple[datetime, str] | None, limit: int
+    ) -> list[Feedback]:
         if before is not None:
             stmt = stmt.where(
                 tuple_(FeedbackRow.created_at, FeedbackRow.feedback_id)
@@ -100,3 +144,28 @@ class SqlFeedbackRepository:
                 projected_at=projection.projected_at,
             )
         )
+
+    async def set_review(self, tenant_id: str, feedback_id: str, review: FeedbackReview) -> None:
+        await self.s.execute(
+            update(FeedbackRow)
+            .where(FeedbackRow.tenant_id == tenant_id, FeedbackRow.feedback_id == feedback_id)
+            .values(**_review_columns(review))
+        )
+
+    async def review_counts(
+        self, tenant_id: str, *, user_id: str | None, agent_id: str | None
+    ) -> dict[str, int]:
+        stmt = (
+            select(FeedbackRow.review_state, func.count())
+            .where(
+                FeedbackRow.tenant_id == tenant_id,
+                FeedbackRow.review_state.is_not(None),
+                FeedbackRow.user_id.is_not_distinct_from(user_id),
+                FeedbackRow.agent_id.is_not_distinct_from(agent_id),
+            )
+            .group_by(FeedbackRow.review_state)
+        )
+        counts = {state.value: 0 for state in ReviewState}
+        for state, n in (await self.s.execute(stmt)).all():
+            counts[str(state)] = int(n)
+        return counts

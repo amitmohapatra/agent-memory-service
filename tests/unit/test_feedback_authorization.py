@@ -8,7 +8,12 @@ import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied, ValidationFailed
-from memory_service.domain.feedback import Feedback, FeedbackTargetKind, FeedbackVerdict
+from memory_service.domain.feedback import (
+    Feedback,
+    FeedbackSource,
+    FeedbackTargetKind,
+    FeedbackVerdict,
+)
 from memory_service.modules.feedback.service import FeedbackService
 
 OWNER = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
@@ -104,6 +109,77 @@ async def test_provenance_and_identity_come_from_the_request() -> None:
     stored, _ = await _service().submit(uow, ctx, body)
     assert stored.trace_id == ctx.trace_id and stored.created_at.year == 2026
     assert stored.workspace_id == "fin" and stored.user_id == "alice"
-    assert [j.task_name for j in uow.jobs] == ["feedback.project"]
+    # a reader's vote waits for review: stored, nothing scheduled (ADR 0028)
+    assert stored.pending and uow.jobs == []
     with pytest.raises(ValidationFailed, match="user_id"):
         await _service().submit(_Uow(), OWNER, _record(FeedbackVerdict.CONFIRM, user_id="mallory"))
+
+
+async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
+    """A vote waits; an owner's edit, a run's own status, a tool-call decision, the judge and
+    an admin in person do not. An agent acting for an admin is still an agent."""
+    run_ctx = OWNER.model_copy(update={"agent_id": "ref", "agent_run_id": "run_1"})
+    admin_agent = READER.model_copy(update={"agent_id": "ref"})
+    cases = [
+        (READER, _record(FeedbackVerdict.CONFIRM), {}, True),
+        (OWNER, _record(FeedbackVerdict.REJECT), {}, False),
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_1",
+                verdict=FeedbackVerdict.CONFIRM,
+                source=FeedbackSource.SYSTEM,
+            ),
+            {},
+            False,
+        ),
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_2",
+                verdict=FeedbackVerdict.REJECT,
+                source=FeedbackSource.SYSTEM,
+            ),
+            {},
+            True,
+        ),
+        (
+            READER,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.TOOL_CALL,
+                target_id="call_1",
+                verdict=FeedbackVerdict.APPROVE,
+            ),
+            {},
+            False,
+        ),
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_1",
+                verdict=FeedbackVerdict.REJECT,
+                source=FeedbackSource.SYSTEM,
+                evidence_refs=[{"source_type": "memory", "source_id": "mem_1"}],
+            ),
+            {},
+            True,
+        ),
+        (READER, _record(FeedbackVerdict.CONFIRM), {"trusted": True}, False),
+        (admin_agent, _record(FeedbackVerdict.CONFIRM), {}, True),
+    ]
+    for ctx, record, kwargs, waits in cases:
+        uow = _Uow()
+        stored, _ = await _service({"carol"} if ctx is admin_agent else frozenset()).submit(
+            uow, ctx, record, **kwargs
+        )
+        assert stored.pending is waits, (ctx.principal_id, record.target_kind, record.source)
+        assert bool(uow.jobs) is not waits
+    stored, _ = await _service({"carol"}).submit(_Uow(), READER, _record(FeedbackVerdict.CONFIRM))
+    assert not stored.pending, "a tenant admin in person"

@@ -12,6 +12,15 @@ A run's outcome is a projection of its feedback: the harness sends RUN feedback 
 ``source=system`` from the run's final status, ``/v1/verify`` writes it with ``source=judge``,
 and a person overrides both. ``OUTCOME_PRECEDENCE`` orders them; a verdict never replaces an
 outcome a higher-ranked source already gave.
+
+A vote is not applied on its word (ADR 0028). A thumbs-up or -down can be wrong, or cast to
+move a memory, so a verdict that would change what the platform learned - a memory's
+standing, a run's outcome, a procedure - waits in review (``ReviewState.PENDING``) until a
+tenant admin approves it; a dismissed one stays stored for statistics and changes nothing.
+Applied as they arrive: the grounding judge's own verdict, a run reporting its own final
+status, an owner's retraction or correction of their memory (an edit, not a vote), a
+decision on a tool call (what is learned from it is only ever a suggestion an admin
+accepts), and anything a tenant admin says in person.
 """
 
 from __future__ import annotations
@@ -65,6 +74,24 @@ OUTCOME_PRECEDENCE: Final = {
     FeedbackSource.INTERRUPT: 3,
     FeedbackSource.HUMAN: 3,
 }
+
+
+class ReviewState(StrEnum):
+    """Where a verdict that waits for a person stands. A record with no review was applied
+    as it arrived."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DISMISSED = "dismissed"
+
+
+class FeedbackReview(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    state: ReviewState
+    reviewed_by: str | None = Field(default=None, description="the admin who decided")
+    reviewed_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=COMMENT_MAX_CHARS)
 
 
 class ProjectionAction(StrEnum):
@@ -158,6 +185,13 @@ class Feedback(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
     projection: FeedbackProjection | None = None
+    review: FeedbackReview | None = Field(
+        default=None, description="null: applied as it arrived; else where its review stands"
+    )
+
+    @property
+    def pending(self) -> bool:
+        return self.review is not None and self.review.state is ReviewState.PENDING
 
     @field_validator("feedback_id", "target_id")
     @classmethod
