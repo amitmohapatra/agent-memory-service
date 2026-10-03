@@ -42,6 +42,7 @@ of evidence.
 | `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.list()`, `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
+| `POST /v1/memories/{memory_id}/restore` | bring back a memory **automatic forgetting archived**: `CURRENT` and searchable again | `ctx.advanced.memories.restore(id)` |
 | `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.advanced.graph.entities(...)` |
 | `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence; `depth` hops of traversal (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.entity(id)` |
 | `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.advanced.job(job_id)` |
@@ -60,7 +61,7 @@ fact = await ctx.remember(
     "The planner prefers weekly digests over per-event alerts.",
     memory_type="PREFERENCE",  # SEMANTIC · PREFERENCE · EPISODIC · PROCEDURAL · TASK · USER · TOOL · OUTCOME
     lifetime="LONG_TERM",  # SHORT_TERM · LONG_TERM
-    visibility="USER",  # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORK · WORKSPACE · TENANT
+    visibility="USER",  # PRIVATE · RUN · AGENT_GROUP · THREAD · USER · WORKSPACE · TENANT
     entities=["weekly digest"],  # linked in the graph
 )
 print(fact.memory_id, fact.deduplicated)
@@ -85,7 +86,7 @@ for memory in page.items:
 if page.next_cursor:
     page = await ctx.advanced.memories.page(limit=50, cursor=page.next_cursor)
 
-async for memory in ctx.advanced.memories.iter(limit=200):  # the cursor, walked for you
+async for memory in ctx.advanced.memories.iter(page_size=200):  # the cursor, walked for you
     ...
 
 await ctx.forget(memory.memory_id)  # soft delete + index removal; idempotent
@@ -93,6 +94,23 @@ await ctx.forget(memory.memory_id)  # soft delete + index removal; idempotent
 
 `memories` is the audit view — "what do we hold about this user, thread or run" — and it is not
 ranked. The ranked, query-driven view is `recall` ([context.md](context.md)).
+
+### Archived is not forgotten
+
+Two different things take a memory out of retrieval. **Forgetting** (`DELETE`, `ctx.forget`, the
+`memory_forget` agent tool, a tenant's `retention_days` sweep) is a soft delete: final from the
+API's point of view. **Archiving** is the background forgetting policy (importance × recency ×
+access decay): a memory idle for at least 30 days whose score falls below 0.05 is marked
+`ARCHIVED` — the row and its evidence stay, it leaves the search index and the default
+listings. `restore` undoes only the second:
+
+```python
+memory = await ctx.advanced.memories.restore(memory_id)  # CURRENT and re-indexed
+```
+
+The same people who may forget a memory may restore it (its owner, the user an agent acts for,
+or a tenant admin). Restoring a memory that is not archived returns it unchanged; one that was
+forgotten stays forgotten (`404`).
 
 ## The knowledge graph
 

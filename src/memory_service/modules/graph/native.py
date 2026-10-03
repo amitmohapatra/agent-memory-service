@@ -35,7 +35,6 @@ from memory_service.modules.memory.native import strip_turn_prefix
 from memory_service.ports.intelligence import Entity, Relation
 from memory_service.ports.models import ProviderInfo
 
-MAX_ENTITIES_PER_CHUNK = 6
 _PRINCIPAL_TYPES = {"user": "USER", "agent": "AGENT", "thread": "THREAD", "work": "WORK"}
 _GENERIC_WORDS = """
 table figure section page note appendix chapter total item revenue change fy25 fy26

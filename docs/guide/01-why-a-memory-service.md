@@ -4,7 +4,7 @@
 > This chapter is about why the obvious fixes do not work, and what this service does
 > instead.
 
-**Next:** [2 · Concepts](02-concepts.md) · **Up:** [Documentation](../README.md)
+**Next:** [Which API for which scenario](../USAGE.md) · **Up:** [Documentation](../README.md)
 
 ---
 
@@ -118,7 +118,7 @@ Being clear about this early saves disappointment later.
 
 - **It is not an LLM wrapper.** Every one of its eleven optional model uses has a
   deterministic fallback, and the service ships with the LLM **off**. A full install with no
-  model gateway at all is a working install. Chapter 8 lists each use and its fallback.
+  model gateway at all is a working install. [`LLM-USES.md`](../LLM-USES.md) lists each use and its fallback.
 - **It is not an agent framework.** It has no opinion about how your agent loops, which
   model you call, or what a tool is. It is a service your agent talks to.
 - **It is not finished.** Several seams are built and deliberately not wired — the admission
@@ -129,8 +129,15 @@ Being clear about this early saves disappointment later.
 
 ## What to read next
 
-- New to the vocabulary → [2 · Concepts](02-concepts.md)
-- Here for the retrieval quality → [4 · Retrieval](04-retrieval.md)
-- Evaluating it for a regulated environment → [7 · Authorization](07-authorization.md) and
-  [6 · Trust](06-trust.md)
-- Need to deploy it this week → [11 · Operations](11-operations.md)
+Chapters 2-8 and 10-12 are not written yet ([the outline](../README.md#the-guide)); until
+they are, these pages cover the same ground:
+
+- New to the vocabulary → [Which API for which scenario](../USAGE.md) and
+  [the API, area by area](../api/README.md)
+- Here for the retrieval quality → [ADR 0026](../adr/0026-general-memory-ranking.md) (the
+  ranking) and [`MEASUREMENTS.md`](../MEASUREMENTS.md)
+- Evaluating it for a regulated environment → [api/tenancy.md](../api/tenancy.md) (who may
+  see what, the read audit), [api/feedback.md](../api/feedback.md) (review before learning)
+  and [api/context.md](../api/context.md) (evidence and grounding)
+- Need to deploy it this week → the [README](../../README.md#install-and-run) and
+  [api/admin.md](../api/admin.md) (onboarding, probes)

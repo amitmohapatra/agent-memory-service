@@ -29,9 +29,11 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 
 | Route | Purpose | SDK (`t = memory.administer("acme")`) |
 | --- | --- | --- |
-| `POST /v1/keys` | issue an admin or service key; the secret is shown once | `t.keys.issue(role, name, …)` |
+| `POST /v1/keys` | issue an admin or service key; the secret is shown once | `t.keys.issue(role, name, workspace_id=…, expires_in_days=…, may_act_as=…)` |
 | `GET /v1/keys` | the tenant's keys, oldest first (cursor paged) | `t.keys.list()`, `t.keys.page()` |
+| `PATCH /v1/keys/{key_id}` | change whom a key may act for (`may_act_as`); it applies on the key's next request | `t.keys.update(key_id, may_act_as=[…])` |
 | `DELETE /v1/keys/{key_id}` | revoke; it fails on its next request from any instance | `t.keys.revoke(key_id)` |
+| `GET /v1/keys/self` | who the calling key is — any key may ask about itself (401 unknown, revoked or expired; 403 refused) | `memory.tenant.keys.whoami()` |
 | `POST /v1/workspaces` | create a workspace | `t.workspaces.create(name, workspace_id=…)` |
 | `GET /v1/workspaces` · `/{id}` | list, or read one | `t.workspaces.list()`, `.get(id)` |
 | `DELETE /v1/workspaces/{id}` | delete it; every member loses the audience and every key bound to it is revoked at once | `t.workspaces.delete(id)` |
@@ -40,7 +42,7 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `GET /v1/workspaces/{id}/members` | who is in it | `t.workspaces.members(id)` |
 | `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
 | `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` |
-| `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…)` |
+| `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted, the model per use | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…, models=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
 
@@ -87,7 +89,23 @@ is a `403`, not a read. Revocation takes effect on the next request from **any**
 a cache expires. `expires_in_days` is available at issue time, and a `workspace_id` on the key binds
 it to that workspace (and is revoked with it).
 
-## Model keys: four levels, resolved in order
+A key also says **whom it may act for** (`may_act_as`: `user:<id>`, `agent:<id>`, or `*` for every
+principal of the tenant — the default at issue; empty means only the key itself). An admin
+narrows or widens it later with `PATCH /v1/keys/{key_id}`; like a revocation it applies on the
+key's next request from any instance.
+
+```python
+await t.keys.update(issued.key_id, may_act_as=["agent:reorder-agent", "user:planner-7"])
+me = await MemoryClient(url, api_key=issued.token).tenant.keys.whoami()  # GET /v1/keys/self
+print(me.key_id, me.tenant_id, me.principal, me.role, me.may_act_as)
+```
+
+`GET /v1/keys/self` is open to every key, about itself: it is how a harness checks its
+credential at startup and how the platform's other services authenticate a key they were
+handed. `tenant_id` is null for a key that names the tenant per request (the platform key, a
+development key); `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
+
+## Model keys: two registered levels and the operator's, resolved in order
 
 A read that is permitted to use an LLM spends *someone's* virtual key, and the service resolves the
 most specific level that has a row:
@@ -95,6 +113,11 @@ most specific level that has a row:
 ```
 the acting agent's key  →  the tenant's key  →  (no row anywhere) the operator's
 ```
+
+The agent's key is `PUT /v1/agents/model-key` (the request names the `agent_id`; one key per
+`agent_id`, whichever user it acts for); the tenant's is `PUT /v1/model-key` (the admin key); the
+operator's is the deployment's `BIFROST_VIRTUAL_KEY`, on the gateway at `BIFROST_URL`. There is no
+workspace level.
 
 Two rules make that safe rather than merely convenient:
 
@@ -115,13 +138,23 @@ print(await t.model_key_status())  # the tenant level, metadata only
 
 ## Model policies: what a key may be spent on
 
-A policy narrows what the model is used for, at the tenant level (`uses`, `read_assist`,
-`models: {use: model}`, `eval_sample`). With no row the default is
-every use, reads assisted. A use runs only when all three agree:
+A policy narrows what the model is used for. It is the tenant's alone (there is no agent- or
+workspace-level policy) and has exactly three fields: `uses`, `read_assist` and
+`models: {use: model}`. With no row the default is **every use except the opt-in ones** —
+today only `memory_restatement` (ADR 0027), which costs a model call per conversation message
+and so is never started by registering a key — with reads assisted and the service's default
+model per use. (`GET /v1/model-key/policy` answers `stored: false` and that default.) A stored
+policy's `uses` is exactly what runs: name `memory_restatement` there to opt in. A use runs
+only when all of these hold:
 
 ```
-the operator's allow-list (MEMORY__MODELS__LLM__USES)  ∩  the resolved policy's uses  ∧  a key that can pay
+the gateway is configured (BIFROST_URL)  ∧  the tenant policy's uses  ∧  a key that can pay
 ```
+
+There is no deployment-level allow-list of uses and no environment variable that names a
+model: the service's defaults are the `LLMTuning` constants (`model` and `fast_model`, both
+`auto`: discovered through the gateway's model catalogue), and the policy's `models` map
+overrides them per use.
 
 `read_assist` decides whether a read (`/v1/context`, `/v1/recall`, `/v1/verify`, the graph
 routes) consults the model; a request cannot override the policy. Background work — extraction, reflection,
@@ -130,8 +163,11 @@ owner's policy decides; a periodic job scans only tenants that hold a live key (
 the operator's key pays). Changing a policy invalidates the assisted read output built under it.
 
 ```python
-await t.set_model_policy(["contextual_extraction", "summaries"], read_assist=False)
-await t.workspaces.set_model_policy("finance", ["reflection", "summaries"], read_assist=True)
+await t.set_model_policy(
+    ["contextual_extraction", "summaries", "memory_restatement"],  # restatement: opt-in
+    read_assist=False,
+    models={"memory_restatement": "openai/gpt-4.1-mini"},  # provider/model, through Bifrost
+)
 for day in (await t.model_usage()).days:  # one row per day and use
     print(day.day, day.use, day.tokens, day.calls)
 ```

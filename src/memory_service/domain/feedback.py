@@ -19,8 +19,8 @@ standing, a run's outcome, a procedure - waits in review (``ReviewState.PENDING`
 tenant admin approves it; a dismissed one stays stored for statistics and changes nothing.
 Applied as they arrive: the grounding judge's own verdict, a run reporting its own final
 status, an owner's retraction or correction of their memory (an edit, not a vote), a
-decision on a tool call (what is learned from it is only ever a suggestion an admin
-accepts), and anything a tenant admin says in person.
+decision on a tool call (what is learned from it is only ever a suggestion, applied once
+accepted), and anything a tenant admin says.
 """
 
 from __future__ import annotations

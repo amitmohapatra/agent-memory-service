@@ -48,7 +48,7 @@ docker compose exec -e MEMORY_TEST_PROVIDERS=env memory-validate make validate
 ```
 
 Secrets never enter the repository: the Bifrost virtual key lives in the git-ignored
-`secrets.env` (or `MEMORY__MODELS__LLM__API_KEY`); provider keys live only in Bifrost.
+`secrets.env` (or the `BIFROST_VIRTUAL_KEY` environment variable); provider keys live only in Bifrost.
 
 ## Pre-commit
 

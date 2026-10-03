@@ -14,31 +14,33 @@ sequenceDiagram
   participant C as POST /v1/context
   participant R as Retrievers
   participant G as Grounding
-  A->>C: {query, scope, token_budget, require_evidence?}
+  A->>C: {query, scope, token_budget?, window?, tools?, format?}
   C->>R: conversation window · memories · document chunks · graph facts · summaries
-  Note over R: dense + BM25, fused (RRF), audience-filtered in the store
+  Note over R: audience-filtered in the store; memories: weighted RRF of BM25, two dense spaces and ColBERT arms, then session/speaker/time/period rules (ADR 0026)
   R-->>C: candidates
   C->>C: dedupe · rank · pack to the budget · render with citations
   C->>C: evidence report: required / satisfied / missing groups
-  C-->>A: ContextBundle {rendered, parts, evidence, token_estimate, cache_hit}
-  A->>A: prompt the model with bundle.rendered
-  A->>G: POST /v1/verify {answer, bundle} — did each claim follow?
+  C-->>A: format=prompt: {rendered, bundle_id, evidence_status, …} · format=full: the whole bundle
+  A->>A: prompt the model with rendered
+  A->>G: POST /v1/verify {answer, bundle_id} — did each claim follow?
   G-->>A: per-claim verdicts: supported · unsupported · contradicted · borderline
 ```
 
 The evidence report is the part people skip and then wish they had not. `status` is `COMPLETE`,
 `INCOMPLETE` or `INSUFFICIENT`, with `required_groups`, `satisfied_groups` and `missing_groups`:
-the service is telling you it could not find what an answer to *this* question needs. With
-`require_evidence=True` an `INSUFFICIENT` report raises `InsufficientEvidence` instead of
-handing you a bundle you might answer from anyway.
+the service is telling you it could not find what an answer to *this* question needs. The
+default (`format="prompt"`) response carries it as `evidence_status`; `format="full"` carries
+the whole report as `evidence`. Nothing raises on `INSUFFICIENT` — there is no
+`require_evidence` flag — so check it yourself and answer that you do not know rather than
+answer from a bundle that cannot support it.
 
 ## Routes
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/context` | build a `ContextBundle` for this turn | `ctx.context(query, token_budget=…, tools=…, since_revision=…, require_evidence=…)` |
-| `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=["chunk", "memory", "summary"])` |
-| `POST /v1/verify` | verify an answer claim by claim against evidence | `ctx.verify(answer, bundle=…)` |
+| `POST /v1/context` | the context for this turn: rendered (`format="prompt"`, the default) or the whole bundle (`format="full"`) | `ctx.context(query, token_budget=…, tools=[names], window=…, document_ids=…, format=…, debug=…)` |
+| `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=[…], time_from=…, time_to=…, as_of=…, known_at=…, document_ids=…)`; kinds: `memory`, `chunk`, `summary`, `episode`, `message` |
+| `POST /v1/verify` | verify an answer claim by claim against the context it was given; with a run, recorded as the judge's RUN feedback | `ctx.verify(answer, bundle_id=…, run_id=…)` |
 | `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
 | `PATCH /v1/threads/{id}` | title and metadata (creates the thread when it does not exist yet) | `ctx.history.update(title=…, metadata=…)` |
 | `DELETE /v1/threads/{id}` | soft-delete a thread | `ctx.history.delete()` |
@@ -49,8 +51,12 @@ handing you a bundle you might answer from anyway.
 ## The bundle
 
 ```python
+prompt = await ctx.context("how did revenue develop?", token_budget=4000)
+prompt.rendered, prompt.bundle_id, prompt.evidence_status, prompt.token_estimate
+prompt.tool_candidates  # only when tools=[...] was given
+
 bundle = await ctx.context(
-    "how did revenue develop?", token_budget=4000, tools={"available": tool_names, "k": 8}
+    "how did revenue develop?", token_budget=4000, tools=tool_names, format="full"
 )
 
 bundle.rendered  # prompt-ready text, with citation markers
@@ -63,12 +69,11 @@ bundle.memories  # durable facts and preferences      (ContextItem)
 bundle.knowledge  # document passages, with document, page and evidence
 bundle.graph_facts  # entity relations
 bundle.summaries  # document and section summaries
-bundle.revision, bundle.delta  # the scope revision; pass it back as since_revision
 bundle.evidence.status  # COMPLETE | INCOMPLETE | INSUFFICIENT
 bundle.evidence.missing_groups
+bundle.bundle_id, bundle.handles  # what /v1/verify and the [m1] handles refer to
 bundle.token_estimate, bundle.token_budget, bundle.cache_hit
-bundle.insufficient  # the status, as a boolean
-bundle.evidence_items()  # the packed evidence as /v1/verify items, in citation order
+bundle.insufficient  # status == "INSUFFICIENT", as a boolean
 ```
 
 The pinned sections — profile, thread summary, procedures, tool hints, in that order — open
@@ -80,29 +85,29 @@ store cannot answer comes back nearly empty instead of full of whatever ranked n
 (`diagnostics.below_relevance_floor` counts them). Exact identifier hits and expansion
 companions are exempt. They are one indexed read each and run concurrently with retrieval; none of them calls
 a model. Memories an agent's own pulls kept using for requests of the same pattern are
-pre-included ([agent-tools.md](agent-tools.md)). `revision` is the scope's revision: a request
-with `since_revision` lists only the items new or changed since then (`delta: true`); the
-pinned sections always come whole, and when the record of that revision has expired (an hour)
-the whole bundle comes back with `delta: false`. The cache key includes the `tools` request.
+pre-included ([agent-tools.md](agent-tools.md)). `window=False` leaves the conversation window
+out, for a framework that keeps its own history. The cache key includes the `tools` request.
 
 `rendered` presents memory as evidence to weigh with ids to cite — not as instructions to follow.
 That framing is deliberate: a retrieved passage is data, and an agent that treats it as a command
 is one prompt-injection away from a problem.
 
-## Reads call a model only when the policy or the request says so
+## Reads call a model only when the tenant's policy says so
 
-Every read takes `use_llm`. Omitted, the resolved model policy's `read_assist` decides;
-`true`/`false` override it for one request. Either way only the read helpers the operator and
-the policy allow run (query expansion, question decomposition, a grounding judge in the
-borderline band) and only when a model key can pay ([tenancy.md](tenancy.md)); the response
-header `X-Trellis-LLM-Tokens` says what the request spent. The pinned sections never call a
+Whether a read consults a model is the tenant's model policy, `read_assist`
+(`PUT /v1/model-key/policy`); a request cannot override it — there is no per-request
+`use_llm`. Even then only the read uses the policy's `uses` name run (`query_expansion` for a
+question no rule classified, `entity_resolution` on the graph route, `grounding_judge` for
+borderline claims in `/v1/verify`), and only when a model key can pay
+([tenancy.md](tenancy.md)); the response header `X-Trellis-LLM-Tokens` says what the request
+spent. Query decomposition was removed in 0.3.0. The pinned sections never call a
 model: summaries, profiles and procedure titles are written in the background. With no key,
 the deterministic path answers.
 
 ## Verifying an answer
 
 ```python
-report = await ctx.verify(answer_text, bundle=bundle)
+report = await ctx.verify(answer_text, bundle_id=prompt.bundle_id)  # run_id= to record it on a run
 print(report.supported, report.unsupported, report.contradicted, report.borderline)
 print(report.per_claim_hallucination_rate, report.nli_provider, report.representative)
 for verdict in report.claims:
@@ -111,8 +116,11 @@ for verdict in report.claims:
 
 The cascade is deterministic first: citations are resolved, then an NLI head scores each claim
 against its best premises, and a contradiction scan runs. Only the borderline band is a candidate
-for a model, and only with `use_llm=True`. This is the same endpoint the harness's grounded judge
-uses before it is willing to spend anything on an LLM judge.
+for a model, and only when the policy allows `grounding_judge` with `read_assist` on and a key
+can pay. With a run (`run_id`, or the scope's agent run) the verdict is recorded as RUN feedback
+from the service's own judge (`source="judge"`, applied without review —
+[feedback.md](feedback.md)); `report.feedback_id` names it. This is the same endpoint the
+harness's grounded judge uses before it is willing to spend anything on an LLM judge.
 
 ## Conversation
 

@@ -620,17 +620,6 @@ class EntityProfile(BaseModel):
 # --------------------------------------------------------------------------- tools
 
 
-class ToolCall(BaseModel):
-    """One call an agent is about to make, or has just made."""
-
-    model_config = ConfigDict(extra="allow")
-
-    tool: str
-    args: dict[str, Any] = Field(default_factory=dict)
-    task: str = ""
-    step: int | None = None
-
-
 class ToolResult(BaseModel):
     """``record_tool``: the stored invocation (``recorded=False`` when it was a retry)."""
 

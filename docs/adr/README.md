@@ -31,13 +31,13 @@ is not finished).
 | [0018](0018-tool-memory.md) | Tool memory: record, learn, advise — **never execute** | accepted |
 | [0019](0019-separate-model-tier.md) | The model tier is deployed separately, on CPU | **superseded (2026-09)**: the served tier was removed; models load in-process |
 | [0020](0020-framework-adapters-live-in-the-consumer.md) | Framework adapters do not live in the memory service — a service that ships a LangGraph package depends on its own consumer | accepted |
-| [0021](0021-tenants-keys-and-workspaces.md) | Tenants, API keys and workspaces are the service's own, with revocation that takes effect on the next request | accepted; amends 0005, amended by 0022 |
+| [0021](0021-tenants-keys-and-workspaces.md) | Tenants, API keys and workspaces are the service's own, with revocation that takes effect on the next request | accepted; amends 0005, amended by 0022; its user groups were removed with their routes (2026-10, migration `0021_final_surface`) |
 | [0022](0022-trellis-names-and-api-conventions.md) | Trellis names and API conventions: `trellis.memory`, `X-Trellis-*` headers, RFC 9457 problem details, `traceparent`, operation ids — with the old spellings kept as aliases for one release | accepted; amends 0005 and 0021 |
-| [0023](0023-m3-lite-feedback-team-keys-pagination-webhooks.md) | M3-lite: `POST /v1/feedback` with a projector, team and workspace model keys, cursor pagination, and signed outbound webhooks | accepted; amends 0012, 0021, 0022 |
+| [0023](0023-m3-lite-feedback-team-keys-pagination-webhooks.md) | M3-lite: `POST /v1/feedback` with a projector, team and workspace model keys, cursor pagination, and signed outbound webhooks | accepted; amends 0012, 0021, 0022; **partly superseded (2026-10)**: outbound webhooks, workspace model keys and the ANSWER/BRIEF feedback targets were removed (migration `0021_final_surface` - a migration, not ADR 0021); notifications live in agent-runs |
 | 0024 | The multilingual runtime and its accuracy programme (Memory Service M2 + M4) | **landing with M2/M4** — the record and `docs/MULTILINGUAL-RUNTIME.md` arrive with that work |
 | [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
-| [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; off unless a model is configured |
+| [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
 
 ## Where the numbers behind these decisions are

@@ -20,10 +20,6 @@ from memory_service.domain.graph import INVALIDATED_BY
 from memory_service.domain.ids import stable_key
 from memory_service.ports.intelligence import Relation
 
-REASON_MEMORY_SUPERSEDED = "memory_superseded"
-REASON_CONTRADICTION = "contradiction"
-REASON_DOCUMENT_REINDEXED = "document_reindexed"
-
 
 def invalidation_edge(
     loser: Relation,

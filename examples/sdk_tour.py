@@ -266,10 +266,12 @@ async def tour() -> int:
         old = next(m for m in history if m.memory_id == mem_ids["timezone"])
         assert old.temporal_status == "SUPERSEDED" and old.superseded_by == tz[0].memory_id
         items = await user.search("what is my timezone", kinds=["memory"])
-        assert any("New_York" in i.text for i in items) and not any(
-            "Berlin" in i.text for i in items
-        )
-        return "Berlin -> New_York superseded (history kept), repeat reinforced, recall serves only CURRENT"
+        # the superseded fact is never served; the turns themselves stay searchable as what
+        # was said when (a temporal question needs the old one), so "Berlin" may appear in
+        # a verbatim turn but not as the timezone fact
+        assert any("New_York" in i.text for i in items)
+        assert not any(i.id == mem_ids["timezone"] for i in items)
+        return "Berlin -> New_York superseded (history kept), repeat reinforced, recall serves only CURRENT facts"
 
     await c.step("consolidation: supersede + reinforce + temporal history", consolidate)
 
@@ -279,7 +281,9 @@ async def tour() -> int:
         mems = await user.advanced.memories.list()
         assert not any(m.memory_id == mem_ids["editor"] for m in mems)
         items = await user.search("favourite editor", kinds=["memory"])
-        assert not any("neovim" in i.text for i in items)
+        # the fact is gone; the verbatim turn it was read from is not "unsaid" (forget it
+        # too to remove the sentence) - the same contract tests/e2e/test_memory_flow.py holds
+        assert not any(i.id == mem_ids["editor"] for i in items)
         try:
             await user.advanced.memories.get(mem_ids["editor"])
             raise AssertionError("forgotten memory still readable")

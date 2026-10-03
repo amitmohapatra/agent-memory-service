@@ -29,12 +29,12 @@ under `ctx.advanced`.
 | `remember(content, memory_type=, visibility=)` / `update(id, content, reason=)` / `forget(id)` | state, supersede or forget one memory |
 | `search(query, kinds=, limit=)` | ranked evidence without bundle assembly |
 | `history(limit=)` / `history.add([...])` / `history.thread()` | the transcript: read it, append to it (`EVENT`: something that happened), the thread with its durable summary |
-| `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.list_for(kind, id)` reads it back |
+| `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.list_for(kind, id)` reads it back; `.pending()` / `.approve(id, note=)` / `.dismiss(id, note=)` work the review queue (tenant admin key) |
 | `record_tool(tool, args, output=, status=)` | what a run did; whether it worked is `feedback("run", run_id, verdict)` |
 | `tool_hints(task, available=, k=)` | which tool, the learned plan, the next step, prefilled and missing arguments |
 | `agent_tools()` / `call_agent_tool(name, args)` | the memory tools an agent calls itself (pull mode) |
-| `profile()` / `profile.edit(block, old, new, source_query=)` | the pinned profile blocks |
-| `verify(answer, bundle=)` | per-claim grounding of an answer |
+| `profile()` / `profile.edit(block, new, old=, source_query=)` | the pinned profile blocks |
+| `verify(answer, bundle_id=, run_id=)` | per-claim grounding of an answer against the context it was given (`bundle_id` from `context()`) |
 
 `ctx.advanced` holds `documents`, `graph`, `tools` (the catalog and approval
 suggestions), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the
@@ -46,7 +46,7 @@ client's `tenant` and `admin` administration objects.
 agent = memory.bind(tenant_id="acme", user_id="u1", agent_id="research")
 await agent.advanced.model_keys.set(virtual_key, idempotency_key="research-key-v1")
 status = await agent.advanced.model_keys.status()  # status only; never the secret
-bundle = await agent.context("What did we decide?", use_llm=False)
+bundle = await agent.context("What did we decide?")
 ```
 
 The service encrypts the virtual key and binds it to the tenant and agent owner. Registration
@@ -54,9 +54,10 @@ requires the operator's envelope-key configuration. Rotation and revocation also
 background jobs and retries. `await agent.advanced.model_keys.revoke()` prevents using that agent's
 credential and does not switch it to the operator key. Memory-service model calls exclude MCP.
 
-Ingestion model uses and read model uses are independent. Context, search, verify and graph
-query follow the model policy's `read_assist` when `use_llm` is omitted; `True`/`False`
-override it for one read, and permit only the uses the operator and the policy enable.
+Ingestion model uses and read model uses are independent. Whether context, search, verify and
+graph queries consult a model is the tenant's model policy (`read_assist`, set with
+`client.tenant.set_model_policy(uses, read_assist=...)` under the tenant admin key); a request
+cannot override it, and only the uses the policy names run. There is no per-request `use_llm`.
 
 ## Standing questions
 
@@ -80,7 +81,8 @@ Every closed vocabulary on the wire is a `Literal` in `trellis.memory.models`
 in your editor and a 422 from the service naming the allowed values; it is never silently
 dropped. The service keeps the SDK's Literals equal to its own enums with a test.
 
-`search(kinds=...)` accepts `chunk` (document passages), `memory` and `summary`.
+`search(kinds=...)` accepts `memory`, `chunk` (document passages), `summary`, `episode`
+(earlier conversations) and `message` (this thread's messages).
 
 ## Headers, tracing and errors
 
@@ -100,7 +102,8 @@ the SDK a client of its own; an httpx client instrumented by OpenTelemetry injec
 
 Errors are RFC 9457 problems mapped to one exception per `code`: `AuthenticationError`,
 `AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError`,
-`RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`, `InsufficientEvidence`.
+`RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`. Insufficient evidence is not
+an exception: `context()` returns `evidence_status` (`INSUFFICIENT` means say you do not know).
 Each carries `status`, `retryable`, `trace_id`, `request_id` and `details`. A request that
 got no response raises `TimeoutError` or `DependencyUnavailableError` with `status` 0.
 
@@ -117,4 +120,11 @@ async with MemoryClient(base_url, api_key=key) as client:
             ...
         await ctx.feedback("memory", memories.items[0].memory_id, "confirm", score=0.9)
         page = await ctx.feedback.page_for("memory", memories.items[0].memory_id)
+        # a confirm by a user or an agent waits for review (page.items[0].review.state ==
+        # "pending"); the tenant admin key works the queue:
+        admin_ctx = MemoryClient(base_url, api_key=tenant_admin_key).bind()
+        for vote in (await admin_ctx.feedback.pending()).items:
+            await admin_ctx.feedback.approve(vote.feedback_id, note="checked")
 ```
+
+See [`docs/USAGE.md`](../../docs/USAGE.md) for which call fits which scenario.

@@ -121,9 +121,6 @@ class ApiKey(BaseModel):
     def usable_at(self, now: datetime) -> bool:
         return self.revoked_at is None and (self.expires_at is None or now < self.expires_at)
 
-    def may_act_for(self, principal: str) -> bool:
-        return ANY_PRINCIPAL in self.may_act_as or principal in self.may_act_as
-
 
 class IssuedKey(BaseModel):
     """What issuing returns: the record and the one-time plaintext token."""

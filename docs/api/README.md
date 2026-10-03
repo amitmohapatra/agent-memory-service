@@ -1,20 +1,21 @@
 # The API, area by area
 
 One page per area: what it is for, a diagram of how it works, every route in it, and the SDK
-call that makes each one. The generated contract — every schema, every error, examples — is
+call that makes each one. Looking for *which* call fits a job rather than what a route does?
+Start with [Which API for which scenario](../USAGE.md). The generated contract — every schema, every error, examples — is
 [`../openapi.json`](../openapi.json) (`make openapi`), and `/docs` on a running service is the
 same thing, browsable. These pages are the explanation; the contract is the authority.
 
 | Page | The question it answers | Routes |
 | --- | --- | --- |
-| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/messages` (events), `/v1/memories`, `/v1/graph/*`, `/v1/jobs/{id}` |
+| [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/messages` (events), `/v1/memories` (incl. `/supersede`, `/restore`), `/v1/graph/*`, `/v1/jobs/{id}` |
 | [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads/{id}`, `/v1/messages` |
 | [agent-tools.md](agent-tools.md) | what can an agent pull from memory itself, and what does that teach the push? | `/v1/agent-tools` |
 | [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}` (its `summary`) |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |
-| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change? | `/v1/feedback` |
-| [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/model-key`, `/v1/agents/model-key`, `/v1/reads` |
+| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback`, `/v1/feedback/pending`, `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
+| [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/keys/self`, `/v1/keys/{id}`, `/v1/model-key`, `/v1/model-key/policy`, `/v1/model-key/usage`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 
 ## What every call shares
@@ -45,8 +46,9 @@ WORKSPACE-visible write needs a workspace row and a member ([tenancy.md](tenancy
 
 **Errors are RFC 9457 problem documents** (`application/problem+json`) with a `type`, a `title`,
 a `status`, a `detail` and, where a field is at fault, `errors`. The SDK raises them as
-`ValidationFailed`, `AuthorizationFailed`, `NotFoundError`, `ConflictError`,
-`InsufficientEvidence` and friends from `trellis.memory.errors`.
+`ValidationError`, `AuthenticationError`, `AuthorizationError`, `NotFoundError`,
+`ConflictError`, `RateLimitedError` and friends from `trellis.memory.errors`. Insufficient
+evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
 
 **Pagination is a cursor**, not an offset: a list route answers `{"…": [...], "next_cursor": …}`
 and the SDK exposes both `list(...)` (one page) and `page(...)` / `iter_*` (the cursor).

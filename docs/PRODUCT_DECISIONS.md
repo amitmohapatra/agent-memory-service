@@ -55,7 +55,10 @@ this is the defence. Also why the echo rule matters: an agent repeating what it 
 not raise confidence.
 
 **Hybrid retrieval: dense + BM25 + RRF + cross-encoder rerank.** Commodity, and necessary.
-Keep exactly this. One measured observation from this repository: recall on an external
+Keep exactly this. *(Superseded, note added 2026-10-03: the cross-encoder rerank was measured
+worse than the fused order and removed; memories are now ranked by [ADR 0026](adr/0026-general-memory-ranking.md) -
+weighted reciprocal-rank fusion of BM25, two dense spaces and ColBERT late-interaction arms,
+then session / speaker / time / period rules, with no reranker.)* One measured observation from this repository: recall on an external
 corpus stayed high with a *random* embedding, meaning the lexical path was carrying the
 result — dense alone would not have.
 
@@ -78,7 +81,9 @@ outgrew the verification budget.
 **Seven of the eight off-by-default retrieval flags — done, 2026-09-20.** `minicoil`,
 `colbert`, `pageindex`, `raptor`, `graph_ppr`, `graphrag_global` and `late_chunking` are
 removed: flags, wiring, adapters, the `strategies` module, the late-interaction vector
-support in the search layer, and 854 MB of ColBERT weights. `splade` remained as the single
+support in the search layer, and 854 MB of ColBERT weights. *(Superseded for `colbert`, note
+added 2026-10-03: ADR 0025 brought late interaction back for memories, and ADR 0026 keeps it
+as two fusion arms - not as a flag.)* `splade` remained as the single
 experiment slot until the Phase-1 freeze (2026-09) removed it too: the sparse leg is BM25 with
 server-side IDF, and a learned sparse encoder is a benchmark challenger, never a product flag.
 

@@ -43,9 +43,11 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
 | `POST /v1/tools/hints` | candidates, plan, next step, prefilled and missing arguments | `ctx.tool_hints(task, available=…, k=…)` |
-| `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support | `ctx.advanced.tools.approval_suggestions()` |
+| `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support | `ctx.advanced.tools.approval_suggestions(tool=…)` |
+| `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
 
-`POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`), and
+`POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's
+`ctx.context(query, tools=[...names])`), and
 tool-call feedback (`POST /v1/feedback`, `target_kind: tool_call`) feeds the statistics and the
 approval patterns.
 
@@ -150,7 +152,25 @@ A verdict on a tool call (`POST /v1/feedback` with `target_kind: tool_call`, `me
 ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is counted per
 (agent, tool, argument shape). The shape is value-free: each argument with its kind, numbers by
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
-suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them.
+suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
+
+```python
+for s in await ctx.advanced.tools.approval_suggestions(tool="erp-create_po"):
+    print(s.id, s.arg_shape, s.suggestion, s.support, s.approve_rate, s.accepted)
+entry = await ctx.advanced.tools.accept_suggestion(s.id)  # the catalog entry, updated
+print(entry.approve_when)
+```
+
+Accepting composes the suggestion into the tool's catalog `approve_when` expression (the
+harness evaluates it before a call; `trellis.memory.approval.evaluate` is the reference). The
+rules of the route:
+
+* only the agent whose decisions the suggestion was learned from may accept it (bind the same
+  `agent_id`); any other caller gets `404`;
+* `409` when the decisions no longer support the suggestion, or when it would auto-approve an
+  `irreversible` tool (those calls are always asked about; `always_ask` may be accepted for any
+  tool);
+* accepting one already part of `approve_when` returns the entry unchanged.
 
 ## What this area does not do
 
