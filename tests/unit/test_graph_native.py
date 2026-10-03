@@ -291,3 +291,23 @@ def test_query_terms_and_fact_candidate() -> None:
     assert c.kind == "fact" and c.text == "Amit works at ACME" and c.retrievers == ["graph"]
     assert c.payload["chunk_id"] == "chk_1" and c.payload["page"] == 3
     assert c.representation is Representation.RELATION
+
+
+async def test_the_restatements_relations_link_the_turn_in_the_graph() -> None:
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="caroline", workspace_id="ws1")
+    mem = await _memory("Yes, we went with the kids, they loved it.", ctx)
+    mem.system_metadata["restatement_relations"] = [
+        ["Caroline", "went_camping_at", "the lake"],
+        ["Caroline", "went_with", "the kids"],
+        ["bad"],
+    ]
+    entities, relations = await NativeGraphEnrichment().enrich_memory(mem, ctx)
+    names = {e.entity_id: e.canonical_name for e in entities}
+    camping = next(r for r in relations if r.predicate == "went_camping_at")
+    # the speaker the model named is the speaker's own node, not a THING called "caroline"
+    assert names[camping.subject_id] == "user:caroline" and "caroline" not in names.values()
+    assert names[camping.object_id] == "the lake" and camping.memory_id == mem.memory_id
+    assert camping.confidence <= 0.6 and camping.attributes["extraction"] == "llm"
+    assert any(r.predicate == "went_with" for r in relations)
+    # the turn is reachable from what it is about, like any other entity it names
+    assert any(r.predicate == "mentions" and names[r.object_id] == "the lake" for r in relations)

@@ -70,6 +70,11 @@ class MemoryCandidate(BaseModel):
         description="a verbatim turn restated to stand on its own, appended to its index key "
         "(set by the pipeline from the model, never by a provider)",
     )
+    restatement_relations: list[tuple[str, str, str]] = Field(
+        default_factory=list,
+        description="(person, predicate, object) the restatement found in the turn, which the "
+        "graph links the turn by (set by the pipeline from the model, never by a provider)",
+    )
 
 
 class ContextualExtractor(Protocol):

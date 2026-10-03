@@ -188,6 +188,11 @@ def build_memory(
             "dated_mentions": dated,
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
             **({"restatement": candidate.restatement} if candidate.restatement else {}),
+            **(
+                {"restatement_relations": [list(r) for r in candidate.restatement_relations]}
+                if candidate.restatement_relations
+                else {}
+            ),
         },
         created_at=now,
         updated_at=now,
@@ -408,9 +413,9 @@ class ObservationPipeline:
         )
         if said is None:
             return candidates
+        update = {"restatement": said.text or None, "restatement_relations": said.relations}
         return [
-            c.model_copy(update={"restatement": said}) if c.category == "verbatim_turn" else c
-            for c in candidates
+            c.model_copy(update=update) if c.category == "verbatim_turn" else c for c in candidates
         ]
 
     async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
