@@ -11,15 +11,16 @@ Provider keys are resolved by the gateway from its own environment (`env.ANTHROP
 ## Pointing the service at a gateway
 
 ```
-MEMORY__MODELS__LLM__ENABLED=true
-MEMORY__MODELS__LLM__PROVIDER=bifrost
-MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
-MEMORY__MODELS__LLM__MODEL=<provider>/<model>        # e.g. gemini/gemini-3.6-flash
-MEMORY__MODELS__LLM__API_KEY=<virtual key>           # issued by the gateway, never a provider key
-MEMORY__MODELS__LLM__USES='["grounding_judge"]'      # which call sites may use it
+BIFROST_URL=https://<your-gateway>/v1
+BIFROST_VIRTUAL_KEY=<virtual key>     # optional: the operator's key, issued by the gateway
 ```
 
-With `enabled=false` the service runs complete and every LLM-backed step falls back to its
+Those are the only two settings. Which uses may call the model, and on which model, is each
+tenant's policy (`PUT /v1/model-key/policy`: `uses`, `read_assist`, `models` per use); whose
+key pays is the agent's (`PUT /v1/agents/model-key`), else the tenant's (`PUT
+/v1/model-key`), else the operator's `BIFROST_VIRTUAL_KEY`. See `docs/USAGE.md`.
+
+Without `BIFROST_URL` the service runs complete and every LLM-backed step falls back to its
 deterministic path. Generation is an enhancement here, never a dependency.
 
 ## Why no gateway service in `docker-compose.yml`

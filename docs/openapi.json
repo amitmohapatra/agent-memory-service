@@ -20812,6 +20812,38 @@
             }
           },
           {
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
             "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
             "in": "header",
             "name": "traceparent",

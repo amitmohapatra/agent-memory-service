@@ -257,7 +257,7 @@ markers = [
   "eval: retrieval/memory evaluation gates",
   "docker: needs a Docker daemon with registry access",
   "models: needs local embedding/reranker model files",
-  "bifrost: needs a running Bifrost gateway (MEMORY__MODELS__LLM__* configured)",
+  "bifrost: needs a running Bifrost gateway (BIFROST_URL, BIFROST_VIRTUAL_KEY)",
 ]
 filterwarnings = ["error::RuntimeWarning:memory_service"]
 

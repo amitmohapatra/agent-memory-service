@@ -72,6 +72,14 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     assert gone.value.status == 404
     assert not any(m.memory_id == stored.memory_id for m in await agent.advanced.memories.list())
 
+    # What a run keeps to itself (RUN) is listed for that run, and only for it.
+    scratch = await agent.remember("Draft: welcome pack goes out on day one.", visibility="RUN")
+    assert any(m.memory_id == scratch.memory_id for m in await agent.advanced.memories.list())
+    other_run = harness.bind(user_id="u1").agent("onboarding-bot")
+    assert not any(
+        m.memory_id == scratch.memory_id for m in await other_run.advanced.memories.list()
+    )
+
 
 @pytest.mark.covers("retrieval.context", "retrieval.recall", "retrieval.verify")
 async def test_an_agent_asks_for_context_then_has_its_answer_verified(app, running) -> None:

@@ -44,12 +44,10 @@ def main() -> int:
                 return _fail(f"{probe} returned {response.status_code}")
 
         written = http.post(
-            "/v1/observations", json={"scope": scope, "kind": "MESSAGE", "content": fact}
+            "/v1/messages", json={"scope": scope, "messages": [{"role": "USER", "content": fact}]}
         )
         if written.status_code >= 300:
-            return _fail(
-                f"POST /v1/observations returned {written.status_code}: {written.text[:200]}"
-            )
+            return _fail(f"POST /v1/messages returned {written.status_code}: {written.text[:200]}")
 
         # the write is asynchronous by design, so poll rather than assume
         deadline = time.monotonic() + CONSOLIDATION_BUDGET_SECONDS
@@ -64,7 +62,7 @@ def main() -> int:
             time.sleep(POLL_SECONDS)
 
     return _fail(
-        f"the observation never became retrievable within {CONSOLIDATION_BUDGET_SECONDS:.0f}s — "
+        f"the message never became retrievable within {CONSOLIDATION_BUDGET_SECONDS:.0f}s — "
         "the API answered, so look at the worker and the queue"
     )
 

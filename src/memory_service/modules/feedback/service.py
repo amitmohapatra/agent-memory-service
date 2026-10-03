@@ -152,11 +152,10 @@ class FeedbackService:
         """Whether ``record`` waits for a tenant admin before it changes anything. Applied as
         it arrives: the service's own judge; a run reporting its own final status, citing
         nothing (the lowest-ranked word on a run, which never overrides a person or the
-        judge); an owner's
-        retraction or correction of a memory (an edit, authorised as one by
-        ``_authorize_memory_verdict``); a decision on a tool call (what is learned from it is
-        a suggestion an admin accepts); and what a tenant admin says in person or through
-        the tenant's administrator credential (``trusted``)."""
+        judge); an owner's retraction or correction of a memory (an edit, authorised as one
+        by ``_authorize_memory_verdict``); a decision on a tool call (what is learned from it
+        is a suggestion, applied only once accepted); and what a tenant admin says, in person
+        or through the tenant's administrator credential (``trusted``)."""
         if trusted:
             return False
         if (

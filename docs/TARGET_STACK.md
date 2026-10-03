@@ -6,6 +6,15 @@
 > tier, multi-layer graph, public benchmarks and the keep/cut decisions are not yet done.
 > Where this disagrees with the code, the code is right. See
 > [FINAL_REPORT.md](FINAL_REPORT.md) for what has actually been measured.
+>
+> **Superseded in part (note added 2026-10-03).** The reranker rows below are not the
+> current design: no cross-encoder reranker runs (`cross-encoder/ms-marco-MiniLM-L6-v2` was
+> measured and removed; see the README's model table), and memories are ranked by the
+> general fusion of [ADR 0026](adr/0026-general-memory-ranking.md) - weighted reciprocal-rank
+> fusion of BM25, two dense spaces and ColBERT late-interaction arms over two keys, then
+> session / speaker / time / period rules, nothing learned and no reranker. There is no
+> `MEMORY__MODELS__SERVING` setting (or any `MEMORY__MODELS__*` setting): the model set is
+> the `FROZEN_MODELS` constant and the gateway is `BIFROST_URL`.
 
 Goal: a memory service that is best in class on every axis that matters — complex relations and
 a temporal knowledge graph, short- and long-term memory, retrieval/RAG, grounding, evaluation,
@@ -32,7 +41,7 @@ the service); the hard release gates stay at their current thresholds; nothing i
   best MTEB-v2 (59.5), LongEmbed (67.8) and multi-turn-RAG (57.6) scores in its size class and
   is the fastest of the models IBM compared; the 47M "small" variant trails by ~4 points at
   ~40% more throughput. English-only.
-- **Rerankers.** ms-marco-MiniLM (our current default) sits at ~60% BEIR nDCG@10.
+- **Rerankers.** *(Superseded: no reranker runs today; ADR 0026.)* ms-marco-MiniLM (the default when this was written) sits at ~60% BEIR nDCG@10.
   BGE-Reranker-v2-M3 (568M) reaches ~71.5% at ~12 ms/pair and is the accepted
   quality-per-latency sweet spot; Qwen3-Reranker-0.6B is similar quality; 4B–8B rerankers
   reach 75–77% but need GPUs. The reranker is the cheapest quality upgrade in the system.
@@ -71,7 +80,7 @@ the service); the hard release gates stay at their current thresholds; nothing i
 |---|---|---|---|
 | Embedding | `ibm-granite/granite-embedding-english-r2` (768-d), ONNX int8 runtime on CPU | best MTEB-v2 / LongEmbed in class, fastest, Apache 2.0, 8k context | `granite-embedding-small-english-r2` for a low-latency tier; `Qwen/Qwen3-Embedding-0.6B` if multilingual is ever needed |
 | Sparse | BM25 (Qdrant native, no model) | no inference cost; beats dense alone on documents | miniCOIL, SPLADE-v3 — only if they win the gate |
-| Reranker | `BAAI/bge-reranker-v2-m3` on candidate_k=20; `granite-embedding-reranker-english-r2` as CPU-light option; MiniLM-L6 only for the low-latency tier | +11 points BEIR over MiniLM at ~12 ms/pair | `Qwen/Qwen3-Reranker-0.6B`; 4B/8B when GPUs exist |
+| Reranker *(superseded: none runs; ADR 0026)* | `BAAI/bge-reranker-v2-m3` on candidate_k=20; `granite-embedding-reranker-english-r2` as CPU-light option; MiniLM-L6 only for the low-latency tier | +11 points BEIR over MiniLM at ~12 ms/pair | `Qwen/Qwen3-Reranker-0.6B`; 4B/8B when GPUs exist |
 | Vector store | Qdrant server: hybrid Query API (prefetch → RRF), multivector, scalar/binary quantization, on-disk payload | native hybrid + multivector + quantization in one engine | — |
 | Graph store | PostgreSQL (existing tables) with temporal validity, plus a **causal/typed-predicate layer** and **entity-summary nodes** | multi-layer graphs beat single-layer; keeps one canonical DB | Apache AGE / FalkorDB if traversal depth ever exceeds SQL recursion budgets |
 | Extraction | Three-tier: (1) lexicon + grammar (existing, deterministic), (2) **GLiNER2 / GLiNER-Relex** zero-shot NER+RE on CPU, (3) LLM via Bifrost for ambiguous spans only | model-based tier beats GPT-5-mini on document-level RE with no API; LLM only where needed | Graphiti / Cognee providers stay only if they win the KG gate |
@@ -89,6 +98,10 @@ Ordered by expected impact per unit of work. Each item is gated: it ships only i
 validation run shows it helps and keeps every critical gate at 1.00.
 
 ### Retrieval (`modules/retrieval`, `adapters/models`, `adapters/search`)
+
+*Superseded (2026-10-03): items 1 and 4 were measured and not shipped; the cross-encoder
+was rejected and ColBERT runs as fusion arms, not as a rerank stage (ADR 0026).*
+
 1. **Reranker default → bge-reranker-v2-m3**; add ONNX/int8 export for CPU; keep MiniLM as
    `low_latency` tier; benchmark candidate_k 15/20/25 with real weights.
 2. **Embedding runtime → ONNX int8** (measure vs fp32 sentence-transformers); enable Qdrant
@@ -153,7 +166,7 @@ validation run shows it helps and keeps every critical gate at 1.00.
 
 ### Performance and scale (`api/`, `adapters/`, `deploy/`)
 21. **Model serving isolation**: embeddings/reranker/NLI run in a separate `memory-models`
-    process (same image, `MEMORY__MODELS__SERVING=inprocess|remote`) so API workers stay
+    process (same image, a serving switch - proposed, not built: no `MEMORY__MODELS__SERVING` exists) so API workers stay
     small and models scale independently; batch + queue with bounded latency.
 22. **Caching**: embedding cache (exists), reranker score cache keyed by (query, doc revision),
     graph-traversal cache keyed by (tenant, entity set, as_of, revision).

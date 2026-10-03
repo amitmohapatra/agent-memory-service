@@ -5,7 +5,9 @@ Three ways in. Pick the one that matches why you are here.
 ### I want to use it
 
 Start with the [README](../README.md) — install, a working agent in twenty lines, and what
-the service needs to run. Then [the guide](#the-guide), in order.
+the service needs to run. Then [**Which API for which scenario**](USAGE.md) — the decision
+guide for an engineer integrating an agent: which endpoint and SDK call fits each job, with
+the gotchas. Then [the guide](#the-guide), in order.
 
 ### I want to understand it
 
@@ -50,7 +52,7 @@ the SDK call that makes it.
 | documents into retrievable knowledge | [api/documents.md](api/documents.md) |
 | tool memory and procedures | [api/tools.md](api/tools.md) |
 | feedback and what it changes | [api/feedback.md](api/feedback.md) |
-| workspaces, groups, keys, model keys, the read audit | [api/tenancy.md](api/tenancy.md) |
+| workspaces, keys, model keys and policy, the read audit | [api/tenancy.md](api/tenancy.md) |
 | onboarding a tenant; health, readiness and `/version` | [api/admin.md](api/admin.md) |
 
 ## Reference

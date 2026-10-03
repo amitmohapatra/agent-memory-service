@@ -39,6 +39,10 @@ says the wire and the scope rules work and says **nothing** about retrieval qual
 read [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) and
 [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md).
 
+**Integrating an agent?** [`docs/USAGE.md`](docs/USAGE.md) — *Which API for which scenario* — is the
+decision guide: push vs pull, which write and which read fits which job, corrections, feedback
+review, model keys and policy, with the SDK call and the gotchas for each.
+
 **One thing to do first on a fresh service**: onboard the tenant (and a workspace, if you will
 write anything WORKSPACE-visible) — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
 member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a first script gets
@@ -63,6 +67,7 @@ member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a f
 | [Configuration](#configuration) | the knobs that matter |
 | [How it works](#how-it-works) | architecture in one screen |
 | [Status](#status-read-this-before-you-trust-a-number) | what is proven and what is not |
+| [**Which API for which scenario**](docs/USAGE.md) | the integration guide: which endpoint and SDK call fits each job |
 | [**The API, area by area**](docs/api/README.md) | every route, a diagram each, and the SDK call that makes it |
 | [The decision records](docs/adr/README.md) | every ADR, one line and a status each |
 
@@ -260,9 +265,10 @@ answer = await my_llm(bundle.rendered)
 
 `bundle.rendered` is a token-budgeted, ready-to-prompt block containing the recent
 conversation, the relevant memories, document passages, and graph facts — deduplicated and
-ordered. Inspect the parts if you want them separately:
+ordered. Ask for `format="full"` to inspect the parts separately:
 
 ```python
+bundle = await ctx.context("how did revenue develop?", format="full")
 bundle.conversation  # recent turns plus a rolling summary
 bundle.memories  # durable facts and preferences
 bundle.knowledge  # document passages, each with document, page and evidence
@@ -273,8 +279,7 @@ bundle.evidence  # what was found, what was missing, and the status
 Need just the search results? `await ctx.search("...")` returns ranked items.
 
 A read consults the model only when the tenant's model policy allows it (`read_assist`, on by
-default once a key is registered) or when the request says so: `use_llm=True` or `use_llm=False`
-overrides the policy for that call. Agent-owned virtual keys are exposed through `ctx.advanced.model_keys.set(...)`; a
+default, and only once a key can pay); a request cannot override the policy. Agent-owned virtual keys are exposed through `ctx.advanced.model_keys.set(...)`; a
 standing question is a profile block with a `source_query`;
 see the [SDK examples](sdk/python/README.md) and
 [capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
@@ -307,11 +312,11 @@ the document and page they came from, so you can cite them.
 
 ### Require evidence
 
-For answers that must be grounded:
+For answers that must be grounded, check the evidence status the context comes with:
 
 ```python
-bundle = await ctx.context("what were FY26 restructuring savings?", require_evidence=True)
-if bundle.evidence.status == "INSUFFICIENT_EVIDENCE":
+bundle = await ctx.context("what were FY26 restructuring savings?")
+if bundle.evidence_status == "INSUFFICIENT":
     return "I don't have enough in my sources to answer that."
 ```
 
@@ -421,21 +426,22 @@ What that buys, and what is enforced rather than promised:
   workspace reads that team; one naming no workspace reads every team the caller is in —
   the same rule threads follow. A workspace id that names no team stays what it was before
   teams existed: a label that grants nothing.
-- **Removal is immediate.** Removing a member (or a user from a group, or a key) takes
+- **Removal is immediate.** Removing a member (or a key) takes
   effect on the next request, not when a cache expires. The author of a memory keeps it.
   Suspending a tenant (`PATCH /v1/admin/tenants/{id}`) stops every one of its keys the same
   way, with 403 rather than 401; resuming restores them. Deleting a workspace revokes the
-  keys bound to it; deleting a group removes it from every workspace.
+  keys bound to it.
 - **Secrets are shown once, and retries are safe.** Onboarding and key issuance honour
   `Idempotency-Key` (`idempotency_key=` in the SDK): a retried request returns the same record
   with `Idempotent-Replayed: true` and `token: null`, never a second copy of the secret.
-  Without it, every call is a new key. Deleted workspace and group ids are never reused
+  Without it, every call is a new key. Deleted workspace ids are never reused
   (409), so audit entries keep their meaning.
 - **Retention, quota, audit.** Per tenant: `retention_days` (a daily sweep forgets
   canonical memories through the same soft delete a `DELETE` uses), `rate_limit_per_minute`
   (429 with `Retry-After`), and `GET /v1/reads` — who read which records, under which scope.
 
-Roles are `admin` (manages one tenant's keys, workspaces and groups; always tenant-wide)
+Roles are `admin` (manages one tenant's keys, workspaces, model keys and policy, and the
+feedback review queue; always tenant-wide)
 and `service` (acts for its users and agents; may be pinned to one workspace). The platform
 key onboards tenants and never reads or writes memory, but it administers every tenant —
 it can issue a tenant's keys — so it is root: at least 32 characters in deployed
@@ -505,7 +511,7 @@ hints = await ctx.tool_hints(task, available=["pricing-lookup_price", "crm-updat
 
 A background job stores one procedure per task pattern once at least two labelled runs
 support it; with the tenant's model it also writes a title and a strategy from what
-succeeded and what failed. `ctx.context(query, tools={"available": [...]})` carries the same
+succeeded and what failed. `ctx.context(query, tools=[...])` carries the same
 hints inline. Approvals and rejections of tool calls (feedback) become suggested approval
 rules (`ctx.advanced.tools.approval_suggestions()`) that nothing applies automatically. See
 [docs/api/tools.md](docs/api/tools.md).
@@ -520,7 +526,8 @@ without a model and a model version that runs when the tenant's key and policy a
 
 - **Feedback.** Verdicts on answers, memories, tool calls and runs adjust the confidence of the
   memories an answer cited, label run outcomes and feed tool statistics; a memory's standing
-  moves its ranking within a bounded ±15%.
+  moves its ranking within a bounded ±15%. A vote from a person or an agent counts only once
+  the tenant admin approves it in the review queue (ADR 0028).
 - **Procedures.** Tool runs with outcomes are mined into one stored procedure per task pattern,
   admitted at ≥ 2 supporting runs and ≥ 60% success, updated by delta; `tool_hints` and the
   push offer it as a plan with argument bindings.
@@ -551,7 +558,7 @@ encoders.
 ## Grounding: did the answer actually follow from the evidence?
 
 ```python
-report = await ctx.verify(answer, bundle=bundle)
+report = await ctx.verify(answer, bundle_id=bundle.bundle_id)
 report.per_claim_hallucination_rate  # 0.0 when every claim is supported
 for claim in report.claims:
     claim.verdict  # supported | unsupported | contradicted | borderline
@@ -567,7 +574,7 @@ contradictions.
 ## Using it from a framework
 
 The SDK is framework-neutral, and deliberately so: bind a scope, call `context()` before
-your agent thinks and `chat.assistant()` after, and everything in this README works from
+your agent thinks and `history.add([("ASSISTANT", answer)])` after, and everything in this README works from
 LangGraph, CrewAI, Google ADK, an MCP server or plain code.
 
 There is no LangGraph adapter in this repository, and that is the design. A memory service
@@ -587,7 +594,7 @@ convenience, not a requirement.
 
 ## Configuration
 
-Everything is environment variables; copy `.env.example` to `.env`.
+Everything deployment-specific is an environment variable; copy `.env.example` to `.env`.
 The ones that actually matter:
 
 ```bash
@@ -597,34 +604,50 @@ MEMORY__SEARCH__QDRANT_URL=http://localhost:6333
 MEMORY__CACHE__URL=redis://localhost:6379/0
 MEMORY__AUTHORIZATION__OPENFGA_API_URL=http://localhost:8081
 
+# The model gateway and the operator's key on it (the platform's names, unprefixed).
+# Unset BIFROST_URL: no model call is ever made.
+BIFROST_URL=https://<your-gateway>/v1
+BIFROST_VIRTUAL_KEY=            # optional: pays for tenants without a key of their own
+
+# Envelope keys that encrypt the agent and tenant model keys registered through the API
+# MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID=v1
+# MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS={"v1":"<base64-encoded-32-byte-key>"}
+
 # The models are not settings: `make models` puts the frozen set in ./models (git-ignored)
 # and the service finds it there, or under /models in the image.
-
-# Automatic assistance requires a registered key (agent, workspace or tenant) or an operator
-# key. False prohibits generation.
-MEMORY__MODELS__LLM__ENABLED=auto
 ```
+
+Only deployment facts are settings (`src/memory_service/config/settings.py`). Models, budgets,
+timeouts, retries and thresholds are constants in `config/constants.py` — a change there is a
+code change, reviewed like one. There are **no** `MEMORY__MODELS__*` variables.
 
 ### About the LLM
 
-The default `enabled=auto` mode uses the model wherever a key can pay for it: the acting
-agent's registered virtual key, else its workspace's, else its tenant's, else the operator's.
-Each tenant decides what its key is spent on with a model policy (`PUT /v1/model-key/policy`,
-per workspace too): the uses allowed and whether reads are assisted by default. A use runs only
-when the operator's allow-list (`MEMORY__MODELS__LLM__USES`, default every use) and the
-resolved policy both allow it. No per-agent model configuration is needed: the service queries
-the gateway's authenticated model catalogue and selects a recognized eligible text model.
-Opaque aliases are not guessed. Catalogue discovery is cached per owner/key revision for five
-minutes and performs no generation. `enabled=false` prohibits generation even for registered
-agents; `enabled=true` also permits keyless gateway calls for the operator-selected uses.
-Spend is visible per tenant: `GET /v1/model-key/usage` (tokens and calls per day and use) and
-`memory_llm_tokens_total{tenant,use,direction}`. See [docs/api/tenancy.md](docs/api/tenancy.md).
+The service runs without one, and a model is used only where a key can pay for it and the
+tenant's policy allows it:
 
+* **Who pays.** The acting agent's registered virtual key (`PUT /v1/agents/model-key`), else
+  its tenant's (`PUT /v1/model-key`), else — only while neither level has a row — the
+  operator's `BIFROST_VIRTUAL_KEY`. A revoked key refuses instead of borrowing the next one.
+* **What it may be spent on.** The tenant's model policy (`PUT /v1/model-key/policy`, the
+  tenant admin key) has exactly three fields: `uses` (which uses may run), `read_assist`
+  (whether reads consult the model; a request cannot override it) and `models` (the gateway
+  model per use). With no policy row the default is every use **except** the opt-in
+  `memory_restatement`, reads assisted, the service's model per use.
+* **Which model.** By default `LLMTuning.model` / `LLMTuning.fast_model` (constants, both
+  `auto`): the service queries the gateway's authenticated model catalogue and selects a
+  recognised eligible text model; opaque aliases are not guessed. A tenant pins a model per
+  use with its policy's `models` map.
+* **What it cost.** `GET /v1/model-key/usage` (tokens and calls per day and use) and
+  `memory_llm_tokens_total{tenant,use,direction}`; a request reports its own spend in
+  `X-Trellis-LLM-Tokens`.
 
-The service runs without one. Native model calls go through
-[Bifrost](https://github.com/maximhq/bifrost), an external gateway you run yourself. The
-operator key comes from deployment secrets; agent-owned virtual keys are encrypted in the
-native database. Provider keys stay in Bifrost. Agent requests exclude MCP clients/tools.
+See [docs/api/tenancy.md](docs/api/tenancy.md) and [docs/LLM-USES.md](docs/LLM-USES.md).
+
+Native model calls go through [Bifrost](https://github.com/maximhq/bifrost), an external
+gateway you run yourself. The operator key comes from deployment secrets; agent- and
+tenant-owned virtual keys are encrypted in the native database. Provider keys stay in Bifrost.
+Memory-service calls exclude MCP clients/tools.
 The pinned Hindsight SDK (the optional `[hindsight]` extra) provides extraction preview for
 eligible non-agent ingestion;
 that server owns its model configuration. Agent extraction stays on the Bifrost path because
@@ -636,22 +659,12 @@ repository's own compose file would put provider keys inside the application's d
 which is the coupling the gateway exists to remove. `deploy/bifrost/` holds an example config
 and nothing that runs.
 
-You choose, per capability, where a model is allowed to help:
-
-```bash
-MEMORY__MODELS__LLM__ENABLED=true
-MEMORY__MODELS__LLM__BASE_URL=https://<your-gateway>/v1
-MEMORY__MODELS__LLM__MODEL=anthropic/claude-sonnet-5              # complex judgement
-MEMORY__MODELS__LLM__FAST_MODEL=anthropic/claude-haiku-4-5        # cheap classification
-MEMORY__MODELS__LLM__USES=["conflict_adjudication","summaries"]
-```
-
 **Sizing `max_tokens` for a reasoning model.** The output budget is spent on reasoning before
 any text is produced, so a budget that looks generous can return an empty answer. Measured
 against `gemini-3.6-flash`: answering "Reply with exactly: OK" consumed 57 reasoning tokens,
 so `max_tokens=16` produced no content at all. The adapter now raises instead of handing back
-an empty string, and names the cause. Start at `MEMORY__MODELS__LLM__MAX_TOKENS=2048` for a
-reasoning model.
+an empty string, and names the cause. The ceiling is the constant `LLMTuning.max_tokens`
+(1024).
 
 **Rate limits.** A `429` is retried against the delay the gateway asks for rather than the
 exponential backoff, because a per-minute quota is not something a 1.5-second retry schedule
@@ -660,29 +673,31 @@ because some providers only put it there — Gemini answers "Please retry in 59.
 A `429` also never opens the circuit breaker: backpressure is the gateway working, and
 counting it turns "slow down" into "stop".
 
-**How much of this is configuration.** Five of these variables are this service's own policy
-— whether a model may be consulted at all, which capabilities may consult it, and which of
-the two models each gets. The rest (`BASE_URL`, `API_KEY`, `MAX_TOKENS`, `TIMEOUT_SECONDS`,
-`MAX_RETRIES`, `RETRY_BACKOFF_SECONDS`, `CIRCUIT_FAILURE_THRESHOLD`, `CIRCUIT_OPEN_SECONDS`)
-are passed straight to the shared [`bifrost-sdk`](https://github.com/amitmohapatra/bifrost-sdk)
-client, which owns the transport, the retries, the rate-limit parsing and the breaker — the
-same client the agent harness uses, so neither service can learn a lesson the other misses.
+**How much of this is configuration.** Two variables: where the gateway is (`BIFROST_URL`)
+and the operator's key on it (`BIFROST_VIRTUAL_KEY`). Which uses run and which model each
+calls is the tenant's policy, through the API. The transport tuning — `max_tokens`,
+`timeout_seconds`, `max_retries` (`constants.LLM`) and `retry_backoff_seconds`,
+`circuit_failure_threshold`, `circuit_open_seconds` (`constants.LLM_TRANSPORT`) — is passed
+straight to the shared [`bifrost-sdk`](https://github.com/amitmohapatra/bifrost-sdk) client,
+which owns the transport, the retries, the rate-limit parsing and the breaker — the same client
+the agent harness uses, so neither service can learn a lesson the other misses.
 
 Available uses: `contextual_extraction`, `relation_extraction`,
 `entity_resolution`, `conflict_adjudication`, `summaries`, `reflection`, `memory_connections`,
-`query_expansion`, `chunk_context`, `grounding_judge`, `procedure_abstraction`
+`query_expansion`, `chunk_context`, `memory_restatement` (opt-in, ADR 0027),
+`grounding_judge`, `procedure_abstraction`
 (each described in [`docs/LLM-USES.md`](docs/LLM-USES.md): when it runs, its tier, its
 fallback).
 
 Each use has its own gate. Contextual extraction consults the model only for
 eligible inputs. Native paths remain available. Model-free operation is a supported mode, not a claim of equal answer accuracy.
 
-### Feedback, model keys and pagination (ADR 0023)
+### Feedback, model keys and pagination (ADR 0023, ADR 0028)
 
 **Feedback.** `POST /v1/feedback` takes the `trellis.contracts.Feedback` record (target kind
 `run | memory | tool_call | procedure`, verdict `confirm | reject | correct |
-approve | edit`, source `human | judge | interrupt`). Identity fields come from the trusted
-headers; a body that disagrees is refused. A memory target must be readable; `reject`,
+approve | edit`, source `human | judge | interrupt | system`). Identity fields come from the
+trusted headers; a body that disagrees is refused. A memory target must be readable; `reject`,
 `correct` and `edit` also need its owner or a tenant admin. The record is stored and
 projected asynchronously: on a memory, `confirm`/`approve` reinforce it, `reject` retracts
 it, `correct`/`edit` write a corrected memory that supersedes it; the outcome is written
@@ -690,23 +705,36 @@ back as `projection`. Read it
 back with `GET /v1/feedback/{id}` or list a target's feedback with
 `GET /v1/feedback?target_kind=memory&target_id=mem_...`.
 
+**A vote waits for review (ADR 0028).** A verdict that would change what was learned on a
+person's or an agent's word alone — a `confirm`/`approve` of a memory, a verdict on a run or a
+procedure — is stored with `review.state = "pending"` and changes nothing until the tenant's
+admin key approves it. Applied as they arrive: the service's own grounding judge
+(`/v1/verify`), a run reporting its own status (`source="system"`, the target is the calling
+`agent_run_id`, citing no memories), an owner's `reject`/`correct`/`edit` of their own memory,
+any `tool_call` verdict, and anything sent with the tenant admin key or by a tenant admin user
+in person. A client that sends `source="judge"` is not the judge and waits like anyone else.
+
 ```python
 record = await ctx.feedback(
     "memory", memory.memory_id, "correct", correction="The renewal is in March, not May."
-)
+)  # the owner's correction: applied as it arrives (record.review is None)
 page = await ctx.feedback.page_for("memory", memory.memory_id)  # .items, .next_cursor
+
+admin = MemoryClient(url, api_key=tenant_admin_key).bind()
+for vote in (await admin.feedback.pending()).items:  # GET /v1/feedback/pending
+    await admin.feedback.approve(vote.feedback_id, note="checked")  # or .dismiss(...)
 ```
 
 **Model keys.** A model call resolves the most specific Bifrost key that exists: the
 agent's own (`PUT /v1/agents/model-key`), then the tenant's (`PUT /v1/model-key`,
-`admin.set_model_key(...)`), then the operator's; a revoked key refuses instead of
-borrowing the next one.
+`client.tenant.set_model_key(...)`), then the operator's (`BIFROST_VIRTUAL_KEY`); a
+revoked key refuses instead of borrowing the next one. There is no workspace level.
 
 **Pagination.** Every list route takes `cursor` and `limit` and answers
 `Link: <...>; rel="next"` when a next page exists (envelope bodies also carry
 `next_cursor`). In the SDK every `list()` returns one page as a list and its `page()`
 sibling returns `items` with `next_cursor`: `await ctx.advanced.memories.page()`,
-`async for m in ctx.advanced.memories.iter(): ...`, `await admin.keys.page(cursor=...)`.
+`async for m in ctx.advanced.memories.iter(): ...`, `await client.tenant.keys.page(cursor=...)`.
 
 **Notifications.** The memory service sends none: run notifications (paused, escalated,
 finished) are tenant webhook subscriptions in agent-runs.
@@ -770,10 +798,20 @@ transaction (a transactional outbox). Only then do you get a `2xx`. A worker tha
 mid-job is detected and its work requeued; replay is safe because every write is idempotent.
 
 **How retrieval works.** Authorized scope → exact lookup → a rules-based router (English cues;
-any other language is routed as a general question) → BM25 + two dense spaces fused with
-RRF, the graph traversal running underneath in one budgeted statement → context expansion
-over the document graph → evidence verification → abstain if still insufficient. The push
-then packs, within the token budget, what clears the encoder's relevance floor.
+any other language is routed as a general question) → hybrid search, the graph traversal
+running underneath in one budgeted statement → context expansion over the document graph →
+evidence verification → abstain if still insufficient. The push then packs, within the token
+budget, what clears the encoder's relevance floor.
+
+Memories are ranked by a general fusion nothing was fitted to (ADR 0026,
+`modules/retrieval/memory_ranking.py`): weighted reciprocal-rank fusion (`K = 10`) of BM25 and
+two dense spaces over two keys — the memory alone, and the memory read with the turn it
+answers — plus ColBERT late-interaction arms (weight 6 on the memory's own key, 2 on its context
+key); then four rules: **session** (each memory gains 0.3 × the best fused score among the top
+50 in its session, the day it was observed), **speaker** (a question naming a person lifts that
+person's memories), **time** (a "when" question lifts memories that name a time) and
+**period** (a question naming a period lifts memories in it). No learned fusion and no reranker:
+a cross-encoder rerank was measured and rejected. Document chunks are fused by the store's RRF.
 
 More: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · design decisions in [docs/adr/](docs/adr/).
 

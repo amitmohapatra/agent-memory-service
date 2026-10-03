@@ -4,17 +4,25 @@ Every path is complete without a model: each use below is optional work layered 
 deterministic path, and any model failure (no key, gateway error, rate limit, invalid output)
 falls back to that path. A use runs only when all of these hold (`LLMAssist.wants`):
 
-1. the deployment allows it: `MEMORY__MODELS__LLM__USES` (default: every use) and
-   `MEMORY__MODELS__LLM__ENABLED` is not `false`;
-2. the tenant policy of the identity that owns the work allows it (`PUT /v1/model-key/policy`,
-   resolved agent → workspace → tenant, the same order as keys);
-3. something can pay: a registered key at one of those levels, or the operator key;
-4. on a read, the read may consult the model: the request's `use_llm`, or when the request
-   does not say, the policy's `read_assist`.
+1. the deployment can reach a model: the gateway is configured (`BIFROST_URL`). There is no
+   deployment-level allow-list of uses and no `MEMORY__MODELS__LLM__*` setting;
+2. the tenant's policy allows it (`PUT /v1/model-key/policy`, `uses`). The policy is the
+   tenant's alone - there is no agent- or workspace-level policy. With no policy row the
+   default is every use **except the opt-in ones** (`OPT_IN_LLM_USES`: today
+   `memory_restatement`), so registering a key never starts a model call per message on its
+   own; a stored policy runs exactly the uses it names;
+3. something can pay: a registered key - the acting agent's (`PUT /v1/agents/model-key`), else
+   the tenant's (`PUT /v1/model-key`) - or the operator's `BIFROST_VIRTUAL_KEY`. A revoked key
+   at the resolved level refuses rather than falling through;
+4. on a read, the policy's `read_assist` is on. A request cannot override it (there is no
+   per-request `use_llm`).
 
-The tier is the model the call goes to: `fast` (`MEMORY__MODELS__LLM__FAST_MODEL`) for the
-uses in `MEMORY__MODELS__LLM__FAST_USES` (default `contextual_extraction`, `query_expansion`,
-`chunk_context`), `strong` (`MEMORY__MODELS__LLM__MODEL`) for the rest. Every system prompt
+The tier is the model the call goes to: `fast` (`LLMTuning.fast_model`) for the uses in
+`LLMTuning.fast_uses` (`contextual_extraction`, `query_expansion`, `chunk_context`,
+`memory_restatement`), `strong` (`LLMTuning.model`) for the rest. Both are constants in
+`config/constants.py`, `auto` by default (a recognised text model discovered through the
+gateway's authenticated `/models`), not environment variables; the tenant's policy names a
+model per use instead (`models: {"memory_restatement": "openai/gpt-4.1-mini"}`). Every system prompt
 ends with one rule (`modules/llm/assist.py:SOURCE_LANGUAGE_RULE`): text is returned in the
 language of its source, never translated; only schema labels (query types, snake_case
 predicates, field names) are fixed English.
@@ -34,6 +42,7 @@ with the model off (`docs/MEASUREMENTS.md`, section 8).
 | `summaries` | document node summaries (bounded number per document), thread summaries (`summary.refresh`, every `SUMMARY_EVERY` messages), the `user` profile block, graph entity summaries (≤ 4 model calls per enrichment job) | strong | abstractive text | the extractive / template text, stored the same way |
 | `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
 | `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
+| `memory_restatement` | **opt-in** (ADR 0027): a conversation message, at ingest, when the tenant's policy names this use. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
 | `procedure_abstraction` | the tool-learning job, for a procedure that clears support and success-rate gates | strong | title and strategy text distilled from successes and failures | the miner's own rendering |
 
 ## Reads (only when the read is assisted)
@@ -42,7 +51,7 @@ with the model off (`docs/MEASUREMENTS.md`, section 8).
 |---|---|---|---|
 | `query_expansion` | `/v1/context` or `/v1/recall` whose question no rule classified - which includes every question not in English, since the router's cue patterns are English and never route another language (`modules/retrieval/router.py`) | fast | the unexpanded hybrid search (every dense space, BM25, the graph by entity name) |
 | `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
-| `grounding_judge` | `/v1/verify` and `/v1/context` with `answer`: claims the NLI cascade could not decide | strong | the claim stays undecided |
+| `grounding_judge` | `/v1/verify`: claims the NLI cascade could not decide | strong | the claim stays undecided |
 
 Removed in 0.3.0: `query_decomposition`. A model call on the read path took 3.2-12.2 s
 (median 6.4 s) through the local gateway against a 300 ms budget, and one of five multi-hop

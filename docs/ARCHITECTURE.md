@@ -80,7 +80,10 @@ and canonical/search drift.
 query -> language + rule-based route (English cues only for English; any other language
          is GENERAL_SEMANTIC) -> overlap encoder with authorized scope + graph prefetch
          (one statement, stopped by PostgreSQL at the 150 ms graph budget)
-      -> exact lookup or dense/BM25 search -> native RRF + stable ties -> dedup -> bounded cut
+      -> exact lookup or dense/BM25 search -> memories: weighted RRF of BM25, two dense
+         spaces and the ColBERT late-interaction arms over two keys, then the session /
+         speaker / time / period rules (ADR 0026); other items: RRF + stable ties
+      -> dedup -> bounded cut
       -> graph facts/evidence -> document companion expansion
       -> request-local evidence verification / bounded companion escalation
       -> dense similarity of each ranked item to the question (one read per collection)
@@ -129,22 +132,26 @@ MENTIONS/DEFINED_BY) is built without an LLM and is distinct from the semantic K
 
 ## Generative model access
 
-The service never talks to an LLM provider. `LLMSettings.provider` is `disabled` or
-`bifrost`; `adapters/models/llm.py` speaks the OpenAI-compatible HTTP API of a
-[Bifrost](https://github.com/maximhq/bifrost) gateway that runs outside the service and
-holds the provider keys. The service holds only a Bifrost *virtual key*
-(`secrets.env` / `MEMORY__MODELS__LLM__API_KEY`). Calls are bounded (timeout, bounded
-retries, circuit breaker), traced (`llm.chat` spans with model/tokens/latency), metered
-(`memory_llm_*`) and logged without prompt text unless `service.log_source_text=true`.
+The service never talks to an LLM provider. The model is available exactly when
+`BIFROST_URL` is set (`LLMSettings.enabled`); `adapters/models/llm.py` speaks the
+OpenAI-compatible HTTP API of a [Bifrost](https://github.com/maximhq/bifrost) gateway that
+runs outside the service and holds the provider keys. The service holds only Bifrost
+*virtual keys*: the operator's (`BIFROST_VIRTUAL_KEY`, e.g. in `secrets.env`) and the
+agent- and tenant-level keys registered through the API, stored encrypted. Calls are bounded
+(timeout, bounded retries, circuit breaker; the values are `constants.LLM` /
+`constants.LLM_TRANSPORT`, not environment variables), traced (`llm.chat` spans with
+model/tokens/latency), metered (`memory_llm_*`) and logged without prompt text unless the
+`LOG_SOURCE_TEXT` constant is on.
 Provider SDK imports are banned under `src/` by Ruff and `tests/unit/test_architecture.py`.
 
 Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMAssist` is
 the single entry point modules use. A request or job first binds the identity that owns the
 work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hierarchies); a use
-is then consulted only when the operator allow-list `models.llm.uses` and the resolved tenant
-policy both allow it and a key can pay (contextual_extraction, relation_extraction,
-entity_resolution, conflict_adjudication, summaries, reflection, memory_connections,
-query_expansion, chunk_context, grounding_judge, procedure_abstraction; see `docs/LLM-USES.md`).
+is then consulted only when the gateway is configured, the resolved tenant policy allows it
+(no policy row: every use except the opt-in `memory_restatement`) and a key can pay
+(contextual_extraction, relation_extraction, entity_resolution, conflict_adjudication,
+summaries, reflection, memory_connections, query_expansion, chunk_context,
+memory_restatement, grounding_judge, procedure_abstraction; see `docs/LLM-USES.md`).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong

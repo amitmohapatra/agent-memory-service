@@ -360,6 +360,8 @@ async def list_memories(
     work_id: str | None = None,
     agent_id: str | None = None,
     agent_group_id: str | None = None,
+    agent_run_id: str | None = None,
+    parent_agent_run_id: str | None = None,
 ) -> MemoryListResponse:
     """Security fields come from trusted headers; lineage anchors (thread, work, agent) are
     query parameters so a caller can list the memories of a specific thread or agent.
@@ -370,8 +372,15 @@ async def list_memories(
     ctx = build_context(
         request,
         container,
+        # the run lineage too: without it a run cannot list the RUN-visible memories it
+        # wrote, which every other read of the same run (recall, context) returns
         ScopeBody(
-            thread_id=thread_id, work_id=work_id, agent_id=agent_id, agent_group_id=agent_group_id
+            thread_id=thread_id,
+            work_id=work_id,
+            agent_id=agent_id,
+            agent_group_id=agent_group_id,
+            agent_run_id=agent_run_id,
+            parent_agent_run_id=parent_agent_run_id,
         ),
     )
     async with container.services["uow_factory"]() as uow:

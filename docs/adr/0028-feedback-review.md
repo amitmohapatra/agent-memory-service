@@ -36,7 +36,8 @@ before the vote took effect.
    - an owner's reject, correct or edit of their memory: an edit, already limited to the
      owner (or a tenant admin), like supersede and forget;
    - a decision on a tool call: what is learned from it is an approval suggestion, which
-     only takes effect when an admin accepts it;
+     only takes effect when it is accepted (`POST /v1/tools/approval-suggestions/{id}/accept`,
+     by the agent whose decisions it was learned from);
    - what the tenant's administrator says, through the admin key or in person.
 4. Every record keeps who voted, on what, when, the verdict and, once decided, who reviewed
    it, when and why: the statistics survive whether or not the vote was applied.

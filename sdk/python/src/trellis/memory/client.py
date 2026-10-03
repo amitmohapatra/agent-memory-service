@@ -459,10 +459,6 @@ class MemoryContext:
     async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         return await self._client.transport.request(method, path, scope=self.scope, **kwargs)
 
-    async def _request_page(self, path: str, **params: Any) -> tuple[Any, str | None]:
-        query = {k: v for k, v in params.items() if v is not None}
-        return await self._client.transport.request_page(path, scope=self.scope, params=query)
-
 
 class FeedbackAPI:
     """Judgements on what the platform did - the learning signal: a verdict on a memory

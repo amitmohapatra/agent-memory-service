@@ -1053,12 +1053,6 @@ def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:
     return (start is None or when >= start) and (end is None or when <= end)
 
 
-def _source_id(candidate: Candidate) -> str | None:
-    refs = candidate.payload.get("source_refs") or []
-    first = refs[0] if refs and isinstance(refs[0], dict) else {}
-    return str(first["source_id"]) if first.get("source_id") else None
-
-
 def by_standing(candidates: list[Candidate]) -> list[Candidate]:
     """Memories re-scored by their standing - confidence and reinforcement, which feedback and
     restatement move - within a bounded factor, and re-sorted (stable: ties keep the fused

@@ -9,7 +9,7 @@ kept by the service; neither costs a model call on the request path.
 | Route | Purpose | SDK |
 | --- | --- | --- |
 | `GET /v1/profile` | the blocks of this user, agent and workspace | `await ctx.profile()` |
-| `PATCH /v1/profile/{block}` | replace `old` with `new` once (empty `old`: the whole block); 409 when `old` is not there; `source_query` sets a standing question | `ctx.profile.edit(block, old, new)` |
+| `PATCH /v1/profile/{block}` | replace `old` with `new` once (empty `old`: the whole block); 409 when `old` is not there; `source_query` sets a standing question | `ctx.profile.edit(block, new, old=…, source_query=…)` |
 | `GET /v1/threads/{thread_id}` | the thread, with its durable `summary` (null until it has one) | `(await ctx.history.thread()).summary` |
 
 ## Profile blocks

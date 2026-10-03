@@ -20,7 +20,7 @@ competitor parity or benchmark superiority.
 | Document RAG | Full 5,183-document/300-query SciFact evaluation reproduced nDCG@10 0.7436 and true recall@10 0.8731; six document capability fixtures separately cover structural cases. |
 | Conversational global/hierarchical reasoning | No validated exhaustive topic→episode→fact route. Document section summaries are a different capability. |
 | Temporal reasoning | Date provenance and validity exist; calibrated event-time ranking remains unvalidated. Derived timestamps now say “summary created.” |
-| Late interaction | No measured runtime ColBERT improvement. Pre-encoding documents does not make token interaction literally O(1). |
+| Late interaction | No measured runtime ColBERT improvement. Pre-encoding documents does not make token interaction literally O(1). **Superseded 2026-10-02 by [ADR 0025](adr/0025-late-interaction-two-keys-and-learned-memory-ranking.md) / [ADR 0026](adr/0026-general-memory-ranking.md):** ColBERT now runs for memories as fusion arms (weight 6 on the memory's own key, 2 on its context key). |
 | Agent facade | Existing HTTP API remains; no new MCP facade claimed. |
 
 The sections below retain earlier audit history; use the current result handoff for
@@ -55,7 +55,7 @@ checked against the source, and the verdict says which mechanism provides it.
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
 | Rank fusion across retrievers | `hybrid_rrf_k` controls native dense/sparse fusion; default preserves legacy `FusionQuery`; `rrf_k=60` controls outer strategy fusion | on | Inner 60 reduced measured recall; see `ACCURACY-EXPERIMENTS-2026-09-26.md` |
 | Wider conversational recall | bounded `memory_recall_k`, respecting explicit caller limits, document selection and the context budget | opt-in, default off | Depth 100 improved paired answers modestly but regressed development abstention; not a general 85% result |
-| Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so reranking was removed |
+| Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so reranking was removed. *Superseded for memories (2026-10-02, ADR 0026): ColBERT runs as weighted fusion arms, not as a reranker; the cross-encoder stays rejected.* |
 | Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |
 | Referent resolution at answer time | `PARENT`, `PREVIOUS`, `NEXT` expansion | on | — |
 | Term definitions | `DEFINED_BY` expansion | on | — |
