@@ -2979,6 +2979,11 @@
       },
       "FeedbackReviewRequest": {
         "additionalProperties": false,
+        "examples": [
+          {
+            "note": "Checked against the signed contract."
+          }
+        ],
         "properties": {
           "note": {
             "anyOf": [
@@ -15473,6 +15478,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "examples": {
+                "with a note": {
+                  "value": {
+                    "note": "Checked against the signed contract."
+                  }
+                },
+                "without": {
+                  "value": {}
+                }
+              },
               "schema": {
                 "anyOf": [
                   {
@@ -16008,6 +16023,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "examples": {
+                "with a note": {
+                  "value": {
+                    "note": "Checked against the signed contract."
+                  }
+                },
+                "without": {
+                  "value": {}
+                }
+              },
               "schema": {
                 "anyOf": [
                   {

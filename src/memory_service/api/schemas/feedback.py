@@ -128,7 +128,10 @@ class FeedbackResponse(BaseModel):
 
 
 class FeedbackReviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"note": "Checked against the signed contract."}]},
+    )
 
     note: str | None = Field(
         default=None, max_length=COMMENT_MAX_CHARS, description="why, for the record"

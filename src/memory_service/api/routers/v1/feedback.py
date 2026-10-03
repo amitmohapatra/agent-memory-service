@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Body, Query, Request, Response
 
 from memory_service.api.deps import (
     AdministeredTenantDep,
@@ -208,6 +208,16 @@ async def _review(
 
 
 _REVIEW_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: the note is optional, and so is the body
+ReviewBody = Annotated[
+    FeedbackReviewRequest | None,
+    Body(
+        openapi_examples={
+            "with a note": {"value": {"note": "Checked against the signed contract."}},
+            "without": {"value": {}},
+        }
+    ),
+]
 
 
 @router.post(
@@ -222,7 +232,7 @@ async def approve_feedback(
     feedback_id: str,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-    body: FeedbackReviewRequest | None = None,
+    body: ReviewBody = None,
 ) -> FeedbackResponse:
     return await _review(request, container, tenant_id, feedback_id, body, approve=True)
 
@@ -239,6 +249,6 @@ async def dismiss_feedback(
     feedback_id: str,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-    body: FeedbackReviewRequest | None = None,
+    body: ReviewBody = None,
 ) -> FeedbackResponse:
     return await _review(request, container, tenant_id, feedback_id, body, approve=False)
