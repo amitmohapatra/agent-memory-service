@@ -70,6 +70,7 @@ async def judge_run(
         metadata={"bundle_id": bundle_id},
     )
     async with uow_factory() as uow:
-        stored, _ = await feedback.submit(uow, ctx, record)
+        # the service's own verdict: applied as it arrives, never left for review
+        stored, _ = await feedback.submit(uow, ctx, record, trusted=True)
         await uow.commit()
     return stored.feedback_id

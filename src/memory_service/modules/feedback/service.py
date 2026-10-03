@@ -10,6 +10,10 @@ the record, so a verdict is never lost and never slows the request that carried 
 - tool call: counted on the tool's statistics and on its approval pattern;
 - procedure: a rejection takes it out of what is offered.
 
+A verdict that would change what was learned on a person's or an agent's word alone waits in
+review (ADR 0028): it is stored ``pending`` and projected only once a tenant admin approves
+it; a dismissed one is kept for statistics and changes nothing. ``_needs_review`` says which.
+
 Every projection that touches a memory re-indexes it (the index carries the confidence and
 reinforcement retrieval ranks by) and bumps its revisions, so a cached bundle that showed the
 old standing stops being served.
@@ -23,7 +27,7 @@ from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
-from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
+from memory_service.domain.errors import Conflict, NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.feedback import (
     AFFIRMING_VERDICTS,
@@ -32,10 +36,12 @@ from memory_service.domain.feedback import (
     OUTCOME_PRECEDENCE,
     Feedback,
     FeedbackProjection,
+    FeedbackReview,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
     ProjectionAction,
+    ReviewState,
 )
 from memory_service.domain.learning import (
     CITED_CONFIDENCE_STEP,
@@ -90,16 +96,24 @@ class FeedbackService:
 
     # ------------------------------------------------------------------ writes
     async def submit(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback: Feedback
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        feedback: Feedback,
+        *,
+        trusted: bool = False,
     ) -> tuple[Feedback, bool]:
-        """Store the record and schedule its projection. Returns the stored record and
-        whether it was new (a retry with the same ``feedback_id`` returns the original).
+        """Store the record and schedule its projection, or leave it waiting for review.
+        Returns the stored record and whether it was new (a retry with the same
+        ``feedback_id`` returns the original).
 
         The record only claims who it is from: its identity fields must agree with the
-        trusted headers, and a memory target must be readable by the caller."""
+        trusted headers, and a memory target must be readable by the caller. ``trusted`` is
+        a verdict applied without review: the service's own (the grounding judge), or one
+        the tenant's administrator credential carries."""
         for name in IDENTITY_FIELDS:
-            claimed, trusted = getattr(feedback, name), getattr(ctx, name)
-            if claimed is not None and trusted is not None and claimed != trusted:
+            claimed, header = getattr(feedback, name), getattr(ctx, name)
+            if claimed is not None and header is not None and claimed != header:
                 raise ValidationFailed(
                     f"feedback {name} does not match the trusted header", details={"field": name}
                 )
@@ -122,19 +136,60 @@ class FeedbackService:
                 "trace_id": ctx.trace_id,
                 "created_at": self.clock(),
                 "projection": None,
+                "review": None,
             }
         )
+        if await self._needs_review(ctx, stored, trusted=trusted):
+            stored = stored.model_copy(update={"review": FeedbackReview(state=ReviewState.PENDING)})
         await uow.feedback.add(stored)
+        if not stored.pending:
+            await self._schedule(uow, stored)
+        return stored, True
+
+    async def _needs_review(
+        self, ctx: MemoryExecutionContext, record: Feedback, *, trusted: bool
+    ) -> bool:
+        """Whether ``record`` waits for a tenant admin before it changes anything. Applied as
+        it arrives: the service's own judge; a run reporting its own final status, citing
+        nothing (the lowest-ranked word on a run, which never overrides a person or the
+        judge); an owner's
+        retraction or correction of a memory (an edit, authorised as one by
+        ``_authorize_memory_verdict``); a decision on a tool call (what is learned from it is
+        a suggestion an admin accepts); and what a tenant admin says in person or through
+        the tenant's administrator credential (``trusted``)."""
+        if trusted:
+            return False
+        if (
+            record.source is FeedbackSource.SYSTEM
+            and record.target_kind is FeedbackTargetKind.RUN
+            and ctx.agent_run_id is not None
+            and record.target_id == ctx.agent_run_id
+            # citing memories would move their confidence: a fresh run each time would be a
+            # vote nobody reviewed
+            and not record.cited_memory_ids(1)
+        ):
+            return False
+        if record.target_kind is FeedbackTargetKind.TOOL_CALL:
+            return False
+        if (
+            record.target_kind is FeedbackTargetKind.MEMORY
+            and record.verdict not in AFFIRMING_VERDICTS
+        ):
+            return False
+        # a tenant admin speaking in person (never an agent acting for one)
+        return ctx.is_agent or not await self.authz.is_tenant_admin(ctx)
+
+    @staticmethod
+    async def _schedule(uow: UnitOfWork, record: Feedback) -> None:
         await uow.enqueue(
             JobSpec(
                 task_name=TASK_FEEDBACK_PROJECT,
                 queue=Queue.RECONCILE,
-                payload={"tenant_id": stored.tenant_id, "feedback_id": stored.feedback_id},
-                idempotency_key=f"feedback:{stored.tenant_id}:{stored.feedback_id}",
-                tenant_id=stored.tenant_id,
+                payload={"tenant_id": record.tenant_id, "feedback_id": record.feedback_id},
+                idempotency_key=f"feedback:{record.tenant_id}:{record.feedback_id}",
+                tenant_id=record.tenant_id,
             )
         )
-        return stored, True
 
     async def _authorize_memory_verdict(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback: Feedback
@@ -151,6 +206,73 @@ class FeedbackService:
                 f"only the owner (or a tenant admin) can {feedback.verdict.value} a memory",
                 details={"principal": ctx.principal_id},
             )
+
+    # ------------------------------------------------------------------ review
+    async def review(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        feedback_id: str,
+        *,
+        approve: bool,
+        reviewed_by: str,
+        note: str | None = None,
+    ) -> Feedback:
+        """Approve a pending verdict (it is projected as if it had just arrived) or dismiss
+        it (kept, never applied); only once. Who may review is the caller's business: the API
+        asks for the tenant's administrator credential."""
+        await uow.serialize(f"feedback:{tenant_id}:{feedback_id}")
+        record = await uow.feedback.get(tenant_id, feedback_id)
+        if record is None:
+            raise NotFound(f"feedback {feedback_id} not found")
+        if not record.pending:
+            raise Conflict(
+                f"feedback {feedback_id} is not waiting for review",
+                details={"review": record.review.state.value if record.review else None},
+            )
+        now = self.clock()
+        review = FeedbackReview(
+            state=ReviewState.APPROVED if approve else ReviewState.DISMISSED,
+            reviewed_by=reviewed_by,
+            reviewed_at=now,
+            note=note,
+        )
+        await uow.feedback.set_review(tenant_id, feedback_id, review)
+        projection = None
+        if approve:
+            await self._schedule(uow, record)
+        else:
+            projection = FeedbackProjection(
+                action=ProjectionAction.NONE, reason="dismissed in review", projected_at=now
+            )
+            await uow.feedback.set_projection(tenant_id, feedback_id, projection)
+        log.info(
+            "feedback.reviewed",
+            tenant_id=tenant_id,
+            feedback_id=feedback_id,
+            state=review.state.value,
+        )
+        return record.model_copy(update={"review": review, "projection": projection})
+
+    async def pending(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        *,
+        before: tuple[datetime, str] | None = None,
+        limit: int = 100,
+    ) -> list[tuple[Feedback, dict[str, int]]]:
+        """The review queue, newest first, each verdict with how its author's verdicts fared
+        in review (pending / approved / dismissed)."""
+        rows = await uow.feedback.list_pending(tenant_id, before=before, limit=limit)
+        history: dict[tuple[str | None, str | None], dict[str, int]] = {}
+        for r in rows:
+            author = (r.user_id, r.agent_id)
+            if author not in history:
+                history[author] = await uow.feedback.review_counts(
+                    tenant_id, user_id=r.user_id, agent_id=r.agent_id
+                )
+        return [(r, history[(r.user_id, r.agent_id)]) for r in rows]
 
     # ------------------------------------------------------------------ reads
     async def get(self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback_id: str) -> Feedback:
@@ -227,6 +349,9 @@ class FeedbackService:
                 return None
             if record.projection is not None:
                 return record.projection
+            if record.pending:
+                # waits for a reviewer; approval schedules this job again
+                return None
             if record.target_kind is FeedbackTargetKind.MEMORY:
                 await uow.serialize(f"memory:{tenant_id}:{record.target_id}")
             now = self.clock()

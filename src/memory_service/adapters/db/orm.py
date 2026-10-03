@@ -1138,8 +1138,20 @@ class FeedbackRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     projection: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     projected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: null: applied as it arrived; else pending, approved or dismissed (ADR 0028)
+    review_state: Mapped[str | None] = mapped_column(String(20))
+    reviewed_by: Mapped[str | None] = mapped_column(String(300))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(String(4000))
 
     __table_args__ = (
+        Index(
+            "ix_feedback_pending",
+            "tenant_id",
+            created_at.desc(),
+            feedback_id.desc(),
+            postgresql_where=text("review_state = 'pending'"),
+        ),
         Index(
             "ix_feedback_target",
             "tenant_id",

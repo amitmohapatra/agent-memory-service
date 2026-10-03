@@ -940,6 +940,19 @@ class FeedbackProjection(BaseModel):
     projected_at: datetime
 
 
+#: where a vote that waits for a tenant admin stands
+ReviewState = Literal["pending", "approved", "dismissed"]
+
+
+class FeedbackReview(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    state: ReviewState
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    note: str | None = None
+
+
 class Feedback(BaseModel):
     """A stored judgement (the ``trellis.contracts.Feedback`` record plus its projection)."""
 
@@ -964,3 +977,7 @@ class Feedback(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     projection: FeedbackProjection | None = None
+    #: null: applied as it arrived; else where its review stands
+    review: FeedbackReview | None = None
+    #: in the review queue only: how the author's verdicts fared (pending/approved/dismissed)
+    author_record: dict[str, int] | None = None

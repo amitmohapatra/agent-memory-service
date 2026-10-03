@@ -38,6 +38,7 @@ is not finished).
 | [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; off unless a model is configured |
+| [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
 
 ## Where the numbers behind these decisions are
 

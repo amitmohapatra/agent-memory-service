@@ -236,7 +236,7 @@ async def test_a_rejected_procedure_is_not_offered_until_its_steps_change(
     [procedure] = await _procedures(container, _ctx())
     feedback = container.services["feedback"]
     async with uow_factory() as uow:
-        await feedback.submit(
+        vote, _ = await feedback.submit(
             uow,
             _ctx(),
             Feedback(
@@ -245,6 +245,14 @@ async def test_a_rejected_procedure_is_not_offered_until_its_steps_change(
                 target_id=procedure.procedure_id,
                 verdict=FeedbackVerdict.REJECT,
             ),
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    # an agent's word on a procedure waits for the tenant's administrator (ADR 0028)
+    assert vote.pending and len(await _procedures(container, _ctx())) == 1
+    async with uow_factory() as uow:
+        await feedback.review(
+            uow, "acme", vote.feedback_id, approve=True, reviewed_by="key:acme-admin"
         )
         await uow.commit()
     await container.tasks.drain()

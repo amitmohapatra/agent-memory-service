@@ -99,7 +99,8 @@ a bounded factor (±15%) before the cut.
 ```
 record_tool / outcome ----> tools.learn: stored procedures per (audience, task pattern),
                             distilled with the tenant model; procedural graph edges
-feedback --------------> feedback.project: memory standing, run outcomes, tool statistics,
+feedback --------------> review (ADR 0028: a vote waits for the tenant administrator) ->
+                         feedback.project: memory standing, run outcomes, tool statistics,
                             approval patterns, procedure rejection
 message every 20 ------> summary.refresh: the thread's durable summary (rolling)
 USER/PREFERENCE memory -> profile.refresh: the user's pinned block
