@@ -40,6 +40,7 @@ is not finished).
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
 | [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
+| [0032](0032-sdk-resilience-act-for-admission-forget-dev-defaults.md) | SDK resilience (Retry-After, full-jitter backoff, read-only POST retries, status-classed errors, circuit breaker, env defaults), `may_act_as` checks agents too, the admission gate behind a tenant switch, the forget cascade moves readers' revisions, and dev defaults (development tenant, development envelope key) | accepted; amends 0009, 0021, 0022 |
 
 ## Where the numbers behind these decisions are
 
