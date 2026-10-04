@@ -58,6 +58,13 @@ merged by rank, lowered it to 0.568. The LoCoMo paper finds the same for "observ
    (`PUT /v1/model-key/policy`, `models: {"memory_restatement": "openai/gpt-4.1-mini"}`);
    a use it does not name calls the service's fast model (`LLMTuning.fast_model`).
 
+8. **The model is told who and when.** The prompt names the turn's speaker and addressee
+   (who "I" and "you" are) and hands over the dates the service already resolved in the
+   turn (`modules/memory/temporal.py`, ADR 0024 decision 7), so the model copies a date
+   rather than computing one. A line that only echoes the turn (90% of its words from it)
+   and a relation whose person or object is a placeholder ("N/A", "none", "unknown") are
+   dropped.
+
 ## Evidence
 
 Offline, LoCoMo conversation 1 (150 answerable questions), turns restated by a 2B CPU model
@@ -81,6 +88,33 @@ One conversation is a noisy estimate (about three points); the full-corpus run a
 through-the-service run with a gateway model are what this ADR is re-measured by. A 2B
 model is the floor: it resolves few dates and writes no facts; a hosted model through the
 gateway writes both.
+
+**Answers, not just recall (2B model, judged).** Recall says whether the evidence reached
+the bundle; it cannot say whether the restatement helps a model answer. LoCoMo conversation
+1, a seeded per-category sample of 39 questions (`benchmark.locomo --sample 40 --judge`), the
+shipped bundle, the same 2B model answering and grading behind the gateway stand-in, with
+and without `memory_restatement` at ingest (the prompt of decision 8):
+
+| ingest | answerable, strict ruler | answerable, lenient ruler | all evidence in top 10 |
+|---|---|---|---|
+| no model | 17 / 30 | 27 / 30 | 24 / 30 |
+| 2B restatement | 13 / 30 | 21 / 30 | 24 / 30 |
+
+Paired on the same questions, the restated corpus lost 5 answers and won 1 under the strict
+ruler (exact test p = 0.22), lost 6 and won none under the lenient one (p = 0.03). The
+evidence reached the bundle as often; 35 of 39 answers differed in wording, and the losses
+are the small answerer misreading a bundle that holds the answer (a pet and a slipper given
+to the wrong person). The 2B grader is consistent with itself (one verdict of 39 changed on a
+re-grade) but strict about form: it rejected "2023-07-02" for "2 July 2023" and "twice" for
+"2", which is why the lenient ruler reads ten points higher on both arms. So with a 2B model
+the restatement does not pay; it stays opt-in, and the run that decides it is the same
+judged pair with a hosted model through the gateway.
+
+**Tried and removed: the graph as a ranked list.** Fusing the traversal's memories into
+the ranking by reciprocal rank (instead of appending them after it) read 0.807 / 0.807 /
+0.802 recall@10 on LoCoMo at weights 0 / 0.25 / 0.5 without a model, and 0.842 / 0.842 /
+0.828 / 0.779 at 0 / 0.25 / 0.5 / 1 on conversation 1 with the 2B model's relations. It was
+neutral at best, so it was removed rather than shipped off.
 
 ## Consequences
 

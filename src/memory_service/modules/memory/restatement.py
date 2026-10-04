@@ -28,6 +28,7 @@ from datetime import datetime
 from typing import Any, Final
 
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.temporal import dated_mentions
 
 USE: Final = "memory_restatement"
 MAX_TURN_CHARS: Final = 1500
@@ -36,17 +37,22 @@ MAX_RESTATEMENT_CHARS: Final = 400
 MAX_FACTS: Final = 3
 MAX_FACT_CHARS: Final = 200
 MAX_RELATIONS: Final = 4
+#: a line this much of whose words are the turn's own is an echo, not a restatement
+ECHO_SHARE: Final = 0.9
 MAX_RELATION_CHARS: Final = 80
 
 SYSTEM: Final = (
     "You restate one turn of a conversation so it makes sense on its own months later. "
-    "Use people's names instead of I, you, he, she or they. Replace relative times "
-    "(yesterday, last week, next month, two days ago) with absolute dates computed from the "
-    "date the turn was said. Keep who, what, where, with whom, when and why. Do not add "
-    "anything the turn does not say. Then list up to three short facts the turn states, and up "
-    "to four relations: a person's name, a short verb phrase in snake_case (went_to, adopted, "
-    "likes, works_at), and a short object copied from the turn. If the turn says nothing worth "
-    "remembering (a greeting, thanks), return an empty restatement and no facts or relations."
+    "The turn's speaker is 'turn.speaker': I, me and my mean that person; you and your mean "
+    "'turn.addressee', the speaker of the previous turn. Write every person by name, never I, "
+    "you, he, she or they. Replace each relative time with the absolute date given for it in "
+    "'dates' (else compute it from 'said_on'). Keep who, what, where, with whom, when and why. "
+    "Do not add anything the turn does not say. Then list up to three short facts the turn "
+    "states, each a full sentence that starts with the person's name, and up to four "
+    "relations: a person's name, a short verb phrase in snake_case (went_to, adopted, likes, "
+    "works_at), and a short object copied from the turn. If the turn says nothing worth "
+    "remembering (a greeting, thanks, a question back), return an empty restatement and no "
+    "facts or relations."
 )
 SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
@@ -83,6 +89,8 @@ _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
 _PREDICATE = re.compile(r"[a-z][a-z_]{1,39}")
 _WORD = re.compile(r"[\w'-]{3,}")
 #: words a relation may use that the turn need not: the model writes names for pronouns
+#: what a model writes when it has no object (or subject) for a relation
+_PLACEHOLDERS = frozenset({"n/a", "na", "none", "unknown", "null", "nothing", "-", "?"})
 _FUNCTION = frozenset(
     {"the", "and", "her", "his", "their", "its", "our", "your", "with", "for", "from", "about"}
 )
@@ -112,13 +120,15 @@ async def restate(
         return None
     prior = before or {}
     said_before = prior.get("text", "")[:MAX_CONTEXT_CHARS]
+    addressee = prior.get("speaker", "")
     payload = {
         "said_on": said_at.date().isoformat(),
         "weekday": said_at.strftime("%A"),
-        "previous_turn": {"speaker": prior.get("speaker", ""), "text": said_before}
-        if said_before
-        else None,
-        "turn": {"speaker": speaker, "text": text[:MAX_TURN_CHARS]},
+        # the relative dates the turn names, as the service resolved them at ingest: the
+        # model substitutes them rather than doing calendar arithmetic it gets wrong
+        "dates": {m["text"]: m["date"] for m in dated_mentions(text, base=said_at)},
+        "previous_turn": {"speaker": addressee, "text": said_before} if said_before else None,
+        "turn": {"speaker": speaker, "addressee": addressee, "text": text[:MAX_TURN_CHARS]},
     }
     output = await assist.structured(
         USE,
@@ -134,11 +144,22 @@ async def restate(
     facts = output.get("facts")
     if isinstance(facts, list):
         kept += [_clean(f, MAX_FACT_CHARS) for f in facts[:MAX_FACTS]]
-    lines = list(dict.fromkeys(line for line in kept if line and grounded(line, source)))
+    lines = list(
+        dict.fromkeys(
+            line for line in kept if line and grounded(line, source) and not _echo(line, text)
+        )
+    )
     relations = _relations(output.get("relations"), source)
     if not lines and not relations:
         return None
     return Restated(" ".join(lines), relations)
+
+
+def _echo(line: str, turn: str) -> bool:
+    """A line that only repeats the turn's own words adds nothing to its key."""
+    said = set(_WORD.findall(turn.casefold()))
+    words = _WORD.findall(line.casefold())
+    return bool(words) and sum(w in said for w in words) / len(words) >= ECHO_SHARE
 
 
 def _relations(value: object, source: str) -> list[tuple[str, str, str]]:
@@ -157,6 +178,8 @@ def _relations(value: object, source: str) -> list[tuple[str, str, str]]:
         predicate = "_".join(str(item.get("predicate", "")).casefold().split())
         obj = _clean(item.get("object"), MAX_RELATION_CHARS)
         if not (subject and obj and _PREDICATE.fullmatch(predicate)):
+            continue
+        if obj.casefold().strip(".") in _PLACEHOLDERS or subject.casefold() in _PLACEHOLDERS:
             continue
         words = _WORD.findall(_DATE.sub(" ", f"{subject} {obj}").casefold())
         if (subject, predicate, obj) not in out and all(

@@ -816,7 +816,7 @@ async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "stric
     raise last if last else RuntimeError("unreachable")
 
 
-def _model_uses(llm_ingestion: bool) -> tuple[str, ...]:
+def _model_uses(llm_ingestion: bool, ingest_uses: Sequence[str] = ()) -> tuple[str, ...]:
     """The uses the bench tenant's policy lets the model run for.
 
     The judge only, by default: it is the instrument, not the system under test. Arm A1
@@ -826,7 +826,8 @@ def _model_uses(llm_ingestion: bool) -> tuple[str, ...]:
     whether the corpus contains model prose. The uses land in the corpus ledger key, so A1
     cannot silently reuse A0's index.
     """
-    return (*JUDGE_USES, "contextual_extraction") if llm_ingestion else JUDGE_USES
+    base = (*JUDGE_USES, "contextual_extraction") if llm_ingestion else JUDGE_USES
+    return (*base, *ingest_uses)
 
 
 def _ingestion_settings(settings: Any, uses: Sequence[str]) -> dict[str, Any]:
@@ -859,6 +860,7 @@ async def run(
     reuse_corpus: bool = False,
     reask: bool = False,
     llm_ingestion: bool = False,
+    ingest_uses: Sequence[str] = (),
 ) -> dict:
     if not DATASET.is_file():
         raise SystemExit(f"{DATASET} is missing — run `make bench-locomo-prepare`")
@@ -871,7 +873,9 @@ async def run(
             "--llm-ingestion needs a generative model: run with BENCH_LLM=on and BIFROST_URL "
             "set (the Makefile's BENCH_LLM_ENV)."
         )
-    uses = _model_uses(llm_ingestion)
+    if ingest_uses and not settings.llm.enabled:
+        raise SystemExit("--ingest-uses needs BENCH_LLM=on and BIFROST_URL set")
+    uses = _model_uses(llm_ingestion, ingest_uses)
     overrides = bench_overrides()
     if ablate:
         # An ablation answers "is this component earning its cost?" the only way that means
@@ -1484,6 +1488,12 @@ def main() -> int:
         help="arm A1: add contextual_extraction (the source-span selector) to the ingestion "
         "path's model uses. Needs --judge's generative model; gets its own corpus.",
     )
+    parser.add_argument(
+        "--ingest-uses",
+        default="",
+        help="comma-separated model uses to run at ingestion as well (e.g. memory_restatement); "
+        "needs the gateway, and is part of the corpus key",
+    )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()
     if args.rejudge:
@@ -1508,6 +1518,7 @@ def main() -> int:
             reuse_corpus=args.reuse_corpus,
             reask=args.reask,
             llm_ingestion=args.llm_ingestion,
+            ingest_uses=tuple(u for u in args.ingest_uses.split(",") if u),
         )
     )
     write_result(args.out, result)

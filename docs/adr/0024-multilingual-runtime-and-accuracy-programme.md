@@ -62,7 +62,12 @@ an English NLI head. The measured numbers behind this record:
    base resolves the weekday correctly but also reads the word "we" as a Wednesday and
    annotates the absolute dates this step exists to leave alone. A phrase resolved to the
    wrong day corrupts an answer silently, so the parser stays narrow - the measurement
-   protocol's rule applied to a date: unmeasured, never wrong. Cost on this host: 0.84 ms
+   protocol's rule applied to a date: unmeasured, never wrong. *Amended 2026-10-04:* the
+   English phrases that are unambiguous are resolved by rule instead (`last Tuesday`, `next
+   Monday`, `last/this weekend`, `this morning`, `a few days ago`), and a named period is a
+   range (`last week` = the Monday-to-Sunday before, `last month` = the calendar month); the
+   absolute-time parser is still never used, and a bare weekday, `next weekend` and the
+   seasons stay unresolved (`modules/memory/temporal.py`). Cost on this host: 0.84 ms
    when the cue pre-check rejects a text, 6-27 ms when it parses, on the ingest path only.
 8. **Read-side aggregates and the reader protocol.** The judged-arm reader (`benchmark/locomo.py`)
    gets one bounded re-ask when it declines while the context names the question's entities

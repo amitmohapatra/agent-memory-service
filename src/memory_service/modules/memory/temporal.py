@@ -21,6 +21,15 @@ dates this module exists to leave alone. An unresolved phrase costs the reader o
 a phrase resolved to the wrong day silently corrupts the answer, so the parser stays narrow.
 Same rule as the measurement protocol: unmeasured, never wrong.
 
+Those that are unambiguous in English are resolved by rule instead (``_english``): "last
+Friday" (the most recent Friday before the day it was said), "next Tuesday", "last weekend",
+"this weekend", "this morning", "tonight", and the vague counts ("a few days ago", "a couple of
+weeks ago") as the range they allow. A named period is a range, not a day: "last week" is the
+Monday-to-Sunday before, "last month" the calendar month, "last year" the calendar year
+(``2023-06-01..2023-06-30``), which is what a question naming that period is matched against
+(``retrieval.periods``). A bare weekday ("on Friday"), "next weekend" and the seasons stay
+unresolved: past or coming, and which hemisphere, is not in the words.
+
 Nothing here is generated text: the phrase is the memory's own words and the date is
 arithmetic on the observation's timestamp.
 
@@ -31,9 +40,10 @@ this; the resolved pairs are already in the payload.
 
 from __future__ import annotations
 
+import calendar
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from functools import cache
 
 from memory_service.domain.fiscal import FiscalCalendar, resolve_fiscal_mentions
@@ -105,34 +115,128 @@ def _cues(languages: tuple[str, ...]) -> _Cues:
     return _Cues(tuple(sorted(phrases, key=len, reverse=True)), tuple(patterns), frozenset(skip))
 
 
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_VAGUE_DAYS = {  # how far back "a few days ago" and the like may reach: (most, least) days
+    ("few", "days"): (6, 2),
+    ("couple", "days"): (3, 2),
+    ("few", "weeks"): (35, 14),
+    ("couple", "weeks"): (21, 10),
+    ("few", "months"): (150, 45),
+    ("couple", "months"): (90, 45),
+}
+_ENGLISH = re.compile(
+    r"\b(?:(?P<wd_dir>last|next)\s+(?P<wd>" + "|".join(_WEEKDAYS) + r")"
+    r"|(?P<we_dir>last|this)\s+weekend"
+    r"|(?P<today>this\s+(?:morning|afternoon|evening)|tonight|earlier\s+today)"
+    r"|(?P<p_dir>last|next)\s+(?P<period>week|month|year)"
+    r"|(?:a\s+)?(?P<vague>few|couple(?:\s+of)?|several)\s+(?P<unit>days|weeks|months)\s+ago)\b",
+    re.IGNORECASE,
+)
+
+
+def _span(first: date, last: date) -> str:
+    return first.isoformat() if first == last else f"{first.isoformat()}..{last.isoformat()}"
+
+
+def _weekday(m: re.Match[str], day: date) -> str:
+    wanted = _WEEKDAYS.index(m.group("wd").lower())
+    if m.group("wd_dir").lower() == "last":
+        at = day - timedelta(days=(day.weekday() - wanted) % 7 or 7)
+    else:
+        at = day + timedelta(days=(wanted - day.weekday()) % 7 or 7)
+    return _span(at, at)
+
+
+def _weekend(m: re.Match[str], day: date) -> str:
+    if m.group("we_dir").lower() == "this":
+        ahead = day.weekday() < 5
+        saturday = (
+            day + timedelta(days=5 - day.weekday())
+            if ahead
+            else day - timedelta(days=day.weekday() - 5)
+        )
+    elif day.weekday() >= 5:
+        saturday = day - timedelta(days=day.weekday() - 5 + 7)
+    else:
+        saturday = day - timedelta(days=day.weekday() + 2)
+    return _span(saturday, saturday + timedelta(days=1))
+
+
+def _period(m: re.Match[str], day: date) -> str:
+    step = -1 if m.group("p_dir").lower() == "last" else 1
+    period = m.group("period").lower()
+    if period == "week":
+        monday = day - timedelta(days=day.weekday()) + timedelta(weeks=step)
+        return _span(monday, monday + timedelta(days=6))
+    if period == "month":
+        month = day.month - 1 + step
+        year, month = day.year + month // 12, month % 12 + 1
+        return _span(date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1]))
+    return _span(date(day.year + step, 1, 1), date(day.year + step, 12, 31))
+
+
+def _vague(m: re.Match[str], day: date) -> str:
+    vague = m.group("vague").lower()
+    word = "few" if vague == "several" else vague.split()[0]
+    most, least = _VAGUE_DAYS[(word, m.group("unit").lower())]
+    return _span(day - timedelta(days=most), day - timedelta(days=least))
+
+
+_RULES = (
+    ("wd", _weekday),
+    ("we_dir", _weekend),
+    ("today", lambda _m, day: _span(day, day)),
+    ("period", _period),
+    ("vague", _vague),
+)
+
+
+def _english(text: str, base: datetime) -> list[DatedMention]:
+    """The English relative expressions dateparser's relative-time parser leaves out, and
+    the named periods as ranges (module docstring)."""
+    day = base.date()
+    out: list[DatedMention] = []
+    for m in _ENGLISH.finditer(text):
+        rule = next(fn for group, fn in _RULES if m.group(group))
+        out.append(DatedMention(text=m.group(0), date=rule(m, day)))
+    return out
+
+
 def resolve_dated_mentions(
     text: str, *, base: datetime, script: Script, limit: int = MAX_MENTIONS
 ) -> list[DatedMention]:
-    """The relative dates ``text`` names, resolved against ``base``; empty for a script
-    with no parser, a text with no relative cue, or a text that names none."""
+    """The relative dates ``text`` names, resolved against ``base``, in the order the text
+    names them; empty for a script with no parser, a text with no relative cue, or a text
+    that names none."""
     languages = LANGUAGES.get(script)
-    if languages is None or not text.strip() or not _cues(languages).found_in(text):
+    if languages is None or not text.strip():
         return []
-    from dateparser.search import search_dates
+    out = _english(text, base) if script is Script.LATIN else []
+    seen = {m.text.casefold() for m in out}
+    if _cues(languages).found_in(text):
+        from dateparser.search import search_dates
 
-    settings = {
-        "PARSERS": ["relative-time"],
-        "RELATIVE_BASE": base.replace(tzinfo=None),
-        "PREFER_DATES_FROM": "past",
-        "RETURN_AS_TIMEZONE_AWARE": False,
-    }
-    found = search_dates(text, languages=list(languages), settings=settings)
-    out: list[DatedMention] = []
-    seen: set[str] = set()
-    for phrase, when in found or ():
-        cleaned = _trimmed(phrase, _cues(languages).skip)
-        if not cleaned or cleaned.casefold() in seen:
-            continue
-        seen.add(cleaned.casefold())
-        out.append(DatedMention(text=cleaned, date=when.date().isoformat()))
-        if len(out) >= limit:
-            break
-    return out
+        settings = {
+            "PARSERS": ["relative-time"],
+            "RELATIVE_BASE": base.replace(tzinfo=None),
+            "PREFER_DATES_FROM": "past",
+            "RETURN_AS_TIMEZONE_AWARE": False,
+        }
+        ruled = list(seen)
+        for phrase, when in search_dates(text, languages=list(languages), settings=settings) or ():
+            cleaned = _trimmed(phrase, _cues(languages).skip).casefold()
+            # a phrase the English rules already read (as a range) is not read again as a day
+            if not cleaned or cleaned in seen or any(cleaned in r or r in cleaned for r in ruled):
+                continue
+            seen.add(cleaned)
+            out.append(
+                DatedMention(
+                    text=_trimmed(phrase, _cues(languages).skip), date=when.date().isoformat()
+                )
+            )
+    lowered = text.casefold()
+    out.sort(key=lambda m: lowered.find(m.text.casefold()))
+    return out[:limit]
 
 
 def _trimmed(phrase: str, skip: frozenset[str]) -> str:

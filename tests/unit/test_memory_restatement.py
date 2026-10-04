@@ -48,7 +48,42 @@ async def test_the_model_sees_the_turn_the_turn_before_it_and_the_day() -> None:
     ]
     assert sent["said_on"] == "2023-05-08" and sent["weekday"] == "Monday"
     assert sent["previous_turn"] == {"speaker": "melanie", "text": BEFORE["text"]}
-    assert sent["turn"] == {"speaker": "caroline", "text": TURN}
+    assert sent["turn"] == {"speaker": "caroline", "addressee": "melanie", "text": TURN}
+    assert sent["dates"] == {}
+
+
+async def test_the_model_is_handed_the_dates_the_service_resolved() -> None:
+    assist = _Assist({"restatement": "", "facts": [], "relations": []})
+    await restate(
+        assist,  # type: ignore[arg-type]
+        text="We went camping last weekend and I signed up two days ago.",
+        speaker="caroline",
+        said_at=SAID,
+        before=None,
+    )
+    [(_, kwargs)] = assist.calls
+    # SAID is Monday 2023-05-08
+    assert json.loads(kwargs["user"])["dates"] == {
+        "last weekend": "2023-05-06..2023-05-07",
+        "two days ago": "2023-05-06",
+    }
+
+
+async def test_echoes_and_placeholder_relations_are_dropped() -> None:
+    assist = _Assist(
+        {
+            "restatement": "Yes, with my kids at the lake, we loved it.",  # the turn again
+            "facts": ["Caroline went to the lake with her kids."],
+            "relations": [
+                {"subject": "Caroline", "predicate": "adopted", "object": "N/A"},
+                {"subject": "Caroline", "predicate": "went_to", "object": "the lake"},
+            ],
+        }
+    )
+    said = await restate(assist, text=TURN, speaker="caroline", said_at=SAID, before=BEFORE)  # type: ignore[arg-type]
+    assert said == Restated(
+        "Caroline went to the lake with her kids.", [("Caroline", "went_to", "the lake")]
+    )
 
 
 async def test_grounded_lines_are_kept_and_invented_ones_dropped() -> None:

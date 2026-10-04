@@ -72,10 +72,13 @@ Payload fields `script` and `entities` are indexed and matched inside the store;
 never returned to a reader. `dated_mentions` is projected and rendered.
 
 `resolve_dated_mentions` covers named and counted offsets in all twelve languages
-(`yesterday`, `tomorrow`, `three days ago`, `last week`, `hace 2 días`, `вчера`, `昨天`). It
-does **not** resolve weekday phrases such as `last Tuesday`: the parser that reaches those
-also reads the word "we" as a Wednesday and annotates absolute dates, and a date resolved to
-the wrong day is worse for a reader than one left alone (ADR 0024, decision 7).
+(`yesterday`, `tomorrow`, `three days ago`, `last week`, `hace 2 días`, `вчера`, `昨天`). The
+English weekday and weekend phrases that are unambiguous (`last Tuesday`, `next Monday`,
+`last weekend`, `this morning`, `a few days ago`) are resolved by rule, and a named period is
+a range (`last week` = `2023-05-01..2023-05-07`). dateparser's absolute-time parser is never
+used - it reads the word "we" as a Wednesday - and a bare weekday, `next weekend` and the
+seasons stay unresolved: a date resolved to the wrong day is worse for a reader than one left
+alone (ADR 0024, decision 7, amended).
 
 ## Language on write, and the model where the rules cannot read
 
