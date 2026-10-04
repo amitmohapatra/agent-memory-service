@@ -23,6 +23,7 @@ from memory_service.domain.errors import (
     CorruptSource,
     DependencyUnavailable,
     NotFound,
+    PayloadTooLarge,
     ValidationFailed,
 )
 from memory_service.domain.ids import content_hash
@@ -141,7 +142,7 @@ class IngestionService:
         if not data:
             raise ValidationFailed("empty file")
         if len(data) > self.cfg.max_file_bytes:
-            raise ValidationFailed(f"file exceeds {self.cfg.max_file_bytes} bytes")
+            raise PayloadTooLarge(f"file exceeds {self.cfg.max_file_bytes} bytes")
         if media_type not in self.parser.supported_media_types and not (
             self.fallback and media_type in self.fallback.supported_media_types
         ):

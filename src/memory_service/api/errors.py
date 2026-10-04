@@ -44,6 +44,7 @@ PROBLEM_TITLES: Final[dict[ErrorCode, str]] = {
     ErrorCode.SCOPE_DENIED: "Outside the caller's scope",
     ErrorCode.NOT_FOUND: "Not found",
     ErrorCode.CONFLICT: "Conflict",
+    ErrorCode.PAYLOAD_TOO_LARGE: "Payload too large",
     ErrorCode.RATE_LIMIT: "Too many requests",
     ErrorCode.DEPENDENCY_UNAVAILABLE: "A dependency is unavailable",
     ErrorCode.TIMEOUT: "Operation timed out",
@@ -174,7 +175,7 @@ ERROR_EXAMPLES: dict[int, dict[str, Any]] = {
         "retryable": False,
     },
     413: {
-        "code": ErrorCode.VALIDATION,
+        "code": ErrorCode.PAYLOAD_TOO_LARGE,
         "detail": f"Body exceeds {MAX_BODY_BYTES} bytes",
         "retryable": False,
     },
@@ -293,7 +294,7 @@ def install_error_handlers(app: FastAPI) -> None:
             404: ErrorCode.NOT_FOUND,
             405: ErrorCode.VALIDATION,
             409: ErrorCode.CONFLICT,
-            413: ErrorCode.VALIDATION,
+            413: ErrorCode.PAYLOAD_TOO_LARGE,
             422: ErrorCode.VALIDATION,
             429: ErrorCode.RATE_LIMIT,
         }

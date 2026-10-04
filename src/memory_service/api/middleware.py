@@ -119,7 +119,7 @@ class CorrelationMiddleware:
         ):
             response = problem_response(
                 build_problem(
-                    code=ErrorCode.VALIDATION,
+                    code=ErrorCode.PAYLOAD_TOO_LARGE,
                     message=f"Body exceeds {self.max_body_bytes} bytes",
                     status=413,
                     retryable=False,

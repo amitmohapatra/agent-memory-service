@@ -56,6 +56,10 @@ class ValidationError(MemoryError):
     pass
 
 
+class PayloadTooLargeError(ValidationError):
+    """413: the body or the file is larger than the service accepts; never retryable as is."""
+
+
 class RateLimitedError(MemoryError):
     pass
 
@@ -75,6 +79,7 @@ _BY_CODE: dict[str, type[MemoryError]] = {
     "NOT_FOUND": NotFoundError,
     "CONFLICT": ConflictError,
     "VALIDATION": ValidationError,
+    "PAYLOAD_TOO_LARGE": PayloadTooLargeError,
     "RATE_LIMIT": RateLimitedError,
     "DEPENDENCY_UNAVAILABLE": DependencyUnavailableError,
     "RETRYABLE_PROCESSING": DependencyUnavailableError,
@@ -104,7 +109,7 @@ def error_from_problem(status: int, body: Any) -> MemoryError:
         else:
             # a gateway's own shape: whatever it calls message or request_id is kept
             problem = body
-    code = str(problem.get("code") or "INTERNAL")
+    code = str(problem.get("code") or ("PAYLOAD_TOO_LARGE" if status == 413 else "INTERNAL"))
     cls = _BY_CODE.get(code, MemoryError)
     # the members are typed here, at the boundary: a gateway's body is not the service's
     retryable = problem.get("retryable")

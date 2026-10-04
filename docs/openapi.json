@@ -2334,6 +2334,7 @@
           "SCOPE_DENIED",
           "NOT_FOUND",
           "CONFLICT",
+          "PAYLOAD_TOO_LARGE",
           "RATE_LIMIT",
           "DEPENDENCY_UNAVAILABLE",
           "TIMEOUT",
@@ -7808,16 +7809,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/admin/tenants",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -8322,16 +8323,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/admin/tenants",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -8766,16 +8767,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/admin/tenants/{tenant_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -9276,16 +9277,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/admin/tenants/{tenant_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -9712,16 +9713,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/agent-tools",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -10224,16 +10225,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/agent-tools/{name}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -10864,16 +10865,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/agents/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -11439,16 +11440,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/agents/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -11937,16 +11938,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/agents/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -12343,16 +12344,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/context",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -12848,16 +12849,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/documents",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -13436,16 +13437,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/documents/{document_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -14104,16 +14105,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -14606,16 +14607,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -15095,16 +15096,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback/pending",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -15683,16 +15684,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback/{feedback_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -16221,16 +16222,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback/{feedback_id}/approve",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -16771,16 +16772,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/feedback/{feedback_id}/dismiss",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -17384,16 +17385,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/graph/entities",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -18052,16 +18053,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/graph/entities/{entity_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -18629,16 +18630,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/jobs/{job_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -19108,16 +19109,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/keys",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -19631,16 +19632,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/keys",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -20020,16 +20021,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/keys/self",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -20523,16 +20524,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/keys/{key_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -21053,16 +21054,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/keys/{key_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -21673,16 +21674,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -22222,16 +22223,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -22844,16 +22845,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories/{memory_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -23430,16 +23431,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories/{memory_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -24027,16 +24028,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories/{memory_id}/restore",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -24550,16 +24551,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/memories/{memory_id}/supersede",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -25018,16 +25019,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/messages",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -25606,16 +25607,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/messages/{message_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -26099,16 +26100,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -26539,16 +26540,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -27046,16 +27047,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -27488,16 +27489,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key/policy",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -27995,16 +27996,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key/policy",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -28475,16 +28476,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/model-key/usage",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -29040,16 +29041,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/profile",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -29552,16 +29553,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/profile/{block}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -30081,16 +30082,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/reads",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -30479,16 +30480,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/recall",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -31052,16 +31053,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/threads/{thread_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -31620,16 +31621,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/threads/{thread_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -32081,16 +32082,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/threads/{thread_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -32727,16 +32728,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/threads/{thread_id}/messages",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -33422,16 +33423,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -34064,16 +34065,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools/approval-suggestions",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -34721,16 +34722,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools/approval-suggestions/{suggestion_id}/accept",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -35185,16 +35186,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools/catalog",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -35628,16 +35629,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools/hints",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -36081,16 +36082,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/tools/invocations",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -36524,16 +36525,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/verify",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -37003,16 +37004,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -37525,16 +37526,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -38040,16 +38041,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces/{workspace_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -38491,16 +38492,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces/{workspace_id}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -38981,16 +38982,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces/{workspace_id}/members",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -39507,16 +39508,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces/{workspace_id}/members/{principal_ref}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
@@ -40048,16 +40049,16 @@
             "content": {
               "application/problem+json": {
                 "example": {
-                  "code": "VALIDATION",
+                  "code": "PAYLOAD_TOO_LARGE",
                   "detail": "Body exceeds 26214400 bytes",
                   "details": {},
                   "instance": "/v1/workspaces/{workspace_id}/members/{principal_ref}",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": false,
                   "status": 413,
-                  "title": "Invalid request",
+                  "title": "Payload too large",
                   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
+                  "type": "urn:trellis:problem:payload-too-large"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Problem"

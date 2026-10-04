@@ -769,7 +769,8 @@ Every error is an RFC 9457 problem (`application/problem+json`):
 
 A retryable `429`, `503` (`DEPENDENCY_UNAVAILABLE`: PostgreSQL, Qdrant or OpenFGA away, the
 database pool exhausted) or `504` (`TIMEOUT`: a database statement stopped at its budget)
-carries `Retry-After` in seconds.
+carries `Retry-After` in seconds. A body or file over the size limit is `413`
+`PAYLOAD_TOO_LARGE` (never retryable).
 
 The SDK raises one exception class per `code` (`AuthorizationError`, `NotFoundError`,
 `RateLimitedError`, ...) with `trace_id` and `request_id` on it, `TimeoutError` or

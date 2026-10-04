@@ -53,6 +53,13 @@ class NotFound(MemoryServiceError):
     http_status = 404
 
 
+class PayloadTooLarge(MemoryServiceError):
+    """The request body or the uploaded file is larger than the service accepts."""
+
+    code = ErrorCode.PAYLOAD_TOO_LARGE
+    http_status = 413
+
+
 class Conflict(MemoryServiceError):
     """The request conflicts with current state (e.g. idempotency key reused with new body)."""
 

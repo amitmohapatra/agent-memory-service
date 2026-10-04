@@ -57,7 +57,7 @@ def test_body_size_limit_is_enforced_before_parsing(limited) -> None:
         headers=H,
         content=b"x" * 4096,
     )
-    assert r.status_code == 413 and r.json()["code"] == "VALIDATION"
+    assert r.status_code == 413 and r.json()["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_a_streamed_body_is_counted_against_the_limit(limited) -> None:
@@ -74,7 +74,7 @@ def test_a_streamed_body_is_counted_against_the_limit(limited) -> None:
     )
     assert "content-length" not in {k.lower() for k in r.request.headers}
     assert r.status_code == 413 and r.headers["content-type"] == "application/problem+json"
-    assert r.json()["code"] == "VALIDATION" and "2048" in r.json()["detail"]
+    assert r.json()["code"] == "PAYLOAD_TOO_LARGE" and "2048" in r.json()["detail"]
     small = client.post(
         "/v1/messages",
         headers={**H, "Content-Type": "application/json"},
@@ -94,7 +94,7 @@ async def test_an_upload_is_refused_as_it_passes_the_file_limit() -> None:
     from fastapi import UploadFile
 
     from memory_service.api.routers.v1.files import UPLOAD_CHUNK_BYTES, read_bounded
-    from memory_service.domain.errors import ValidationFailed
+    from memory_service.domain.errors import PayloadTooLarge
 
     class Counting(io.BytesIO):
         reads = 0
@@ -104,10 +104,11 @@ async def test_an_upload_is_refused_as_it_passes_the_file_limit() -> None:
             return super().read(size)
 
     big = UploadFile(Counting(b"x" * (UPLOAD_CHUNK_BYTES * 10)))
-    with pytest.raises(ValidationFailed, match="exceeds"):
+    with pytest.raises(PayloadTooLarge, match="exceeds"):
         await read_bounded(big, UPLOAD_CHUNK_BYTES + 1)
     assert Counting.reads == 2, "stopped at the chunk that passed the limit"
     sized = UploadFile(io.BytesIO(b"abc"), size=10_000)
-    with pytest.raises(ValidationFailed):
+    with pytest.raises(PayloadTooLarge) as refused:
         await read_bounded(sized, 100)
+    assert refused.value.http_status == 413 and refused.value.code == "PAYLOAD_TOO_LARGE"
     assert await read_bounded(UploadFile(io.BytesIO(b"abc")), 100) == b"abc"

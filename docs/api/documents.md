@@ -72,10 +72,11 @@ The `202` names the parse job in `Location` (`/v1/jobs/{id}`).
 
 ## Size
 
-A request body is at most 25 MB (`MAX_BODY_BYTES`): a larger `Content-Length` is a `413` before
+A request body is at most 25 MB (`MAX_BODY_BYTES`): a larger `Content-Length` is a `413`
+problem (`code: PAYLOAD_TOO_LARGE`, not retryable; SDK `PayloadTooLargeError`) before
 anything is read, and a streamed (chunked) body is counted as it arrives and stopped with the same
 `413` once it passes. The file itself is read a megabyte at a time against the ingestion limit
-(`max_file_bytes`) and refused (`422`) the moment it passes it, never read whole first.
+(`max_file_bytes`) and refused with the same `413` the moment it passes it, never read whole first.
 
 ## Parsing, honestly
 

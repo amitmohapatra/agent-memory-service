@@ -21,7 +21,7 @@ from memory_service.api.idempotent import first_job, run_idempotent
 from memory_service.api.params import DocumentIdPath
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, DocumentStatus, Visibility
-from memory_service.domain.errors import ValidationFailed
+from memory_service.domain.errors import PayloadTooLarge, ValidationFailed
 from memory_service.domain.ids import content_hash
 from memory_service.modules.ingestion.service import IngestionService
 
@@ -221,13 +221,13 @@ async def read_bounded(file: UploadFile, limit: int) -> bytes:
     - never the whole file first and the size after. A size the parser already knows is
     refused before anything is read."""
     if file.size is not None and file.size > limit:
-        raise ValidationFailed(f"file exceeds {limit} bytes", details={"size_bytes": file.size})
+        raise PayloadTooLarge(f"file exceeds {limit} bytes", details={"size_bytes": file.size})
     chunks: list[bytes] = []
     seen = 0
     while chunk := await file.read(UPLOAD_CHUNK_BYTES):
         seen += len(chunk)
         if seen > limit:
-            raise ValidationFailed(f"file exceeds {limit} bytes")
+            raise PayloadTooLarge(f"file exceeds {limit} bytes")
         chunks.append(chunk)
     return b"".join(chunks)
 
