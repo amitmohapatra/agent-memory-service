@@ -322,14 +322,18 @@ class SqlWorkspaceRepository:
         )
         return _rowcount(result) > 0
 
-    async def members(self, tenant_id: str, workspace_id: str) -> list[WorkspaceMember]:
+    async def members(
+        self, tenant_id: str, workspace_id: str, *, after: str = "", limit: int | None = None
+    ) -> list[WorkspaceMember]:
         stmt = (
             select(WorkspaceMemberRow)
             .where(
                 WorkspaceMemberRow.tenant_id == tenant_id,
                 WorkspaceMemberRow.workspace_id == workspace_id,
+                WorkspaceMemberRow.principal > after,
             )
             .order_by(WorkspaceMemberRow.principal)
+            .limit(limit)
         )
         return [_workspace_member(r) for r in (await self.s.scalars(stmt)).all()]
 

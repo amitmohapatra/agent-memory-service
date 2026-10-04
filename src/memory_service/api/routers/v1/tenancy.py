@@ -22,6 +22,7 @@ from memory_service.api.deps import (
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import NO_CONTENT, resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
+from memory_service.api.params import WorkspaceIdPath, limit_query
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
     CreateWorkspaceRequest,
@@ -330,14 +331,29 @@ async def delete_workspace(
     "/workspaces/{workspace_id}/members",
     response_model=list[WorkspaceMemberResponse],
     responses=_ERRORS,
-    summary="List a workspace's members",
+    summary="List a workspace's members by principal (cursor paged)",
 )
 async def list_members(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    response: Response,
+    workspace_id: WorkspaceIdPath,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, limit_query(500, "members")] = 100,
 ) -> list[WorkspaceMemberResponse]:
+    position = decode_cursor(cursor, fields=("principal",))
     async with container.services["uow_factory"]() as uow:
-        members = await _service(container).members(uow, tenant_id, workspace_id)
-    return [WorkspaceMemberResponse.of(m) for m in members]
+        members = await _service(container).members(
+            uow,
+            tenant_id,
+            workspace_id,
+            after=position["principal"] if position else "",
+            limit=limit + 1,
+        )
+    items, next_cursor = page(members, limit=limit, position=lambda m: {"principal": m.principal})
+    link_next(request, response, next_cursor)
+    return [WorkspaceMemberResponse.of(m) for m in items]
 
 
 @router.put(
@@ -422,12 +438,19 @@ async def list_reads(
     response: Response,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-    after: Annotated[
-        datetime | None, Query(description="only entries newer than this instant (a since-filter)")
+    since: Annotated[
+        datetime | None,
+        Query(
+            description="Only entries newer than this instant (ISO 8601; a naive value is UTC): "
+            "a filter that stays the same across pages."
+        ),
     ] = None,
     before: Annotated[
         datetime | None,
-        Query(description="only entries older than this instant: the cursor for the next page"),
+        Query(
+            description="Only entries older than this instant (ISO 8601; a naive value is "
+            "UTC). The cursor sets it for the next page; a cursor wins over it."
+        ),
     ] = None,
     cursor: CursorQuery = None,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
@@ -438,7 +461,7 @@ async def list_reads(
     await container.services["read_audit"].flush()
     async with container.services["uow_factory"]() as uow:
         entries = await uow.read_audit.list(
-            tenant_id, after=_aware(after), before=_aware(before), limit=limit + 1
+            tenant_id, after=_aware(since), before=_aware(before), limit=limit + 1
         )
     items = entries[:limit]
     next_cursor = (

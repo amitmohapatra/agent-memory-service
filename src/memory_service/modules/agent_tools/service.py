@@ -8,6 +8,7 @@ learns from those which items to pre-include in the pushed context for similar r
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -197,8 +198,11 @@ class AgentTools:
         self.services = services
 
     @staticmethod
-    def specs() -> list[dict[str, Any]]:
-        return [tool.spec() for tool in TOOLS]
+    @functools.cache
+    def specs() -> tuple[dict[str, Any], ...]:
+        """Every tool's name, description and input schema. The set is fixed for the life
+        of the process, so the schemas are built once; callers read them, never change them."""
+        return tuple(tool.spec() for tool in TOOLS)
 
     async def call(
         self,

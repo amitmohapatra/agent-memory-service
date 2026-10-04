@@ -6,11 +6,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from memory_service.api.deps import ContainerDep, HeaderContextDep
 from memory_service.api.errors import error_responses
+from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
+from memory_service.api.params import limit_query
 from memory_service.config.constants import GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, RelationStatus
@@ -75,6 +77,10 @@ class NeighborhoodOut(BaseModel):
 
 class EntityListResponse(BaseModel):
     entities: list[EntityOut]
+    next_cursor: str | None = Field(
+        default=None,
+        description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
+    )
 
 
 class CurrentValueOut(BaseModel):
@@ -108,6 +114,8 @@ class EntityProfileResponse(BaseModel):
     responses=_ERRORS,
 )
 async def search_entities(
+    request: Request,
+    response: Response,
     ctx: HeaderContextDep,
     container: ContainerDep,
     q: Annotated[
@@ -121,12 +129,24 @@ async def search_entities(
     type: Annotated[
         str | None, Query(max_length=40, description="entity type, e.g. ORG or PERSON")
     ] = None,
-    limit: Annotated[int, Query(ge=1, le=GRAPH.entity_search_max)] = 20,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, limit_query(GRAPH.entity_search_max, "entities")] = 20,
 ) -> EntityListResponse:
+    """The answer is a ranking (named first, then by prefix, most mentioned first), so the
+    cursor is a position in it; the ranking holds at most the service's search bound
+    (100 entities) in all - narrow ``q`` or ``type`` to reach past it."""
+    position = decode_cursor(cursor, fields={"offset": int})
+    offset = position["offset"] if position else 0
     graph: GraphService = container.services["graph"]
     async with container.services["llm_assist"].reading(ctx):
-        found = await graph.search_entities(ctx, query=q, entity_type=type, limit=limit)
-    return EntityListResponse(entities=[_entity(e) for e in found])
+        found = await graph.search_entities(
+            ctx, query=q, entity_type=type, limit=offset + limit + 1
+        )
+    items = found[offset : offset + limit]
+    more = len(found) > offset + limit and len(items) == limit
+    next_cursor = encode_cursor({"offset": offset + limit}) if more else None
+    link_next(request, response, next_cursor)
+    return EntityListResponse(entities=[_entity(e) for e in items], next_cursor=next_cursor)
 
 
 @router.get(

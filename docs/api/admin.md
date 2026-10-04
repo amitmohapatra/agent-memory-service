@@ -23,7 +23,7 @@ sequenceDiagram
 | Route | Purpose | SDK (`memory.admin`) |
 | --- | --- | --- |
 | `POST /v1/admin/tenants` | onboard a tenant and receive its first admin key (shown once) | `admin.create_tenant(name, tenant_id=…, retention_days=…, rate_limit_per_minute=…)` |
-| `GET /v1/admin/tenants` | list tenants (cursor: the last `tenant_id` seen) | `admin.tenants()`, `admin.tenants_page()` |
+| `GET /v1/admin/tenants` | list tenants by id (cursor paged; the `after` alias is removed) | `admin.tenants()`, `admin.tenants_page()` |
 | `GET /v1/admin/tenants/{tenant_id}` | one tenant | `admin.get_tenant(id)` |
 | `PATCH /v1/admin/tenants/{tenant_id}` | rename, suspend or resume; set retention and the request quota | `admin.update_tenant(id, **changes)` |
 

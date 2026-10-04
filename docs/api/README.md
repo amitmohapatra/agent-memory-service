@@ -14,7 +14,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}` (its `summary`) |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |
-| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback`, `/v1/feedback/pending`, `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
+| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback` (incl. `?review=pending`), `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
 | [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/keys/self`, `/v1/keys/{id}`, `/v1/model-key`, `/v1/model-key/policy`, `/v1/model-key/usage`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 
@@ -60,8 +60,13 @@ unreachable or its pool exhausted, Qdrant or OpenFGA away), `504 TIMEOUT` a data
 stopped at its budget. A `detail` never quotes a driver's or a server's message. Insufficient
 evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
 
-**Pagination is a cursor**, not an offset: a list route answers `{"…": [...], "next_cursor": …}`
-and the SDK exposes both `list(...)` (one page) and `page(...)` / `iter_*` (the cursor).
+**Pagination is a cursor**, not an offset: every list route takes `cursor` and `limit` and sends
+`Link: <…>; rel="next"` exactly when a next page exists; an envelope body (`{"…": [...]}`) also
+carries `next_cursor`, a bare-array body only the header. The SDK exposes both `list(...)` (one
+page) and `page(...)` / `iter_*` (the cursor).
+
+**Polled reads validate.** `GET /v1/agent-tools` and `GET /v1/tools` send an `ETag`; a request
+whose `If-None-Match` names it is answered `304` without a body.
 
 ## The SDK in four lines
 

@@ -566,10 +566,10 @@ class FeedbackAPI:
     async def pending(self, *, limit: int = 100, cursor: str | None = None) -> Page[Feedback]:
         """The review queue (the tenant's administrator key): verdicts that change nothing
         until approved, newest first, each with its author's ``author_record``."""
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"review": "pending", "limit": limit}
         if cursor:
             params["cursor"] = cursor
-        data = await self._ctx._request("GET", "/v1/feedback/pending", params=params)
+        data = await self._ctx._request("GET", "/v1/feedback", params=params)
         return Page[Feedback](
             items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
             next_cursor=data.get("next_cursor"),

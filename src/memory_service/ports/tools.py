@@ -49,8 +49,10 @@ class ToolRepository(Protocol):
         workspace_id: str | None,
         names: Sequence[str] | None = None,
         limit: int,
+        after: str = "",
     ) -> list[ToolDescriptor]:
-        """Entries visible in the workspace (its own shadow the tenant's), by name."""
+        """Entries visible in the workspace (its own shadow the tenant's), by name; ``after``
+        is the last name of the previous page."""
         ...
 
     async def catalog_by_ids(
@@ -115,7 +117,11 @@ class ToolRepository(Protocol):
         tool_name: str | None,
         min_support: int,
         limit: int,
-    ) -> list[ApprovalCounts]: ...
+        after: tuple[int, str, str] | None = None,
+    ) -> list[ApprovalCounts]:
+        """Patterns with at least ``min_support`` decisions, most supported first, then by
+        tool and shape; ``after`` is the (support, tool, shape) of the previous page's last."""
+        ...
 
 
 @runtime_checkable

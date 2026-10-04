@@ -10,9 +10,12 @@ from fastapi.routing import APIRoute
 
 from memory_service.api.errors import Problem, error_responses
 from memory_service.api.headers import (
+    CACHE_CONTROL_HEADER,
     CORRELATION_ID_HEADER,
+    ETAG_HEADER,
     IDEMPOTENCY_KEY_HEADER,
     IDEMPOTENT_REPLAYED_HEADER,
+    IF_NONE_MATCH_HEADER,
     LINK_HEADER,
     LOCATION_HEADER,
     RATE_LIMIT_LIMIT_HEADER,
@@ -188,6 +191,14 @@ LOCATION_RESPONSE_HEADERS: dict[str, str] = {
     "/v1/memories/{memory_id}), the status of the first queued job on a 202 "
     "(/v1/jobs/{job_id}). An idempotent replay carries the same Location."
 }
+#: On the GETs a client polls: a validator to send back, and how long to keep the answer.
+CONDITIONAL_RESPONSE_HEADERS: dict[str, str] = {
+    ETAG_HEADER: "Weak validator of this response (a digest of its bytes): send it back in "
+    "If-None-Match and an unchanged answer is a 304 without a body.",
+    CACHE_CONTROL_HEADER: "How long the answer may be kept: private, max-age=300 for the "
+    "fixed agent tool set; private, no-cache (revalidate every time) for the tool catalog.",
+}
+CONDITIONAL_GETS = frozenset({"agent_tools.list_agent_tools", "tools.list_tools"})
 #: The 202s whose body names a job, and so a Location (``POST /v1/tools/invocations`` records
 #: the call in the request and queues none).
 JOB_ACCEPTS = frozenset({"messages.create_messages", "documents.upload_document"})
@@ -210,6 +221,7 @@ def _header_components() -> dict[str, Any]:
         **WRITE_RESPONSE_HEADERS,
         **PAGED_RESPONSE_HEADERS,
         **LOCATION_RESPONSE_HEADERS,
+        **CONDITIONAL_RESPONSE_HEADERS,
     }
     described[RETRY_AFTER_HEADER] = (
         "Seconds to wait before retrying: until the rate-limit window resets (429), or until "
@@ -242,6 +254,8 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
             response["headers"].update(_response_header_refs([RETRY_AFTER_HEADER]))
         if status == "201" or (status == "202" and op.get("operationId") in JOB_ACCEPTS):
             response["headers"].update(_response_header_refs(list(LOCATION_RESPONSE_HEADERS)))
+        if status in ("200", "304") and op.get("operationId") in CONDITIONAL_GETS:
+            response["headers"].update(_response_header_refs(list(CONDITIONAL_RESPONSE_HEADERS)))
         for media in response.get("content", {}).values():
             example = media.get("example")
             if isinstance(example, dict) and "instance" in example:
@@ -367,6 +381,14 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
                     params.append(dict(p))
             if takes_idempotency_key(method, op) and idem["name"] not in existing:
                 params.append(dict(idem))
+            if op.get("operationId") in CONDITIONAL_GETS:
+                params.append(
+                    _header_param(
+                        IF_NONE_MATCH_HEADER,
+                        "The ETag of the answer the client holds; when it still matches, the "
+                        "response is a 304 without a body.",
+                    )
+                )
             _document_responses(path, method, op)
     _rename_body_schemas(schema)
     app.openapi_schema = schema

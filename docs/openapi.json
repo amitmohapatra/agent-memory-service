@@ -1,6 +1,18 @@
 {
   "components": {
     "headers": {
+      "Cache-Control": {
+        "description": "How long the answer may be kept: private, max-age=300 for the fixed agent tool set; private, no-cache (revalidate every time) for the tool catalog.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ETag": {
+        "description": "Weak validator of this response (a digest of its bytes): send it back in If-None-Match and an unchanged answer is a 304 without a body.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "Idempotent-Replayed": {
         "description": "true when the response is the stored result of an earlier request with the same Idempotency-Key.",
         "schema": {
@@ -354,6 +366,18 @@
       },
       "ApprovalSuggestionsResponse": {
         "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` for the next page (also in `Link`); null on the last.",
+            "title": "Next Cursor"
+          },
           "suggestions": {
             "items": {
               "$ref": "#/components/schemas/ApprovalSuggestionBody"
@@ -677,6 +701,34 @@
           "name"
         ],
         "title": "CatalogEntry",
+        "type": "object"
+      },
+      "CatalogPageResponse": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` for the next page (also in `Link`); null on the last.",
+            "title": "Next Cursor"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogTool"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "CatalogPageResponse",
         "type": "object"
       },
       "CatalogRequest": {
@@ -2005,6 +2057,18 @@
             },
             "title": "Entities",
             "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` for the next page (also in `Link`); null on the last.",
+            "title": "Next Cursor"
           }
         },
         "required": [
@@ -6938,16 +7002,6 @@
         "operationId": "admin.list_tenants",
         "parameters": [
           {
-            "in": "query",
-            "name": "after",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "After",
-              "type": "string"
-            }
-          },
-          {
             "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
             "in": "query",
             "name": "cursor",
@@ -7465,7 +7519,7 @@
             }
           }
         },
-        "summary": "List tenants (cursor: the last tenant_id seen)",
+        "summary": "List tenants by id (cursor paged)",
         "tags": [
           "admin"
         ]
@@ -8982,6 +9036,7 @@
     },
     "/v1/agent-tools": {
       "get": {
+        "description": "The set is fixed per release: the response carries `ETag` and `Cache-Control: private, max-age=300`, and a request whose `If-None-Match` names the tag is a `304` without a body.",
         "operationId": "agent_tools.list_agent_tools",
         "parameters": [
           {
@@ -9037,6 +9092,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The ETag of the answer the client holds; when it still matches, the response is a 304 without a body.",
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9050,6 +9114,44 @@
             },
             "description": "Successful Response",
             "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/Cache-Control"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: If-None-Match names the ETag",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/Cache-Control"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -9974,6 +10076,7 @@
         "operationId": "agents.revoke_key",
         "parameters": [
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -9986,10 +10089,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -10002,10 +10107,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -10018,10 +10125,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -10034,10 +10143,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -10050,10 +10161,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -10066,10 +10179,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -10082,10 +10197,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -10098,6 +10215,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -10595,6 +10713,7 @@
         "operationId": "agents.key_status",
         "parameters": [
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -10607,10 +10726,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -10623,10 +10744,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -10639,10 +10762,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -10655,10 +10780,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -10671,10 +10798,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -10687,10 +10816,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -10703,10 +10834,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -10719,6 +10852,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -12614,6 +12748,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -12626,10 +12761,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -12642,10 +12779,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -12658,10 +12797,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -12674,10 +12815,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -12690,10 +12833,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -12706,10 +12851,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -12722,10 +12869,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -12738,6 +12887,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -13160,25 +13310,64 @@
     },
     "/v1/feedback": {
       "get": {
+        "description": "Two lists, one route. With `target_kind` and `target_id`: the feedback on that target the caller may see. With `review=pending`: the review queue, verdicts that change nothing until a tenant admin approves them. The tenant's administrator credential (the platform key names the tenant in X-Trellis-Tenant). Each verdict carries `author_record`: how its author's verdicts fared in review (pending, approved, dismissed).",
         "operationId": "feedback.list_feedback",
         "parameters": [
           {
+            "description": "What the feedback judges: run, memory, tool_call or procedure. Required with target_id unless review=pending.",
             "in": "query",
             "name": "target_kind",
-            "required": true,
+            "required": false,
             "schema": {
-              "$ref": "#/components/schemas/FeedbackTargetKind"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FeedbackTargetKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What the feedback judges: run, memory, tool_call or procedure. Required with target_id unless review=pending.",
+              "title": "Target Kind"
             }
           },
           {
+            "description": "The judged object's id (a run id, mem_..., an invocation id or a procedure id). Required with target_kind unless review=pending.",
             "in": "query",
             "name": "target_id",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Target Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The judged object's id (a run id, mem_..., an invocation id or a procedure id). Required with target_kind unless review=pending.",
+              "title": "Target Id"
+            }
+          },
+          {
+            "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential).",
+            "in": "query",
+            "name": "review",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "pending",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential).",
+              "title": "Review"
             }
           },
           {
@@ -13201,11 +13390,13 @@
             }
           },
           {
+            "description": "The most feedback records one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most feedback records one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -13213,6 +13404,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -13225,10 +13417,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -13241,10 +13435,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -13257,10 +13453,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -13273,10 +13471,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -13289,10 +13489,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -13305,10 +13507,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -13321,10 +13525,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -13337,6 +13543,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -13775,7 +13982,7 @@
             }
           }
         },
-        "summary": "List the feedback on one target, newest first (cursor paged)",
+        "summary": "List the feedback on one target, or the review queue, newest first (cursor paged)",
         "tags": [
           "feedback"
         ]
@@ -14285,7 +14492,8 @@
     },
     "/v1/feedback/pending": {
       "get": {
-        "description": "The tenant's administrator credential. Each verdict carries `author_record`: how its author's verdicts fared in review (pending, approved, dismissed).",
+        "deprecated": true,
+        "description": "The same list as `GET /v1/feedback?review=pending`, kept as an alias; answered with `Deprecation: true` and a `Link` to the successor. The tenant's administrator credential (the platform key names the tenant in X-Trellis-Tenant). Each verdict carries `author_record`: how its author's verdicts fared in review (pending, approved, dismissed).",
         "operationId": "feedback.pending_feedback",
         "parameters": [
           {
@@ -14308,11 +14516,13 @@
             }
           },
           {
+            "description": "The most feedback records one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most feedback records one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -14763,7 +14973,7 @@
             }
           }
         },
-        "summary": "The review queue: verdicts that change nothing until approved, newest first",
+        "summary": "The review queue (deprecated: GET /v1/feedback?review=pending)",
         "tags": [
           "feedback"
         ]
@@ -14783,6 +14993,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -14795,10 +15006,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -14811,10 +15024,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -14827,10 +15042,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -14843,10 +15060,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -14859,10 +15078,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -14875,10 +15096,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -14891,10 +15114,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -14907,6 +15132,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -16425,6 +16651,7 @@
     },
     "/v1/graph/entities": {
       "get": {
+        "description": "The answer is a ranking (named first, then by prefix, most mentioned first), so the\ncursor is a position in it; the ranking holds at most the service's search bound\n(100 entities) in all - narrow ``q`` or ``type`` to reach past it.",
         "operationId": "graph.search_entities",
         "parameters": [
           {
@@ -16466,11 +16693,32 @@
             }
           },
           {
+            "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "The most entities one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 20,
+              "description": "The most entities one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
@@ -16478,6 +16726,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -16490,10 +16739,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -16506,10 +16757,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -16522,10 +16775,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -16538,10 +16793,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -16554,10 +16811,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -16570,10 +16829,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -16586,10 +16847,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -16602,6 +16865,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -16671,6 +16935,9 @@
             },
             "description": "Successful Response",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16716,6 +16983,9 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16761,6 +17031,9 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16806,6 +17079,9 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16851,6 +17127,9 @@
             },
             "description": "Request validation failed",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16896,6 +17175,9 @@
             },
             "description": "Too many requests",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -16944,6 +17226,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -17071,6 +17356,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -17083,10 +17369,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -17099,10 +17387,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -17115,10 +17405,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -17131,10 +17423,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -17147,10 +17441,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -17163,10 +17459,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -17179,10 +17477,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -17195,6 +17495,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -17630,6 +17931,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -17642,10 +17944,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -17658,10 +17962,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -17674,10 +17980,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -17690,10 +17998,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -17706,10 +18016,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -17722,10 +18034,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -17738,10 +18052,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -17754,6 +18070,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -21839,6 +22156,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -21851,10 +22169,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -21867,10 +22187,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -21883,10 +22205,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -21899,10 +22223,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -21915,10 +22241,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -21931,10 +22259,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -21947,10 +22277,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -21963,6 +22295,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -22421,6 +22754,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -22433,10 +22767,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -22449,10 +22785,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -22465,10 +22803,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -22481,10 +22821,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -22497,10 +22839,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -22513,10 +22857,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -22529,10 +22875,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -22545,6 +22893,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -22979,6 +23328,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -22991,10 +23341,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -23007,10 +23359,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -23023,10 +23377,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -23039,10 +23395,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -23055,10 +23413,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -23071,10 +23431,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -23087,10 +23449,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -23103,6 +23467,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -24559,6 +24924,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -24571,10 +24937,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -24587,10 +24955,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -24603,10 +24973,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -24619,10 +24991,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -24635,10 +25009,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -24651,10 +25027,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -24667,10 +25045,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -24683,6 +25063,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -28112,6 +28493,7 @@
         "operationId": "profile.get_profile",
         "parameters": [
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -28124,10 +28506,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -28140,10 +28524,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -28156,10 +28542,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -28172,10 +28560,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -28188,10 +28578,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -28204,10 +28596,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -28220,10 +28614,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -28236,6 +28632,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -29183,9 +29580,9 @@
         "operationId": "tenancy.list_reads",
         "parameters": [
           {
-            "description": "only entries newer than this instant (a since-filter)",
+            "description": "Only entries newer than this instant (ISO 8601; a naive value is UTC): a filter that stays the same across pages.",
             "in": "query",
-            "name": "after",
+            "name": "since",
             "required": false,
             "schema": {
               "anyOf": [
@@ -29197,12 +29594,12 @@
                   "type": "null"
                 }
               ],
-              "description": "only entries newer than this instant (a since-filter)",
-              "title": "After"
+              "description": "Only entries newer than this instant (ISO 8601; a naive value is UTC): a filter that stays the same across pages.",
+              "title": "Since"
             }
           },
           {
-            "description": "only entries older than this instant: the cursor for the next page",
+            "description": "Only entries older than this instant (ISO 8601; a naive value is UTC). The cursor sets it for the next page; a cursor wins over it.",
             "in": "query",
             "name": "before",
             "required": false,
@@ -29216,7 +29613,7 @@
                   "type": "null"
                 }
               ],
-              "description": "only entries older than this instant: the cursor for the next page",
+              "description": "Only entries older than this instant (ISO 8601; a naive value is UTC). The cursor sets it for the next page; a cursor wins over it.",
               "title": "Before"
             }
           },
@@ -30145,22 +30542,18 @@
         "operationId": "threads.delete_thread",
         "parameters": [
           {
+            "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "thread_id",
             "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Thread Id"
+              "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Thread Id",
+              "type": "string"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -30173,10 +30566,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -30189,10 +30584,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -30205,10 +30602,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -30221,10 +30620,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -30237,10 +30638,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -30253,10 +30656,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -30269,6 +30674,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -30718,22 +31124,18 @@
         "operationId": "threads.get_thread",
         "parameters": [
           {
+            "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "thread_id",
             "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Thread Id"
+              "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Thread Id",
+              "type": "string"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -30746,10 +31148,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -30762,10 +31166,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -30778,10 +31184,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -30794,10 +31202,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -30810,10 +31220,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -30826,10 +31238,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -30842,6 +31256,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -31265,10 +31680,12 @@
         "operationId": "threads.patch_thread",
         "parameters": [
           {
+            "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "thread_id",
             "required": true,
             "schema": {
+              "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id",
               "type": "string"
             }
@@ -31738,30 +32155,24 @@
         "operationId": "messages.list_messages",
         "parameters": [
           {
+            "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "thread_id",
             "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Thread Id"
+              "description": "The conversation thread. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Thread Id",
+              "type": "string"
             }
           },
           {
+            "description": "The most messages one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 50,
-              "examples": [
-                50
-              ],
+              "description": "The most messages one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -31819,6 +32230,7 @@
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -31831,10 +32243,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -31847,10 +32261,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -31863,10 +32279,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -31879,10 +32297,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -31895,10 +32315,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -31911,10 +32333,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -31927,6 +32351,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -32373,9 +32798,11 @@
     },
     "/v1/tools": {
       "get": {
+        "description": "The response carries `ETag` (a digest of the page) and `Cache-Control: private, no-cache`; send the tag back in `If-None-Match` and an unchanged page is a `304` without a body - how a harness refreshes the approval tiers (`risk`, `approve_when`) cheaply. A page holds `limit` tools by name; the default is the whole catalog of a tenant at its 500-entry bound.",
         "operationId": "tools.list_tools",
         "parameters": [
           {
+            "description": "Only these tools (repeat the parameter); a name the catalog does not know is absent from the answer. Omit for every tool.",
             "in": "query",
             "name": "names",
             "required": false,
@@ -32392,10 +32819,45 @@
                   "type": "null"
                 }
               ],
+              "description": "Only these tools (repeat the parameter); a name the catalog does not know is absent from the answer. Omit for every tool.",
               "title": "Names"
             }
           },
           {
+            "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "The most tools one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "description": "The most tools one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -32408,10 +32870,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -32424,10 +32888,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -32440,10 +32906,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -32456,10 +32924,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -32472,10 +32942,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -32488,10 +32960,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -32504,10 +32978,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -32520,6 +32996,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -32576,6 +33053,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "description": "The ETag of the answer the client holds; when it still matches, the response is a 304 without a body.",
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -32583,12 +33069,56 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CatalogResponse"
+                  "$ref": "#/components/schemas/CatalogPageResponse"
                 }
               }
             },
             "description": "Successful Response",
             "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/Cache-Control"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: If-None-Match names the ETag",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/Cache-Control"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32634,6 +33164,9 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32679,6 +33212,9 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32724,6 +33260,9 @@
             },
             "description": "Thread not found",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32769,6 +33308,9 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32814,6 +33356,9 @@
             },
             "description": "Request validation failed",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32859,6 +33404,9 @@
             },
             "description": "Too many requests",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -32907,6 +33455,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -32934,7 +33485,7 @@
             }
           }
         },
-        "summary": "The tool catalog visible in this scope, with each tool's statistics",
+        "summary": "The tool catalog visible in this scope, by name, with each tool's statistics (cursor paged; ETag / If-None-Match answer 304 when unchanged)",
         "tags": [
           "tools"
         ]
@@ -32942,9 +33493,11 @@
     },
     "/v1/tools/approval-suggestions": {
       "get": {
+        "description": "Most supported first. A page reads ``limit`` decision patterns and offers those that\nsupport a rule the tool does not have yet, so it may hold fewer suggestions than\n``limit`` and still have a next page.",
         "operationId": "tools.approval_suggestions",
         "parameters": [
           {
+            "description": "Only the suggestions for this tool (its name).",
             "in": "query",
             "name": "tool",
             "required": false,
@@ -32958,10 +33511,45 @@
                   "type": "null"
                 }
               ],
+              "description": "Only the suggestions for this tool (its name).",
               "title": "Tool"
             }
           },
           {
+            "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "The most patterns one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "The most patterns one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -32974,10 +33562,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -32990,10 +33580,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -33006,10 +33598,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -33022,10 +33616,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -33038,10 +33634,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -33054,10 +33652,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -33070,10 +33670,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -33086,6 +33688,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -33155,6 +33758,9 @@
             },
             "description": "Successful Response",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33200,6 +33806,9 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33245,6 +33854,9 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33290,6 +33902,9 @@
             },
             "description": "Thread not found",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33335,6 +33950,9 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33380,6 +33998,9 @@
             },
             "description": "Request validation failed",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33425,6 +34046,9 @@
             },
             "description": "Too many requests",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -33473,6 +34097,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -33520,6 +34147,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -33532,10 +34160,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "session_id",
             "required": false,
@@ -33548,10 +34178,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Session Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -33564,10 +34196,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "task_id",
             "required": false,
@@ -33580,10 +34214,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Task Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -33596,10 +34232,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -33612,10 +34250,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -33628,10 +34268,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -33644,6 +34286,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -37995,12 +38638,47 @@
         "operationId": "tenancy.list_members",
         "parameters": [
           {
+            "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {
+              "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Workspace Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "The most members one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "The most members one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
             }
           },
           {
@@ -38082,6 +38760,9 @@
             },
             "description": "Successful Response",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38127,6 +38808,9 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38172,6 +38856,9 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38217,6 +38904,9 @@
             },
             "description": "Thread not found",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38262,6 +38952,9 @@
             },
             "description": "Idempotency key reused with a different payload",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38307,6 +39000,9 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38352,6 +39048,9 @@
             },
             "description": "Request validation failed",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38397,6 +39096,9 @@
             },
             "description": "Too many requests",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -38445,6 +39147,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -38472,7 +39177,7 @@
             }
           }
         },
-        "summary": "List a workspace's members",
+        "summary": "List a workspace's members by principal (cursor paged)",
         "tags": [
           "tenancy"
         ]

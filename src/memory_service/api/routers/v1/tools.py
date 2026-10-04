@@ -15,6 +15,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from memory_service.api.caching import conditional_model
 from memory_service.api.deps import (
     ContainerDep,
     HeaderContextDep,
@@ -23,7 +24,10 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.headers import LINK_HEADER
 from memory_service.api.idempotent import run_idempotent
+from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, next_link, page
+from memory_service.api.params import limit_query
 from memory_service.api.schemas.context import ToolHintsResponse
 from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
@@ -308,6 +312,13 @@ class CatalogResponse(BaseModel):
     tools: list[CatalogTool]
 
 
+class CatalogPageResponse(CatalogResponse):
+    next_cursor: str | None = Field(
+        default=None,
+        description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
+    )
+
+
 class HintsRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -354,6 +365,10 @@ class ApprovalSuggestionBody(BaseModel):
 
 class ApprovalSuggestionsResponse(BaseModel):
     suggestions: list[ApprovalSuggestionBody]
+    next_cursor: str | None = Field(
+        default=None,
+        description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
+    )
 
 
 @router.post(
@@ -398,21 +413,50 @@ async def record_invocation(
     )
 
 
+#: The catalog changes when an entry or a statistic does, so a client revalidates each time
+#: (``no-cache``) and a 304 spares it the body; ``private``: the answer is per tenant.
+CATALOG_CACHE_CONTROL = "private, no-cache"
+
+
 @router.get(
     "/tools",
-    response_model=CatalogResponse,
+    response_model=CatalogPageResponse,
     tags=["tools"],
-    summary="The tool catalog visible in this scope, with each tool's statistics",
-    responses=_ERRORS,
+    summary="The tool catalog visible in this scope, by name, with each tool's statistics "
+    "(cursor paged; ETag / If-None-Match answer 304 when unchanged)",
+    description="The response carries `ETag` (a digest of the page) and `Cache-Control: "
+    "private, no-cache`; send the tag back in `If-None-Match` and an unchanged page is a "
+    "`304` without a body - how a harness refreshes the approval tiers (`risk`, "
+    "`approve_when`) cheaply. A page holds `limit` tools by name; the default is the whole "
+    "catalog of a tenant at its 500-entry bound.",
+    responses={**_ERRORS, 304: {"description": "Not modified: If-None-Match names the ETag"}},
 )
 async def list_tools(
+    request: Request,
     ctx: HeaderContextDep,
     container: ContainerDep,
-    names: Annotated[list[str] | None, Query(max_length=CATALOG_MAX)] = None,
-) -> CatalogResponse:
+    names: Annotated[
+        list[str] | None,
+        Query(
+            max_length=CATALOG_MAX,
+            description="Only these tools (repeat the parameter); a name the catalog does not "
+            "know is absent from the answer. Omit for every tool.",
+        ),
+    ] = None,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, limit_query(CATALOG_MAX, "tools")] = CATALOG_MAX,
+) -> Response:
+    position = decode_cursor(cursor, fields=("name",))
     async with container.services["uow_factory"]() as uow:
-        rows = await container.services["tool_memory"].catalog(uow, ctx, names)
-    return CatalogResponse(tools=[CatalogTool.of(entry, stats) for entry, stats in rows])
+        rows = await container.services["tool_memory"].catalog(
+            uow, ctx, names, after=position["name"] if position else "", limit=limit + 1
+        )
+    items, next_cursor = page(rows, limit=limit, position=lambda row: {"name": row[0].name})
+    body = CatalogPageResponse(
+        tools=[CatalogTool.of(entry, stats) for entry, stats in items], next_cursor=next_cursor
+    )
+    headers = {LINK_HEADER: next_link(request, next_cursor)} if next_cursor else None
+    return conditional_model(request, body, cache_control=CATALOG_CACHE_CONTROL, headers=headers)
 
 
 @router.put(
@@ -479,17 +523,37 @@ async def tool_hints(
     responses=_ERRORS,
 )
 async def approval_suggestions(
+    request: Request,
+    response: Response,
     ctx: HeaderContextDep,
     container: ContainerDep,
-    tool: Annotated[str | None, Query(max_length=200)] = None,
+    tool: Annotated[
+        str | None,
+        Query(max_length=200, description="Only the suggestions for this tool (its name)."),
+    ] = None,
+    cursor: CursorQuery = None,
+    limit: Annotated[
+        int, limit_query(APPROVAL_SUGGESTIONS_MAX, "patterns")
+    ] = APPROVAL_SUGGESTIONS_MAX,
 ) -> ApprovalSuggestionsResponse:
+    """Most supported first. A page reads ``limit`` decision patterns and offers those that
+    support a rule the tool does not have yet, so it may hold fewer suggestions than
+    ``limit`` and still have a next page."""
+    position = decode_cursor(cursor, fields={"support": int, "tool": str, "shape": str})
+    after = (position["support"], position["tool"], position["shape"]) if position else None
     async with container.services["uow_factory"]() as uow:
-        counts = await uow.tools.approval_patterns(
+        rows = await uow.tools.approval_patterns(
             ctx.tenant_id,
             ctx.agent_id or "",
             tool_name=tool,
             min_support=APPROVAL_MIN_SUPPORT,
-            limit=APPROVAL_SUGGESTIONS_MAX,
+            limit=limit + 1,
+            after=after,
+        )
+        counts, next_cursor = page(
+            rows,
+            limit=limit,
+            position=lambda c: {"support": c.support, "tool": c.tool, "shape": c.arg_shape},
         )
         names = sorted({c.tool for c in counts})
         entries = {
@@ -498,7 +562,9 @@ async def approval_suggestions(
                 ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=len(names) + 1
             )
         }
+    link_next(request, response, next_cursor)
     return ApprovalSuggestionsResponse(
+        next_cursor=next_cursor,
         suggestions=[
             ApprovalSuggestionBody(
                 id=approvals.suggestion_id(c),
@@ -515,7 +581,7 @@ async def approval_suggestions(
             )
             for c in counts
             if (suggestion := approvals.offered(c, entries.get(c.tool))) is not None
-        ]
+        ],
     )
 
 

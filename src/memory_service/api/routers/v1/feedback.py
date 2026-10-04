@@ -4,7 +4,7 @@ review the verdicts that wait for a tenant admin (ADR 0028)."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Query, Request, Response
 
@@ -12,22 +12,29 @@ from memory_service.api.deps import (
     AdministeredTenantDep,
     ContainerDep,
     HeaderContextDep,
+    LineageDep,
     ScopeBody,
     ServicePrincipalDep,
     build_context,
+    ensure_role,
+    existing_administered_tenant,
     is_tenant_administrator,
     request_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.headers import DEPRECATION_HEADER, LINK_HEADER
 from memory_service.api.idempotent import resource_at, run_idempotent
-from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
+from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, next_link, page
+from memory_service.api.params import limit_query
 from memory_service.api.schemas.feedback import (
     FeedbackListResponse,
     FeedbackRequest,
     FeedbackResponse,
     FeedbackReviewRequest,
 )
+from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.feedback import FeedbackTargetKind
+from memory_service.domain.tenancy import KeyRole
 from memory_service.modules.feedback.service import FeedbackService
 
 router = APIRouter(tags=["feedback"])
@@ -104,22 +111,65 @@ async def submit_feedback(
     )
 
 
+_PENDING_DESCRIPTION = (
+    "The tenant's administrator credential (the platform key names the tenant in "
+    "X-Trellis-Tenant). Each verdict carries `author_record`: how its author's verdicts fared "
+    "in review (pending, approved, dismissed)."
+)
+
+
 @router.get(
     "/feedback",
     response_model=FeedbackListResponse,
     responses=_ERRORS,
-    summary="List the feedback on one target, newest first (cursor paged)",
+    summary="List the feedback on one target, or the review queue, newest first (cursor paged)",
+    description=(
+        "Two lists, one route. With `target_kind` and `target_id`: the feedback on that "
+        "target the caller may see. With `review=pending`: the review queue, verdicts that "
+        "change nothing until a tenant admin approves them. " + _PENDING_DESCRIPTION
+    ),
 )
 async def list_feedback(
     request: Request,
     response: Response,
     container: ContainerDep,
-    ctx: HeaderContextDep,
-    target_kind: Annotated[FeedbackTargetKind, Query()],
-    target_id: Annotated[str, Query(min_length=1, max_length=200)],
+    principal: ServicePrincipalDep,
+    lineage: LineageDep,
+    target_kind: Annotated[
+        FeedbackTargetKind | None,
+        Query(
+            description="What the feedback judges: run, memory, tool_call or procedure. "
+            "Required with target_id unless review=pending."
+        ),
+    ] = None,
+    target_id: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=200,
+            description="The judged object's id (a run id, mem_..., an invocation id or a "
+            "procedure id). Required with target_kind unless review=pending.",
+        ),
+    ] = None,
+    review: Annotated[
+        Literal["pending"] | None,
+        Query(
+            description="pending: list the review queue instead of one target's feedback "
+            "(the tenant's administrator credential)."
+        ),
+    ] = None,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "feedback records")] = 100,
 ) -> FeedbackListResponse:
+    if review is not None:
+        if target_kind is not None or target_id is not None:
+            raise ValidationFailed("review=pending lists the queue; send no target with it")
+        ensure_role(principal, KeyRole.ADMIN, KeyRole.PLATFORM)
+        tenant_id = await existing_administered_tenant(request, principal, container)
+        return await _pending(request, response, container, tenant_id, cursor, limit)
+    if target_kind is None or target_id is None:
+        raise ValidationFailed("send target_kind and target_id, or review=pending")
+    ctx = build_context(request, container, lineage)
     position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
     before = (position["created_at"], position["feedback_id"]) if position else None
     async with container.services["uow_factory"]() as uow:
@@ -141,11 +191,10 @@ async def list_feedback(
     "/feedback/pending",
     response_model=FeedbackListResponse,
     responses=_ERRORS,
-    summary="The review queue: verdicts that change nothing until approved, newest first",
-    description=(
-        "The tenant's administrator credential. Each verdict carries `author_record`: how its "
-        "author's verdicts fared in review (pending, approved, dismissed)."
-    ),
+    deprecated=True,
+    summary="The review queue (deprecated: GET /v1/feedback?review=pending)",
+    description="The same list as `GET /v1/feedback?review=pending`, kept as an alias; "
+    "answered with `Deprecation: true` and a `Link` to the successor. " + _PENDING_DESCRIPTION,
 )
 async def pending_feedback(
     request: Request,
@@ -153,7 +202,26 @@ async def pending_feedback(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "feedback records")] = 100,
+) -> FeedbackListResponse:
+    response.headers[DEPRECATION_HEADER] = "true"
+    successor = request.url.replace(path=request.url.path.removesuffix("/pending"))
+    successor = successor.include_query_params(review="pending")
+    response.headers[LINK_HEADER] = f'<{successor}>; rel="successor-version"'
+    listed = await _pending(request, response, container, tenant_id, cursor, limit)
+    if listed.next_cursor is not None:
+        # the page link stays on this route; the successor rides beside it
+        response.headers[LINK_HEADER] += ", " + next_link(request, listed.next_cursor)
+    return listed
+
+
+async def _pending(
+    request: Request,
+    response: Response,
+    container: Any,
+    tenant_id: str,
+    cursor: str | None,
+    limit: int,
 ) -> FeedbackListResponse:
     position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
     before = (position["created_at"], position["feedback_id"]) if position else None
@@ -167,7 +235,8 @@ async def pending_feedback(
             "feedback_id": q[0].feedback_id,
         },
     )
-    link_next(request, response, next_cursor)
+    if LINK_HEADER not in response.headers:
+        link_next(request, response, next_cursor)
     return FeedbackListResponse(
         feedback=[FeedbackResponse.of(f, record) for f, record in items], next_cursor=next_cursor
     )

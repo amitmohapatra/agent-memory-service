@@ -69,10 +69,15 @@ def test_errors_are_problem_details(client: TestClient) -> None:
             }
 
 
-def test_no_operation_is_a_deprecated_alias(client: TestClient) -> None:
+#: The one deprecated alias (ADR 0030): the review queue moved to GET /v1/feedback?review=pending.
+DEPRECATED_ALIASES = {"feedback.pending_feedback"}
+
+
+def test_the_only_deprecated_operation_is_the_review_queue_alias(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
     assert "/v1/files" not in schema["paths"]
-    assert not [path for _, path, op in _operations(schema) if op.get("deprecated")]
+    deprecated = {op["operationId"] for _, _, op in _operations(schema) if op.get("deprecated")}
+    assert deprecated == DEPRECATED_ALIASES
     assert "X-Memory-LLM-Tokens" not in schema["components"]["headers"]
 
 
@@ -112,7 +117,7 @@ def test_every_public_operation_documents_edge_statuses_and_response_headers(
             example = problem.get("example")
             if example is not None:
                 assert example["instance"] == path
-    assert "Deprecation" not in components and "X-Memory-LLM-Tokens" not in components
+    assert "X-Memory-LLM-Tokens" not in components
 
 
 def test_form_body_schemas_keep_their_full_names(client: TestClient) -> None:

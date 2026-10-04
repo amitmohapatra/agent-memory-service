@@ -3,11 +3,13 @@ with their JSON input schemas and called in the caller's scope."""
 
 from __future__ import annotations
 
-from typing import Any
+import functools
+from typing import Any, Final
 
 from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from memory_service.api.caching import conditional, etag_of
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
@@ -49,15 +51,32 @@ class CallResponse(BaseModel):
     result: Any = Field(description="what the tool returned (items carry an id)")
 
 
+#: The set changes only with a release: a client may keep it five minutes without asking,
+#: and revalidates with If-None-Match after that.
+AGENT_TOOLS_CACHE_CONTROL: Final = "private, max-age=300"
+
+
+@functools.cache
+def _listing() -> tuple[bytes, str]:
+    """The listing's bytes and tag, built once per process: the set is fixed."""
+    body = AgentToolsResponse(tools=[AgentToolSpec(**spec) for spec in AgentTools.specs()])
+    raw = body.model_dump_json().encode()
+    return raw, etag_of(raw)
+
+
 @router.get(
     "/agent-tools",
     response_model=AgentToolsResponse,
     tags=["agent_tools"],
     summary="The memory tools an agent may call, with their input schemas",
-    responses=_ERRORS,
+    description="The set is fixed per release: the response carries `ETag` and "
+    "`Cache-Control: private, max-age=300`, and a request whose `If-None-Match` names the tag "
+    "is a `304` without a body.",
+    responses={**_ERRORS, 304: {"description": "Not modified: If-None-Match names the ETag"}},
 )
-async def list_agent_tools(_: ServicePrincipalDep) -> AgentToolsResponse:
-    return AgentToolsResponse(tools=[AgentToolSpec(**spec) for spec in AgentTools.specs()])
+async def list_agent_tools(request: Request, _: ServicePrincipalDep) -> Response:
+    body, etag = _listing()
+    return conditional(request, body, etag=etag, cache_control=AGENT_TOOLS_CACHE_CONTROL)
 
 
 @router.post(

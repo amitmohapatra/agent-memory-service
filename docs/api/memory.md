@@ -45,7 +45,7 @@ of evidence.
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
 | `POST /v1/memories/{memory_id}/restore` | bring back a memory **automatic forgetting archived**: `CURRENT` and searchable again | `ctx.advanced.memories.restore(id)` |
-| `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.advanced.graph.entities(...)` |
+| `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first (cursor paged through the ranking, at most 100 in all) | `ctx.advanced.graph.entities(...)` |
 | `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence; `depth` hops of traversal (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.entity(id)` |
 | `GET /v1/jobs/{job_id}` | has the processing for that write finished? | `ctx.advanced.job(job_id)` |
 

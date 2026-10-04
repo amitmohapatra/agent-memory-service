@@ -8,6 +8,17 @@ from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.headers import require_one_value
+from memory_service.api.params import (
+    AgentGroupIdQuery,
+    AgentIdQuery,
+    AgentRunIdQuery,
+    ParentAgentRunIdQuery,
+    SessionIdQuery,
+    TaskIdQuery,
+    ThreadIdPath,
+    ThreadIdQuery,
+    WorkIdQuery,
+)
 from memory_service.api.schemas.tenancy import KeySelfResponse
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
@@ -248,38 +259,63 @@ def build_context(
     return ctx
 
 
-async def get_header_context(
-    request: Request,
-    container: ContainerDep,
-    _: ServicePrincipalDep,
-    thread_id: str | None = None,
-    session_id: str | None = None,
-    work_id: str | None = None,
-    task_id: str | None = None,
-    agent_id: str | None = None,
-    agent_group_id: str | None = None,
-    agent_run_id: str | None = None,
-    parent_agent_run_id: str | None = None,
-) -> MemoryExecutionContext:
-    """Context for GET/DELETE routes (no body): security fields from trusted headers, the
-    lineage (thread, work, agent run, agent group) from optional query parameters so an
-    agent reads and forgets with the same identity it wrote with."""
-    return build_context(
-        request,
-        container,
-        ScopeBody(
-            thread_id=thread_id,
-            session_id=session_id,
-            work_id=work_id,
-            task_id=task_id,
-            agent_id=agent_id,
-            agent_group_id=agent_group_id,
-            agent_run_id=agent_run_id,
-            parent_agent_run_id=parent_agent_run_id,
-        ),
+def _lineage_but_thread(
+    session_id: SessionIdQuery = None,
+    work_id: WorkIdQuery = None,
+    task_id: TaskIdQuery = None,
+    agent_id: AgentIdQuery = None,
+    agent_group_id: AgentGroupIdQuery = None,
+    agent_run_id: AgentRunIdQuery = None,
+    parent_agent_run_id: ParentAgentRunIdQuery = None,
+) -> ScopeBody:
+    return ScopeBody(
+        session_id=session_id,
+        work_id=work_id,
+        task_id=task_id,
+        agent_id=agent_id,
+        agent_group_id=agent_group_id,
+        agent_run_id=agent_run_id,
+        parent_agent_run_id=parent_agent_run_id,
     )
 
 
+_LineageButThread = Annotated[ScopeBody, Depends(_lineage_but_thread)]
+
+
+def lineage_query(base: _LineageButThread, thread_id: ThreadIdQuery = None) -> ScopeBody:
+    """The lineage of a GET/DELETE route (no body) from its optional query parameters, so
+    an agent reads and forgets with the same identity it wrote with."""
+    return base.model_copy(update={"thread_id": thread_id})
+
+
+def thread_lineage(base: _LineageButThread, thread_id: ThreadIdPath) -> ScopeBody:
+    """:func:`lineage_query` for a route under ``/threads/{thread_id}``: the path names the
+    thread the call acts in."""
+    return base.model_copy(update={"thread_id": thread_id})
+
+
+LineageDep = Annotated[ScopeBody, Depends(lineage_query)]
+
+
+async def get_header_context(
+    request: Request, container: ContainerDep, _: ServicePrincipalDep, lineage: LineageDep
+) -> MemoryExecutionContext:
+    """Context for GET/DELETE routes (no body): security fields from trusted headers, the
+    lineage (thread, work, agent run, agent group) from optional query parameters."""
+    return build_context(request, container, lineage)
+
+
+async def get_thread_context(
+    request: Request,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+    lineage: Annotated[ScopeBody, Depends(thread_lineage)],
+) -> MemoryExecutionContext:
+    """:func:`get_header_context` for the routes of one thread (its id is the path's)."""
+    return build_context(request, container, lineage)
+
+
+ThreadContextDep = Annotated[MemoryExecutionContext, Depends(get_thread_context)]
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
 
 
@@ -338,14 +374,19 @@ def is_tenant_administrator(principal: ServicePrincipal) -> bool:
     return _has_role(principal, (KeyRole.ADMIN, KeyRole.PLATFORM))
 
 
+def ensure_role(principal: ServicePrincipal, *roles: KeyRole) -> ServicePrincipal:
+    """The principal, when its credential holds one of ``roles``; else 403."""
+    if not _has_role(principal, roles):
+        raise AuthorizationFailed(
+            "this credential may not perform that administration",
+            details={"required_role": [r.value for r in roles]},
+        )
+    return principal
+
+
 def require_role(*roles: KeyRole) -> Any:
     async def dependency(principal: ServicePrincipalDep) -> ServicePrincipal:
-        if not _has_role(principal, roles):
-            raise AuthorizationFailed(
-                "this credential may not perform that administration",
-                details={"required_role": [r.value for r in roles]},
-            )
-        return principal
+        return ensure_role(principal, *roles)
 
     return Depends(dependency)
 
@@ -395,6 +436,13 @@ async def get_administered_tenant(
     """``administered_tenant`` as a dependency, which also puts the header in the OpenAPI
     document. The tenant must exist when the header alone names it: the platform's typo
     must not create rows for a tenant nobody onboarded."""
+    return await existing_administered_tenant(request, principal, container)
+
+
+async def existing_administered_tenant(
+    request: Request, principal: ServicePrincipal, container: Container
+) -> str:
+    """:func:`administered_tenant`, which must exist when the header alone names it."""
     tenant_id = administered_tenant(request, principal, container)
     if principal.claims.get("tenant") != tenant_id:
         async with container.services["uow_factory"]() as uow:

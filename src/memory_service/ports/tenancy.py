@@ -97,7 +97,11 @@ class WorkspaceRepository(Protocol):
 
     async def remove_member(self, tenant_id: str, workspace_id: str, principal: str) -> bool: ...
 
-    async def members(self, tenant_id: str, workspace_id: str) -> list[WorkspaceMember]: ...
+    async def members(
+        self, tenant_id: str, workspace_id: str, *, after: str = "", limit: int | None = None
+    ) -> list[WorkspaceMember]:
+        """Members by principal; ``after`` is the last principal of the previous page."""
+        ...
 
     async def memberships_of(self, tenant_id: str, principal: str) -> list[str]:
         """Workspace ids a principal (user: or agent:) is a member of."""

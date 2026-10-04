@@ -10,6 +10,7 @@ from memory_service.api.deps import (
     ContainerDep,
     HeaderContextDep,
     ServicePrincipalDep,
+    ThreadContextDep,
     build_context,
 )
 from memory_service.api.errors import error_responses
@@ -21,6 +22,7 @@ from memory_service.api.idempotent import (
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
+from memory_service.api.params import ThreadIdPath, limit_query
 from memory_service.api.schemas.conversation import (
     CreateMessagesRequest,
     JobResponse,
@@ -101,7 +103,7 @@ async def _hydrate(archive, message: Message) -> Message:  # type: ignore[no-unt
     responses=_WRITE_ERRORS,
 )
 async def patch_thread(
-    thread_id: str,
+    thread_id: ThreadIdPath,
     request: Request,
     body: PatchThreadRequest,
     container: ContainerDep,
@@ -133,7 +135,7 @@ async def patch_thread(
     responses=_READ_ERRORS,
 )
 async def get_thread(
-    thread_id: str, ctx: HeaderContextDep, container: ContainerDep
+    thread_id: ThreadIdPath, ctx: ThreadContextDep, container: ContainerDep
 ) -> ThreadResponse:
     async with container.services["uow_factory"]() as uow:
         thread = await _service(container).get_thread(uow, ctx, thread_id)
@@ -149,7 +151,7 @@ async def get_thread(
     responses=_READ_ERRORS,
 )
 async def delete_thread(
-    request: Request, thread_id: str, ctx: HeaderContextDep, container: ContainerDep
+    request: Request, thread_id: ThreadIdPath, ctx: ThreadContextDep, container: ContainerDep
 ) -> Response:
     """With ``Idempotency-Key``, a retry of a delete that succeeded is its 204 again, not
     the 404 the deleted thread would now earn."""
@@ -178,10 +180,10 @@ async def delete_thread(
 async def list_messages(
     request: Request,
     response: Response,
-    thread_id: str,
-    ctx: HeaderContextDep,
+    thread_id: ThreadIdPath,
+    ctx: ThreadContextDep,
     container: ContainerDep,
-    limit: Annotated[int, Query(ge=1, le=500, examples=[50])] = 50,
+    limit: Annotated[int, limit_query(500, "messages")] = 50,
     before_sequence: Annotated[
         int | None, Query(ge=1, description="Return messages with sequence < this value")
     ] = None,

@@ -92,19 +92,18 @@ async def create_tenant(
     "/tenants",
     response_model=list[TenantResponse],
     responses=_ERRORS,
-    summary="List tenants (cursor: the last tenant_id seen)",
+    summary="List tenants by id (cursor paged)",
 )
 async def list_tenants(
     request: Request,
     response: Response,
     container: ContainerDep,
     _: PlatformDep,
-    after: str = "",
     cursor: CursorQuery = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[TenantResponse]:
     position = decode_cursor(cursor, fields=("tenant_id",))
-    start = position["tenant_id"] if position else after
+    start = position["tenant_id"] if position else ""
     async with container.services["uow_factory"]() as uow:
         tenants = await _service(container).list_tenants(uow, after=start, limit=limit + 1)
     items, next_cursor = page(tenants, limit=limit, position=lambda t: {"tenant_id": t.tenant_id})
