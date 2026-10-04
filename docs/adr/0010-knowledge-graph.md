@@ -36,6 +36,11 @@
 - **API/SDK.** `POST /v1/graph/query` (free text or explicit entities, `hops`, `as_of`,
   `max_visited`) and `ctx.graph.query(...)`.
 
+**Amended since the decision.** At query time `GraphStage` (`modules/graph/retrieval.py`)
+traverses 3 hops for multi-hop routes and 1 otherwise, with `max_visited = 40`, not the 1-2 hops
+and 80 written above; the traversal is stopped by PostgreSQL at the 150 ms prefetch budget
+(`GraphSettings.prefetch_budget_ms`). No separate measurement of that change is recorded.
+
 ## Evidence
 - `tests/security/test_graph_isolation.py`: 96 reader configurations × 144 objects across two
   tenants, 2-hop traversal from a tenant-wide hub — returned == oracle-allowed, 0 leaks.

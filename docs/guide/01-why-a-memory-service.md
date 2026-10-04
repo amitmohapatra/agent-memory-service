@@ -58,7 +58,7 @@ You report what happened. It decides what is worth remembering.
 ```
 your agent                    memory service
     │
-    │  POST /v1/observations   "the user said: my timezone is Europe/Berlin"
+    │  POST /v1/messages       "the user said: my timezone is Europe/Berlin"
     ├─────────────────────────────►  accepted (202), queued
     │                                    │
     │                                    ├─ extract candidate facts
@@ -116,7 +116,7 @@ there, and every one of the 87 memories points back at the ones it came from.
 
 Being clear about this early saves disappointment later.
 
-- **It is not an LLM wrapper.** Every one of its eleven optional model uses has a
+- **It is not an LLM wrapper.** Every one of its twelve optional model uses has a
   deterministic fallback, and the service ships with the LLM **off**. A full install with no
   model gateway at all is a working install. [`LLM-USES.md`](../LLM-USES.md) lists each use and its fallback.
 - **It is not an agent framework.** It has no opinion about how your agent loops, which

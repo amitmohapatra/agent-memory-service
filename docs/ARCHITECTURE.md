@@ -196,7 +196,7 @@ flowchart LR
   pulls["agent-tool pulls"] --> pf["prefetch, every 5 min<br/>what the push pre-includes"]
   cat["catalog upsert"] --> ti["tools.index<br/>the tools search collection"]
   obs["observation (any language)"] --> mp["memory.process<br/>English rules; other languages:<br/>contextual_extraction (tenant model)"]
-  md["memory / document"] --> ge["graph.enrich<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
+  md["memory / document"] --> ge["inside memory.index / document.index:<br/>graph enrichment, native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
 Where each model use runs, its tier and its fallback: [LLM-USES.md](LLM-USES.md).

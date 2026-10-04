@@ -147,12 +147,14 @@ pip install -e sdk/python        # the trellis-memory SDK
 model. The set is `FROZEN_MODELS` in `src/memory_service/config/constants.py`, and the
 download catalogue is derived from it, so the code and the weights cannot drift apart:
 
-| Role | Frozen | Size | Why |
+| Role | Frozen (`config/constants.py::FROZEN_MODELS`) | License | Why |
 |---|---|---|---|
-| Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
+| Embedding, English | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | Apache-2.0 | lowest query p95 of every candidate benchmarked, at the smallest useful dimension; encodes Latin-script queries |
+| Embedding, multilingual | `hotchpotch/bekko-embedding-v1-a8m` (384-dim) | MIT | every script, every query (ADR 0024) |
+| Late interaction (ColBERT) | `mixedbread-ai/mxbai-edge-colbert-v0-32m` (64-dim per token) | Apache-2.0 | the late-interaction arms over two keys in the memory ranking (ADR 0025, 0026) |
 | Sparse | BM25 (client term frequencies, Qdrant server-side IDF) | — | no weights |
 | Reranker | none (removed) | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency, and no reranker beat the fused order on LoCoMo; the offline scorer lives in `benchmark/cross_encoder.py` |
-| Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
+| Grounding NLI | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | MIT | multilingual claim-support classifier for `/v1/verify` |
 
 The benchmark challengers (Granite R2 base, Granite reranker, SPLADE, GLiNER2, the former
 reranker) are listed in `benchmark/challengers.txt`; `make models-all` fetches them, and only

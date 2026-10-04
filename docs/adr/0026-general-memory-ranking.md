@@ -42,6 +42,17 @@ neighbour lift ADR 0025 used) is not shipped. Offline, per rule, LoCoMo / LongMe
 base 0.769 / 0.883; + session 0.782 / 0.888; + speaker 0.778 / 0.883; + time 0.772 / 0.883;
 + neighbour lift 0.777 / 0.874 (dropped).
 
+**Amended since the decision** (the code is `modules/retrieval/memory_ranking.py`):
+
+- **Session at 0.3, and ColBERT over the context key at `LATE_CONTEXT = 2`** (commit 7cc1177).
+  Chosen on LongMemEval and scored on LoCoMo, and the other way round: offline LoCoMo
+  0.790 -> 0.807, LongMemEval 0.888 -> 0.898.
+- **A fourth rule, period** (commit 5c84c31): a question that names a period (parsed by rule in
+  `modules/retrieval/periods.py`) lifts the memories said in it, or whose resolved relative dates
+  fall in it, by `PERIOD = 3` rank-1 units. Offline LoCoMo 0.807 -> 0.816 (0.783 -> 0.851 on the
+  198 questions naming a period); LongMemEval unchanged at strengths 0-5 and worse at 8. These
+  are offline figures; the rule has no separate through-the-service measurement.
+
 ## Evidence
 
 Through the service, LoCoMo, all ten conversations, 1,536 answerable questions, the corpus
