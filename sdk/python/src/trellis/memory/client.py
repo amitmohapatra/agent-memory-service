@@ -752,10 +752,16 @@ class HistoryAPI:
 
 
 def _default_key(prefix: str, scope: Scope, *parts: str) -> str:
-    """Deterministic idempotency key from lineage + content so retries never duplicate."""
+    """Deterministic idempotency key from lineage + content so retries never duplicate. Who
+    the write is for is part of it: the same words remembered for two users (or agents, or
+    workspaces) of one tenant are two writes, not a replay of one with another payload."""
     h = hashlib.blake2b(digest_size=16)
     for p in (
         scope.tenant_id or "",
+        scope.workspace_id or "",
+        scope.user_id or "",
+        scope.agent_id or "",
+        scope.agent_group_id or "",
         scope.thread_id or "",
         scope.session_id or "",
         scope.turn_id or "",
