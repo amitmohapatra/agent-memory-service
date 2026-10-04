@@ -33,6 +33,8 @@ from memory_service.ports.llm import StoredPolicy
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 #: the usage ledger's default window and the widest one a read may ask for
 USAGE_DEFAULT_DAYS = 30
 USAGE_MAX_DAYS = 366
@@ -89,7 +91,7 @@ def _digest(key: SecretStr) -> str:
     "/agents/model-key",
     response_model=AgentKeyStatus,
     tags=["agents"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the acting agent's model-key status, without its secret",
 )
 async def key_status(container: ContainerDep, ctx: HeaderContextDep) -> AgentKeyStatus:
@@ -189,7 +191,7 @@ async def _put_level(
     "/model-key",
     response_model=AgentKeyStatus,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the tenant's model-key status (used by agents without a key of their own)",
 )
 async def tenant_key_status(
@@ -313,7 +315,7 @@ def _policies(container) -> ModelPolicies:  # type: ignore[no-untyped-def]
     "/model-key/policy",
     response_model=ModelPolicyStatus,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the tenant's model policy: uses, read assistance, the model per use",
 )
 async def tenant_policy(
@@ -378,7 +380,7 @@ class ModelUsageResponse(BaseModel):
     "/model-key/usage",
     response_model=ModelUsageResponse,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="The tenant's model tokens and calls per day and use",
 )
 async def tenant_usage(

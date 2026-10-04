@@ -36,6 +36,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.memory.service import MemoryService
 
@@ -89,8 +90,13 @@ class RememberRequest(BaseModel):
         max_length=20,
         description="Entities the memory names: linked in the graph and anchored in search",
     )
-    valid_from: datetime | None = Field(default=None, description="When it became true")
-    valid_to: datetime | None = Field(default=None, description="When it stops being true")
+    valid_from: UtcDateTime | None = Field(
+        default=None, description=f"When the statement became true. {UTC_RULE}"
+    )
+    valid_to: UtcDateTime | None = Field(
+        default=None,
+        description=f"When the statement stops being true (after valid_from). {UTC_RULE}",
+    )
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
     @model_validator(mode="after")

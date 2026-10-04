@@ -128,3 +128,46 @@ def test_form_body_schemas_keep_their_full_names(client: TestClient) -> None:
         title = str(definition.get("title", ""))
         if title.startswith("Body_"):
             assert name == title.replace(".", "_"), name
+
+
+def test_the_operational_routes_need_no_credential(client: TestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    for method, path, op in _operations(schema):
+        if path.startswith(("/health", "/metrics", "/version")):
+            assert op["security"] == [], f"{method.upper()} {path}"
+        else:
+            assert "security" not in op, f"{method.upper()} {path}: the document's default"
+    assert schema["info"]["license"]["identifier"] == "Apache-2.0"
+    assert schema["info"]["contact"]["url"].startswith("https://")
+
+
+def test_no_read_documents_a_conflict_it_cannot_raise(client: TestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    reads = [f"GET {path}" for method, path, op in _operations(schema) if method == "get"]
+    conflicted = [
+        f"GET {path}"
+        for method, path, op in _operations(schema)
+        if method == "get" and "409" in op["responses"]
+    ]
+    assert reads and not conflicted
+
+
+def test_every_request_instant_is_read_as_utc(client: TestClient) -> None:
+    """A naive request instant is UTC, and the document says so wherever one is taken."""
+    schema = client.get("/openapi.json").json()
+    schemas = schema["components"]["schemas"]
+    for name, definition in schemas.items():
+        if not name.endswith(("Request", "In", "Body_documents_upload_document")):
+            continue
+        for field, prop in (definition.get("properties") or {}).items():
+            formats = {prop.get("format")} | {o.get("format") for o in prop.get("anyOf", [])}
+            if "date-time" in formats:
+                assert "UTC" in prop.get("description", ""), f"{name}.{field}"
+    for method, path, op in _operations(schema):
+        for param in op.get("parameters", []):
+            param_schema = param.get("schema", {})
+            formats = {param_schema.get("format")} | {
+                o.get("format") for o in param_schema.get("anyOf", [])
+            }
+            if "date-time" in formats:
+                assert "UTC" in param.get("description", ""), f"{method} {path} {param['name']}"

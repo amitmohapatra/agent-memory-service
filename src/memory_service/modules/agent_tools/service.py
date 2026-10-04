@@ -20,6 +20,7 @@ from pydantic import ValidationError as PydanticValidationError
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, Visibility
 from memory_service.domain.errors import NotFound, ValidationFailed
+from memory_service.domain.instants import UtcDateTime
 from memory_service.domain.pulls import (
     PREFETCH_BATCH,
     PREFETCH_MAX,
@@ -75,12 +76,12 @@ class MemorySearchArgs(_Args):
         description="memory, chunk (document passages), summary, episode (earlier "
         "conversations), message (this conversation); default memory and chunk",
     )
-    time_from: datetime | None = Field(default=None, description="observed since")
-    time_to: datetime | None = Field(default=None, description="observed until")
-    as_of: datetime | None = Field(
+    time_from: UtcDateTime | None = Field(default=None, description="observed since")
+    time_to: UtcDateTime | None = Field(default=None, description="observed until")
+    as_of: UtcDateTime | None = Field(
         default=None, description="what was true at this moment (includes replaced memories)"
     )
-    known_at: datetime | None = Field(
+    known_at: UtcDateTime | None = Field(
         default=None, description="what had been learned by this moment"
     )
     k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)

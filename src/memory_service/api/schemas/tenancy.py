@@ -50,7 +50,18 @@ class CreateTenantRequest(BaseModel):
 
 
 class UpdateTenantRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Only the fields sent change."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {"status": "suspended"},
+                {"name": "Acme Corporation", "retention_days": 365, "rate_limit_per_minute": 600},
+                {"clear_retention": True, "clear_rate_limit": True},
+            ]
+        },
+    )
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     status: TenantStatus | None = Field(default=None, description=_STATUS)

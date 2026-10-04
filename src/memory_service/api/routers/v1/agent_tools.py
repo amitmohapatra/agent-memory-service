@@ -17,6 +17,8 @@ from memory_service.modules.agent_tools.service import AgentTools
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: the listing needs only a valid credential
+_LIST_ERRORS = error_responses(401, 403, 422, 503)
 
 
 class AgentToolSpec(BaseModel):
@@ -72,7 +74,7 @@ def _listing() -> tuple[bytes, str]:
     description="The set is fixed per release: the response carries `ETag` and "
     "`Cache-Control: private, max-age=300`, and a request whose `If-None-Match` names the tag "
     "is a `304` without a body.",
-    responses={**_ERRORS, 304: {"description": "Not modified: If-None-Match names the ETag"}},
+    responses={**_LIST_ERRORS, 304: {"description": "Not modified: If-None-Match names the ETag"}},
 )
 async def list_agent_tools(request: Request, _: ServicePrincipalDep) -> Response:
     body, etag = _listing()

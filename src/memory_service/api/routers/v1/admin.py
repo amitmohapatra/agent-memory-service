@@ -24,6 +24,8 @@ log = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
@@ -91,7 +93,7 @@ async def create_tenant(
 @router.get(
     "/tenants",
     response_model=list[TenantResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List tenants by id (cursor paged)",
 )
 async def list_tenants(
@@ -114,7 +116,7 @@ async def list_tenants(
 @router.get(
     "/tenants/{tenant_id}",
     response_model=TenantResponse,
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Get a tenant",
 )
 async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) -> TenantResponse:

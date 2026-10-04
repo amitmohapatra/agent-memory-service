@@ -16,6 +16,7 @@ from memory_service.api.params import limit_query
 from memory_service.config.constants import GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, RelationStatus
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.modules.graph.service import GraphService
 from memory_service.ports.intelligence import Entity, Relation
 
@@ -165,12 +166,15 @@ async def entity_profile(
         int, Query(ge=0, le=3, description="hops of traversal from the entity; 0: none")
     ] = 0,
     as_of: Annotated[
-        datetime | None,
-        Query(description="valid time: facts that were true at this instant"),
+        UtcDateTime | None,
+        Query(description=f"Valid time: facts that were true at this instant. {UTC_RULE}"),
     ] = None,
     valid_at: Annotated[
-        datetime | None,
-        Query(description="knowledge time: facts asserted by this instant, not yet withdrawn"),
+        UtcDateTime | None,
+        Query(
+            description="Knowledge time: facts asserted by this instant, not yet withdrawn. "
+            + UTC_RULE
+        ),
     ] = None,
     layers: Annotated[
         list[GraphLayer] | None,

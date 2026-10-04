@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.validation import CustomMetadata, bounded_json
 from memory_service.domain.context import MemoryExecutionContext
@@ -23,6 +23,7 @@ from memory_service.domain.feedback import (
     FeedbackTargetKind,
     FeedbackVerdict,
 )
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 
 BoundedCorrection = Annotated[Any, AfterValidator(bounded_json(FEEDBACK_JSON_MAX_BYTES))]
 
@@ -71,9 +72,10 @@ class FeedbackRequest(BaseModel):
         default_factory=list, max_length=EVIDENCE_REFS_MAX
     )
     metadata: CustomMetadata = Field(default_factory=dict)
-    created_at: AwareDatetime | None = Field(
+    created_at: UtcDateTime | None = Field(
         default=None,
-        description="accepted for the contracts shape; the stored instant is the service's",
+        description="Accepted for the contracts shape and ignored: the stored instant is the "
+        f"service's clock. {UTC_RULE}",
     )
 
     @model_validator(mode="after")

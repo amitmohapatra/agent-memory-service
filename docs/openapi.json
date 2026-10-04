@@ -2767,7 +2767,7 @@
                 "type": "null"
               }
             ],
-            "description": "accepted for the contracts shape; the stored instant is the service's",
+            "description": "Accepted for the contracts shape and ignored: the stored instant is the service's clock. ISO 8601; a value without an offset is read as UTC.",
             "title": "Created At"
           },
           "evidence_refs": {
@@ -4035,7 +4035,7 @@
                 "type": "null"
               }
             ],
-            "description": "Original timestamp for imports",
+            "description": "When the message was originally sent, for imports of an older conversation; omitted: now. ISO 8601; a value without an offset is read as UTC.",
             "title": "Occurred At"
           },
           "parent_message_id": {
@@ -4971,7 +4971,7 @@
                 "type": "null"
               }
             ],
-            "description": "memories as they were true at this moment, including ones later replaced (valid time)",
+            "description": "Memories as they were true at this moment, including ones later replaced (valid time). ISO 8601; a value without an offset is read as UTC.",
             "title": "As Of"
           },
           "debug": {
@@ -5032,7 +5032,7 @@
                 "type": "null"
               }
             ],
-            "description": "memories as they were known at this moment: learned by then and not yet replaced (knowledge time, for audit)",
+            "description": "Memories as they were known at this moment: learned by then and not yet replaced (knowledge time, for audit). ISO 8601; a value without an offset is read as UTC.",
             "title": "Known At"
           },
           "limit": {
@@ -5074,7 +5074,7 @@
                 "type": "null"
               }
             ],
-            "description": "only what was observed since (filters before ranking)",
+            "description": "Only what was observed at or after this instant (filters before ranking). ISO 8601; a value without an offset is read as UTC.",
             "title": "Time From"
           },
           "time_to": {
@@ -5087,7 +5087,7 @@
                 "type": "null"
               }
             ],
-            "description": "only what was observed until",
+            "description": "Only what was observed at or before this instant. ISO 8601; a value without an offset is read as UTC.",
             "title": "Time To"
           }
         },
@@ -5386,7 +5386,7 @@
                 "type": "null"
               }
             ],
-            "description": "When it became true",
+            "description": "When the statement became true. ISO 8601; a value without an offset is read as UTC.",
             "title": "Valid From"
           },
           "valid_to": {
@@ -5399,7 +5399,7 @@
                 "type": "null"
               }
             ],
-            "description": "When it stops being true",
+            "description": "When the statement stops being true (after valid_from). ISO 8601; a value without an offset is read as UTC.",
             "title": "Valid To"
           },
           "visibility": {
@@ -6384,6 +6384,21 @@
       },
       "UpdateTenantRequest": {
         "additionalProperties": false,
+        "description": "Only the fields sent change.",
+        "examples": [
+          {
+            "status": "suspended"
+          },
+          {
+            "name": "Acme Corporation",
+            "rate_limit_per_minute": 600,
+            "retention_days": 365
+          },
+          {
+            "clear_rate_limit": true,
+            "clear_retention": true
+          }
+        ],
         "properties": {
           "clear_rate_limit": {
             "default": false,
@@ -6923,7 +6938,15 @@
     }
   },
   "info": {
-    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |\n| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nThe read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no\n`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,\ncontinues with letters, digits and `._:-`, and is at most 200 characters. A request carrying\nany scope or credential header more than once with different values is refused (422) before\nthe credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
+    "contact": {
+      "name": "trellis-memory maintainers",
+      "url": "https://github.com/amitmohapatra/agent-memory-service"
+    },
+    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |\n| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nThe read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no\n`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,\ncontinues with letters, digits and `._:-`, and is at most 200 characters. A request carrying\nany scope or credential header more than once with different values is refused (422) before\nthe credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Instants and pagination\nEvery instant is ISO 8601; a request instant without an offset is read as UTC, and every\nresponse instant carries one. Every list takes `cursor` and `limit` and answers\n`Link: <...>; rel=\"next\"` exactly when a next page exists (envelopes also `next_cursor`).\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
     "title": "trellis-memory API",
     "version": "0.3.0"
   },
@@ -6944,6 +6967,7 @@
             "description": "Successful Response"
           }
         },
+        "security": [],
         "summary": "Liveness probe",
         "tags": [
           "operations"
@@ -6976,6 +7000,7 @@
             "description": "not_ready: a mandatory store is down (the same body, status 503)"
           }
         },
+        "security": [],
         "summary": "Readiness probe",
         "tags": [
           "operations"
@@ -6991,6 +7016,7 @@
             "description": "Successful Response"
           }
         },
+        "security": [],
         "summary": "Prometheus metrics",
         "tags": [
           "operations"
@@ -7245,54 +7271,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/admin/tenants",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "Link": {
                 "$ref": "#/components/headers/Link"
@@ -8276,51 +8254,6 @@
               }
             }
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/admin/tenants/{tenant_id}",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -9241,96 +9174,6 @@
               }
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "NOT_FOUND",
-                  "detail": "Thread not found",
-                  "details": {},
-                  "instance": "/v1/agent-tools",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 404,
-                  "title": "Not found",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:not-found"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Thread not found",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/agent-tools",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -11056,51 +10899,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/agents/model-key",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -17290,7 +17088,7 @@
             }
           },
           {
-            "description": "valid time: facts that were true at this instant",
+            "description": "Valid time: facts that were true at this instant. ISO 8601; a value without an offset is read as UTC.",
             "in": "query",
             "name": "as_of",
             "required": false,
@@ -17304,12 +17102,12 @@
                   "type": "null"
                 }
               ],
-              "description": "valid time: facts that were true at this instant",
+              "description": "Valid time: facts that were true at this instant. ISO 8601; a value without an offset is read as UTC.",
               "title": "As Of"
             }
           },
           {
-            "description": "knowledge time: facts asserted by this instant, not yet withdrawn",
+            "description": "Knowledge time: facts asserted by this instant, not yet withdrawn. ISO 8601; a value without an offset is read as UTC.",
             "in": "query",
             "name": "valid_at",
             "required": false,
@@ -17323,7 +17121,7 @@
                   "type": "null"
                 }
               ],
-              "description": "knowledge time: facts asserted by this instant, not yet withdrawn",
+              "description": "Knowledge time: facts asserted by this instant, not yet withdrawn. ISO 8601; a value without an offset is read as UTC.",
               "title": "Valid At"
             }
           },
@@ -18748,54 +18546,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/keys",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "Link": {
                 "$ref": "#/components/headers/Link"
@@ -26224,51 +25974,6 @@
               }
             }
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/model-key",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -27194,51 +26899,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/model-key/policy",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -28226,51 +27886,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/model-key/usage",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -29870,54 +29485,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/reads",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "Link": {
                 "$ref": "#/components/headers/Link"
@@ -36863,54 +36430,6 @@
               }
             }
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/workspaces",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -38395,51 +37914,6 @@
               }
             }
           },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/workspaces/{workspace_id}",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
           "413": {
             "content": {
               "application/problem+json": {
@@ -38903,54 +38377,6 @@
               }
             },
             "description": "Thread not found",
-            "headers": {
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/workspaces/{workspace_id}/members",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
             "headers": {
               "Link": {
                 "$ref": "#/components/headers/Link"
@@ -40257,6 +39683,7 @@
             "description": "Successful Response"
           }
         },
+        "security": [],
         "summary": "Build and provider information",
         "tags": [
           "operations"

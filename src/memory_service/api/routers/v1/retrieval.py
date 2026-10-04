@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
@@ -16,6 +15,7 @@ from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
@@ -103,19 +103,23 @@ class RecallRequest(BaseModel):
         "user, one per thread), message (this thread's history).",
         examples=[["chunk", "memory"]],
     )
-    time_from: datetime | None = Field(
-        default=None, description="only what was observed since (filters before ranking)"
-    )
-    time_to: datetime | None = Field(default=None, description="only what was observed until")
-    as_of: datetime | None = Field(
+    time_from: UtcDateTime | None = Field(
         default=None,
-        description="memories as they were true at this moment, including ones later "
-        "replaced (valid time)",
+        description=f"Only what was observed at or after this instant (filters before "
+        f"ranking). {UTC_RULE}",
     )
-    known_at: datetime | None = Field(
+    time_to: UtcDateTime | None = Field(
+        default=None, description=f"Only what was observed at or before this instant. {UTC_RULE}"
+    )
+    as_of: UtcDateTime | None = Field(
         default=None,
-        description="memories as they were known at this moment: learned by then and not yet "
-        "replaced (knowledge time, for audit)",
+        description="Memories as they were true at this moment, including ones later "
+        f"replaced (valid time). {UTC_RULE}",
+    )
+    known_at: UtcDateTime | None = Field(
+        default=None,
+        description="Memories as they were known at this moment: learned by then and not yet "
+        f"replaced (knowledge time, for audit). {UTC_RULE}",
     )
     document_ids: list[str] | None = Field(
         default=None,

@@ -28,6 +28,13 @@ from memory_service.config.constants import HEADERS
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
 TITLE = "trellis-memory API"
+CONTACT = {
+    "name": "trellis-memory maintainers",
+    "url": "https://github.com/amitmohapatra/agent-memory-service",
+}
+LICENSE = {"name": "Apache-2.0", "identifier": "Apache-2.0"}
+#: The operational routes: no credential, no scope headers, no idempotency.
+OPS_PREFIXES = ("/health", "/metrics", "/version")
 
 DESCRIPTION = """
 trellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.
@@ -72,6 +79,11 @@ Every error is an RFC 9457 problem (`application/problem+json`, schema `Problem`
 are what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a
 dependency that is down (PostgreSQL unreachable or its pool exhausted, the search or
 authorization server away), 504 a database statement stopped at its time budget.
+
+### Instants and pagination
+Every instant is ISO 8601; a request instant without an offset is read as UTC, and every
+response instant carries one. Every list takes `cursor` and `limit` and answers
+`Link: <...>; rel="next"` exactly when a next page exists (envelopes also `next_cursor`).
 
 ### Versioning
 Public routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its
@@ -317,6 +329,8 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
         routes=app.routes,
         tags=TAGS,
         servers=[{"url": "/", "description": "current host"}],
+        contact=CONTACT,
+        license_info=LICENSE,
     )
     components = schema.setdefault("components", {})
     schemas = components.setdefault("schemas", {})
@@ -372,7 +386,9 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
         for method, op in methods.items():
             if method not in ("get", "post", "put", "patch", "delete"):
                 continue
-            if path.startswith(("/health", "/metrics", "/version")):
+            if path.startswith(OPS_PREFIXES):
+                # the probes and the scrape answer before any key exists
+                op["security"] = []
                 continue
             params = op.setdefault("parameters", [])
             existing = {p.get("name") for p in params}

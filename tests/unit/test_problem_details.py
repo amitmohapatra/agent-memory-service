@@ -178,3 +178,16 @@ def test_every_documented_code_is_one_the_service_can_produce() -> None:
     }
     # the middleware writes RATE_LIMIT (429) itself; nothing else is produced outside a class
     assert set(ErrorCode) == produced | {ErrorCode.RATE_LIMIT}
+
+
+def test_a_naive_request_instant_is_utc() -> None:
+    from datetime import UTC, datetime
+
+    from pydantic import TypeAdapter
+
+    from memory_service.domain.instants import UtcDateTime
+
+    adapter = TypeAdapter(UtcDateTime)
+    assert adapter.validate_python("2026-09-14T10:00:00") == datetime(2026, 9, 14, 10, tzinfo=UTC)
+    kept = adapter.validate_python("2026-09-14T12:00:00+02:00")
+    assert kept.utcoffset() is not None and kept.hour == 12

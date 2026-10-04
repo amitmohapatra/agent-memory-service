@@ -7,7 +7,7 @@ tuples are written with the rows and the membership revision is bumped in the sa
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
@@ -35,9 +35,12 @@ from memory_service.api.schemas.tenancy import (
     WorkspaceMemberResponse,
     WorkspaceResponse,
 )
+from memory_service.domain.instants import UtcDateTime
 
 router = APIRouter(tags=["tenancy"])
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
@@ -118,7 +121,7 @@ async def key_self(principal: ServicePrincipalDep) -> KeySelfResponse:
 @router.get(
     "/keys",
     response_model=list[ApiKeyResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List keys, oldest first (cursor paged)",
 )
 async def list_keys(
@@ -254,7 +257,7 @@ async def create_workspace(
 @router.get(
     "/workspaces",
     response_model=list[WorkspaceResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List workspaces",
 )
 async def list_workspaces(
@@ -280,7 +283,7 @@ async def list_workspaces(
 @router.get(
     "/workspaces/{workspace_id}",
     response_model=WorkspaceResponse,
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Get a workspace",
 )
 async def get_workspace(
@@ -330,7 +333,7 @@ async def delete_workspace(
 @router.get(
     "/workspaces/{workspace_id}/members",
     response_model=list[WorkspaceMemberResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List a workspace's members by principal (cursor paged)",
 )
 async def list_members(
@@ -429,7 +432,7 @@ async def remove_member(
 @router.get(
     "/reads",
     response_model=list[ReadAuditResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Who read which records, newest first (cursor paged; the keyset is the instant, so "
     "entries sharing one instant across a page boundary need a larger page)",
 )
@@ -439,14 +442,14 @@ async def list_reads(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     since: Annotated[
-        datetime | None,
+        UtcDateTime | None,
         Query(
             description="Only entries newer than this instant (ISO 8601; a naive value is UTC): "
             "a filter that stays the same across pages."
         ),
     ] = None,
     before: Annotated[
-        datetime | None,
+        UtcDateTime | None,
         Query(
             description="Only entries older than this instant (ISO 8601; a naive value is "
             "UTC). The cursor sets it for the next page; a cursor wins over it."
@@ -460,19 +463,10 @@ async def list_reads(
         before = position["before"]
     await container.services["read_audit"].flush()
     async with container.services["uow_factory"]() as uow:
-        entries = await uow.read_audit.list(
-            tenant_id, after=_aware(since), before=_aware(before), limit=limit + 1
-        )
+        entries = await uow.read_audit.list(tenant_id, after=since, before=before, limit=limit + 1)
     items = entries[:limit]
     next_cursor = (
         encode_cursor({"before": items[-1].at.isoformat()}) if len(entries) > limit else None
     )
     link_next(request, response, next_cursor)
     return [ReadAuditResponse.model_validate(e.model_dump()) for e in items]
-
-
-def _aware(instant: datetime | None) -> datetime | None:
-    """A naive instant means UTC; the store compares against timestamptz."""
-    if instant is not None and instant.tzinfo is None:
-        return instant.replace(tzinfo=UTC)
-    return instant

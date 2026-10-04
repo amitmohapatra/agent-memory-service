@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from memory_service.api.deps import ScopeBody
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, JobStatus, MessageKind, MessageRole
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 
 _SCOPE_EXAMPLE: dict[str, Any] = {
     "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
@@ -116,7 +117,11 @@ class MessageIn(BaseModel):
     )
     attachments: list[AttachmentIn] = Field(default_factory=list)
     custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
-    occurred_at: datetime | None = Field(default=None, description="Original timestamp for imports")
+    occurred_at: UtcDateTime | None = Field(
+        default=None,
+        description="When the message was originally sent, for imports of an older "
+        f"conversation; omitted: now. {UTC_RULE}",
+    )
     source_system: str | None = Field(default=None, max_length=100, examples=["slack"])
     source_message_id: str | None = Field(
         default=None, max_length=400, examples=["1726300000.000100"]

@@ -141,3 +141,14 @@ def test_the_review_queue_is_a_filter_of_the_feedback_list(client) -> None:
     both = {"review": "pending", "target_kind": "memory", "target_id": "mem_1"}
     assert client.get("/v1/feedback", headers=admin, params=both).status_code == 422
     assert client.get("/v1/feedback", headers=H).status_code == 422
+
+
+def test_a_naive_instant_is_read_as_utc(client) -> None:
+    body = {"query": "units", "time_from": "2026-01-01T00:00:00", "as_of": "2026-06-01T00:00:00"}
+    assert client.post("/v1/recall", headers=H, json=body).status_code == 200
+    stated = client.post(
+        "/v1/memories",
+        headers=H,
+        json={"content": "Office moves in March.", "valid_from": "2026-03-01T00:00:00"},
+    )
+    assert stated.status_code == 201, stated.text
