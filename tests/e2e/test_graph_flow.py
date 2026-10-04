@@ -106,7 +106,8 @@ def test_graph_query_and_context_facts(client) -> None:
     other = {**H, "X-Trellis-User": "u2"}
     assert client.get(f"/v1/graph/entities/{ebitda['entity_id']}", headers=other).status_code == 404
     assert client.get("/v1/graph/entities", headers=other, params={"q": "adjusted"}).json() == {
-        "entities": []
+        "entities": [],
+        "next_cursor": None,
     }
     deep = client.get(f"/v1/graph/entities/{ebitda['entity_id']}", headers=H, params={"depth": 9})
     assert deep.status_code == 422
