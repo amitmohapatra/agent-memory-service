@@ -83,6 +83,8 @@ the SDK call that makes it.
 
 - [`MILESTONES.md`](MILESTONES.md) — the build log, M0 to M13. Archaeology, not a
   description of the current API.
+- [`history/`](history/README.md) — the dated reports, handoffs and experiment write-ups,
+  indexed. Each describes the code as it was on its date.
 
 **Planned or partly built** — specifications written before the work. Where they disagree
 with the code, the code is right; each carries a status line saying how much is built.

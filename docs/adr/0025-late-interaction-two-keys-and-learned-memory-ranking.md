@@ -2,7 +2,7 @@
 
 Date: 2026-10-01. Status: accepted. Supersedes the `colbert` part of ADR 0012. Decision 3
 (the learned ranking) is superseded by ADR 0026: its coefficients did not transfer between corpora.
-Results: `docs/PHASE11-RESULTS-2026-10-01.md`.
+Results: `docs/history/PHASE11-RESULTS-2026-10-01.md`.
 
 ## Context
 
@@ -80,7 +80,7 @@ SciFact (300 queries, 5,183 abstracts), offline: nDCG@10 0.746 -> 0.759, recall@
 0.872 -> 0.883 with the late arm at 2.0. Rerankers were measured on SciFact too: too slow on
 512-token abstracts, and the multilingual one lowered nDCG.
 
-Through the service: `docs/PHASE11-RESULTS-2026-10-01.md` (LoCoMo, SciFact, XQuAD,
+Through the service: `docs/history/PHASE11-RESULTS-2026-10-01.md` (LoCoMo, SciFact, XQuAD,
 LongMemEval, latency).
 
 ## Consequences
@@ -92,7 +92,7 @@ LongMemEval, latency).
 - **Latency and throughput.** A memory search is the query's three encodes (two dense,
   one late) and one batched round trip to the store; the learned score is arithmetic over
   ~45 candidates. `memory_pool_k` sets the scored head; the coefficients are fitted at its
-  value. Numbers: `docs/PHASE11-RESULTS-2026-10-01.md`.
+  value. Numbers: `docs/history/PHASE11-RESULTS-2026-10-01.md`.
 - **The coefficients are LoCoMo's.** LongMemEval is scored with them unchanged, as the test
   of whether they transfer; a corpus whose questions differ in kind may want a refit, which
   is a script over a feature dump and a constant change.

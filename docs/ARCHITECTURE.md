@@ -240,7 +240,7 @@ Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;
-see [the capability audit](RESEARCH-RAG-2026-09-25.md).
+see [the capability audit](history/RESEARCH-RAG-2026-09-25.md).
 
 ## Caching
 

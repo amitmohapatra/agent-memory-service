@@ -179,7 +179,7 @@ class FrozenModels(BaseModel):
     #: The multilingual encoder: named vector ``dense_ml``, searched for every query.
     #:
     #: Bekko a8m: ModernBERT (Answer.AI/LightOn) + mmBERT (JHU) lineage, a Japanese
-    #: maintainer, MIT. Measured (``docs/CPU-MULTILINGUAL-DECISION-20260928.md``): XQuAD
+    #: maintainer, MIT. Measured (``docs/history/CPU-MULTILINGUAL-DECISION-20260928.md``): XQuAD
     #: paragraph R@10 0.9883 over 12 languages where the English encoder reads 0.6596; fused
     #: with it and BM25, SciFact 0.7557/0.8926 against 0.7409/0.8912 for English + BM25; 1,200
     #: encodes at 20 RPS with p99 108.84 ms. Its larger sibling (a25m) costs a p99 of 1,046 ms
@@ -632,7 +632,7 @@ class RetrievalSettings(BaseModel):
     #: ``None`` is equal weights, which every measurement before the fit was made at.
     #:
     #: Measured over LoCoMo's 1,986 questions against equal weights at the same depth
-    #: (``docs/PHASE9-RESULTS-2026-09-29.md``, item 1): recall@10 +0.0143, multi-hop@10
+    #: (``docs/history/PHASE9-RESULTS-2026-09-29.md``, item 1): recall@10 +0.0143, multi-hop@10
     #: +0.0176, better on 55 questions and worse on 20; all-answerable recall@10/20/50/100
     #: 0.651/0.719/0.813/0.817 -> 0.666/0.730/0.819/0.821, for +7.8 ms p50. An arm missing
     #: from the mapping weighs 1.0, so a single-encoder deployment still fuses correctly.

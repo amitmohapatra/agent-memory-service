@@ -1,7 +1,7 @@
 # The multilingual runtime
 
 How a query in any of twelve scripts is retrieved, how a record is indexed, and how an
-existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `PHASE7-RESULTS-2026-09-28.md`.
+existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `history/PHASE7-RESULTS-2026-09-28.md`.
 
 ## The models
 

@@ -104,7 +104,7 @@ envelope.
   then letters, digits and `._:-`, at most 200 characters) and replaced otherwise, as `X-Request-
   ID` is.
 - Historical documents keep the old names as the record of what they were: ADR 0020, the
-  dated measurement notes (`docs/LATENCY-LAYERS-2026-09.md`, `docs/AUDIT-2026-09-23.md`) and
+  dated measurement notes (`docs/history/LATENCY-LAYERS-2026-09.md`, `docs/history/AUDIT-2026-09-23.md`) and
   the dated benchmark artifacts under `benchmark/results/`.
 - OpenAPI documents the response headers (`components.headers`), the 413 and 429 every
   operation can answer, and a per-operation problem example.
