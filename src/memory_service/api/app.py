@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from starlette.middleware.gzip import GZipMiddleware
 
 from memory_service.__about__ import __version__
+from memory_service.api.deadline import DeadlineMiddleware
 from memory_service.api.errors import install_error_handlers
 from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddleware
 from memory_service.api.openapi import TITLE, custom_openapi, operation_id
@@ -18,6 +19,7 @@ from memory_service.application.container import Container, Overrides, build_con
 from memory_service.config import constants
 from memory_service.config.settings import Settings, get_settings
 from memory_service.observability.logging import configure_logging, get_logger
+from memory_service.observability.metrics import mark_process_dead
 from memory_service.observability.tracing import configure_tracing
 
 log = get_logger(__name__)
@@ -71,6 +73,7 @@ def create_app(
             yield
         finally:
             await app.state.container.close()
+            mark_process_dead()
             log.info("app.stopped")
 
     app = FastAPI(
@@ -90,8 +93,11 @@ def create_app(
     app.state.settings = settings
     # Added innermost first, so the order a request meets them is the reverse: correlation
     # ids wrap everything, the rate limit sits inside them, and compression sits closest to
-    # the route - it acts on what the route produced, not on a 413 or a 429 problem.
+    # the route - it acts on what the route produced, not on a 413 or a 429 problem. The
+    # deadline sits between them: a 429 costs nothing to answer, and the timed part is the
+    # route and its dependencies.
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+    app.add_middleware(DeadlineMiddleware, limits=constants.OVERLOAD)
     app.add_middleware(
         RateLimitMiddleware,
         per_minute=constants.RATE_LIMIT_PER_MINUTE,

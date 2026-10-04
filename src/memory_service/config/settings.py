@@ -25,6 +25,7 @@ Every credential is a ``SecretStr`` and ``Settings.redacted()`` masks all of the
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, ClassVar, Literal, get_args
 
@@ -38,10 +39,39 @@ from memory_service.domain.fiscal import parse_calendar
 # ---------------------------------------------------------------------------
 
 
-#: Worker processes when nothing says otherwise. One process is one GIL, and one GIL does
-#: not serve the target rate; three is what the 8 vCPU target has room for beside two math
-#: threads each.
-_DEFAULT_WORKERS = 3
+#: The most processes (API workers) or concurrent jobs a default ever picks: past eight,
+#: one container's models, pools and caches are better spent on a second container.
+_MAX_DEFAULT_PARALLELISM = 8
+
+
+def available_cpus() -> int:
+    """The CPUs this process may actually run on, not the host's.
+
+    ``os.cpu_count()`` is the host's count inside a container: a pod limited to two CPUs on a
+    64-core node would start eight workers and eight jobs, each with its model threads. The
+    cgroup v2 quota (``cpu.max``) is the limit a container is actually held to, the
+    scheduler affinity the cores it may use; the smallest of what can be read wins.
+    """
+    counts: list[int] = []
+    affinity = getattr(os, "sched_getaffinity", None)
+    if affinity is not None:
+        counts.append(len(affinity(0)))
+    try:
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()[:2]  # noqa: SIM115
+        if quota != "max":
+            counts.append(max(1, -(-int(quota) // int(period))))
+    except (OSError, ValueError):
+        pass
+    if not counts:
+        counts.append(os.cpu_count() or 1)
+    return max(1, min(counts))
+
+
+def default_parallelism() -> int:
+    """``available_cpus()`` clamped to 1-8: the default API worker count and job concurrency
+    when nothing sets them (``WEB_CONCURRENCY``, ``MEMORY__SERVICE__WORKERS``,
+    ``MEMORY__TASKS__WORKER_CONCURRENCY``)."""
+    return max(1, min(_MAX_DEFAULT_PARALLELISM, available_cpus()))
 
 
 def _workers_default() -> int:
@@ -53,15 +83,18 @@ def _workers_default() -> int:
     the two to differ. A value that is not a number at all is ignored rather than fatal
     (an empty ``WEB_CONCURRENCY=`` is a common way for a platform to say "unset"); a number
     outside 1-8 is not ignored, it fails validation below, because silently serving three
-    workers to someone who asked for sixteen is the drift this is meant to remove.
+    workers to someone who asked for sixteen is the drift this is meant to remove. Unset,
+    the machine decides: one worker per available CPU, clamped to 1-8
+    (``default_parallelism``). It was a constant three, sized for the 8 vCPU target, which
+    oversubscribed a two-CPU pod and left most of a sixteen-CPU one idle.
     """
     raw = os.environ.get("WEB_CONCURRENCY")
     if raw is None:
-        return _DEFAULT_WORKERS
+        return default_parallelism()
     try:
         return int(raw)
     except ValueError:
-        return _DEFAULT_WORKERS
+        return default_parallelism()
 
 
 class ServiceSettings(BaseModel):
@@ -82,23 +115,94 @@ class ServiceSettings(BaseModel):
     )
 
 
+#: Connections one process opens when no budget is set: 8+8 for requests, 4+4 for the
+#: graph traversal, 4 for the task queue - what the pools were before the budget existed.
+_CONNECTIONS_PER_PROCESS = 28
+
+
+@dataclass(frozen=True)
+class PoolPlan:
+    """One process's share of the pod's connection budget, per pool (``pool_plan``)."""
+
+    #: the request pool through ``url``: SQLAlchemy ``pool_size`` + ``max_overflow``
+    main_size: int
+    main_overflow: int
+    #: the graph traversal's budgeted pool through ``direct_url``
+    graph_size: int
+    graph_overflow: int
+    #: Procrastinate's psycopg pool through ``direct_url`` (max; min is 1)
+    queue_max: int
+
+    @property
+    def total(self) -> int:
+        return (
+            self.main_size + self.main_overflow + self.graph_size + self.graph_overflow
+        ) + self.queue_max
+
+
 class DatabaseSettings(BaseModel):
-    #: Per *process*, not per service: with three API workers and a worker container the
-    #: pools add up, so 8+8 each (plus the graph traversal's own 4+4,
-    #: ``GraphSettings.budgeted_pool_*``) keeps the total inside a default max_connections
-    #: while leaving every request the two or three checkouts it takes.
+    """Where PostgreSQL is, and how many connections a pod may hold to it.
+
+    ``url`` is the request path's connection and may be a transaction-mode pooler
+    (PgBouncer ``pool_mode=transaction``; set ``transaction_pooler``). ``direct_url`` is for
+    the work that needs a session of its own - Procrastinate's LISTEN/NOTIFY and its job
+    locks, and the graph traversal's session ``statement_timeout`` and prepared plan - and
+    defaults to ``url``. See docs/deploy/database.md.
+    """
+
     url: SecretStr = SecretStr("postgresql+psycopg://memory:memory@localhost:5432/memory")
-    pool_size: int = 8
-    max_overflow: int = 8
+    direct_url: SecretStr | None = None
+    #: ``url`` is a transaction-mode pooler: no server-side prepared statements, and no
+    #: session parameters in the startup packet (the pooler sets ``statement_timeout`` on its
+    #: server connections, ``connect_query`` in deploy/pgbouncer/pgbouncer.ini).
+    transaction_pooler: bool = False
+    #: Connections one pod (container) may open to PostgreSQL or to the pooler, across all
+    #: its processes and all their pools. Each process takes ``budget // processes`` and
+    #: splits it 4:2:1 between the request pool, the graph traversal and the task queue
+    #: (``pool_plan``). Unset: 28 per process, the sizes the pools had before.
+    connection_budget: int | None = Field(default=None, ge=6)
 
     @property
     def dsn(self) -> str:
         return self.url.get_secret_value()
 
     @property
+    def direct_dsn(self) -> str:
+        """The session-capable connection (``direct_url``, else ``url``)."""
+        return (self.direct_url or self.url).get_secret_value()
+
+    def pool_plan(self, processes: int) -> PoolPlan:
+        """One process's pools, from the pod's budget::
+
+            per_process = connection_budget // processes      (unset: 28)
+            queue       = max(2, per_process // 7)
+            graph       = max(2, 2 * per_process // 7)        split ceil(g/2) + floor(g/2)
+            main        = max(2, per_process - graph - queue) split ceil(m/2) + floor(m/2)
+
+        A pool's overflow is the burst it may open past its steady size and closes again;
+        the budget counts both, because a burst is when the budget matters.
+        """
+        processes = max(1, processes)
+        if self.connection_budget is None:
+            per_process = _CONNECTIONS_PER_PROCESS
+        else:
+            per_process = max(6, self.connection_budget // processes)
+        queue = max(2, per_process // 7)
+        graph = max(2, 2 * per_process // 7)
+        main = max(2, per_process - graph - queue)
+        return PoolPlan(
+            main_size=-(-main // 2),
+            main_overflow=main // 2,
+            graph_size=-(-graph // 2),
+            graph_overflow=graph // 2,
+            queue_max=queue,
+        )
+
+    @property
     def sync_url(self) -> str:
-        """SQLAlchemy URL for sync use (Alembic). psycopg3 serves both sync and async."""
-        url = self.dsn
+        """SQLAlchemy URL for sync use (Alembic). psycopg3 serves both sync and async.
+        Migrations take locks and set session parameters, so they go direct."""
+        url = self.direct_dsn
         if "+psycopg" in url:
             return url
         if "+" not in url.split("://", 1)[0]:
@@ -107,8 +211,9 @@ class DatabaseSettings(BaseModel):
 
     @property
     def procrastinate_dsn(self) -> str:
-        """Plain libpq DSN for Procrastinate's psycopg connector."""
-        return self.dsn.replace("postgresql+psycopg://", "postgresql://", 1)
+        """Plain libpq DSN for Procrastinate's psycopg connector: always the session-capable
+        connection, since its worker LISTENs and holds locks across statements."""
+        return self.direct_dsn.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
 class CacheSettings(BaseModel):
@@ -120,7 +225,10 @@ class CacheSettings(BaseModel):
 class TaskSettings(BaseModel):
     """Procrastinate on the application database."""
 
-    worker_concurrency: int = Field(default=4, ge=1, le=8)
+    #: jobs one worker process runs at once; unset, one per available CPU clamped to 1-8
+    worker_concurrency: int = Field(default_factory=default_parallelism, ge=1, le=8)
+    #: where the worker serves its Prometheus metrics and healthcheck (``None``: not at all)
+    metrics_port: int | None = Field(default=9464, ge=1, le=65535)
 
 
 AuthenticationMode = Literal["trusted_dev", "jwt", "api_key"]
@@ -290,7 +398,8 @@ class Settings(BaseSettings):
     )
     database: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
-    tasks: TaskSettings = TaskSettings()
+    #: built per Settings() too: the job concurrency's default reads the machine
+    tasks: TaskSettings = Field(default_factory=TaskSettings)
     authentication: AuthenticationSettings = AuthenticationSettings()
     authorization: AuthorizationSettings = AuthorizationSettings()
     blob: BlobSettings = BlobSettings()

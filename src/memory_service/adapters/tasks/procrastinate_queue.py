@@ -10,9 +10,10 @@ from typing import Any
 import procrastinate
 from procrastinate import exceptions as pexc
 
+from memory_service.config.constants import DATABASE
 from memory_service.domain.enums import JobStatus
 from memory_service.observability.logging import get_logger
-from memory_service.observability.metrics import jobs_total
+from memory_service.observability.metrics import jobs_total, worker_running_jobs
 from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
 from memory_service.ports.tasks import QUEUE_PRIORITY, JobInfo, JobSpec, Queue, TaskHandler
@@ -56,13 +57,32 @@ class ProcrastinateTaskQueue:
     info = INFO
 
     def __init__(
-        self, dsn: str, *, default_retries: int = 5, job_timeout_seconds: int = 600
+        self,
+        dsn: str,
+        *,
+        default_retries: int = 5,
+        job_timeout_seconds: int = 600,
+        max_size: int = 4,
     ) -> None:
+        """``dsn`` must reach PostgreSQL with a session of its own (``direct_url``): the
+        worker LISTENs for new jobs on a connection it keeps, which a transaction-mode
+        pooler would hand to someone else between statements.
+
+        The pool is sized from the pod's connection budget and bounded in time like the
+        request pool: Procrastinate's default had no statement timeout and no connect
+        timeout, so a stalled server held a job fetch, and the worker's slot, forever."""
         self.app = procrastinate.App(
             connector=procrastinate.PsycopgConnector(
                 conninfo=dsn,
                 json_dumps=lambda v: json.dumps(v, default=str),
                 json_loads=json.loads,
+                min_size=1,
+                max_size=max(2, max_size),
+                timeout=DATABASE.pool_timeout_seconds,
+                kwargs={
+                    "options": f"-c statement_timeout={DATABASE.statement_timeout_ms}",
+                    "connect_timeout": DATABASE.connect_timeout_seconds,
+                },
             )
         )
         self.default_retries = default_retries
@@ -111,11 +131,14 @@ class ProcrastinateTaskQueue:
         async def _run(context: procrastinate.JobContext, **payload: Any) -> Any:
             attempt = context.job.attempts if context.job else 0
             with span("job.run", task=name, queue=queue.value, attempt=attempt):
+                worker_running_jobs.inc()
                 try:
                     result = await asyncio.wait_for(handler(payload), timeout=timeout)
                 except Exception:
                     jobs_total.labels(name, "failed").inc()
                     raise
+                finally:
+                    worker_running_jobs.dec()
                 jobs_total.labels(name, "succeeded").inc()
                 return result
 
@@ -189,17 +212,33 @@ class ProcrastinateTaskQueue:
         return None
 
     async def run_worker(
-        self, queues: list[Queue] | None = None, *, concurrency: int = 4, wait: bool = True
+        self,
+        queues: list[Queue] | None = None,
+        *,
+        concurrency: int = 4,
+        wait: bool = True,
+        install_signal_handlers: bool = False,
+        shutdown_grace_seconds: float | None = None,
     ) -> None:
+        """Run jobs until stopped (or, ``wait=False``, until the queues are empty).
+
+        ``install_signal_handlers`` is for the worker process alone (``memory_service.worker``):
+        SIGTERM/SIGINT then stop the fetch loop and wait up to ``shutdown_grace_seconds`` for
+        running jobs, after which Procrastinate aborts them with ``AbortReason.SHUTDOWN`` and
+        puts them back to be retried. Tests and drains run it inside a loop they own, where a
+        handler on SIGINT would take Ctrl-C away from the test runner.
+        """
         await self.open()
         options: dict[str, Any] = {}
         if queues:
             options["queues"] = [q.value for q in queues]
+        if shutdown_grace_seconds is not None:
+            options["shutdown_graceful_timeout"] = shutdown_grace_seconds
         await self.app.run_worker_async(
             **options,
             concurrency=concurrency,
             wait=wait,
-            install_signal_handlers=False,
+            install_signal_handlers=install_signal_handlers,
             fetch_job_polling_interval=2.0,
         )
 

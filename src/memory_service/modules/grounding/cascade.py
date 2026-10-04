@@ -14,21 +14,25 @@ but the bundle did not pack are reported as ``contradicted``.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from memory_service.config.constants import NLISettings
+from memory_service.config.constants import LLM, NLISettings
 from memory_service.domain.context_bundle import ContextBundle
 from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK
 from memory_service.modules.context.handles import BundleRecord, record_of
 from memory_service.modules.grounding.lexical import content_tokens, coverage, words
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import grounding_claims_total, stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.models import NLIProvider, NLIScore
+
+log = get_logger(__name__)
 
 _CLAUSE_SPLIT = re.compile(r";\s+|,\s+(?:and|but|while|whereas)\s+", re.IGNORECASE)
 _BRACKET_CITE = re.compile(r"\s*\[([^\[\]]{1,120})\]")
@@ -282,8 +286,12 @@ class GroundingCascade:
             settled: list[ClaimReport | None] = [
                 decided if isinstance(decided, ClaimReport) else None for decided in prepared
             ]
+            # one judge budget for the whole answer (``LLM.judge_deadline_seconds``)
+            judge_until = asyncio.get_running_loop().time() + LLM.judge_deadline_seconds
             for (index, (premises, cited, notes)), scores in zip(pending, scored, strict=True):
-                settled[index] = await self._decide(claims[index], premises, cited, notes, scores)
+                settled[index] = await self._decide(
+                    claims[index], premises, cited, notes, scores, judge_until=judge_until
+                )
 
             reports: list[ClaimReport] = []
             judged = 0
@@ -385,8 +393,11 @@ class GroundingCascade:
         cited: bool,
         notes: list[str],
         scores: list[NLIScore],
+        *,
+        judge_until: float | None = None,
     ) -> ClaimReport:
-        """The verdict for one claim, given its scores. The only await is the judge."""
+        """The verdict for one claim, given its scores. The only await is the judge, which
+        is asked only while ``judge_until`` (the loop's clock) has not passed."""
         # On equal support, cite the primary source. A graph fact derived from a chunk renders
         # as the same sentence and ties with it, but only the chunk carries a document, page and
         # offsets the reader can check, so it is the more useful citation.
@@ -422,7 +433,7 @@ class GroundingCascade:
                 notes.append("cited evidence does not support the claim")
         elif low <= support <= high:
             verdict = "borderline"
-            decision = await self._judge(claim.text, premises)
+            decision = await self._judge(claim.text, premises, until=judge_until)
             if decision is None:
                 notes.append("entailment in the borderline band; no judge decision")
             else:
@@ -453,20 +464,31 @@ class GroundingCascade:
             e for cov, _, e in ranked if e.text.strip() and (cov > 0.0 or self.nli.representative)
         ][: self.cfg.premises_per_claim]
 
-    async def _judge(self, claim: str, premises: Sequence[Evidence]) -> dict[str, Any] | None:
+    async def _judge(
+        self, claim: str, premises: Sequence[Evidence], *, until: float | None = None
+    ) -> dict[str, Any] | None:
         if not self.assist.wants("grounding_judge"):
+            return None
+        remaining = None if until is None else until - asyncio.get_running_loop().time()
+        if remaining is not None and remaining <= 0:
             return None
         passages = "\n".join(
             f"[{i + 1}] {' '.join(e.text.split())[:_JUDGE_PASSAGE_CHARS]}"
             for i, e in enumerate(premises)
         )
-        out = await self.assist.structured(
-            "grounding_judge",
-            system=_JUDGE_SYSTEM,
-            user=f"Claim: {claim}\n\nEvidence:\n{passages}",
-            schema=_JUDGE_SCHEMA,
-            max_tokens=200,
-        )
+        try:
+            async with asyncio.timeout(remaining):
+                out = await self.assist.structured(
+                    "grounding_judge",
+                    system=_JUDGE_SYSTEM,
+                    user=f"Claim: {claim}\n\nEvidence:\n{passages}",
+                    schema=_JUDGE_SCHEMA,
+                    max_tokens=200,
+                )
+        except TimeoutError:
+            # the claim stays borderline, which is what it is without a judge
+            log.warning("grounding.judge_deadline_exceeded", budget=LLM.judge_deadline_seconds)
+            return None
         if out is None:
             return None
         return {"supported": bool(out["supported"]), "reason": str(out.get("reason", ""))[:300]}

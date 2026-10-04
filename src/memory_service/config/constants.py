@@ -338,6 +338,50 @@ TASKS = TaskTuning()
 
 
 @dataclass(frozen=True)
+class OverloadTuning:
+    """How much work one process accepts before it refuses quickly instead of queueing
+    without bound (ADR 0031). A refusal is a retryable problem - 503 when there is no room,
+    504 when a request ran past its deadline - so a caller backs off instead of piling on,
+    and a slow dependency cannot hold every connection of the pod.
+
+    Constants, not settings, by the rule at the top of this file: they shape the product's
+    behaviour under load, and an operator who needs different ones has a capacity problem
+    that a number in an env file would hide.
+    """
+
+    #: Request deadlines per route class (``api/deadline.py``): a read (GET, /v1/context,
+    #: /v1/recall, /v1/tools/hints) answers within this or gets a 504 problem.
+    read_deadline_seconds: float = 5.0
+    #: everything that writes: the write itself plus the outbox, under one transaction
+    write_deadline_seconds: float = 15.0
+    #: /v1/verify: NLI over up to 40 claims, then the judge inside its own, shorter deadline
+    #: (``LLM.judge_deadline_seconds``)
+    verify_deadline_seconds: float = 15.0
+    #: Callers allowed to wait for one in-process model (``SerialRunner``) beside the one
+    #: inside it. Past this a caller fails at once with 503 rather than queueing: at ~40 ms
+    #: an encode, 32 waiters is already over a second of queue in front of the next one.
+    model_queue_max_waiters: int = 32
+    #: uvicorn ``limit_concurrency`` per worker process: connections plus in-flight tasks
+    #: past which uvicorn answers 503 itself, before any application code runs
+    limit_concurrency: int = 128
+    #: the listen backlog (uvicorn ``backlog``): connections the kernel queues for accept
+    backlog: int = 2048
+    #: On SIGTERM/SIGINT the job worker stops fetching and gives running jobs this long to
+    #: finish; whatever is still running is then aborted and released for a retry. Under
+    #: compose's ``stop_grace_period`` for the worker (45 s).
+    worker_shutdown_grace_seconds: float = 30.0
+    #: How long a readiness answer is reused (``Container.readiness``): a probe every second
+    #: from each of several orchestrator components must not become a ping per dependency
+    #: per second.
+    readiness_cache_seconds: float = 3.0
+    #: one dependency ping's budget inside a readiness probe
+    readiness_ping_timeout_seconds: float = 2.0
+
+
+OVERLOAD = OverloadTuning()
+
+
+@dataclass(frozen=True)
 class AuthorizationTuning:
     max_listed_objects: int = 2000
     decision_cache: bool = True
@@ -390,6 +434,12 @@ class LLMTuning:
     timeout_seconds: float = 30.0
     #: retries on 429/5xx/timeouts; the sleeps sit outside the request timeout
     max_retries: int = 2
+    #: The verified-context judge's budget, for all the claims of one /v1/verify together.
+    #: It was bounded only by the call's own ``timeout_seconds`` times ``max_retries + 1``
+    #: per claim - minutes for one answer. Past this the claims still undecided stay
+    #: ``borderline``, which is what they are without a judge; it sits inside
+    #: ``OVERLOAD.verify_deadline_seconds`` so the request answers rather than timing out.
+    judge_deadline_seconds: float = 8.0
 
 
 LLM = LLMTuning()

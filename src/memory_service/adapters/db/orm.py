@@ -630,6 +630,16 @@ class MemoryRow(Base):
         ),
         Index("ix_memories_tenant_hash", "tenant_id", "normalized_hash"),
         Index("ix_memories_tenant_scope", "tenant_id", "scope_key", "temporal_status"),
+        # consolidation's candidate read (``candidates``): a scope's live rows, newest first,
+        # one index range in the order the LIMIT wants (migration 0023)
+        Index(
+            "ix_memories_scope_candidates",
+            "tenant_id",
+            "scope_key",
+            "temporal_status",
+            text("updated_at DESC"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),

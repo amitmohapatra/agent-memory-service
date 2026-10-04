@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from memory_service.adapters.models._runner import configure_runners
 from memory_service.application.container import Dependency
 from memory_service.config import constants
 from memory_service.config.constants import FROZEN_MODELS
@@ -31,6 +32,7 @@ async def wire_all(container: Container) -> None:
         llm_enabled=settings.llm.enabled,
         stand_ins=container.overrides.summary(),
     )
+    configure_runners(max_waiters=constants.OVERLOAD.model_queue_max_waiters)
     await _wire_cache(container)
     await _wire_database(container)
     await _wire_tasks(container)
@@ -90,7 +92,9 @@ async def _wire_cache(container: Container) -> None:
 async def _wire_database(container: Container) -> None:
     from memory_service.adapters.db.engine import Database
 
-    db = Database(container.settings.database)
+    plan = container.settings.database.pool_plan(container.processes)
+    db = Database(container.settings.database, plan)
+    log.info("database.pools", processes=container.processes, per_process=plan.total)
     container.database = db
     container.add_dependency(
         Dependency(name="postgres", mandatory=True, ping=db.ping, close=db.close)
@@ -114,10 +118,11 @@ async def _wire_tasks(container: Container) -> None:
             container.settings.database.procrastinate_dsn,
             default_retries=constants.TASKS.default_retries,
             job_timeout_seconds=constants.TASKS.job_timeout_seconds,
+            max_size=container.settings.database.pool_plan(container.processes).queue_max,
         )
         container.tasks = queue
         container.add_dependency(
-            Dependency(name="task_queue", mandatory=True, ping=queue.ping, close=queue.close)
+            Dependency(name="task_queue", mandatory=False, ping=queue.ping, close=queue.close)
         )
 
 
@@ -143,7 +148,7 @@ async def _wire_authorization(container: Container) -> None:
 
         provider = OpenFGAAuthorizationProvider(container.settings.authorization)
         container.add_dependency(
-            Dependency(name="openfga", mandatory=True, ping=provider.ping, close=provider.close)
+            Dependency(name="openfga", mandatory=False, ping=provider.ping, close=provider.close)
         )
     container.authorization = provider
 
@@ -234,12 +239,12 @@ async def _wire_blob(container: Container) -> None:
         from memory_service.adapters.blob.gcs import GCSBlobStore
 
         store = GCSBlobStore(cfg)
-        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+        container.add_dependency(Dependency(name="blob", mandatory=False, ping=store.ping))
     else:
         from memory_service.adapters.blob.filesystem import FilesystemBlobStore
 
         store = FilesystemBlobStore(cfg.filesystem_root)
-        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+        container.add_dependency(Dependency(name="blob", mandatory=False, ping=store.ping))
     container.blob = store
 
 
@@ -295,7 +300,7 @@ async def _wire_search(container: Container) -> None:
     container.search = store
     if local is None:
         container.add_dependency(
-            Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
+            Dependency(name="qdrant", mandatory=False, ping=store.ping, close=store.close)
         )
 
 
@@ -596,8 +601,13 @@ def _wire_graph(container: Container) -> None:
     else:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
+        database = container.settings.database
+        plan = database.pool_plan(container.processes)
         store = PostgresGraphStore(
-            container.database.engine, budget_ms=container.tuning.graph.prefetch_budget_ms
+            container.database.engine,
+            budget_ms=container.tuning.graph.prefetch_budget_ms,
+            budgeted_url=database.direct_dsn,
+            budgeted_pool=(plan.graph_size, plan.graph_overflow),
         )
         container.graph_store = store
         container.add_closer("graph_store", store.close)

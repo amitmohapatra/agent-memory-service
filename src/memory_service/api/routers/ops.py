@@ -28,8 +28,10 @@ class DependencyStatus(BaseModel):
 class ReadyResponse(BaseModel):
     status: Literal["ready", "degraded", "not_ready"] = Field(
         ...,
-        description="ready: every dependency answered; degraded: an optional provider is "
-        "down (served with 200); not_ready: a mandatory store is down (served with 503).",
+        description="ready: every dependency answered; degraded: a dependency other than "
+        "PostgreSQL is down - search, authorization, blob store, task queue, cache - "
+        "(served with 200: the routes that need it answer 503 themselves); not_ready: "
+        "PostgreSQL is down or the process is shutting down (served with 503).",
         examples=["ready"],
     )
     dependencies: dict[str, DependencyStatus] = Field(
@@ -83,7 +85,10 @@ async def live() -> LiveResponse:
     response_model=ReadyResponse,
     summary="Readiness probe",
     description=(
-        "Verifies mandatory backing stores. Optional providers never fail readiness when disabled."
+        "PostgreSQL and the process decide readiness; every other dependency is reported "
+        "(``degraded``) without failing it. Answers are reused for a few seconds, so a "
+        "probe does not ping every store on every call. Liveness (/health/live) checks "
+        "nothing outside the process."
     ),
     responses={
         503: {
