@@ -636,6 +636,26 @@ async def test_remember_states_a_memory_and_update_supersedes_it(client: MemoryC
 
 
 @respx.mock
+async def test_the_same_words_for_two_users_are_two_writes(client: MemoryClient) -> None:
+    """The default idempotency key names who the write is for: the same content remembered for
+    two users (or agents) of one tenant is two writes, never a replay of the first with a
+    different payload (the service answers that 409)."""
+    remember = respx.post("http://memory.test/v1/memories").respond(
+        201, json={"memory_id": "mem_1", "deduplicated": False, "job_ids": []}
+    )
+    keys = set()
+    for scope in (
+        {"user_id": "ann"},
+        {"user_id": "bob"},
+        {"user_id": "ann", "agent_id": "planner"},
+        {"user_id": "ann", "workspace_id": "ws2"},
+    ):
+        await client.bind(tenant_id="acme", **scope).remember("Prefers metric units.")
+        keys.add(remember.calls.last.request.headers["Idempotency-Key"])
+    assert len(keys) == 4
+
+
+@respx.mock
 async def test_a_message_without_a_turn_is_not_deduplicated_by_content(
     client: MemoryClient,
 ) -> None:
