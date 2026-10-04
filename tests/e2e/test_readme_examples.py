@@ -1,4 +1,4 @@
-"""The README's examples, executed.
+"""The READMEs' examples (this one's and sdk/python/README.md's), executed.
 
 A README that drifts from the API is worse than no README, so every snippet a reader is
 invited to copy runs here against the real service. If you change the SDK surface and this
@@ -143,3 +143,23 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
     after = await run.tool_hints(TASK, available=[t["name"] for t in TOOLS])
     assert after.next is not None and after.next.name == "crm.update_quote"
     assert after.next.args["quote_id"] == "Q-77"
+
+
+async def test_sdk_readme_one_turn_on_its_own(app, client) -> None:
+    """sdk/python/README.md: Use it on its own — context into the prompt, the turn recorded,
+    feedback on the run, with no framework and no harness."""
+    memory = sdk_client(app)
+    run = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1").agent("support")
+    question = "What changed in EBITDA?"
+
+    pushed = await run.context(question, window=False)
+    assert pushed.rendered and pushed.bundle_id
+    answer = f"Answered from {pushed.token_estimate} tokens of context"
+    await run.history.add([("USER", question), ("ASSISTANT", answer)])
+    assert [(m.role, m.content) for m in await run.history()][-2:] == [
+        ("USER", question),
+        ("ASSISTANT", answer),
+    ]
+
+    verdict = await run.feedback("run", run.scope.agent_run_id, "confirm")
+    assert verdict.target_kind == "run" and verdict.target_id == run.scope.agent_run_id

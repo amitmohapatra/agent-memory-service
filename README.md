@@ -582,7 +582,8 @@ contradictions.
 
 The SDK is framework-neutral, and deliberately so: bind a scope, call `context()` before
 your agent thinks and `history.add([("ASSISTANT", answer)])` after, and everything in this README works from
-LangGraph, CrewAI, Google ADK, an MCP server or plain code.
+LangGraph, CrewAI, Google ADK, an MCP server or plain code. The
+[SDK README](sdk/python/README.md#use-it-on-its-own-or-with-the-harness) shows one turn.
 
 There is no LangGraph adapter in this repository, and that is the design. A memory service
 that ships adapters knows the names of its consumers — the dependency points the wrong way,
