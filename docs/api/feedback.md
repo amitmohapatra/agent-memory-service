@@ -52,7 +52,9 @@ The projection is a separate, later fact, which is why `GET` is worth doing: a `
 before the projector runs, so the record you get back has `projection: null`.
 
 An answer's `evidence_refs` name what it cited (`{"source_type": "memory", "source_id":
-"mem_…"}`); each must be a memory the reviewer may read, or the `POST` is refused. Memory
+"mem_…"}`; `source_type` is one of the service's evidence sources: `memory`, `message`, `file`,
+`document_chunk`, `agent_result`, `tool_result`, `import`, `observation`, `statement`,
+`graph_fact`, `summary`, `episode`, `feedback`); each must be a memory the reviewer may read, or the `POST` is refused. Memory
 standing — confidence and reinforcement — is part of the retrieval ranking: a bounded factor
 (at most ±15%) on the fused score, so it reorders near-ties and never outweighs relevance.
 

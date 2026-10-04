@@ -8,8 +8,47 @@ it was derived from. OpenLineage tracks *processing* lineage and OpenTelemetry t
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class EvidenceSource(StrEnum):
+    """What kind of object a piece of evidence points at - every value the service writes."""
+
+    #: a conversation message (``message_id``)
+    MESSAGE = "message"
+    #: an uploaded file before it was parsed into chunks
+    FILE = "file"
+    #: a passage of a parsed document (``document_id``, ``chunk_id``, ``page``)
+    DOCUMENT_CHUNK = "document_chunk"
+    #: what an agent run reported as its result
+    AGENT_RESULT = "agent_result"
+    #: what a tool call returned (``tool_run_id`` / the invocation)
+    TOOL_RESULT = "tool_result"
+    #: a record imported from another system
+    IMPORT = "import"
+    #: an observation of another kind (a decision, an event)
+    OBSERVATION = "observation"
+    #: a principal's own statement, stored verbatim (``POST /v1/memories``)
+    STATEMENT = "statement"
+    #: another memory this one was derived from (a consolidation, a derived slot)
+    MEMORY = "memory"
+    #: a fact of the knowledge graph
+    GRAPH_FACT = "graph_fact"
+    #: a document or thread summary
+    SUMMARY = "summary"
+    #: an earlier conversation of the user (one per thread)
+    EPISODE = "episode"
+    #: a feedback record that corrected or confirmed the memory
+    FEEDBACK = "feedback"
+
+
+EVIDENCE_SOURCE_DESCRIPTION = (
+    "What the evidence points at: message, file, document_chunk, agent_result, tool_result, "
+    "import, observation, statement (a principal's own words), memory (the memory it was "
+    "derived from), graph_fact, summary, episode or feedback."
+)
 
 
 class EvidenceRef(BaseModel):
@@ -17,10 +56,7 @@ class EvidenceRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    source_type: str = Field(
-        default=...,
-        description="message | file | document_chunk | agent_result | tool_result | import",
-    )
+    source_type: EvidenceSource = Field(default=..., description=EVIDENCE_SOURCE_DESCRIPTION)
     source_id: str = Field(..., description="Primary identifier of the source object.")
     message_id: str | None = None
     document_id: str | None = None

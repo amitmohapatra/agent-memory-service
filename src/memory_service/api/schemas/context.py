@@ -8,11 +8,11 @@ are the contract the SDK relies on, so nothing extra is allowed through.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_service.domain.enums import EvidenceStatus
+from memory_service.domain.enums import EvidenceStatus, MessageRole
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
 
 _CLAIM_EXAMPLE: dict[str, Any] = {
@@ -177,7 +177,11 @@ class ContextPassage(BaseModel):
     id: str
     text: str
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
-    kind: str | None = Field(default=None, description="table, paragraph, ...; absent: a chunk")
+    kind: Literal["relation", "memory"] | None = Field(
+        default=None,
+        description="Absent for a document passage (a chunk); relation or memory for a fact or "
+        "memory carried in as a passage's required companion.",
+    )
     document_id: str | None = None
     page: int | None = None
     section: str | None = Field(default=None, description="e.g. 'Financial Results > EBITDA'")
@@ -209,7 +213,10 @@ class WindowMessageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    role: str
+    role: MessageRole = Field(
+        description="Who said it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT (something "
+        "that happened, told to the service)."
+    )
     text: str
 
 

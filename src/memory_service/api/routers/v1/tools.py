@@ -37,10 +37,11 @@ from memory_service.domain.learning import (
     Suggestion,
 )
 from memory_service.domain.tools import (
-    SOURCE_MAX_CHARS,
+    TOOL_SOURCE_DESCRIPTION,
     SideEffects,
     ToolAnnotations,
     ToolDescriptor,
+    ToolSource,
     ToolStats,
     ToolStatus,
 )
@@ -154,7 +155,7 @@ class CatalogEntry(BaseModel):
         description="read (changes nothing), write (changes what can be changed back), "
         "irreversible (cannot be undone); omitted when unknown",
     )
-    source: str = Field(default="manual", max_length=SOURCE_MAX_CHARS)
+    source: ToolSource = Field(default="manual", description=TOOL_SOURCE_DESCRIPTION)
     server: str | None = Field(default=None, max_length=200)
     examples: list[ToolJson] = Field(default_factory=list, max_length=20)
     redact: list[str] = Field(
@@ -265,7 +266,7 @@ class CatalogTool(BaseModel):
     required: list[str]
     argument_entity_types: dict[str, str]
     side_effects: SideEffects | None
-    source: str
+    source: ToolSource = Field(description=TOOL_SOURCE_DESCRIPTION)
     server: str | None
     examples: list[dict[str, Any]]
     annotations: dict[str, bool] = Field(

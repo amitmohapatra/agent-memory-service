@@ -105,7 +105,7 @@ def test_temporal_state_validity_window() -> None:
 
 def test_evidence_citation_key_prefers_most_specific() -> None:
     e = EvidenceRef(
-        source_type="chunk",
+        source_type="document_chunk",
         source_id="s",
         document_id="doc_1",
         chunk_id="chk_1",
@@ -133,3 +133,16 @@ def test_an_id_with_a_trailing_newline_is_not_an_id() -> None:
 
     assert is_valid_id("thr_1") and not is_valid_id("thr_1\n")
     assert is_valid_tenant_id("acme") and not is_valid_tenant_id("acme\n")
+
+
+def test_evidence_names_one_of_the_sources_the_service_writes() -> None:
+    """``source_type`` is an enum: the documented set is the set the code writes."""
+    import pydantic
+
+    from memory_service.domain.evidence import EvidenceSource
+
+    now = datetime.now(UTC)
+    for source in EvidenceSource:
+        assert EvidenceRef(source_type=source, source_id="x", observed_at=now).source_type == source
+    with pytest.raises(pydantic.ValidationError):
+        EvidenceRef(source_type="chunk", source_id="x", observed_at=now)  # type: ignore[arg-type]

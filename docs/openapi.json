@@ -692,7 +692,15 @@
           },
           "source": {
             "default": "manual",
-            "maxLength": 50,
+            "description": "Where the tool comes from: manual (written through this API, the default), local (a function of the harness), mcp (an MCP server, named in server), memory (this service's own agent tools), openapi (an OpenAPI operation) or a2a (another agent).",
+            "enum": [
+              "manual",
+              "local",
+              "mcp",
+              "memory",
+              "openapi",
+              "a2a"
+            ],
             "title": "Source",
             "type": "string"
           }
@@ -898,6 +906,15 @@
             "title": "Side Effects"
           },
           "source": {
+            "description": "Where the tool comes from: manual (written through this API, the default), local (a function of the harness), mcp (an MCP server, named in server), memory (this service's own agent tools), openapi (an OpenAPI operation) or a2a (another agent).",
+            "enum": [
+              "manual",
+              "local",
+              "mcp",
+              "memory",
+              "openapi",
+              "a2a"
+            ],
             "title": "Source",
             "type": "string"
           },
@@ -1229,13 +1246,17 @@
           "kind": {
             "anyOf": [
               {
+                "enum": [
+                  "relation",
+                  "memory"
+                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "table, paragraph, ...; absent: a chunk",
+            "description": "Absent for a document passage (a chunk); relation or memory for a fact or memory carried in as a passage's required companion.",
             "title": "Kind"
           },
           "page": {
@@ -2329,9 +2350,8 @@
             "type": "string"
           },
           "source_type": {
-            "description": "message | file | document_chunk | agent_result | tool_result | import",
-            "title": "Source Type",
-            "type": "string"
+            "$ref": "#/components/schemas/EvidenceSource",
+            "description": "What the evidence points at: message, file, document_chunk, agent_result, tool_result, import, observation, statement (a principal's own words), memory (the memory it was derived from), graph_fact, summary, episode or feedback."
           },
           "span_end": {
             "anyOf": [
@@ -2375,6 +2395,26 @@
         ],
         "title": "EvidenceRef",
         "type": "object"
+      },
+      "EvidenceSource": {
+        "description": "What kind of object a piece of evidence points at - every value the service writes.",
+        "enum": [
+          "message",
+          "file",
+          "document_chunk",
+          "agent_result",
+          "tool_result",
+          "import",
+          "observation",
+          "statement",
+          "memory",
+          "graph_fact",
+          "summary",
+          "episode",
+          "feedback"
+        ],
+        "title": "EvidenceSource",
+        "type": "string"
       },
       "EvidenceStatus": {
         "enum": [
@@ -2591,10 +2631,9 @@
             "type": "string"
           },
           "source_type": {
+            "$ref": "#/components/schemas/EvidenceSource",
             "default": "memory",
-            "maxLength": 50,
-            "title": "Source Type",
-            "type": "string"
+            "description": "What the evidence points at: message, file, document_chunk, agent_result, tool_result, import, observation, statement (a principal's own words), memory (the memory it was derived from), graph_fact, summary, episode or feedback."
           }
         },
         "required": [
@@ -3520,8 +3559,15 @@
             "title": "Last Error"
           },
           "queue": {
-            "title": "Queue",
-            "type": "string"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Queue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The work queue that runs it (chat-fast, memory-extract, embedding, document-parse, graph, summary, archive, evaluation, import, reconcile); null when the queue no longer knows the job."
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus",
@@ -3585,7 +3631,14 @@
             "type": "string"
           },
           "role": {
-            "description": "platform, admin, service, trusted_dev or jwt",
+            "description": "What the key is: platform (the bootstrap secret), admin or service (a key this service issued), trusted_dev (a development key) or jwt (an issuer's token)",
+            "enum": [
+              "platform",
+              "admin",
+              "service",
+              "trusted_dev",
+              "jwt"
+            ],
             "title": "Role",
             "type": "string"
           },
@@ -3626,6 +3679,8 @@
       "LiveResponse": {
         "properties": {
           "status": {
+            "const": "ok",
+            "description": "Always ok: the process answers (it checks no dependency).",
             "examples": [
               "ok"
             ],
@@ -4852,6 +4907,22 @@
         "title": "QueryType",
         "type": "string"
       },
+      "Queue": {
+        "enum": [
+          "chat-fast",
+          "memory-extract",
+          "embedding",
+          "document-parse",
+          "graph",
+          "summary",
+          "archive",
+          "evaluation",
+          "import",
+          "reconcile"
+        ],
+        "title": "Queue",
+        "type": "string"
+      },
       "ReadAuditResponse": {
         "properties": {
           "at": {
@@ -5680,7 +5751,14 @@
             "type": "string"
           },
           "kind": {
-            "description": "memory, chunk, summary, episode or message",
+            "description": "What the item is: memory (something learned or stated), chunk (a document passage), summary (a document summary), episode (an earlier conversation of this user) or message (this thread's history).",
+            "enum": [
+              "memory",
+              "chunk",
+              "summary",
+              "episode",
+              "message"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -6484,6 +6562,21 @@
             "type": "integer"
           },
           "use": {
+            "description": "What the model was called for, as the tenant policy names it (contextual_extraction, summaries, grounding_judge, ...).",
+            "enum": [
+              "contextual_extraction",
+              "relation_extraction",
+              "entity_resolution",
+              "conflict_adjudication",
+              "summaries",
+              "reflection",
+              "memory_connections",
+              "query_expansion",
+              "chunk_context",
+              "memory_restatement",
+              "grounding_judge",
+              "procedure_abstraction"
+            ],
             "title": "Use",
             "type": "string"
           }
@@ -6693,6 +6786,8 @@
       "VersionResponse": {
         "properties": {
           "api_version": {
+            "const": "v1",
+            "description": "The public API version the routes live under (/v1).",
             "examples": [
               "v1"
             ],
@@ -6708,6 +6803,13 @@
             "type": "array"
           },
           "environment": {
+            "description": "The deployment's environment setting (service.environment); staging and prod refuse development keys.",
+            "enum": [
+              "dev",
+              "test",
+              "staging",
+              "prod"
+            ],
             "examples": [
               "dev"
             ],
@@ -6774,8 +6876,8 @@
             "type": "string"
           },
           "role": {
-            "title": "Role",
-            "type": "string"
+            "$ref": "#/components/schemas/MessageRole",
+            "description": "Who said it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT (something that happened, told to the service)."
           },
           "text": {
             "title": "Text",

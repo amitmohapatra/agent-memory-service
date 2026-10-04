@@ -31,6 +31,7 @@ from typing import Any, Final
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from memory_service.domain.evidence import EVIDENCE_SOURCE_DESCRIPTION, EvidenceSource
 from memory_service.domain.ids import is_valid_id, new_id
 
 #: Bound on the serialised correction and metadata of one record.
@@ -130,7 +131,9 @@ class FeedbackEvidenceRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    source_type: str = Field(default="memory", max_length=50)
+    source_type: EvidenceSource = Field(
+        default=EvidenceSource.MEMORY, description=EVIDENCE_SOURCE_DESCRIPTION
+    )
     source_id: str = Field(min_length=1, max_length=200)
     message_id: str | None = None
     document_id: str | None = None

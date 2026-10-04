@@ -365,7 +365,10 @@ async def set_tenant_policy(
 
 class UsageDayOut(BaseModel):
     day: date
-    use: str
+    use: LLMUse = Field(
+        description="What the model was called for, as the tenant policy names it "
+        "(contextual_extraction, summaries, grounding_judge, ...)."
+    )
     tokens: int
     calls: int
 
@@ -400,5 +403,8 @@ async def tenant_usage(
     return ModelUsageResponse(
         since=since,
         until=until,
-        days=[UsageDayOut(day=d.day, use=d.use, tokens=d.tokens, calls=d.calls) for d in days],
+        days=[
+            UsageDayOut(day=d.day, use=cast("LLMUse", d.use), tokens=d.tokens, calls=d.calls)
+            for d in days
+        ],
     )

@@ -11,6 +11,7 @@ from memory_service.api.deps import ScopeBody
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, JobStatus, MessageKind, MessageRole
 from memory_service.domain.instants import UTC_RULE, UtcDateTime
+from memory_service.ports.tasks import Queue
 
 _SCOPE_EXAMPLE: dict[str, Any] = {
     "thread_id": "thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
@@ -299,7 +300,11 @@ class JobResponse(BaseModel):
 
     job_id: str
     task_name: str
-    queue: str
+    queue: Queue | None = Field(
+        description="The work queue that runs it (chat-fast, memory-extract, embedding, "
+        "document-parse, graph, summary, archive, evaluation, import, reconcile); null when "
+        "the queue no longer knows the job."
+    )
     status: JobStatus = Field(
         ...,
         description="PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts "

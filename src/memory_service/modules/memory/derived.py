@@ -17,7 +17,7 @@ from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.memory import (
     CanonicalMemory,
     Scope,
@@ -64,7 +64,11 @@ def source_slot(
 
 def _memory_evidence(sources: Sequence[CanonicalMemory]) -> list[EvidenceRef]:
     return [
-        EvidenceRef(source_type="memory", source_id=m.memory_id, observed_at=m.temporal.observed_at)
+        EvidenceRef(
+            source_type=EvidenceSource.MEMORY,
+            source_id=m.memory_id,
+            observed_at=m.temporal.observed_at,
+        )
         for m in sources
     ]
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from typing import Final
 
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY
 from memory_service.domain.tools import ToolDescriptor, ToolInvocation
 from memory_service.modules.graph.native import entity_id_for, relation_id_for
@@ -52,7 +52,7 @@ def _entity(call: ToolInvocation, name: str, entity_type: str) -> Entity:
 
 def _evidence(call: ToolInvocation) -> EvidenceRef:
     return EvidenceRef(
-        source_type="tool_result",
+        source_type=EvidenceSource.TOOL_RESULT,
         source_id=call.invocation_id,
         agent_id=call.agent_id,
         agent_run_id=call.run_id,

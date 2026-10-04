@@ -117,6 +117,11 @@ class UpdateKeyRequest(BaseModel):
     may_act_as: list[str] = Field(max_length=MAY_ACT_AS_MAX, description=_MAY_ACT_AS)
 
 
+#: What ``GET /v1/keys/self`` calls a credential: an issued key's role, or the mode of one
+#: that is not an issued key.
+KeySelfRole = Literal["platform", "admin", "service", "trusted_dev", "jwt"]
+
+
 class KeySelfResponse(BaseModel):
     """Who a key is, for the platform's other services (agent-runs) to authenticate by."""
 
@@ -126,7 +131,10 @@ class KeySelfResponse(BaseModel):
         "request (the platform key, development keys)"
     )
     principal: str = Field(description="who the caller is; a principal the key may always be")
-    role: str = Field(description="platform, admin, service, trusted_dev or jwt")
+    role: KeySelfRole = Field(
+        description="What the key is: platform (the bootstrap secret), admin or service (a key "
+        "this service issued), trusted_dev (a development key) or jwt (an issuer's token)"
+    )
     may_act_as: list[str] = Field(description=_MAY_ACT_AS)
 
 

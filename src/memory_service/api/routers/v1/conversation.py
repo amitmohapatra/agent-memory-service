@@ -40,6 +40,7 @@ from memory_service.domain.enums import ArchiveStatus, JobStatus
 from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.profile import ThreadSummary
 from memory_service.modules.conversation.service import ConversationService
+from memory_service.ports.tasks import Queue
 
 router = APIRouter()
 
@@ -332,6 +333,11 @@ async def get_message(
 # --------------------------------------------------------------------------- jobs
 
 
+def _queue(name: str | None) -> Queue | None:
+    """The queue a job runs on; ``None`` when the queue no longer reports one."""
+    return Queue(name) if name in {q.value for q in Queue} else None
+
+
 @router.get(
     "/jobs/{job_id}",
     response_model=JobResponse,
@@ -352,7 +358,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
             return JobResponse(
                 job_id=job_id,
                 task_name=row.task_name,
-                queue=row.queue,
+                queue=_queue(row.queue),
                 status=JobStatus.PENDING,
                 attempts=row.attempts,
                 last_error=row.last_error,
@@ -362,14 +368,14 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
             return JobResponse(
                 job_id=job_id,
                 task_name=row.task_name,
-                queue=row.queue,
+                queue=_queue(row.queue),
                 status=JobStatus.PENDING,
                 attempts=row.attempts,
             )
         return JobResponse(
             job_id=job_id,
             task_name=row.task_name,
-            queue=row.queue,
+            queue=_queue(row.queue),
             status=info.status,
             attempts=info.attempts,
             last_error=info.last_error,
@@ -394,7 +400,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
     return JobResponse(
         job_id=info.job_id,
         task_name=info.task_name,
-        queue=info.queue,
+        queue=_queue(info.queue),
         status=info.status,
         attempts=info.attempts,
         last_error=info.last_error,

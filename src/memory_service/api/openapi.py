@@ -24,14 +24,11 @@ from memory_service.api.headers import (
     RETRY_AFTER_HEADER,
     TRACE_ID_HEADER,
 )
-from memory_service.config.constants import HEADERS
+from memory_service.config.constants import HEADERS, PROJECT_URL
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
 TITLE = "trellis-memory API"
-CONTACT = {
-    "name": "trellis-memory maintainers",
-    "url": "https://github.com/amitmohapatra/agent-memory-service",
-}
+CONTACT = {"name": "trellis-memory maintainers", "url": PROJECT_URL}
 LICENSE = {"name": "Apache-2.0", "identifier": "Apache-2.0"}
 #: The operational routes: no credential, no scope headers, no idempotency.
 OPS_PREFIXES = ("/health", "/metrics", "/version")

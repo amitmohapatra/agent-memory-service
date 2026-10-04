@@ -214,6 +214,8 @@ DOCLING_ARTIFACTS_DIR = "docling"
 
 SERVICE_NAME = "trellis-memory"
 API_VERSION = "v1"
+#: Where the service's source and issues live: the OpenAPI document's contact.
+PROJECT_URL = "https://github.com/amitmohapatra/agent-memory-service"
 HOST = "0.0.0.0"  # noqa: S104 - a container listens on every interface
 #: never log raw source text (prompts, model output, message bodies)
 LOG_SOURCE_TEXT = False

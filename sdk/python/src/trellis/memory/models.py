@@ -42,7 +42,7 @@ class ModelUsageDay(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     day: date
-    use: str
+    use: LLMUse
     tokens: int
     calls: int
 
@@ -113,6 +113,43 @@ ClaimVerdictValue = Literal["supported", "unsupported", "contradicted", "borderl
 GroundingMethod = Literal["citation", "nli", "judge"]
 ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
 SideEffects = Literal["read", "write", "irreversible"]
+#: What a piece of evidence points at (the service's ``EvidenceSource``).
+EvidenceSource = Literal[
+    "message",
+    "file",
+    "document_chunk",
+    "agent_result",
+    "tool_result",
+    "import",
+    "observation",
+    "statement",
+    "memory",
+    "graph_fact",
+    "summary",
+    "episode",
+    "feedback",
+]
+#: Where a catalog entry comes from: the contracts' tool sources and ``manual`` (written
+#: through the API).
+ToolSource = Literal["manual", "local", "mcp", "memory", "openapi", "a2a"]
+#: What a model call was for (the service's ``LLMUse``).
+LLMUse = Literal[
+    "contextual_extraction",
+    "relation_extraction",
+    "entity_resolution",
+    "conflict_adjudication",
+    "summaries",
+    "reflection",
+    "memory_connections",
+    "query_expansion",
+    "chunk_context",
+    "memory_restatement",
+    "grounding_judge",
+    "procedure_abstraction",
+]
+#: What ``keys.whoami`` calls a credential: an issued key's role, or the mode of one that is
+#: not an issued key.
+KeySelfRole = Literal["platform", "admin", "service", "trusted_dev", "jwt"]
 
 
 #: the service's id grammar (domain/ids.py ID_PATTERN)
@@ -235,7 +272,7 @@ class JobHandle(BaseModel):
 class EvidenceRef(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    source_type: str
+    source_type: EvidenceSource
     source_id: str
     message_id: str | None = None
     document_id: str | None = None
@@ -279,7 +316,7 @@ class SearchItem(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     id: str
-    kind: str
+    kind: SearchKind
     text: str
     observed_on: str | None = None
     document_id: str | None = None
@@ -318,8 +355,8 @@ class ContextPassage(BaseModel):
     id: str
     text: str
     relevance: float
-    #: table, paragraph, ...; None: a chunk
-    kind: str | None = None
+    #: None: a document passage (a chunk); relation or memory: a required companion
+    kind: Literal["relation", "memory"] | None = None
     document_id: str | None = None
     page: int | None = None
     section: str | None = None
@@ -353,7 +390,7 @@ class WindowMessage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     id: str
-    role: str
+    role: MessageRole
     text: str
 
 
@@ -657,7 +694,7 @@ class CatalogTool(BaseModel):
     required: list[str] = Field(default_factory=list)
     argument_entity_types: dict[str, str] = Field(default_factory=dict)
     side_effects: SideEffects | None = None
-    source: str = "manual"
+    source: ToolSource = "manual"
     server: str | None = None
     examples: list[dict[str, Any]] = Field(default_factory=list)
     #: the MCP annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
@@ -806,7 +843,7 @@ class TenantInfo(BaseModel):
 class ApiKeyInfo(BaseModel):
     key_id: str
     tenant_id: str
-    role: str
+    role: KeyRole
     name: str
     workspace_id: str | None = None
     created_by: str
@@ -823,7 +860,7 @@ class KeyInfo(BaseModel):
     key_id: str
     tenant_id: str | None = None
     principal: str
-    role: str
+    role: KeySelfRole
     may_act_as: list[str] = Field(default_factory=list)
 
 

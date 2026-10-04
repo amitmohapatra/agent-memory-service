@@ -16,7 +16,11 @@ router = APIRouter(tags=["operations"])
 
 
 class LiveResponse(BaseModel):
-    status: str = Field(..., examples=["ok"])
+    status: Literal["ok"] = Field(
+        ...,
+        description="Always ok: the process answers (it checks no dependency).",
+        examples=["ok"],
+    )
 
 
 class DependencyStatus(BaseModel):
@@ -46,8 +50,15 @@ class ReadyResponse(BaseModel):
 class VersionResponse(BaseModel):
     service: str = Field(..., examples=[constants.SERVICE_NAME])
     version: str = Field(..., examples=[__version__])
-    api_version: str = Field(..., examples=["v1"])
-    environment: str = Field(..., examples=["dev"])
+    api_version: Literal["v1"] = Field(
+        ..., description="The public API version the routes live under (/v1).", examples=["v1"]
+    )
+    environment: Literal["dev", "test", "staging", "prod"] = Field(
+        ...,
+        description="The deployment's environment setting (service.environment); staging and "
+        "prod refuse development keys.",
+        examples=["dev"],
+    )
     degraded: list[str] = Field(
         default_factory=list,
         description=(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -19,7 +19,7 @@ from memory_service.api.params import (
     ThreadIdQuery,
     WorkIdQuery,
 )
-from memory_service.api.schemas.tenancy import KeySelfResponse
+from memory_service.api.schemas.tenancy import KeySelfResponse, KeySelfRole
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.config.constants import HEADERS
@@ -335,7 +335,7 @@ def key_self_of(principal: ServicePrincipal) -> KeySelfResponse:
             key_id=str(claims["key_id"]),
             tenant_id=str(claims["tenant"]),
             principal=principal.service_id,
-            role=str(claims["role"]),
+            role=cast("KeySelfRole", str(claims["role"])),
             may_act_as=list(claims.get("may_act_as") or []),
         )
     # a development key or an issuer's token names its tenant per request
@@ -343,7 +343,7 @@ def key_self_of(principal: ServicePrincipal) -> KeySelfResponse:
         key_id=principal.service_id,
         tenant_id=None,
         principal=principal.service_id,
-        role=principal.mode,
+        role=cast("KeySelfRole", principal.mode),
         may_act_as=[ANY_PRINCIPAL],
     )
 

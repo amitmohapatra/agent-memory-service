@@ -21,7 +21,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -54,7 +54,11 @@ class SearchItem(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: str
-    kind: str = Field(description="memory, chunk, summary, episode or message")
+    kind: SearchKind = Field(
+        description="What the item is: memory (something learned or stated), chunk (a "
+        "document passage), summary (a document summary), episode (an earlier conversation "
+        "of this user) or message (this thread's history)."
+    )
     text: str
     observed_on: str | None = Field(
         default=None, description="the day it was observed (YYYY-MM-DD), when known"
@@ -99,7 +103,7 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
     page = c.payload.get("page")
     return SearchItem(
         id=c.record_id,
-        kind=c.kind,
+        kind=cast(SearchKind, c.kind),
         text=_clip(c.text, text_chars),
         observed_on=_day(c.payload.get("observed_at")),
         document_id=c.payload.get("document_id"),

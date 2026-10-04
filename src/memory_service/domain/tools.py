@@ -24,6 +24,14 @@ ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
 SideEffects = Literal["read", "write", "irreversible"]
 #: Where a tool comes from (mcp, local, openapi, a2a, ...): descriptive, not a closed set.
 SOURCE_MAX_CHARS: Final = 50
+#: Where a catalog entry comes from: the contracts' ``ToolSource`` (what a harness publishes)
+#: and ``manual``, an entry an administrator wrote through the API.
+ToolSource = Literal["manual", "local", "mcp", "memory", "openapi", "a2a"]
+TOOL_SOURCE_DESCRIPTION: Final = (
+    "Where the tool comes from: manual (written through this API, the default), local (a "
+    "function of the harness), mcp (an MCP server, named in server), memory (this service's "
+    "own agent tools), openapi (an OpenAPI operation) or a2a (another agent)."
+)
 
 
 class ToolAnnotations(BaseModel):
@@ -74,7 +82,9 @@ class ToolDescriptor(BaseModel):
         description="argument name -> the entity type its value names (e.g. supplier: ORG)",
     )
     side_effects: SideEffects | None = None
-    source: str = Field(default="manual", max_length=SOURCE_MAX_CHARS)
+    source: str = Field(
+        default="manual", max_length=SOURCE_MAX_CHARS, description=TOOL_SOURCE_DESCRIPTION
+    )
     server: str | None = Field(default=None, description="MCP server name for gateway tools.")
     examples: list[dict[str, Any]] = Field(default_factory=list)
     redact: list[str] = Field(
