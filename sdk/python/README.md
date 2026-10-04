@@ -18,6 +18,29 @@ await ctx.history.add([("ASSISTANT", answer)])
 The SDK hides Qdrant, BM25, embeddings, RRF, GCS compaction, graph enrichment,
 dedup, memory types, TTLs, cache keys and task queues. Those are service configuration.
 
+## Use it on its own or with the harness
+
+The SDK is a block you plug into whatever runs your agent: LangGraph, OpenAI Agents, the
+Claude Agent SDK or plain code. It depends on `httpx` and `pydantic` only, and imports no
+framework and no harness. Each turn, read the context into the prompt, record the turn, and
+send feedback when you know how the run went:
+
+```python
+from trellis.memory import MemoryClient
+
+memory = MemoryClient()  # MEMORY_URL and TRELLIS_API_KEY from the environment
+run = memory.bind(user_id="u1", thread_id="thr_1").agent("support")
+
+pushed = await run.context(question, window=False)  # window=False: your framework keeps the history
+answer = await my_agent(system=pushed.rendered, user=question)  # a graph node, an Agent, a query()
+await run.history.add([("USER", question), ("ASSISTANT", answer)])
+
+await run.feedback("run", run.scope.agent_run_id, "confirm")  # or "reject"
+```
+
+With [agent-harness](https://github.com/amitmohapatra/agent-harness), `h.wrap(agent)` makes
+the same calls on every run, so you write none of them ([USAGE §14](../../docs/USAGE.md#14-through-the-harness)).
+
 ## Configuration
 
 `MemoryClient()` reads the platform's shared names: `MEMORY_URL` for the service (the local

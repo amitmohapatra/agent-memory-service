@@ -3,7 +3,8 @@
 Status: accepted (2026-09-28). Amends ADR 0012 (agent credentials), ADR 0021 (tenancy)
 and ADR 0022 (API conventions). Design of record: the platform design doc, phase 2.
 Partly superseded (2026-10, final overhaul, migration 0021): outbound webhooks, workspace
-model keys and the ANSWER/BRIEF feedback targets are removed; notifications live in agent-runs.
+model keys and the ANSWER/BRIEF feedback targets are removed; notifications live in agent-runs,
+whose SDK verifies them (`trellis.runs.webhooks.verify_signature`).
 
 ## Context
 
@@ -100,7 +101,7 @@ checked at subscription time and again against every address the host resolves t
 delivery; the connection is then pinned to that vetted address, with the original host in
 `Host` and SNI, so a record that changes between check and connect (DNS rebinding) cannot
 steer the request onto the local network. Shared address space (100.64/10) counts as private. The one setting, `webhooks.allow_local_targets`, permits http and local addresses
-for docker-compose development and is refused in deployed environments. The SDK ships `trellis.memory.webhooks.verify_signature` for receivers.
+for docker-compose development and is refused in deployed environments. The SDK shipped `trellis.memory.webhooks.verify_signature` for receivers; it went with the webhooks (see Status), and the memory SDK ships no webhook code. Run notifications are signed by agent-runs, and a receiver verifies them with `trellis.runs.webhooks.verify_signature` (pip `trellis-runs`, the agent-runs SDK).
 
 ## Consequences
 
