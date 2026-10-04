@@ -172,6 +172,62 @@ rules of the route:
   tool);
 * accepting one already part of `approve_when` returns the entry unchanged.
 
+## Tools in context: what is sent, what comes back
+
+The same tool information reaches the service three ways and comes back two ways. This is the
+whole round trip as the harness (`agent-harness`) drives it; a caller without the harness
+sends the same requests itself.
+
+```mermaid
+sequenceDiagram
+  participant H as Harness (one run)
+  participant S as Memory service
+  participant W as Worker
+  Note over H: the agent's toolbox is resolved (own tools, MCP via Bifrost, OpenAPI)
+  H->>S: PUT /v1/tools/catalog {tools: [name, description, input_schema, source, server, side_effects or annotations]}
+  Note over H,S: only entries not published before (digest), in the background
+  H->>S: POST /v1/context {query: task, tools: {available: [names]}, window}
+  Note over H,S: tools are sent only when the run has at least 5 of its own (TOOL_HINTS_MIN)
+  S-->>H: {rendered, bundle_id, token_estimate, tool_candidates, evidence_status}
+  Note over H: tool_candidates narrow the tools the model is offered
+  H->>S: POST /v1/tools/invocations {tool, args, output, status, error_class, latency_ms, task, step}
+  Note over H,S: one per call the agent makes, idempotent on (run, step, tool, args)
+  S->>W: tools.learn, tools.index
+  W->>S: procedures per (audience, task pattern), tool statistics
+  Note over H,S: the next run's context carries what was learned
+```
+
+### What the harness sends
+
+| When | Request | Tool fields | Where in the harness |
+|---|---|---|---|
+| a run's toolbox is resolved | `PUT /v1/tools/catalog` | `name`, `description`, `input_schema`, `source` (`local`, `mcp`, `openapi`, `a2a`), `server`; `side_effects` where the harness knows them (local and OpenAPI tools), the server's `annotations` for MCP tools (the service derives the tier) | `tools/toolbox.py`, `clients/memory.py::catalog_entry` |
+| before the model runs | `POST /v1/context` | `tools.available`: the run's own tool names (not the memory tools), only when there are at least 5; `tools.k` defaults to 8 | `agent.py::push` |
+| each tool call | `POST /v1/tools/invocations` | `tool`, `args`, `output`, `status` (ok, error, timeout, rejected, cancelled), `error_class`, `latency_ms`, `task`, `step` | `clients/memory.py::record_tool` |
+| on demand, mid-run | `POST /v1/tools/hints` | `task`, `available` (the run's tool names) | the `tool_search` memory tool |
+
+Arguments are redacted per the catalog entry's `redact` list before they are stored.
+
+### What comes back
+
+`POST /v1/context` with `format=prompt` (the harness's default) returns:
+
+| Field | What it holds | Who uses it |
+|---|---|---|
+| `rendered` | the prompt text. With tools it starts with `## Procedures that worked for this task` (each as `title: tool -> tool (worked N% of M runs)`) and `## Tools` (`next: <tool>`, `<tool>.<arg> = <value> (<source>)`, `missing <tool>.<arg>: <question>`), then the profile, summary, memories and the rest | the model reads it |
+| `tool_candidates` | the tool names that fit the task, best first (at most `k`), only when `tools` was sent | the harness offers only these to the model |
+| `bundle_id`, `token_estimate`, `evidence_status` | as for any context | `/v1/verify`, budgeting, abstaining |
+
+`format=full` returns the whole bundle instead, with the structured forms of the same thing:
+`procedures` (id, title, steps, success_rate, support) and `tools` (`ToolHints`: candidates with
+score, success_rate and why; plan; next; prefill keyed `tool.arg` with value, source and
+evidence_id; missing arguments with the question to ask). `POST /v1/tools/hints` returns that
+same `ToolHints` on its own.
+
+Nothing tool-related is in the context when `tools` is not sent: no procedures, no hints, no
+candidates. A run with fewer than five tools therefore gets plain memory context, and its calls
+are still recorded and still teach procedures for later runs.
+
 ## What this area does not do
 
 * it does not execute anything, ever;

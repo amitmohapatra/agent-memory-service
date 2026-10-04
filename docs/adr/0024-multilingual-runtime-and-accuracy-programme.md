@@ -1,13 +1,13 @@
 # ADR 0024: The multilingual runtime and the accuracy programme (Phase 7: M2 + M4)
 
-Date: 2026-09-28. Status: accepted. Plan of record: `docs/PLAN-MULTILINGUAL-PLATFORM-2026-09-28.md`
+Date: 2026-09-28. Status: accepted. Plan of record: `docs/history/PLAN-MULTILINGUAL-PLATFORM-2026-09-28.md`
 (D2, D6, D8, D9, section 4 rows M2 and M4). Spec: the gstack archive
 `~/.gstack/projects/amitmohapatra-agent-memory-service/specs/20260928-161930-29573-phase-7-*.md`.
-Results: `docs/PHASE7-RESULTS-2026-09-28.md`.
+Results: `docs/history/PHASE7-RESULTS-2026-09-28.md`.
 
 ## Context
 
-The CPU screens of 27-28 September selected the models (`docs/CPU-MULTILINGUAL-DECISION-20260928.md`)
+The CPU screens of 27-28 September selected the models (`docs/history/CPU-MULTILINGUAL-DECISION-20260928.md`)
 but the runtime still embedded every query with an English encoder and verified claims with
 an English NLI head. The measured numbers behind this record:
 
@@ -102,5 +102,5 @@ an English NLI head. The measured numbers behind this record:
 - The hermetic suite stands in one hash space named `dense_ml`; the script-pruning path is
   covered by unit tests with spy encoders, and the real encoders by the container gates.
 - The quality gates (`test_architecture.py`, `test_complexity_budget.py`) are not raised.
-- What was measured, and what was not, is in `docs/PHASE7-RESULTS-2026-09-28.md`; no gate
+- What was measured, and what was not, is in `docs/history/PHASE7-RESULTS-2026-09-28.md`; no gate
   threshold in this record was moved to pass.

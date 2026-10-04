@@ -14,7 +14,7 @@ sequenceDiagram
   participant S as The service
   O->>A: {name, tenant_id?, retention_days?, rate_limit_per_minute?} + Idempotency-Key
   A-->>O: CreatedTenant {tenant, admin_key.token}  ← shown once
-  Note over O,T: hand that admin key to the tenant; the platform key is not for daily use
+  Note over O,T: hand that admin key to the tenant#59; the platform key is not for daily use
   T->>S: POST /v1/keys — service keys for its agents
   T->>S: POST /v1/workspaces, members  (tenancy.md)
   O->>A: PATCH /v1/admin/tenants/{id} — rename, suspend, resume, retention, quota

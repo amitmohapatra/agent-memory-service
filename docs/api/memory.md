@@ -20,15 +20,17 @@ sequenceDiagram
   API->>DB: the message rows + their jobs, one transaction
   API-->>A: 202 {messages: [{message_id, job_ids, deduplicated}]}
   Note over API,A: acknowledged = durable, not yet retrievable
-  W->>DB: extract candidates · dedupe · admission gate
+  W->>DB: extract candidates · dedupe
   W->>DB: memories, with validity windows and audience
   W->>DB: graph entities and relations
   W->>V: embeddings for what was admitted
   A->>API: GET /v1/jobs/{job_id} — has it landed? (ack.job_ids)
 ```
 
-The admission gate is why a chatty agent does not fill the store: a candidate is scored on
-worthiness, novelty, confidence and expected utility, and is admitted, deferred or rejected.
+An admission gate (`modules/memory/admission.py`) that scores a candidate on worthiness,
+novelty, confidence and expected utility, and admits, defers or rejects it, is built but **not
+wired**: `adapters/wiring.py` builds the observation pipeline without one, so today every
+deduplicated candidate is stored.
 Deduplication is lexical *and* dense, so the same fact said twice is one memory with two pieces
 of evidence.
 

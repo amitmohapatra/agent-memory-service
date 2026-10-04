@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded (2026-09, Phase 1 of `docs/ROADMAP-2026-09.md`). The served tier was removed:
+Superseded (2026-09, Phase 1 of `docs/history/ROADMAP-2026-09.md`). The served tier was removed:
 the `Remote*` adapters, `tools/model_server.py`, the `memory-embed`/`memory-rerank`/
 `memory-nli`/`memory-sparse` compose services, the litellm `model-gateway`, the `url`/
 `api_key`/`timeout_seconds`/`max_retries` settings on every model section, `sparse_url`

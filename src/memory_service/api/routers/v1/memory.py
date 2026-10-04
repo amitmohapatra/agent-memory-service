@@ -171,7 +171,8 @@ class MemoryResponse(BaseModel):
     temporal_status: TemporalStatus = Field(
         ...,
         description="CURRENT is the live value; SUPERSEDED was replaced by a newer memory "
-        "(see superseded_by); CONTRADICTED conflicts with a current one; EXPIRED passed its "
+        "(see superseded_by); CONTRADICTED is reserved (the service resolves a conflict by "
+        "superseding, so it sets no memory to it today); EXPIRED passed its "
         "valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept.",
     )
     valid_from: datetime | None = None

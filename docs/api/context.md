@@ -16,7 +16,7 @@ sequenceDiagram
   participant G as Grounding
   A->>C: {query, scope, token_budget?, window?, tools?, format?}
   C->>R: conversation window · memories · document chunks · graph facts · summaries
-  Note over R: audience-filtered in the store; memories: weighted RRF of BM25, two dense spaces and ColBERT arms, then session/speaker/time/period rules (ADR 0026)
+  Note over R: audience-filtered in the store#59; memories: weighted RRF of BM25, two dense spaces and ColBERT arms, then session/speaker/time/period rules (ADR 0026)
   R-->>C: candidates
   C->>C: dedupe · rank · pack to the budget · render with citations
   C->>C: evidence report: required / satisfied / missing groups

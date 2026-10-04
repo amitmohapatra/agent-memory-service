@@ -2,7 +2,7 @@
 
 **26 September update:** landing consolidation is wired and lifecycle-tested; background
 reflection now has source-audience preservation, bounded cross-thread history and durable
-revision receipts. See [the current handoff](FINAL-RESULTS-2026-09-26.md) for validation and
+revision receipts. See [the current handoff](history/FINAL-RESULTS-2026-09-26.md) for validation and
 rollout status. The dormant-wiring statements in the historical September 25 audit below
 are superseded. A maintained conversation hierarchy, temporal ranking, semantic entity
 canonicalization and an MCP facade remain separate gaps; these changes do not establish
@@ -26,9 +26,9 @@ competitor parity or benchmark superiority.
 The sections below retain earlier audit history; use the current result handoff for
 active defaults, costs, completed metrics and deployment status.
 
-**Re-audited 2026-09-25:** see [research, wiring and RAG verification](RESEARCH-RAG-2026-09-25.md).
+**Re-audited 2026-09-25:** see [research, wiring and RAG verification](history/RESEARCH-RAG-2026-09-25.md).
 The historical coverage argument below establishes mechanisms, not competitor parity.
-See [the current feature follow-up](FEATURE-AUDIT-2026-09-25.md): graph-to-memory hydration
+See [the current feature follow-up](history/FEATURE-AUDIT-2026-09-25.md): graph-to-memory hydration
 and context packing are now implemented; safe continuous consolidation remains unfinished.
 The earlier assessment below predates that follow-up.
 
@@ -53,7 +53,7 @@ checked against the source, and the verdict says which mechanism provides it.
 |---|---|---|---|
 | Exact match on identifiers, error codes, SKUs | `exact` + BM25 sparse with server-side IDF | on by default | — |
 | Semantic / paraphrase match | dense (Granite 384-d) | on | — |
-| Rank fusion across retrievers | `hybrid_rrf_k` controls native dense/sparse fusion; default preserves legacy `FusionQuery`; `rrf_k=60` controls outer strategy fusion | on | Inner 60 reduced measured recall; see `ACCURACY-EXPERIMENTS-2026-09-26.md` |
+| Rank fusion across retrievers | `hybrid_rrf_k` controls native dense/sparse fusion; default preserves legacy `FusionQuery`; `rrf_k=60` controls outer strategy fusion | on | Inner 60 reduced measured recall; see `history/ACCURACY-EXPERIMENTS-2026-09-26.md` |
 | Wider conversational recall | bounded `memory_recall_k`, respecting explicit caller limits, document selection and the context budget | opt-in, default off | Depth 100 improved paired answers modestly but regressed development abstention; not a general 85% result |
 | Precision at the top | hybrid fusion (dense + sparse, RRF) | on | **`colbert`** — late interaction approximates a cross-encoder, and the cross-encoder itself measured *worse* than no reranking at all (p = 0.012, MEASUREMENTS.md §3e), so reranking was removed. *Superseded for memories (2026-10-02, ADR 0026): ColBERT runs as weighted fusion arms, not as a reranker; the cross-encoder stays rejected.* |
 | Chunk understood in document context | contextual header (title, section path, page, entities) prepended before indexing | on | **`late_chunking`** — see §2 |

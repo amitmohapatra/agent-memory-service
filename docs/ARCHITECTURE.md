@@ -5,24 +5,49 @@
 Hexagonal architecture (ports and adapters), one microservice, horizontally scalable API
 and worker processes sharing PostgreSQL.
 
+### In the platform
+
+```mermaid
+flowchart LR
+  subgraph clients[Callers]
+    H["agent-harness<br/>(trellis-harness)"]
+    SDK["trellis-memory SDK<br/>(sdk/python)"]
+    REST[Any HTTP client]
+  end
+  H --> SDK
+  SDK -->|/v1 + API key| API
+  REST -->|/v1 + API key| API
+  H -->|runs, interrupts| RUNS["agent-runs"]
+  subgraph svc[trellis-memory service]
+    API["API process<br/>(FastAPI)"]
+    W["Worker process<br/>(Procrastinate jobs)"]
+  end
+  API --> PG[("PostgreSQL<br/>source of truth + job queue")]
+  W --> PG
+  API --> Q[("Qdrant<br/>search, rebuildable")]
+  W --> Q
+  API --> C[("Dragonfly / Redis<br/>hot cache")]
+  W --> B[("GCS or filesystem<br/>archive")]
+  API -. optional .-> FGA["OpenFGA"]
+  API -->|virtual key| GW["Bifrost gateway"]
+  W -->|virtual key| GW
+  GW --> LLM["Model providers"]
+  CT["trellis-contracts"] -. shared types .- H
+  CT -. shared types .- RUNS
 ```
-                       +---------------------------+
-   Plain Python  ----> |                           |
-   REST client   ----> |   trellis-memory SDK      | ----> trellis-memory service (FastAPI)
-   LangGraph adapter-> |                           |            |
-                       +---------------------------+            v
-                                                        application (use cases)
-                                                                |
-                                       +------------------------+-------------------------+
-                                       |                        |                         |
-                                    domain                   ports                    modules
-                            (contracts we own)          (Protocols)           (conversation, ingestion,
-                                                                |               retrieval, archive, ...)
-                                                                v
-                                                            adapters
-                       PostgreSQL · Qdrant · Dragonfly · OpenFGA · Procrastinate · GCS/filesystem ·
-                       Docling · ONNX/sentence-transformers · native memory/graph intelligence
-                       Bifrost (the only LLM path: one HTTP adapter, no provider SDK anywhere)
+
+### Inside the service
+
+```mermaid
+flowchart TB
+  api["api/<br/>routers, schemas, problem details"] --> app["application/<br/>Container, use cases"]
+  app --> mods["modules/*<br/>feature slices"]
+  app --> ports["ports/<br/>Protocols"]
+  mods --> ports
+  mods --> domain["domain/<br/>contracts we own"]
+  ports --> domain
+  adapters["adapters/<br/>the only place SDKs are imported"] -. implements .-> ports
+  adapters --> ext["PostgreSQL · Qdrant · Dragonfly · OpenFGA · Procrastinate ·<br/>GCS/filesystem · Docling · ONNX/sentence-transformers · Bifrost (HTTP)"]
 ```
 
 Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
@@ -46,27 +71,67 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 
 ## Data placement
 
+```mermaid
+flowchart LR
+  HOT["HOT · Dragonfly<br/>recent thread, ephemeral memories, caches<br/>(never the source of truth)"]
+  WARM["WARM · PostgreSQL<br/>threads, sessions, turns, messages, observations,<br/>canonical memories, evidence refs, documents/nodes/chunks,<br/>jobs, revisions, archive manifests, graph, tool catalog/calls/<br/>statistics/procedures, approval patterns, agent-tool pulls,<br/>profile blocks, thread summaries, feedback, model keys and policies"]
+  SEARCH["SEARCH · Qdrant<br/>BM25 sparse + dense: knowledge, memories, tools<br/>(rebuildable from WARM)"]
+  ARCHIVE["ARCHIVE · GCS<br/>raw chat segments (JSONL+zstd), raw files,<br/>imports, old versions"]
+  WARM -->|index jobs| SEARCH
+  WARM -->|archive jobs| ARCHIVE
+  WARM -->|cache-aside| HOT
 ```
-HOT      Dragonfly      recent thread, ephemeral memories, caches (never source of truth)
-WARM     PostgreSQL     threads/sessions/turns/messages, observations, canonical memories,
-                        evidence refs, documents/nodes/chunks metadata, jobs, revisions,
-                        archive manifests, graph, tool catalog/calls/statistics/procedures,
-                        approval patterns, agent-tool pulls and prefetch counts, profile
-                        blocks, thread summaries, feedback, model keys and policies
-SEARCH   Qdrant         BM25 sparse + dense (knowledge, memories, tools) — rebuildable
-ARCHIVE  GCS            raw chat segments (JSONL+zstd), raw files, imports, old versions
+
+### Core data model
+
+Solid lines are foreign keys; dashed lines are references the service keeps without one
+(evidence refs, graph pointers, feedback targets).
+
+```mermaid
+erDiagram
+  threads ||--o{ sessions : has
+  sessions ||--o{ turns : has
+  turns ||--o{ messages : has
+  messages ||--o{ message_attachments : has
+  messages ||..o{ observations : "becomes"
+  observations ||..o{ memories : "evidence for"
+  memories ||--o{ memory_dependencies : "derived from"
+  memories ||..o{ graph_relations : "linked by"
+  graph_entities ||..o{ graph_relations : "subject / object"
+  documents ||--o{ document_versions : has
+  documents ||--o{ document_nodes : has
+  documents ||--o{ chunks : has
+  documents ||--o{ context_edges : has
+  memories ||..o{ feedback : "target"
+  agent_runs ||..o{ feedback : "target"
+  tenants ||--o{ api_keys : issues
+  tenants ||--o{ workspaces : has
+  workspaces ||--o{ workspace_members : has
 ```
 
 ## Durability protocol
 
-```
-request -> validate trusted context -> idempotency check
-       -> BEGIN
-            persist staged payload + metadata + observation
-            enqueue archive job + memory job (same transaction)
-            bump revisions
-          COMMIT
-       -> 200/202
+```mermaid
+sequenceDiagram
+  participant Cl as Client
+  participant API as API
+  participant PG as PostgreSQL
+  participant W as Worker
+  participant Bl as GCS / filesystem
+  Cl->>API: write (Idempotency-Key)
+  API->>API: validate the trusted context
+  API->>PG: idempotency check
+  rect rgb(240,240,240)
+    API->>PG: BEGIN
+    API->>PG: staged payload + metadata + observation
+    API->>PG: archive job + memory job (job_outbox, same transaction)
+    API->>PG: bump revisions
+    API->>PG: COMMIT
+  end
+  API-->>Cl: 200 / 202
+  W->>PG: claim jobs
+  W->>Bl: group, compress, checksum, immutable upload
+  W->>PG: manifest, ARCHIVED, later purge the staged payload
 ```
 
 Archive worker: group -> compress -> checksum -> immutable upload -> verify generation +
@@ -76,43 +141,62 @@ and canonical/search drift.
 
 ## Retrieval pipeline
 
-```
-query -> language + rule-based route (English cues only for English; any other language
-         is GENERAL_SEMANTIC) -> overlap encoder with authorized scope + graph prefetch
-         (one statement, stopped by PostgreSQL at the 150 ms graph budget)
-      -> exact lookup or dense/BM25 search -> memories: weighted RRF of BM25, two dense
-         spaces and the ColBERT late-interaction arms over two keys, then the session /
-         speaker / time / period rules (ADR 0026); other items: RRF + stable ties
-      -> dedup -> bounded cut
-      -> graph facts/evidence -> document companion expansion
-      -> request-local evidence verification / bounded companion escalation
-      -> dense similarity of each ranked item to the question (one read per collection)
-      -> ContextBuilder packs provenance and evidence groups under the token budget, skipping
-         ranked items under the encoder's relevance floor
-         (concurrently with retrieval: profile blocks, the thread summary, procedures,
-          prefetched memories and the thread's recent messages - one indexed read each; the
-          pinned sections take at most half the budget; tool hints when asked)
+```mermaid
+flowchart TB
+  q[query] --> route["language + rule-based route<br/>(English cues only for English;<br/>any other language: GENERAL_SEMANTIC)"]
+  route --> par{{"concurrently"}}
+  par --> enc["encoders, with the authorized scope"]
+  par --> gp["graph prefetch<br/>(one statement, stopped at the 150 ms budget)"]
+  enc --> search["exact lookup or dense / BM25 search"]
+  search --> mem["memories: weighted RRF of BM25, two dense spaces<br/>and ColBERT over two keys, then session / speaker /<br/>time / period rules (ADR 0026)"]
+  search --> other["other items: RRF + stable ties"]
+  mem --> cut[dedup, bounded cut]
+  other --> cut
+  gp --> gfx["graph facts and evidence"]
+  cut --> gfx
+  gfx --> comp["document companion expansion,<br/>request-local evidence verification"]
+  comp --> sim["dense similarity of each item to the question"]
+  sim --> pack["ContextBuilder: provenance + evidence groups<br/>under the token budget, relevance floor"]
+  side["profile blocks, thread summary, procedures,<br/>prefetched memories, recent messages, tool hints<br/>(one indexed read each, in parallel)"] --> pack
+  pack --> bundle[ContextBundle]
 ```
 
 Memories are re-scored by standing (confidence and reinforcement, which feedback moves) with
 a bounded factor (±15%) before the cut.
 
+## Memory lifecycle
+
+A memory's `temporal_status`, as the code moves it. Every state but CURRENT is out of
+retrieval; nothing is hard-deleted by these transitions.
+
+```mermaid
+stateDiagram-v2
+  [*] --> CURRENT: observation processed / memory written
+  CURRENT --> SUPERSEDED: a newer fact or a correction replaces it (superseded_by)
+  CURRENT --> RETRACTED: feedback reject, or DELETE /v1/memories/{id} (soft delete)
+  CURRENT --> EXPIRED: expires_at passed (memory.expire, hourly)
+  CURRENT --> ARCHIVED: forgetting policy (memory.forget, daily)
+  ARCHIVED --> CURRENT: POST /v1/memories/{id}/restore
+  SUPERSEDED --> [*]
+  RETRACTED --> [*]
+  EXPIRED --> [*]
+```
+
+`CONTRADICTED` is in the API's vocabulary but reserved: a conflict is resolved by
+superseding, so no memory is set to it today.
+
 ## Learning (background)
 
-```
-record_tool / outcome ----> tools.learn: stored procedures per (audience, task pattern),
-                            distilled with the tenant model; procedural graph edges
-feedback --------------> review (ADR 0028: a vote waits for the tenant administrator) ->
-                         feedback.project: memory standing, run outcomes, tool statistics,
-                            approval patterns, procedure rejection
-message every 20 ------> summary.refresh: the thread's durable summary (rolling)
-USER/PREFERENCE memory -> profile.refresh: the user's pinned block
-agent-tool pulls ------> prefetch (every 5 min): what the push pre-includes per pattern
-catalog upsert --------> tools.index: the tools search collection
-observation (any lang) -> memory.process: English rules; other languages (Observation.lang)
-                            -> contextual_extraction facts in that language (tenant model)
-memory / document -----> graph.enrich: native entities and edges; relation_extraction reads
-                            text the entity rules cannot (tenant model)
+```mermaid
+flowchart LR
+  rt["record_tool / outcome"] --> tl["tools.learn<br/>procedures per (audience, task pattern),<br/>procedural graph edges"]
+  fb[feedback] --> rv["review (ADR 0028):<br/>a vote waits for the tenant admin"] --> fp["feedback.project<br/>memory standing, run outcomes, tool statistics,<br/>approval patterns, procedure rejection"]
+  msg["every 20 messages"] --> sr["summary.refresh<br/>the thread's rolling summary"]
+  up["USER / PREFERENCE memory"] --> pr["profile.refresh<br/>the user's pinned block"]
+  pulls["agent-tool pulls"] --> pf["prefetch, every 5 min<br/>what the push pre-includes"]
+  cat["catalog upsert"] --> ti["tools.index<br/>the tools search collection"]
+  obs["observation (any language)"] --> mp["memory.process<br/>English rules; other languages:<br/>contextual_extraction (tenant model)"]
+  md["memory / document"] --> ge["inside memory.index / document.index:<br/>graph enrichment, native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
 Where each model use runs, its tier and its fallback: [LLM-USES.md](LLM-USES.md).
@@ -156,7 +240,7 @@ Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;
-see [the capability audit](RESEARCH-RAG-2026-09-25.md).
+see [the capability audit](history/RESEARCH-RAG-2026-09-25.md).
 
 ## Caching
 

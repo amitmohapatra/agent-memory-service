@@ -147,12 +147,14 @@ pip install -e sdk/python        # the trellis-memory SDK
 model. The set is `FROZEN_MODELS` in `src/memory_service/config/constants.py`, and the
 download catalogue is derived from it, so the code and the weights cannot drift apart:
 
-| Role | Frozen | Size | Why |
+| Role | Frozen (`config/constants.py::FROZEN_MODELS`) | License | Why |
 |---|---|---|---|
-| Embedding | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | 94 MB | lowest query p95 of every candidate benchmarked, at the smallest useful dimension |
+| Embedding, English | `ibm-granite/granite-embedding-small-english-r2` (384-dim) | Apache-2.0 | lowest query p95 of every candidate benchmarked, at the smallest useful dimension; encodes Latin-script queries |
+| Embedding, multilingual | `hotchpotch/bekko-embedding-v1-a8m` (384-dim) | MIT | every script, every query (ADR 0024) |
+| Late interaction (ColBERT) | `mixedbread-ai/mxbai-edge-colbert-v0-32m` (64-dim per token) | Apache-2.0 | the late-interaction arms over two keys in the memory ranking (ADR 0025, 0026) |
 | Sparse | BM25 (client term frequencies, Qdrant server-side IDF) | — | no weights |
 | Reranker | none (removed) | — | `cross-encoder/ms-marco-MiniLM-L6-v2` measured significantly *worse* on SciFact (nDCG 79.3 vs 84.5, p = 0.012) at 21x the latency, and no reranker beat the fused order on LoCoMo; the offline scorer lives in `benchmark/cross_encoder.py` |
-| Grounding NLI | `MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli` | 371 MB | claim-support classifier for `/v1/verify` |
+| Grounding NLI | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` | MIT | multilingual claim-support classifier for `/v1/verify` |
 
 The benchmark challengers (Granite R2 base, Granite reranker, SPLADE, GLiNER2, the former
 reranker) are listed in `benchmark/challengers.txt`; `make models-all` fetches them, and only
@@ -282,7 +284,7 @@ A read consults the model only when the tenant's model policy allows it (`read_a
 default, and only once a key can pay); a request cannot override the policy. Agent-owned virtual keys are exposed through `ctx.advanced.model_keys.set(...)`; a
 standing question is a profile block with a `source_query`;
 see the [SDK examples](sdk/python/README.md) and
-[capability/validation handoff](docs/AGENT-CAPABILITIES-HANDOFF-20260927.md).
+[capability/validation handoff](docs/history/AGENT-CAPABILITIES-HANDOFF-20260927.md).
 
 ### State a fact directly
 
@@ -652,7 +654,7 @@ The pinned Hindsight SDK (the optional `[hindsight]` extra) provides extraction 
 eligible non-agent ingestion;
 that server owns its model configuration. Agent extraction stays on the Bifrost path because
 the SDK cannot carry a per-request model virtual key. Source storage and authorization stay
-native. See the [integration boundary](docs/HINDSIGHT-CAPABILITY-STATUS-20260927.md).
+native. See the [integration boundary](docs/history/HINDSIGHT-CAPABILITY-STATUS-20260927.md).
 
 There is deliberately **no gateway service in `docker-compose.yml`**. Starting one from this
 repository's own compose file would put provider keys inside the application's deployment,
@@ -830,7 +832,7 @@ What is measured, with the real encoders, PostgreSQL and Qdrant, on a 2015 4-cor
 |---|---|
 | `/v1/context` p50 / p95, model off | ~0.3 s / ~0.4-0.6 s on that laptop; the 300 ms p95 target is set for an 8 vCPU VM and has not been measured there |
 | context packing | 10 off-topic questions: 30.8 → 1.5 memories and 76 → 23 KB per response with the relevance floor; every evidence memory of 135 LoCoMo questions still packed |
-| LoCoMo source recall, SciFact nDCG@10, XQuAD R@10 | [`docs/PHASE7-RESULTS-2026-09-28.md`](docs/PHASE7-RESULTS-2026-09-28.md), [`docs/PHASE9-RESULTS-2026-09-29.md`](docs/PHASE9-RESULTS-2026-09-29.md) |
+| LoCoMo source recall, SciFact nDCG@10, XQuAD R@10 | [`docs/history/PHASE7-RESULTS-2026-09-28.md`](docs/history/PHASE7-RESULTS-2026-09-28.md), [`docs/history/PHASE9-RESULTS-2026-09-29.md`](docs/history/PHASE9-RESULTS-2026-09-29.md) |
 | acknowledged data loss, unauthorized retrieval | 0 and 0 in the failure and security suites |
 
 Not measured: generated-answer accuracy with the current write path, and anything at the

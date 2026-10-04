@@ -58,7 +58,7 @@ You report what happened. It decides what is worth remembering.
 ```
 your agent                    memory service
     │
-    │  POST /v1/observations   "the user said: my timezone is Europe/Berlin"
+    │  POST /v1/messages       "the user said: my timezone is Europe/Berlin"
     ├─────────────────────────────►  accepted (202), queued
     │                                    │
     │                                    ├─ extract candidate facts
@@ -116,7 +116,7 @@ there, and every one of the 87 memories points back at the ones it came from.
 
 Being clear about this early saves disappointment later.
 
-- **It is not an LLM wrapper.** Every one of its eleven optional model uses has a
+- **It is not an LLM wrapper.** Every one of its twelve optional model uses has a
   deterministic fallback, and the service ships with the LLM **off**. A full install with no
   model gateway at all is a working install. [`LLM-USES.md`](../LLM-USES.md) lists each use and its fallback.
 - **It is not an agent framework.** It has no opinion about how your agent loops, which
@@ -129,15 +129,14 @@ Being clear about this early saves disappointment later.
 
 ## What to read next
 
-Chapters 2-8 and 10-12 are not written yet ([the outline](../README.md#the-guide)); until
-they are, these pages cover the same ground:
+The rest of the guide is in [the outline](../README.md#the-guide); by reason for reading:
 
-- New to the vocabulary → [Which API for which scenario](../USAGE.md) and
-  [the API, area by area](../api/README.md)
-- Here for the retrieval quality → [ADR 0026](../adr/0026-general-memory-ranking.md) (the
-  ranking) and [`MEASUREMENTS.md`](../MEASUREMENTS.md)
-- Evaluating it for a regulated environment → [api/tenancy.md](../api/tenancy.md) (who may
-  see what, the read audit), [api/feedback.md](../api/feedback.md) (review before learning)
-  and [api/context.md](../api/context.md) (evidence and grounding)
-- Need to deploy it this week → the [README](../../README.md#install-and-run) and
-  [api/admin.md](../api/admin.md) (onboarding, probes)
+- New to the vocabulary → [chapter 2, Concepts](02-concepts.md), then
+  [Which API for which scenario](../USAGE.md)
+- Here for the retrieval quality → [chapter 4, Retrieval](04-retrieval.md), with
+  [ADR 0026](../adr/0026-general-memory-ranking.md) and [`MEASUREMENTS.md`](../MEASUREMENTS.md)
+- Evaluating it for a regulated environment → [chapter 7, Authorization](07-authorization.md)
+  (who may see what, the read audit) and [chapter 6, Trust](06-trust.md) (evidence, grounding,
+  review before learning)
+- Need to deploy it this week → [chapter 11, Operations](11-operations.md), the
+  [README](../../README.md#install-and-run) and [api/admin.md](../api/admin.md)

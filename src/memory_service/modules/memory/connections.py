@@ -22,7 +22,7 @@ Three rules make it safe to run unattended:
    what a temporal read returns. A model proposal is not evidence enough to take a fact out
    of circulation - a false contradiction retracting a correct memory is the one failure
    direction that loses data, and the grounding golden already caught mDeBERTa doing exactly
-   that (docs/PHASE7-RESULTS-2026-09-28.md). A proposed supersession is recorded as an edge
+   that (docs/history/PHASE7-RESULTS-2026-09-28.md). A proposed supersession is recorded as an edge
    and nothing else, which is why ``false_merge_rate`` cannot move.
 2. **It never crosses an audience.** Both endpoints must share tenant, scope, owner and
    visibility keys, so an edge can never tell a reader of one memory that another exists.

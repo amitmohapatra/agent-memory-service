@@ -1,7 +1,7 @@
 # The multilingual runtime
 
 How a query in any of twelve scripts is retrieved, how a record is indexed, and how an
-existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `PHASE7-RESULTS-2026-09-28.md`.
+existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `history/PHASE7-RESULTS-2026-09-28.md`.
 
 ## The models
 
@@ -65,7 +65,7 @@ sequenceDiagram
         I->>EN: embed_documents(texts)
         I->>ML: embed_documents(texts)
     end
-    I->>Q: upsert(points: dense_en, dense_ml, bm25; payload: script, entities, dated_mentions, ...)
+    I->>Q: upsert(points: dense_en, dense_ml, bm25#59; payload: script, entities, dated_mentions, ...)
 ```
 
 Payload fields `script` and `entities` are indexed and matched inside the store; they are
