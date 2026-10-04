@@ -284,3 +284,38 @@ async def test_private_memory_in_a_thread_invalidates_owners_threadless_replay(
             await container.services["memory"].forget(uow, author, memory.memory_id)
         await uow.commit()
     assert not await _served(builder, U1, query)
+
+
+async def test_a_working_memory_write_drops_the_cached_bundle_of_its_thread(container, uow_factory):
+    """Working memory lives only in the cache and is folded into the bundle, so no
+    persistent write moved a revision: the next context call was served the bundle cached
+    before the write, without the item, until the TTL."""
+    from memory_service.domain.enums import Lifetime, MemoryType
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import _observe
+
+    ctx = _ctx()
+    async with uow_factory() as uow:
+        await container.services["conversation"].create_thread(uow, ctx)
+        await uow.commit()
+    builder = container.services["context_builder"]
+    query = "what is the scratch value?"
+    await builder.build(ctx, query)
+    await builder.drain()
+    assert await _served(builder, ctx, query)
+    before = await _revisions(container, ctx)
+
+    await _observe(
+        container,
+        uow_factory,
+        ctx,
+        "The scratch value for this run is 42.",
+        hints=ProcessingHints(lifetime=Lifetime.EPHEMERAL, memory_type=MemoryType.WORKING),
+    )
+    assert await container.services["ephemeral_memory"].recall(ctx), "nothing reached WM"
+    after = await _revisions(container, ctx)
+    thread_key = f"{RevisionKind.THREAD.value}:{ctx.thread_id}"
+    assert after.get(thread_key, 0) > before.get(thread_key, 0)
+    assert not await _served(builder, ctx, query), "the bundle cached before the write"
+    rebuilt = await builder.build(ctx, query)
+    assert not rebuilt.cache_hit

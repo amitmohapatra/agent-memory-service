@@ -329,6 +329,34 @@ async def test_the_bundle_write_is_off_the_request_path() -> None:
     assert len(cache._data) > key_before
 
 
+async def test_the_three_bundle_forms_are_written_in_one_pipelined_call() -> None:
+    """The record and both API forms were three sequential SETs - three round trips per
+    miss on the cache the hot path reads; they are one ``mset`` now."""
+    cache = MemoryCache()
+    builder = _builder(cache)
+    writes: list[list[str]] = []
+    original = cache.mset
+
+    async def spy(items: Any, *, ttl_seconds: int | None = None) -> None:
+        writes.append(sorted(items))
+        assert ttl_seconds == builder.cache_ttl
+        await original(items, ttl_seconds=ttl_seconds)
+
+    plain = cache.set
+
+    async def no_set(key: str, value: bytes, *, ttl_seconds: int | None = None) -> None:
+        assert not key.startswith("ctx"), f"a bundle form was written on its own: {key}"
+        await plain(key, value, ttl_seconds=ttl_seconds)
+
+    cache.mset = spy  # type: ignore[method-assign]
+    cache.set = no_set  # type: ignore[method-assign]
+    await builder.build(CTX, QUERY)
+    await builder.drain()
+    bundle_writes = [w for w in writes if any(k.startswith("ctx") for k in w)]
+    assert len(bundle_writes) == 1, writes
+    assert [k.split(":", 1)[0] for k in bundle_writes[0]] == ["ctx", "ctxf", "ctxp"]
+
+
 async def test_a_config_fingerprint_is_computed_once() -> None:
     builder = _builder(MemoryCache())
     computed = 0

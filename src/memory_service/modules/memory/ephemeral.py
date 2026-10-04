@@ -9,6 +9,7 @@ import json
 from datetime import UTC, datetime
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.revisions import RevisionKind
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.intelligence import MemoryCandidate
 
@@ -28,10 +29,12 @@ class EphemeralMemory:
 
     async def remember(
         self, ctx: MemoryExecutionContext, candidate: MemoryCandidate, *, deferred: bool = False
-    ) -> None:
+    ) -> bool:
+        """Push ``candidate`` onto the scope's list; True when the cache took it, so the
+        caller knows a cached bundle of this scope is now missing an item."""
         key = self.key(ctx)
         if self.cache is None or key is None:
-            return
+            return False
         item = json.dumps(
             {
                 "content": candidate.content,
@@ -42,8 +45,25 @@ class EphemeralMemory:
                 "at": datetime.now(UTC).isoformat(),
             }
         ).encode()
-        with contextlib.suppress(CacheUnavailable):
+        try:
             await self.cache.list_push(key, item, max_len=self.max_items, ttl_seconds=self.ttl)
+        except CacheUnavailable:
+            return False
+        return True
+
+    @staticmethod
+    def revision_key(ctx: MemoryExecutionContext) -> tuple[RevisionKind, str]:
+        """The revision a cached bundle of this scope reads that a write here must move.
+
+        Working memory is folded into the bundle (``ContextBuilder._add_extras``) but lives
+        only in the cache, so no persistent write would otherwise invalidate a bundle cached
+        before it: the next context call was served the old bundle until its TTL. THREAD when
+        there is a thread; an item anchored only by an agent run has no narrower revision
+        that every reader of that run subscribes to, so TENANT.
+        """
+        if ctx.thread_id:
+            return RevisionKind.THREAD, ctx.thread_id
+        return RevisionKind.TENANT, ""
 
     async def recall(self, ctx: MemoryExecutionContext) -> list[dict[str, str]]:
         key = self.key(ctx)

@@ -341,11 +341,12 @@ class ObservationPipeline:
     ) -> set[str]:
         """Returns the ids written (created or reinforced)."""
         affected: set[str] = set()
+        working_moved = False
         now = datetime.now(UTC)
         for cand in candidates:
             if cand.lifetime is Lifetime.EPHEMERAL:
                 if self.working is not None:
-                    await self.working.remember(ctx, cand)
+                    working_moved |= await self.working.remember(ctx, cand)
                 outcomes.append(
                     ConsolidationOutcome(
                         decision=DedupDecision.IGNORE, candidate=cand, reason="ephemeral (cache)"
@@ -378,7 +379,7 @@ class ObservationPipeline:
                     )
                 if admission.verdict is not AdmissionVerdict.ADMIT:
                     if admission.verdict is AdmissionVerdict.DEFER and self.working is not None:
-                        await self.working.remember(ctx, cand, deferred=True)
+                        working_moved |= await self.working.remember(ctx, cand, deferred=True)
                     outcomes.append(
                         ConsolidationOutcome(
                             decision=DedupDecision.IGNORE,
@@ -391,6 +392,10 @@ class ObservationPipeline:
             outcomes.append(outcome)
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
+        if working_moved:
+            # committed with the observation's PROCESSED mark by the caller's unit of work
+            kind, identifier = EphemeralMemory.revision_key(ctx)
+            await uow.revisions.bump(ctx.tenant_id, kind, identifier)
         return affected
 
     async def _restated(

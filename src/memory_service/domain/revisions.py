@@ -2,7 +2,10 @@
 
 Every mutation increments the revisions it affects. Cache keys embed the relevant
 revisions, so stale entries simply stop being addressed; no cache scans, no deletion
-storms. The revision counters live in PostgreSQL (canonical) with a Dragonfly read cache.
+storms. The revision counters live only in PostgreSQL (the ``revisions`` table): a bump
+commits with the write it describes, and a reader takes every counter it depends on in one
+indexed statement per cache lookup (``ContextBuilder._revisions``). They are not cached
+anywhere, because a cached counter is exactly the stale read this scheme exists to prevent.
 """
 
 from __future__ import annotations
