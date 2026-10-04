@@ -94,6 +94,16 @@ principal of the tenant — the default at issue; empty means only the key itsel
 narrows or widens it later with `PATCH /v1/keys/{key_id}`; like a revocation it applies on the
 key's next request from any instance.
 
+A restricted key is checked against **every principal a request names**: its user
+(`X-Trellis-User` or the body's `user_id`) must be listed as `user:<id>`, and its agent (the
+body's or query's `agent_id`) as `agent:<id>`; either missing is `403` (`this key may not act for
+that user` / `… as that agent`, `details.field` naming which). So a key listing `user:planner-7`
+and `agent:reorder-agent` may run `reorder-agent` for `planner-7`, but not another agent for
+her, nor `reorder-agent` for another user. A request naming neither user nor agent acts as the
+key itself — the anonymous service principal, which holds no grant on any user's or agent's
+memories. `*` lifts the restriction. (Before 0.4 only the user was checked: an `agent:` entry was
+stored and reported, and a key restricted to one agent could act as any other by naming it.)
+
 ```python
 await t.keys.update(issued.key_id, may_act_as=["agent:reorder-agent", "user:planner-7"])
 me = await MemoryClient(url, api_key=issued.token).tenant.keys.whoami()  # GET /v1/keys/self
@@ -102,8 +112,12 @@ print(me.key_id, me.tenant_id, me.principal, me.role, me.may_act_as)
 
 `GET /v1/keys/self` is open to every key, about itself: it is how a harness checks its
 credential at startup and how the platform's other services authenticate a key they were
-handed. `tenant_id` is null for a key that names the tenant per request (the platform key, a
-development key); `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
+handed. `tenant_id` is null for a credential that names the tenant per request (the platform
+key, an issuer's token). A development key reports the development tenant —
+`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`, `default` unless set — and acts in it on every
+route when a request names no tenant, so a laptop's harness needs no tenant configured anywhere;
+`X-Trellis-Tenant` still names another, and administering the development tenant needs no
+onboarding row. `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
 
 ## Model keys: two registered levels and the operator's, resolved in order
 

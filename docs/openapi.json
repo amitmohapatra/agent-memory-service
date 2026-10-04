@@ -1621,6 +1621,12 @@
           }
         ],
         "properties": {
+          "admission_gate": {
+            "default": false,
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate",
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -3529,7 +3535,7 @@
                 "type": "null"
               }
             ],
-            "description": "the tenant the key speaks for; null for a key that names the tenant per request (the platform key, development keys)",
+            "description": "the tenant the key speaks for; a development key's is the development tenant it acts in unless a request names another; null for a credential that names the tenant per request (the platform key, an issuer's token)",
             "title": "Tenant Id"
           }
         },
@@ -5812,6 +5818,11 @@
       },
       "TenantResponse": {
         "properties": {
+          "admission_gate": {
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5868,6 +5879,7 @@
           "status",
           "retention_days",
           "rate_limit_per_minute",
+          "admission_gate",
           "created_at",
           "updated_at"
         ],
@@ -6316,6 +6328,18 @@
       "UpdateTenantRequest": {
         "additionalProperties": false,
         "properties": {
+          "admission_gate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate"
+          },
           "clear_rate_limit": {
             "default": false,
             "title": "Clear Rate Limit",
@@ -7001,7 +7025,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -7494,7 +7518,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -8012,7 +8036,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -8483,7 +8507,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -8954,7 +8978,7 @@
             }
           }
         },
-        "summary": "Rename, suspend or resume a tenant; set its retention and request quota",
+        "summary": "Rename, suspend or resume a tenant; set its retention, request quota and admission gate",
         "tags": [
           "admin"
         ]
@@ -8992,7 +9016,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -9464,7 +9488,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -10101,7 +10125,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -10726,7 +10750,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -11187,7 +11211,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -11696,7 +11720,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -12118,7 +12142,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -12760,7 +12784,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -13356,7 +13380,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -13797,7 +13821,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -14299,7 +14323,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -14312,7 +14336,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -14914,7 +14938,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -15315,7 +15339,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -15328,7 +15352,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -15860,7 +15884,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -15873,7 +15897,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -16600,7 +16624,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -17190,7 +17214,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -17746,7 +17770,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -18168,7 +18192,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -18181,7 +18205,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -18670,7 +18694,7 @@
         "operationId": "tenancy.issue_key",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -18683,7 +18707,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -19216,7 +19240,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -19571,7 +19595,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -19584,7 +19608,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -20079,7 +20103,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -20092,7 +20116,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -20783,7 +20807,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -21223,7 +21247,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -21924,7 +21948,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -22503,7 +22527,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -23058,7 +23082,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -23518,7 +23542,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -24028,7 +24052,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -24626,7 +24650,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -25017,7 +25041,7 @@
         "operationId": "tenancy.revoke_tenant_key",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -25030,7 +25054,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -25523,7 +25547,7 @@
         "operationId": "tenancy.tenant_key_status",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -25536,7 +25560,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -25993,7 +26017,7 @@
         "operationId": "tenancy.set_tenant_key",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -26006,7 +26030,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -26511,7 +26535,7 @@
         "operationId": "tenancy.tenant_policy",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -26524,7 +26548,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -26981,7 +27005,7 @@
         "operationId": "tenancy.set_tenant_policy",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -26994,7 +27018,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -27537,7 +27561,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -27550,7 +27574,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -28164,7 +28188,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -28591,7 +28615,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -29142,7 +29166,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -29155,7 +29179,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -29672,7 +29696,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -30213,7 +30237,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -30783,7 +30807,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -31208,7 +31232,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -31862,7 +31886,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -32452,7 +32476,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -33015,7 +33039,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -33570,7 +33594,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -34069,7 +34093,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -34530,7 +34554,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -34991,7 +35015,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -35452,7 +35476,7 @@
             }
           },
           {
-            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key.",
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -35917,7 +35941,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -35930,7 +35954,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -36418,7 +36442,7 @@
         "operationId": "tenancy.create_workspace",
         "parameters": [
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -36431,7 +36455,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -36945,7 +36969,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -36958,7 +36982,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -37453,7 +37477,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -37466,7 +37490,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -37934,7 +37958,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -37947,7 +37971,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -38428,7 +38452,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -38441,7 +38465,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },
@@ -38945,7 +38969,7 @@
             }
           },
           {
-            "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
             "in": "header",
             "name": "X-Trellis-Tenant",
             "required": false,
@@ -38958,7 +38982,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The tenant to administer. Required for the platform key and development keys; an admin key names its own tenant and this must agree with it.",
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
               "title": "X-Trellis-Tenant"
             }
           },

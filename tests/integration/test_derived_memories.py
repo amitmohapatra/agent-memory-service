@@ -189,3 +189,57 @@ async def test_run_only_reflection_does_not_grant_the_owner_extra_access(contain
         assert insight.visibility is Visibility.RUN
         assert await uow.memories.visibility_keys("acme", created[0]) == run_keys
     assert created[0] not in {m.memory_id for m in await _memories(uow_factory, U1, container)}
+
+
+async def test_forgetting_a_source_retracts_what_was_derived_from_it(container, uow_factory):
+    """``DELETE /v1/memories/{id}`` and the ``memory_forget`` tool both forget through
+    ``MemoryService.forget``. What was derived from the forgotten memory goes with it, however
+    deep and whatever else it was derived from: a synthesis of A and B still says what A
+    said. What was derived only from other memories stays. The dependents leave the index and
+    the readers' caches in the same commit."""
+    from memory_service.adapters.db.orm import MemoryRow
+    from memory_service.modules.memory.revisions import memory_revision_keys
+
+    forgotten, kept = await sources(container, uow_factory)
+    async with uow_factory() as uow:
+        both = await derive(uow, [forgotten, kept], "profile")
+        await uow.commit()
+    async with uow_factory() as uow:
+        both = await uow.memories.get("acme", both.memory_id)
+        deeper = await derive(uow, [both, kept], "overview")
+        unrelated = await derive(uow, [kept], "formatting")
+        await uow.commit()
+    # a dependent anchored where the forgotten memory is not: only its own revisions can
+    # invalidate a reader who cached it
+    async with uow_factory() as uow:
+        row = await uow.memories.s.get(MemoryRow, deeper.memory_id)
+        row.thread_id, row.scope_level = "thr-insight", "THREAD"
+        await uow.commit()
+    async with uow_factory() as uow:
+        deeper = (await uow.memories.get_many("acme", [deeper.memory_id]))[0]
+        assert deeper.scope.thread_id == "thr-insight"
+    watched = sorted(memory_revision_keys(deeper))
+    async with uow_factory() as uow:
+        before = await uow.revisions.get_many("acme", watched)
+
+    async with uow_factory() as uow:
+        assert await container.services["memory"].forget(uow, U1, forgotten.memory_id)
+        await uow.commit()
+
+    async with uow_factory() as uow:
+        live = {
+            m.memory_id
+            for m in await uow.memories.get_many(
+                "acme", [both.memory_id, deeper.memory_id, unrelated.memory_id, kept.memory_id]
+            )
+        }
+        assert live == {unrelated.memory_id, kept.memory_id}
+        for memory_id in (both.memory_id, deeper.memory_id):
+            row = await uow.memories.s.get(MemoryRow, memory_id)
+            assert row.temporal_status == TemporalStatus.RETRACTED.value
+            assert row.indexed_at is None, "queued for removal from the search index"
+        after = await uow.revisions.get_many("acme", watched)
+    assert all(after[k] > before[k] for k in before), (before, after)
+    # forgetting again is a no-op, not an error
+    async with uow_factory() as uow:
+        assert await container.services["memory"].forget(uow, U1, forgotten.memory_id) is None

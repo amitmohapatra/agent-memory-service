@@ -369,14 +369,17 @@ def _wire_llm(container: Container) -> None:
     Model keys, per-level policies and the daily usage ledger are wired whatever the
     configuration, so a tenant can register a key or a policy before the operator turns the
     model on."""
-    from memory_service.adapters.models.credential_cipher import AesCredentialCipher
+    from memory_service.adapters.models.credential_cipher import (
+        AesCredentialCipher,
+        envelope_settings,
+    )
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 
     uow_factory = container.services["uow_factory"]
-    cipher = AesCredentialCipher(container.settings.agent_credentials)
+    cipher = AesCredentialCipher(envelope_settings(container.settings))
     credentials = ModelCredentials(uow_factory, cipher)
     policies = ModelPolicies(uow_factory)
     usage = LLMUsage(uow_factory)
@@ -502,6 +505,7 @@ def _wire_retrieval(container: Container) -> None:
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
     from memory_service.modules.feedback.service import FeedbackService
+    from memory_service.modules.memory.admission import AdmissionGate
     from memory_service.modules.memory.connections import ConnectionService
     from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.native import NativeMemoryIntelligence
@@ -534,6 +538,8 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
+        # consulted only for tenants that turned it on (Tenant.admission_gate, off by default)
+        gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
     )
     container.services["memory"] = MemoryService(

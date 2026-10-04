@@ -111,7 +111,10 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # 35 -> 36 for ``retail_calendar``: which fiscal calendar the customer reports in is a
     # fact about the customer, like ``tenant_claim``, not a tuning - two retailers on 4-5-4
     # and 4-4-5 calendars mean different days by the same "last week".
-    assert len(leaves) <= 36, f"{len(leaves)} env fields: {leaves}"
+    # 36 -> 37 for ``authentication.trusted_dev_tenant``: which tenant a laptop's development
+    # key acts in is a credential fact (it is what ``GET /v1/keys/self`` reports for the key),
+    # and it must equal the harness's local tenant, which is configured on the other side.
+    assert len(leaves) <= 37, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",

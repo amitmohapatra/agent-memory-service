@@ -244,7 +244,7 @@ def _rename_body_schemas(schema: dict[str, Any]) -> None:
 def _scope_header_params() -> list[dict[str, Any]]:
     described = {
         HEADERS.tenant: "The tenant acted for. In api_key mode the key names it and this must "
-        "agree with the key.",
+        "agree with the key; a development key acts in the development tenant without it.",
         HEADERS.workspace: "The workspace (team) acted in; membership is checked.",
         HEADERS.user: "The end user acted for.",
     }

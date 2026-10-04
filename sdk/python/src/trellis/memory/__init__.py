@@ -9,6 +9,7 @@ from trellis.memory.advanced import (
     ModelKeysAPI,
     ToolCatalogAPI,
 )
+from trellis.memory.breaker import CircuitBreaker
 from trellis.memory.client import (
     FeedbackAPI,
     HistoryAPI,
@@ -20,6 +21,7 @@ from trellis.memory.client import (
 from trellis.memory.errors import (
     AuthenticationError,
     AuthorizationError,
+    CircuitOpenError,
     ConflictError,
     DependencyUnavailableError,
     MemoryError,
@@ -121,6 +123,8 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "CatalogTool",
+    "CircuitBreaker",
+    "CircuitOpenError",
     "ClaimVerdict",
     "ConflictError",
     "ContextBundle",

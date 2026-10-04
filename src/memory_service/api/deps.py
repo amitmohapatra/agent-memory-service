@@ -99,6 +99,21 @@ def credential_mode(request: Request) -> str | None:
     return principal.mode if principal is not None else None
 
 
+def credential_tenant(principal: ServicePrincipal | None, container: Container) -> str | None:
+    """The tenant a credential acts in when the request names none: an issued key's own, and
+    the configured development tenant for a development key (``trusted_dev_tenant``), so a
+    laptop needs no tenant anywhere. None for the platform key and an issuer's token, which
+    name the tenant per request."""
+    if principal is None:
+        return None
+    if principal.mode == "api_key":
+        tenant = principal.claims.get("tenant")
+        return str(tenant) if tenant else None
+    if principal.mode == "trusted_dev":
+        return container.settings.authentication.trusted_dev_tenant
+    return None
+
+
 def _require_tenant_matches_credential(
     request: Request, container: Container, tenant_id: str
 ) -> None:
@@ -151,10 +166,13 @@ def _credential_scope(
     """The tenant and workspace this request acts in, bound to its credential.
 
     A key carries its tenant, so a caller holding one need not repeat it; when it does, the
-    check still binds the two. A key bound to a workspace pins the workspace the same way.
+    check still binds the two. A development key acts in the development tenant unless the
+    request names another. A key bound to a workspace pins the workspace the same way.
     """
     claims = credential_claims(request) if credential_mode(request) == "api_key" else {}
-    tenant_id = headers["tenant_id"] or body.tenant_id or claims.get("tenant")
+    tenant_id = (
+        headers["tenant_id"] or body.tenant_id or credential_tenant(_principal(request), container)
+    )
     if not tenant_id:
         raise ValidationFailed(f"tenant_id is required ({HEADERS.tenant} header)")
     _require_tenant_matches_credential(request, container, tenant_id)
@@ -178,14 +196,28 @@ def _require_tenant_active(container: Container, tenant_id: str) -> None:
         raise AuthorizationFailed("tenant is suspended", details={"tenant_id": tenant_id})
 
 
-def _require_may_act_as(request: Request, user_id: str | None) -> None:
-    """A key restricted to some principals (``may_act_as``) acts for no other user."""
+def _require_may_act_as(request: Request, user_id: str | None, agent_id: str | None) -> None:
+    """A key restricted to some principals (``may_act_as``) acts for those and no others.
+
+    Every principal the request names is checked: its user against the ``user:<id>``
+    entries and its agent against the ``agent:<id>`` entries, so a key listing only
+    ``user:alice`` cannot run an agent for her, and one listing only ``agent:reorder`` cannot
+    pick a user. A request naming neither acts as the key itself - the anonymous service
+    principal, which holds no grant on any user's or agent's memories. ``*`` (the default at
+    issue) lifts the restriction.
+
+    The agent check used to be missing: ``agent:<id>`` entries were stored and reported by
+    ``GET /v1/keys/self`` and compared with nothing, so a key restricted to one agent could
+    act as any other by naming it in the body.
+    """
     claims = credential_claims(request) if credential_mode(request) == "api_key" else {}
     allowed = claims.get("may_act_as")
-    if user_id is None or allowed is None or ANY_PRINCIPAL in allowed:
+    if allowed is None or ANY_PRINCIPAL in allowed:
         return
-    if f"user:{user_id}" not in allowed:
+    if user_id is not None and f"user:{user_id}" not in allowed:
         raise ScopeDenied("this key may not act for that user", details={"field": HEADERS.user})
+    if agent_id is not None and f"agent:{agent_id}" not in allowed:
+        raise ScopeDenied("this key may not act as that agent", details={"field": "agent_id"})
 
 
 def request_context(request: Request, tenant_id: str) -> MemoryExecutionContext:
@@ -215,7 +247,7 @@ def build_context(
     tenant_id, workspace_id = _credential_scope(request, container, headers, body)
     _require_tenant_active(container, tenant_id)
     user_id = headers["user_id"] or body.user_id
-    _require_may_act_as(request, user_id)
+    _require_may_act_as(request, user_id, body.agent_id)
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
@@ -283,7 +315,7 @@ async def get_header_context(
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
 
 
-def key_self_of(principal: ServicePrincipal) -> KeySelfResponse:
+def key_self_of(principal: ServicePrincipal, container: Container) -> KeySelfResponse:
     """What ``GET /v1/keys/self`` says about the authenticated caller."""
     claims = principal.claims
     if principal.mode == "api_key" and is_platform(principal):
@@ -302,10 +334,11 @@ def key_self_of(principal: ServicePrincipal) -> KeySelfResponse:
             role=str(claims["role"]),
             may_act_as=list(claims.get("may_act_as") or []),
         )
-    # a development key or an issuer's token names its tenant per request
+    # an issuer's token names its tenant per request; a development key acts in the
+    # development tenant unless a request names another
     return KeySelfResponse(
         key_id=principal.service_id,
-        tenant_id=None,
+        tenant_id=credential_tenant(principal, container),
         principal=principal.service_id,
         role=principal.mode,
         may_act_as=[ANY_PRINCIPAL],
@@ -358,7 +391,8 @@ TenantAdminDep = Annotated[ServicePrincipal, require_role(KeyRole.ADMIN, KeyRole
 
 def administered_tenant(request: Request, principal: ServicePrincipal, container: Container) -> str:
     """The tenant an administrative call acts on: the key's own tenant, or - for a
-    credential that names none, the platform key and development keys - the header."""
+    credential that names none, the platform key and development keys - the header; a
+    development key with no header administers the development tenant."""
     claimed = principal.claims.get("tenant") if principal.mode == "api_key" else None
     named = require_one_value(request.headers, HEADERS.tenant)
     if named and not is_valid_tenant_id(named):
@@ -369,7 +403,7 @@ def administered_tenant(request: Request, principal: ServicePrincipal, container
         raise ScopeDenied(
             "credential is not valid for this tenant", details={"field": HEADERS.tenant}
         )
-    tenant = claimed or named
+    tenant = claimed or named or credential_tenant(principal, container)
     if not tenant:
         raise ValidationFailed(f"tenant_id is required ({HEADERS.tenant} header)")
     if not is_platform(principal):
@@ -387,16 +421,18 @@ async def get_administered_tenant(
         str | None,
         Header(
             alias=HEADERS.tenant,
-            description="The tenant to administer. Required for the platform key and "
-            "development keys; an admin key names its own tenant and this must agree with it.",
+            description="The tenant to administer. Required for the platform key; a "
+            "development key administers the development tenant without it; an admin key "
+            "names its own tenant and this must agree with it.",
         ),
     ] = None,
 ) -> str:
     """``administered_tenant`` as a dependency, which also puts the header in the OpenAPI
     document. The tenant must exist when the header alone names it: the platform's typo
-    must not create rows for a tenant nobody onboarded."""
+    must not create rows for a tenant nobody onboarded. The credential's own tenant (a key's,
+    or the development tenant of a development key) needs no row."""
     tenant_id = administered_tenant(request, principal, container)
-    if principal.claims.get("tenant") != tenant_id:
+    if credential_tenant(principal, container) != tenant_id:
         async with container.services["uow_factory"]() as uow:
             if await uow.tenants.get(tenant_id) is None:
                 raise NotFound("Tenant not found")

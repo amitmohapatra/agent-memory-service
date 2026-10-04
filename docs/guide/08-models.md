@@ -118,7 +118,12 @@ flowchart TB
   has a row — the operator's `BIFROST_VIRTUAL_KEY`. A revoked key refuses rather than falling
   through, and a key registered or rotated mid-call fails that call closed instead of mixing
   keys. Keys are stored encrypted under the operator's envelope keys
-  (`MEMORY__AGENT_CREDENTIALS__*`) and never returned. There is no workspace-level key: ADR
+  (`MEMORY__AGENT_CREDENTIALS__*`) and never returned. In `dev` and `test` with none set, the
+  service derives a development envelope key at startup (from a fixed label and the database
+  URL, so every process agrees; never stored) and logs `agent_credentials.development_key` as
+  a warning: registration works on a laptop and protects nothing. `staging` and `prod` never
+  get one and refuse registration until the keys are set
+  (`adapters/models/credential_cipher.py:envelope_settings`). There is no workspace-level key: ADR
   0023's workspace model keys were removed (migration `0021_final_surface`).
 - **What it may be spent on** is the tenant's policy (`PUT /v1/model-key/policy`), with
   exactly three fields: `uses`, `read_assist` and `models` (a gateway model per use). There

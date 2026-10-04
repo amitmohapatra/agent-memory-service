@@ -32,6 +32,7 @@ from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator,
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from memory_service.domain.fiscal import parse_calendar
+from memory_service.domain.tenancy import is_valid_tenant_id
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -139,6 +140,19 @@ class AuthenticationSettings(BaseModel):
     jwt_jwks_url: str | None = None
     #: Development keys that trust the context headers as given (refused when deployed).
     trusted_dev_api_keys: list[SecretStr] = Field(default_factory=list)
+    #: The tenant a development key acts in when a request names none, and the one
+    #: ``GET /v1/keys/self`` reports for it - so a laptop's harness, which asks the key for its
+    #: tenant, works with no tenant configured anywhere. ``X-Trellis-Tenant`` still picks
+    #: another. The same value as the harness's local tenant.
+    trusted_dev_tenant: str = Field(default="default", min_length=1, max_length=200)
+
+    @field_validator("trusted_dev_tenant")
+    @classmethod
+    def _valid_dev_tenant(cls, value: str) -> str:
+        if not is_valid_tenant_id(value):
+            raise ValueError(f"invalid trusted_dev_tenant: {value!r}")
+        return value
+
     #: Claim on the credential naming the tenant it may act for. Unset, a credential may
     #: assert ANY tenant - the tenant arrives in a header and nothing checks it against who
     #: is calling, so one key reaches every tenant on the deployment by changing a header.

@@ -110,8 +110,8 @@ async def issue_key(
     description="The introspection other services of the platform authenticate a key by: "
     "send the key as any call sends it and read who it is. Any key may ask about itself.",
 )
-async def key_self(principal: ServicePrincipalDep) -> KeySelfResponse:
-    return key_self_of(principal)
+async def key_self(principal: ServicePrincipalDep, container: ContainerDep) -> KeySelfResponse:
+    return key_self_of(principal, container)
 
 
 @router.get(
