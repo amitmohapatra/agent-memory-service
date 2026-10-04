@@ -27,20 +27,22 @@ contract. Nothing in the guide claims a number that is not in one of those files
 | # | Chapter | What you get |
 |---|---|---|
 | 1 | [Why a memory service](guide/01-why-a-memory-service.md) | the problem, and why a vector database is not the answer |
-| 2 | Concepts *(not written yet)* | memories, observations, scopes, principals — the vocabulary |
-| 3 | Time *(not written yet)* | how a fact stops being true without being deleted |
-| 4 | Retrieval *(not written yet)* | four retrievers, one ranking, and why there is no reranker |
-| 5 | The knowledge graph *(not written yet)* | the questions vector search cannot answer |
-| 6 | Trust *(not written yet)* | grounding, contradiction, and memory poisoning |
-| 7 | Authorization *(not written yet)* | seven visibility levels, and who an agent really is |
-| 8 | Models *(not written yet)* | which models, where, why — and running without an LLM |
-| 9 | [API and SDK](api/README.md) | every endpoint and its SDK call, side by side — **written**, one page per area |
-| 10 | Architecture *(not written yet)* | ports, adapters, and the path a write takes |
-| 11 | Operations *(not written yet)* | deploying, configuring, and what hardware it needs |
-| 12 | Testing and gates *(not written yet)* | how the claims in this documentation are kept true |
+| 2 | [Concepts](guide/02-concepts.md) | memories, observations, scopes, principals — the vocabulary |
+| 3 | [Time](guide/03-time.md) | how a fact stops being true without being deleted |
+| 4 | [Retrieval](guide/04-retrieval.md) | four retrievers, one ranking, and why there is no reranker |
+| 5 | [The knowledge graph](guide/05-knowledge-graph.md) | the questions vector search cannot answer |
+| 6 | [Trust](guide/06-trust.md) | grounding, contradiction, and memory poisoning |
+| 7 | [Authorization](guide/07-authorization.md) | seven visibility levels, and who an agent really is |
+| 8 | [Models](guide/08-models.md) | which models, where, why — and running without an LLM |
+| 9 | [API and SDK](api/README.md) | every endpoint and its SDK call, side by side, one page per area |
+| 10 | [Architecture](guide/10-architecture.md) | ports, adapters, and the path a write takes |
+| 11 | [Operations](guide/11-operations.md) | deploying, configuring, and what hardware it needs |
+| 12 | [Testing and gates](guide/12-testing-and-gates.md) | how the claims in this documentation are kept true |
 
-Chapters 1 and 9 are written; the rest is the planned outline, listed so you can see where the
-guide is going — those chapters are unlinked rather than linked-and-missing on purpose.
+All twelve chapters are written. Each cites the code (`src/memory_service/…` paths, given
+relative to the package) and the ADRs it describes, and every figure names its source in
+[`MEASUREMENTS.md`](MEASUREMENTS.md), an ADR's evidence or `benchmark/results/`; where
+something is designed but not built, the chapter says so.
 
 Chapter 9 is [`api/`](api/README.md): one page per API area, each with a diagram, every route, and
 the SDK call that makes it.
