@@ -49,9 +49,12 @@ class AdminAPI:
         tenant_id: str | None = None,
         retention_days: int | None = None,
         rate_limit_per_minute: int | None = None,
+        admission_gate: bool = False,
         idempotency_key: str | None = None,
     ) -> CreatedTenant:
         """The tenant and its first admin key. The key's token is returned once: keep it.
+        ``admission_gate`` scores extracted memory candidates and stores only the admitted
+        ones (off: every deduplicated candidate is stored).
 
         Pass ``idempotency_key`` to make a retry safe: the replay carries the same tenant with
         ``admin_key.token`` set to None (the secret is never shown twice).
@@ -61,6 +64,7 @@ class AdminAPI:
             "tenant_id": tenant_id,
             "retention_days": retention_days,
             "rate_limit_per_minute": rate_limit_per_minute,
+            "admission_gate": admission_gate,
         }
         return CreatedTenant.model_validate(
             await self._t.request(
@@ -91,7 +95,7 @@ class AdminAPI:
 
     async def update_tenant(self, tenant_id: str, **changes: Any) -> TenantInfo:
         """``name``, ``status``, ``retention_days`` / ``clear_retention``,
-        ``rate_limit_per_minute`` / ``clear_rate_limit``."""
+        ``rate_limit_per_minute`` / ``clear_rate_limit``, ``admission_gate``."""
         return TenantInfo.model_validate(
             await self._t.request("PATCH", f"/v1/admin/tenants/{tenant_id}", json=changes)
         )

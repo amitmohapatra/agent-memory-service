@@ -799,6 +799,8 @@ class TenantInfo(BaseModel):
     status: TenantStatus
     retention_days: int | None = None
     rate_limit_per_minute: int | None = None
+    #: extracted memory candidates are scored and only the admitted ones stored
+    admission_gate: bool = False
     created_at: datetime
     updated_at: datetime
 

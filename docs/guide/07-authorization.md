@@ -103,8 +103,8 @@ counted in the cache and fails open when the cache is down.
 **A tenant is the wall nothing crosses.** Every object id and every audience key carries the
 tenant (`thread:acme/thr_1`, `user:acme/u1`), so tenancy is structural rather than a column
 someone has to remember (ADR 0005). A tenant is onboarded by the platform key
-(`POST /v1/admin/tenants`), carries `retention_days` and `rate_limit_per_minute`, and can be
-suspended. Identifiers are never reused: a deleted workspace keeps its rows, and creating
+(`POST /v1/admin/tenants`), carries `retention_days`, `rate_limit_per_minute` and the
+`admission_gate` switch, and can be suspended. Identifiers are never reused: a deleted workspace keeps its rows, and creating
 another with the same id is `409`, so audit entries and memory anchors keep their meaning.
 
 **A workspace is a team inside a tenant** that shares what it stores (ADR 0021). Membership is

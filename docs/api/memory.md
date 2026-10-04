@@ -27,12 +27,24 @@ sequenceDiagram
   A->>API: GET /v1/jobs/{job_id} — has it landed? (ack.job_ids)
 ```
 
-An admission gate (`modules/memory/admission.py`) that scores a candidate on worthiness,
-novelty, confidence and expected utility, and admits, defers or rejects it, is built but **not
-wired**: `adapters/wiring.py` builds the observation pipeline without one, so today every
-deduplicated candidate is stored.
 Deduplication is lexical *and* dense, so the same fact said twice is one memory with two pieces
 of evidence.
+
+### The admission gate
+
+An admission gate (`modules/memory/admission.py`) scores each extracted candidate on worthiness
+(type prior and extraction confidence, penalised for transient or generic phrasing), novelty
+(what deduplication decided), confidence and expected utility (lifetime × importance ×
+recency), and admits, defers or rejects it. It is a **tenant's switch**, off by default:
+`admission_gate` on the tenant (`POST`/`PATCH /v1/admin/tenants`, [admin.md](admin.md)). With it
+on, a rejected candidate is not stored (the job records it as `IGNORE` with the gate's reasons),
+a deferred one waits in working memory and is admitted when it is said again, and every stored
+memory carries the decision and its inputs in `system_metadata.admission`. With it off — and for
+a tenant with no row, such as the development tenant — every deduplicated candidate is stored,
+as before. It is off by default because the retrieval gates were measured with every candidate
+kept: on LoCoMo, keeping the verbatim turn is what lifted the retrieval ceiling from 0.098 to
+0.685, and a gate that drops a turn drops what retrieval can reach. Statements made with
+`remember` are never gated (ADR 0032).
 
 ## Routes
 

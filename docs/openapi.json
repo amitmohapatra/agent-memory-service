@@ -1621,6 +1621,12 @@
           }
         ],
         "properties": {
+          "admission_gate": {
+            "default": false,
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate",
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -5812,6 +5818,11 @@
       },
       "TenantResponse": {
         "properties": {
+          "admission_gate": {
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5868,6 +5879,7 @@
           "status",
           "retention_days",
           "rate_limit_per_minute",
+          "admission_gate",
           "created_at",
           "updated_at"
         ],
@@ -6316,6 +6328,18 @@
       "UpdateTenantRequest": {
         "additionalProperties": false,
         "properties": {
+          "admission_gate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "score each memory candidate extracted from a message or event (worthiness, novelty, confidence, expected utility) and store only the admitted ones; a deferred one is kept when it is said again. Off (the default) stores every deduplicated candidate. Statements made with POST /v1/memories are never gated",
+            "title": "Admission Gate"
+          },
           "clear_rate_limit": {
             "default": false,
             "title": "Clear Rate Limit",
@@ -8954,7 +8978,7 @@
             }
           }
         },
-        "summary": "Rename, suspend or resume a tenant; set its retention and request quota",
+        "summary": "Rename, suspend or resume a tenant; set its retention, request quota and admission gate",
         "tags": [
           "admin"
         ]

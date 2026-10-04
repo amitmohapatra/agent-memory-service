@@ -1037,6 +1037,9 @@ class TenantRow(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", server_default="active")
     retention_days: Mapped[int | None] = mapped_column(Integer)
     rate_limit_per_minute: Mapped[int | None] = mapped_column(Integer)
+    admission_gate: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
 

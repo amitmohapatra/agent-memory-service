@@ -298,7 +298,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 | --- | --- | --- |
 | Rotate a key | `POST /v1/keys` (new), deploy it, `DELETE /v1/keys/{key_id}` (old) | `keys.issue(...)`, `keys.revoke(old_id)` |
 | Narrow whom a key may act for | `PATCH /v1/keys/{key_id}` | `admin.tenant.keys.update(key_id, may_act_as=["agent:support-bot"])` |
-| Retention / rate limit / suspend (platform key) | `PATCH /v1/admin/tenants/{id}` | `platform.admin.update_tenant("acme", retention_days=365, rate_limit_per_minute=600)`; `status="suspended"` |
+| Retention / rate limit / suspend / admission gate (platform key) | `PATCH /v1/admin/tenants/{id}` | `platform.admin.update_tenant("acme", retention_days=365, rate_limit_per_minute=600)`; `status="suspended"`; `admission_gate=True` (off by default: score extracted candidates and store only the admitted ones) |
 | Who read what | `GET /v1/reads` | `await admin.tenant.reads(limit=50)` |
 
 - Revocation and `may_act_as` changes apply on the key's next request, on every instance.

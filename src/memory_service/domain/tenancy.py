@@ -77,6 +77,11 @@ class Tenant(BaseModel):
     rate_limit_per_minute: int | None = Field(
         default=None, ge=0, description="overrides service.rate_limit_per_minute for this tenant"
     )
+    admission_gate: bool = Field(
+        default=False,
+        description="score each extracted memory candidate before it is stored and keep only "
+        "the ones worth keeping (modules/memory/admission.py); off keeps every candidate",
+    )
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

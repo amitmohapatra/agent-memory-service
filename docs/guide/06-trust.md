@@ -222,12 +222,12 @@ are the ones in the code, each with where it lives.
   instructions inside them, and the degenerate-input benchmark records a prompt-injection
   question that was answered rather than declined (`docs/MEASUREMENTS.md` §4). Treat the
   rendered context as untrusted data in your own system prompt.
-- **The admission gate is built and not wired.** `modules/memory/admission.py` scores a
-  candidate on worthiness, novelty, confidence and expected utility and can admit, defer or
-  reject it; `ObservationPipeline` accepts a gate, but `adapters/wiring.py` constructs the
-  pipeline without one. Every candidate the rules extract is admitted today.
-  ([api/memory.md](../api/memory.md) describes the gate as if it ran; the wiring is the
-  source of truth.)
+- **The admission gate is off unless a tenant turns it on.** `modules/memory/admission.py`
+  scores a candidate on worthiness, novelty, confidence and expected utility and can admit,
+  defer or reject it; it is wired into the observation pipeline behind
+  `Tenant.admission_gate`, which defaults to off because the retrieval gates were measured
+  with every candidate kept ([api/memory.md](../api/memory.md#the-admission-gate), ADR 0032).
+  For a tenant that has not turned it on, every candidate the rules extract is admitted.
 - **No per-voter rate limit or reputation.** ADR 0028's argument is that review makes one
   unnecessary for safety; `author_record` is the visibility it provides instead.
 

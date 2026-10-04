@@ -12,12 +12,12 @@ sequenceDiagram
   participant A as POST /v1/admin/tenants
   participant T as Tenant admin
   participant S as The service
-  O->>A: {name, tenant_id?, retention_days?, rate_limit_per_minute?} + Idempotency-Key
+  O->>A: {name, tenant_id?, retention_days?, rate_limit_per_minute?, admission_gate?} + Idempotency-Key
   A-->>O: CreatedTenant {tenant, admin_key.token}  ← shown once
   Note over O,T: hand that admin key to the tenant#59; the platform key is not for daily use
   T->>S: POST /v1/keys — service keys for its agents
   T->>S: POST /v1/workspaces, members  (tenancy.md)
-  O->>A: PATCH /v1/admin/tenants/{id} — rename, suspend, resume, retention, quota
+  O->>A: PATCH /v1/admin/tenants/{id} — rename, suspend, resume, retention, quota, admission
 ```
 
 | Route | Purpose | SDK (`memory.admin`) |
@@ -25,7 +25,7 @@ sequenceDiagram
 | `POST /v1/admin/tenants` | onboard a tenant and receive its first admin key (shown once) | `admin.create_tenant(name, tenant_id=…, retention_days=…, rate_limit_per_minute=…)` |
 | `GET /v1/admin/tenants` | list tenants (cursor: the last `tenant_id` seen) | `admin.tenants()`, `admin.tenants_page()` |
 | `GET /v1/admin/tenants/{tenant_id}` | one tenant | `admin.get_tenant(id)` |
-| `PATCH /v1/admin/tenants/{tenant_id}` | rename, suspend or resume; set retention and the request quota | `admin.update_tenant(id, **changes)` |
+| `PATCH /v1/admin/tenants/{tenant_id}` | rename, suspend or resume; set retention, the request quota and the admission gate | `admin.update_tenant(id, **changes)` |
 
 ```python
 created = await memory.admin.create_tenant(
@@ -41,6 +41,11 @@ print(created.tenant.tenant_id, created.admin_key.token)  # the token is shown o
 A suspended tenant's own administrators are suspended with it — resuming is the platform's job, not
 theirs. Retention and the request quota are per tenant, and a tenant with neither set inherits the
 deployment's defaults.
+
+`admission_gate` (off by default) turns on the admission gate for the tenant's extracted memories:
+each candidate is scored and only the admitted ones are stored
+([memory.md](memory.md#the-admission-gate)). A tenant with no row — the development tenant —
+keeps every candidate.
 
 ## Operations
 

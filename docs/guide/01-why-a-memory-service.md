@@ -121,9 +121,10 @@ Being clear about this early saves disappointment later.
   model gateway at all is a working install. [`LLM-USES.md`](../LLM-USES.md) lists each use and its fallback.
 - **It is not an agent framework.** It has no opinion about how your agent loops, which
   model you call, or what a tool is. It is a service your agent talks to.
-- **It is not finished.** Several seams are built and deliberately not wired — the admission
-  gate, thread observation, relation invalidation. Each is flagged where it appears, with
-  what it would do and what turning it on would change.
+- **It is not finished.** Several seams are built and deliberately not wired — thread
+  observation, relation invalidation — and the admission gate is wired but off unless a tenant
+  turns it on. Each is flagged where it appears, with what it would do and what turning it on
+  would change.
 
 ---
 

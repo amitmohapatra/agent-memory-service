@@ -273,7 +273,14 @@ class ObservationPipeline:
                     or observation.hints.importance is not None
                 )
                 async with self.uow_factory() as uow:
-                    affected = await self._apply_all(uow, ctx, candidates, outcomes, hinted=hinted)
+                    affected = await self._apply_all(
+                        uow,
+                        ctx,
+                        candidates,
+                        outcomes,
+                        hinted=hinted,
+                        gate=await self._gate_for(uow, tenant_id),
+                    )
                     if affected:
                         await uow.enqueue(
                             JobSpec(
@@ -321,6 +328,40 @@ class ObservationPipeline:
             update["importance"] = h.importance
         return c.model_copy(update=update) if update else c
 
+    async def _gate_for(self, uow: UnitOfWork, tenant_id: str) -> AdmissionGate | None:
+        """The admission gate, when the tenant turned it on (``Tenant.admission_gate``, off by
+        default). A tenant with no row - the development tenant, a jwt deployment's tenants -
+        keeps every candidate, as every tenant did before the gate was wired."""
+        if self.gate is None:
+            return None
+        tenant = await uow.tenants.get(tenant_id)
+        return self.gate if tenant is not None and tenant.admission_gate else None
+
+    async def _admission(
+        self,
+        gate: AdmissionGate,
+        ctx: MemoryExecutionContext,
+        cand: MemoryCandidate,
+        outcome: ConsolidationOutcome,
+        *,
+        hinted: bool,
+        now: datetime,
+    ) -> AdmissionDecision:
+        """The gate's verdict on one candidate. A deferred candidate said again while it is
+        parked in working memory is corroborated and admitted; one deferred for the first
+        time is parked there."""
+        admission = gate.evaluate(cand, outcome, hinted=hinted, now=now)
+        if admission.verdict is AdmissionVerdict.DEFER and await self._deferred_before(ctx, cand):
+            return admission.model_copy(
+                update={
+                    "verdict": AdmissionVerdict.ADMIT,
+                    "reasons": [*admission.reasons, "corroborated: repeated while deferred"],
+                }
+            )
+        if admission.verdict is AdmissionVerdict.DEFER and self.working is not None:
+            await self.working.remember(ctx, cand, deferred=True)
+        return admission
+
     async def _deferred_before(self, ctx: MemoryExecutionContext, cand: MemoryCandidate) -> bool:
         if self.working is None:
             return False
@@ -338,8 +379,10 @@ class ObservationPipeline:
         outcomes: list[ConsolidationOutcome],
         *,
         hinted: bool = False,
+        gate: AdmissionGate | None = None,
     ) -> set[str]:
-        """Returns the ids written (created or reinforced)."""
+        """Returns the ids written (created or reinforced). With a ``gate``, a candidate it
+        does not admit is recorded as IGNORE with the gate's reasons and not stored."""
         affected: set[str] = set()
         now = datetime.now(UTC)
         for cand in candidates:
@@ -362,23 +405,9 @@ class ObservationPipeline:
             )
             outcome = await self.provider.consolidate(cand, existing, ctx)
             admission: AdmissionDecision | None = None
-            if self.gate is not None:
-                admission = self.gate.evaluate(cand, outcome, hinted=hinted, now=now)
-                if admission.verdict is AdmissionVerdict.DEFER and await self._deferred_before(
-                    ctx, cand
-                ):
-                    admission = admission.model_copy(
-                        update={
-                            "verdict": AdmissionVerdict.ADMIT,
-                            "reasons": [
-                                *admission.reasons,
-                                "corroborated: repeated while deferred",
-                            ],
-                        }
-                    )
+            if gate is not None:
+                admission = await self._admission(gate, ctx, cand, outcome, hinted=hinted, now=now)
                 if admission.verdict is not AdmissionVerdict.ADMIT:
-                    if admission.verdict is AdmissionVerdict.DEFER and self.working is not None:
-                        await self.working.remember(ctx, cand, deferred=True)
                     outcomes.append(
                         ConsolidationOutcome(
                             decision=DedupDecision.IGNORE,

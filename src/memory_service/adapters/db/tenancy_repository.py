@@ -37,6 +37,7 @@ def _tenant(row: TenantRow) -> Tenant:
         status=row.status,  # type: ignore[arg-type]
         retention_days=row.retention_days,
         rate_limit_per_minute=row.rate_limit_per_minute,
+        admission_gate=row.admission_gate,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

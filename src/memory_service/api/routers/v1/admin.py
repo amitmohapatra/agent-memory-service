@@ -60,6 +60,7 @@ async def create_tenant(
             tenant_id=body.tenant_id,
             retention_days=body.retention_days,
             rate_limit_per_minute=body.rate_limit_per_minute,
+            admission_gate=body.admission_gate,
             created_by=principal.service_id,
         )
         response = CreatedTenantResponse(
@@ -127,7 +128,8 @@ async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) ->
     "/tenants/{tenant_id}",
     response_model=TenantResponse,
     responses=_ERRORS,
-    summary="Rename, suspend or resume a tenant; set its retention and request quota",
+    summary="Rename, suspend or resume a tenant; set its retention, request quota and "
+    "admission gate",
     description="Send `status` only to change it: any request naming a status makes every "
     "key of the tenant re-read the store for the next two minutes (that is what makes a "
     "suspension bite at once, and a retry after a failure safe).",
@@ -146,6 +148,7 @@ async def update_tenant(
             rate_limit_per_minute=body.rate_limit_per_minute,
             clear_retention=body.clear_retention,
             clear_rate_limit=body.clear_rate_limit,
+            admission_gate=body.admission_gate,
         )
         if body.status is not None:
             # Keyed on the requested status, not on a change, so a retry after a failure

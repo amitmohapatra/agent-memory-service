@@ -505,6 +505,7 @@ def _wire_retrieval(container: Container) -> None:
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
     from memory_service.modules.feedback.service import FeedbackService
+    from memory_service.modules.memory.admission import AdmissionGate
     from memory_service.modules.memory.connections import ConnectionService
     from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.native import NativeMemoryIntelligence
@@ -537,6 +538,8 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
+        # consulted only for tenants that turned it on (Tenant.admission_gate, off by default)
+        gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
     )
     container.services["memory"] = MemoryService(

@@ -29,6 +29,12 @@ _MAY_ACT_AS = (
     "the principals a request with this key may act for (user:<id>, agent:<id>), or * for "
     "every principal of the tenant; empty: only the key itself"
 )
+_ADMISSION = (
+    "score each memory candidate extracted from a message or event (worthiness, novelty, "
+    "confidence, expected utility) and store only the admitted ones; a deferred one is kept "
+    "when it is said again. Off (the default) stores every deduplicated candidate. Statements "
+    "made with POST /v1/memories are never gated"
+)
 _QUOTA = (
     "requests per minute per credential of this tenant, replacing the service default; "
     "0 disables the limiter for the tenant (to stop serving it, suspend it)"
@@ -47,6 +53,7 @@ class CreateTenantRequest(BaseModel):
         default=None, ge=1, description="forget canonical memories older than this many days"
     )
     rate_limit_per_minute: int | None = Field(default=None, ge=0, description=_QUOTA)
+    admission_gate: bool = Field(default=False, description=_ADMISSION)
 
 
 class UpdateTenantRequest(BaseModel):
@@ -58,6 +65,7 @@ class UpdateTenantRequest(BaseModel):
     clear_retention: bool = False
     rate_limit_per_minute: int | None = Field(default=None, ge=0, description=_QUOTA)
     clear_rate_limit: bool = False
+    admission_gate: bool | None = Field(default=None, description=_ADMISSION)
 
 
 class TenantResponse(BaseModel):
@@ -66,6 +74,7 @@ class TenantResponse(BaseModel):
     status: TenantStatus = Field(description=_STATUS)
     retention_days: int | None
     rate_limit_per_minute: int | None
+    admission_gate: bool = Field(description=_ADMISSION)
     created_at: datetime
     updated_at: datetime
 
