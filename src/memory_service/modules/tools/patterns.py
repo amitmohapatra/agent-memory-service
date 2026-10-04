@@ -91,17 +91,3 @@ def similarity(left: str, right: str) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
-
-
-def best_match(pattern: str, candidates: list[str], *, threshold: float = 0.6) -> str | None:
-    """The stored pattern closest to ``pattern``, or ``None`` when nothing is close enough.
-    An exact match always wins."""
-    if not pattern:
-        return None
-    if pattern in candidates:
-        return pattern
-    scored = [(similarity(pattern, c), c) for c in candidates]
-    scored.sort(key=lambda kv: (-kv[0], kv[1]))
-    if scored and scored[0][0] >= threshold:
-        return scored[0][1]
-    return None
