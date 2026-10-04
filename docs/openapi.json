@@ -13,6 +13,12 @@
           "type": "string"
         }
       },
+      "Location": {
+        "description": "Where the result lives: the created resource on a 201 (e.g. /v1/memories/{memory_id}), the status of the first queued job on a 202 (/v1/jobs/{job_id}). An idempotent replay carries the same Location.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "Retry-After": {
         "description": "Seconds to wait before retrying: until the rate-limit window resets (429), or until an unavailable or timed-out dependency is worth asking again (503, 504).",
         "schema": {
@@ -6853,7 +6859,7 @@
     }
   },
   "info": {
-    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nAn id starts with a letter or digit, continues with letters, digits and `._:-`, and is at\nmost 200 characters. A request carrying any scope or credential header more than once with\ndifferent values is refused (422) before the credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
+    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |\n| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nThe read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no\n`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,\ncontinues with letters, digits and `._:-`, and is at most 200 characters. A request carrying\nany scope or credential header more than once with different values is refused (422) before\nthe credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
     "title": "trellis-memory API",
     "version": "0.3.0"
   },
@@ -7523,7 +7529,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -7555,6 +7561,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -8518,7 +8527,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -9439,6 +9448,7 @@
     },
     "/v1/agent-tools/{name}": {
       "post": {
+        "description": "With ``Idempotency-Key``, a retried call (a ``remember`` whose answer was lost) gets\nthe first result instead of a second write. The tool writes in units of work of its own;\nthe key's record is committed once the tool has answered.",
         "operationId": "agent_tools.call_agent_tool",
         "parameters": [
           {
@@ -9505,7 +9515,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -9960,6 +9970,7 @@
     },
     "/v1/agents/model-key": {
       "delete": {
+        "description": "204: the key is revoked (a revocation tombstone, so the agent never borrows the tenant's key); `GET /v1/agents/model-key` reads the status afterwards.",
         "operationId": "agents.revoke_key",
         "parameters": [
           {
@@ -10145,7 +10156,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -10155,14 +10166,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentKeyStatus"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response",
             "headers": {
               "Idempotent-Replayed": {
@@ -11237,7 +11241,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -11747,15 +11751,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "description": "Idempotency key for safe retries of persistent writes.",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -11787,9 +11782,6 @@
             },
             "description": "format=prompt: PromptContextResponse; format=full: ContextResponse",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11835,9 +11827,6 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11883,9 +11872,6 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11931,9 +11917,6 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11979,9 +11962,6 @@
             },
             "description": "Request validation failed",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -12027,9 +12007,6 @@
             },
             "description": "Too many requests",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -12078,9 +12055,6 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -12174,7 +12148,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -12250,6 +12224,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -13862,7 +13839,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -13930,6 +13907,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -15425,7 +15405,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -15973,7 +15953,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -18798,7 +18778,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -18830,6 +18810,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -19705,7 +19688,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -20216,7 +20199,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -21330,7 +21313,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -21398,6 +21381,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -21821,6 +21807,7 @@
     },
     "/v1/memories/{memory_id}": {
       "delete": {
+        "description": "With ``Idempotency-Key``, a retry of a forget that succeeded is its 204 again, not\nthe 404 the forgotten memory would now earn.",
         "operationId": "memory.forget_memory",
         "parameters": [
           {
@@ -22034,7 +22021,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -23174,7 +23161,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -23637,7 +23624,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -24150,7 +24137,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -24182,6 +24169,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -25115,6 +25105,7 @@
     },
     "/v1/model-key": {
       "delete": {
+        "description": "204: the key is revoked; `GET /v1/model-key` reads the status afterwards.",
         "operationId": "tenancy.revoke_tenant_key",
         "parameters": [
           {
@@ -25181,7 +25172,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -25191,14 +25182,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentKeyStatus"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response",
             "headers": {
               "Idempotent-Replayed": {
@@ -26163,7 +26147,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -27157,7 +27141,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -28674,6 +28658,7 @@
     },
     "/v1/profile/{block}": {
       "patch": {
+        "description": "With ``Idempotency-Key``, a retry of an edit that succeeded gets the edited block\nagain rather than the 409 its ``old`` text, now replaced, would earn.",
         "operationId": "profile.edit_profile_block",
         "parameters": [
           {
@@ -28740,7 +28725,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -29825,15 +29810,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "description": "Idempotency key for safe retries of persistent writes.",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -29857,9 +29833,6 @@
             },
             "description": "Successful Response",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -29905,9 +29878,6 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -29953,9 +29923,6 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -30001,9 +29968,6 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -30049,9 +30013,6 @@
             },
             "description": "Request validation failed",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -30097,9 +30058,6 @@
             },
             "description": "Too many requests",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -30148,9 +30106,6 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -30186,6 +30141,7 @@
     },
     "/v1/threads/{thread_id}": {
       "delete": {
+        "description": "With ``Idempotency-Key``, a retry of a delete that succeeded is its 204 again, not\nthe 404 the deleted thread would now earn.",
         "operationId": "threads.delete_thread",
         "parameters": [
           {
@@ -30371,7 +30327,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -31372,7 +31328,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -33746,7 +33702,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -34248,7 +34204,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -34710,15 +34666,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "description": "Idempotency key for safe retries of persistent writes.",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -34742,9 +34689,6 @@
             },
             "description": "Successful Response",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34790,9 +34734,6 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34838,9 +34779,6 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34886,9 +34824,6 @@
             },
             "description": "Thread not found",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34934,9 +34869,6 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34982,9 +34914,6 @@
             },
             "description": "Request validation failed",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35030,9 +34959,6 @@
             },
             "description": "Too many requests",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -35081,9 +35007,6 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -35119,6 +35042,7 @@
     },
     "/v1/tools/invocations": {
       "post": {
+        "description": "Recorded in the request, so there is no job to poll and no ``Location``: 202 says the\ncall is counted, and what it teaches (procedures, statistics) is learned later.",
         "operationId": "tools.record_invocation",
         "parameters": [
           {
@@ -35176,7 +35100,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -35638,15 +35562,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "description": "Idempotency key for safe retries of persistent writes.",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "requestBody": {
@@ -35670,9 +35585,6 @@
             },
             "description": "Successful Response",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35718,9 +35630,6 @@
             },
             "description": "Missing or invalid credentials",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35766,9 +35675,6 @@
             },
             "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35814,9 +35720,6 @@
             },
             "description": "Thread not found",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35862,9 +35765,6 @@
             },
             "description": "Body exceeds 26214400 bytes",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35910,9 +35810,6 @@
             },
             "description": "Request validation failed",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35958,9 +35855,6 @@
             },
             "description": "Too many requests",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -36009,9 +35903,6 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
               "Retry-After": {
                 "$ref": "#/components/headers/Retry-After"
               },
@@ -36648,7 +36539,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -36680,6 +36571,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -37178,7 +37072,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -38670,7 +38564,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,
@@ -39190,7 +39084,7 @@
             }
           },
           {
-            "description": "Idempotency key for safe retries of persistent writes.",
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
             "in": "header",
             "name": "Idempotency-Key",
             "required": false,

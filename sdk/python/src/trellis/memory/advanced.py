@@ -253,10 +253,9 @@ class ModelKeysAPI:
         )
 
     async def revoke(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        data = await self._ctx._request(
-            "DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key
-        )
-        return AgentKeyStatus.model_validate(data)
+        """Revoke the key. The service answers 204; the status it leaves is read back."""
+        await self._ctx._request("DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key)
+        return await self.status()
 
 
 class MemoriesAPI:

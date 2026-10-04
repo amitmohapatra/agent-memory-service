@@ -16,9 +16,10 @@ from memory_service.api.deps import (
     ServicePrincipalDep,
     build_context,
     is_tenant_administrator,
+    request_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import run_idempotent
+from memory_service.api.idempotent import resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
 from memory_service.api.schemas.feedback import (
     FeedbackListResponse,
@@ -99,6 +100,7 @@ async def submit_feedback(
         key=request.state.idempotency_key,
         payload=body.model_dump(mode="json", exclude_none=True),
         handler=write,
+        location=resource_at("/v1/feedback/{}", "feedback_id"),
     )
 
 
@@ -192,9 +194,12 @@ async def _review(
     body: FeedbackReviewRequest | None,
     *,
     approve: bool,
-) -> FeedbackResponse:
+) -> Response:
+    """With ``Idempotency-Key``, a retried review that succeeded gets the reviewed record
+    again rather than the 409 a verdict no longer pending would earn."""
     principal = request.state.service_principal
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         reviewed = await _service(container).review(
             uow,
             tenant_id,
@@ -203,8 +208,20 @@ async def _review(
             reviewed_by=f"key:{principal.service_id}",
             note=body.note if body else None,
         )
-        await uow.commit()
-    return FeedbackResponse.of(reviewed)
+        return 200, FeedbackResponse.of(reviewed).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={
+            "feedback_id": feedback_id,
+            "approve": approve,
+            "note": body.note if body else None,
+        },
+        handler=handler,
+    )
 
 
 _REVIEW_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
@@ -233,7 +250,7 @@ async def approve_feedback(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     body: ReviewBody = None,
-) -> FeedbackResponse:
+) -> Response:
     return await _review(request, container, tenant_id, feedback_id, body, approve=True)
 
 
@@ -250,5 +267,5 @@ async def dismiss_feedback(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     body: ReviewBody = None,
-) -> FeedbackResponse:
+) -> Response:
     return await _review(request, container, tenant_id, feedback_id, body, approve=False)

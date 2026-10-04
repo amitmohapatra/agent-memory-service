@@ -754,7 +754,8 @@ them on every operation, ADR 0022 explains them):
 | `X-Request-ID` | One id per call, kept across the SDK's retries; echoed when it is an id (a letter or digit, then letters, digits and `._:-`, at most 200 characters), else replaced. |
 | `X-Correlation-ID` | An opaque id of yours (a letter or digit, then letters, digits and `._:-`, at most 200 characters), echoed. A `correlation_id` in the body scope wins over the header. `bind(trace_id=...)` with a non-W3C value lands here. |
 | `X-Trace-ID` | Response: the 32-hex trace id the request ran under, the same one `traceparent` carries. |
-| `Idempotency-Key` | Makes a write safe to retry. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
+| `Idempotency-Key` | Makes a write safe to retry: every write honours it (a retry gets the first response, `Idempotent-Replayed: true`, never a second effect or a 404 for a second delete); the read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take none. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
+| `Location` | Response: on a `201` the created resource (`/v1/memories/{id}`, `/v1/feedback/{id}`, ...), on a `202` that queued a job its status (`/v1/jobs/{id}`). |
 | `X-Trellis-LLM-Tokens` | Response: LLM tokens the request spent, when it spent any |
 
 Every error is an RFC 9457 problem (`application/problem+json`):

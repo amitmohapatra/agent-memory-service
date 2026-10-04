@@ -129,8 +129,9 @@ class TenantAPI:
         return AgentKeyStatus.model_validate(data)
 
     async def revoke_model_key(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        data = await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
-        return AgentKeyStatus.model_validate(data)
+        """Revoke the tenant's key. The service answers 204; the status is read back."""
+        await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
+        return await self.model_key_status()
 
     async def model_policy(self) -> ModelPolicy:
         """The tenant's model policy: the uses the model may be called for, whether reads

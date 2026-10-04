@@ -38,7 +38,13 @@ either direction. The SDK sends both halves from `MemoryClient.bind(**scope)`.
 
 **Writes are acknowledged, then processed.** A `2xx` on a write means the record *and* its
 processing job are committed in one transaction — not that the result is retrievable yet. Poll
-`GET /v1/jobs/{job_id}`, or the document's own status, rather than reading immediately.
+`GET /v1/jobs/{job_id}` (a `202` names the first job in `Location`), or the document's own status,
+rather than reading immediately. A `201` names the created resource in `Location`.
+
+**Every write takes `Idempotency-Key`.** A retry with the same key and body is the first response
+again — status, body, `Location` — with `Idempotent-Replayed: true`: a second `DELETE` is the first
+`204`, not a `404`; a retried profile edit is not a `409`. The same key with another body is a `409`.
+The read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no key.
 
 **Reads are audience-filtered before search runs**, not after. A memory or chunk is retrievable
 only by a principal in its audience, and the filter is applied in the store. That is why a

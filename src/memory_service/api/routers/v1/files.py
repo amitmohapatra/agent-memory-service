@@ -6,8 +6,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from memory_service.api.deps import (
@@ -18,7 +17,7 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import run_idempotent
+from memory_service.api.idempotent import first_job, run_idempotent
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import ArchiveStatus, DocumentStatus, Visibility
 from memory_service.domain.errors import ValidationFailed
@@ -180,7 +179,7 @@ async def upload_document(
         ),
     ] = None,
     custom_metadata: Annotated[str | None, Form()] = None,
-) -> JSONResponse:
+) -> Response:
     try:
         scope_body = ScopeBody.model_validate(json.loads(scope)) if scope else ScopeBody()
         metadata = _METADATA.validate_python(json.loads(custom_metadata)) if custom_metadata else {}
@@ -226,6 +225,7 @@ async def upload_document(
             "title": title,
         },
         handler=handler,
+        location=first_job,
     )
 
 

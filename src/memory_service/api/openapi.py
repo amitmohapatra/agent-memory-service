@@ -14,6 +14,7 @@ from memory_service.api.headers import (
     IDEMPOTENCY_KEY_HEADER,
     IDEMPOTENT_REPLAYED_HEADER,
     LINK_HEADER,
+    LOCATION_HEADER,
     RATE_LIMIT_LIMIT_HEADER,
     RATE_LIMIT_REMAINING_HEADER,
     REQUEST_ID_HEADER,
@@ -47,16 +48,19 @@ evaluated by OpenFGA on every request.
 ### Standard headers
 | Header | Direction | Purpose |
 |---|---|---|
-| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |
+| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |
+| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |
 | `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |
 | `X-Request-ID` | both | Per-request id; generated when absent or not an id. |
 | `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |
 | `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |
 | `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |
 
-An id starts with a letter or digit, continues with letters, digits and `._:-`, and is at
-most 200 characters. A request carrying any scope or credential header more than once with
-different values is refused (422) before the credential is read.
+The read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no
+`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,
+continues with letters, digits and `._:-`, and is at most 200 characters. A request carrying
+any scope or credential header more than once with different values is refused (422) before
+the credential is read.
 
 ### Errors
 Every error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):
@@ -178,6 +182,22 @@ PAGED_RESPONSE_HEADERS: dict[str, str] = {
     LINK_HEADER: 'RFC 8288 link: rel="next" names the next page of a list (present exactly '
     "when one exists, ADR 0023)."
 }
+#: On a 201 (the created resource) and on the 202s that queue a job (its status).
+LOCATION_RESPONSE_HEADERS: dict[str, str] = {
+    LOCATION_HEADER: "Where the result lives: the created resource on a 201 (e.g. "
+    "/v1/memories/{memory_id}), the status of the first queued job on a 202 "
+    "(/v1/jobs/{job_id}). An idempotent replay carries the same Location."
+}
+#: The 202s whose body names a job, and so a Location (``POST /v1/tools/invocations`` records
+#: the call in the request and queues none).
+JOB_ACCEPTS = frozenset({"messages.create_messages", "documents.upload_document"})
+#: POSTs that only read - a query too large or too structured for a URL - so neither take an
+#: ``Idempotency-Key`` nor answer ``Idempotent-Replayed``. ``/v1/verify`` records the judge's
+#: verdict, under an id derived from the run, the bundle and the answer: verifying the same
+#: answer twice is one verdict without a key.
+UNKEYED_POSTS = frozenset(
+    {"retrieval.recall", "retrieval.context", "retrieval.verify", "tools.tool_hints"}
+)
 #: Every public operation can answer these before the route runs.
 EDGE_STATUSES = (413, 429)
 #: The retryable statuses whose responses say when to retry (``Retry-After``).
@@ -185,7 +205,12 @@ RETRY_AFTER_STATUSES = frozenset({"429", "503", "504"})
 
 
 def _header_components() -> dict[str, Any]:
-    described = {**RESPONSE_HEADERS, **WRITE_RESPONSE_HEADERS, **PAGED_RESPONSE_HEADERS}
+    described = {
+        **RESPONSE_HEADERS,
+        **WRITE_RESPONSE_HEADERS,
+        **PAGED_RESPONSE_HEADERS,
+        **LOCATION_RESPONSE_HEADERS,
+    }
     described[RETRY_AFTER_HEADER] = (
         "Seconds to wait before retrying: until the rate-limit window resets (429), or until "
         "an unavailable or timed-out dependency is worth asking again (503, 504)."
@@ -207,7 +232,7 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
     for status in EDGE_STATUSES:
         responses.setdefault(str(status), error_responses(status)[status])
     headers = list(RESPONSE_HEADERS)
-    if method != "get":
+    if takes_idempotency_key(method, op):
         headers += list(WRITE_RESPONSE_HEADERS)
     if any(p.get("name") == "cursor" for p in op.get("parameters", [])):
         headers += list(PAGED_RESPONSE_HEADERS)
@@ -215,10 +240,20 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
         response.setdefault("headers", {}).update(_response_header_refs(headers))
         if status in RETRY_AFTER_STATUSES:
             response["headers"].update(_response_header_refs([RETRY_AFTER_HEADER]))
+        if status == "201" or (status == "202" and op.get("operationId") in JOB_ACCEPTS):
+            response["headers"].update(_response_header_refs(list(LOCATION_RESPONSE_HEADERS)))
         for media in response.get("content", {}).values():
             example = media.get("example")
             if isinstance(example, dict) and "instance" in example:
                 example["instance"] = path
+
+
+def takes_idempotency_key(method: str, op: dict[str, Any]) -> bool:
+    """Whether the operation is a write that honours ``Idempotency-Key`` (every write goes
+    through ``api/idempotent.run_idempotent``), as opposed to a GET or a read-only POST."""
+    return method in ("post", "put", "patch", "delete") and op.get("operationId") not in (
+        UNKEYED_POSTS
+    )
 
 
 def _rename_body_schemas(schema: dict[str, Any]) -> None:
@@ -313,7 +348,11 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
         *_scope_header_params(),
     ]
     idem = _header_param(
-        IDEMPOTENCY_KEY_HEADER, "Idempotency key for safe retries of persistent writes."
+        IDEMPOTENCY_KEY_HEADER,
+        "Makes a retry of this write safe for 24 hours: the same key with the same body gets "
+        "the first response (status, body, Location) with Idempotent-Replayed: true, never a "
+        "second effect; the same key with a different body is a 409. Any string of at most "
+        "255 characters, unique per logical write (a UUID).",
     )
     for path, methods in schema.get("paths", {}).items():
         for method, op in methods.items():
@@ -326,7 +365,7 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
             for p in common:
                 if p["name"] not in existing:
                     params.append(dict(p))
-            if method in ("post", "put", "patch", "delete") and idem["name"] not in existing:
+            if takes_idempotency_key(method, op) and idem["name"] not in existing:
                 params.append(dict(idem))
             _document_responses(path, method, op)
     _rename_body_schemas(schema)

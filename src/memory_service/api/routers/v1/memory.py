@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import (
@@ -21,8 +20,10 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import (
+    NO_CONTENT,
     default_idempotency_key,
     derived_or_body,
+    resource_at,
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
@@ -269,7 +270,7 @@ def _service(container: Any) -> MemoryService:
 )
 async def remember(
     request: Request, body: RememberRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
     identity = ("remember", body.memory_type.value, body.content)
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
@@ -297,7 +298,15 @@ async def remember(
         )
         return 201, RememberResponse(**ack.__dict__).model_dump(mode="json"), None
 
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=key,
+        payload=payload,
+        handler=handler,
+        location=resource_at("/v1/memories/{}", "memory_id"),
+    )
 
 
 @router.post(
@@ -313,7 +322,7 @@ async def supersede_memory(
     body: SupersedeRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
-) -> JSONResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
     memory_id = await container.services["bundle_records"].resolve(
         ctx, memory_id, bundle_id=body.bundle_id
@@ -427,19 +436,32 @@ async def get_memory(
     responses=_READ_ERRORS,
 )
 async def forget_memory(
+    request: Request,
     memory_id: str,
     ctx: HeaderContextDep,
     container: ContainerDep,
     bundle_id: Annotated[
         str | None, Query(max_length=64, description="the context whose handle the path names")
     ] = None,
-) -> None:
-    memory_id = await container.services["bundle_records"].resolve(
-        ctx, memory_id, bundle_id=bundle_id
+) -> Response:
+    """With ``Idempotency-Key``, a retry of a forget that succeeded is its 204 again, not
+    the 404 the forgotten memory would now earn."""
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        resolved = await container.services["bundle_records"].resolve(
+            ctx, memory_id, bundle_id=bundle_id
+        )
+        await _service(container).forget(uow, ctx, resolved)
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "forget", "memory_id": memory_id, "bundle_id": bundle_id},
+        handler=handler,
     )
-    async with container.services["uow_factory"]() as uow:
-        await _service(container).forget(uow, ctx, memory_id)
-        await uow.commit()
 
 
 @router.post(
@@ -450,11 +472,19 @@ async def forget_memory(
     responses=_READ_ERRORS,
 )
 async def restore_memory(
-    memory_id: str, ctx: HeaderContextDep, container: ContainerDep
-) -> MemoryResponse:
-    async with container.services["uow_factory"]() as uow:
+    request: Request, memory_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         memory = await _service(container).restore(
             uow, ctx, memory_id, container.services["forgetting"]
         )
-        await uow.commit()
-    return MemoryResponse(**memory_to_api(memory))
+        return 200, MemoryResponse(**memory_to_api(memory)).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "restore", "memory_id": memory_id},
+        handler=handler,
+    )

@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memory_service.api.deps import (
@@ -23,6 +23,7 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.idempotent import run_idempotent
 from memory_service.api.schemas.context import ToolHintsResponse
 from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
@@ -366,22 +367,34 @@ class ApprovalSuggestionsResponse(BaseModel):
 )
 async def record_invocation(
     request: Request, body: RecordRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> RecordResponse:
+) -> Response:
+    """Recorded in the request, so there is no job to poll and no ``Location``: 202 says the
+    call is counted, and what it teaches (procedures, statistics) is learned later."""
     ctx = build_context(request, container, body.scope)
     service = container.services["tool_memory"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         invocation, created = await service.record(
             uow,
             ctx,
             **body.model_dump(exclude={"scope", "sub_calls"}),
             sub_calls=[c.model_dump() for c in body.sub_calls],
         )
-        await uow.commit()
-    return RecordResponse(
-        invocation_id=invocation.invocation_id,
-        step=invocation.step,
-        args_hash=invocation.args_hash,
-        recorded=created,
+        out = RecordResponse(
+            invocation_id=invocation.invocation_id,
+            step=invocation.step,
+            args_hash=invocation.args_hash,
+            recorded=created,
+        )
+        return 202, out.model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload=body.model_dump(mode="json"),
+        handler=handler,
     )
 
 
@@ -411,14 +424,24 @@ async def list_tools(
 )
 async def put_catalog(
     request: Request, body: CatalogRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> CatalogResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         stored = await container.services["tool_memory"].put_catalog(
             uow, ctx, [entry.to_domain() for entry in body.tools]
         )
-        await uow.commit()
-    return CatalogResponse(tools=[CatalogTool.of(entry) for entry in stored])
+        out = CatalogResponse(tools=[CatalogTool.of(entry) for entry in stored])
+        return 200, out.model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload=body.model_dump(mode="json"),
+        handler=handler,
+    )
 
 
 @router.post(
@@ -504,9 +527,17 @@ async def approval_suggestions(
     responses=error_responses(401, 403, 404, 409, 422, 503),
 )
 async def accept_approval_suggestion(
-    suggestion_id: str, ctx: HeaderContextDep, container: ContainerDep
-) -> CatalogTool:
-    async with container.services["uow_factory"]() as uow:
+    request: Request, suggestion_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         entry = await approvals.accept(uow, ctx, suggestion_id)
-        await uow.commit()
-    return CatalogTool.of(entry)
+        return 200, CatalogTool.of(entry).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "accept", "suggestion_id": suggestion_id},
+        handler=handler,
+    )

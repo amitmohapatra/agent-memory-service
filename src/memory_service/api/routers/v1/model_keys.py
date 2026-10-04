@@ -21,7 +21,7 @@ from memory_service.api.deps import (
     request_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.idempotent import NO_CONTENT, default_idempotency_key, run_idempotent
 from memory_service.config.settings import ALL_LLM_USES, LLMUse
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.provenance import require_permitted_model
@@ -129,15 +129,17 @@ async def set_key(
 
 @router.delete(
     "/agents/model-key",
-    response_model=AgentKeyStatus,
+    status_code=204,
     tags=["agents"],
     responses=_ERRORS,
     summary="Revoke the acting agent's model key and invalidate assisted read caches",
+    description="204: the key is revoked (a revocation tombstone, so the agent never borrows "
+    "the tenant's key); `GET /v1/agents/model-key` reads the status afterwards.",
 )
 async def revoke_key(request: Request, container: ContainerDep, ctx: HeaderContextDep):
     async def write(uow):  # type: ignore[no-untyped-def]
-        record = await _service(container).set(uow, ctx, None)
-        return 200, _status(record).model_dump(mode="json"), None
+        await _service(container).set(uow, ctx, None)
+        return NO_CONTENT, {}, None
 
     return await run_idempotent(
         request,
@@ -165,6 +167,8 @@ async def _put_level(
 
     async def write(uow):  # type: ignore[no-untyped-def]
         record = await _service(container).set_for(uow, identity, key)
+        if key is None:
+            return NO_CONTENT, {}, None
         return 200, _status(record).model_dump(mode="json"), None
 
     payload = {"principal": identity.principal_id, "action": action}
@@ -214,10 +218,11 @@ async def set_tenant_key(
 
 @router.delete(
     "/model-key",
-    response_model=AgentKeyStatus,
+    status_code=204,
     tags=["tenancy"],
     responses=_ERRORS,
     summary="Revoke the tenant's model key",
+    description="204: the key is revoked; `GET /v1/model-key` reads the status afterwards.",
 )
 async def revoke_tenant_key(
     request: Request, container: ContainerDep, tenant_id: AdministeredTenantDep

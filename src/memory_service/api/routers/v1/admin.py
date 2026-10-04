@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import ContainerDep, PlatformDep, request_context
 from memory_service.api.errors import error_responses
@@ -49,7 +48,7 @@ def _without_token(body: dict[str, Any]) -> dict[str, Any]:
 )
 async def create_tenant(
     request: Request, body: CreateTenantRequest, container: ContainerDep, principal: PlatformDep
-) -> JSONResponse:
+) -> Response:
     payload = body.model_dump(mode="json")
     ctx = request_context(request, PLATFORM_SCOPE)
 
@@ -85,6 +84,7 @@ async def create_tenant(
         payload=payload,
         handler=handler,
         stored_body=_without_token,
+        location=lambda body: f"/v1/admin/tenants/{body['tenant']['tenant_id']}",
     )
 
 
@@ -133,11 +133,16 @@ async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) ->
     "suspension bite at once, and a retry after a failure safe).",
 )
 async def update_tenant(
-    tenant_id: str, body: UpdateTenantRequest, container: ContainerDep, _: PlatformDep
-) -> TenantResponse:
+    request: Request,
+    tenant_id: str,
+    body: UpdateTenantRequest,
+    container: ContainerDep,
+    _: PlatformDep,
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
-        tenant, _ = await _service(container).update_tenant(
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        tenant, _changed = await _service(container).update_tenant(
             uow,
             tenant_id,
             name=body.name,
@@ -152,11 +157,22 @@ async def update_tenant(
             # still tombstones; strictly and before the commit, so a cache that is away is a
             # 503 to retry rather than a suspension that keys keep serving through.
             await verifier.invalidate_tenant(tenant_id, strict=True)
-        await uow.commit()
-    if body.status is not None:
-        await verifier.invalidate_tenant(tenant_id)
-    try:
-        await container.services["tenant_registry"].observe(tenant)
-    except Exception as exc:  # the refresh loop repairs this within a minute
-        log.warning("tenant_registry.observe_failed", tenant_id=tenant_id, error=str(exc))
-    return TenantResponse.of(tenant)
+
+        async def after_commit() -> None:
+            if body.status is not None:
+                await verifier.invalidate_tenant(tenant_id)
+            try:
+                await container.services["tenant_registry"].observe(tenant)
+            except Exception as exc:  # the refresh loop repairs this within a minute
+                log.warning("tenant_registry.observe_failed", tenant_id=tenant_id, error=str(exc))
+
+        return 200, TenantResponse.of(tenant).model_dump(mode="json"), after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, PLATFORM_SCOPE),
+        key=request.state.idempotency_key,
+        payload={"tenant_id": tenant_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )

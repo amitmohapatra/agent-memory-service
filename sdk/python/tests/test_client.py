@@ -43,10 +43,13 @@ def test_bind_builds_scope_and_child_contexts(client: MemoryClient) -> None:
 async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(client):
     status = {"registered": True, "revoked": False, "revision": 1}
     put = respx.put("http://memory.test/v1/agents/model-key").respond(200, json=status)
-    get = respx.get("http://memory.test/v1/agents/model-key").respond(200, json=status)
-    delete = respx.delete("http://memory.test/v1/agents/model-key").respond(
-        200, json={**status, "revoked": True, "revision": 2}
-    )
+    get = respx.get("http://memory.test/v1/agents/model-key")
+    get.side_effect = [
+        httpx.Response(200, json=status),
+        httpx.Response(200, json={**status, "revoked": True, "revision": 2}),
+    ]
+    # the service answers a revocation with 204; the SDK reads the status back
+    delete = respx.delete("http://memory.test/v1/agents/model-key").respond(204)
     ctx = client.bind(tenant_id="acme", user_id="alice").agent("research")
     assert (
         await ctx.advanced.model_keys.set("vk-sdk-test", idempotency_key="rotate-1")
@@ -56,6 +59,7 @@ async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(cli
     assert get.calls.last.request.url.params["agent_id"] == "research"
     assert (await ctx.advanced.model_keys.revoke()).revoked
     assert delete.calls.last.request.url.params["agent_id"] == "research"
+    assert get.calls.last.request.url.params["agent_id"] == "research"
 
 
 async def test_context_manager_propagates_via_contextvars(client: MemoryClient) -> None:

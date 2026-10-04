@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
+from memory_service.api.idempotent import run_idempotent
 from memory_service.modules.agent_tools.service import AgentTools
 
 router = APIRouter()
@@ -68,9 +69,29 @@ async def list_agent_tools(_: ServicePrincipalDep) -> AgentToolsResponse:
 )
 async def call_agent_tool(
     name: str, request: Request, body: CallRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> CallResponse:
+) -> Response | CallResponse:
+    """With ``Idempotency-Key``, a retried call (a ``remember`` whose answer was lost) gets
+    the first result instead of a second write. The tool writes in units of work of its own;
+    the key's record is committed once the tool has answered."""
     ctx = build_context(request, container, body.scope)
-    result = await container.services["agent_tools"].call(
-        ctx, name, body.args, toolbox=body.toolbox
+
+    async def call() -> CallResponse:
+        result = await container.services["agent_tools"].call(
+            ctx, name, body.args, toolbox=body.toolbox
+        )
+        return CallResponse(result=result)
+
+    if request.state.idempotency_key is None:
+        return await call()
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        return 200, (await call()).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"name": name, **body.model_dump(mode="json")},
+        handler=handler,
     )
-    return CallResponse(result=result)

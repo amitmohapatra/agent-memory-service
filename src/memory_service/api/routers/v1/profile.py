@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import (
@@ -16,6 +16,7 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.idempotent import run_idempotent
 from memory_service.domain.profile import (
     PROFILE_BLOCK_MAX_CHARS,
     SOURCE_QUERY_MAX_CHARS,
@@ -119,9 +120,12 @@ async def edit_profile_block(
     body: EditBlockRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
-) -> ProfileBlockBody:
+) -> Response:
+    """With ``Idempotency-Key``, a retry of an edit that succeeded gets the edited block
+    again rather than the 409 its ``old`` text, now replaced, would earn."""
     ctx = build_context(request, container, body.scope)
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         stored = await container.services["profile"].edit(
             uow,
             ctx,
@@ -134,5 +138,13 @@ async def edit_profile_block(
                 else {}
             ),
         )
-        await uow.commit()
-    return ProfileBlockBody.of(stored)
+        return 200, ProfileBlockBody.of(stored).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"block": block, **body.model_dump(mode="json", exclude_unset=True)},
+        handler=handler,
+    )

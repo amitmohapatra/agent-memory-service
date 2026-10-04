@@ -8,6 +8,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from memory_service.api.openapi import UNKEYED_POSTS
+
 pytestmark = pytest.mark.contract
 
 OPERATION_ID = re.compile(r"^[a-z_]+\.[a-z_]+$")
@@ -102,8 +104,10 @@ def test_every_public_operation_documents_edge_statuses_and_response_headers(
                 assert ref == {"$ref": f"#/components/headers/{name}"} and name in components
             if status == "429":
                 assert "Retry-After" in headers
-            if method != "get":
+            if method != "get" and op["operationId"] not in UNKEYED_POSTS:
                 assert "Idempotent-Replayed" in headers, f"{method.upper()} {path} {status}"
+            if status == "201":
+                assert "Location" in headers, f"{method.upper()} {path} {status}"
             problem = response.get("content", {}).get("application/problem+json", {})
             example = problem.get("example")
             if example is not None:

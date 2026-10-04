@@ -10,6 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 from openapi_spec_validator import validate
 
+from memory_service.api.openapi import UNKEYED_POSTS
+
 pytestmark = pytest.mark.contract
 
 PUBLIC_PREFIX = "/v1/"
@@ -42,8 +44,13 @@ def test_every_public_operation_has_error_responses_and_standard_headers(
             for header in ("X-Request-ID", "traceparent", "X-Correlation-ID"):
                 if header not in params:
                     problems.append(f"{method.upper()} {path}: missing {header} header")
-            if method in ("post", "put", "patch", "delete") and "Idempotency-Key" not in params:
+            keyed = method in ("post", "put", "patch", "delete") and (
+                op["operationId"] not in UNKEYED_POSTS
+            )
+            if keyed and "Idempotency-Key" not in params:
                 problems.append(f"{method.upper()} {path}: missing Idempotency-Key header")
+            if not keyed and "Idempotency-Key" in params:
+                problems.append(f"{method.upper()} {path}: a read advertises Idempotency-Key")
             body = op.get("requestBody")
             if body:
                 content = body.get("content", {})

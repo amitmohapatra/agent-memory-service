@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
     AdministeredTenantDep,
@@ -21,7 +20,7 @@ from memory_service.api.deps import (
     request_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import run_idempotent
+from memory_service.api.idempotent import NO_CONTENT, resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
@@ -68,7 +67,7 @@ async def issue_key(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     principal: ServicePrincipalDep,
-) -> JSONResponse:
+) -> Response:
     ctx = request_context(request, tenant_id)
     payload = body.model_dump(mode="json")
 
@@ -99,6 +98,7 @@ async def issue_key(
         payload=payload,
         handler=handler,
         stored_body=_without_token,
+        location=resource_at("/v1/keys/{}", "key_id"),
     )
 
 
@@ -148,17 +148,33 @@ async def list_keys(
     summary="Change whom a key may act for; it applies on the key's next request",
 )
 async def update_key(
-    key_id: str, body: UpdateKeyRequest, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> ApiKeyResponse:
+    request: Request,
+    key_id: str,
+    body: UpdateKeyRequest,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         key = await _service(container).set_may_act_as(uow, tenant_id, key_id, body.may_act_as)
         # the same order a revocation takes: tombstone first, so no instance keeps serving
         # the old grant from its cache
         await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    await verifier.invalidate(key_id)
-    return ApiKeyResponse.of(key)
+
+        async def after_commit() -> None:
+            await verifier.invalidate(key_id)
+
+        return 200, ApiKeyResponse.of(key).model_dump(mode="json"), after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"key_id": key_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )
 
 
 @router.delete(
@@ -168,21 +184,34 @@ async def update_key(
     summary="Revoke a key; it fails on its next request from any instance",
 )
 async def revoke_key(
-    key_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
+    request: Request, key_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).revoke_key(uow, tenant_id, key_id)
         if revoked:
             # Tombstone before the commit, strictly: a reader between the two steps re-reads,
             # and a cache that is away turns this into a 503 to retry rather than a 204
             # while the key still serves from cache.
             await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    if revoked:
-        # only a key of this tenant: another tenant's key id must not be touched from here
-        await verifier.invalidate(key_id)
-        container.services["tenant_registry"].forget_key(key_id)
+
+        async def after_commit() -> None:
+            if revoked:
+                # only a key of this tenant: another tenant's key id must not be touched here
+                await verifier.invalidate(key_id)
+                container.services["tenant_registry"].forget_key(key_id)
+
+        return NO_CONTENT, {}, after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "revoke", "key_id": key_id},
+        handler=handler,
+    )
 
 
 # -- workspaces -----------------------------------------------------------------------
@@ -200,7 +229,7 @@ async def create_workspace(
     body: CreateWorkspaceRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-) -> JSONResponse:
+) -> Response:
     ctx = request_context(request, tenant_id)
     payload = body.model_dump(mode="json")
 
@@ -211,7 +240,13 @@ async def create_workspace(
         return 201, WorkspaceResponse.of(workspace).model_dump(mode="json"), None
 
     return await run_idempotent(
-        request, container, ctx, key=request.state.idempotency_key, payload=payload, handler=handler
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload=payload,
+        handler=handler,
+        location=resource_at("/v1/workspaces/{}", "workspace_id"),
     )
 
 
@@ -264,18 +299,31 @@ async def get_workspace(
     "is revoked at once",
 )
 async def delete_workspace(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
+    request: Request, workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).delete_workspace(uow, tenant_id, workspace_id)
         for key_id in revoked:
             # as in revoke_key: strictly and before the commit
             await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    for key_id in revoked:
-        await verifier.invalidate(key_id)
-        container.services["tenant_registry"].forget_key(key_id)
+
+        async def after_commit() -> None:
+            for key_id in revoked:
+                await verifier.invalidate(key_id)
+                container.services["tenant_registry"].forget_key(key_id)
+
+        return NO_CONTENT, {}, after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "delete", "workspace_id": workspace_id},
+        handler=handler,
+    )
 
 
 @router.get(
@@ -299,14 +347,15 @@ async def list_members(
     summary="Admit a user or agent (user:<id> | agent:<id>) with one role",
 )
 async def set_member(
+    request: Request,
     workspace_id: str,
     principal_ref: str,
     body: SetMemberRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     principal: ServicePrincipalDep,
-) -> WorkspaceMemberResponse:
-    async with container.services["uow_factory"]() as uow:
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         member = await _service(container).set_member(
             uow,
             tenant_id,
@@ -315,8 +364,20 @@ async def set_member(
             role=body.role,
             added_by=principal.service_id,
         )
-        await uow.commit()
-    return WorkspaceMemberResponse.of(member)
+        return 200, WorkspaceMemberResponse.of(member).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={
+            "workspace_id": workspace_id,
+            "principal": principal_ref,
+            **body.model_dump(mode="json"),
+        },
+        handler=handler,
+    )
 
 
 @router.delete(
@@ -326,11 +387,24 @@ async def set_member(
     summary="Remove a member; its next request no longer reads the workspace",
 )
 async def remove_member(
-    workspace_id: str, principal_ref: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
-    async with container.services["uow_factory"]() as uow:
+    request: Request,
+    workspace_id: str,
+    principal_ref: str,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         await _service(container).remove_member(uow, tenant_id, workspace_id, principal_ref)
-        await uow.commit()
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "remove", "workspace_id": workspace_id, "principal": principal_ref},
+        handler=handler,
+    )
 
 
 # -- read audit -----------------------------------------------------------------------

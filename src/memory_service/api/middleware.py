@@ -27,12 +27,12 @@ from memory_service.api.errors import build_problem, problem_response
 from memory_service.api.headers import (
     AUTHORIZATION_HEADER,
     CORRELATION_ID_HEADER,
-    IDEMPOTENCY_KEY_HEADER,
     RATE_LIMIT_LIMIT_HEADER,
     RATE_LIMIT_REMAINING_HEADER,
     REQUEST_ID_HEADER,
     RETRY_AFTER_HEADER,
     correlation_headers,
+    idempotency_key_of,
     refuse_ambiguous_headers,
     scope_header,
 )
@@ -107,7 +107,7 @@ class CorrelationMiddleware:
         state["correlation_id"] = correlation_id
         state["trace_id"] = trace_id
         state["traceparent"] = traceparent
-        state["idempotency_key"] = headers.get(IDEMPOTENCY_KEY_HEADER)
+        state["idempotency_key"] = None
         path = scope["path"]
 
         content_length = headers.get("content-length")
@@ -132,6 +132,7 @@ class CorrelationMiddleware:
             return
         try:
             refuse_ambiguous_headers(headers)
+            state["idempotency_key"] = idempotency_key_of(headers)
         except ValidationFailed as exc:
             # Before the credential is verified and before any bucket is touched: a client
             # must not name a tenant per request with values the context builder is about to

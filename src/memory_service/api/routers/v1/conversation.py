@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
     ContainerDep,
@@ -15,8 +14,10 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import (
+    NO_CONTENT,
     default_idempotency_key,
     derived_or_body,
+    first_job,
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
@@ -105,14 +106,23 @@ async def patch_thread(
     body: PatchThreadRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
-) -> ThreadResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope.model_copy(update={"thread_id": thread_id}))
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         thread = await _service(container).patch_thread(
             uow, ctx, thread_id, title=body.title, custom_metadata=body.custom_metadata
         )
-        await uow.commit()
-    return _thread_response(thread)
+        return 200, _thread_response(thread).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"thread_id": thread_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )
 
 
 @router.get(
@@ -138,10 +148,24 @@ async def get_thread(
     summary="Soft-delete a thread",
     responses=_READ_ERRORS,
 )
-async def delete_thread(thread_id: str, ctx: HeaderContextDep, container: ContainerDep) -> None:
-    async with container.services["uow_factory"]() as uow:
+async def delete_thread(
+    request: Request, thread_id: str, ctx: HeaderContextDep, container: ContainerDep
+) -> Response:
+    """With ``Idempotency-Key``, a retry of a delete that succeeded is its 204 again, not
+    the 404 the deleted thread would now earn."""
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         await _service(container).delete_thread(uow, ctx, thread_id)
-        await uow.commit()
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "delete", "thread_id": thread_id},
+        handler=handler,
+    )
 
 
 @router.get(
@@ -225,7 +249,7 @@ def _with_thread(ctx: MemoryExecutionContext) -> MemoryExecutionContext:
 )
 async def create_messages(
     request: Request, body: CreateMessagesRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
+) -> Response:
     ctx = _with_thread(build_context(request, container, body.scope))
     identity: tuple[str, ...] = (
         "messages",
@@ -269,7 +293,23 @@ async def create_messages(
 
         return 202, acks, after_commit
 
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=key,
+        payload=payload,
+        handler=handler,
+        location=_first_message_job,
+    )
+
+
+def _first_message_job(body: dict[str, Any]) -> str | None:
+    """``Location`` of an accepted batch: the first job any of its messages queued."""
+    for ack in body.get("messages") or []:
+        if where := first_job(ack):
+            return where
+    return None
 
 
 @router.get(
