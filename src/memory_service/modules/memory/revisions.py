@@ -46,13 +46,22 @@ def memory_revision_keys(memory: CanonicalMemory) -> set[tuple[RevisionKind, str
     return keys or {(RevisionKind.TENANT, "")}
 
 
+def touched_revisions(
+    memories: Iterable[CanonicalMemory],
+) -> list[tuple[str, RevisionKind, str]]:
+    """``(tenant, kind, id)`` of every revision these memories' readers cache on, once each
+    and in a fixed order (concurrent bumpers lock the rows in the same order)."""
+    return sorted(
+        {
+            (memory.tenant_id, kind, identifier)
+            for memory in memories
+            for kind, identifier in memory_revision_keys(memory)
+        }
+    )
+
+
 async def bump_memory_revisions(uow: UnitOfWork, memories: Iterable[CanonicalMemory]) -> None:
-    touched = {
-        (memory.tenant_id, kind, identifier)
-        for memory in memories
-        for kind, identifier in memory_revision_keys(memory)
-    }
-    for tenant_id, kind, identifier in sorted(touched):
+    for tenant_id, kind, identifier in touched_revisions(memories):
         await uow.revisions.bump(tenant_id, kind, identifier)
 
 

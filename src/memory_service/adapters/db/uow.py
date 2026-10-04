@@ -37,7 +37,7 @@ from memory_service.adapters.db.tenancy_repository import (
     SqlWorkspaceRepository,
 )
 from memory_service.adapters.db.tool_repository import SqlProcedureRepository, SqlToolRepository
-from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.memory.revisions import touched_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -180,7 +180,8 @@ class SqlUnitOfWork:
         # its source was forgotten must not be served from a reader's cache either, and its
         # audiences are not always its source's (another source may have narrowed them, or
         # its scope names another thread).
-        await bump_memory_revisions(self, self.memories.invalidated_memories)
+        for tenant_id, kind, identifier in touched_revisions(self.memories.invalidated_memories):
+            await self.revisions.bump(tenant_id, kind, identifier)
         self.memories.invalidated_memories.clear()
         for tenant_id, ids in self.memories.invalidated.items():
             if ids:

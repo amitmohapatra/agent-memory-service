@@ -131,7 +131,10 @@ def test_a_configured_keyring_is_used_as_given_even_in_dev():
 
 def test_the_development_key_differs_per_database():
     first, second = _settings("dev"), _settings("dev")
-    second.database.url = SecretStr("postgresql+psycopg://memory:memory@elsewhere:5432/memory")
+    second.database.url = SecretStr(
+        first.database.url.get_secret_value().replace("@localhost:", "@elsewhere:")
+    )
+    assert second.database.url != first.database.url
     assert (
         envelope_settings(first).encryption_keys[DEVELOPMENT_KEY_ID].get_secret_value()
         != envelope_settings(second).encryption_keys[DEVELOPMENT_KEY_ID].get_secret_value()
