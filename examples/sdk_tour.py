@@ -185,7 +185,7 @@ async def tour() -> int:
         items = await user.search("Why did Adjusted EBITDA increase despite lower revenue?")
         pages = {i.page for i in items if i.document_id == doc_id["acme"]}
         assert {1, 11, 14, 20} <= pages, pages
-        assert all(i.citation for i in items)
+        assert all(i.id and i.kind for i in items)
         table = await user.search("Legacy Services revenue FY25 vs FY26", limit=5)
         assert any("| Legacy Services | 153 | 111 |" in i.text for i in table)
         return (
@@ -197,20 +197,21 @@ async def tour() -> int:
     async def context() -> str:
         question = "Why did Adjusted EBITDA increase despite lower revenue?"
         prompt = await user.context(question)
-        assert prompt.rendered and prompt.bundle_id
+        assert prompt.rendered and prompt.bundle_id and "## " in prompt.rendered
         bundle = await user.context(question, format="full")
-        assert bundle.evidence.status == "COMPLETE", bundle.evidence
-        assert bundle.knowledge and bundle.graph_facts and "## " in bundle.rendered
-        assert "Europe/Berlin" in bundle.conversation.rendered
+        assert bundle.evidence_status == "COMPLETE", bundle.missing_evidence
+        assert bundle.knowledge and bundle.graph_facts
+        assert bundle.conversation is not None
+        assert any("Europe/Berlin" in m.text for m in bundle.conversation.messages)
         cached = await user.context(question, format="full")
-        assert cached.cache_hit
+        assert cached == bundle, "a repeat is served from the cache, unchanged"
         unrelated = await user.context("Who won the 1998 football championship?", format="full")
-        assert unrelated.evidence.status == "INSUFFICIENT", unrelated.evidence
+        assert unrelated.insufficient, unrelated.evidence_status
         small = await user.context("What is Adjusted EBITDA?", token_budget=400)
         assert small.token_estimate <= 400 + 120
         return (
-            f"evidence={bundle.evidence.status}, {len(bundle.knowledge)} chunks, "
-            f"{len(bundle.graph_facts)} facts, cache_hit on repeat, abstains on unrelated question"
+            f"evidence={bundle.evidence_status}, {len(bundle.knowledge)} chunks, "
+            f"{len(bundle.graph_facts)} facts, cached on repeat, abstains on unrelated question"
         )
 
     await c.step("POST /v1/context (prompt, full bundle, cache, budget, evidence)", context)

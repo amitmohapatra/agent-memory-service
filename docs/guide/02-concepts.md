@@ -267,7 +267,7 @@ evidence" for one query in one execution context; it "never contains everything"
 |---|---|
 | `profile`, `thread_summary`, `procedures`, `tools` | the pinned sections every prompt starts from |
 | `conversation` | the most recent messages after the thread summary that fit |
-| `memories`, `knowledge`, `graph_facts`, `summaries` | ranked items, each a `ContextItem` with its `relevance` (0..1), citation and evidence |
+| `memories`, `knowledge`, `graph_facts`, `summaries` | ranked items, each with its `id` and `relevance` (0..1); memories carry their date, subject, resolved dates and sources, passages their document, page and section |
 | `evidence` | the evidence report: `COMPLETE`, `INCOMPLETE` or `INSUFFICIENT` (chapter 6) |
 | `bundle_id` | the handle `/v1/verify` and the short item handles refer to |
 

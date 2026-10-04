@@ -1,4 +1,4 @@
-"""The best-ranked evidence sits at both ends of the prompt, not only the head.
+"""The best-ranked evidence leads the prompt, and no memory is shown twice.
 
 arXiv 2307.03172 measures retrieval accuracy at 75.8 / 53.8 / 63.2 per cent when the needed
 passage is first / in the middle / last. This renderer already put the best-ranked few first
@@ -19,7 +19,6 @@ import pytest
 
 from memory_service.domain.context_bundle import (
     MOST_RELEVANT_MAX,
-    MOST_RELEVANT_TAIL,
     SHOWN_ABOVE,
     _most_relevant_count,
 )
@@ -89,29 +88,13 @@ def _bundle(n: int):
     )
 
 
-def test_the_best_evidence_appears_at_both_ends(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The tail repeat is an ablation knob, off by default; this pins what it does when on."""
-    import memory_service.domain.context_bundle as cb
-
-    monkeypatch.setattr(cb, "REPEAT_MOST_RELEVANT_AT_END", True)
+def test_no_memory_body_is_shown_twice() -> None:
+    """The ranked head and the timeline share one copy of each body: the timeline points at
+    what the head already shows, and nothing is repeated at the end of the prompt."""
     rendered = _bundle(100).render()
-    assert "## Most relevant" in rendered
-    assert "## Most relevant, again" in rendered
-    head = rendered.index("## Most relevant")
-    timeline = rendered.index("## Memories")
-    tail = rendered.index("## Most relevant, again")
-    assert head < timeline < tail, "the repeat must come after the timeline, near the question"
-
-
-def test_the_top_memory_is_in_both_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
-    import memory_service.domain.context_bundle as cb
-
-    monkeypatch.setattr(cb, "REPEAT_MOST_RELEVANT_AT_END", True)
-    rendered = _bundle(100).render()
-    head_block = rendered.split("## Memories")[0]
-    tail_block = rendered.split("## Most relevant, again")[1]
-    assert "memory number 0 " in head_block
-    assert "memory number 0 " in tail_block
+    assert "## Most relevant, again" not in rendered
+    for i in range(100):
+        assert rendered.count(f"memory number {i} ") == 1
 
 
 def test_the_timeline_still_points_rather_than_duplicating() -> None:
@@ -119,12 +102,3 @@ def test_the_timeline_still_points_rather_than_duplicating() -> None:
     rendered = _bundle(100).render()
     timeline = rendered.split("## Memories")[1]
     assert timeline.count(SHOWN_ABOVE) == _most_relevant_count(100)
-
-
-def test_the_tail_is_a_reminder_not_a_second_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
-    import memory_service.domain.context_bundle as cb
-
-    monkeypatch.setattr(cb, "REPEAT_MOST_RELEVANT_AT_END", True)
-    rendered = _bundle(100).render()
-    tail_block = rendered.split("## Most relevant, again")[1]
-    assert tail_block.count("- [") == MOST_RELEVANT_TAIL

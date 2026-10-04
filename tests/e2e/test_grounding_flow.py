@@ -44,11 +44,11 @@ def _upload(client, scope: dict[str, str]) -> str:
 def test_verify_over_http(client) -> None:
     scope = _scope()
     _upload(client, scope)
-    # the bundle carries a handle and what was retrieved but not packed
+    # the bundle carries the handle the answer is verified against
     r = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q, "format": "full"})
     assert r.status_code == 200, r.text
     bundle = r.json()
-    assert bundle["bundle_id"] and isinstance(bundle["evidence"]["unused"], list)
+    assert bundle["bundle_id"] and bundle["evidence_status"] == "COMPLETE"
     prompt = client.post("/v1/context", headers=H, json={"scope": scope, "query": Q}).json()
     assert prompt["bundle_id"] == bundle["bundle_id"] and prompt["rendered"]
 
@@ -63,7 +63,7 @@ def test_verify_over_http(client) -> None:
     assert [c["verdict"] for c in report["claims"]] == ["supported", "contradicted"]
     assert report["per_claim_hallucination_rate"] == 0.5
     assert report["representative"] is False and report["nli_provider"] == "lexical-nli-v2"
-    assert report["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["item_id"]
+    assert report["claims"][0]["evidence_ids"][0] == bundle["knowledge"][0]["id"]
     assert "X-Trellis-LLM-Tokens" not in r.headers  # no LLM configured: nothing to account
     good = client.post(
         "/v1/verify",
@@ -108,7 +108,7 @@ async def test_verify_through_the_sdk(app, client) -> None:
     report = await ctx.verify(f"{GOOD} {BAD}", bundle_id=bundle.bundle_id)
     assert [c.verdict for c in report.claims] == ["supported", "contradicted"]
     assert report.per_claim_hallucination_rate == 0.5 and report.grounded is False
-    assert report.claims[1].evidence_ids == [bundle.knowledge[0].item_id]
+    assert report.claims[1].evidence_ids == [bundle.knowledge[0].id]
     good = await ctx.verify(GOOD, bundle_id=bundle.bundle_id)
     assert good.grounded and good.evidence_count > 0
     await memory.aclose()

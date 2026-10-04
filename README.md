@@ -267,15 +267,16 @@ answer = await my_llm(bundle.rendered)
 
 `bundle.rendered` is a token-budgeted, ready-to-prompt block containing the recent
 conversation, the relevant memories, document passages, and graph facts — deduplicated and
-ordered. Ask for `format="full"` to inspect the parts separately:
+ordered, with nothing shown twice. Ask for `format="full"` for the same content as structured
+data (no `rendered` copy of it), to build your own prompt:
 
 ```python
 bundle = await ctx.context("how did revenue develop?", format="full")
-bundle.conversation  # recent turns plus a rolling summary
-bundle.memories  # durable facts and preferences
-bundle.knowledge  # document passages, each with document, page and evidence
-bundle.graph_facts  # entity relations
-bundle.evidence  # what was found, what was missing, and the status
+bundle.conversation, bundle.thread_summary  # recent messages and the rolling summary
+bundle.memories  # durable facts and preferences: id, text, relevance 0..1, date, sources
+bundle.knowledge  # document passages: id, text, relevance, document, page, section
+bundle.graph_facts  # entity relations: subject, predicate, object, relevance
+bundle.evidence_status, bundle.missing_evidence  # COMPLETE / INCOMPLETE / INSUFFICIENT
 ```
 
 Need just the search results? `await ctx.search("...")` returns ranked items.
@@ -504,11 +505,10 @@ learn together.
 
 ```python
 hints = await ctx.tool_hints(task, available=["pricing-lookup_price", "crm-update_quote"])
-# hints.candidates  ranked by relevance and by how well each tool has worked
-# hints.plan        the learned procedure: its steps, their argument bindings, support
-# hints.next        the plan's next step for this run
-# hints.prefill     argument values found in the run, the graph, the profile or the task
-# hints.missing     required arguments nothing could fill, with the question to ask
+# hints.tools   best first, each with confidence (0..1), success_rate, the arguments
+#               found (run, graph, profile or task) and the required ones missing
+# hints.next    the plan's next step for this run, else the best tool
+# hints.plan    the learned procedure: its steps (tool names), success_rate, runs
 ```
 
 A background job stores one procedure per task pattern once at least two labelled runs
@@ -532,7 +532,7 @@ without a model and a model version that runs when the tenant's key and policy a
   the tenant admin approves it in the review queue (ADR 0028).
 - **Procedures.** Tool runs with outcomes are mined into one stored procedure per task pattern,
   admitted at ≥ 2 supporting runs and ≥ 60% success, updated by delta; `tool_hints` and the
-  push offer it as a plan with argument bindings.
+  push offer it as a plan, the next step's arguments filled from the earlier steps' outputs.
 - **Approval suggestions.** Approve / reject / edit decisions per tool and argument shape become
   suggested rules after 5 decisions (`GET /v1/tools/approval-suggestions`); never applied by
   the service.

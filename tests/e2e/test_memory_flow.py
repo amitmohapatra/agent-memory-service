@@ -93,15 +93,14 @@ def test_messages_and_events_become_memories(client) -> None:
     assert r.status_code == 200 and r.json()["query_type"] == "USER_MEMORY"
     items = r.json()["items"]
     assert items and items[0]["kind"] == "memory"
-    assert items[0]["citation"] == f"memory_id:{items[0]['id']}"
     assert any("Europe/Berlin" in i["text"] for i in items)
     bundle = client.post(
         "/v1/context",
         headers=H,
         json={"scope": scope, "query": "which store did we decide on?", "format": "full"},
     ).json()
-    assert bundle["memories"] and "## Memories" in bundle["rendered"]
     assert any("PostgreSQL" in m["text"] for m in bundle["memories"])
+    assert all(0.0 <= m["relevance"] <= 1.0 for m in bundle["memories"])
 
     # forget: gone from list, get, recall and context (cache invalidated by revision bump)
     r = client.delete(f"/v1/memories/{tz['memory_id']}", headers=H)

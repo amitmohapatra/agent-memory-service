@@ -20,25 +20,24 @@ sequenceDiagram
   R-->>C: candidates
   C->>C: dedupe · rank · pack to the budget · render with citations
   C->>C: evidence report: required / satisfied / missing groups
-  C-->>A: format=prompt: {rendered, bundle_id, evidence_status, …} · format=full: the whole bundle
+  C-->>A: format=prompt: {bundle_id, rendered, token_estimate, evidence_status, tools?} · format=full: the same content as data
   A->>A: prompt the model with rendered
   A->>G: POST /v1/verify {answer, bundle_id} — did each claim follow?
   G-->>A: per-claim verdicts: supported · unsupported · contradicted · borderline
 ```
 
-The evidence report is the part people skip and then wish they had not. `status` is `COMPLETE`,
-`INCOMPLETE` or `INSUFFICIENT`, with `required_groups`, `satisfied_groups` and `missing_groups`:
-the service is telling you it could not find what an answer to *this* question needs. The
-default (`format="prompt"`) response carries it as `evidence_status`; `format="full"` carries
-the whole report as `evidence`. Nothing raises on `INSUFFICIENT` — there is no
-`require_evidence` flag — so check it yourself and answer that you do not know rather than
-answer from a bundle that cannot support it.
+The evidence status is the part people skip and then wish they had not. `evidence_status` is
+`COMPLETE`, `INCOMPLETE` or `INSUFFICIENT`: the service is telling you whether it found what an
+answer to *this* question needs, and `format="full"` adds `missing_evidence`, the companion
+passages that are not there. Nothing raises on `INSUFFICIENT` — there is no `require_evidence`
+flag — so check it yourself and answer that you do not know rather than answer from a context
+that cannot support it.
 
 ## Routes
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/context` | the context for this turn: rendered (`format="prompt"`, the default) or the whole bundle (`format="full"`) | `ctx.context(query, token_budget=…, tools=[names], window=…, document_ids=…, format=…, debug=…)` |
+| `POST /v1/context` | the context for this turn: rendered for a prompt (`format="prompt"`, the default) or the same content as structured data (`format="full"`) | `ctx.context(query, token_budget=…, tools=[names], window=…, document_ids=…, format=…, debug=…)` |
 | `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=[…], time_from=…, time_to=…, as_of=…, known_at=…, document_ids=…)`; kinds: `memory`, `chunk`, `summary`, `episode`, `message` |
 | `POST /v1/verify` | verify an answer claim by claim against the context it was given; with a run, recorded as the judge's RUN feedback | `ctx.verify(answer, bundle_id=…, run_id=…)` |
 | `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
@@ -48,33 +47,62 @@ answer from a bundle that cannot support it.
 | `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
 | `GET /v1/messages/{id}` | one message | `ctx.history.message(id)` |
 
-## The bundle
+## The two forms
+
+Each form holds only what its reader uses, and nothing twice. Every number is in 0..1, a field
+or list with nothing in it is absent, and ranking internals (the raw fusion score, which
+retrievers found an item) are not sent: `debug=true` adds them as `diagnostics`.
+
+**`format="prompt"`** (the default) is what an agent puts in front of its model:
+
+```json
+{
+  "bundle_id": "6f1c0e2a9b",
+  "rendered": "## Tools\n- erp-create_po (confidence 0.74, next step): amount = 700, cost_centre = 'CC-7'; missing supplier_id: erp-create_po needs 'supplier id': what should it be?\n\n## Recent conversation\nUSER: …\n\n## Memories\n- [m1] …",
+  "token_estimate": 180,
+  "evidence_status": "COMPLETE",
+  "tools": [{"name": "erp-create_po", "confidence": 0.74}, {"name": "erp-get_budget", "confidence": 0.74}]
+}
+```
+
+`tools` is there only when the request sent `tools`; a caller offers its model only those.
+
+**`format="full"`** is the same content as data, for a caller that builds its own prompt. It
+has no `rendered`: that would be the same content twice.
+
+```json
+{
+  "bundle_id": "ee0d62d9ae",
+  "evidence_status": "COMPLETE",
+  "token_estimate": 277,
+  "missing_evidence": ["PAGE11"],
+  "conversation": {"thread_id": "thread-po", "messages": [{"id": "msg_…", "role": "USER", "text": "…"}]},
+  "thread_summary": "Priya runs procurement for the Berlin office.",
+  "profile": [{"block": "user", "text": "name: Priya"}],
+  "procedures": [{"id": "prc_…", "title": "Order supplies", "steps": ["erp-search_supplier", "erp-create_po"], "success_rate": 1.0, "runs": 3}],
+  "tools": [{"name": "erp-create_po", "confidence": 0.74, "success_rate": 1.0, "next": true, "args": {"amount": 700, "cost_centre": "CC-7"}, "missing": [{"arg": "supplier_id", "question": "erp-create_po needs 'supplier id': what should it be?"}]}],
+  "memories": [{"id": "mem_…", "text": "…", "relevance": 0.32, "observed_at": "2026-10-04T11:17:47Z", "subject": "user:u-priya", "dates": [{"text": "Last week", "date": "2026-09-21..2026-09-27"}], "sources": ["msg_…"]}],
+  "knowledge": [{"id": "chk_…", "text": "…", "relevance": 0.61, "document_id": "doc_…", "page": 11, "section": "Results > Revenue"}],
+  "graph_facts": [{"id": "rel_…", "subject": "Priya", "predicate": "works_at", "object": "Acme", "relevance": 0.4, "observed_at": "…"}],
+  "summaries": [{"id": "sum_…", "text": "…", "relevance": 0.5}]
+}
+```
 
 ```python
-prompt = await ctx.context("how did revenue develop?", token_budget=4000)
+prompt = await ctx.context("how did revenue develop?", token_budget=4000, tools=tool_names)
 prompt.rendered, prompt.bundle_id, prompt.evidence_status, prompt.token_estimate
-prompt.tool_candidates  # only when tools=[...] was given
+prompt.tools, prompt.tool_names  # the tools that fit, with confidence (only with tools=[...])
 
-bundle = await ctx.context(
-    "how did revenue develop?", token_budget=4000, tools=tool_names, format="full"
-)
-
-bundle.rendered  # prompt-ready text, with citation markers
-bundle.profile  # pinned blocks of the user, agent and workspace   (profile.md)
-bundle.thread_summary  # the thread's durable summary: text, covers_to_sequence, version
-bundle.conversation  # ConversationWindow: the messages after the summary that fit
-bundle.procedures  # procedures learned for this task: id, title, steps, success_rate
-bundle.tools  # tool hints (only when asked): candidates, plan, next, prefill, missing
-bundle.memories  # durable facts and preferences      (ContextItem)
-bundle.knowledge  # document passages, with document, page and evidence
-bundle.graph_facts  # entity relations
-bundle.summaries  # document and section summaries
-bundle.evidence.status  # COMPLETE | INCOMPLETE | INSUFFICIENT
-bundle.evidence.missing_groups
-bundle.bundle_id, bundle.handles  # what /v1/verify and the [m1] handles refer to
-bundle.token_estimate, bundle.token_budget, bundle.cache_hit
-bundle.insufficient  # status == "INSUFFICIENT", as a boolean
+bundle = await ctx.context("how did revenue develop?", tools=tool_names, format="full")
+bundle.memories, bundle.knowledge, bundle.graph_facts, bundle.summaries
+bundle.conversation, bundle.thread_summary, bundle.profile, bundle.procedures, bundle.tools
+bundle.missing_evidence, bundle.insufficient  # evidence_status == "INSUFFICIENT"
 ```
+
+**Nothing is shown twice.** A memory whose every source is a message the recent conversation
+already shows, and a `mentions` fact whose object the shown text already names, are left out
+of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and
+the handles still see them.
 
 The pinned sections — profile, thread summary, procedures, tool hints, in that order — open
 `rendered` and may take at most half of `token_budget` (in that priority); ranked evidence fills

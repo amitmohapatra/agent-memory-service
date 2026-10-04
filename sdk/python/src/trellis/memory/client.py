@@ -231,8 +231,9 @@ class MemoryContext:
         ``forget`` and ``verify`` accept within the bundle.
 
         ``tools`` - the agent's own tools - adds the procedures learned for the task and the
-        tool hints (the next tool, argument values, what is missing), and returns the
-        ``tool_candidates`` that fit. ``format="full"`` returns the whole bundle."""
+        tools that fit, each with its confidence (0..1), the argument values found and the
+        required ones missing; the prompt form returns the fitting tools in ``tools``.
+        ``format="full"`` returns the same content as structured data, without the rendering."""
         payload: dict[str, Any] = {
             "query": query,
             "scope": self.scope_payload(),
@@ -418,9 +419,9 @@ class MemoryContext:
     async def tool_hints(
         self, task: str, *, available: Sequence[str] | None = None, k: int = TOOL_HINTS_K
     ) -> ToolHints:
-        """Which tools fit ``task`` (among ``available`` when given), the learned plan, the
-        next step, argument values found in memory (keyed ``tool.arg``), and what is
-        missing."""
+        """Which tools fit ``task`` (among ``available`` when given), best first: each with
+        its confidence (0..1), success rate, whether it is the plan's next step, the argument
+        values found and the required ones missing; and the learned plan."""
         data = await self._request(
             "POST",
             "/v1/tools/hints",

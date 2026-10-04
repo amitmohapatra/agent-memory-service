@@ -13,11 +13,13 @@ from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import RunOutcome, StoredProcedure, ToolDescriptor, ToolInvocation
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.hints import (
+    ToolHintsService,
     _candidates,
     _from_memories,
     _from_procedure,
     _from_profile,
     _from_task,
+    _labelled_slots,
     _missing,
     _Resolution,
     next_tool,
@@ -276,9 +278,103 @@ def test_each_resolver_names_where_its_value_came_from() -> None:
     assert found is not None and found.value == "CC-9" and found.evidence_id == "mem_1"
 
     by_task = _job(tool, task="bill 1200 to bob@example.com and 1300 to ann@example.com")
-    by_task.slots = task_slots(by_task.task)
+    by_task.slots = _labelled_slots(by_task.task, ["email"])
     first, second = _from_task(by_task, "email"), _from_task(by_task, "email")
     assert (first.value, second.value) == ("bob@example.com", "ann@example.com")  # type: ignore[union-attr]
     assert _from_task(by_task, "email") is None, "each value fills one argument"
     question = _missing(tool, "amount").question
     assert "amount" in question and "update" in question
+
+
+# ------------------------------------------------------------------ arguments from the task
+
+
+def _create_po() -> ToolDescriptor:
+    return ToolDescriptor(
+        tenant_id="acme",
+        name="erp-create_po",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "supplier_id": {"type": "string"},
+                "amount": {"type": "number"},
+                "cost_centre": {"type": "string"},
+            },
+        },
+        required=["supplier_id", "amount", "cost_centre"],
+    )
+
+
+async def test_a_value_fills_the_argument_the_words_before_it_name() -> None:
+    """ "cost centre CC-7" is the cost centre: it never fills supplier_id because both look
+    like identifiers, and supplier_id, which the task does not give, is asked for."""
+    task = "Order 700 EUR of supplies from Acme Steel for cost centre CC-7"
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    prefill, missing = await service.arguments(_job(_create_po(), task=task))
+    assert prefill["erp-create_po.cost_centre"].value == "CC-7"
+    assert prefill["erp-create_po.amount"].value == 700, "the schema declares a number"
+    assert "erp-create_po.supplier_id" not in prefill
+    assert [(m.arg, m.question) for m in missing] == [
+        ("supplier_id", "erp-create_po needs 'supplier id': what should it be?")
+    ]
+
+
+async def test_a_memory_that_names_the_value_fills_what_the_task_does_not() -> None:
+    """The user said "their supplier id is SUP-40" earlier: the memory of it fills
+    supplier_id. The task's own values still win: the memory's older cost centre does not."""
+
+    class Said:
+        item_id = "mem_said"
+        attributes: dict[str, str] = {}
+        text = "We buy from Acme Steel; their supplier id is SUP-40, cost centre CC-1."
+
+    task = "Order 700 EUR of supplies from Acme Steel for cost centre CC-7"
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    prefill, missing = await service.arguments(_job(_create_po(), task=task, memories=[Said()]))
+    supplier = prefill["erp-create_po.supplier_id"]
+    assert (supplier.value, supplier.source, supplier.evidence_id) == (
+        "SUP-40",
+        "memory",
+        "mem_said",
+    )
+    assert prefill["erp-create_po.cost_centre"].value == "CC-7" and not missing
+
+
+def test_slots_are_labelled_by_the_argument_words_just_before_them() -> None:
+    task = "Order 700 EUR of supplies from Acme Steel for cost centre CC-7"
+    labelled = _labelled_slots(task, ["supplier_id", "amount", "cost_centre"])
+    by_value = {value: label for _, value, label in labelled}
+    assert by_value["CC-7"] == "cost_centre"
+    assert by_value["Acme Steel"] is None, "a name is no supplier_id: free for one that takes it"
+    assert by_value["700 EUR"] is None, "a currency after the amount is the amount's"
+    assert "Order" not in by_value, "the word that opens the sentence is not a name"
+
+
+def test_an_identifier_that_spells_its_argument_is_labelled_by_it() -> None:
+    task = "update quote Q-1183 with EMEA price for SKU-22"
+    labelled = _labelled_slots(task, ["quote_id", "sku", "region"])
+    by_value = {value: label for _, value, label in labelled}
+    assert by_value["SKU-22"] == "sku"
+    assert by_value["Q-1183"] == "quote_id", "named for another argument, never the sku"
+
+
+async def test_numbers_are_cast_only_for_number_arguments() -> None:
+    tool = ToolDescriptor(
+        tenant_id="acme",
+        name="pay",
+        input_schema={
+            "properties": {
+                "total": {"type": "number"},
+                "count": {"type": "integer"},
+                "ref": {"type": "string"},
+            }
+        },
+        required=["total", "count", "ref"],
+    )
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    prefill, _ = await service.arguments(
+        _job(tool, task="pay EUR 1,200.50 total for quantity count 3 ref INV-42")
+    )
+    assert prefill["pay.total"].value == 1200.5
+    assert prefill["pay.count"].value == 3
+    assert prefill["pay.ref"].value == "INV-42", "a string argument keeps its text"

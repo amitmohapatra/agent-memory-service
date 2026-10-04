@@ -36,6 +36,16 @@ def test_the_set_is_final_and_every_schema_is_self_contained() -> None:
     assert set(by_name["tool_search"]["properties"]) == {"task"}, (
         "the toolbox is the caller's, not an argument the model fills"
     )
+    # what the model reads every call: no title repeating a name, no null branch or default
+    for spec in specs:
+        for name, prop in spec["input_schema"]["properties"].items():
+            assert "title" not in prop and prop.get("default", 0) is not None, (spec["name"], name)
+            assert {"type": "null"} not in prop.get("anyOf", []), (spec["name"], name)
+    assert search["properties"]["time_from"] == {
+        "description": "observed since",
+        "format": "date-time",
+        "type": "string",
+    }
 
 
 def test_only_named_items_are_counted_as_what_a_pull_returned() -> None:
@@ -71,7 +81,6 @@ def test_an_item_is_what_a_caller_uses_and_cites() -> None:
         "kind": "chunk",
         "text": "x" * 1000 + "…",
         "observed_on": "2026-01-15",
-        "citation": "chunk_id:chk_1",
         "document_id": "doc_1",
         "page": 4,
     }

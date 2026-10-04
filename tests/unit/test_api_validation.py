@@ -273,8 +273,6 @@ def _values(literal: Any) -> set[str]:
         (sdk.Visibility, enums.Visibility),
         (sdk.ScopeLevel, enums.ScopeLevel),
         (sdk.TemporalStatus, enums.TemporalStatus),
-        (sdk.Representation, enums.Representation),
-        (sdk.QueryType, enums.QueryType),
         (sdk.EvidenceStatus, enums.EvidenceStatus),
         (sdk.MessageRole, enums.MessageRole),
         (sdk.MessageKind, enums.MessageKind),
@@ -290,7 +288,6 @@ def test_sdk_literals_match_the_service_enums(sdk_literal: Any, service: Any) ->
 @pytest.mark.parametrize(
     ("sdk_literal", "service"),
     [
-        (sdk.EvidenceKind, cascade.EvidenceKind),
         (sdk.ClaimVerdictValue, ClaimVerdict),
         (sdk.GroundingMethod, GroundingMethod),
         (sdk.ToolStatus, ToolStatus),

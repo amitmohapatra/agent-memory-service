@@ -75,8 +75,15 @@ def test_graph_query_and_context_facts(client) -> None:
             "format": "full",
         },
     ).json()
-    assert bundle["graph_facts"] and bundle["graph_facts"][0]["citation"].startswith("relation_id:")
-    assert "## Facts" in bundle["rendered"]
+    fact = bundle["graph_facts"][0]
+    assert fact["id"] and fact["subject"] and fact["predicate"] and fact["object"]
+    assert 0.0 <= fact["relevance"] <= 1.0 and "rendered" not in bundle
+    prompt = client.post(
+        "/v1/context",
+        headers=H,
+        json={"scope": scope, "query": "Why did Adjusted EBITDA increase despite lower revenue?"},
+    ).json()
+    assert "## Facts" in prompt["rendered"]
     pages = {k.get("page") for k in bundle["knowledge"]}
     assert {11, 14, 20} <= pages, pages
     # layer restriction: structural edges only

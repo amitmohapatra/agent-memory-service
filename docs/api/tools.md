@@ -19,7 +19,7 @@ sequenceDiagram
   participant L as tools.learn (background)
   A->>C: what each tool is and does (once, idempotent)
   A->>H: {task, available, k}
-  H-->>A: candidates, plan, next, prefill, missing
+  H-->>A: tools (confidence, success rate, next step, args, missing) and the plan
   loop each step
     A->>X: run the tool (local, framework, or an MCP gateway)
     X-->>A: output or error
@@ -42,7 +42,7 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `GET /v1/tools?names=…` | the catalog visible in this scope, with statistics | `ctx.advanced.tools.catalog(names=…)` |
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
-| `POST /v1/tools/hints` | candidates, plan, next step, prefilled and missing arguments | `ctx.tool_hints(task, available=…, k=…)` |
+| `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
 
@@ -104,27 +104,47 @@ agents or users. Every new call is counted on the tool (calls, successes, latenc
 
 ## Tool hints
 
-```python
-hints = await ctx.tool_hints("order 500 sheets of A4 from Acme", available=tools, k=8)
-hints.candidates  # [{name, score, success_rate, why}], only tools in `available`
-hints.plan  # {procedure_id, title, steps (with bindings), success_rate, support} | None
-hints.next  # the plan's first step this run has not done, else the best candidate
-hints.prefill  # {arg: {tool, value, source, evidence_id}} for the next tool
-hints.missing  # [{tool, arg, entity_type, question}]: required, nothing could fill it
+```json
+{
+  "tools": [
+    {"name": "erp-create_po", "confidence": 0.74, "success_rate": 1.0, "next": true,
+     "args": {"amount": 700, "cost_centre": "CC-7"},
+     "missing": [{"arg": "supplier_id", "question": "erp-create_po needs 'supplier id': what should it be?"}]},
+    {"name": "erp-get_budget", "confidence": 0.74, "success_rate": 1.0, "args": {"cost_centre": "CC-7"}},
+    {"name": "calendar-book", "confidence": 0.21, "missing": [{"arg": "when", "question": "calendar-book needs 'when': what should it be?"}]}
+  ],
+  "plan": {"id": "prc_…", "title": "Order supplies", "steps": ["erp-search_supplier", "erp-get_budget", "erp-create_po"], "success_rate": 1.0, "runs": 3}
+}
 ```
 
-- **candidates** — hybrid search (dense + BM25) over the catalog, narrowed to `available` (a
+```python
+hints = await ctx.tool_hints("order 500 sheets of A4 from Acme", available=tools, k=8)
+hints.tools  # best first, only tools in `available`
+hints.next  # the plan's next step, else the best tool: .name .confidence .args .missing
+hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs | None
+```
+
+- **tools** — hybrid search (dense + BM25) over the catalog, narrowed to `available` (a
   callable tool the search missed still competes on its record), scored by relevance × how
   well the tool has worked, with a bonus for the plan's tools, its next step, and recent use.
+  `confidence` is that score as 0..1 (`1 - e^-score`, same order); `success_rate` is the share
+  of the tool's recorded calls that succeeded (absent: never called).
 - **plan / next** — the stored procedure whose pattern matches the task and whose tools are all
-  callable; `next` follows this run's recorded calls through it.
-- **prefill** — each argument of the next tool, first found wins: the procedure's binding (an
+  callable; `next: true` marks the step this run has not done yet.
+- **args** — every candidate's arguments, first found wins: the procedure's binding (an
   earlier step's output in this run, or the literal every successful run used) → the
   knowledge graph (an entity of the argument's type named in the task; for an `…id` argument,
   the id a tool returned for it) → a `name: value` line of a pinned profile block, or a memory
-  whose predicate is the argument's name → a value the task itself names (ids, emails, amounts,
-  dates, numbers), each used once.
-- **missing** — required arguments nothing filled, with the question to ask.
+  whose predicate is the argument's name → a value the task itself names → a value a memory in
+  hand names right after the argument's words ("their supplier id is SUP-40" for
+  `supplier_id`). A value named right after an argument's own words fills that argument and no
+  other ("for cost centre CC-7" is `cost_centre`, never `supplier_id`), as does an identifier
+  that spells it (`SKU-22` is `sku`, never the quote `Q-1183`); a name is never an `…id`
+  argument's (it is left for the argument that takes a name). Each value is used once, a
+  currency on either side of an amount is the amount's (`700 EUR`), and a value for a number
+  argument is a number (`"700 EUR"` → `700`).
+- **missing** — required arguments nothing filled, with the question to ask (and the
+  `entity_type` the argument names, when the catalog says).
 
 ## Procedures and the learning job
 
@@ -144,7 +164,7 @@ strategy the miner's own rendering.
 The same job writes graph edges in the `procedural` layer: a call with a typed argument
 (`argument_entity_types`) `used_entity` the entity it names; when that call succeeded and returned
 an id field, the entity is `identified_by` the id. That is how "Acme" becomes `supplier_id`
-`SUP-42` in a later prefill.
+`SUP-42` in a later hint's `args`.
 
 ## Approval suggestions
 
@@ -188,8 +208,8 @@ sequenceDiagram
   Note over H,S: only entries not published before (digest), in the background
   H->>S: POST /v1/context {query: task, tools: {available: [names]}, window}
   Note over H,S: tools are sent only when the run has at least 5 of its own (TOOL_HINTS_MIN)
-  S-->>H: {rendered, bundle_id, token_estimate, tool_candidates, evidence_status}
-  Note over H: tool_candidates narrow the tools the model is offered
+  S-->>H: {bundle_id, rendered, token_estimate, evidence_status, tools: [{name, confidence}]}
+  Note over H: tools narrow the tools the model is offered
   H->>S: POST /v1/tools/invocations {tool, args, output, status, error_class, latency_ms, task, step}
   Note over H,S: one per call the agent makes, idempotent on (run, step, tool, args)
   S->>W: tools.learn, tools.index
@@ -214,18 +234,16 @@ Arguments are redacted per the catalog entry's `redact` list before they are sto
 
 | Field | What it holds | Who uses it |
 |---|---|---|
-| `rendered` | the prompt text. With tools it starts with `## Procedures that worked for this task` (each as `title: tool -> tool (worked N% of M runs)`) and `## Tools` (`next: <tool>`, `<tool>.<arg> = <value> (<source>)`, `missing <tool>.<arg>: <question>`), then the profile, summary, memories and the rest | the model reads it |
-| `tool_candidates` | the tool names that fit the task, best first (at most `k`), only when `tools` was sent | the harness offers only these to the model |
+| `rendered` | the prompt text. With tools it starts with `## Procedures that worked for this task` (each as `title: tool -> tool (worked N% of M runs)`) and `## Tools`: the best three tools and the next step, each as `- <tool> (confidence 0.74, next step): <arg> = <value>, …; missing <arg>: <question>`; then the profile, summary, conversation, memories and the rest | the model reads it |
+| `tools` | the tools that fit the task, best first (at most `k`), each `{name, confidence}`, only when `tools` was sent | the harness offers only these to the model |
 | `bundle_id`, `token_estimate`, `evidence_status` | as for any context | `/v1/verify`, budgeting, abstaining |
 
-`format=full` returns the whole bundle instead, with the structured forms of the same thing:
-`procedures` (id, title, steps, success_rate, support) and `tools` (`ToolHints`: candidates with
-score, success_rate and why; plan; next; prefill keyed `tool.arg` with value, source and
-evidence_id; missing arguments with the question to ask). `POST /v1/tools/hints` returns that
-same `ToolHints` on its own.
+`format=full` returns the same content as data instead: `procedures` (`id`, `title`, `steps` as
+tool names, `success_rate`, `runs`) and `tools`, each with `confidence`, `success_rate`, `next`,
+`args` and `missing`, exactly as `POST /v1/tools/hints` returns them.
 
 Nothing tool-related is in the context when `tools` is not sent: no procedures, no hints, no
-candidates. A run with fewer than five tools therefore gets plain memory context, and its calls
+tools. A run with fewer than five tools therefore gets plain memory context, and its calls
 are still recorded and still teach procedures for later runs.
 
 ## What this area does not do

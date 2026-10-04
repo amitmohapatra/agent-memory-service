@@ -49,16 +49,23 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
     assert prompt.rendered and prompt.bundle_id
     bundle = await ctx.context("how did revenue develop?", format="full")
     # the attributes the README tells readers to inspect
-    assert isinstance(bundle.rendered, str) and bundle.rendered
-    for attr in ("conversation", "memories", "knowledge", "graph_facts", "evidence"):
+    for attr in (
+        "conversation",
+        "thread_summary",
+        "memories",
+        "knowledge",
+        "graph_facts",
+        "evidence_status",
+        "missing_evidence",
+    ):
         assert hasattr(bundle, attr), attr
-    assert bundle.evidence.status in {"COMPLETE", "PARTIAL", "INSUFFICIENT_EVIDENCE"}
+    assert bundle.evidence_status in {"COMPLETE", "INCOMPLETE", "INSUFFICIENT"}
 
     assert await ctx.search("revenue") != []
     assert await ctx.advanced.memories.list() != []
 
     gated = await ctx.context("what were FY26 restructuring savings?", format="full")
-    assert gated.evidence.status  # the README branches on this value
+    assert gated.evidence_status  # the README branches on this value
 
 
 async def test_readme_multi_agent_visibility(app, client) -> None:
@@ -120,10 +127,19 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
         await run.feedback("run", run.scope.agent_run_id, "confirm", source="system")
 
     hints = await agent.tool_hints(TASK, available=[t["name"] for t in TOOLS])
-    assert hints.plan is not None and hints.next == "pricing.lookup_price"
-    steps = [s["tool"] for s in hints.plan.steps]
-    assert steps == ["pricing.lookup_price", "crm.update_quote"], steps
-    assert hints.plan.support == 3 and hints.plan.success_rate == 1.0
+    assert hints.plan is not None and hints.next is not None
+    assert hints.next.name == "pricing.lookup_price"
+    assert hints.plan.steps == ["pricing.lookup_price", "crm.update_quote"], hints.plan.steps
+    assert hints.plan.runs == 3 and hints.plan.success_rate == 1.0
     # the headline claim: an argument is bound from an earlier step's output
-    binding = next(b for b in hints.plan.steps[1]["bindings"] if b["argument"] == "quote_id")
-    assert binding["source_step"] == 0 and binding["source_field"]
+    run = ctx.agent("ops", agent_run_id="run_readme_next")
+    await run.record_tool(
+        "pricing.lookup_price",
+        args={"sku": "SKU-22", "region": "EMEA"},
+        output={"price": 1300, "currency": "EUR", "quote_id": "Q-77"},
+        task=TASK,
+        step=0,
+    )
+    after = await run.tool_hints(TASK, available=[t["name"] for t in TOOLS])
+    assert after.next is not None and after.next.name == "crm.update_quote"
+    assert after.next.args["quote_id"] == "Q-77"

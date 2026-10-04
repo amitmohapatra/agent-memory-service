@@ -27,7 +27,7 @@ from memory_service.domain.context_bundle import (
     EvidenceReport,
 )
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
-from memory_service.modules.context.builder import bundle_to_api
+from memory_service.modules.context.views import full_view
 
 pytestmark = pytest.mark.unit
 
@@ -87,7 +87,7 @@ def _app_returning_a_bundle(settings, overrides):
     middleware stack, no database."""
     app = create_app(settings, overrides=overrides)
     router = APIRouter()
-    payload = bundle_to_api(_bundle())
+    payload = full_view(_bundle())
 
     @router.get("/bundle-shaped", response_model=ContextResponse)
     async def bundle_shaped() -> Any:
@@ -101,8 +101,8 @@ def test_a_context_sized_response_is_compressed_on_the_wire(settings, overrides)
     """The measurement Phase 2 asks for: what a /v1/context-sized body costs off-box.
 
     Recorded in the assertion rather than in a comment, so it cannot quietly stop being
-    true: the same response, gzipped, must be a fraction of its size. `rendered` repeats
-    every item's text, which is exactly what a compressor is good at.
+    true: the same response, gzipped, must be a fraction of its size. Structured items repeat
+    their keys, which is exactly what a compressor is good at.
     """
     with TestClient(_app_returning_a_bundle(settings, overrides)) as client:
         plain = client.get("/bundle-shaped", headers={"Accept-Encoding": "identity"})
@@ -113,8 +113,9 @@ def test_a_context_sized_response_is_compressed_on_the_wire(settings, overrides)
     uncompressed = int(plain.headers["content-length"])
     compressed = int(zipped.headers["content-length"])
     assert plain.json() == zipped.json(), "compression must not change the body"
-    # measured on this fixture: 49,773 B -> 1,853 B, a factor of 27
-    assert uncompressed > 30_000, f"the fixture stopped being context-sized ({uncompressed} B)"
+    # measured on this fixture: 19,511 B uncompressed (49,773 B before the full form dropped
+    # the rendering, the handles map and the ranking internals)
+    assert uncompressed > 15_000, f"the fixture stopped being context-sized ({uncompressed} B)"
     assert compressed < uncompressed / 5, (
         f"gzip bought less than 5x on a context bundle: {uncompressed} B -> {compressed} B"
     )

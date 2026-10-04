@@ -162,19 +162,20 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
 
     cold = await user.agent("quote-bot").tool_hints(TASK, available=[LOOKUP, UPDATE])
     assert cold.plan is None, "nothing learned yet: no plan is invented"
-    assert {c.name for c in cold.candidates} <= {LOOKUP, UPDATE}
+    assert {c.name for c in cold.tools} <= {LOOKUP, UPDATE}
 
     for quote in ("Q-1183", "Q-2001"):
         await _one_successful_run(user.agent("quote-bot"), quote)
 
     fresh = user.agent("quote-bot")
     hints = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
-    assert hints.plan is not None and [s["tool"] for s in hints.plan.steps] == [LOOKUP, UPDATE]
-    assert hints.plan.support == 2 and hints.plan.success_rate == 1.0
-    assert hints.next == LOOKUP and hints.candidates[0].name == LOOKUP
-    # every labelled run looked the price up in EMEA: the procedure binds the literal
-    assert hints.prefill[f"{LOOKUP}.region"].value == "EMEA"
-    assert hints.prefill[f"{LOOKUP}.region"].source == "procedure"
+    assert hints.plan is not None and hints.plan.steps == [LOOKUP, UPDATE]
+    assert hints.plan.runs == 2 and hints.plan.success_rate == 1.0
+    assert hints.next is not None and hints.next.name == LOOKUP == hints.tools[0].name
+    assert 0.0 <= hints.next.confidence <= 1.0
+    # every labelled run looked the price up in EMEA (the procedure binds the literal), and
+    # the task names the SKU itself - never the quote, which only looks like one
+    assert hints.next.args == {"region": "EMEA", "sku": "SKU-22"}
 
     # after the lookup, the plan moves on and the quote comes from the lookup's output
     await fresh.record_tool(
@@ -185,13 +186,12 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
         step=0,
     )
     after = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
-    assert after.next == UPDATE
-    quote = after.prefill[f"{UPDATE}.quote"]
-    assert quote.value == "Q-3003" and quote.source == "procedure"
+    assert after.next is not None and after.next.name == UPDATE
+    assert after.next.args["quote"] == "Q-3003", "the quote comes from the lookup's output"
 
     # a caller that cannot call the second tool is never handed a plan that needs it
     partial = await fresh.tool_hints(TASK, available=[LOOKUP])
-    assert partial.plan is None and {c.name for c in partial.candidates} == {LOOKUP}
+    assert partial.plan is None and {c.name for c in partial.tools} == {LOOKUP}
 
 
 @pytest.mark.covers(

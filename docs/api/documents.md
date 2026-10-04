@@ -52,7 +52,7 @@ Then it simply appears where an agent already looks:
 ```python
 bundle = await ctx.context("what does the FY26 report say about EBITDA?")
 for item in bundle.knowledge:
-    print(item.citation, item.document_id, item.page, item.text[:80])
+    print(item.id, item.document_id, item.page, item.text[:80])
 ```
 
 `visibility` decides who can retrieve it, and the prerequisite bites here more than anywhere else:

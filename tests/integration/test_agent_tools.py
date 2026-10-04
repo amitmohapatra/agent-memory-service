@@ -97,7 +97,8 @@ async def test_message_search_profile_and_tool_search_tools(container, uow_facto
     assert edited["version"] == written["version"] + 1
 
     hints = await _call(container, "tool_search", {"task": "order paper"})
-    assert set(hints) == {"plan", "next", "prefill", "missing"}
+    # nothing learned for this task: the tools that fit, and no plan (an absent key is none)
+    assert set(hints) == {"tools"}
 
 
 async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(

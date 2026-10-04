@@ -96,13 +96,13 @@ async def test_an_agent_asks_for_context_then_has_its_answer_verified(app, runni
     full = await agent.context(
         "who leads the payments platform team", token_budget=2000, format="full"
     )
-    assert full.query_type and full.token_estimate <= full.token_budget
+    assert full.bundle_id == prompt.bundle_id and full.token_estimate <= 2000
     assert any("Priya" in item.text for item in full.memories), full.memories
-    assert full.handles and all(h[0] in "mfsd" for h in full.handles)
+    assert all(0.0 <= item.relevance <= 1.0 for item in full.memories)
 
     ranked = await agent.search("release review", limit=5)
     assert ranked and any("Thursday" in item.text for item in ranked)
-    assert len(ranked) <= 5 and all(item.citation and item.kind for item in ranked)
+    assert len(ranked) <= 5 and all(item.id and item.kind for item in ranked)
 
     report = await agent.verify(
         "Priya Raman leads the payments platform team [m1]", bundle_id=prompt.bundle_id

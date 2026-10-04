@@ -31,7 +31,7 @@ under `ctx.advanced`.
 | `history(limit=)` / `history.add([...])` / `history.thread()` | the transcript: read it, append to it (`EVENT`: something that happened), the thread with its durable summary |
 | `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.list_for(kind, id)` reads it back; `.pending()` / `.approve(id, note=)` / `.dismiss(id, note=)` work the review queue (tenant admin key) |
 | `record_tool(tool, args, output=, status=)` | what a run did; whether it worked is `feedback("run", run_id, verdict)` |
-| `tool_hints(task, available=, k=)` | which tool, the learned plan, the next step, prefilled and missing arguments |
+| `tool_hints(task, available=, k=)` | the tools that fit, best first, with confidence, success rate, the arguments found and the missing ones; the learned plan |
 | `agent_tools()` / `call_agent_tool(name, args)` | the memory tools an agent calls itself (pull mode) |
 | `profile()` / `profile.edit(block, new, old=, source_query=)` | the pinned profile blocks |
 | `verify(answer, bundle_id=, run_id=)` | per-claim grounding of an answer against the context it was given (`bundle_id` from `context()`) |
