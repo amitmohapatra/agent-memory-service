@@ -10,6 +10,10 @@ every READY document's chunks and summaries and every CURRENT memory:
 upserts over what is there. Documents and memories that fail are reported, never skipped
 silently. Also used by the failure-injection suite (``search_rebuild`` scenario).
 
+``--drop`` is also how existing collections take a new cluster layout
+(``MEMORY__SEARCH__SHARD_NUMBER`` and friends, fixed by Qdrant at creation) and regroup
+their stored points under the ``is_tenant`` index at once (docs/deploy/search.md).
+
 Moving an existing tenant onto the multilingual runtime is this tool twice: the rebuild
 writes every record with both dense vectors (``dense_en``, ``dense_ml``), its script tag and
 its resolved dates into the collections the new fingerprint names,

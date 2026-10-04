@@ -66,10 +66,6 @@ class ApiKeyRepository(Protocol):
         """``key_id -> tenant_id`` for the live keys of these tenants (the rate limiter)."""
         ...
 
-    async def live_key_ids(self) -> list[str]:
-        """Every unrevoked, unexpired key id (the verifier's unknown-id budget)."""
-        ...
-
     async def count_live(self, tenant_id: str) -> int:
         """Unrevoked, unexpired keys of the tenant (the issuance cap)."""
         ...

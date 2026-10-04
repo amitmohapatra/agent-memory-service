@@ -7,6 +7,7 @@ timeouts) so callers degrade to the canonical store instead of hanging.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator, Mapping, Sequence
 
 import redis.asyncio as redis_async
@@ -109,6 +110,39 @@ class RedisCache:
                 yield key.decode() if isinstance(key, bytes) else key
         except (RedisError, OSError) as exc:
             raise CacheUnavailable("cache scan failed") from exc
+
+    async def publish(self, channel: str, message: bytes) -> int:
+        return int(await self._guard("publish", self._client.publish(channel, message)))
+
+    async def subscribe(self, channel: str) -> AsyncIterator[bytes]:
+        """Messages published on ``channel`` until the connection drops.
+
+        A connection of its own, without the half-second socket timeout of the command
+        client: a subscriber waits on the socket by design, and a timeout there would end
+        the subscription every half second. The health check keeps a dead peer from going
+        unnoticed; a drop raises ``CacheUnavailable`` and the caller resubscribes.
+        """
+        client = redis_async.from_url(
+            self.settings.url.get_secret_value(),
+            socket_connect_timeout=CACHE.connect_timeout_seconds,
+            socket_timeout=None,
+            decode_responses=False,
+            health_check_interval=30,
+        )
+        pubsub = client.pubsub(ignore_subscribe_messages=True)
+        try:
+            await pubsub.subscribe(channel)
+            while True:
+                message = await pubsub.get_message(timeout=30.0)
+                if message is not None and message.get("type") == "message":
+                    yield message["data"]
+        except (RedisError, OSError) as exc:
+            raise CacheUnavailable(f"cache subscribe failed: {type(exc).__name__}") from exc
+        finally:
+            with contextlib.suppress(Exception):
+                await pubsub.aclose()
+            with contextlib.suppress(Exception):
+                await client.aclose()
 
     async def ping(self) -> bool:
         try:

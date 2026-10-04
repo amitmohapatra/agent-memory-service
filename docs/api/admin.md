@@ -68,13 +68,14 @@ curl -s http://localhost:8080/health/ready | jq
 
 ```json
 {
-  "status": "ready",
+  "status": "degraded",
   "dependencies": {
     "postgres":   {"ok": true,  "mandatory": true,  "error": null},
-    "task_queue": {"ok": true,  "mandatory": true,  "error": null},
-    "qdrant":     {"ok": true,  "mandatory": true,  "error": null},
-    "blob":       {"ok": true,  "mandatory": true,  "error": null},
-    "openfga":    {"ok": true,  "mandatory": true,  "error": null},
+    "process":    {"ok": true,  "mandatory": true,  "error": null},
+    "task_queue": {"ok": true,  "mandatory": false, "error": null},
+    "qdrant":     {"ok": true,  "mandatory": false, "error": null},
+    "blob":       {"ok": true,  "mandatory": false, "error": null},
+    "openfga":    {"ok": true,  "mandatory": false, "error": null},
     "cache":      {"ok": false, "mandatory": false, "error": "TimeoutError"},
     "llm":        {"ok": true,  "mandatory": false, "error": null}
   }
@@ -84,16 +85,21 @@ curl -s http://localhost:8080/health/ready | jq
 | Dependency | Mandatory | What it is | Down means |
 | --- | --- | --- | --- |
 | `postgres` | **yes** | the system of record: observations, memories, jobs, tenancy, audit | `not_ready`, `503` |
-| `task_queue` | **yes** | the outbox worker's queue; without it a write is acknowledged and never processed | `not_ready`, `503` |
-| `qdrant` | **yes** | the vector store behind retrieval | `not_ready`, `503` |
-| `blob` | **yes** | uploaded document bytes | `not_ready`, `503` |
-| `openfga` | **yes** | the authorization store that decides audiences | `not_ready`, `503` |
+| `process` | **yes** | this process; false once shutdown has begun, so a load balancer drains it first | `not_ready`, `503` |
+| `task_queue` | no | the outbox worker's queue; writes stay durable in the outbox and are dispatched when it is back | `degraded`, still `200` |
+| `qdrant` | no | the vector store behind retrieval; retrieval routes answer `503` while it is down | `degraded`, still `200` |
+| `blob` | no | uploaded document bytes and archives; uploads and archive jobs fail and retry | `degraded`, still `200` |
+| `openfga` | no | the authorization store; requests that need a decision answer `503` | `degraded`, still `200` |
 | `cache` | no | Dragonfly/Redis-protocol cache in front of hot reads | `degraded`, still `200` |
 | `llm` | no | the Bifrost gateway, when model use is enabled at all | `degraded`, still `200` |
 
-The three states are deliberate: `ready` (everything answered), `degraded` (an optional provider is
-down — served with `200`, because refusing traffic because a *cache* is down is worse than serving
-it), `not_ready` (a mandatory store is down — `503`, so a load balancer takes this instance out).
+The three states are deliberate: `ready` (everything answered), `degraded` (a dependency other
+than PostgreSQL is down - served with `200`), `not_ready` (PostgreSQL is down or the process is
+stopping - `503`, so a load balancer takes this instance out). Only what no request can be
+served without fails readiness (ADR 0031). A shared store blinking used to fail readiness on
+every pod at once and turn a partial outage - search down, writes still fine - into a total
+one; the routes that need the missing store answer `503` on their own. The answer is reused
+for 3 s and each ping is bounded at 2 s, so probes do not hammer the dependencies.
 A dependency that is configured off is not a dependency and does not appear.
 
 Which dependencies are registered depends on the deployment: a container that runs with stand-ins

@@ -22,7 +22,9 @@ flowchart LR
     API["API process<br/>(FastAPI)"]
     W["Worker process<br/>(Procrastinate jobs)"]
   end
-  API --> PG[("PostgreSQL<br/>source of truth + job queue")]
+  API -->|requests| PGB["PgBouncer<br/>(transaction mode)"]
+  PGB --> PG[("PostgreSQL<br/>source of truth + job queue")]
+  API -->|"queue, graph traversal<br/>(session work, direct)"| PG
   W --> PG
   API --> Q[("Qdrant<br/>search, rebuildable")]
   W --> Q
@@ -246,10 +248,69 @@ see [the capability audit](history/RESEARCH-RAG-2026-09-25.md).
 
 Cache-aside. Every sensitive key contains tenant, principal scope fingerprint, revision
 fingerprint, provider/model version and the content/query hash. Invalidation is by revision
-bump, never by scan.
+bump, never by scan. The revision counters live only in PostgreSQL. A bump commits with the
+write it describes, and a bundle lookup reads every counter it depends on in one statement.
+
+A write bumps the revisions of the **audience** that can read what it changed (ADR 0031):
+
+| write | revisions bumped |
+|---|---|
+| a memory (written, superseded, forgotten, indexed) | its owner's USER / THREAD / AGENT, plus every reader its visibility keys name (`memory_revision_keys`) |
+| working memory (EPHEMERAL, or DEFER) | the THREAD, or TENANT when anchored only by an agent run |
+| a document indexed or removed | its visibility keys' readers and its THREAD (`document_revision_keys`), with or without graph enrichment |
+| graph facts from a memory or document | that memory's or document's audience, plus the readers of every entity whose summary changed; GRAPH only when the audience is unknown |
+| a grant | MEMBERSHIP (the authorization scope cache) |
+
+```mermaid
+flowchart LR
+  w["write: memory, working memory,<br/>document index, graph facts"] --> aud["its audience:<br/>visibility keys + anchors"]
+  aud --> rev[("revisions<br/>(PostgreSQL)")]
+  q["/v1/context"] --> look["one read of the counters<br/>the bundle depends on"]
+  rev --> look
+  look --> key["bundle key =<br/>scope + revision fingerprint + query"]
+  key --> hit{"in cache?"}
+  hit -->|yes| ans[answer]
+  hit -->|no| build["build: encode (query vectors cached),<br/>search, assemble"] --> mset["one pipelined mset:<br/>record + prompt + full form"] --> ans
+```
+
+Query vectors are cached per dense space (`emb:<encoder fingerprint>:q:<sha256(query)>`,
+one day) beside the document vectors (`emb:<fingerprint>:<content hash>`, a week).
+
+## Runtime: overload, readiness, workers
+
+ADR 0031; the operator's view is [guide/11-operations.md](guide/11-operations.md) and
+[deploy/database.md](deploy/database.md).
+
+```mermaid
+flowchart TB
+  c[client] --> uv["uvicorn: limit_concurrency 128 / worker,<br/>backlog 2048, keep-alive 65 s"]
+  uv -->|past the limit| r503a["503 (uvicorn)"]
+  uv --> dl["deadline: read 5 s, write 15 s,<br/>verify 15 s (uploads, probes exempt)"]
+  dl -->|past the deadline| r504["504 TIMEOUT problem"]
+  dl --> route[route]
+  route --> mq["model queue: one inside,<br/>at most 32 waiting"]
+  mq -->|queue full| r503b["503 DEPENDENCY_UNAVAILABLE"]
+  route --> pool["pools from one per-pod<br/>connection budget"]
+  probe["/health/ready"] --> ready["PostgreSQL + process decide;<br/>others reported as degraded;<br/>answer reused 3 s"]
+```
+
+- **Pools.** One per-pod connection budget is split per process 4:2:1: requests (through
+  PgBouncer when there is one), the graph traversal (direct), and the task queue (direct).
+  Every connection is bounded by connect, checkout and statement timeouts.
+- **Readiness** is PostgreSQL and the process. Search, authorization, blob, the queue and the
+  cache are reported without failing it. Liveness checks nothing outside the process.
+- **The job worker** stops fetching on SIGTERM and gives running jobs 30 s, then releases
+  them for a retry. It serves queue depth, oldest-job lag, outbox backlog and failed jobs on
+  its own metrics port.
+- **CPU-bound parsing** (the builtin parser, document fact extraction) runs in a thread, and
+  thread write authorization is asked before the unit of work and its lock.
+- **The tenant registry** learns live keys one at a time and applies suspensions and
+  revocations announced on the cache's pub/sub channel. Its one-minute refresh is the
+  fallback when the cache is down.
 
 ## Observability
 
-OpenTelemetry spans per stage, Prometheus metrics (`/metrics`), structured JSON logs with
+OpenTelemetry spans per stage, Prometheus metrics (`/metrics`, summed over the API's worker
+processes; the job worker on its own port), structured JSON logs with
 tenant/thread/session/turn/agent-run/job/trace fields, OpenLineage events for processing
 lineage, `EvidenceRef` for claim provenance. Source text is never logged by default.

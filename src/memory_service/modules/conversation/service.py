@@ -131,16 +131,24 @@ class ConversationService:
         *,
         title: str | None = None,
         custom_metadata: dict[str, Any] | None = None,
+        may_write: bool | None = None,
     ) -> Thread:
         """Set a thread's title and metadata, creating the thread when it does not exist yet
-        (messages create threads on demand; this is how one gets a title first)."""
+        (messages create threads on demand; this is how one gets a title first).
+
+        ``may_write`` is ``may_write_thread`` asked before the unit of work was opened; see
+        ``append_message`` for why it must not be asked under the thread's lock."""
+        if may_write is None:
+            may_write = await self.may_write_thread(ctx, thread_id)
         await uow.serialize(f"thread:{ctx.tenant_id}/{thread_id}")
         existing = await uow.threads.get(ctx.tenant_id, thread_id)
         if existing is None:
             return await self.create_thread(
                 uow, ctx, thread_id=thread_id, title=title, custom_metadata=custom_metadata
             )
-        await self.authz.require(ctx, "can_write", "thread", thread_id)
+        if not may_write:
+            # no, or the thread was created concurrently since the pre-check: ask again
+            await self.authz.require(ctx, "can_write", "thread", thread_id)
         if title is None and custom_metadata is None:
             return existing
         await uow.threads.touch(
@@ -182,6 +190,13 @@ class ConversationService:
         )
         await self.hot.invalidate(ctx.tenant_id, thread_id)
 
+    async def may_write_thread(self, ctx: MemoryExecutionContext, thread_id: str) -> bool:
+        """Whether the caller may write ``thread_id`` if it exists - one authorization round
+        trip, meant to be taken before a unit of work is open. A thread nobody has created
+        yet has no grants, so False here is a refusal only once the thread is known to
+        exist; the writer creates it otherwise."""
+        return await self.authz.allowed(ctx, "can_write", "thread", thread_id)
+
     # -- messages ---------------------------------------------------------------
     async def append_message(
         self,
@@ -197,9 +212,16 @@ class ConversationService:
         source_system: str | None = None,
         source_message_id: str | None = None,
         parent_message_id: str | None = None,
+        may_write: bool | None = None,
     ) -> AppendResult:
         """Append one message. An EVENT is internal evidence: it is kept in the transcript and
-        learned from as an event, never shown as chat."""
+        learned from as an event, never shown as chat.
+
+        ``may_write`` is ``may_write_thread`` for this thread, asked by the caller before it
+        opened the unit of work. The check used to run here, after the per-thread advisory
+        lock: every writer of the thread queued behind one authorization round trip (up to
+        the authorization timeout and its retries) while holding a pooled connection and
+        the lock. Not given, it is asked before the lock at least."""
         if not ctx.thread_id:
             raise ValidationFailed("thread_id is required for messages")
         if role is MessageRole.EVENT:
@@ -216,6 +238,8 @@ class ConversationService:
         if kind is MessageKind.INTERNAL and ctx.agent_id is None and role in (MessageRole.AGENT,):
             raise ValidationFailed("internal AGENT messages require agent_id in the scope")
 
+        if may_write is None:
+            may_write = await self.may_write_thread(ctx, ctx.thread_id)
         with (
             span("conversation.append", tenant_id=ctx.tenant_id),
             stage_seconds.labels("conversation.append").time(),
@@ -226,7 +250,10 @@ class ConversationService:
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
             if thread is None:
                 await self.create_thread(uow, ctx, thread_id=ctx.thread_id)
-            else:
+            elif not may_write:
+                # The pre-check said no. Either the caller may not write, or the thread did
+                # not exist yet and a concurrent first message created it while this one
+                # waited for the lock; only this rare path asks again, under the lock.
                 await self.authz.require(ctx, "can_write", "thread", ctx.thread_id)
 
             # imports: the same source message must not be stored twice

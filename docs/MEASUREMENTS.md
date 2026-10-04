@@ -294,6 +294,12 @@ Until multiprocess collection is wired, `/metrics` says this itself: it exposes
 `memory_api_workers` as the divisor and prefixes the exposition with a `# SCOPE:` comment
 block naming the pid and the worker count.
 
+> **Resolved 2026-10-04 (ADR 0031).** `memory-api` with more than one worker now sets
+> `PROMETHEUS_MULTIPROC_DIR` (emptied at start) and `/metrics` sums every worker's values
+> with `MultiProcessCollector`; the banner reads `# SCOPE: all N API worker processes`.
+> Started any other way with several workers, the banner still says the series are one
+> worker's share.
+
 **A known tail contributor, for whoever reads the p99.** An idempotent Qdrant read that hits
 a connection-level failure is retried once after a jittered pause of 50–100 ms
 (`_RETRY_PAUSE_SECONDS`). The worst case for such a read is one timeout plus 100 ms plus the
@@ -562,3 +568,57 @@ includes it.
 
 The 300 ms p95 target (8 vCPU VM) is still not reachable on this 4-core, no-AVX2 box and is
 not claimed.
+
+
+## 9. Load sanity check after the runtime pass — 2026-10-04 (ADR 0031)
+
+`benchmark/load/run.py`, cold arm (every query salted, so no bundle-cache hits), 60 s per
+rate, against the code of ADR 0031. The box is **not** the 2015 i5 of the sections above: a
+4-CPU sandbox VM (Intel Xeon @ 2.10 GHz, AVX2, 15.7 GB), shared with other agents' work.
+Each artifact records the host load in `provenance` and the setup in `conditions`. The setup
+departs from a deployment in ways that matter:
+
+- **One API process.** There is no OpenFGA on this box, so the in-process authorization
+  stand-in was used, and it keeps grants per process: several workers would refuse each
+  other's threads. The limits are `memory-api`'s (`limit_concurrency` 128, `backlog` 2048,
+  keep-alive 65 s). This is one GIL, not the three-worker shape.
+- **The NLI model is the lexical stand-in.** The ONNX graph is not on this box, so `/v1/verify`
+  is not priced here.
+- **Real encoders.** granite (`dense_en`) and bekko (`dense_ml`), BM25 and late interaction as
+  shipped. PostgreSQL direct (no PgBouncer), the Qdrant 1.18.2 server, Redis, one job worker
+  with `worker_concurrency=1` on the same CPUs, the model off.
+- **The corpus starts empty.** Each simulated user writes its own thread, so retrieval runs
+  over a small corpus that grows during the run. This prices the request path with tiny
+  candidate sets. It is not a capacity number for a populated tenant.
+- Locust ran on the same 4 CPUs.
+
+| offered | served rps | `/v1/context` p50 / p95 / p99 ms | all requests p50 / p95 / p99 ms | failures |
+|---|---|---|---|---|
+| 4 rps | 4.42 | 140 / 180 / 190 | 110 / 180 / 220 | 0 |
+| 10 rps | 10.82 | 360 / 480 / 520 | 290 / 430 / 520 | 0 |
+| 30 rps | 32.15 | 270 / 620 / 740 | 180 / 570 / 1,000 | 0 |
+| 60 rps | 33.39 | 2,800 / 4,400 / 4,700 | 970 / 4,100 / 4,500 | 190 (189 × 503, 1 × 504) |
+
+Artifacts: `benchmark/results/load_runtime_4core_{4,10,30,60}rps_cold.json`.
+
+What this shows, and what it does not:
+
+- **The knee for one process is about 33 rps on this box, and past it the service refuses
+  instead of queueing.** At 60 rps offered, the encoder's queue filled and 217 callers got an
+  immediate 503 (`memory_model_queue_rejected_total{runner="encoder"}`). Locust counted 189
+  refused requests: a query encodes in two spaces, each through its own runner labelled
+  `encoder`, so one request can be refused twice. One read ran past its 5 s
+  deadline and got a 504. Throughput held at the knee, and the p95 of what was served stayed
+  at 4.4 s. The earlier 4-core run without these bounds
+  (`load_4core_10rps_cold.json`, a different box, the three-worker docker stack) served
+  0.66 rps at 10 offered, with `/v1/context` at p95 35 s and a verified context at 96 s:
+  every caller waited and nothing was refused. The two runs share neither the box nor the
+  topology, so they are not a before-and-after measurement of this change. They show the
+  failure mode this change removes.
+- **The worker gauges work under load.** During the 60 rps run the worker's metrics port
+  showed `memory_queue_depth{queue="embedding"}` 998, `oldest_lag` 92 s for embedding and
+  113 s for document-parse, and an outbox backlog of 3. One job at a time cannot keep up with
+  60 rps of writes, which is a sizing fact about this setup, not a defect.
+- Not measured: the three-worker API with multiprocess metrics, PgBouncer in the path, a
+  populated corpus, the NLI model, and the 8 vCPU target. The 300 ms p95 target is still not
+  claimed. The p95 of 180-620 ms at 4-30 rps is over a near-empty corpus.

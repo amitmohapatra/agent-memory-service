@@ -87,8 +87,16 @@ class TaskQueue(Protocol):
         ...
 
     async def run_worker(
-        self, queues: list[Queue] | None = None, *, concurrency: int = 4
-    ) -> None: ...
+        self,
+        queues: list[Queue] | None = None,
+        *,
+        concurrency: int = 4,
+        install_signal_handlers: bool = False,
+        shutdown_grace_seconds: float | None = None,
+    ) -> None:
+        """Run jobs; with ``install_signal_handlers``, SIGTERM/SIGINT stop it gracefully,
+        waiting up to ``shutdown_grace_seconds`` for running jobs before releasing them."""
+        ...
 
     async def ping(self) -> bool: ...
 

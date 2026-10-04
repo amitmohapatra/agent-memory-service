@@ -19,6 +19,13 @@ The semaphore is rebuilt when the running loop changes. A benchmark harness that
 event loop" on its second run, which is a fact about the primitive rather than about the
 model.
 
+The queue in front of the gate is bounded (``constants.OVERLOAD.model_queue_max_waiters``,
+installed by ``configure_runners``). Unbounded, an overloaded process accepted every request
+and made each one wait behind all the others: latency grew without limit and every caller
+timed out together. Past the bound a caller fails at once with ``DependencyUnavailable``
+(a retryable 503), and ``memory_model_queue_waiters`` / ``memory_model_queue_rejected_total``
+show the queue.
+
 A cancelled caller keeps its permit until the model is out. ``run_in_executor`` cannot take
 back a job the thread has already started, so releasing the gate on cancellation — a client
 disconnect, a request timeout — would let the next caller in while the previous encode is
@@ -31,20 +38,37 @@ import asyncio
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import ParamSpec, TypeVar
+from typing import ClassVar, ParamSpec, TypeVar
+
+from memory_service.domain.errors import DependencyUnavailable
+from memory_service.observability.metrics import model_queue_rejected_total, model_queue_waiters
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
 
+def configure_runners(*, max_waiters: int | None) -> None:
+    """Bound the queue in front of every model of this process (``None``: unbounded)."""
+    SerialRunner.max_waiters = max_waiters
+
+
 class SerialRunner:
     """A single-thread executor plus a one-permit gate, shared by every model adapter."""
+
+    #: callers allowed to queue for the gate, process-wide (``configure_runners``)
+    max_waiters: ClassVar[int | None] = None
 
     def __init__(self, name: str) -> None:
         self.name = name
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=name)
         self._gate: asyncio.Semaphore | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._waiting = 0
+
+    @property
+    def waiting(self) -> int:
+        """Callers queued for the gate right now."""
+        return self._waiting
 
     def _semaphore(self, loop: asyncio.AbstractEventLoop) -> asyncio.Semaphore:
         if self._gate is None or self._loop is not loop:
@@ -54,7 +78,22 @@ class SerialRunner:
 
     async def run(self, fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
         loop = asyncio.get_running_loop()
-        async with self._semaphore(loop):
+        gate = self._semaphore(loop)
+        limit = self.max_waiters
+        if gate.locked() and limit is not None and self._waiting >= limit:
+            model_queue_rejected_total.labels(self.name).inc()
+            raise DependencyUnavailable(
+                f"the {self.name} model is saturated ({self._waiting} callers queued); "
+                "retry shortly"
+            )
+        self._waiting += 1
+        model_queue_waiters.labels(self.name).inc()
+        try:
+            await gate.acquire()
+        finally:
+            self._waiting -= 1
+            model_queue_waiters.labels(self.name).dec()
+        try:
             running = loop.run_in_executor(self._executor, partial(fn, *args, **kwargs))
             try:
                 return await asyncio.shield(running)
@@ -64,6 +103,8 @@ class SerialRunner:
                 # disconnect.
                 if not running.done():
                     await asyncio.gather(running, return_exceptions=True)
+        finally:
+            gate.release()
 
     def close(self) -> None:
         self._executor.shutdown(wait=False, cancel_futures=True)

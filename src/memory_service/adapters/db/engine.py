@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from memory_service.config.constants import DATABASE
-from memory_service.config.settings import DatabaseSettings
+from memory_service.config.settings import DatabaseSettings, PoolPlan
 from memory_service.observability.logging import get_logger
+from memory_service.observability.metrics import db_pool_capacity, db_pool_checked_out
 
 log = get_logger(__name__)
 
@@ -37,23 +38,56 @@ def _is_dead(dbapi_connection: Any) -> bool:
     )
 
 
+def connect_args(settings: DatabaseSettings, *, statement_timeout_ms: int) -> dict[str, Any]:
+    """psycopg connection arguments for ``url``.
+
+    Behind a transaction-mode pooler a client's consecutive transactions run on different
+    server connections, so nothing may outlive a transaction: no server-side prepared
+    statement (``prepare_threshold=None``; psycopg prepares a query after its fifth run by
+    default, and the sixth would then name a statement another server connection never saw)
+    and no session parameter in the startup packet (PgBouncer refuses ``options``). The
+    pooler's own ``connect_query`` sets ``statement_timeout`` on each server connection
+    instead (deploy/pgbouncer/pgbouncer.ini). Directly connected, the timeout rides in the
+    startup packet as before.
+    """
+    args: dict[str, Any] = {"connect_timeout": DATABASE.connect_timeout_seconds}
+    if settings.transaction_pooler:
+        args["prepare_threshold"] = None
+    else:
+        args["options"] = f"-c statement_timeout={statement_timeout_ms}"
+    return args
+
+
+def track_pool(engine: AsyncEngine, name: str, capacity: int) -> None:
+    """Expose a pool's checked-out connections and capacity (``memory_db_pool_*``): the
+    first number to read when requests queue for a connection (``pool_timeout``)."""
+    db_pool_capacity.labels(name).inc(capacity)
+    gauge = db_pool_checked_out.labels(name)
+
+    @event.listens_for(engine.sync_engine, "checkout")
+    def _out(*_: Any) -> None:
+        gauge.inc()
+
+    @event.listens_for(engine.sync_engine, "checkin")
+    def _in(*_: Any) -> None:
+        gauge.dec()
+
+
 class Database:
-    def __init__(self, settings: DatabaseSettings) -> None:
+    def __init__(self, settings: DatabaseSettings, plan: PoolPlan | None = None) -> None:
         self.settings = settings
+        self.plan = plan or settings.pool_plan(1)
         self.engine: AsyncEngine = create_async_engine(
             settings.dsn,
-            pool_size=settings.pool_size,
-            max_overflow=settings.max_overflow,
+            pool_size=self.plan.main_size,
+            max_overflow=self.plan.main_overflow,
             pool_timeout=DATABASE.pool_timeout_seconds,
             # A pre-ping is a round trip on every checkout, and a request takes two or three
             # checkouts against a database that is on another host: at the target rate that
             # is milliseconds of pure latency to catch something a recycle window makes rare.
             pool_pre_ping=False,
             pool_recycle=DATABASE.pool_recycle_seconds,
-            connect_args={
-                "options": f"-c statement_timeout={DATABASE.statement_timeout_ms}",
-                "connect_timeout": DATABASE.connect_timeout_seconds,
-            },
+            connect_args=connect_args(settings, statement_timeout_ms=DATABASE.statement_timeout_ms),
         )
 
         @event.listens_for(self.engine.sync_engine, "checkout")
@@ -64,6 +98,7 @@ class Database:
                 # buy, for the case that can be seen for free.
                 raise exc.DisconnectionError("connection was closed while pooled")
 
+        track_pool(self.engine, "main", self.plan.main_size + self.plan.main_overflow)
         self.session_factory = async_sessionmaker(
             self.engine, expire_on_commit=False, class_=AsyncSession
         )

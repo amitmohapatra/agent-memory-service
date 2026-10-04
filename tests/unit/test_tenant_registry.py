@@ -36,9 +36,6 @@ class _Keys:
     async def key_tenants(self, tenant_ids):  # type: ignore[no-untyped-def]
         return {k: t for k, t in self.rows.items() if t in set(tenant_ids)}
 
-    async def live_key_ids(self) -> list[str]:
-        return list(self.rows)
-
 
 class _Uow:
     def __init__(self, tenants: _Tenants, keys: _Keys) -> None:
@@ -81,7 +78,10 @@ async def test_refresh_loads_quotas_their_keys_and_suspensions() -> None:
     )
     assert registry.is_suspended("globex") and not registry.is_suspended("acme")
     assert registry.quota_for("initech", None) == ("initech", None)
-    assert registry.knows_key("k1") and registry.knows_key("k2") and not registry.knows_key("k9")
+    # a metered key is known; every other key is learned one by one (no full key list)
+    assert registry.knows_key("k1") and not registry.knows_key("k2")
+    registry.remember_key("k2")
+    assert registry.knows_key("k2") and not registry.knows_key("k9")
 
 
 async def test_observe_applies_a_tenant_s_record_and_loads_its_keys_at_once() -> None:
@@ -270,3 +270,118 @@ async def test_a_caller_that_sends_no_tenant_header_is_metered_by_the_tenant_its
     assert (await _status(mw, app, None, key=token))[0] == 200, (
         "forgotten keys fall back to default"
     )
+
+
+# -- across processes: the channel, and the refresh when it is down (ADR 0031) -----------
+
+
+class _TenantsWithGet(_Tenants):
+    async def get(self, tenant_id: str) -> Tenant | None:
+        return self.rows.get(tenant_id)
+
+
+def _pair(tenants: list[Tenant], key_tenants: dict[str, str] | None = None):
+    import asyncio  # noqa: F401 - the registries start tasks on the running loop
+
+    from memory_service.adapters.cache.memory_cache import MemoryCache
+
+    cache = MemoryCache()
+    uow = _Uow(_TenantsWithGet(tenants), _Keys(key_tenants or {}))
+
+    @asynccontextmanager
+    async def factory():
+        yield uow
+
+    a = TenantRegistry(factory, cache=cache)  # type: ignore[arg-type]
+    b = TenantRegistry(factory, cache=cache)  # type: ignore[arg-type]
+    return cache, uow, a, b
+
+
+async def _settle() -> None:
+    import asyncio
+
+    for _ in range(20):
+        await asyncio.sleep(0)
+
+
+async def test_a_suspension_on_one_process_reaches_another_at_once() -> None:
+    _cache, uow, a, b = _pair([Tenant(tenant_id="acme", name="Acme")])
+    b.start()
+    try:
+        await _settle()  # b is subscribed
+        suspended = Tenant(tenant_id="acme", name="Acme", status="suspended")
+        uow.tenants.rows["acme"] = suspended  # the row commits, then the admin's process...
+        await a.observe(suspended)  # ...applies it and announces it
+        await _settle()
+        assert b.is_suspended("acme"), "the other process waited for its minute refresh"
+        key_id, _, _ = mint_token()
+        a.observe_key(key_id, "acme")
+        await _settle()
+        assert b.knows_key(key_id)
+        a.forget_key(key_id)
+        await _settle()
+        assert not b.knows_key(key_id)
+    finally:
+        await b.close()
+        await a.close()
+
+
+async def test_with_the_cache_down_the_refresh_still_converges() -> None:
+    cache, uow, a, b = _pair([Tenant(tenant_id="acme", name="Acme")])
+    cache.available = False
+    suspended = Tenant(tenant_id="acme", name="Acme", status="suspended")
+    uow.tenants.rows["acme"] = suspended
+    await a.observe(suspended)  # the announcement fails quietly
+    assert a.is_suspended("acme") and not b.is_suspended("acme")
+    await b.refresh()
+    assert b.is_suspended("acme")
+
+
+async def test_a_listener_that_lost_its_subscription_reloads_and_resubscribes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from memory_service.modules.tenancy import registry as registry_module
+
+    monkeypatch.setattr(registry_module, "RECONNECT_SECONDS", (0.01, 0.02))
+    cache, uow, a, b = _pair([Tenant(tenant_id="acme", name="Acme")])
+    b.start()
+    try:
+        await _settle()
+        cache.available = False
+        # what happened while the cache was away is only in the store
+        uow.tenants.rows["acme"] = Tenant(tenant_id="acme", name="Acme", status="suspended")
+        for queue in list(cache._channels.get(registry_module.CHANNEL, [])):
+            queue.put_nowait(b"{}")  # wakes the subscriber, which finds the outage
+        await asyncio.sleep(0.1)
+        assert b.is_suspended("acme"), "the lost subscription did not trigger a reload"
+        cache.available = True
+        await asyncio.sleep(0.1)
+        a.observe_key("k-late", "acme")
+        await asyncio.sleep(0.05)
+        assert b.knows_key("k-late"), "the listener did not subscribe again"
+    finally:
+        await b.close()
+        await a.close()
+
+
+async def test_an_announced_event_from_this_process_is_not_applied_twice() -> None:
+    _cache, uow, a, _b = _pair([Tenant(tenant_id="acme", name="Acme")])
+    calls = 0
+    original = uow.tenants.get
+
+    async def counting(tenant_id: str):  # type: ignore[no-untyped-def]
+        nonlocal calls
+        calls += 1
+        return await original(tenant_id)
+
+    uow.tenants.get = counting  # type: ignore[method-assign]
+    a.start()
+    try:
+        await _settle()
+        await a.observe(Tenant(tenant_id="acme", name="Acme", status="suspended"))
+        await _settle()
+        assert calls == 0
+    finally:
+        await a.close()

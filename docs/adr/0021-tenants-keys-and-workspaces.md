@@ -58,10 +58,12 @@ ladder only because nothing wrote their membership.
   the deletion (entries are written set-if-absent), so the revocation holds from the next
   request on every instance. Unknown key ids are cached as missing for a few seconds, and
   each instance reads the store for at most `UNKNOWN_IDS_PER_MINUTE` ids it does not
-  recognise (the registry holds every live key id), so a flood of distinct well-formed
-  garbage tokens costs the store a bounded amount; the price is that a key issued on
-  another instance during such a flood may be refused (logged as
-  `api_key.unknown_id_budget_refused`) until the registry's next refresh, a minute at most.
+  recognise, so a flood of distinct well-formed garbage tokens costs the store a bounded
+  amount. (Amended by ADR 0031: the registry no longer reloads every live key id; it learns
+  keys as they are issued, announced on the cache's pub/sub channel or verified. A key
+  issued on another instance is announced at once; with the cache down, it may be refused
+  during such a flood, logged as `api_key.unknown_id_budget_refused`, until the minute's
+  budget resets.)
   A tenant holds at most `MAX_KEYS_PER_TENANT` live keys.
 - **Administration is idempotent on request and never shows a secret twice.** Onboarding,
   key issuance, workspace and group creation honour `Idempotency-Key`; without it every call

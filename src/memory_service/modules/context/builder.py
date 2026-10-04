@@ -568,7 +568,7 @@ class ContextBuilder:
         """Return a reusable bundle or an encoding the retrieval miss can consume."""
         if found.semantic is None or self.semantic_cache is None:
             return None, None
-        embedding = await self.engine.indexer.embedding.embed_query(query)
+        embedding = await self.engine.indexer.spaces.embed_primary_query(query)
         raw = await self.semantic_cache.lookup(found.semantic, embedding)
         if raw is None:
             return None, embedding
@@ -634,16 +634,16 @@ class ContextBuilder:
         """
         try:
             record = bundle.model_copy(update={"cache_hit": True, "diagnostics": {}})
-            await cache.set(
-                found.cache_key,
-                record.model_dump_json(exclude={"revision_fingerprint"}).encode(),
+            # one pipelined round trip for the three forms, not three sequential SETs
+            await cache.mset(
+                {
+                    found.cache_key: record.model_dump_json(
+                        exclude={"revision_fingerprint"}
+                    ).encode(),
+                    found.prompt_key: orjson.dumps(prompt_view(bundle)),
+                    found.full_key: orjson.dumps(full_view(bundle)),
+                },
                 ttl_seconds=self.cache_ttl,
-            )
-            await cache.set(
-                found.prompt_key, orjson.dumps(prompt_view(bundle)), ttl_seconds=self.cache_ttl
-            )
-            await cache.set(
-                found.full_key, orjson.dumps(full_view(bundle)), ttl_seconds=self.cache_ttl
             )
         except CacheUnavailable:
             return

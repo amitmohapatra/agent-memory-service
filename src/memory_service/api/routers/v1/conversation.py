@@ -111,10 +111,18 @@ async def patch_thread(
     _: ServicePrincipalDep,
 ) -> Response:
     ctx = build_context(request, container, body.scope.model_copy(update={"thread_id": thread_id}))
+    service = _service(container)
+    # authorized before the unit of work: no connection or thread lock waits on it
+    may_write = await service.may_write_thread(ctx, thread_id)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
-        thread = await _service(container).patch_thread(
-            uow, ctx, thread_id, title=body.title, custom_metadata=body.custom_metadata
+        thread = await service.patch_thread(
+            uow,
+            ctx,
+            thread_id,
+            title=body.title,
+            custom_metadata=body.custom_metadata,
+            may_write=may_write,
         )
         return 200, _thread_response(thread).model_dump(mode="json"), None
 
@@ -265,6 +273,8 @@ async def create_messages(
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
     payload = derived_or_body(request, body, identity)
     service = _service(container)
+    # authorized before the unit of work: no connection or thread lock waits on it
+    may_write = await service.may_write_thread(ctx, ctx.thread_id or "")
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         results = []
@@ -284,6 +294,7 @@ async def create_messages(
                     source_system=m.source_system,
                     source_message_id=m.source_message_id,
                     parent_message_id=m.parent_message_id,
+                    may_write=may_write,
                 )
             )
         acks = MessagesAckResponse(

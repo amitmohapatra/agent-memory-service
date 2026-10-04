@@ -23,10 +23,10 @@ def test_default_depth_matches_the_promoted_memory_configuration() -> None:
 
 
 def test_env_overrides_with_nested_delimiter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MEMORY__DATABASE__POOL_SIZE", "3")
+    monkeypatch.setenv("MEMORY__DATABASE__CONNECTION_BUDGET", "30")
     monkeypatch.setenv("MEMORY__SERVICE__LOG_LEVEL", "WARNING")
     s = Settings(_env_file=None)
-    assert s.database.pool_size == 3
+    assert s.database.connection_budget == 30
     assert s.service.log_level == "WARNING"
 
 
@@ -34,11 +34,11 @@ def test_env_beats_dotenv(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A real environment variable outranks ``.env``: compose sets the topology through
     ``environment:`` and an operator's copied-in line must not be able to shadow it."""
     dotenv = tmp_path / ".env"
-    dotenv.write_text("MEMORY__DATABASE__POOL_SIZE=7\nMEMORY__SERVICE__PORT=9999\n")
-    monkeypatch.delenv("MEMORY__DATABASE__POOL_SIZE", raising=False)
+    dotenv.write_text("MEMORY__DATABASE__CONNECTION_BUDGET=70\nMEMORY__SERVICE__PORT=9999\n")
+    monkeypatch.delenv("MEMORY__DATABASE__CONNECTION_BUDGET", raising=False)
     monkeypatch.setenv("MEMORY__SERVICE__PORT", "8181")
     s = Settings(_env_file=str(dotenv))
-    assert s.database.pool_size == 7, ".env is still read"
+    assert s.database.connection_budget == 70, ".env is still read"
     assert s.service.port == 8181, "the environment wins over .env"
 
 
@@ -111,10 +111,18 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # 35 -> 36 for ``retail_calendar``: which fiscal calendar the customer reports in is a
     # fact about the customer, like ``tenant_claim``, not a tuning - two retailers on 4-5-4
     # and 4-4-5 calendars mean different days by the same "last week".
-    # 36 -> 37 for ``authentication.trusted_dev_tenant``: which tenant a laptop's development
+    # 36 -> 38 (ADR 0031), all topology: ``database.pool_size`` and ``max_overflow`` became
+    # one ``connection_budget`` per pod (the pools are derived from it); ``direct_url`` and
+    # ``transaction_pooler`` say a PgBouncer sits in front of the request path and where the
+    # session work goes instead; ``tasks.metrics_port`` is a port, like ``service.port``. The
+    # overload limits and deadlines that came with them are constants (``OVERLOAD``).
+    # 38 -> 41: ``search.shard_number``, ``replication_factor`` and
+    # ``write_consistency_factor`` describe the Qdrant cluster a deployment runs - one node
+    # or six - which no constant can know.
+    # 41 -> 42 for ``authentication.trusted_dev_tenant``: which tenant a laptop's development
     # key acts in is a credential fact (it is what ``GET /v1/keys/self`` reports for the key),
     # and it must equal the harness's local tenant, which is configured on the other side.
-    assert len(leaves) <= 37, f"{len(leaves)} env fields: {leaves}"
+    assert len(leaves) <= 42, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",

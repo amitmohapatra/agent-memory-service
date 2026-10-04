@@ -264,9 +264,11 @@ Step by step (`modules/context/builder.py`, `modules/retrieval/engine.py`):
 
 ## Caching and revisions
 
-Revision counters live in PostgreSQL with a Dragonfly read cache (`domain/revisions.py`).
-Every mutation increments the revisions it affects — `TENANT`, `USER`, `THREAD`, `AGENT`,
-`DOCUMENT`, `GRAPH`, and `MEMBERSHIP` for grants — and every sensitive cache key embeds the
+Revision counters live only in PostgreSQL (`domain/revisions.py`), read in one statement per
+bundle lookup. Every mutation increments the revisions of the audience that can read what it
+changed — `TENANT`, `USER`, `THREAD`, `AGENT`, and `MEMBERSHIP` for grants; `GRAPH` only for a
+graph change whose audience is unknown, `DOCUMENT` for ingestion's own bookkeeping (ADR
+0031) — and every sensitive cache key embeds the
 relevant ones, so stale entries simply stop being addressed. `MEMBERSHIP` is kept apart from
 `TENANT` and `USER` because those move with every memory write, and a scope invalidated by
 content churn was resolved again for no reason. Which revisions a memory bumps follows its

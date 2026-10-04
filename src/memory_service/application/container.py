@@ -9,12 +9,15 @@ not configured, and readiness distinguishes mandatory from optional dependencies
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from memory_service.config import constants
 from memory_service.config.constants import (
+    OVERLOAD,
     ArchiveSettings,
     ContextSettings,
     DenseModel,
@@ -167,6 +170,9 @@ class Container:
     overrides: Overrides = field(default_factory=Overrides)
     tuning: Tuning = field(default_factory=lambda: Tuning.resolve(Overrides()))
     registries: Registries = field(default_factory=get_registries)
+    #: processes of this kind in one pod (the API's uvicorn workers, or 1 for the job
+    #: worker): what the pod's connection budget is divided by
+    processes: int = 1
     dependencies: dict[str, Dependency] = field(default_factory=dict)
     #: Services with buffered work to finish at shutdown. Not dependencies: they are not
     #: pinged, they do not decide readiness, and they are closed *before* the dependencies
@@ -193,6 +199,10 @@ class Container:
     document_parser: Any = None
     database: Any = None
     services: dict[str, Any] = field(default_factory=dict)
+    #: set when shutdown begins; readiness reports the process down from then on
+    closing: bool = False
+    #: the last readiness answer and when it was taken (monotonic seconds)
+    _readiness: tuple[float, dict[str, dict[str, Any]]] | None = field(default=None, repr=False)
 
     def add_dependency(self, dep: Dependency) -> None:
         self.dependencies[dep.name] = dep
@@ -202,24 +212,46 @@ class Container:
         self.closers[name] = close
 
     async def readiness(self) -> dict[str, dict[str, Any]]:
-        """Ping every dependency. Optional dependencies never fail readiness when disabled."""
+        """Ping every dependency, at most once per ``OVERLOAD.readiness_cache_seconds``.
+
+        Readiness decides whether this process gets traffic, so only what it cannot serve
+        without is ``mandatory``: PostgreSQL (the source of truth, every request touches it)
+        and the process itself (``process``: false once shutdown has begun, so a load
+        balancer drains it before the pools close). Qdrant, OpenFGA, the blob store, the
+        task queue and the cache are reported - a ``degraded`` body - without failing the
+        probe (ADR 0031). Failing it took every pod out of rotation at once when a shared
+        dependency blinked, turning a partial outage (search down, writes still fine) into
+        a total one, and the routes that need the missing store answer 503 on their own.
+
+        The answer is reused for a few seconds, and the pings run concurrently under one
+        timeout each: several probers hitting every pod every second were a ping per
+        dependency per prober per second, and one slow store made the whole probe slow.
+        """
+        cached = self._readiness
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < OVERLOAD.readiness_cache_seconds:
+            return {name: dict(result) for name, result in cached[1].items()}
+        results = await self._probe()
+        results["process"] = {"ok": not self.closing, "mandatory": True}
+        self._readiness = (time.monotonic(), results)
+        return {name: dict(result) for name, result in results.items()}
+
+    async def _probe(self) -> dict[str, dict[str, Any]]:
         from memory_service.observability.metrics import dependency_up
 
-        results: dict[str, dict[str, Any]] = {}
-        for name, dep in self.dependencies.items():
+        async def ping(dep: Dependency) -> dict[str, Any]:
             try:
-                ok = bool(await dep.ping())
-            except Exception as exc:
-                ok = False
-                results[name] = {
-                    "ok": False,
-                    "mandatory": dep.mandatory,
-                    "error": type(exc).__name__,
-                }
-            else:
-                results[name] = {"ok": ok, "mandatory": dep.mandatory}
-            dependency_up.labels(name).set(1 if ok else 0)
-        return results
+                async with asyncio.timeout(OVERLOAD.readiness_ping_timeout_seconds):
+                    ok = bool(await dep.ping())
+            except Exception as exc:  # TimeoutError included; a probe never raises
+                dependency_up.labels(dep.name).set(0)
+                return {"ok": False, "mandatory": dep.mandatory, "error": type(exc).__name__}
+            dependency_up.labels(dep.name).set(1 if ok else 0)
+            return {"ok": ok, "mandatory": dep.mandatory}
+
+        deps = list(self.dependencies.values())
+        answers = await asyncio.gather(*(ping(dep) for dep in deps))
+        return {dep.name: answer for dep, answer in zip(deps, answers, strict=True)}
 
     async def close(self) -> None:
         """Flush what services have buffered, then close the dependencies under them.
@@ -230,6 +262,8 @@ class Container:
         still open. Getting this wrong costs a window of bookkeeping per worker on every
         rolling deploy, silently.
         """
+        self.closing = True
+        self._readiness = None
         for name, close_service in reversed(list(self.closers.items())):
             try:
                 await close_service()
@@ -267,12 +301,17 @@ class Container:
 
 
 async def build_container(
-    settings: Settings, version: str, *, overrides: Overrides | None = None
+    settings: Settings,
+    version: str,
+    *,
+    overrides: Overrides | None = None,
+    role: Literal["api", "worker"] = "api",
 ) -> Container:
     """Wire providers for the configured environment.
 
     ``overrides`` swaps backing stores and models for in-process stand-ins and replaces frozen
-    tuning; production never passes it.
+    tuning; production never passes it. ``role`` says which process this is: an API worker
+    shares its pod with ``service.workers - 1`` others, the job worker has its pod alone.
     """
     from memory_service.adapters import wire_adapters
 
@@ -282,6 +321,7 @@ async def build_container(
         version=version,
         overrides=overrides,
         tuning=Tuning.resolve(overrides, settings.retail_calendar),
+        processes=settings.service.workers if role == "api" else 1,
     )
     await wire_adapters(container)
     return container

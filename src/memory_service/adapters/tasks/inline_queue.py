@@ -99,7 +99,14 @@ class RecordingTaskQueue:
             return
         self.jobs[job_id] = self.jobs[job_id].model_copy(update={"status": JobStatus.SUCCEEDED})
 
-    async def run_worker(self, queues: list[Queue] | None = None, *, concurrency: int = 4) -> None:
+    async def run_worker(
+        self,
+        queues: list[Queue] | None = None,
+        *,
+        concurrency: int = 4,
+        install_signal_handlers: bool = False,
+        shutdown_grace_seconds: float | None = None,
+    ) -> None:
         await self.drain()
 
     async def ping(self) -> bool:

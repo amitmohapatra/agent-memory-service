@@ -14,7 +14,7 @@ from __future__ import annotations
 import contextlib
 import json
 from collections.abc import Mapping
-from typing import get_args
+from typing import NoReturn, get_args
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ScopeDenied
@@ -181,11 +181,14 @@ class AuthorizationService:
         self, ctx: MemoryExecutionContext, relation: str, obj_type: str, ident: str
     ) -> None:
         if not await self.allowed(ctx, relation, obj_type, ident):
-            authz_denials_total.labels(relation).inc()
-            log.info("authz.denied", relation=relation, object_type=obj_type, **ctx.log_fields())
-            raise ScopeDenied(
-                "Access denied", details={"relation": relation, "object_type": obj_type}
-            )
+            self.deny(ctx, relation, obj_type)
+
+    def deny(self, ctx: MemoryExecutionContext, relation: str, obj_type: str) -> NoReturn:
+        """Refuse as ``require`` does, for a decision already taken by ``allowed`` (asked
+        before a unit of work was opened, so no connection or lock waited on it)."""
+        authz_denials_total.labels(relation).inc()
+        log.info("authz.denied", relation=relation, object_type=obj_type, **ctx.log_fields())
+        raise ScopeDenied("Access denied", details={"relation": relation, "object_type": obj_type})
 
     # -- grants -----------------------------------------------------------------
     async def _bump_membership(

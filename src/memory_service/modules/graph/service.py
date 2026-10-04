@@ -14,7 +14,11 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import NotFound
 from memory_service.domain.graph import GraphLayer
 from memory_service.domain.memory import CanonicalMemory, Scope, unverified_representation
-from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.revisions import (
+    RevisionKind,
+    audience_revision_keys,
+    document_revision_keys,
+)
 from memory_service.domain.text import unicode_tokens
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -24,6 +28,7 @@ from memory_service.modules.ingestion.context_graph import canonical_entity, ext
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.memory.native import _STOP as _STOP_WORDS
+from memory_service.modules.memory.revisions import memory_revision_keys
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
@@ -153,7 +158,9 @@ class GraphService:
         now = datetime.now(UTC)
         found = {m.memory_id for m in memories}
         n = 0
-        removed = 0
+        #: the revisions this pass moved facts under (ADR 0031)
+        moved: set[tuple[RevisionKind, str]] = set()
+        readers: set[str] = set()
         #: entities to re-summarise, per owner whose model identity may pay for it
         touched: dict[str, list[str]] = {}
         with (
@@ -161,23 +168,45 @@ class GraphService:
             stage_seconds.labels("graph.enrich").time(),
         ):
             for mid in memory_ids:
-                if mid not in found:
-                    removed += await self.store.supersede_for_memory(tenant_id, mid, at=now)
+                if mid not in found and await self.store.supersede_for_memory(
+                    tenant_id, mid, at=now
+                ):
+                    # the memory is gone, and with it what its facts' audience was
+                    moved.add((RevisionKind.GRAPH, ""))
             for m in memories:
                 if m.temporal.status.value != "CURRENT" or unverified_representation(
                     m.system_metadata
                 ):
-                    removed += await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now)
+                    if await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now):
+                        moved |= memory_revision_keys(m)
                     continue
-                n += await self._enrich_memory(m, touched)
+                written = await self._enrich_memory(m, touched)
+                if written:
+                    moved |= memory_revision_keys(m)
+                n += written
             for principal, entity_ids in touched.items():
                 async with self.assist.bound(ModelIdentity(tenant_id, principal)):
-                    await self.summaries.refresh(tenant_id, entity_ids)
-        if n or removed:
-            async with self.uow_factory() as uow:
-                await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
-                await uow.commit()
+                    await self.summaries.refresh(tenant_id, entity_ids, readers=readers)
+        await self._bump(tenant_id, moved | audience_revision_keys(tenant_id, readers))
         return n
+
+    async def _bump(self, tenant_id: str, keys: set[tuple[RevisionKind, str]]) -> None:
+        """Move the revisions of the audiences a graph change is visible to.
+
+        It was one tenant-wide GRAPH counter, bumped by every memory-index job and every
+        document enrichment, so each memory write dropped every cached bundle of the tenant,
+        including those of users who could read none of the new facts. A fact is readable
+        exactly by its relation's visibility keys, which are the memory's or the document's,
+        so their audience revisions are what a reader of the fact subscribes to; a rewritten
+        entity summary is readable by the entity's readers. GRAPH remains for a change whose
+        audience is unknown.
+        """
+        if not keys:
+            return
+        async with self.uow_factory() as uow:
+            for kind, identifier in sorted(keys):
+                await uow.revisions.bump(tenant_id, kind, identifier)
+            await uow.commit()
 
     async def _enrich_memory(self, m: CanonicalMemory, touched: dict[str, list[str]]) -> int:
         """One memory's entities and relations; records the entities it touched per owner."""
@@ -228,10 +257,15 @@ class GraphService:
                 await self.store.upsert_entities(entities)
                 await self.store.upsert_relations(relations)
                 busiest = sorted(entities, key=lambda e: (-e.mention_count, e.entity_id))
-                await self.summaries.refresh(tenant_id, [e.entity_id for e in busiest])
-        async with self.uow_factory() as uow:
-            await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
-            await uow.commit()
+                readers: set[str] = set()
+                await self.summaries.refresh(
+                    tenant_id, [e.entity_id for e in busiest], readers=readers
+                )
+        await self._bump(
+            tenant_id,
+            document_revision_keys(tenant_id, document.thread_id, keys)
+            | audience_revision_keys(tenant_id, readers),
+        )
         log.info(
             "graph.document_enriched",
             tenant_id=tenant_id,

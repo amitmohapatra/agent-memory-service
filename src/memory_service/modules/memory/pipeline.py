@@ -384,11 +384,12 @@ class ObservationPipeline:
         """Returns the ids written (created or reinforced). With a ``gate``, a candidate it
         does not admit is recorded as IGNORE with the gate's reasons and not stored."""
         affected: set[str] = set()
+        working_moved = False
         now = datetime.now(UTC)
         for cand in candidates:
             if cand.lifetime is Lifetime.EPHEMERAL:
                 if self.working is not None:
-                    await self.working.remember(ctx, cand)
+                    working_moved |= await self.working.remember(ctx, cand)
                 outcomes.append(
                     ConsolidationOutcome(
                         decision=DedupDecision.IGNORE, candidate=cand, reason="ephemeral (cache)"
@@ -408,6 +409,10 @@ class ObservationPipeline:
             if gate is not None:
                 admission = await self._admission(gate, ctx, cand, outcome, hinted=hinted, now=now)
                 if admission.verdict is not AdmissionVerdict.ADMIT:
+                    if admission.verdict is AdmissionVerdict.DEFER and self.working is not None:
+                        # _admission parked it in working memory: cached bundles of the scope
+                        # are missing an item now
+                        working_moved = True
                     outcomes.append(
                         ConsolidationOutcome(
                             decision=DedupDecision.IGNORE,
@@ -420,6 +425,10 @@ class ObservationPipeline:
             outcomes.append(outcome)
             ids = await self._apply(uow, ctx, outcome, existing, now=now, admission=admission)
             affected |= ids
+        if working_moved:
+            # committed with the observation's PROCESSED mark by the caller's unit of work
+            kind, identifier = EphemeralMemory.revision_key(ctx)
+            await uow.revisions.bump(ctx.tenant_id, kind, identifier)
         return affected
 
     async def _restated(

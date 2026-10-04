@@ -136,3 +136,32 @@ def test_invalid_layouts_are_refused() -> None:
         DenseSpaces(
             [DenseSpace(VectorName.DENSE_EN, _Spy(), query_scripts=frozenset({Script.LATIN}))]
         )
+
+
+async def test_query_vectors_are_cached_per_space_and_survive_a_cache_outage() -> None:
+    from memory_service.adapters.cache.memory_cache import MemoryCache
+    from memory_service.ports.cache import CacheUnavailable
+
+    spaces, english, multilingual = _spaces()
+    cache = MemoryCache()
+    spaces.use_cache(cache, ttl_seconds=60)
+    first = await spaces.embed_query("where is the office")
+    again = await spaces.embed_query("where is the office")
+    assert english.queries == multilingual.queries == ["where is the office"]
+    for name in first:
+        assert again[name] == pytest.approx(first[name], abs=1e-6)
+    keys = [k for k in cache._data if k.startswith("emb:")]
+    assert len(keys) == 2 and all(":q:" in k for k in keys)
+    # the primary vector the semantic cache asks for is the same cached entry
+    assert await spaces.embed_primary_query("where is the office") == pytest.approx(
+        first[VectorName.DENSE_ML], abs=1e-6
+    )
+    assert multilingual.queries == ["where is the office"]
+
+    async def down(*_: object, **__: object) -> None:
+        raise CacheUnavailable("down")
+
+    cache.mget = down  # type: ignore[method-assign]
+    cache.mset = down  # type: ignore[method-assign]
+    assert set(await spaces.embed_query("another question")) == set(first)
+    assert english.queries[-1] == "another question"
