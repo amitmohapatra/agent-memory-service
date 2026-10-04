@@ -106,7 +106,7 @@ A migration runs against a live service. The rule for every revision:
 2. **Indexes on live tables are built `CONCURRENTLY`**, inside
    `op.get_context().autocommit_block()`, since `CREATE INDEX CONCURRENTLY` cannot run in a
    transaction. Use `IF NOT EXISTS` so a retried migration is harmless. The downgrade drops
-   it `CONCURRENTLY` too. Migration 0023 is the pattern.
+   it `CONCURRENTLY` too. Migration 0024 is the pattern.
 3. **Expand, then contract.** Add a nullable column or a new table and deploy code that
    writes both, then backfill in batches from a job, and only drop the old shape in a later
    release. A `NOT NULL` column with a volatile default rewrites the table.

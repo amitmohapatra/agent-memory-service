@@ -92,6 +92,7 @@ then defaults. Every credential is a `SecretStr`, and `/version` shows a redacte
 | `MEMORY__TASKS__WORKER_CONCURRENCY` | CPUs, 1–8 | jobs a worker runs at once, 1–8; unset, one per CPU |
 | `MEMORY__TASKS__METRICS_PORT` | 9464 | the job worker's Prometheus series and healthcheck |
 | `MEMORY__SEARCH__QDRANT_URL`, `__QDRANT_GRPC_PORT`, `__QDRANT_API_KEY` | localhost:6333, 6334 | |
+| `MEMORY__SEARCH__SHARD_NUMBER`, `__REPLICATION_FACTOR`, `__WRITE_CONSISTENCY_FACTOR` | 1, 1, 1 | the Qdrant cluster's layout for **new** collections ([deploy/search.md](../deploy/search.md)) |
 | `MEMORY__AUTHORIZATION__OPENFGA_API_URL`, `__OPENFGA_STORE_ID`, `__OPENFGA_MODEL_ID`, `__OPENFGA_API_TOKEN` | localhost:8081 | a pinned model id that is not this build's model stops the service at start (ADR 0021) |
 | `MEMORY__BLOB__PROVIDER`, `__CHAT_BUCKET`, `__FILE_BUCKET`, `__FILESYSTEM_ROOT`, `__GCS_PROJECT` | `filesystem` | `gcs` in deployed environments |
 | `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` | unset | the platform operator (chapter 7); unset = nobody can onboard |
@@ -284,7 +285,9 @@ retry; compose's `stop_grace_period` for it is 45 s.
 **Overload.** A read (GET, `/v1/context`, `/v1/recall`, `/v1/tools/hints`) that runs past
 5 s, a write past 15 s, `/v1/verify` past 15 s is answered `504` `TIMEOUT` (retryable);
 uploads and probes have no deadline. A model queue past 32 waiters answers `503` at once.
-uvicorn refuses past 128 concurrent connections per worker. The values are
+uvicorn refuses past 128 concurrent connections per worker and keeps idle keep-alive
+connections for 65 s (above the SDK's 30 s and the usual 60 s load-balancer idle timeout;
+uvicorn's own default of 5 s closed connections clients were about to reuse). The values are
 `constants.OVERLOAD` (ADR 0031).
 
 **Traces.** OpenTelemetry spans per stage, exported over OTLP/HTTP when

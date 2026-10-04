@@ -38,7 +38,7 @@ R. Do not proceed if a release gate fails.
   ADR 0031). `migrations/env.py` sets `lock_timeout` (5 s) and `statement_timeout` (15 min)
   for every migration, so a revision that cannot get its lock fails instead of queueing the
   live service behind it. An index on an existing table is `CREATE INDEX CONCURRENTLY IF
-  NOT EXISTS` inside `op.get_context().autocommit_block()` (migration 0023 is the pattern).
+  NOT EXISTS` inside `op.get_context().autocommit_block()` (migration 0024 is the pattern).
   Schema changes go expand-then-contract across releases. Test `upgrade head`,
   `downgrade -1`, `upgrade head` on a scratch database.
 

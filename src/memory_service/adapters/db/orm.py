@@ -631,7 +631,7 @@ class MemoryRow(Base):
         Index("ix_memories_tenant_hash", "tenant_id", "normalized_hash"),
         Index("ix_memories_tenant_scope", "tenant_id", "scope_key", "temporal_status"),
         # consolidation's candidate read (``candidates``): a scope's live rows, newest first,
-        # one index range in the order the LIMIT wants (migration 0023)
+        # one index range in the order the LIMIT wants (migration 0024)
         Index(
             "ix_memories_scope_candidates",
             "tenant_id",

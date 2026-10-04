@@ -292,6 +292,20 @@ class SearchSettings(BaseModel):
     #: the REST endpoint, which is what the dashboard and the snapshot API speak.
     qdrant_grpc_port: int = 6334
     qdrant_api_key: SecretStr | None = None
+    #: How a new collection is laid out on a Qdrant cluster: shards to spread its points
+    #: over, copies of each shard, and how many copies must acknowledge a write. Facts about
+    #: the cluster, so they are settings; they apply when a collection is created, and an
+    #: existing collection takes new values only through a rebuild
+    #: (``tools/reindex.py --drop``, docs/deploy/search.md). The defaults are one node.
+    shard_number: int = Field(default=1, ge=1)
+    replication_factor: int = Field(default=1, ge=1)
+    write_consistency_factor: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def _consistency_within_replicas(self) -> SearchSettings:
+        if self.write_consistency_factor > self.replication_factor:
+            raise ValueError("search.write_consistency_factor cannot exceed replication_factor")
+        return self
 
 
 LLMUse = Literal[

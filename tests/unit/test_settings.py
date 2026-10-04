@@ -116,7 +116,10 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # ``transaction_pooler`` say a PgBouncer sits in front of the request path and where the
     # session work goes instead; ``tasks.metrics_port`` is a port, like ``service.port``. The
     # overload limits and deadlines that came with them are constants (``OVERLOAD``).
-    assert len(leaves) <= 38, f"{len(leaves)} env fields: {leaves}"
+    # 38 -> 41: ``search.shard_number``, ``replication_factor`` and
+    # ``write_consistency_factor`` describe the Qdrant cluster a deployment runs - one node
+    # or six - which no constant can know.
+    assert len(leaves) <= 41, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",

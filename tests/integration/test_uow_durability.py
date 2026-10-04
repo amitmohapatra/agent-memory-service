@@ -329,7 +329,7 @@ async def test_by_ids_returns_only_undispatched_rows_that_were_asked_for(
 
 
 async def test_the_candidate_index_exists_and_migrations_fail_fast(container) -> None:
-    """Migration 0023 builds the candidate index online; env.py bounds every migration's
+    """Migration 0024 builds the candidate index online; env.py bounds every migration's
     lock wait so an ALTER cannot queue the live service behind it (ADR 0031)."""
     from pathlib import Path
 
@@ -344,7 +344,7 @@ async def test_the_candidate_index_exists_and_migrations_fail_fast(container) ->
         ).scalar_one()
     assert valid is True
     root = Path(__file__).resolve().parents[2]
-    migration = (root / "migrations/versions/0023_online_candidate_index.py").read_text()
+    migration = (root / "migrations/versions/0024_online_candidate_index.py").read_text()
     assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in migration
     assert "autocommit_block()" in migration
     env = (root / "migrations/env.py").read_text()

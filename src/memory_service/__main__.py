@@ -61,6 +61,8 @@ def run_api() -> None:
         access_log=False,
         limit_concurrency=OVERLOAD.limit_concurrency,
         backlog=OVERLOAD.backlog,
+        # above every client's keep-alive (the SDK's is 30 s) and LB idle timeouts
+        timeout_keep_alive=OVERLOAD.keep_alive_seconds,
         # in-flight requests get their longest deadline to finish on SIGTERM
         timeout_graceful_shutdown=int(OVERLOAD.write_deadline_seconds) + 5,
     )

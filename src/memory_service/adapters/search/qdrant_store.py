@@ -125,8 +125,13 @@ async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
 
 #: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
 #: ``script`` is the record's Unicode script.
-_PAYLOAD_INDEXES = {
-    "tenant_id": models.PayloadSchemaType.KEYWORD,
+#: ``tenant_id`` is the tenant key: every search filters on exactly one value of it, and
+#: ``is_tenant`` tells Qdrant to lay segments out per tenant so that filter selects a
+#: tenant's storage instead of scanning everyone's (multitenancy, Qdrant >= 1.11).
+_TENANT_INDEX = models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD, is_tenant=True)
+
+_PAYLOAD_INDEXES: dict[str, Any] = {
+    "tenant_id": _TENANT_INDEX,
     "visibility_keys": models.PayloadSchemaType.KEYWORD,
     "kind": models.PayloadSchemaType.KEYWORD,
     "document_id": models.PayloadSchemaType.KEYWORD,
@@ -138,6 +143,12 @@ _PAYLOAD_INDEXES = {
     "valid_to": models.PayloadSchemaType.DATETIME,
     "known_to": models.PayloadSchemaType.DATETIME,
 }
+
+
+def _is_tenant_index(info: Any) -> bool:
+    """Whether an existing payload index (``PayloadIndexInfo``) is the tenant index."""
+    params = getattr(info, "params", None)
+    return bool(getattr(params, "is_tenant", False))
 
 
 def point_id(record_id: str) -> str:
@@ -388,6 +399,14 @@ class QdrantSearchStore:
                         on_disk_payload=spec.on_disk_payload
                         and SEARCH.on_disk_payload
                         and not self._local,
+                        # the cluster's layout (SearchSettings); local mode has none
+                        shard_number=None if self._local else self.settings.shard_number,
+                        replication_factor=None
+                        if self._local
+                        else self.settings.replication_factor,
+                        write_consistency_factor=None
+                        if self._local
+                        else self.settings.write_consistency_factor,
                     )
                 except Exception:
                     # Check-then-create, and three API workers start cold against the same
@@ -417,9 +436,11 @@ class QdrantSearchStore:
         remote Qdrant under memory pressure makes expensive. Changing it does not need a
         reindex; the collection is updated in place.
         """
-        wanted = spec.on_disk_payload and SEARCH.on_disk_payload
         try:
             info = await self._client.get_collection(name)
+            # in RAM only while it is small enough to be worth it (``payload_in_ram_max_points``)
+            grown = (info.points_count or 0) > SEARCH.payload_in_ram_max_points
+            wanted = (spec.on_disk_payload or grown) and SEARCH.on_disk_payload
             if bool(info.config.params.on_disk_payload) == wanted:
                 return
             await self._client.update_collection(
@@ -430,7 +451,6 @@ class QdrantSearchStore:
             log.warning(
                 "qdrant.payload_storage_not_reconciled",
                 collection=name,
-                wanted_on_disk=wanted,
                 error_message=f"{type(exc).__name__}: {exc}",
             )
 
@@ -440,10 +460,18 @@ class QdrantSearchStore:
         filters on it, so Qdrant read payloads to apply it; and a field added here after a
         collection was created was never indexed on that collection at all."""
         info = await self._client.get_collection(name)
-        have = set((info.payload_schema or {}).keys())
+        have = info.payload_schema or {}
         for field, schema in _PAYLOAD_INDEXES.items():
             if field not in have:
                 await self._client.create_payload_index(name, field_name=field, field_schema=schema)
+        if not _is_tenant_index(have.get("tenant_id")):
+            # Created before ``is_tenant``: index it again with the flag. Qdrant then groups
+            # new segments by tenant, so a tenant-filtered search reads that tenant's points
+            # instead of filtering every segment; points already stored are regrouped as the
+            # optimizer rewrites their segments, or at once by a rebuild (reindex --drop).
+            await self._client.create_payload_index(
+                name, field_name="tenant_id", field_schema=_TENANT_INDEX
+            )
 
     async def upsert(self, records: Sequence[SearchRecord]) -> None:
         if not records:

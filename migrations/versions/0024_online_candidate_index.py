@@ -20,7 +20,8 @@ same predicate and order.
 
 from alembic import op
 
-revision = "0023_online_candidate_index"
+revision = "0024_online_candidate_index"
+# Chained after 0023_tenant_admission_gate at merge (audit-sdk); 0022 on this branch.
 down_revision = "0022_feedback_review"
 branch_labels = None
 depends_on = None

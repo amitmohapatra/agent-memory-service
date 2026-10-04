@@ -56,6 +56,8 @@ def test_the_api_runs_the_configured_number_of_workers(
     # the outermost overload bound (ADR 0031): uvicorn refuses past it before the app runs
     assert captured["limit_concurrency"] == OVERLOAD.limit_concurrency
     assert captured["backlog"] == OVERLOAD.backlog
+    # longer than the SDK's 30 s keep-alive, so the server never closes a reusable connection
+    assert captured["timeout_keep_alive"] == OVERLOAD.keep_alive_seconds > 30
 
 
 @pytest.mark.parametrize(("cpus", "expected"), [(1, 1), (2, 2), (6, 6), (64, 8)])

@@ -312,6 +312,11 @@ class SearchTuning:
     collection_prefix: str = "mem"
     on_disk_payload: bool = True
     timeout_seconds: float = 5.0
+    #: A collection asked to hold its payloads in RAM (the memories) keeps them there only
+    #: up to this many points; past it the payloads move to disk (checked when a process
+    #: first ensures the collection). A memory's payload is ~1-2 KB, so this is ~1 GB of
+    #: Qdrant RAM before the page cache takes over.
+    payload_in_ram_max_points: int = 500_000
 
 
 SEARCH = SearchTuning()
@@ -366,6 +371,13 @@ class OverloadTuning:
     limit_concurrency: int = 128
     #: the listen backlog (uvicorn ``backlog``): connections the kernel queues for accept
     backlog: int = 2048
+    #: How long uvicorn keeps an idle keep-alive connection (``timeout_keep_alive``). Its
+    #: default is 5 s, and the memory SDK keeps idle connections for 30 s, so the server
+    #: closed connections the client still meant to reuse: the next request raced the FIN
+    #: and failed, or paid a new handshake. Longer than every client's keep-alive and the
+    #: usual load-balancer idle timeouts (60 s), so the server is never the side that closes
+    #: a connection a client is about to use.
+    keep_alive_seconds: int = 65
     #: On SIGTERM/SIGINT the job worker stops fetching and gives running jobs this long to
     #: finish; whatever is still running is then aborted and released for a retry. Under
     #: compose's ``stop_grace_period`` for the worker (45 s).
