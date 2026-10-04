@@ -101,8 +101,9 @@ class MemoryUser(HttpUser):
             headers={**self.headers, "Idempotency-Key": f"{self.scope['thread_id']}-{self.turn}"},
             json={
                 "scope": self.scope,
-                "role": "USER",
-                "content": f"{random.choice(FACTS)} (turn {self.turn})",
+                "messages": [
+                    {"role": "USER", "content": f"{random.choice(FACTS)} (turn {self.turn})"}
+                ],
             },
             name="POST /v1/messages",
         )
@@ -127,23 +128,32 @@ class MemoryUser(HttpUser):
 
     @task(1)
     def context_with_verification(self) -> None:
-        """The same bundle, plus the grounding cascade over a short answer.
+        """A bundle, then the grounding cascade over a short answer against it.
 
         This is the only task that touches the NLI model, and it is weighted like the
         upload on purpose: verification is opt-in per request, so a capacity number that
         assumed every request paid for it would size the box for traffic nobody sends -
         and one that never exercised it would miss the most expensive thing the service
-        can be asked to do.
+        can be asked to do. The answer is verified against the bundle it was given
+        (``POST /v1/verify`` with the bundle id); ``/v1/context`` no longer takes an answer.
         """
-        self.client.post(
+        bundle = self.client.post(
             "/v1/context",
+            headers=self.headers,
+            json={"scope": self.scope, "query": _query()},
+            name="POST /v1/context (for verify)",
+        )
+        if bundle.status_code != 200:
+            return
+        self.client.post(
+            "/v1/verify",
             headers=self.headers,
             json={
                 "scope": self.scope,
-                "query": _query(),
+                "bundle_id": bundle.json().get("bundle_id"),
                 "answer": "Revenue was EUR 412 million in FY26 and Adjusted EBITDA rose 8%.",
             },
-            name="POST /v1/context (verified)",
+            name="POST /v1/verify",
         )
 
     @task(1)

@@ -14,7 +14,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}` (its `summary`) |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |
-| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback`, `/v1/feedback/pending`, `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
+| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback` (incl. `?review=pending`), `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
 | [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/keys/self`, `/v1/keys/{id}`, `/v1/model-key`, `/v1/model-key/policy`, `/v1/model-key/usage`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 
@@ -38,7 +38,13 @@ either direction. The SDK sends both halves from `MemoryClient.bind(**scope)`.
 
 **Writes are acknowledged, then processed.** A `2xx` on a write means the record *and* its
 processing job are committed in one transaction — not that the result is retrievable yet. Poll
-`GET /v1/jobs/{job_id}`, or the document's own status, rather than reading immediately.
+`GET /v1/jobs/{job_id}` (a `202` names the first job in `Location`), or the document's own status,
+rather than reading immediately. A `201` names the created resource in `Location`.
+
+**Every write takes `Idempotency-Key`.** A retry with the same key and body is the first response
+again — status, body, `Location` — with `Idempotent-Replayed: true`: a second `DELETE` is the first
+`204`, not a `404`; a retried profile edit is not a `409`. The same key with another body is a `409`.
+The read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no key.
 
 **Reads are audience-filtered before search runs**, not after. A memory or chunk is retrievable
 only by a principal in its audience, and the filter is applied in the store. That is why a
@@ -47,11 +53,21 @@ WORKSPACE-visible write needs a workspace row and a member ([tenancy.md](tenancy
 **Errors are RFC 9457 problem documents** (`application/problem+json`) with a `type`, a `title`,
 a `status`, a `detail` and, where a field is at fault, `errors`. The SDK raises them as
 `ValidationError`, `AuthenticationError`, `AuthorizationError`, `NotFoundError`,
-`ConflictError`, `RateLimitedError` and friends from `trellis.memory.errors`. Insufficient
+`ConflictError`, `RateLimitedError` and friends from `trellis.memory.errors`. `retryable: true`
+means the same request may pass later, and a retryable `429`, `503` or `504` says when in
+`Retry-After` (seconds): `503 DEPENDENCY_UNAVAILABLE` is a store that is down (PostgreSQL
+unreachable or its pool exhausted, Qdrant or OpenFGA away), `504 TIMEOUT` a database statement
+stopped at its budget. A body or file over the limit is `413 PAYLOAD_TOO_LARGE`
+(`PayloadTooLargeError`, a `ValidationError`), as in agent-runs. A `detail` never quotes a driver's or a server's message. Insufficient
 evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
 
-**Pagination is a cursor**, not an offset: a list route answers `{"…": [...], "next_cursor": …}`
-and the SDK exposes both `list(...)` (one page) and `page(...)` / `iter_*` (the cursor).
+**Pagination is a cursor**, not an offset: every list route takes `cursor` and `limit` and sends
+`Link: <…>; rel="next"` exactly when a next page exists; an envelope body (`{"…": [...]}`) also
+carries `next_cursor`, a bare-array body only the header. The SDK exposes both `list(...)` (one
+page) and `page(...)` / `iter_*` (the cursor).
+
+**Polled reads validate.** `GET /v1/agent-tools` and `GET /v1/tools` send an `ETag`; a request
+whose `If-None-Match` names it is answered `304` without a body.
 
 ## The SDK in four lines
 

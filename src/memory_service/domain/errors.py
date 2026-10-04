@@ -53,6 +53,13 @@ class NotFound(MemoryServiceError):
     http_status = 404
 
 
+class PayloadTooLarge(MemoryServiceError):
+    """The request body or the uploaded file is larger than the service accepts."""
+
+    code = ErrorCode.PAYLOAD_TOO_LARGE
+    http_status = 413
+
+
 class Conflict(MemoryServiceError):
     """The request conflicts with current state (e.g. idempotency key reused with new body)."""
 
@@ -65,6 +72,14 @@ class DependencyUnavailable(MemoryServiceError):
 
     code = ErrorCode.DEPENDENCY_UNAVAILABLE
     http_status = 503
+    retryable = True
+
+
+class OperationTimedOut(MemoryServiceError):
+    """A backing store stopped the operation at its time budget (a statement timeout)."""
+
+    code = ErrorCode.TIMEOUT
+    http_status = 504
     retryable = True
 
 

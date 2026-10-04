@@ -9,8 +9,8 @@ that is pure event-loop overhead on the path being measured.
 ``CorrelationMiddleware`` resolves the request, correlation and trace ids (W3C
 ``traceparent`` in and out, ADR 0022), refuses a request whose scope or credential headers
 carry more than one value before anything reads them, answers the 413 before the body is
-read, and writes the id headers, the alias routes' ``Deprecation``/``Link`` headers and the
-LLM-token header on every response it sees. ``RateLimitMiddleware`` keeps the per-tenant
+read (from Content-Length) or as it streams past the limit, and writes the id headers and
+the LLM-token header on every response it sees. ``RateLimitMiddleware`` keeps the per-tenant
 window with its burst, fails open on a cache outage, and answers the 429 with its headers.
 """
 
@@ -21,18 +21,19 @@ import time
 from typing import Any
 
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_service.api.errors import build_problem, problem_response
 from memory_service.api.headers import (
     AUTHORIZATION_HEADER,
     CORRELATION_ID_HEADER,
-    IDEMPOTENCY_KEY_HEADER,
     RATE_LIMIT_LIMIT_HEADER,
     RATE_LIMIT_REMAINING_HEADER,
     REQUEST_ID_HEADER,
     RETRY_AFTER_HEADER,
     correlation_headers,
+    idempotency_key_of,
     refuse_ambiguous_headers,
     scope_header,
 )
@@ -107,7 +108,7 @@ class CorrelationMiddleware:
         state["correlation_id"] = correlation_id
         state["trace_id"] = trace_id
         state["traceparent"] = traceparent
-        state["idempotency_key"] = headers.get(IDEMPOTENCY_KEY_HEADER)
+        state["idempotency_key"] = None
         path = scope["path"]
 
         content_length = headers.get("content-length")
@@ -118,7 +119,7 @@ class CorrelationMiddleware:
         ):
             response = problem_response(
                 build_problem(
-                    code=ErrorCode.VALIDATION,
+                    code=ErrorCode.PAYLOAD_TOO_LARGE,
                     message=f"Body exceeds {self.max_body_bytes} bytes",
                     status=413,
                     retryable=False,
@@ -132,6 +133,7 @@ class CorrelationMiddleware:
             return
         try:
             refuse_ambiguous_headers(headers)
+            state["idempotency_key"] = idempotency_key_of(headers)
         except ValidationFailed as exc:
             # Before the credential is verified and before any bucket is touched: a client
             # must not name a tenant per request with values the context builder is about to
@@ -156,9 +158,29 @@ class CorrelationMiddleware:
         bind_log_context(request_id=request_id, trace_id=trace_id, correlation_id=correlation_id)
         try:
             with llm_accounting() as llm_tokens:
-                await self._serve(scope, receive, send, state, llm_tokens)
+                await self._serve(scope, self._bounded(receive), send, state, llm_tokens)
         finally:
             clear_log_context()
+
+    def _bounded(self, receive: Receive) -> Receive:
+        """``receive`` counting the body as it streams in: a chunked request, or one whose
+        Content-Length understates it, is stopped at the limit with the same 413 problem the
+        Content-Length check answers, before the route has buffered past it. The exception is
+        the HTTP one FastAPI's body reader re-raises (anything else it turns into a 400)."""
+        seen = 0
+
+        async def bounded() -> Message:
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > self.max_body_bytes:
+                    raise StarletteHTTPException(
+                        status_code=413, detail=f"Body exceeds {self.max_body_bytes} bytes"
+                    )
+            return message
+
+        return bounded
 
     async def _serve(
         self,

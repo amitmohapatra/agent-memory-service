@@ -195,8 +195,29 @@ class ToolCatalogAPI:
         """Catalog entries visible in this scope; ``names`` narrows to those tools (a name
         the catalog does not know is absent from the answer)."""
         params: dict[str, Any] = {"names": list(names)} if names else {}
-        data = await self._ctx._request("GET", "/v1/tools", params=params)
-        return [CatalogTool.model_validate(t) for t in data.get("tools", [])]
+        tools: list[CatalogTool] = []
+        while True:
+            data = await self._ctx._request("GET", "/v1/tools", params=params)
+            tools += [CatalogTool.model_validate(t) for t in data.get("tools", [])]
+            # a page holds the whole catalog at its bound; follow the cursor past it anyway
+            if not data.get("next_cursor"):
+                return tools
+            params = {**params, "cursor": data["next_cursor"]}
+
+    async def catalog_if_changed(
+        self, names: Sequence[str] | None = None, *, etag: str | None = None
+    ) -> tuple[list[CatalogTool] | None, str | None]:
+        """:meth:`catalog`, read conditionally: with the ``etag`` of an earlier answer,
+        ``None`` means nothing changed since (the service answered 304). The second item is
+        the ETag to send next time. For a caller that re-reads governance often (the
+        harness every 30 s): an unchanged catalog costs one empty response."""
+        params: dict[str, Any] = {"names": list(names)} if names else {}
+        data, tag = await self._ctx._client.transport.request_conditional(
+            "/v1/tools", scope=self._ctx.scope, params=params, etag=etag
+        )
+        if data is None:
+            return None, tag
+        return [CatalogTool.model_validate(t) for t in data.get("tools", [])], tag
 
     async def put_catalog(
         self, tools: Sequence[dict[str, Any]], *, idempotency_key: str | None = None
@@ -253,10 +274,9 @@ class ModelKeysAPI:
         )
 
     async def revoke(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        data = await self._ctx._request(
-            "DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key
-        )
-        return AgentKeyStatus.model_validate(data)
+        """Revoke the key. The service answers 204; the status it leaves is read back."""
+        await self._ctx._request("DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key)
+        return await self.status()
 
 
 class MemoriesAPI:

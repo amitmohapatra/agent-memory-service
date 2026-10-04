@@ -220,7 +220,11 @@ class ContextGraphEdge(StrEnum):
 
 
 class ErrorCode(StrEnum):
-    """Public API error categories (``api/errors.py`` carries them in problem details)."""
+    """Public API error categories (``api/errors.py`` carries them in problem details).
+
+    Every value is one the service produces: TIMEOUT is a database statement stopped at its
+    budget (504); there is no category a client can be told about but never receive.
+    """
 
     VALIDATION = "VALIDATION"
     AUTHENTICATION = "AUTHENTICATION"
@@ -228,9 +232,9 @@ class ErrorCode(StrEnum):
     SCOPE_DENIED = "SCOPE_DENIED"
     NOT_FOUND = "NOT_FOUND"
     CONFLICT = "CONFLICT"
+    PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
     RATE_LIMIT = "RATE_LIMIT"
     DEPENDENCY_UNAVAILABLE = "DEPENDENCY_UNAVAILABLE"
     TIMEOUT = "TIMEOUT"
-    RETRYABLE_PROCESSING = "RETRYABLE_PROCESSING"
     CORRUPT_SOURCE = "CORRUPT_SOURCE"
     INTERNAL = "INTERNAL"

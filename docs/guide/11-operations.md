@@ -84,17 +84,22 @@ then defaults. Every credential is a `SecretStr`, and `/version` shows a redacte
 |---|---|---|
 | `MEMORY__SERVICE__ENVIRONMENT` | `dev` | `dev`, `test`, `staging`, `prod`; the last two enable the production guards |
 | `MEMORY__SERVICE__PORT`, `__LOG_LEVEL`, `__LOG_JSON` | `8080`, `INFO`, `true` | |
-| `WEB_CONCURRENCY` / `MEMORY__SERVICE__WORKERS` | 3 | API worker processes, 1–8; the second wins when both are set |
-| `MEMORY__DATABASE__URL`, `__POOL_SIZE`, `__MAX_OVERFLOW` | localhost, 8, 8 | per **process**: three API workers and a worker add up (plus 4 + 4 for the graph traversal's own pool) |
+| `WEB_CONCURRENCY` / `MEMORY__SERVICE__WORKERS` | CPUs, 1–8 (the image sets 3) | API worker processes, 1–8; the second wins when both are set; unset, one per CPU the container may use (cgroup quota and affinity, not the host's count) |
+| `MEMORY__DATABASE__URL` | localhost | the request path's connection; may be a transaction-mode PgBouncer ([deploy/database.md](../deploy/database.md)) |
+| `MEMORY__DATABASE__DIRECT_URL`, `__TRANSACTION_POOLER` | `URL`, `false` | PostgreSQL itself, for the job queue, the graph traversal and migrations; `true` when `URL` is a transaction pooler |
+| `MEMORY__DATABASE__CONNECTION_BUDGET` | 28 × processes | connections one **pod** may open; each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue |
 | `MEMORY__CACHE__URL` | `redis://localhost:6379/0` | any Redis-protocol cache |
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | 4 | jobs a worker runs at once, 1–8 |
+| `MEMORY__TASKS__WORKER_CONCURRENCY` | CPUs, 1–8 | jobs a worker runs at once, 1–8; unset, one per CPU |
+| `MEMORY__TASKS__METRICS_PORT` | 9464 | the job worker's Prometheus series and healthcheck |
 | `MEMORY__SEARCH__QDRANT_URL`, `__QDRANT_GRPC_PORT`, `__QDRANT_API_KEY` | localhost:6333, 6334 | |
+| `MEMORY__SEARCH__SHARD_NUMBER`, `__REPLICATION_FACTOR`, `__WRITE_CONSISTENCY_FACTOR` | 1, 1, 1 | the Qdrant cluster's layout for **new** collections ([deploy/search.md](../deploy/search.md)) |
 | `MEMORY__AUTHORIZATION__OPENFGA_API_URL`, `__OPENFGA_STORE_ID`, `__OPENFGA_MODEL_ID`, `__OPENFGA_API_TOKEN` | localhost:8081 | a pinned model id that is not this build's model stops the service at start (ADR 0021) |
 | `MEMORY__BLOB__PROVIDER`, `__CHAT_BUCKET`, `__FILE_BUCKET`, `__FILESYSTEM_ROOT`, `__GCS_PROJECT` | `filesystem` | `gcs` in deployed environments |
 | `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` | unset | the platform operator (chapter 7); unset = nobody can onboard |
 | `MEMORY__AUTHENTICATION__JWT_ISSUER`, `__JWT_AUDIENCE`, `__JWT_JWKS_URL`, `__TENANT_CLAIM` | unset | `jwt` mode when the JWKS URL is set |
 | `MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS` | `[]` | development only |
-| `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID`, `__ENCRYPTION_KEYS` | unset | envelope keys that encrypt registered model keys |
+| `MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT` | `default` | the tenant a development key acts in (and `GET /v1/keys/self` reports) when a request names none |
+| `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID`, `__ENCRYPTION_KEYS` | unset | envelope keys that encrypt registered model keys; required in staging and prod, where registration is refused without them; `dev`/`test` derive an unprotected development key with a warning |
 | `MEMORY__HINDSIGHT__BASE_URL`, `__API_KEY` | unset | the optional extraction service (chapter 8) |
 | `MEMORY__RETAIL_CALENDAR` | unset | a fiscal calendar such as `454`; resolves fiscal phrases and expands planning shorthand (chapter 3) |
 | `BIFROST_URL`, `BIFROST_VIRTUAL_KEY` | unset | the model gateway and the operator's key on it; no `MEMORY__` prefix |
@@ -247,10 +252,14 @@ revert of the build ([MULTILINGUAL-RUNTIME.md](../MULTILINGUAL-RUNTIME.md#moving
 ## Observability
 
 **Probes** ([api/admin.md](../api/admin.md#operations)). `GET /health/live` is always `200`
-while the process is up. `GET /health/ready` is `200` when every mandatory dependency answered
-(`ready`) or only an optional one is down (`degraded`), and `503` when a mandatory one is down
-(`not_ready`). Mandatory: `postgres`, `task_queue`, `qdrant`, `blob`, `openfga`. Optional:
-`cache`, `llm`. Wire the load balancer to `ready`. `GET /version` reports which provider is
+while the process is up and checks nothing outside it. `GET /health/ready` is `200` when every
+dependency answered (`ready`) or one other than PostgreSQL is down (`degraded`), and `503`
+when PostgreSQL is down or the process has begun shutting down (`not_ready`). Mandatory:
+`postgres`, `process`. Reported but never failing readiness: `qdrant`, `openfga`, `blob`,
+`task_queue`, `cache`, `llm` - a shared dependency blinking used to take every pod out of
+rotation at once, and the routes that need a missing store answer 503 themselves (ADR 0031).
+The answer is reused for 3 s and each ping is bounded at 2 s. Wire the load balancer to
+`ready`. `GET /version` reports which provider is
 **running** per port and lists every place it differs from what was configured under
 `degraded` — check it before believing a benchmark.
 
@@ -258,11 +267,29 @@ while the process is up. `GET /health/ready` is `200` when every mandatory depen
 latency, per-stage timings (`memory_stage_seconds`), jobs, cache operations, authorization
 denials, dependency up, evidence status, memory decisions, LLM requests, tokens and latency,
 grounding claims, graph budget expiries, archive bytes, reconciler repairs, dropped audit
-entries. **One caveat that changes how you read them** (`docs/MEASUREMENTS.md` §5c): the
-registry is per process and the API runs three, so a scrape is one worker's share and a
-counter can go down between scrapes. `/metrics` says so itself — `memory_api_workers` is the
-divisor and the exposition starts with a `# SCOPE:` comment naming the pid. Scrape with
-`WEB_CONCURRENCY=1` for any gate that reads counters; multiprocess collection is not wired.
+entries, and the overload signals: `memory_model_queue_waiters` and
+`memory_model_queue_rejected_total` per model, `memory_request_deadline_exceeded_total` per
+route class, `memory_db_pool_checked_out` / `memory_db_pool_capacity` per pool. `memory-api`
+with more than one worker sets `PROMETHEUS_MULTIPROC_DIR` (emptied at start), so a scrape
+is every worker's values summed (`# SCOPE: all N API worker processes`); started any other
+way with several workers, the banner says the series are one worker's share
+(`docs/MEASUREMENTS.md` §5c).
+
+**The job worker** serves its own series on `MEMORY__TASKS__METRICS_PORT` (9464):
+`memory_queue_depth` and `memory_queue_oldest_lag_seconds` per queue,
+`memory_outbox_backlog`, `memory_jobs_failed_terminal` per queue, `memory_worker_running_jobs`
+and `memory_worker_last_sample_timestamp_seconds` (sampled every 15 s; a stale value is a
+worker that cannot reach its database). The compose healthcheck reads that port. On SIGTERM
+the worker stops fetching, gives running jobs 30 s, then aborts and releases the rest for a
+retry; compose's `stop_grace_period` for it is 45 s.
+
+**Overload.** A read (GET, `/v1/context`, `/v1/recall`, `/v1/tools/hints`) that runs past
+5 s, a write past 15 s, `/v1/verify` past 15 s is answered `504` `TIMEOUT` (retryable);
+uploads and probes have no deadline. A model queue past 32 waiters answers `503` at once.
+uvicorn refuses past 128 concurrent connections per worker and keeps idle keep-alive
+connections for 65 s (above the SDK's 30 s and the usual 60 s load-balancer idle timeout;
+uvicorn's own default of 5 s closed connections clients were about to reuse). The values are
+`constants.OVERLOAD` (ADR 0031).
 
 **Traces.** OpenTelemetry spans per stage, exported over OTLP/HTTP when
 `OTEL_EXPORTER_OTLP_ENDPOINT` is set; W3C `traceparent` is continued from the caller and
@@ -284,7 +311,9 @@ provenance is `EvidenceRef` and execution is traced; processing lineage is not e
 | Symptom | Look at |
 |---|---|
 | a write was acknowledged but nothing is retrievable | `GET /v1/jobs/{id}`; outbox rows still pending (the sweep runs every minute); `memory_jobs_total` |
-| readiness is `degraded` | which optional dependency is down in the body; the cache being down is served, not refused |
+| readiness is `degraded` | which dependency is down in the body; requests that need it answer 503, the rest are served |
+| clients see 503 / 504 under load | `memory_model_queue_rejected_total`, `memory_request_deadline_exceeded_total`, `memory_db_pool_checked_out` against `memory_db_pool_capacity` |
+| jobs pile up | the worker's `memory_queue_depth` and `memory_queue_oldest_lag_seconds`; `memory_outbox_backlog` rising means the relay, not the worker |
 | a benchmark number looks wrong | `/version` → `degraded`; any `representative: false` in the artifact (chapter 12) |
 | graph facts are missing under load | `memory_graph_budget_expired_total`: the 150 ms budget is stopping traversals |
 | a model use is not running | `BIFROST_URL`, the tenant's policy (`GET /v1/model-key/policy`), whether a key can pay, `memory_llm_assist_total` |

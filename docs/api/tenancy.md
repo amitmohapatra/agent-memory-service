@@ -39,9 +39,9 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `DELETE /v1/workspaces/{id}` | delete it; every member loses the audience and every key bound to it is revoked at once | `t.workspaces.delete(id)` |
 | `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>` or `agent:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
 | `DELETE /v1/workspaces/{id}/members/{principal_ref}` | remove a member; its next request no longer reads the workspace | `t.workspaces.remove_member(id, principal)` |
-| `GET /v1/workspaces/{id}/members` | who is in it | `t.workspaces.members(id)` |
-| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
-| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` |
+| `GET /v1/workspaces/{id}/members` | who is in it, by principal (cursor paged) | `t.workspaces.members(id)`, `.members_page(id, cursor=…)` |
+| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read; `DELETE` answers `204`) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` (reads the status back) |
+| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key (`DELETE` answers `204`) | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` (reads the status back) |
 | `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted, the model per use | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…, models=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
@@ -94,6 +94,16 @@ principal of the tenant — the default at issue; empty means only the key itsel
 narrows or widens it later with `PATCH /v1/keys/{key_id}`; like a revocation it applies on the
 key's next request from any instance.
 
+A restricted key is checked against **every principal a request names**: its user
+(`X-Trellis-User` or the body's `user_id`) must be listed as `user:<id>`, and its agent (the
+body's or query's `agent_id`) as `agent:<id>`; either missing is `403` (`this key may not act for
+that user` / `… as that agent`, `details.field` naming which). So a key listing `user:planner-7`
+and `agent:reorder-agent` may run `reorder-agent` for `planner-7`, but not another agent for
+her, nor `reorder-agent` for another user. A request naming neither user nor agent acts as the
+key itself — the anonymous service principal, which holds no grant on any user's or agent's
+memories. `*` lifts the restriction. (Before 0.4 only the user was checked: an `agent:` entry was
+stored and reported, and a key restricted to one agent could act as any other by naming it.)
+
 ```python
 await t.keys.update(issued.key_id, may_act_as=["agent:reorder-agent", "user:planner-7"])
 me = await MemoryClient(url, api_key=issued.token).tenant.keys.whoami()  # GET /v1/keys/self
@@ -102,8 +112,13 @@ print(me.key_id, me.tenant_id, me.principal, me.role, me.may_act_as)
 
 `GET /v1/keys/self` is open to every key, about itself: it is how a harness checks its
 credential at startup and how the platform's other services authenticate a key they were
-handed. `tenant_id` is null for a key that names the tenant per request (the platform key, a
-development key); `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
+handed. `tenant_id` is null for a credential that names the tenant per request (the platform
+key, an issuer's token). A development key reports the development tenant —
+`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`, `default` unless set — and acts in it on every
+route when a request names no tenant, so a laptop's harness needs no tenant configured anywhere;
+`X-Trellis-Tenant` still names another. The development tenant gets its row the first time
+it is administered, and the development stack also accepts the keys it issued: `POST /v1/keys`
+with the development key gives the service key a deployment would use, ready at once. `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
 
 ## Model keys: two registered levels and the operator's, resolved in order
 
@@ -187,7 +202,8 @@ Each entry names the credential and the principal that read, whether it was a `r
 `context` assembly, the `record_ids` that came back, and a `query_hash` plus a `scope_fingerprint`
 rather than the query text — the audit answers *who read which records* without becoming a second
 copy of what was asked. Newest first, pageable by cursor (or `before=<the last entry's at>`);
-`after` is a since-filter. The keyset is the instant, so entries sharing one instant across a page
+`since=<instant>` keeps only newer entries (a filter that stays the same across pages; it was
+`after` before ADR 0030). The keyset is the instant, so entries sharing one instant across a page
 boundary need a larger page.
 
 ## What this area does not do

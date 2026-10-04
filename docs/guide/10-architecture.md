@@ -122,7 +122,8 @@ Step by step:
 
 1. **Middleware** (`api/middleware.py`). `CorrelationMiddleware` assigns the request and
    correlation ids, continues an incoming `traceparent` (ADR 0022), enforces the 25 MB body
-   limit (`MAX_BODY_BYTES`) and refuses a scope or credential header sent twice with
+   limit (`MAX_BODY_BYTES`: from `Content-Length` before the body is read, and by counting
+   the bytes of a streamed body as they arrive), bounds `Idempotency-Key` and refuses a scope or credential header sent twice with
    different values. `RateLimitMiddleware` counts the credential's one-minute window
    (chapter 7).
 2. **Authentication and context** (`api/deps.py`). The credential is verified; the tenant,
@@ -263,9 +264,11 @@ Step by step (`modules/context/builder.py`, `modules/retrieval/engine.py`):
 
 ## Caching and revisions
 
-Revision counters live in PostgreSQL with a Dragonfly read cache (`domain/revisions.py`).
-Every mutation increments the revisions it affects — `TENANT`, `USER`, `THREAD`, `AGENT`,
-`DOCUMENT`, `GRAPH`, and `MEMBERSHIP` for grants — and every sensitive cache key embeds the
+Revision counters live only in PostgreSQL (`domain/revisions.py`), read in one statement per
+bundle lookup. Every mutation increments the revisions of the audience that can read what it
+changed — `TENANT`, `USER`, `THREAD`, `AGENT`, and `MEMBERSHIP` for grants; `GRAPH` only for a
+graph change whose audience is unknown, `DOCUMENT` for ingestion's own bookkeeping (ADR
+0031) — and every sensitive cache key embeds the
 relevant ones, so stale entries simply stop being addressed. `MEMBERSHIP` is kept apart from
 `TENANT` and `USER` because those move with every memory write, and a scope invalidated by
 content churn was resolved again for no reason. Which revisions a memory bumps follows its

@@ -55,6 +55,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import aliased
 
+from memory_service.adapters.db.engine import track_pool
 from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
 from memory_service.config.constants import DATABASE, GRAPH
 from memory_service.domain.evidence import EvidenceRef
@@ -397,17 +398,30 @@ def traversal_params(
 
 
 class PostgresGraphStore:
-    def __init__(self, engine: AsyncEngine, *, budget_ms: int = GRAPH.prefetch_budget_ms) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        budget_ms: int = GRAPH.prefetch_budget_ms,
+        budgeted_url: str | None = None,
+        budgeted_pool: tuple[int, int] | None = None,
+    ) -> None:
+        """``budgeted_url`` is where the traversal's own pool connects. Its statement
+        timeout is a session parameter and its plan a prepared statement, both of which a
+        transaction-mode pooler would hand to the next client, so behind one it goes
+        direct (``DatabaseSettings.direct_url``). ``budgeted_pool`` is its (size, overflow)
+        from the pod's connection budget."""
         self._sessions = async_sessionmaker(engine, expire_on_commit=False)
         self._reads = async_sessionmaker(
             engine.execution_options(isolation_level="AUTOCOMMIT"), expire_on_commit=False
         )
         self._budget_ms = budget_ms
+        size, overflow = budgeted_pool or (GRAPH.budgeted_pool_size, GRAPH.budgeted_pool_overflow)
         self._budgeted_engine = create_async_engine(
-            engine.url,
+            budgeted_url or engine.url,
             isolation_level="AUTOCOMMIT",
-            pool_size=GRAPH.budgeted_pool_size,
-            max_overflow=GRAPH.budgeted_pool_overflow,
+            pool_size=size,
+            max_overflow=overflow,
             pool_timeout=DATABASE.pool_timeout_seconds,
             pool_pre_ping=False,
             pool_recycle=DATABASE.pool_recycle_seconds,
@@ -420,6 +434,7 @@ class PostgresGraphStore:
                 "prepare_threshold": 0,
             },
         )
+        track_pool(self._budgeted_engine, "graph", size + overflow)
         self._budgeted = async_sessionmaker(self._budgeted_engine, expire_on_commit=False)
 
     async def close(self) -> None:

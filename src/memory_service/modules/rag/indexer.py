@@ -22,6 +22,7 @@ from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.revisions import document_revision_keys
 from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.conversation.summary import (
@@ -45,7 +46,7 @@ from memory_service.ports.search import (
     SearchStore,
     VectorName,
 )
-from memory_service.ports.uow import UnitOfWorkFactory
+from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 log = get_logger(__name__)
 
@@ -298,6 +299,13 @@ class Indexer:
                         nid for nid, value in summaries.items() if value != extractive[nid]
                     },
                 )
+                # the previous generation goes before the revisions move, so a bundle built
+                # under the new revisions cannot carry the old chunks
+                stale = await self._purge_superseded(
+                    tenant_id,
+                    document_id,
+                    keep={c.chunk_id for c in all_chunks} | {f"sum_{nid}" for nid in summaries},
+                )
                 async with self.uow_factory() as uow:
                     # SQL summaries feed parent expansion, which has no generated-provenance
                     # column. Keep that evidence extractive; generated search representations
@@ -308,12 +316,8 @@ class Indexer:
                         fingerprint=self.fingerprint,
                         indexed_at=datetime.now(UTC),
                     )
+                    await _bump_document_revisions(uow, document, keys)
                     await uow.commit()
-                stale = await self._purge_superseded(
-                    tenant_id,
-                    document_id,
-                    keep={c.chunk_id for c in all_chunks} | {f"sum_{nid}" for nid in summaries},
-                )
         log.info(
             "index.document_done",
             tenant_id=tenant_id,
@@ -680,10 +684,31 @@ class Indexer:
         return await self.index_document(tenant_id, document_id, force=True)
 
     async def delete_document(self, tenant_id: str, document_id: str) -> None:
+        async with self.uow_factory() as uow:
+            document = await uow.documents.get(tenant_id, document_id)
+            keys = await uow.documents.visibility_keys(tenant_id, document_id)
         await self.store.delete_by_filter(
             self.collection(KNOWLEDGE),
             SearchFilter(tenant_id=tenant_id, must={"document_id": document_id}),
         )
+        async with self.uow_factory() as uow:
+            await _bump_document_revisions(
+                uow, document or Document.model_construct(tenant_id=tenant_id), keys
+            )
+            await uow.commit()
+
+
+async def _bump_document_revisions(
+    uow: UnitOfWork, document: Document, visibility_keys: Sequence[str]
+) -> None:
+    """Indexing is when a document becomes searchable, and it moved nothing a bundle reads:
+    ingestion bumps DOCUMENT, which no context lookup subscribes to, and GRAPH moved only
+    when graph enrichment was on. A bundle cached before the index job kept answering
+    without the document until its TTL. The audiences are the chunks' own visibility keys,
+    read the way ``memory_revision_keys`` reads a memory's."""
+    keys = document_revision_keys(document.tenant_id, document.thread_id, visibility_keys)
+    for kind, identifier in sorted(keys):
+        await uow.revisions.bump(document.tenant_id, kind, identifier)
 
 
 def _vectors_at(dense: dict[VectorName, list[list[float]]], i: int) -> dict[VectorName, Any]:

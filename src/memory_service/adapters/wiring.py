@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING, Any
 
+from memory_service.adapters.models._runner import configure_runners
 from memory_service.application.container import Dependency
 from memory_service.config import constants
 from memory_service.config.constants import FROZEN_MODELS
@@ -31,6 +32,7 @@ async def wire_all(container: Container) -> None:
         llm_enabled=settings.llm.enabled,
         stand_ins=container.overrides.summary(),
     )
+    configure_runners(max_waiters=constants.OVERLOAD.model_queue_max_waiters)
     await _wire_cache(container)
     await _wire_database(container)
     await _wire_tasks(container)
@@ -90,7 +92,9 @@ async def _wire_cache(container: Container) -> None:
 async def _wire_database(container: Container) -> None:
     from memory_service.adapters.db.engine import Database
 
-    db = Database(container.settings.database)
+    plan = container.settings.database.pool_plan(container.processes)
+    db = Database(container.settings.database, plan)
+    log.info("database.pools", processes=container.processes, per_process=plan.total)
     container.database = db
     container.add_dependency(
         Dependency(name="postgres", mandatory=True, ping=db.ping, close=db.close)
@@ -114,10 +118,11 @@ async def _wire_tasks(container: Container) -> None:
             container.settings.database.procrastinate_dsn,
             default_retries=constants.TASKS.default_retries,
             job_timeout_seconds=constants.TASKS.job_timeout_seconds,
+            max_size=container.settings.database.pool_plan(container.processes).queue_max,
         )
         container.tasks = queue
         container.add_dependency(
-            Dependency(name="task_queue", mandatory=True, ping=queue.ping, close=queue.close)
+            Dependency(name="task_queue", mandatory=False, ping=queue.ping, close=queue.close)
         )
 
 
@@ -143,7 +148,7 @@ async def _wire_authorization(container: Container) -> None:
 
         provider = OpenFGAAuthorizationProvider(container.settings.authorization)
         container.add_dependency(
-            Dependency(name="openfga", mandatory=True, ping=provider.ping, close=provider.close)
+            Dependency(name="openfga", mandatory=False, ping=provider.ping, close=provider.close)
         )
     container.authorization = provider
 
@@ -169,11 +174,13 @@ def _wire_services(container: Container) -> None:
     settings = container.settings
     uow_factory = container.services["uow_factory"]
     container.services["idempotency"] = IdempotencyService(container.cache)
-    registry = TenantRegistry(uow_factory)
+    registry = TenantRegistry(uow_factory, cache=container.cache)
     registry.start()
     container.services["tenant_registry"] = registry
     container.add_closer("tenant_registry", registry.close)
-    keys = ApiKeyVerifier(uow_factory, container.cache, known=registry.knows_key)
+    keys = ApiKeyVerifier(
+        uow_factory, container.cache, known=registry.knows_key, remember=registry.remember_key
+    )
     container.services["api_keys"] = keys
     container.services["authenticator"] = ServiceAuthenticator(settings.authentication, keys=keys)
     authz = AuthorizationService(
@@ -234,12 +241,12 @@ async def _wire_blob(container: Container) -> None:
         from memory_service.adapters.blob.gcs import GCSBlobStore
 
         store = GCSBlobStore(cfg)
-        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+        container.add_dependency(Dependency(name="blob", mandatory=False, ping=store.ping))
     else:
         from memory_service.adapters.blob.filesystem import FilesystemBlobStore
 
         store = FilesystemBlobStore(cfg.filesystem_root)
-        container.add_dependency(Dependency(name="blob", mandatory=True, ping=store.ping))
+        container.add_dependency(Dependency(name="blob", mandatory=False, ping=store.ping))
     container.blob = store
 
 
@@ -295,7 +302,7 @@ async def _wire_search(container: Container) -> None:
     container.search = store
     if local is None:
         container.add_dependency(
-            Dependency(name="qdrant", mandatory=True, ping=store.ping, close=store.close)
+            Dependency(name="qdrant", mandatory=False, ping=store.ping, close=store.close)
         )
 
 
@@ -369,14 +376,17 @@ def _wire_llm(container: Container) -> None:
     Model keys, per-level policies and the daily usage ledger are wired whatever the
     configuration, so a tenant can register a key or a policy before the operator turns the
     model on."""
-    from memory_service.adapters.models.credential_cipher import AesCredentialCipher
+    from memory_service.adapters.models.credential_cipher import (
+        AesCredentialCipher,
+        envelope_settings,
+    )
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 
     uow_factory = container.services["uow_factory"]
-    cipher = AesCredentialCipher(container.settings.agent_credentials)
+    cipher = AesCredentialCipher(envelope_settings(container.settings))
     credentials = ModelCredentials(uow_factory, cipher)
     policies = ModelPolicies(uow_factory)
     usage = LLMUsage(uow_factory)
@@ -460,6 +470,9 @@ def _wire_retrieval(container: Container) -> None:
         assist=container.services["llm_assist"],
     )
     container.services["indexer"] = indexer
+    container.dense_spaces.use_cache(
+        container.cache, ttl_seconds=constants.CACHE.query_embedding_ttl_seconds
+    )
     engine = RetrievalEngine(
         container.services["uow_factory"],
         container.services["authz"],
@@ -502,6 +515,7 @@ def _wire_retrieval(container: Container) -> None:
 def _wire_memory(container: Container) -> None:
     """Memory intelligence: the native provider + observation pipeline + service."""
     from memory_service.modules.feedback.service import FeedbackService
+    from memory_service.modules.memory.admission import AdmissionGate
     from memory_service.modules.memory.connections import ConnectionService
     from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.native import NativeMemoryIntelligence
@@ -534,6 +548,8 @@ def _wire_memory(container: Container) -> None:
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
+        # consulted only for tenants that turned it on (Tenant.admission_gate, off by default)
+        gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
     )
     container.services["memory"] = MemoryService(
@@ -593,8 +609,13 @@ def _wire_graph(container: Container) -> None:
     else:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
+        database = container.settings.database
+        plan = database.pool_plan(container.processes)
         store = PostgresGraphStore(
-            container.database.engine, budget_ms=container.tuning.graph.prefetch_budget_ms
+            container.database.engine,
+            budget_ms=container.tuning.graph.prefetch_budget_ms,
+            budgeted_url=database.direct_dsn,
+            budgeted_pool=(plan.graph_size, plan.graph_overflow),
         )
         container.graph_store = store
         container.add_closer("graph_store", store.close)

@@ -10,11 +10,12 @@ nothing about your agent library.
 ```python
 from trellis.memory import MemoryClient
 
-memory = MemoryClient("http://localhost:8080", api_key="dev-key")
+# MEMORY_URL and TRELLIS_API_KEY name the service and the key; the local stack is the
+# default address, and its development key acts in the tenant "default"
+memory = MemoryClient(api_key="dev-key")
 
 ctx = memory.bind(
-    tenant_id="acme",
-    user_id="u1",
+    user_id="u1",  # tenant_id="acme" names another tenant; an issued key names its own
     # your own id: the service creates the thread on first use (and its session and turns,
     # unless you pass session_id / turn_id of your own)
     thread_id="chat-42",
@@ -43,8 +44,11 @@ read [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) and
 decision guide: push vs pull, which write and which read fits which job, corrections, feedback
 review, model keys and policy, with the SDK call and the gotchas for each.
 
-**One thing to do first on a fresh service**: onboard the tenant (and a workspace, if you will
-write anything WORKSPACE-visible) — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
+**On a fresh local service there is nothing to set up for memory**: the development key acts in
+the tenant `default` (`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`), which is also what
+`GET /v1/keys/self` reports, so a harness started with only `MEMORY_URL` and `TRELLIS_API_KEY`
+needs no tenant either. Workspaces are different: to write anything WORKSPACE-visible, onboard
+the tenant and the team first — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
 member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a first script gets
 `Workspace not found`.
 
@@ -128,12 +132,13 @@ suite and `examples/serve.py` do have a deterministic stand-in, which is why the
 without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, liveness at
-`/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`.
+`/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`; it acts in the
+tenant `default` unless a request names another (`X-Trellis-Tenant`, or `bind(tenant_id=...)`).
 
-`/health/ready` is the one to wire to a load balancer: `200` when every mandatory store answered
-(`ready`) *or* only an optional provider is down (`degraded`), and **`503`** when a mandatory one
-is (`not_ready`). Mandatory: `postgres`, `task_queue`, `qdrant`, `blob`, `openfga`. Optional:
-`cache`, `llm`. `/version` says which provider is actually *running* per port and lists anything
+`/health/ready` is the one to wire to a load balancer: `200` when everything answered
+(`ready`) *or* a dependency other than PostgreSQL is down (`degraded`), and **`503`** when
+PostgreSQL is down or the process is stopping (`not_ready`). Search, authorization, blob, the
+task queue, the cache and the gateway are reported, never decisive (ADR 0031). `/version` says which provider is actually *running* per port and lists anything
 that fell back under `degraded`. All of it, with the response bodies:
 [`docs/api/admin.md`](docs/api/admin.md).
 
@@ -612,6 +617,7 @@ BIFROST_URL=https://<your-gateway>/v1
 BIFROST_VIRTUAL_KEY=            # optional: pays for tenants without a key of their own
 
 # Envelope keys that encrypt the agent and tenant model keys registered through the API
+# (required in staging and prod; dev and test derive an unprotected development key)
 # MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID=v1
 # MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS={"v1":"<base64-encoded-32-byte-key>"}
 
@@ -754,7 +760,8 @@ them on every operation, ADR 0022 explains them):
 | `X-Request-ID` | One id per call, kept across the SDK's retries; echoed when it is an id (a letter or digit, then letters, digits and `._:-`, at most 200 characters), else replaced. |
 | `X-Correlation-ID` | An opaque id of yours (a letter or digit, then letters, digits and `._:-`, at most 200 characters), echoed. A `correlation_id` in the body scope wins over the header. `bind(trace_id=...)` with a non-W3C value lands here. |
 | `X-Trace-ID` | Response: the 32-hex trace id the request ran under, the same one `traceparent` carries. |
-| `Idempotency-Key` | Makes a write safe to retry. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
+| `Idempotency-Key` | Makes a write safe to retry: every write honours it (a retry gets the first response, `Idempotent-Replayed: true`, never a second effect or a 404 for a second delete); the read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take none. The SDK derives one for messages, observations, documents, and deletes of memories and threads; other writes take an explicit `idempotency_key`. |
+| `Location` | Response: on a `201` the created resource (`/v1/memories/{id}`, `/v1/feedback/{id}`, ...), on a `202` that queued a job its status (`/v1/jobs/{id}`). |
 | `X-Trellis-LLM-Tokens` | Response: LLM tokens the request spent, when it spent any |
 
 Every error is an RFC 9457 problem (`application/problem+json`):
@@ -765,6 +772,11 @@ Every error is an RFC 9457 problem (`application/problem+json`):
  "instance": "/v1/recall", "code": "SCOPE_DENIED", "retryable": false,
  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "request_id": "req_01J...", "details": {}}
 ```
+
+A retryable `429`, `503` (`DEPENDENCY_UNAVAILABLE`: PostgreSQL, Qdrant or OpenFGA away, the
+database pool exhausted) or `504` (`TIMEOUT`: a database statement stopped at its budget)
+carries `Retry-After` in seconds. A body or file over the size limit is `413`
+`PAYLOAD_TOO_LARGE` (never retryable).
 
 The SDK raises one exception class per `code` (`AuthorizationError`, `NotFoundError`,
 `RateLimitedError`, ...) with `trace_id` and `request_id` on it, `TimeoutError` or

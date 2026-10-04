@@ -11,15 +11,24 @@ space answers all of them.
 Each encoder owns its own single-thread runner, so the spaces are encoded concurrently:
 ``asyncio.gather`` over two ``SerialRunner`` executors is two forward passes at once, not
 one after the other.
+
+Query vectors are cached (``emb:<encoder fingerprint>:q:<query hash>``, beside the document
+vectors the indexer caches) once a cache is attached: every bundle-cache miss used to encode
+the same query again - a revision bump, a different budget or a second reader asking the
+same thing each cost a forward pass per space on the request path.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import hashlib
+import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from memory_service.domain.script import Script, detect_script
+from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.models import EmbeddingProvider
 from memory_service.ports.search import VectorName
 
@@ -47,6 +56,20 @@ class DenseSpaces:
         if not any(space.query_scripts is None for space in spaces):
             raise ValueError("one dense space must be searched for every script")
         self.spaces = tuple(spaces)
+        self._cache: CacheProvider | None = None
+        self._query_ttl = 0
+
+    def use_cache(self, cache: CacheProvider | None, *, ttl_seconds: int) -> None:
+        """Cache query vectors in ``cache`` for ``ttl_seconds`` (``None``: no cache)."""
+        self._cache = cache
+        self._query_ttl = ttl_seconds
+
+    @staticmethod
+    def query_key(space: DenseSpace, text: str) -> str:
+        """A query's vector key. ``q`` keeps it apart from the document vector of the same
+        text: an asymmetric encoder embeds a query and a passage differently."""
+        digest = hashlib.sha256(text.encode()).hexdigest()[:32]
+        return f"emb:{space.encoder.fingerprint()}:q:{digest}"
 
     @classmethod
     def single(
@@ -103,8 +126,44 @@ class DenseSpaces:
             if known is not None and space.name in known
         }
         pending = [space for space in wanted if space.name not in out]
-        vectors = await asyncio.gather(*(space.encoder.embed_query(text) for space in pending))
-        out.update(zip((space.name for space in pending), vectors, strict=True))
+        out.update(await self._cached_queries(text, pending))
+        return out
+
+    async def embed_primary_query(self, text: str) -> list[float]:
+        """The primary space's query vector, through the same cache."""
+        space = self.primary_space
+        return (await self._cached_queries(text, [space]))[space.name]
+
+    async def _cached_queries(
+        self, text: str, spaces: Sequence[DenseSpace]
+    ) -> dict[VectorName, list[float]]:
+        if not spaces:
+            return {}
+        out: dict[VectorName, list[float]] = {}
+        keys = [self.query_key(space, text) for space in spaces]
+        if self._cache is not None:
+            try:
+                found = await self._cache.mget(keys)
+            except CacheUnavailable:
+                found = [None] * len(keys)
+            for space, raw in zip(spaces, found, strict=True):
+                if raw:
+                    out[space.name] = list(struct.unpack(f"<{len(raw) // 4}f", raw))
+        missing = [space for space in spaces if space.name not in out]
+        vectors = await asyncio.gather(*(space.encoder.embed_query(text) for space in missing))
+        fresh = {space.name: list(v) for space, v in zip(missing, vectors, strict=True)}
+        out.update(fresh)
+        if self._cache is not None and fresh:
+            with contextlib.suppress(CacheUnavailable):
+                await self._cache.mset(
+                    {
+                        self.query_key(space, text): struct.pack(
+                            f"<{len(fresh[space.name])}f", *fresh[space.name]
+                        )
+                        for space in missing
+                    },
+                    ttl_seconds=self._query_ttl,
+                )
         return out
 
     def close(self) -> None:

@@ -124,6 +124,9 @@ class SqlMemoryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
         self.invalidated: dict[str, set[str]] = {}
+        #: The dependents retracted in this transaction, as they now are: the unit of work
+        #: moves the revisions their readers' caches are keyed on when it commits.
+        self.invalidated_memories: list[CanonicalMemory] = []
 
     async def _invalidate_dependents(self, tenant_id: str, source_ids: Sequence[str]) -> None:
         if not source_ids:
@@ -156,7 +159,7 @@ class SqlMemoryRepository:
                 .where(MemoryRow.memory_id.in_(ids))
                 .execution_options(populate_existing=True)
             )
-            refreshed.all()
+            self.invalidated_memories.extend(_to_domain(r) for r in refreshed.all())
 
     async def _source_rows(
         self, memory: CanonicalMemory, visibility_keys: Sequence[str]

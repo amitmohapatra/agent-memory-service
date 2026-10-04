@@ -80,19 +80,21 @@ def test_body_cannot_override_trusted_headers(settings, overrides) -> None:
 
 def test_missing_tenant_and_auth(settings, overrides) -> None:
     with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
+        # a development key names its tenant: the development tenant
         r = c.post("/echo-context", headers={"X-API-Key": "test-key"}, json={})
-        assert r.status_code == 422 and "tenant_id" in r.json()["detail"]
+        assert r.status_code == 200 and r.json()["tenant_id"] == "default", r.text
         r = c.post("/echo-context", headers={"X-Trellis-Tenant": "acme"}, json={})
         assert r.status_code == 401 and r.json()["code"] == "AUTHENTICATION"
 
 
 def test_the_removed_header_spellings_name_no_tenant(settings, overrides) -> None:
     """``X-Memory-*`` was removed in 0.3.0: a request that names its tenant only that way
-    names none."""
+    names none, and acts where its credential does - here the development tenant."""
     old = {"X-API-Key": "test-key", "X-Memory-Tenant": "acme", "X-Memory-User": "u1"}
     with TestClient(_app(settings, overrides), raise_server_exceptions=False) as c:
         r = c.post("/echo-context", headers=old, json={"thread_id": "thr_1"})
-        assert r.status_code == 422 and "tenant_id" in r.json()["detail"]
+        assert r.status_code == 200, r.text
+        assert r.json()["tenant_id"] == "default" and r.json()["user_id"] is None
 
 
 def test_a_correlation_id_named_in_the_body_is_the_one_echoed(settings, overrides) -> None:

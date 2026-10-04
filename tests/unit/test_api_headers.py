@@ -60,3 +60,15 @@ def test_a_header_is_read_plainly() -> None:
     assert scope_header(Headers({"X-API-Key": "k"}), HEADERS.api_key) == "k"
     assert scope_header(Headers({}), HEADERS.api_key) is None
     assert require_one_value(Headers({}), HEADERS.user) is None
+
+
+def test_an_idempotency_key_is_one_bounded_value() -> None:
+    from memory_service.api.headers import IDEMPOTENCY_KEY_MAX_CHARS, idempotency_key_of
+
+    assert idempotency_key_of({}) is None
+    assert idempotency_key_of({"Idempotency-Key": "  "}) is None
+    assert idempotency_key_of({"Idempotency-Key": "write-1"}) == "write-1"
+    with pytest.raises(ValidationFailed):
+        idempotency_key_of({"Idempotency-Key": "k" * (IDEMPOTENCY_KEY_MAX_CHARS + 1)})
+    with pytest.raises(ValidationFailed):
+        idempotency_key_of(Headers(raw=[(b"idempotency-key", b"a"), (b"idempotency-key", b"b")]))

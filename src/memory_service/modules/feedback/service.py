@@ -28,7 +28,7 @@ from typing import Any, Final
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.errors import Conflict, NotFound, ScopeDenied, ValidationFailed
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.feedback import (
     AFFIRMING_VERDICTS,
     APPROVAL_COUNTER,
@@ -69,7 +69,7 @@ TASK_FEEDBACK_PROJECT = "feedback.project"
 REINFORCEMENT_STEP: Final = 0.1
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
-EVIDENCE_SOURCE: Final = "feedback"
+EVIDENCE_SOURCE: Final = EvidenceSource.FEEDBACK
 
 
 def _correction_text(correction: Any) -> str:

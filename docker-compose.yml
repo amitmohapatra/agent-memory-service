@@ -11,7 +11,13 @@ name: memory-service
 # containers through `env_file:` below. Nothing belongs in both files — compose wins, so a
 # duplicated line in .env is a value that looks set and is not.
 x-common-env: &common-env
-  MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
+  # The request path goes through PgBouncer in transaction mode; the work that needs a
+  # session of its own (the job queue's LISTEN/NOTIFY and locks, the graph traversal's
+  # session timeout and prepared plan, migrations) goes to PostgreSQL directly.
+  # docs/deploy/database.md, ADR 0031.
+  MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@pgbouncer:6432/memory
+  MEMORY__DATABASE__DIRECT_URL: postgresql+psycopg://memory:memory@postgres:5432/memory
+  MEMORY__DATABASE__TRANSACTION_POOLER: "true"
   MEMORY__CACHE__URL: redis://dragonfly:6379/0
   MEMORY__SEARCH__QDRANT_URL: http://qdrant:6333
   MEMORY__AUTHORIZATION__OPENFGA_API_URL: http://openfga:8080
@@ -39,6 +45,22 @@ services:
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    # the mounted pgbouncer.ini is used as is (the image only generates one when absent)
+    volumes:
+      - ./deploy/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./deploy/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports: ["6432:6432"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 6432 || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -163,6 +185,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
       qdrant:
         condition: service_healthy
       dragonfly:
@@ -209,11 +233,24 @@ services:
       resources:
         limits:
           cpus: '2'
+    # SIGTERM stops the fetch loop; running jobs get 30 s (OVERLOAD.worker_shutdown_grace_
+    # seconds) before they are aborted and released for a retry, inside this window
+    stop_grace_period: 45s
+    # Prometheus series (queue depth, oldest-job lag, outbox backlog, failed jobs)
+    ports: ["9464:9464"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9464/metrics')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 600s
     volumes:
       - blob:/data/blob
       - ./models:/models:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      pgbouncer:
         condition: service_healthy
       qdrant:
         condition: service_healthy
@@ -253,7 +290,9 @@ services:
     working_dir: /app
     environment:
       <<: *common-env
+      # the release gates connect directly, so the suite's resets and session SETs work
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@postgres:5432/memory
+      MEMORY__DATABASE__TRANSACTION_POOLER: "false"
       MEMORY__SERVICE__LOG_LEVEL: WARNING
       MEMORY__BLOB__FILESYSTEM_ROOT: /app/.blob
       UV_PROJECT_ENVIRONMENT: /opt/venv

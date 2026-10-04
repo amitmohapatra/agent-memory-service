@@ -15,6 +15,7 @@ from trellis.memory import (
     MemoryClient,
     MemoryContext,
     MemoryError,
+    NotFoundError,
     TimeoutError,
     current_context,
 )
@@ -43,10 +44,13 @@ def test_bind_builds_scope_and_child_contexts(client: MemoryClient) -> None:
 async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(client):
     status = {"registered": True, "revoked": False, "revision": 1}
     put = respx.put("http://memory.test/v1/agents/model-key").respond(200, json=status)
-    get = respx.get("http://memory.test/v1/agents/model-key").respond(200, json=status)
-    delete = respx.delete("http://memory.test/v1/agents/model-key").respond(
-        200, json={**status, "revoked": True, "revision": 2}
-    )
+    get = respx.get("http://memory.test/v1/agents/model-key")
+    get.side_effect = [
+        httpx.Response(200, json=status),
+        httpx.Response(200, json={**status, "revoked": True, "revision": 2}),
+    ]
+    # the service answers a revocation with 204; the SDK reads the status back
+    delete = respx.delete("http://memory.test/v1/agents/model-key").respond(204)
     ctx = client.bind(tenant_id="acme", user_id="alice").agent("research")
     assert (
         await ctx.advanced.model_keys.set("vk-sdk-test", idempotency_key="rotate-1")
@@ -56,6 +60,7 @@ async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(cli
     assert get.calls.last.request.url.params["agent_id"] == "research"
     assert (await ctx.advanced.model_keys.revoke()).revoked
     assert delete.calls.last.request.url.params["agent_id"] == "research"
+    assert get.calls.last.request.url.params["agent_id"] == "research"
 
 
 async def test_context_manager_propagates_via_contextvars(client: MemoryClient) -> None:
@@ -329,22 +334,35 @@ async def test_tool_records_go_to_the_invocations_route(client: MemoryClient) ->
 
 @respx.mock
 @pytest.mark.parametrize(
-    "response",
+    ("response", "cls", "code", "retryable"),
     [
-        httpx.Response(502, text="<html>Bad Gateway</html>", headers={"content-type": "text/html"}),
-        httpx.Response(500, json=["not", "a", "problem"]),
-        httpx.Response(500, json={"error": "boom"}),
-        httpx.Response(404, json={"unexpected": "shape"}),
+        (
+            httpx.Response(
+                502, text="<html>Bad Gateway</html>", headers={"content-type": "text/html"}
+            ),
+            DependencyUnavailableError,
+            "DEPENDENCY_UNAVAILABLE",
+            True,
+        ),
+        (httpx.Response(500, json=["not", "a", "problem"]), MemoryError, "INTERNAL", False),
+        (httpx.Response(500, json={"error": "boom"}), MemoryError, "INTERNAL", False),
+        (httpx.Response(404, json={"unexpected": "shape"}), NotFoundError, "NOT_FOUND", False),
     ],
 )
-async def test_an_unrecognised_error_body_still_raises_a_typed_error(
-    client: MemoryClient, response: httpx.Response
+async def test_an_unrecognised_error_body_is_classed_by_its_status(
+    client: MemoryClient,
+    response: httpx.Response,
+    cls: type[MemoryError],
+    code: str,
+    retryable: bool,
 ) -> None:
     respx.get("http://memory.test/v1/jobs/job_1").mock(return_value=response)
-    with pytest.raises(MemoryError) as exc:
+    with pytest.raises(cls) as exc:
         await client.bind(tenant_id="acme").advanced.job("job_1")
-    assert exc.value.code == "INTERNAL" and exc.value.status == response.status_code
-    assert exc.value.retryable is False and exc.value.message == f"HTTP {response.status_code}"
+    assert type(exc.value) is cls
+    assert exc.value.code == code and exc.value.status == response.status_code
+    assert exc.value.retryable is retryable
+    assert exc.value.message == f"HTTP {response.status_code}"
 
 
 @respx.mock
@@ -359,7 +377,9 @@ async def test_a_plain_rfc_9457_problem_keeps_its_words(client: MemoryClient) ->
     )
     with pytest.raises(MemoryError) as exc:
         await client.bind(tenant_id="acme").advanced.job("job_1")
-    assert exc.value.code == "INTERNAL" and exc.value.message == "Service Unavailable"
+    assert isinstance(exc.value, DependencyUnavailableError)
+    assert exc.value.code == "DEPENDENCY_UNAVAILABLE"
+    assert exc.value.message == "Service Unavailable"
     assert exc.value.retryable is True  # from the status, so the read was retried
 
 
@@ -402,7 +422,8 @@ async def test_a_gateway_body_keeps_its_message_and_request_id(client: MemoryCli
     with pytest.raises(MemoryError) as exc:
         await client.bind(tenant_id="acme").advanced.job("job_1")
     assert exc.value.message == "Forbidden" and exc.value.request_id == "gw-1"
-    assert exc.value.code == "INTERNAL" and exc.value.status == 403
+    assert isinstance(exc.value, AuthorizationError)
+    assert exc.value.code == "AUTHORIZATION" and exc.value.status == 403
 
 
 @respx.mock

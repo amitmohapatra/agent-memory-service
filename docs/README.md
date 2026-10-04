@@ -44,6 +44,10 @@ relative to the package) and the ADRs it describes, and every figure names its s
 [`MEASUREMENTS.md`](MEASUREMENTS.md), an ADR's evidence or `benchmark/results/`; where
 something is designed but not built, the chapter says so.
 
+Two deployment pages go with chapter 11: [deploy/database.md](deploy/database.md) (the
+connection budget, PgBouncer, online migrations) and [deploy/search.md](deploy/search.md)
+(Qdrant shards, replicas and the tenant index).
+
 Chapter 9 is [`api/`](api/README.md): one page per API area, each with a diagram, every route, and
 the SDK call that makes it.
 

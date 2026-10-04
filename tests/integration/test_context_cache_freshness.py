@@ -284,3 +284,78 @@ async def test_private_memory_in_a_thread_invalidates_owners_threadless_replay(
             await container.services["memory"].forget(uow, author, memory.memory_id)
         await uow.commit()
     assert not await _served(builder, U1, query)
+
+
+async def test_a_working_memory_write_drops_the_cached_bundle_of_its_thread(container, uow_factory):
+    """Working memory lives only in the cache and is folded into the bundle, so no
+    persistent write moved a revision: the next context call was served the bundle cached
+    before the write, without the item, until the TTL."""
+    from memory_service.domain.enums import Lifetime, MemoryType
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import _observe
+
+    ctx = _ctx()
+    async with uow_factory() as uow:
+        await container.services["conversation"].create_thread(uow, ctx)
+        await uow.commit()
+    builder = container.services["context_builder"]
+    query = "what is the scratch value?"
+    await builder.build(ctx, query)
+    await builder.drain()
+    assert await _served(builder, ctx, query)
+    before = await _revisions(container, ctx)
+
+    await _observe(
+        container,
+        uow_factory,
+        ctx,
+        "The scratch value for this run is 42.",
+        hints=ProcessingHints(lifetime=Lifetime.EPHEMERAL, memory_type=MemoryType.WORKING),
+    )
+    assert await container.services["ephemeral_memory"].recall(ctx), "nothing reached WM"
+    after = await _revisions(container, ctx)
+    thread_key = f"{RevisionKind.THREAD.value}:{ctx.thread_id}"
+    assert after.get(thread_key, 0) > before.get(thread_key, 0)
+    assert not await _served(builder, ctx, query), "the bundle cached before the write"
+    rebuilt = await builder.build(ctx, query)
+    assert not rebuilt.cache_hit
+
+
+async def test_graph_enrichment_moves_only_the_audience_of_the_facts_it_wrote(
+    container, uow_factory
+):
+    """GRAPH was one counter per tenant bumped by every memory-index job: each write dropped
+    every cached bundle of the tenant, including users who could read none of the new facts.
+    The facts are readable by the memory's audience, and that is what moves now (ADR 0031)."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, U2, _observe
+
+    builder = container.services["context_builder"]
+    query = "who acquired Westfalen?"
+    for ctx in (U1, U2):
+        await builder.build(ctx, query)
+    await builder.drain()
+    async with uow_factory() as uow:
+        before = await uow.revisions.get_many(
+            "acme", [(RevisionKind.GRAPH, ""), (RevisionKind.TENANT, "")]
+        )
+
+    await _observe(
+        container,
+        uow_factory,
+        U1,
+        "Acme Corp acquired Westfalen GmbH in March 2025 for EUR 40 million.",
+        kind=ObservationKind.EVENT,
+        hints=ProcessingHints(visibility=Visibility.USER),
+    )
+    _, relations = await container.graph_store.count("acme")
+    assert relations, "the write produced no graph facts, so it tests nothing"
+
+    async with uow_factory() as uow:
+        after = await uow.revisions.get_many(
+            "acme", [(RevisionKind.GRAPH, ""), (RevisionKind.TENANT, "")]
+        )
+    assert after == before, "a USER memory's facts moved a tenant-wide revision"
+    assert not await _served(builder, U1, query)
+    assert await _served(builder, U2, query), "a reader of none of the facts lost its cache"

@@ -66,10 +66,6 @@ class ApiKeyRepository(Protocol):
         """``key_id -> tenant_id`` for the live keys of these tenants (the rate limiter)."""
         ...
 
-    async def live_key_ids(self) -> list[str]:
-        """Every unrevoked, unexpired key id (the verifier's unknown-id budget)."""
-        ...
-
     async def count_live(self, tenant_id: str) -> int:
         """Unrevoked, unexpired keys of the tenant (the issuance cap)."""
         ...
@@ -97,7 +93,11 @@ class WorkspaceRepository(Protocol):
 
     async def remove_member(self, tenant_id: str, workspace_id: str, principal: str) -> bool: ...
 
-    async def members(self, tenant_id: str, workspace_id: str) -> list[WorkspaceMember]: ...
+    async def members(
+        self, tenant_id: str, workspace_id: str, *, after: str = "", limit: int | None = None
+    ) -> list[WorkspaceMember]:
+        """Members by principal; ``after`` is the last principal of the previous page."""
+        ...
 
     async def memberships_of(self, tenant_id: str, principal: str) -> list[str]:
         """Workspace ids a principal (user: or agent:) is a member of."""

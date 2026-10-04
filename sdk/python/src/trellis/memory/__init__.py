@@ -9,6 +9,7 @@ from trellis.memory.advanced import (
     ModelKeysAPI,
     ToolCatalogAPI,
 )
+from trellis.memory.breaker import CircuitBreaker
 from trellis.memory.client import (
     FeedbackAPI,
     HistoryAPI,
@@ -20,10 +21,12 @@ from trellis.memory.client import (
 from trellis.memory.errors import (
     AuthenticationError,
     AuthorizationError,
+    CircuitOpenError,
     ConflictError,
     DependencyUnavailableError,
     MemoryError,
     NotFoundError,
+    PayloadTooLargeError,
     RateLimitedError,
     TimeoutError,
     ValidationError,
@@ -121,6 +124,8 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "CatalogTool",
+    "CircuitBreaker",
+    "CircuitOpenError",
     "ClaimVerdict",
     "ConflictError",
     "ContextBundle",
@@ -177,6 +182,7 @@ __all__ = [
     "ModelUsageDay",
     "NotFoundError",
     "Page",
+    "PayloadTooLargeError",
     "PinnedBlock",
     "ProcedureView",
     "ProfileAPI",

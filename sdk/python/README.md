@@ -5,9 +5,9 @@ Python SDK for trellis-memory, the multi-agent memory service.
 ```python
 from trellis.memory import MemoryClient
 
-memory = MemoryClient("http://memory-service:8080", api_key="dev-key")
+memory = MemoryClient()  # MEMORY_URL and TRELLIS_API_KEY from the environment
 
-ctx = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1")  # session/turn optional
+ctx = memory.bind(user_id="u1", thread_id="thr_1")  # the key names the tenant
 
 await ctx.history.add([("USER", "What changed in EBITDA?")])
 bundle = await ctx.context("What changed in EBITDA?")
@@ -17,6 +17,54 @@ await ctx.history.add([("ASSISTANT", answer)])
 
 The SDK hides Qdrant, BM25, embeddings, RRF, GCS compaction, graph enrichment,
 dedup, memory types, TTLs, cache keys and task queues. Those are service configuration.
+
+## Configuration
+
+`MemoryClient()` reads the platform's shared names: `MEMORY_URL` for the service (the local
+stack's `http://localhost:8080` when unset) and `TRELLIS_API_KEY` for the key. Arguments win:
+`MemoryClient(url, api_key=...)`, or `bearer_token=` for a token (then no key is read from the
+environment). Against the local stack's development key (`dev-key`) no tenant is needed
+either: a development key acts in the service's development tenant, `default`, unless a call
+names another (`bind(tenant_id=...)`).
+
+| Argument | Default | What it does |
+|---|---|---|
+| `timeout` | `10.0` | seconds per attempt; connecting is bounded by 5 s of it. `context(..., timeout=)` and `search(..., timeout=)` take a per-call one |
+| `max_retries` | `3` | how many times a retryable failure is sent again |
+| `circuit_failure_threshold` | `5` | failed calls in a row that open the circuit; `0` disables the breaker |
+| `circuit_open_seconds` | `30.0` | how long an open circuit fails fast before one call probes |
+| `http_client` | a pooled `httpx.AsyncClient` | idle connections kept 30 s, at most 100 connections |
+
+`async with MemoryClient() as memory:` closes the pool on exit (`await memory.aclose()`
+otherwise). Use one client per process.
+
+## Retries and the circuit breaker
+
+A call is sent again when that cannot duplicate anything: GETs, writes carrying an
+`Idempotency-Key` (the verbs that write send one), and the read-only POSTs - `context`,
+`search` (`/v1/recall`), `verify` and `tool_hints`. They retry on a retryable error (`429`,
+`502`, `503`, `504`, or a problem that says `retryable: true`), on timeouts and on dropped
+connections. A connection that never opened is retried for every call, and so is a `429`,
+which the service refuses before doing any work. A write without a key that may have reached
+the service (a read timeout, a 503) is not retried, and no key is invented for it.
+
+The wait is the service's `Retry-After` when it sent one (at most 30 s), otherwise full-jitter
+exponential backoff: a uniform draw from 0 up to 0.5 s, 1 s, 2 s ... capped at 8 s.
+
+After `circuit_failure_threshold` calls in a row fail for want of the service - no response,
+or a 5xx, counted once per call however many attempts it made - the client stops sending:
+every call raises `CircuitOpenError` at once for `circuit_open_seconds`. Then one call goes
+through as the probe while the others keep failing fast; its success closes the circuit, its
+failure opens it for another period. A 4xx is the service answering and a 429 is the service
+asking for less: neither counts. The breaker is per client, so an agent's turn during an
+outage degrades in microseconds instead of paying the timeout and every retry on each call:
+
+```python
+try:
+    pushed = await ctx.context(question)
+except DependencyUnavailableError:  # CircuitOpenError is one; retryable, with retry_after
+    pushed = None  # answer without memory this turn
+```
 
 ## The verbs
 
@@ -50,7 +98,8 @@ bundle = await agent.context("What did we decide?")
 ```
 
 The service encrypts the virtual key and binds it to the tenant and agent owner. Registration
-requires the operator's envelope-key configuration. Rotation and revocation also affect
+requires the operator's envelope-key configuration (a local `dev` service derives a
+development one, so it works there with nothing set). Rotation and revocation also affect
 background jobs and retries. `await agent.advanced.model_keys.revoke()` prevents using that agent's
 credential and does not switch it to the operator key. Memory-service model calls exclude MCP.
 
@@ -101,11 +150,19 @@ the SDK a client of its own; an httpx client instrumented by OpenTelemetry injec
 `traceparent` at send time, which then replaces the one built from `trace_id`.
 
 Errors are RFC 9457 problems mapped to one exception per `code`: `AuthenticationError`,
-`AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError`,
-`RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`. Insufficient evidence is not
-an exception: `context()` returns `evidence_status` (`INSUFFICIENT` means say you do not know).
-Each carries `status`, `retryable`, `trace_id`, `request_id` and `details`. A request that
-got no response raises `TimeoutError` or `DependencyUnavailableError` with `status` 0.
+`AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError` (and its
+`PayloadTooLargeError`, a `413 PAYLOAD_TOO_LARGE`), `RateLimitedError`,
+`DependencyUnavailableError` (and its `CircuitOpenError`; a 503 means the service's database or
+search is away, and it sends `Retry-After`), `TimeoutError`.
+Insufficient evidence is not an exception: `context()` returns `evidence_status`
+(`INSUFFICIENT` means say you do not know). Each carries `status`, `retryable`,
+`retry_after` (the `Retry-After` seconds, when sent), `trace_id`, `request_id` and `details`.
+A body without a `code` - a gateway or proxy answered - is classed by its status: 400/422
+`ValidationError`, 413 `PayloadTooLargeError`, 401 `AuthenticationError`, 403
+`AuthorizationError`, 404 `NotFoundError`, 409 `ConflictError`, 429 `RateLimitedError`, 502/503
+`DependencyUnavailableError`, 504 `TimeoutError` (those four retryable), anything else the base
+`MemoryError` (not retryable). A request that got no response raises `TimeoutError` or
+`DependencyUnavailableError` with `status` 0, both retryable.
 
 
 ## Feedback and paging
@@ -126,5 +183,10 @@ async with MemoryClient(base_url, api_key=key) as client:
         for vote in (await admin_ctx.feedback.pending()).items:
             await admin_ctx.feedback.approve(vote.feedback_id, note="checked")
 ```
+
+`feedback.pending()` reads `GET /v1/feedback?review=pending`. Every list pages the same way
+(`cursor` + `limit`, ADR 0030): `t.workspaces.members_page(id)`, `t.reads_page(since=...)`
+(`since` was `after`), `admin.tenants_page()` (no `after`); `tools.catalog()` follows the cursor
+itself. `revoke()` / `revoke_model_key()` read the status back after the service's `204`.
 
 See [`docs/USAGE.md`](../../docs/USAGE.md) for which call fits which scenario.

@@ -227,8 +227,9 @@ The rules every document here follows, and where each is enforced:
    the OpenAPI file is diffed in CI.
 7. **Code beats prose.** Where this guide and the code disagree, the code is right, and this
    guide cites the file so you can check. Where it found older documents out of date — the
-   admission gate described as running in [api/memory.md](../api/memory.md), the NLI row in the
-   README's model table — chapters 6 and 8 say what the code does.
+   admission gate described as running in [api/memory.md](../api/memory.md) before it was
+   wired behind a tenant switch, the NLI row in the README's model table — chapters 6 and 8
+   say what the code does.
 
 ---
 

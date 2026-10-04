@@ -2,9 +2,25 @@
 
 A read costs the caller nothing here: ``record`` appends to a bounded queue and returns. A
 flusher writes the queue to PostgreSQL every ``flush_every`` seconds or ``batch`` entries,
-and once more at shutdown. What this buys is a request path with no audit write on it; what
-it costs is a loss window of one flush interval if the process dies, and that window is the
-number to quote, not "durable". A full queue drops the newest entry and counts the drop.
+and once more at shutdown. What this buys is a request path with no audit write on it.
+
+The guarantee, precisely (ADR 0021, restated in ADR 0031). An entry is written unless:
+
+- the process dies without shutting down (SIGKILL, OOM kill, a crash): what was queued and
+  not yet committed is lost - at most one ``flush_every`` (1 s) of reads, plus a batch in
+  flight;
+- the queue is full (``max_pending``, 10 000 entries - the store has stalled for seconds):
+  the newest entry is dropped;
+- a row cannot be stored even on its own after its batch failed: that row is dropped.
+
+Every drop of the last two kinds is counted (``memory_read_audit_dropped_total``); the first
+cannot be counted by the process that died. A graceful stop - SIGTERM to uvicorn, which
+runs the app's shutdown and ``Container.close`` - flushes the queue and waits for batches in
+flight before the pool closes. It is therefore an operational record with a stated loss
+window, not a compliance ledger: a read is never refused or slowed because its audit entry
+could not be written. A deployment that needs every read on the record before the caller is
+answered needs a transactional write per read (a WAL flush on every recall), which this
+module deliberately does not do.
 """
 
 from __future__ import annotations

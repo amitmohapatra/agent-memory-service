@@ -14,6 +14,7 @@ re-running enrichment upserts instead of duplicating.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import re
 from collections.abc import Callable, Sequence
@@ -23,7 +24,7 @@ from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.graph import layer_for
 from memory_service.domain.ids import stable_key
 from memory_service.domain.language import is_english
@@ -536,11 +537,14 @@ class NativeGraphEnrichment:
         )
         entities[doc_entity.entity_id] = doc_entity
         ie = DocumentIE(nodes, chunks, document_title=document_title)
-        ie.run()
+        # Regex extraction over every chunk of the document: CPU for as long as the
+        # document is long, which on the event loop stalled the worker's heartbeat and every
+        # other job sharing it. In a thread the loop keeps its turns.
+        await asyncio.to_thread(ie.run)
 
         def chunk_ref(c: Chunk) -> EvidenceRef:
             return EvidenceRef(
-                source_type="document_chunk",
+                source_type=EvidenceSource.DOCUMENT_CHUNK,
                 source_id=c.chunk_id,
                 document_id=version.document_id,
                 document_version_id=version.document_version_id,
@@ -552,7 +556,7 @@ class NativeGraphEnrichment:
 
         def node_ref(n: DocumentNode) -> EvidenceRef:
             return EvidenceRef(
-                source_type="document_chunk",
+                source_type=EvidenceSource.DOCUMENT_CHUNK,
                 source_id=n.node_id,
                 document_id=version.document_id,
                 document_version_id=version.document_version_id,

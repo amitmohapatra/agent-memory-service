@@ -9,7 +9,7 @@ that change nothing).
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `GET /v1/agent-tools` | the tools, each `{name, description, input_schema}` | `ctx.agent_tools()` |
+| `GET /v1/agent-tools` | the tools, each `{name, description, input_schema}`; `ETag` + `Cache-Control: private, max-age=300`, `If-None-Match` → `304` | `ctx.agent_tools()` |
 | `POST /v1/agent-tools/{name}` `{"args": {...}}` | call one; answers `{"result": ...}` | `ctx.call_agent_tool(name, args)` |
 
 ## The tools (the final set)
@@ -19,7 +19,7 @@ that change nothing).
 | `memory_search` | `query`, `kinds?` (memory, chunk, summary, message — this conversation), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, …}]` (the `/v1/recall` item) |
 | `memory_remember` | `content`, `kind` (the 8 primary kinds), `scope` (user, agent, run, thread, group, workspace) | `{id, deduplicated}` |
 | `memory_update` | `id` (or its bundle handle, `m3`), `content` | `{id, supersedes}` |
-| `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}` |
+| `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}`; memories derived from it are retracted too ([memory.md](memory.md#forgetting-takes-what-was-derived-from-it)) |
 | `profile_edit` | `block`, `old` (empty replaces the block), `new` | `{block, text, version}`; 409 when `old` is gone |
 | `tool_search` | `task` | `{tools: [{name, confidence, success_rate?, next?, args?, missing?}], plan?}` (the `/v1/tools/hints` answer) |
 

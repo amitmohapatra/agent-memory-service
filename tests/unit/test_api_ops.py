@@ -41,7 +41,7 @@ def test_metrics_says_which_worker_it_is_counting(client: TestClient) -> None:
 
     payload, _ = render_metrics(3)
     assert b"one API worker process (pid" in payload and b"of 3" in payload
-    assert b"WEB_CONCURRENCY=1" in payload, "and it says how to get a whole number instead"
+    assert b"PROMETHEUS_MULTIPROC_DIR" in payload, "and it says how to get a whole number"
 
 
 def test_swagger_redoc_openapi_available(client: TestClient) -> None:
@@ -75,7 +75,7 @@ def test_problem_for_unknown_route(client: TestClient) -> None:
 def test_body_limit_returns_a_problem(client: TestClient) -> None:
     r = client.post("/version", headers={"Content-Length": str(10**9)}, content=b"")
     assert r.status_code == 413
-    assert r.json()["code"] == "VALIDATION"
+    assert r.json()["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_domain_error_maps_to_a_problem(settings, overrides) -> None:

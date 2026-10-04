@@ -482,6 +482,25 @@ async def test_the_hybrid_failure_is_still_a_dependency_error() -> None:
         )
 
 
+async def test_the_hybrid_failure_keeps_the_clients_message_out_of_the_problem() -> None:
+    """The client's text can name the server's URL and collections; the problem detail a
+    caller reads says which call failed and how, and the message goes to the log only."""
+    client = FakeClient(
+        error=RuntimeError("http://qdrant.internal:6333/collections/tm_memories refused"),
+        fail_times=5,
+    )
+    with pytest.raises(DependencyUnavailable) as raised:
+        await _store(client).search_hybrid(
+            "c",
+            dense={VectorName.DENSE_ML: [0.1] * 4},
+            sparse=SparseVector(indices=[1], values=[1.0]),
+            flt=_flt(),
+            limit=5,
+            prefetch_limit=8,
+        )
+    assert raised.value.message == "qdrant hybrid query failed: RuntimeError"
+
+
 # --- transport --------------------------------------------------------------------------------
 
 
@@ -564,3 +583,88 @@ async def test_a_create_that_leaves_no_collection_still_fails() -> None:
         await _store(client).ensure_collection(  # type: ignore[arg-type]
             CollectionSpec(name="memories", dense={VectorName.DENSE_EN: 4, VectorName.DENSE_ML: 4})
         )
+
+
+# --- scale-out: layout, tenant index, payload storage (ADR 0031) ------------------------
+
+
+class _LayoutClient:
+    """An empty store that records what a create and the index pass ask for."""
+
+    def __init__(self, *, points: int = 0, schema: dict[str, Any] | None = None) -> None:
+        self.created: dict[str, Any] = {}
+        self.indexes: dict[str, Any] = {}
+        self.updates: list[Any] = []
+        self.exists = schema is not None
+        self.schema = schema or {}
+        self.points = points
+
+    async def collection_exists(self, name: str) -> bool:
+        return self.exists
+
+    async def create_collection(self, **kwargs: Any) -> None:
+        self.created = kwargs
+        self.exists = True
+
+    async def get_collection(self, name: str) -> Any:
+        params = type("Params", (), {"on_disk_payload": False})()
+        config = type("Config", (), {"params": params})()
+        return type(
+            "Info",
+            (),
+            {"payload_schema": self.schema, "points_count": self.points, "config": config},
+        )()
+
+    async def create_payload_index(self, name: str, *, field_name: str, field_schema: Any) -> None:
+        self.indexes[field_name] = field_schema
+
+    async def update_collection(self, **kwargs: Any) -> None:
+        self.updates.append(kwargs["collection_params"])
+
+
+async def test_a_new_collection_takes_the_clusters_layout_and_a_tenant_index() -> None:
+    client = _LayoutClient()
+    store = QdrantSearchStore(
+        SearchSettings(shard_number=6, replication_factor=2, write_consistency_factor=2)
+    )
+    store._client = client  # type: ignore[assignment]
+    await store.ensure_collection(
+        CollectionSpec(name="memories", dense={VectorName.DENSE_ML: 4}, on_disk_payload=False)
+    )
+    assert (
+        client.created["shard_number"],
+        client.created["replication_factor"],
+        client.created["write_consistency_factor"],
+    ) == (6, 2, 2)
+    tenant = client.indexes["tenant_id"]
+    assert isinstance(tenant, models.KeywordIndexParams) and tenant.is_tenant is True
+    assert client.updates == [], "a small memories collection keeps its payload in RAM"
+
+
+async def test_an_old_tenant_index_is_rebuilt_with_the_flag() -> None:
+    old = type("IndexInfo", (), {"params": None})()
+    schema = dict.fromkeys(("tenant_id", "visibility_keys", "kind", "document_id"), old)
+    schema |= dict.fromkeys(
+        ("current", "script", "observed_at", "valid_from", "valid_to", "known_to"), old
+    )
+    client = _LayoutClient(schema=schema)
+    store = _store(client)  # type: ignore[arg-type]
+    await store.ensure_collection(CollectionSpec(name="knowledge", dense={VectorName.DENSE_ML: 4}))
+    assert list(client.indexes) == ["tenant_id"]
+    assert client.indexes["tenant_id"].is_tenant is True
+
+
+async def test_a_grown_memories_collection_moves_its_payload_to_disk() -> None:
+    from memory_service.config.constants import SEARCH
+
+    client = _LayoutClient(points=SEARCH.payload_in_ram_max_points + 1, schema={})
+    store = _store(client)  # type: ignore[arg-type]
+    await store.ensure_collection(
+        CollectionSpec(name="memories", dense={VectorName.DENSE_ML: 4}, on_disk_payload=False)
+    )
+    assert [diff.on_disk_payload for diff in client.updates] == [True]
+
+
+def test_write_consistency_cannot_exceed_the_replicas() -> None:
+    with pytest.raises(ValueError, match="write_consistency_factor"):
+        SearchSettings(replication_factor=1, write_consistency_factor=2)

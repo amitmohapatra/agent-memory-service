@@ -37,6 +37,7 @@ def _tenant(row: TenantRow) -> Tenant:
         status=row.status,  # type: ignore[arg-type]
         retention_days=row.retention_days,
         rate_limit_per_minute=row.rate_limit_per_minute,
+        admission_gate=row.admission_gate,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -223,10 +224,6 @@ class SqlApiKeyRepository:
             update(ApiKeyRow).where(ApiKeyRow.key_id == key_id).values(last_used_at=at)
         )
 
-    async def live_key_ids(self) -> list[str]:
-        stmt = select(ApiKeyRow.key_id).where(_live())
-        return list((await self.s.scalars(stmt)).all())
-
     async def count_live(self, tenant_id: str) -> int:
         stmt = select(func.count()).where(ApiKeyRow.tenant_id == tenant_id, _live())
         return int((await self.s.scalar(stmt)) or 0)
@@ -322,14 +319,18 @@ class SqlWorkspaceRepository:
         )
         return _rowcount(result) > 0
 
-    async def members(self, tenant_id: str, workspace_id: str) -> list[WorkspaceMember]:
+    async def members(
+        self, tenant_id: str, workspace_id: str, *, after: str = "", limit: int | None = None
+    ) -> list[WorkspaceMember]:
         stmt = (
             select(WorkspaceMemberRow)
             .where(
                 WorkspaceMemberRow.tenant_id == tenant_id,
                 WorkspaceMemberRow.workspace_id == workspace_id,
+                WorkspaceMemberRow.principal > after,
             )
             .order_by(WorkspaceMemberRow.principal)
+            .limit(limit)
         )
         return [_workspace_member(r) for r in (await self.s.scalars(stmt)).all()]
 

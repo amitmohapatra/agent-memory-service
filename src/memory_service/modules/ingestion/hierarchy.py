@@ -120,7 +120,10 @@ def build_hierarchy(
                 # the document's own title heading: the root already represents it
                 stack = [(1, root)]
                 continue
-            while stack and stack[-1][0] >= level:
+            # the document root is never popped: once the title heading had put it at level
+            # 1, a second H1 emptied the stack and the whole parse failed (IndexError) for
+            # any Markdown file with two top-level headings
+            while len(stack) > 1 and stack[-1][0] >= level:
                 stack.pop()
             parent = stack[-1][1]
             rep = (

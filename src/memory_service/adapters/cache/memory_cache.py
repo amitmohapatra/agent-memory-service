@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import fnmatch
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -18,6 +19,8 @@ class MemoryCache:
         self._lists: dict[str, tuple[list[bytes], float | None]] = {}
         self.available = True  # flip to False to simulate an outage
         self.ops = 0
+        #: subscribers per channel: one queue each, fed by publish
+        self._channels: dict[str, list[asyncio.Queue[bytes]]] = {}
 
     def _check(self) -> None:
         self.ops += 1
@@ -112,6 +115,25 @@ class MemoryCache:
         for key in list(self._data) + list(self._lists):
             if fnmatch.fnmatch(key, pattern):
                 yield key
+
+    async def publish(self, channel: str, message: bytes) -> int:
+        self._check()
+        queues = self._channels.get(channel, [])
+        for queue in queues:
+            queue.put_nowait(message)
+        return len(queues)
+
+    async def subscribe(self, channel: str) -> AsyncIterator[bytes]:
+        self._check()
+        queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._channels.setdefault(channel, []).append(queue)
+        try:
+            while True:
+                message = await queue.get()
+                self._check()  # an outage ends the subscription, as a dropped socket would
+                yield message
+        finally:
+            self._channels[channel].remove(queue)
 
     async def ping(self) -> bool:
         return self.available

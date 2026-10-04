@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 
 from memory_service.api.deps import ContainerDep, PlatformDep, request_context
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
+from memory_service.api.params import TenantIdPath, limit_query
 from memory_service.api.schemas.tenancy import (
     CreatedTenantResponse,
     CreateTenantRequest,
@@ -25,6 +25,8 @@ log = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
@@ -49,7 +51,7 @@ def _without_token(body: dict[str, Any]) -> dict[str, Any]:
 )
 async def create_tenant(
     request: Request, body: CreateTenantRequest, container: ContainerDep, principal: PlatformDep
-) -> JSONResponse:
+) -> Response:
     payload = body.model_dump(mode="json")
     ctx = request_context(request, PLATFORM_SCOPE)
 
@@ -60,6 +62,7 @@ async def create_tenant(
             tenant_id=body.tenant_id,
             retention_days=body.retention_days,
             rate_limit_per_minute=body.rate_limit_per_minute,
+            admission_gate=body.admission_gate,
             created_by=principal.service_id,
         )
         response = CreatedTenantResponse(
@@ -85,26 +88,26 @@ async def create_tenant(
         payload=payload,
         handler=handler,
         stored_body=_without_token,
+        location=lambda body: f"/v1/admin/tenants/{body['tenant']['tenant_id']}",
     )
 
 
 @router.get(
     "/tenants",
     response_model=list[TenantResponse],
-    responses=_ERRORS,
-    summary="List tenants (cursor: the last tenant_id seen)",
+    responses=_READ_ERRORS,
+    summary="List tenants by id (cursor paged)",
 )
 async def list_tenants(
     request: Request,
     response: Response,
     container: ContainerDep,
     _: PlatformDep,
-    after: str = "",
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "tenants")] = 100,
 ) -> list[TenantResponse]:
     position = decode_cursor(cursor, fields=("tenant_id",))
-    start = position["tenant_id"] if position else after
+    start = position["tenant_id"] if position else ""
     async with container.services["uow_factory"]() as uow:
         tenants = await _service(container).list_tenants(uow, after=start, limit=limit + 1)
     items, next_cursor = page(tenants, limit=limit, position=lambda t: {"tenant_id": t.tenant_id})
@@ -115,10 +118,12 @@ async def list_tenants(
 @router.get(
     "/tenants/{tenant_id}",
     response_model=TenantResponse,
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Get a tenant",
 )
-async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) -> TenantResponse:
+async def get_tenant(
+    tenant_id: TenantIdPath, container: ContainerDep, _: PlatformDep
+) -> TenantResponse:
     async with container.services["uow_factory"]() as uow:
         return TenantResponse.of(await _service(container).get_tenant(uow, tenant_id))
 
@@ -127,17 +132,23 @@ async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) ->
     "/tenants/{tenant_id}",
     response_model=TenantResponse,
     responses=_ERRORS,
-    summary="Rename, suspend or resume a tenant; set its retention and request quota",
+    summary="Rename, suspend or resume a tenant; set its retention, request quota and "
+    "admission gate",
     description="Send `status` only to change it: any request naming a status makes every "
     "key of the tenant re-read the store for the next two minutes (that is what makes a "
     "suspension bite at once, and a retry after a failure safe).",
 )
 async def update_tenant(
-    tenant_id: str, body: UpdateTenantRequest, container: ContainerDep, _: PlatformDep
-) -> TenantResponse:
+    request: Request,
+    tenant_id: TenantIdPath,
+    body: UpdateTenantRequest,
+    container: ContainerDep,
+    _: PlatformDep,
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
-        tenant, _ = await _service(container).update_tenant(
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        tenant, _changed = await _service(container).update_tenant(
             uow,
             tenant_id,
             name=body.name,
@@ -146,17 +157,29 @@ async def update_tenant(
             rate_limit_per_minute=body.rate_limit_per_minute,
             clear_retention=body.clear_retention,
             clear_rate_limit=body.clear_rate_limit,
+            admission_gate=body.admission_gate,
         )
         if body.status is not None:
             # Keyed on the requested status, not on a change, so a retry after a failure
             # still tombstones; strictly and before the commit, so a cache that is away is a
             # 503 to retry rather than a suspension that keys keep serving through.
             await verifier.invalidate_tenant(tenant_id, strict=True)
-        await uow.commit()
-    if body.status is not None:
-        await verifier.invalidate_tenant(tenant_id)
-    try:
-        await container.services["tenant_registry"].observe(tenant)
-    except Exception as exc:  # the refresh loop repairs this within a minute
-        log.warning("tenant_registry.observe_failed", tenant_id=tenant_id, error=str(exc))
-    return TenantResponse.of(tenant)
+
+        async def after_commit() -> None:
+            if body.status is not None:
+                await verifier.invalidate_tenant(tenant_id)
+            try:
+                await container.services["tenant_registry"].observe(tenant)
+            except Exception as exc:  # the refresh loop repairs this within a minute
+                log.warning("tenant_registry.observe_failed", tenant_id=tenant_id, error=str(exc))
+
+        return 200, TenantResponse.of(tenant).model_dump(mode="json"), after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, PLATFORM_SCOPE),
+        key=request.state.idempotency_key,
+        payload={"tenant_id": tenant_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )

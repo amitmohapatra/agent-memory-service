@@ -136,3 +136,26 @@ async def test_delete_reports_how_many_keys_it_removed(cache) -> None:
     keys = [_key(), _key()]
     await cache.mset(dict.fromkeys(keys, b"v"))
     assert await cache.delete(*keys, _key()) == 2
+
+
+async def test_a_published_message_reaches_a_subscriber(cache) -> None:
+    """The tenant registry's channel (ADR 0031): fire-and-forget to whoever is subscribed."""
+    channel = f"contract:{uuid.uuid4().hex}"
+    received: list[bytes] = []
+    ready = asyncio.Event()
+
+    async def listen() -> None:
+        stream = cache.subscribe(channel)
+        ready.set()
+        async for message in stream:
+            received.append(message)
+            return
+
+    task = asyncio.create_task(listen())
+    await ready.wait()
+    for _ in range(50):  # the subscription is established asynchronously
+        if await cache.publish(channel, b"hello"):
+            break
+        await asyncio.sleep(0.02)
+    await asyncio.wait_for(task, timeout=5)
+    assert received[0] == b"hello"

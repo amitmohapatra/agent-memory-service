@@ -21,7 +21,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,14 +53,26 @@ class SearchItem(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    id: str
-    kind: str = Field(description="memory, chunk, summary, episode or message")
-    text: str
+    id: str = Field(
+        description="The item's id (mem_..., chk_..., a summary or a message id): what to "
+        "cite and to fetch."
+    )
+    kind: SearchKind = Field(
+        description="What the item is: memory (something learned or stated), chunk (a "
+        "document passage), summary (a document summary), episode (an earlier conversation "
+        "of this user) or message (this thread's history)."
+    )
+    text: str = Field(description="The item's text (clipped for long passages).")
     observed_on: str | None = Field(
         default=None, description="the day it was observed (YYYY-MM-DD), when known"
     )
-    document_id: str | None = None
-    page: int | None = None
+    document_id: str | None = Field(
+        default=None, description="The document it comes from, for a chunk or a summary."
+    )
+    page: int | None = Field(
+        default=None,
+        description="The 1-based page of the document it is on, when the document has pages.",
+    )
     thread_id: str | None = Field(
         default=None, description="the conversation an episode is (its messages: /v1/threads)"
     )
@@ -99,7 +111,7 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
     page = c.payload.get("page")
     return SearchItem(
         id=c.record_id,
-        kind=c.kind,
+        kind=cast(SearchKind, c.kind),
         text=_clip(c.text, text_chars),
         observed_on=_day(c.payload.get("observed_at")),
         document_id=c.payload.get("document_id"),

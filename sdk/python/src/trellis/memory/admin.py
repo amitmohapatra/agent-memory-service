@@ -49,9 +49,12 @@ class AdminAPI:
         tenant_id: str | None = None,
         retention_days: int | None = None,
         rate_limit_per_minute: int | None = None,
+        admission_gate: bool = False,
         idempotency_key: str | None = None,
     ) -> CreatedTenant:
         """The tenant and its first admin key. The key's token is returned once: keep it.
+        ``admission_gate`` scores extracted memory candidates and stores only the admitted
+        ones (off: every deduplicated candidate is stored).
 
         Pass ``idempotency_key`` to make a retry safe: the replay carries the same tenant with
         ``admin_key.token`` set to None (the secret is never shown twice).
@@ -61,6 +64,7 @@ class AdminAPI:
             "tenant_id": tenant_id,
             "retention_days": retention_days,
             "rate_limit_per_minute": rate_limit_per_minute,
+            "admission_gate": admission_gate,
         }
         return CreatedTenant.model_validate(
             await self._t.request(
@@ -68,15 +72,13 @@ class AdminAPI:
             )
         )
 
-    async def tenants(
-        self, *, after: str = "", limit: int = 100, cursor: str | None = None
-    ) -> list[TenantInfo]:
-        return (await self.tenants_page(after=after, limit=limit, cursor=cursor)).items
+    async def tenants(self, *, limit: int = 100, cursor: str | None = None) -> list[TenantInfo]:
+        return (await self.tenants_page(limit=limit, cursor=cursor)).items
 
     async def tenants_page(
-        self, *, after: str = "", limit: int = 100, cursor: str | None = None
+        self, *, limit: int = 100, cursor: str | None = None
     ) -> Page[TenantInfo]:
-        params = {"after": after or None, "limit": limit, "cursor": cursor}
+        params = {"limit": limit, "cursor": cursor}
         data, next_cursor = await self._t.request_page(
             "/v1/admin/tenants", params={k: v for k, v in params.items() if v is not None}
         )
@@ -91,7 +93,7 @@ class AdminAPI:
 
     async def update_tenant(self, tenant_id: str, **changes: Any) -> TenantInfo:
         """``name``, ``status``, ``retention_days`` / ``clear_retention``,
-        ``rate_limit_per_minute`` / ``clear_rate_limit``."""
+        ``rate_limit_per_minute`` / ``clear_rate_limit``, ``admission_gate``."""
         return TenantInfo.model_validate(
             await self._t.request("PATCH", f"/v1/admin/tenants/{tenant_id}", json=changes)
         )
@@ -129,8 +131,9 @@ class TenantAPI:
         return AgentKeyStatus.model_validate(data)
 
     async def revoke_model_key(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        data = await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
-        return AgentKeyStatus.model_validate(data)
+        """Revoke the tenant's key. The service answers 204; the status is read back."""
+        await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
+        return await self.model_key_status()
 
     async def model_policy(self) -> ModelPolicy:
         """The tenant's model policy: the uses the model may be called for, whether reads
@@ -169,17 +172,17 @@ class TenantAPI:
         )
 
     async def reads(
-        self, *, after: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
+        self, *, since: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
     ) -> list[ReadAuditRecord]:
         """Who read which records, newest first. Page older entries with the cursor (or
-        ``before=<the last entry's at>``); ``after`` is a since-filter."""
-        return (await self.reads_page(after=after, before=before, limit=limit, cursor=cursor)).items
+        ``before=<the last entry's at>``); ``since`` keeps only entries newer than it."""
+        return (await self.reads_page(since=since, before=before, limit=limit, cursor=cursor)).items
 
     async def reads_page(
-        self, *, after: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
+        self, *, since: Any = None, before: Any = None, limit: int = 100, cursor: str | None = None
     ) -> Page[ReadAuditRecord]:
         params: dict[str, Any] = {"limit": limit, "cursor": cursor}
-        for name, value in (("after", after), ("before", before)):
+        for name, value in (("since", since), ("before", before)):
             if value is not None:
                 params[name] = value.isoformat() if hasattr(value, "isoformat") else value
         data, next_cursor = await self._page("/v1/reads", **params)
@@ -287,6 +290,18 @@ class WorkspacesAPI:
     async def remove_member(self, workspace_id: str, principal: str) -> None:
         await self._tenant._request("DELETE", f"/v1/workspaces/{workspace_id}/members/{principal}")
 
-    async def members(self, workspace_id: str) -> list[WorkspaceMemberInfo]:
-        data = await self._tenant._request("GET", f"/v1/workspaces/{workspace_id}/members")
-        return [WorkspaceMemberInfo.model_validate(m) for m in data]
+    async def members(
+        self, workspace_id: str, *, limit: int = 100, cursor: str | None = None
+    ) -> list[WorkspaceMemberInfo]:
+        """One page of the members, by principal; ``members_page`` carries the cursor."""
+        return (await self.members_page(workspace_id, limit=limit, cursor=cursor)).items
+
+    async def members_page(
+        self, workspace_id: str, *, limit: int = 100, cursor: str | None = None
+    ) -> Page[WorkspaceMemberInfo]:
+        data, next_cursor = await self._tenant._page(
+            f"/v1/workspaces/{workspace_id}/members", limit=limit, cursor=cursor
+        )
+        return Page[WorkspaceMemberInfo](
+            items=[WorkspaceMemberInfo.model_validate(m) for m in data], next_cursor=next_cursor
+        )

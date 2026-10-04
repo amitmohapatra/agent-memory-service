@@ -7,6 +7,7 @@ footnote blocks; pipe tables and fenced code are kept intact.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import re
 from html.parser import HTMLParser
@@ -63,30 +64,49 @@ class BuiltinParser:
                 f"the builtin parser cannot read {media_type!r} ({filename!r}). Rich formats "
                 "need documents.parser=docling in an image built with the docling extra."
             )
-        text = sanitise(data.decode("utf-8", errors="replace"))
-        if media_type == "text/html" or filename.lower().endswith((".html", ".htm")):
-            text = html_to_markdown(text)
-        title = _title_from(text, filename)
-        blocks = markdown_blocks(text)
-        version = DocumentVersion(
-            document_id=document_id, tenant_id=tenant_id, parser="builtin", parser_version="1"
-        )
-        nodes = build_hierarchy(
-            blocks,
+        # Decoding, HTML conversion, block parsing, the hierarchy and the context graph are
+        # pure Python over the whole file: seconds of CPU for a large document, all of it
+        # holding the event loop in the worker - Procrastinate's heartbeat, the job's own
+        # timeout and every other job on that loop waited behind it. In a thread the loop
+        # keeps its turns (the GIL is handed back every few milliseconds).
+        return await asyncio.to_thread(
+            _parse,
             document_id=document_id,
-            document_version_id=version.document_version_id,
             tenant_id=tenant_id,
-            title=title,
+            filename=filename,
+            media_type=media_type,
+            data=data,
         )
-        pages = [n.page_end for n in nodes if n.page_end]
-        edges = build_context_graph(nodes, tenant_id=tenant_id, document_id=document_id)
-        return ParsedDocument(
-            version=version,
-            nodes=nodes,
-            edges=edges,
-            title=title,
-            page_count=max(pages) if pages else None,
-        )
+
+
+def _parse(
+    *, document_id: str, tenant_id: str, filename: str, media_type: str, data: bytes
+) -> ParsedDocument:
+    """The whole parse, synchronously (``BuiltinParser.parse`` runs it in a thread)."""
+    text = sanitise(data.decode("utf-8", errors="replace"))
+    if media_type == "text/html" or filename.lower().endswith((".html", ".htm")):
+        text = html_to_markdown(text)
+    title = _title_from(text, filename)
+    blocks = markdown_blocks(text)
+    version = DocumentVersion(
+        document_id=document_id, tenant_id=tenant_id, parser="builtin", parser_version="1"
+    )
+    nodes = build_hierarchy(
+        blocks,
+        document_id=document_id,
+        document_version_id=version.document_version_id,
+        tenant_id=tenant_id,
+        title=title,
+    )
+    pages = [n.page_end for n in nodes if n.page_end]
+    edges = build_context_graph(nodes, tenant_id=tenant_id, document_id=document_id)
+    return ParsedDocument(
+        version=version,
+        nodes=nodes,
+        edges=edges,
+        title=title,
+        page_count=max(pages) if pages else None,
+    )
 
 
 def _title_from(text: str, filename: str) -> str:

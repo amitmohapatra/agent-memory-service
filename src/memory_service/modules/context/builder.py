@@ -31,7 +31,7 @@ from memory_service.domain.context_bundle import (
 )
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
@@ -103,6 +103,14 @@ def _relevance(c: Candidate) -> tuple[float, ScoreKind, float]:
     return float(c.score), "fusion", min(float(c.score), 1.0) * _FUSION_CEILING
 
 
+#: The evidence a retrieved candidate is, by its kind (summary and message name themselves).
+_EVIDENCE_SOURCE = {
+    "chunk": EvidenceSource.DOCUMENT_CHUNK,
+    "memory": EvidenceSource.MEMORY,
+    "fact": EvidenceSource.GRAPH_FACT,
+}
+
+
 def candidate_to_item(c: Candidate) -> ContextItem:
     p = c.payload
     citation = {
@@ -113,9 +121,7 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     }.get(c.kind, f"{c.kind}:{c.record_id}")
     evidence = [
         EvidenceRef(
-            source_type={"chunk": "document_chunk", "memory": "memory", "fact": "graph_fact"}.get(
-                c.kind, c.kind
-            ),
+            source_type=_EVIDENCE_SOURCE.get(c.kind) or EvidenceSource(c.kind),
             source_id=c.record_id,
             document_id=p.get("document_id"),
             chunk_id=c.record_id if c.kind == "chunk" else p.get("chunk_id"),
@@ -562,7 +568,7 @@ class ContextBuilder:
         """Return a reusable bundle or an encoding the retrieval miss can consume."""
         if found.semantic is None or self.semantic_cache is None:
             return None, None
-        embedding = await self.engine.indexer.embedding.embed_query(query)
+        embedding = await self.engine.indexer.spaces.embed_primary_query(query)
         raw = await self.semantic_cache.lookup(found.semantic, embedding)
         if raw is None:
             return None, embedding
@@ -628,16 +634,16 @@ class ContextBuilder:
         """
         try:
             record = bundle.model_copy(update={"cache_hit": True, "diagnostics": {}})
-            await cache.set(
-                found.cache_key,
-                record.model_dump_json(exclude={"revision_fingerprint"}).encode(),
+            # one pipelined round trip for the three forms, not three sequential SETs
+            await cache.mset(
+                {
+                    found.cache_key: record.model_dump_json(
+                        exclude={"revision_fingerprint"}
+                    ).encode(),
+                    found.prompt_key: orjson.dumps(prompt_view(bundle)),
+                    found.full_key: orjson.dumps(full_view(bundle)),
+                },
                 ttl_seconds=self.cache_ttl,
-            )
-            await cache.set(
-                found.prompt_key, orjson.dumps(prompt_view(bundle)), ttl_seconds=self.cache_ttl
-            )
-            await cache.set(
-                found.full_key, orjson.dumps(full_view(bundle)), ttl_seconds=self.cache_ttl
             )
         except CacheUnavailable:
             return

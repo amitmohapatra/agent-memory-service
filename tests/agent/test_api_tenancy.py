@@ -63,6 +63,16 @@ async def test_a_platform_operator_onboards_lists_and_suspends_a_tenant(app, run
     assert (await platform.admin.get_tenant("acme")).status == "suspended"
     assert (await platform.admin.update_tenant("acme", status="active")).status == "active"
 
+    # the admission gate is the tenant's switch, off unless asked for
+    assert created.tenant.admission_gate is False
+    gated = await platform.admin.update_tenant("acme", admission_gate=True)
+    assert gated.admission_gate is True and gated.status == "active"
+    assert (await platform.admin.get_tenant("acme")).admission_gate is True
+    onboarded_gated = await platform.admin.create_tenant(
+        "Initech", tenant_id="initech", admission_gate=True
+    )
+    assert onboarded_gated.tenant.admission_gate is True
+
 
 @pytest.mark.covers(
     "tenancy.create_workspace",

@@ -1,6 +1,6 @@
 """The 90% path::
 
-    memory = MemoryClient("http://memory-service:8080", api_key="...")
+    memory = MemoryClient()   # MEMORY_URL and TRELLIS_API_KEY; or MemoryClient(url, api_key=...)
     ctx = memory.bind(user_id=..., thread_id=...)   # the key names the tenant
     pushed = await ctx.context(question)            # what the prompt gets: pushed.rendered
     ...
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from collections.abc import Mapping, Sequence
 from contextvars import ContextVar
@@ -30,6 +31,7 @@ import httpx
 
 from trellis.memory.admin import AdminAPI, TenantAPI
 from trellis.memory.advanced import AdvancedAPI
+from trellis.memory.breaker import DEFAULT_FAILURE_THRESHOLD, DEFAULT_OPEN_SECONDS
 from trellis.memory.models import (
     AgentTool,
     ContextBundle,
@@ -64,6 +66,12 @@ _current_context: ContextVar[MemoryContext | None] = ContextVar("trellis.memory_
 
 #: How many tool candidates ``tool_hints`` and ``context(tools=...)`` ask for by default.
 TOOL_HINTS_K = 8
+#: Where the service is when ``base_url`` is not passed, and the key when ``api_key`` is
+#: not: the platform's shared names, the same ones the harness and agent-runs read.
+ENV_URL = "MEMORY_URL"
+ENV_API_KEY = "TRELLIS_API_KEY"
+#: The local stack's address (docker compose), for a laptop with neither set.
+DEFAULT_URL = "http://localhost:8080"
 
 
 def current_context() -> MemoryContext | None:
@@ -72,23 +80,41 @@ def current_context() -> MemoryContext | None:
 
 
 class MemoryClient:
+    """One per process. ``base_url`` defaults to ``$MEMORY_URL`` (else the local stack's
+    ``http://localhost:8080``) and ``api_key`` to ``$TRELLIS_API_KEY``, so ``MemoryClient()``
+    is the whole configuration where the platform's environment is set.
+
+    ``timeout`` bounds each attempt (connecting within 5 s of it); ``max_retries`` is how
+    many times a retryable failure is sent again, with full-jitter backoff or the
+    ``Retry-After`` the service asked for (at most 30 s). After
+    ``circuit_failure_threshold`` calls in a row fail for want of the service (no response,
+    or a 5xx) the client stops sending for ``circuit_open_seconds`` and raises
+    :class:`CircuitOpenError` at once, then lets one call through to probe; 0 disables it.
+    """
+
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         *,
         api_key: str | None = None,
         bearer_token: str | None = None,
-        timeout: float = 10.0,
+        timeout: float | httpx.Timeout = 10.0,
         max_retries: int = 3,
         http_client: httpx.AsyncClient | None = None,
+        circuit_failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
+        circuit_open_seconds: float = DEFAULT_OPEN_SECONDS,
     ) -> None:
+        if api_key is None and bearer_token is None:
+            api_key = os.environ.get(ENV_API_KEY) or None
         self._transport = Transport(
-            base_url,
+            base_url or os.environ.get(ENV_URL) or DEFAULT_URL,
             api_key=api_key,
             bearer_token=bearer_token,
             timeout=timeout,
             max_retries=max_retries,
             client=http_client,
+            circuit_failure_threshold=circuit_failure_threshold,
+            circuit_open_seconds=circuit_open_seconds,
         )
         #: Platform administration (the bootstrap key): onboarding tenants.
         self.admin = AdminAPI(self)
@@ -198,6 +224,7 @@ class MemoryContext:
         document_ids: Sequence[str] | None = ...,
         format: Literal["prompt"] = ...,
         debug: bool = ...,
+        timeout: float | None = ...,  # noqa: ASYNC109
     ) -> PromptContext: ...
 
     @overload
@@ -211,6 +238,7 @@ class MemoryContext:
         document_ids: Sequence[str] | None = ...,
         format: Literal["full"],
         debug: bool = ...,
+        timeout: float | None = ...,  # noqa: ASYNC109
     ) -> ContextBundle: ...
 
     async def context(
@@ -223,6 +251,7 @@ class MemoryContext:
         document_ids: Sequence[str] | None = None,
         format: Literal["prompt", "full"] = "prompt",
         debug: bool = False,
+        timeout: float | None = None,  # noqa: ASYNC109 - the request's own timeout
     ) -> PromptContext | ContextBundle:
         """The context for this turn: the pinned profile, the thread's summary, its recent
         messages (unless ``window=False``: the framework keeps its own history), and the
@@ -233,7 +262,8 @@ class MemoryContext:
         ``tools`` - the agent's own tools - adds the procedures learned for the task and the
         tools that fit, each with its confidence (0..1), the argument values found and the
         required ones missing; the prompt form returns the fitting tools in ``tools``.
-        ``format="full"`` returns the same content as structured data, without the rendering."""
+        ``format="full"`` returns the same content as structured data, without the rendering.
+        ``timeout`` replaces the client's for this call, e.g. a turn's own latency budget."""
         payload: dict[str, Any] = {
             "query": query,
             "scope": self.scope_payload(),
@@ -247,7 +277,7 @@ class MemoryContext:
             payload["document_ids"] = list(document_ids)
         if tools is not None:
             payload["tools"] = {"available": list(tools), "k": TOOL_HINTS_K}
-        data = await self._request("POST", "/v1/context", json=payload)
+        data = await self._request("POST", "/v1/context", json=payload, timeout=timeout)
         if format == "full":
             return ContextBundle.model_validate(data)
         return PromptContext.model_validate(data)
@@ -334,12 +364,14 @@ class MemoryContext:
         known_at: datetime | None = None,
         document_ids: Sequence[str] | None = None,
         debug: bool = False,
+        timeout: float | None = None,  # noqa: ASYNC109 - the request's own timeout
     ) -> list[SearchItem]:
         """Ranked items for ``query``: memories and document passages by default; ``kinds``
         also reads document summaries, earlier conversations (``episode``) and this
         thread's messages. ``time_from``/``time_to`` keep what was observed within the range
         (before anything is ranked). ``as_of`` reads memories as they were true then and
-        ``known_at`` as they were known then, including ones replaced since."""
+        ``known_at`` as they were known then, including ones replaced since. ``timeout``
+        replaces the client's for this call."""
         payload: dict[str, Any] = {
             "query": query,
             "scope": self.scope_payload(),
@@ -358,7 +390,7 @@ class MemoryContext:
                 payload[name] = when.isoformat()
         if document_ids is not None:
             payload["document_ids"] = list(document_ids)
-        data = await self._request("POST", "/v1/recall", json=payload)
+        data = await self._request("POST", "/v1/recall", json=payload, timeout=timeout)
         return [SearchItem.model_validate(i) for i in data.get("items", [])]
 
     async def verify(
@@ -566,10 +598,10 @@ class FeedbackAPI:
     async def pending(self, *, limit: int = 100, cursor: str | None = None) -> Page[Feedback]:
         """The review queue (the tenant's administrator key): verdicts that change nothing
         until approved, newest first, each with its author's ``author_record``."""
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"review": "pending", "limit": limit}
         if cursor:
             params["cursor"] = cursor
-        data = await self._ctx._request("GET", "/v1/feedback/pending", params=params)
+        data = await self._ctx._request("GET", "/v1/feedback", params=params)
         return Page[Feedback](
             items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
             next_cursor=data.get("next_cursor"),

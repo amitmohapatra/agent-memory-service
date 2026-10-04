@@ -10,9 +10,16 @@ Every SDK snippet below runs inside an `async` function and assumes:
 ```python
 from trellis.memory import MemoryClient
 
-memory = MemoryClient("http://localhost:8080", api_key=SERVICE_KEY)
-ctx = memory.bind(user_id="u1", thread_id="chat-42")  # tenant_id too with a dev key
+memory = MemoryClient()  # MEMORY_URL and TRELLIS_API_KEY; or MemoryClient(url, api_key=SERVICE_KEY)
+ctx = memory.bind(user_id="u1", thread_id="chat-42")  # the key names the tenant
 ```
+
+A development key (`dev-key` on the local stack) names the development tenant, `default`
+(`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`): with it no tenant is needed either, and
+`bind(tenant_id=...)` picks another. The client retries what cannot duplicate anything, honours
+`Retry-After`, and fails fast with `CircuitOpenError` (a retryable
+`DependencyUnavailableError`) while the service is down — see
+[the SDK README](../sdk/python/README.md#retries-and-the-circuit-breaker).
 
 ---
 
@@ -43,6 +50,9 @@ print((await MemoryClient(url, api_key=service.token).tenant.keys.whoami()).role
   policy, the read audit, the feedback review queue); `service` reads and writes memory for the
   users and agents it may act for. Give an agent a service key, never the admin key.
 - The tenant comes from the key; a `X-Trellis-Tenant` header that disagrees is a `403`.
+- `may_act_as` restricts a key to the listed principals: the request's user must be listed as
+  `user:<id>` and its `agent_id` as `agent:<id>`, or it is a `403`; a restricted key naming
+  neither acts only as itself.
 - A secret is shown once; with `idempotency_key` a retry replays the record with `token=None`.
 - A `WORKSPACE`-visible write needs the workspace row and a membership first, or it answers
   `Workspace not found`. Workspace roles are `admin`, `member` (read + write) and `viewer`
@@ -225,7 +235,7 @@ The six tools: `memory_search`, `memory_remember`, `memory_update`, `memory_forg
 | --- | --- | --- |
 | Record a verdict | `POST /v1/feedback` | `await ctx.feedback("memory", mem_id, "correct", correction="…")` |
 | Read one / a target's history | `GET /v1/feedback/{id}`, `GET /v1/feedback?target_kind=…&target_id=…` | `ctx.feedback.get(id)`, `ctx.feedback.page_for("run", run_id)` |
-| The review queue (tenant admin key) | `GET /v1/feedback/pending` | `await admin_ctx.feedback.pending(limit=50)` |
+| The review queue (tenant admin key) | `GET /v1/feedback?review=pending` | `await admin_ctx.feedback.pending(limit=50)` |
 | Decide a vote (tenant admin key) | `POST /v1/feedback/{id}/approve`, `/dismiss` | `admin_ctx.feedback.approve(id, note=…)`, `.dismiss(id, note=…)` |
 
 **Applied immediately:** the service's own grounding judge (`/v1/verify`); a run reporting its
@@ -288,7 +298,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 | --- | --- | --- |
 | Rotate a key | `POST /v1/keys` (new), deploy it, `DELETE /v1/keys/{key_id}` (old) | `keys.issue(...)`, `keys.revoke(old_id)` |
 | Narrow whom a key may act for | `PATCH /v1/keys/{key_id}` | `admin.tenant.keys.update(key_id, may_act_as=["agent:support-bot"])` |
-| Retention / rate limit / suspend (platform key) | `PATCH /v1/admin/tenants/{id}` | `platform.admin.update_tenant("acme", retention_days=365, rate_limit_per_minute=600)`; `status="suspended"` |
+| Retention / rate limit / suspend / admission gate (platform key) | `PATCH /v1/admin/tenants/{id}` | `platform.admin.update_tenant("acme", retention_days=365, rate_limit_per_minute=600)`; `status="suspended"`; `admission_gate=True` (off by default: score extracted candidates and store only the admitted ones) |
 | Who read what | `GET /v1/reads` | `await admin.tenant.reads(limit=50)` |
 
 - Revocation and `may_act_as` changes apply on the key's next request, on every instance.
@@ -354,7 +364,7 @@ If your agent runs under [`agent-harness`](https://github.com/amitmohapatra/agen
 | Approval suggestions | `GET …/approval-suggestions`, `POST …/{id}/accept` | `ctx.advanced.tools.approval_suggestions()`, `.accept_suggestion(id)` |
 | Agent tools | `GET /v1/agent-tools`, `POST /v1/agent-tools/{name}` | `ctx.agent_tools()`, `ctx.call_agent_tool(name, args)` |
 | A verdict | `POST /v1/feedback` | `ctx.feedback(kind, id, verdict, …)` |
-| Review votes (admin) | `GET /v1/feedback/pending`, `POST …/approve`, `…/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)` |
+| Review votes (admin) | `GET /v1/feedback?review=pending`, `POST …/approve`, `…/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)` |
 | Agent model key | `PUT /v1/agents/model-key` | `ctx.advanced.model_keys.set(vk)` |
 | Tenant model key (admin) | `PUT /v1/model-key` | `client.tenant.set_model_key(vk)` |
 | Model policy (admin) | `PUT /v1/model-key/policy` | `client.tenant.set_model_policy(uses, read_assist=…, models=…)` |

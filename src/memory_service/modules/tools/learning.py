@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.revisions import RevisionKind, audience_revision_keys
 from memory_service.domain.tools import RunOutcome, StoredProcedure, ToolInvocation, stable_hash
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.tools.edges import tool_edges
@@ -298,15 +298,20 @@ class ToolLearning:
                         tenant_id, sorted({c.tool_id for c in tenant_calls})
                     )
                 }
-            written = 0
+            audiences: set[tuple[RevisionKind, str]] = set()
             for call in tenant_calls:
                 entry = entries.get(call.tool_id)
                 entities, relations = tool_edges(call, entry) if entry else ([], [])
                 if relations:
                     await self.graph.upsert_entities(entities)
                     await self.graph.upsert_relations(relations)
-                    written += len(relations)
-            if written:
+                    # the edges' readers, not the whole tenant (ADR 0031)
+                    for relation in relations:
+                        audiences |= audience_revision_keys(
+                            tenant_id, relation.visibility_keys
+                        ) or {(RevisionKind.GRAPH, "")}
+            if audiences:
                 async with self.uow_factory() as uow:
-                    await uow.revisions.bump(tenant_id, RevisionKind.GRAPH, "")
+                    for kind, identifier in sorted(audiences):
+                        await uow.revisions.bump(tenant_id, kind, identifier)
                     await uow.commit()

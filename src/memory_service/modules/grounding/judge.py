@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.evidence import EvidenceSource
 from memory_service.domain.feedback import (
     Feedback,
     FeedbackEvidenceRef,
@@ -63,7 +64,7 @@ async def judge_run(
         comment=f"{report.supported}/{len(report.claims)} claims supported, "
         f"{report.contradicted} contradicted",
         evidence_refs=[
-            FeedbackEvidenceRef(source_type="memory", source_id=item_id)
+            FeedbackEvidenceRef(source_type=EvidenceSource.MEMORY, source_id=item_id)
             for item_id in dict.fromkeys(supported)
             if item_id.startswith("mem_")
         ][:CITED_MAX],

@@ -66,3 +66,18 @@ async def test_batch_bumps_each_affected_revision_once():
 )
 def test_principal_audience_is_independent_of_storage_anchor(principal, kind, identifier):
     assert (kind, identifier) in memory_revision_keys(memory([f"principal:acme/{principal}"]))
+
+
+def test_a_documents_revisions_are_its_audiences_and_its_thread() -> None:
+    from memory_service.domain.revisions import document_revision_keys
+
+    assert document_revision_keys("acme", None, ["user:acme/u1", "principal:acme/user:u1"]) == {
+        (RevisionKind.USER, "u1")
+    }
+    assert document_revision_keys("acme", "thr_1", ["workspace:acme/ws1"]) == {
+        (RevisionKind.TENANT, ""),
+        (RevisionKind.THREAD, "thr_1"),
+    }
+    # another tenant's key names no reader here; a document with no audience left is TENANT
+    assert document_revision_keys("acme", None, ["user:globex/u1"]) == {(RevisionKind.TENANT, "")}
+    assert document_revision_keys("acme", None, []) == {(RevisionKind.TENANT, "")}

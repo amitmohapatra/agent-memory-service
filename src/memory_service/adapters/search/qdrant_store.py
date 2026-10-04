@@ -78,6 +78,15 @@ _CONNECTION_ERRORS = (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadE
 _EMPTY_RESPONSE_SIGNS = ("object has no attribute 'result'", "returned None")
 
 
+def _unavailable(operation: str, exc: BaseException) -> DependencyUnavailable:
+    """The 503 a failed call becomes. The client's message goes to the log, never into the
+    problem's ``detail``: it can quote the server's URL, collection names and payloads."""
+    log.warning(
+        "qdrant.failed", operation=operation, error_type=type(exc).__name__, error=str(exc)[:500]
+    )
+    return DependencyUnavailable(f"qdrant {operation} failed: {type(exc).__name__}")
+
+
 def _is_empty_response(exc: BaseException) -> bool:
     """Whether the client raised because it had no response to unwrap (see the note above)."""
     if not isinstance(exc, AttributeError | AssertionError):
@@ -125,8 +134,13 @@ async def _read[T](operation: str, call: Callable[[], Awaitable[T]]) -> T:
 
 #: Payload fields the search filters use; each one is indexed (see _ensure_payload_indexes).
 #: ``script`` is the record's Unicode script.
-_PAYLOAD_INDEXES = {
-    "tenant_id": models.PayloadSchemaType.KEYWORD,
+#: ``tenant_id`` is the tenant key: every search filters on exactly one value of it, and
+#: ``is_tenant`` tells Qdrant to lay segments out per tenant so that filter selects a
+#: tenant's storage instead of scanning everyone's (multitenancy, Qdrant >= 1.11).
+_TENANT_INDEX = models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD, is_tenant=True)
+
+_PAYLOAD_INDEXES: dict[str, Any] = {
+    "tenant_id": _TENANT_INDEX,
     "visibility_keys": models.PayloadSchemaType.KEYWORD,
     "kind": models.PayloadSchemaType.KEYWORD,
     "document_id": models.PayloadSchemaType.KEYWORD,
@@ -138,6 +152,12 @@ _PAYLOAD_INDEXES = {
     "valid_to": models.PayloadSchemaType.DATETIME,
     "known_to": models.PayloadSchemaType.DATETIME,
 }
+
+
+def _is_tenant_index(info: Any) -> bool:
+    """Whether an existing payload index (``PayloadIndexInfo``) is the tenant index."""
+    params = getattr(info, "params", None)
+    return bool(getattr(params, "is_tenant", False))
 
 
 def point_id(record_id: str) -> str:
@@ -388,6 +408,14 @@ class QdrantSearchStore:
                         on_disk_payload=spec.on_disk_payload
                         and SEARCH.on_disk_payload
                         and not self._local,
+                        # the cluster's layout (SearchSettings); local mode has none
+                        shard_number=None if self._local else self.settings.shard_number,
+                        replication_factor=None
+                        if self._local
+                        else self.settings.replication_factor,
+                        write_consistency_factor=None
+                        if self._local
+                        else self.settings.write_consistency_factor,
                     )
                 except Exception:
                     # Check-then-create, and three API workers start cold against the same
@@ -402,9 +430,7 @@ class QdrantSearchStore:
                 await self._ensure_payload_indexes(name)
                 await self._reconcile_payload_storage(name, spec)
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant ensure_collection failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("ensure_collection", exc) from exc
         self._known.add(name)
 
     async def _reconcile_payload_storage(self, name: str, spec: CollectionSpec) -> None:
@@ -417,9 +443,11 @@ class QdrantSearchStore:
         remote Qdrant under memory pressure makes expensive. Changing it does not need a
         reindex; the collection is updated in place.
         """
-        wanted = spec.on_disk_payload and SEARCH.on_disk_payload
         try:
             info = await self._client.get_collection(name)
+            # in RAM only while it is small enough to be worth it (``payload_in_ram_max_points``)
+            grown = (info.points_count or 0) > SEARCH.payload_in_ram_max_points
+            wanted = (spec.on_disk_payload or grown) and SEARCH.on_disk_payload
             if bool(info.config.params.on_disk_payload) == wanted:
                 return
             await self._client.update_collection(
@@ -430,7 +458,6 @@ class QdrantSearchStore:
             log.warning(
                 "qdrant.payload_storage_not_reconciled",
                 collection=name,
-                wanted_on_disk=wanted,
                 error_message=f"{type(exc).__name__}: {exc}",
             )
 
@@ -440,10 +467,18 @@ class QdrantSearchStore:
         filters on it, so Qdrant read payloads to apply it; and a field added here after a
         collection was created was never indexed on that collection at all."""
         info = await self._client.get_collection(name)
-        have = set((info.payload_schema or {}).keys())
+        have = info.payload_schema or {}
         for field, schema in _PAYLOAD_INDEXES.items():
             if field not in have:
                 await self._client.create_payload_index(name, field_name=field, field_schema=schema)
+        if not _is_tenant_index(have.get("tenant_id")):
+            # Created before ``is_tenant``: index it again with the flag. Qdrant then groups
+            # new segments by tenant, so a tenant-filtered search reads that tenant's points
+            # instead of filtering every segment; points already stored are regrouped as the
+            # optimizer rewrites their segments, or at once by a rebuild (reindex --drop).
+            await self._client.create_payload_index(
+                name, field_name="tenant_id", field_schema=_TENANT_INDEX
+            )
 
     async def upsert(self, records: Sequence[SearchRecord]) -> None:
         if not records:
@@ -652,12 +687,13 @@ class QdrantSearchStore:
                     ),
                 )
             except Exception as exc:
-                detail = (
-                    "the search server sent no response body (retried once already)"
-                    if _is_empty_response(exc)
-                    else f"{type(exc).__name__}: {exc}"
-                )
-                raise DependencyUnavailable(f"qdrant hybrid query failed: {detail}") from exc
+                if _is_empty_response(exc):
+                    log.warning("qdrant.failed", operation="hybrid query", error=str(exc)[:500])
+                    raise DependencyUnavailable(
+                        "qdrant hybrid query failed: the search server sent no response body "
+                        "(retried once already)"
+                    ) from exc
+                raise _unavailable("hybrid query", exc) from exc
         # Native RRF leaves equal-score ordering unspecified. Resolve ties before the
         # engine deduplicates/cuts the pool, or identical queries can pack different
         # evidence. This stabilizes the returned pool without another RPC or wider search;
@@ -701,9 +737,7 @@ class QdrantSearchStore:
                     ),
                 )
             except Exception as exc:
-                raise DependencyUnavailable(
-                    f"qdrant arms query failed: {type(exc).__name__}: {exc}"
-                ) from exc
+                raise _unavailable("arms query", exc) from exc
             payloads = await self._payloads(collection, responses)
         out: dict[VectorName, list[SearchHit]] = {}
         for (name, _), response in zip(arms, responses, strict=True):
@@ -741,9 +775,7 @@ class QdrantSearchStore:
                 ),
             )
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("arms payload read", exc) from exc
         return {str(p.id): dict(p.payload or {}) for p in points}
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
@@ -791,9 +823,7 @@ class QdrantSearchStore:
         try:
             listing = await self._client.get_collections()
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant get_collections failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("get_collections", exc) from exc
         return [c.name[len(prefix) :] for c in listing.collections if c.name.startswith(prefix)]
 
     async def ping(self) -> bool:

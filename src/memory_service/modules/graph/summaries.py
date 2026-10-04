@@ -48,9 +48,13 @@ class EntitySummaries:
         self.assist = assist
         self.cfg = settings
 
-    async def refresh(self, tenant_id: str, entity_ids: Sequence[str]) -> int:
+    async def refresh(
+        self, tenant_id: str, entity_ids: Sequence[str], *, readers: set[str] | None = None
+    ) -> int:
         """Rewrite the summaries of ``entity_ids`` whose facts changed; returns how many.
-        The caller orders the ids by priority and binds the model identity."""
+        The caller orders the ids by priority and binds the model identity. ``readers``
+        collects the audience keys of every entity whose summary was rewritten: whoever
+        reads the entity reads its summary, so those are the bundles it invalidates."""
         wanted = list(dict.fromkeys(entity_ids))[: self.cfg.entity_summaries_per_job]
         if not wanted:
             return 0
@@ -73,5 +77,7 @@ class EntitySummaries:
             await self.store.set_summary(
                 tenant_id, facts.entity.entity_id, summary=text, source=source
             )
+            if readers is not None:
+                readers.update(facts.entity.visibility_keys or [f"tenant:{tenant_id}"])
             written += 1
         return written

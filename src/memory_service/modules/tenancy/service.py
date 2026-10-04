@@ -93,6 +93,7 @@ class TenancyService:
         tenant_id: str | None = None,
         retention_days: int | None = None,
         rate_limit_per_minute: int | None = None,
+        admission_gate: bool = False,
     ) -> tuple[Tenant, IssuedKey]:
         """The tenant and its first admin key, shown once."""
         tenant_id = _require_id(tenant_id, "tenant")
@@ -105,6 +106,7 @@ class TenancyService:
             name=_clean_name(name),
             retention_days=retention_days,
             rate_limit_per_minute=rate_limit_per_minute,
+            admission_gate=admission_gate,
         )
         await uow.tenants.add(tenant)
         admin = await self.issue_key(
@@ -135,6 +137,7 @@ class TenancyService:
         rate_limit_per_minute: int | None = None,
         clear_retention: bool = False,
         clear_rate_limit: bool = False,
+        admission_gate: bool | None = None,
     ) -> tuple[Tenant, bool]:
         """The updated tenant, and whether its status changed (every key of a suspended
         tenant must stop working on its next request, so the caller invalidates them)."""
@@ -148,6 +151,8 @@ class TenancyService:
             changes["retention_days"] = None if clear_retention else retention_days
         if rate_limit_per_minute is not None or clear_rate_limit:
             changes["rate_limit_per_minute"] = None if clear_rate_limit else rate_limit_per_minute
+        if admission_gate is not None:
+            changes["admission_gate"] = admission_gate
         tenant = current.model_copy(update=changes)
         await uow.tenants.update(tenant_id, changes)
         return tenant, tenant.status != current.status
@@ -346,7 +351,14 @@ class TenancyService:
         )
 
     async def members(
-        self, uow: UnitOfWork, tenant_id: str, workspace_id: str
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        workspace_id: str,
+        *,
+        after: str = "",
+        limit: int | None = None,
     ) -> list[WorkspaceMember]:
+        """A page of the workspace's members by principal, after ``after``."""
         await self.get_workspace(uow, tenant_id, workspace_id)
-        return await uow.workspaces.members(tenant_id, workspace_id)
+        return await uow.workspaces.members(tenant_id, workspace_id, after=after, limit=limit)

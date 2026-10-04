@@ -101,3 +101,76 @@ async def test_handler_timeout_is_enforced(queue: ProcrastinateTaskQueue) -> Non
 
 async def test_ping(queue: ProcrastinateTaskQueue) -> None:
     assert await queue.ping() is True
+
+
+async def _stop_mid_job(queue_database: str, tmp_path, *, seconds: float, grace: float):
+    """Start a worker on one slow job, SIGTERM it while the job runs; the job's final
+    state, whether it finished, and how long the stop took."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    queue = ProcrastinateTaskQueue(queue_database, default_retries=2)
+
+    async def never(payload):  # the worker in the subprocess runs it, not this one
+        raise AssertionError
+
+    queue.register("test.slow", Queue.CHAT_FAST, never)
+    job_id = await queue.enqueue(JobSpec(task_name="test.slow", queue=Queue.CHAT_FAST))
+    root = Path(__file__).resolve().parents[2]
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(root / "src"), str(root), os.environ.get("PYTHONPATH", "")]
+        ),
+    }
+    marker = tmp_path / "finished"
+    proc = subprocess.Popen(  # noqa: S603
+        [
+            sys.executable,
+            str(Path(__file__).with_name("_graceful_worker.py")),
+            queue_database,
+            str(seconds),
+            str(grace),
+            str(marker),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    try:
+        line = await asyncio.wait_for(asyncio.to_thread(proc.stdout.readline), timeout=60)  # type: ignore[union-attr]
+        assert line.startswith("TOOK")
+        started = time.monotonic()
+        proc.send_signal(signal.SIGTERM)
+        await asyncio.wait_for(asyncio.to_thread(proc.wait), timeout=30)
+        took = time.monotonic() - started
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 0
+    info = await queue.get(job_id)
+    await queue.close()
+    return info, marker.exists(), took
+
+
+async def test_sigterm_lets_a_running_job_finish_inside_the_grace(
+    queue: ProcrastinateTaskQueue, queue_database: str, tmp_path
+) -> None:
+    info, finished, took = await _stop_mid_job(queue_database, tmp_path, seconds=1.5, grace=20)
+    assert finished, "the job was cut off instead of being allowed to finish"
+    assert info is not None and info.status is JobStatus.SUCCEEDED
+    assert took < 15
+
+
+async def test_sigterm_releases_a_job_that_outlives_the_grace(
+    queue: ProcrastinateTaskQueue, queue_database: str, tmp_path
+) -> None:
+    info, finished, took = await _stop_mid_job(queue_database, tmp_path, seconds=60, grace=0.5)
+    assert not finished
+    assert took < 15, "the worker waited past its grace"
+    # aborted for the shutdown and put back to be retried, not left in `doing`
+    assert info is not None and info.status is JobStatus.PENDING, info

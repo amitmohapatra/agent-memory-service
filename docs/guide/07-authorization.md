@@ -19,7 +19,7 @@ flowchart TB
   TB --> SU{tenant suspended?}
   SU -->|yes| D403[403 tenant is suspended]
   SU -->|no| WS["bind the workspace: a key bound to one<br/>pins it#59; a different header is 403"]
-  WS --> MAA["may_act_as: a restricted key<br/>acts for no other user"]
+  WS --> MAA["may_act_as: a restricted key<br/>acts for no other user or agent"]
   MAA --> CTX["MemoryExecutionContext:<br/>body security fields must equal the headers"]
   CTX --> PR["principal: agent:user/agent, user:id, ..."]
   PR --> SC["AuthorizedScope from OpenFGA<br/>(bounded list_objects, cached by revision)"]
@@ -66,7 +66,13 @@ What the verifier guarantees (`modules/auth/keys.py`, ADR 0021):
   set-if-absent.
 - **A flood of garbage tokens costs a bounded amount.** Unknown ids are cached as missing for
   five seconds, and each instance reads the store for at most 600 unrecognised ids a minute
-  (`UNKNOWN_IDS_PER_MINUTE`).
+  (`UNKNOWN_IDS_PER_MINUTE`). "Recognised" is a key this process has issued, verified or been
+  told about on the tenant registry's channel (ADR 0031).
+- **Suspensions and revocations reach every process promptly.** The instance that makes the
+  change publishes it on the cache's pub/sub channel (`trellis:tenancy`), and every API
+  worker of every pod applies it on arrival. With the cache down, the registry's one-minute
+  refresh of quotas and suspensions is the bound, and the verifier's tombstones still decide
+  for keys.
 - **A secret is shown once.** An idempotent retry of key issuance or onboarding replays the
   record with `token: null`.
 - **A tenant holds at most 1,000 live keys** (`MAX_KEYS_PER_TENANT` in `domain/tenancy.py`).
@@ -76,16 +82,18 @@ What the verifier guarantees (`modules/auth/keys.py`, ADR 0021):
 `api/deps.py:build_context` turns a request into its execution context:
 
 1. **The tenant** comes from the key. A header naming another tenant is `403 credential is not
-   valid for this tenant`, never a silent redirect.
+   valid for this tenant`, never a silent redirect. A development key (laptops only) acts in
+   the development tenant (`authentication.trusted_dev_tenant`, `default`) when the request
+   names none, and in the named one when it does.
 2. **A suspended tenant** is refused for every credential kind, from an in-process tenant
    registry that costs no store read (`modules/tenancy/registry.py`).
 3. **The workspace**: a key bound to a workspace pins it; a header naming another is `403`.
-4. **`may_act_as`**: a key restricted to listed principals is refused (`403 this key may not
-   act for that user`) when the request names a user not on the list. In the code read for
-   this chapter, `_require_may_act_as` checks only the `user:<id>` entries against the
-   request's user; `agent:<id>` entries are stored and reported by `GET /v1/keys/self`, but no
-   check against the request's `agent_id` was found, and a request naming no user is not
-   restricted by the list.
+4. **`may_act_as`**: a key restricted to listed principals acts for those and no others.
+   `_require_may_act_as` checks the request's user against the `user:<id>` entries and its
+   `agent_id` against the `agent:<id>` entries (`403 this key may not act for that user` /
+   `… as that agent`); a request naming neither acts as the key itself, the anonymous service
+   principal, which holds no grant on any user's or agent's memories. `*` lifts it
+   (`tests/security/test_may_act_as.py`, ADR 0032).
 5. **Body against headers**: a `tenant_id`, `workspace_id` or `user_id` in the body that
    disagrees with a header is refused, and `custom_metadata` may not contain any reserved key.
 
@@ -101,8 +109,8 @@ counted in the cache and fails open when the cache is down.
 **A tenant is the wall nothing crosses.** Every object id and every audience key carries the
 tenant (`thread:acme/thr_1`, `user:acme/u1`), so tenancy is structural rather than a column
 someone has to remember (ADR 0005). A tenant is onboarded by the platform key
-(`POST /v1/admin/tenants`), carries `retention_days` and `rate_limit_per_minute`, and can be
-suspended. Identifiers are never reused: a deleted workspace keeps its rows, and creating
+(`POST /v1/admin/tenants`), carries `retention_days`, `rate_limit_per_minute` and the
+`admission_gate` switch, and can be suspended. Identifiers are never reused: a deleted workspace keeps its rows, and creating
 another with the same id is `409`, so audit entries and memory anchors keep their meaning.
 
 **A workspace is a team inside a tenant** that shares what it stores (ADR 0021). Membership is
@@ -241,9 +249,16 @@ rows as the planned follow-up, and it does not exist yet.
 Every recall and context assembly writes an entry to `memory_reads`: the credential, the
 principal it acted for, `recall` or `context`, the record ids served, a `query_hash` and a
 scope fingerprint — never the query text (`modules/audit/service.py`). Entries are written in
-batches off the request path, with a stated loss window of one flush interval if the process
-dies, and purged after 400 days (`read_audit_retention_days`, hourly purge). A tenant admin
-reads it with `GET /v1/reads`, newest first.
+batches off the request path and purged after 400 days (`read_audit_retention_days`, hourly
+purge). A tenant admin reads it with `GET /v1/reads`, newest first.
+
+What it guarantees: a graceful stop (SIGTERM) flushes everything queued before the pool
+closes. A process killed outright loses up to one flush interval (1 s) of entries plus a
+batch in flight. A queue that fills (10 000 entries, the store stalled for seconds) drops the
+newest entry, and so does a row that cannot be stored even on its own; both kinds are
+counted in `memory_read_audit_dropped_total`. It is an operational record with that loss
+window, not a compliance ledger: a read is never slowed or refused for its audit entry
+(ADR 0031).
 
 ---
 

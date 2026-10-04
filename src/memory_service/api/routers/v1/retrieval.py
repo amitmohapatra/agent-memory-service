@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
@@ -16,6 +15,7 @@ from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
@@ -86,14 +86,23 @@ _CONTEXT_EXAMPLE: dict[str, Any] = {
 class RecallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_RECALL_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        examples=[_SCOPE],
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     query: str = Field(
         ...,
         min_length=1,
         max_length=4000,
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
+        description="What to look for, in words (1-4000 characters).",
     )
-    limit: int = Field(default=20, ge=1, le=100, examples=[20])
+    limit: int = Field(
+        default=20, ge=1, le=100, examples=[20], description="The most items to return (1-100)."
+    )
     kinds: list[SearchKind] = Field(
         default_factory=lambda: list(DEFAULT_KINDS),
         min_length=1,
@@ -103,19 +112,23 @@ class RecallRequest(BaseModel):
         "user, one per thread), message (this thread's history).",
         examples=[["chunk", "memory"]],
     )
-    time_from: datetime | None = Field(
-        default=None, description="only what was observed since (filters before ranking)"
-    )
-    time_to: datetime | None = Field(default=None, description="only what was observed until")
-    as_of: datetime | None = Field(
+    time_from: UtcDateTime | None = Field(
         default=None,
-        description="memories as they were true at this moment, including ones later "
-        "replaced (valid time)",
+        description=f"Only what was observed at or after this instant (filters before "
+        f"ranking). {UTC_RULE}",
     )
-    known_at: datetime | None = Field(
+    time_to: UtcDateTime | None = Field(
+        default=None, description=f"Only what was observed at or before this instant. {UTC_RULE}"
+    )
+    as_of: UtcDateTime | None = Field(
         default=None,
-        description="memories as they were known at this moment: learned by then and not yet "
-        "replaced (knowledge time, for audit)",
+        description="Memories as they were true at this moment, including ones later "
+        f"replaced (valid time). {UTC_RULE}",
+    )
+    known_at: UtcDateTime | None = Field(
+        default=None,
+        description="Memories as they were known at this moment: learned by then and not yet "
+        f"replaced (knowledge time, for audit). {UTC_RULE}",
     )
     document_ids: list[str] | None = Field(
         default=None,
@@ -129,7 +142,7 @@ class RecallRequest(BaseModel):
 class RecallResponse(BaseModel):
     model_config = ConfigDict(json_schema_extra={"examples": [{"items": [_ITEM_EXAMPLE]}]})
 
-    items: list[SearchItem]
+    items: list[SearchItem] = Field(description="The items, best first.")
     query_type: QueryType | None = Field(
         default=None, description=_QUERY_TYPE_DESCRIPTION + " Only with debug."
     )
@@ -139,15 +152,34 @@ class RecallResponse(BaseModel):
 class ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CONTEXT_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        examples=[_SCOPE],
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     query: str = Field(
         ...,
         min_length=1,
         max_length=4000,
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
+        description="The current turn's question, in words (1-4000 characters).",
     )
-    token_budget: int | None = Field(default=None, ge=200, le=16_000, examples=[6000])
-    document_ids: list[str] | None = Field(default=None, max_length=100, examples=[None])
+    token_budget: int | None = Field(
+        default=None,
+        ge=200,
+        le=16_000,
+        examples=[6000],
+        description="The most tokens the context may take (200-16000); omitted: the "
+        "service's default.",
+    )
+    document_ids: list[str] | None = Field(
+        default=None,
+        max_length=100,
+        examples=[None],
+        description="Restrict document knowledge to these documents (at most 100).",
+    )
     tools: ToolsRequest | None = Field(
         default=None,
         description="the agent's callable tools (available: null means any catalog tool): "

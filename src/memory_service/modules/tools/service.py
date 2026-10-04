@@ -95,10 +95,17 @@ class ToolMemoryService:
         return stored
 
     async def catalog(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, names: Sequence[str] | None
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        names: Sequence[str] | None,
+        *,
+        after: str = "",
+        limit: int = CATALOG_MAX,
     ) -> list[tuple[ToolDescriptor, ToolStats]]:
+        """A page of the catalog visible in this scope, by name after ``after``."""
         entries = await uow.tools.catalog(
-            ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=CATALOG_MAX
+            ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=limit, after=after
         )
         stats = await uow.tools.stats(ctx.tenant_id, [e.name for e in entries])
         return [(e, stats.get(e.name) or ToolStats(tool_name=e.name)) for e in entries]

@@ -60,6 +60,16 @@ class CacheProvider(Protocol):
         and every ``async for`` over it would fail to type-check)."""
         ...
 
+    async def publish(self, channel: str, message: bytes) -> int:
+        """Announce ``message`` to every current subscriber of ``channel``; returns how many
+        received it. Fire-and-forget: a subscriber that is not connected misses it."""
+        ...
+
+    def subscribe(self, channel: str) -> AsyncIterator[bytes]:
+        """Messages published on ``channel`` from now on, until the connection drops (then
+        ``CacheUnavailable``). An async generator, declared without ``async`` like ``scan``."""
+        ...
+
     async def ping(self) -> bool: ...
 
     async def close(self) -> None: ...
