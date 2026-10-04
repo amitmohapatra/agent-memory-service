@@ -43,7 +43,7 @@ of evidence.
 | `POST /v1/memories/{memory_id}/supersede` | replace a memory with a new version; the old one is closed, not deleted | `ctx.update(id, content, reason=...)` |
 | `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.list()`, `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
-| `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal | `ctx.forget(id)` |
+| `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal, and what was derived from it is retracted | `ctx.forget(id)` |
 | `POST /v1/memories/{memory_id}/restore` | bring back a memory **automatic forgetting archived**: `CURRENT` and searchable again | `ctx.advanced.memories.restore(id)` |
 | `GET /v1/graph/entities` | search visible entities by name prefix (`q`) and `type`, most mentioned first | `ctx.advanced.graph.entities(...)` |
 | `GET /v1/graph/entities/{entity_id}` | an entity's profile: current value per predicate, relations, history, evidence; `depth` hops of traversal (bounded, visibility-filtered; `layers`, `as_of`, `valid_at`) | `ctx.advanced.graph.entity(id)` |
@@ -113,6 +113,19 @@ memory = await ctx.advanced.memories.restore(memory_id)  # CURRENT and re-indexe
 The same people who may forget a memory may restore it (its owner, the user an agent acts for,
 or a tenant admin). Restoring a memory that is not archived returns it unchanged; one that was
 forgotten stays forgotten (`404`).
+
+### Forgetting takes what was derived from it
+
+A derived memory — an insight the background reflection wrote from several memories — records
+its sources (`memory_dependencies`, and `supporting_memory_ids` on the memory). Forgetting a
+memory (`DELETE`, `ctx.forget`, `memory_forget`, and the retention sweep) **retracts every
+memory derived from it, recursively**: the insight, an overview written from that insight, and
+so on. A derived memory goes even when it had other sources that are still live, because it
+still says what the forgotten one said; those other sources stay, and the next reflection pass
+over them writes a new insight from what is left. Memories derived only from other memories are
+untouched. The retracted ones leave the search index and every reader's cache in the same
+commit (their revisions move with it), and stay readable only in a temporal view. Superseding,
+expiring or archiving a source does the same (ADR 0032).
 
 ## The knowledge graph
 
