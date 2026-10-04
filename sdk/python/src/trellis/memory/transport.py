@@ -34,6 +34,8 @@ HEADER_IDEMPOTENCY = "Idempotency-Key"
 HEADER_REQUEST_ID = "X-Request-ID"
 HEADER_CORRELATION = "X-Correlation-ID"
 HEADER_TRACEPARENT = "traceparent"
+#: The status of a conditional GET whose answer has not changed.
+NOT_MODIFIED: Final = 304
 _REQUEST_ID = HEADER_REQUEST_ID.lower()
 
 _TRACE_ID = re.compile(r"[0-9a-fA-F]{32}")
@@ -219,6 +221,24 @@ class Transport:
         header (``rel="next"``), which every paged route sends (ADR 0023)."""
         response = await self._perform("GET", path, scope=scope, params=params, headers=headers)
         return _decoded(response), next_cursor(response.headers.get("link"))
+
+    async def request_conditional(
+        self,
+        path: str,
+        *,
+        scope: Scope | None = None,
+        params: dict[str, Any] | None = None,
+        etag: str | None = None,
+    ) -> tuple[Any | None, str | None]:
+        """A GET asked with ``If-None-Match`` when ``etag`` is given: the decoded body and the
+        answer's ``ETag``, or ``None`` and the ETag to keep when nothing changed (304). A
+        route that sends no ``ETag`` is simply read in full each time."""
+        headers = {"If-None-Match": etag} if etag else None
+        response = await self._perform("GET", path, scope=scope, params=params, headers=headers)
+        tag = response.headers.get("etag")
+        if response.status_code == NOT_MODIFIED:
+            return None, tag or etag
+        return _decoded(response), tag
 
     async def _perform(
         self,

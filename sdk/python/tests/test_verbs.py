@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 import respx
 from pydantic import BaseModel
@@ -359,3 +360,27 @@ async def test_the_catalog_and_the_agent_s_model_key_are_advanced(ctx) -> None:
     assert await ctx.advanced.tools.approval_suggestions() == [] and suggestions.called
     assert (await ctx.advanced.tools.accept_suggestion("s1")).approve_when == "amount > 1"
     assert accepted.called
+
+
+@respx.mock
+async def test_the_catalog_is_read_again_only_when_it_changed(ctx) -> None:
+    """``catalog_if_changed``: the first read keeps the ETag; asked with it, a 304 answers
+    ``None`` (nothing changed) and the ETag to keep; a changed catalog answers in full."""
+    entry = {"tool_id": "tool_1", "name": "erp-get_stock", "risk": "read"}
+    route = respx.get(f"{BASE}/v1/tools").mock(
+        side_effect=[
+            httpx.Response(200, json={"tools": [entry]}, headers={"ETag": '"v1"'}),
+            httpx.Response(304, headers={"ETag": '"v1"'}),
+            httpx.Response(
+                200, json={"tools": [entry, {**entry, "name": "x"}]}, headers={"ETag": '"v2"'}
+            ),
+        ]
+    )
+    first, tag = await ctx.advanced.tools.catalog_if_changed(["erp-get_stock"])
+    assert [t.name for t in first or []] == ["erp-get_stock"] and tag == '"v1"'
+    assert "if-none-match" not in route.calls[0].request.headers
+    unchanged, kept = await ctx.advanced.tools.catalog_if_changed(["erp-get_stock"], etag=tag)
+    assert unchanged is None and kept == '"v1"'
+    assert route.calls[1].request.headers["if-none-match"] == '"v1"'
+    changed, newer = await ctx.advanced.tools.catalog_if_changed(etag=kept)
+    assert [t.name for t in changed or []] == ["erp-get_stock", "x"] and newer == '"v2"'
