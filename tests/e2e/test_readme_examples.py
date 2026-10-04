@@ -146,8 +146,8 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
 
 
 async def test_sdk_readme_one_turn_on_its_own(app, client) -> None:
-    """sdk/python/README.md: Use it on its own — context into the prompt, the turn recorded,
-    feedback on the run, with no framework and no harness."""
+    """README: Where this fits, Way 2 — context into the prompt, the turn recorded, feedback
+    on the run, with no framework and no harness."""
     memory = sdk_client(app)
     run = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1").agent("support")
     question = "What changed in EBITDA?"

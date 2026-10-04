@@ -2,8 +2,8 @@
 
 `/v1/context` pushes what a turn probably needs. Agent tools let the agent pull the rest itself
 (ReAct): a fixed set of memory tools with JSON input schemas, called in the caller's scope like
-every other route. A harness adds them to the agent's tool list (`memory="read"` gets the four
-that change nothing).
+every other route. The harness adds them to a wrapped agent's tool list (Way 1); any other
+framework lists them with `ctx.agent_tools()` and offers them to its model (Way 2).
 
 ## Routes
 

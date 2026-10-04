@@ -54,10 +54,70 @@ member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a f
 
 ---
 
+## Where this fits: two ways to use Trellis
+
+Trellis is used in one of two ways, and each block works in both:
+
+- **Way 1, wrapped.** `from trellis import Harness; h = Harness(); agent = h.wrap(my_agent)`.
+  The harness runs your agent (LangGraph, Deep Agents, OpenAI Agents SDK, Claude Agent SDK,
+  a plain function) and uses every block automatically: memory context, recording and
+  feedback; durable runs, the inbox, schedules and the worker in agent-runs; governance of
+  tool calls; models and MCP tools through Bifrost; evals; the AG-UI and A2A surfaces.
+- **Way 2, pluggable blocks.** Keep your framework untouched and import only the blocks you
+  want: `trellis.memory` (`MemoryClient`), `trellis.runs` (`RunsClient`, `Worker`,
+  `webhooks.verify_signature`), `trellis.contracts` (the shared types), `bifrost_sdk` (models
+  and MCP tools through Bifrost), and from the harness repo `trellis.harness.governance`
+  (`Governance.from_env`, `check`, `governed`), `trellis.harness.evals` (`EvalServices`,
+  `evaluate`, `judge`) and `trellis.harness.a2a.remote`.
+
+A package shipped from its own repo is top-level `trellis.X`; anything from the harness repo
+is `trellis.harness.X`. `bifrost_sdk` (pip `bifrost-sdk`) is the exception: it keeps its own,
+older name.
+
+**This package** is the platform's memory: this service keeps what agents and people said,
+stated and uploaded, and pushes back the context a turn needs. `trellis.memory`
+(`MemoryClient`, pip `trellis-memory`, in [`sdk/python`](sdk/python/README.md)) is its Python
+SDK.
+
+| | What happens with the memory service and `trellis.memory` |
+|---|---|
+| **Way 1, wrapped** | With `MEMORY_URL` and `TRELLIS_API_KEY` set, the harness binds each run's scope and makes the calls: it pushes `context()` into the framework's input, adds the six pull tools, records the transcript and every tool call, sends the run's outcome and each approval as feedback, verifies a sample of answers, and reads the tool catalog governance decides from. You write no memory code ([USAGE §14](docs/USAGE.md#14-through-the-harness)). |
+| **Way 2, pluggable** | Your framework runs the agent, untouched; each turn you read the context into its prompt, record the turn, and send feedback when you know how the run went: |
+
+```python
+from trellis.memory import MemoryClient
+
+memory = MemoryClient()  # MEMORY_URL and TRELLIS_API_KEY from the environment
+run = memory.bind(user_id="u1", thread_id="thr_1").agent("support")
+
+pushed = await run.context(question, window=False)  # window=False: your framework keeps the history
+answer = await my_agent(system=pushed.rendered, user=question)  # a graph node, an Agent, a query()
+await run.history.add([("USER", question), ("ASSISTANT", answer)])
+
+await run.feedback("run", run.scope.agent_run_id, "confirm")  # or "reject"
+```
+
+- **Choose Way 1 when** you want memory on every run of a wrapped agent with nothing to write,
+  including the parts that are easy to forget: tool calls recorded, approvals learned, the
+  outcome sent, the tools narrowed to the task.
+- **Choose Way 2 when** your framework owns the prompt and the loop (a graph node, an Agents
+  SDK `Agent`, a `query()`), when the caller is not an agent (an import job, a UI's profile
+  page), or when you want only a part: the push, the pull tools (`agent_tools()`,
+  `call_agent_tool`), or the tool hints. [`docs/USAGE.md`](docs/USAGE.md) says which call
+  fits which job.
+
+Harness docs: [the two ways](https://github.com/amitmohapatra/agent-harness/blob/main/README.md#two-ways-to-use-trellis) · [every page](https://github.com/amitmohapatra/agent-harness/blob/main/docs/README.md) ·
+blocks: [memory](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/memory.md), [governance](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/governance.md), [evaluation](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/evaluation.md), [contracts](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/contracts.md) ·
+recipes: [LangGraph](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/langgraph.md), [OpenAI Agents SDK](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/openai-agents.md),
+[Claude Agent SDK](https://github.com/amitmohapatra/agent-harness/blob/main/docs/blocks/claude-agent-sdk.md).
+
+---
+
 ## Contents
 
 | | |
 |---|---|
+| [Where this fits](#where-this-fits-two-ways-to-use-trellis) | the two ways to use Trellis: wrapped by the harness, or this SDK in your own framework |
 | [What you get](#what-you-get) | the five kinds of memory, and the guarantees |
 | [Three ways an agent uses it](#three-ways-an-agent-uses-it) | push, pull, or your own calls |
 | [Install and run](#install-and-run) | 5 minutes to a running service |
@@ -212,7 +272,7 @@ setting; `serve.py` prints which mode it is in, and any benchmark produced that 
 
 | mode | who decides what the model sees | the calls |
 |---|---|---|
-| **auto** (push) | the service, every turn | `ctx.context(task, tools=...)` → `rendered` goes into the prompt: the pinned profile, the thread's durable summary and the messages after it, the procedure learned for the task, tool hints, and the memories, passages and graph facts that clear the relevance floor, within `token_budget`. The agent harness does this for you with `memory="read_write"`. |
+| **auto** (push) | the service, every turn | `ctx.context(task, tools=...)` → `rendered` goes into the prompt: the pinned profile, the thread's durable summary and the messages after it, the procedure learned for the task, tool hints, and the memories, passages and graph facts that clear the relevance floor, within `token_budget`. The agent harness does this for you on every wrapped run ([Way 1](#where-this-fits-two-ways-to-use-trellis)). |
 | **react** (pull) | the agent, mid-run | `ctx.agent_tools()` lists six tools (`memory_search` — `kinds` includes `message` for the transcript —, `memory_remember`, `memory_update`, `memory_forget`, `profile_edit`, `tool_search`) with JSON schemas; `ctx.call_agent_tool(name, args)` runs one. Every call is logged as a pull, and what the agent keeps pulling for a kind of request is what the push starts including (prefetch learning). |
 | **manual** | your code | the verbs: `remember`, `update`, `forget`, `search`, `history`, `feedback`, `record_tool`, `tool_hints`, `agent_tools`, `call_agent_tool`, `profile`; everything else (documents, graph, admin, model keys) under `ctx.advanced`. |
 
@@ -582,8 +642,8 @@ contradictions.
 
 The SDK is framework-neutral, and deliberately so: bind a scope, call `context()` before
 your agent thinks and `history.add([("ASSISTANT", answer)])` after, and everything in this README works from
-LangGraph, CrewAI, Google ADK, an MCP server or plain code. The
-[SDK README](sdk/python/README.md#use-it-on-its-own-or-with-the-harness) shows one turn.
+LangGraph, CrewAI, Google ADK, an MCP server or plain code.
+[Way 2](#where-this-fits-two-ways-to-use-trellis) shows one turn.
 
 There is no LangGraph adapter in this repository, and that is the design. A memory service
 that ships adapters knows the names of its consumers — the dependency points the wrong way,
@@ -591,7 +651,8 @@ and the service image ends up carrying framework packages it never imports. Fram
 adapters belong in the layer that drives the framework: in this platform that is
 [`agent-harness`](https://github.com/amitmohapatra/agent-harness) (`trellis-harness`), which
 attaches to a LangGraph graph, an OpenAI Agents agent, Claude Agent SDK options or a plain
-callable, pushes `/v1/context` into the run and adds the pull tools (`memory="read_write"`).
+callable, pushes `/v1/context` into the run and adds the pull tools whenever `MEMORY_URL` is set
+([Way 1](#where-this-fits-two-ways-to-use-trellis)).
 
 ### Plain HTTP
 

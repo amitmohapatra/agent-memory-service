@@ -169,8 +169,9 @@ merely see it, so a viewer cannot delete a team's memory by disagreeing with it.
 
 ## What this area does not do
 
-* it does not let a judge become its own ground truth: the harness's `DatasetBuilder` excludes
-  `source="judge"` when it builds an offline dataset from what happened;
+* it does not let a judge become its own ground truth: every record keeps its `source`
+  (`human`, `judge`, `interrupt`), so whoever builds an offline dataset from what happened can
+  leave out `source="judge"`;
 * it does not apply a vote on its own: until the tenant's administrator approves it, a
   pending verdict is a record and nothing more;
 * it does not delete: a retraction closes a memory's validity and keeps the record.
