@@ -40,6 +40,7 @@ is not finished).
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
 | [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
+| [0030](0030-api-surface-errors-idempotency-pagination-descriptions.md) | API surface: retryable database errors with `Retry-After`, `PAYLOAD_TOO_LARGE`, `Idempotency-Key` on every write, `Location`, one cursor convention, conditional GETs, every field described | accepted; amends 0022 and 0023 |
 
 ## Where the numbers behind these decisions are
 

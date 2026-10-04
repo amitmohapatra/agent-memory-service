@@ -101,8 +101,10 @@ the SDK a client of its own; an httpx client instrumented by OpenTelemetry injec
 `traceparent` at send time, which then replaces the one built from `trace_id`.
 
 Errors are RFC 9457 problems mapped to one exception per `code`: `AuthenticationError`,
-`AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError`,
-`RateLimitedError`, `DependencyUnavailableError`, `TimeoutError`. Insufficient evidence is not
+`AuthorizationError`, `NotFoundError`, `ConflictError`, `ValidationError` (and its
+`PayloadTooLargeError`, a `413 PAYLOAD_TOO_LARGE`), `RateLimitedError`,
+`DependencyUnavailableError` (a 503: the service's database or search is away; it sends
+`Retry-After`), `TimeoutError`. Insufficient evidence is not
 an exception: `context()` returns `evidence_status` (`INSUFFICIENT` means say you do not know).
 Each carries `status`, `retryable`, `trace_id`, `request_id` and `details`. A request that
 got no response raises `TimeoutError` or `DependencyUnavailableError` with `status` 0.
@@ -126,5 +128,10 @@ async with MemoryClient(base_url, api_key=key) as client:
         for vote in (await admin_ctx.feedback.pending()).items:
             await admin_ctx.feedback.approve(vote.feedback_id, note="checked")
 ```
+
+`feedback.pending()` reads `GET /v1/feedback?review=pending`. Every list pages the same way
+(`cursor` + `limit`, ADR 0030): `t.workspaces.members_page(id)`, `t.reads_page(since=...)`
+(`since` was `after`), `admin.tenants_page()` (no `after`); `tools.catalog()` follows the cursor
+itself. `revoke()` / `revoke_model_key()` read the status back after the service's `204`.
 
 See [`docs/USAGE.md`](../../docs/USAGE.md) for which call fits which scenario.

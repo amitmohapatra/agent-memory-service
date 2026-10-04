@@ -92,8 +92,9 @@ def _all_fields_have_examples(component: dict, schema: dict) -> bool:
 
 def test_committed_schema_matches_generated(client: TestClient) -> None:
     committed = Path(__file__).resolve().parents[2] / "docs" / "openapi.json"
-    if not committed.is_file():
-        pytest.skip("docs/openapi.json not committed yet")
+    # A missing file is a failure, not a skip: the agent suite's coverage gate and every
+    # generated client read it, and a skip would let it vanish unnoticed.
+    assert committed.is_file(), "docs/openapi.json is missing: run `make openapi`"
     assert json.loads(committed.read_text()) == json.loads(
         json.dumps(_schema(client), sort_keys=True)
     )

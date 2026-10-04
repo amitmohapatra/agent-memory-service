@@ -188,7 +188,7 @@ Each entry names the credential and the principal that read, whether it was a `r
 rather than the query text — the audit answers *who read which records* without becoming a second
 copy of what was asked. Newest first, pageable by cursor (or `before=<the last entry's at>`);
 `since=<instant>` keeps only newer entries (a filter that stays the same across pages; it was
-`after` before 0.4). The keyset is the instant, so entries sharing one instant across a page
+`after` before ADR 0030). The keyset is the instant, so entries sharing one instant across a page
 boundary need a larger page.
 
 ## What this area does not do
