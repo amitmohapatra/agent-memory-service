@@ -299,7 +299,10 @@ class ToolCandidate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
+    #: the ranking score (unbounded: task match, track record, plan and recency)
     score: float
+    #: the score as 0..1 (``1 - e^-score``): the same order, a number a caller can threshold
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     success_rate: float | None = None
     why: str = ""
 

@@ -71,7 +71,6 @@ def test_an_item_is_what_a_caller_uses_and_cites() -> None:
         "kind": "chunk",
         "text": "x" * 1000 + "…",
         "observed_on": "2026-01-15",
-        "citation": "chunk_id:chk_1",
         "document_id": "doc_1",
         "page": 4,
     }

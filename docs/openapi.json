@@ -988,21 +988,9 @@
         "title": "ClaimVerdictBody",
         "type": "object"
       },
-      "ContextItemBody": {
+      "ContextFact": {
         "additionalProperties": false,
-        "description": "One ranked piece of context.",
         "properties": {
-          "attributes": {
-            "additionalProperties": true,
-            "description": "structured extras: predicate/subject/object for facts and memories, fact attributes (period, currency, amount...), contradicts/contributors",
-            "title": "Attributes",
-            "type": "object"
-          },
-          "citation": {
-            "description": "stable citation key",
-            "title": "Citation",
-            "type": "string"
-          },
           "document_id": {
             "anyOf": [
               {
@@ -1014,40 +1002,183 @@
             ],
             "title": "Document Id"
           },
-          "evidence": {
-            "items": {
-              "$ref": "#/components/schemas/EvidenceRef"
-            },
-            "title": "Evidence",
-            "type": "array"
-          },
-          "expanded_from": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "item_id this was expanded from",
-            "title": "Expanded From"
-          },
-          "expansion_edge": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "PARENT | NEXT | DEFINED_BY | ...",
-            "title": "Expansion Edge"
-          },
-          "item_id": {
-            "title": "Item Id",
+          "id": {
+            "title": "Id",
             "type": "string"
+          },
+          "object": {
+            "title": "Object",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "predicate": {
+            "title": "Predicate",
+            "type": "string"
+          },
+          "relevance": {
+            "description": "0..1, how close the item is to the question; comparable across the bundle",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "predicate",
+          "object",
+          "relevance"
+        ],
+        "title": "ContextFact",
+        "type": "object"
+      },
+      "ContextMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "dates": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DatedMentionBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "relative dates in the text, resolved",
+            "title": "Dates"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "when it was said or learned",
+            "title": "Observed At"
+          },
+          "relevance": {
+            "description": "0..1, how close the item is to the question; comparable across the bundle",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the messages or documents",
+            "title": "Sources"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "who or what it is about",
+            "title": "Subject"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "relevance"
+        ],
+        "title": "ContextMemory",
+        "type": "object"
+      },
+      "ContextPassage": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "table, paragraph, ...; absent: a chunk",
+            "title": "Kind"
           },
           "page": {
             "anyOf": [
@@ -1061,41 +1192,13 @@
             "title": "Page"
           },
           "relevance": {
-            "default": 0.0,
-            "description": "Comparable across the bundle, 0..1, higher is better.",
+            "description": "0..1, how close the item is to the question; comparable across the bundle",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Relevance",
             "type": "number"
           },
-          "representation": {
-            "$ref": "#/components/schemas/Representation",
-            "description": "Which representation of knowledge the item is: CHUNK, TABLE, PARAGRAPH, SECTION, SUBSECTION or CODE_BLOCK for document passages, MEMORY for a canonical memory, RELATION for a graph fact, SUMMARY for a rolled-up summary."
-          },
-          "retrievers": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Retrievers",
-            "type": "array"
-          },
-          "score": {
-            "default": 0.0,
-            "description": "The raw number the ranking stage produced; its meaning depends on score_kind, so it is not comparable between items. Use relevance.",
-            "title": "Score",
-            "type": "number"
-          },
-          "score_kind": {
-            "default": "fusion",
-            "description": "Where score came from: a fusion rank score (fusion) or an exact identifier hit (exact).",
-            "enum": [
-              "fusion",
-              "exact"
-            ],
-            "title": "Score Kind",
-            "type": "string"
-          },
-          "section_path": {
+          "section": {
             "anyOf": [
               {
                 "type": "string"
@@ -1105,25 +1208,19 @@
               }
             ],
             "description": "e.g. 'Financial Results > EBITDA'",
-            "title": "Section Path"
+            "title": "Section"
           },
           "text": {
             "title": "Text",
             "type": "string"
-          },
-          "token_estimate": {
-            "default": 0,
-            "title": "Token Estimate",
-            "type": "integer"
           }
         },
         "required": [
-          "item_id",
-          "representation",
+          "id",
           "text",
-          "citation"
+          "relevance"
         ],
-        "title": "ContextItemBody",
+        "title": "ContextPassage",
         "type": "object"
       },
       "ContextRequest": {
@@ -1166,7 +1263,7 @@
           },
           "format": {
             "default": "prompt",
-            "description": "prompt: {rendered, bundle_id, token_estimate} (+ tool_candidates when tools were given); full: the whole bundle",
+            "description": "prompt: what to put in front of the model (rendered, bundle_id, token_estimate, evidence_status, and the tools that fit when tools were given); full: the same content as structured data, without the rendering",
             "enum": [
               "prompt",
               "full"
@@ -1235,24 +1332,23 @@
       },
       "ContextResponse": {
         "additionalProperties": false,
-        "description": "ContextBundle (format=full): bounded, ranked, provenance-carrying context.",
+        "description": "format=full: the same content as structured data, for a caller building its own\nprompt. A list or field with nothing in it is absent.",
         "properties": {
-          "built_at": {
-            "format": "date-time",
-            "title": "Built At",
-            "type": "string"
-          },
           "bundle_id": {
             "description": "for /v1/verify and for resolving the handles",
             "title": "Bundle Id",
             "type": "string"
           },
-          "cache_hit": {
-            "title": "Cache Hit",
-            "type": "boolean"
-          },
           "conversation": {
-            "$ref": "#/components/schemas/ConversationWindowBody"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the thread's recent messages (with window)"
           },
           "diagnostics": {
             "anyOf": [
@@ -1267,87 +1363,121 @@
             "description": "only with debug",
             "title": "Diagnostics"
           },
-          "evidence": {
-            "$ref": "#/components/schemas/EvidenceReportBody"
+          "evidence_status": {
+            "$ref": "#/components/schemas/EvidenceStatus",
+            "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
           },
           "graph_facts": {
-            "items": {
-              "$ref": "#/components/schemas/ContextItemBody"
-            },
-            "title": "Graph Facts",
-            "type": "array"
-          },
-          "handles": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "description": "handle -> item id, as rendered cites them",
-            "title": "Handles",
-            "type": "object"
-          },
-          "knowledge": {
-            "items": {
-              "$ref": "#/components/schemas/ContextItemBody"
-            },
-            "title": "Knowledge",
-            "type": "array"
-          },
-          "memories": {
-            "items": {
-              "$ref": "#/components/schemas/ContextItemBody"
-            },
-            "title": "Memories",
-            "type": "array"
-          },
-          "procedures": {
-            "description": "procedures learned for this task (only with tools)",
-            "items": {
-              "$ref": "#/components/schemas/ProcedureView"
-            },
-            "title": "Procedures",
-            "type": "array"
-          },
-          "profile": {
-            "description": "the pinned profile blocks of the user, agent, workspace",
-            "items": {
-              "$ref": "#/components/schemas/ProfileBlockView"
-            },
-            "title": "Profile",
-            "type": "array"
-          },
-          "query": {
-            "title": "Query",
-            "type": "string"
-          },
-          "query_type": {
-            "$ref": "#/components/schemas/QueryType",
-            "description": "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage answers it), DOCUMENT_MULTI_HOP (several passages must be combined), ENTITY_RELATION (graph traversal), TEMPORAL, GLOBAL_SUMMARY or GENERAL_SEMANTIC (the default)."
-          },
-          "rendered": {
-            "title": "Rendered",
-            "type": "string"
-          },
-          "summaries": {
-            "items": {
-              "$ref": "#/components/schemas/ContextItemBody"
-            },
-            "title": "Summaries",
-            "type": "array"
-          },
-          "thread_summary": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ThreadSummaryView"
+                "items": {
+                  "$ref": "#/components/schemas/ContextFact"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "the thread's durable summary; the window follows it"
+            "title": "Graph Facts"
           },
-          "token_budget": {
-            "title": "Token Budget",
-            "type": "integer"
+          "knowledge": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContextPassage"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge"
+          },
+          "memories": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContextMemory"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memories"
+          },
+          "missing_evidence": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "required companion evidence that is not there",
+            "title": "Missing Evidence"
+          },
+          "procedures": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProcedureBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "procedures learned for the task (only with tools)",
+            "title": "Procedures"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/memory_service__api__schemas__context__ProfileBlockBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "summaries": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContextSummary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summaries"
+          },
+          "thread_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the thread's durable summary",
+            "title": "Thread Summary"
           },
           "token_estimate": {
             "title": "Token Estimate",
@@ -1356,49 +1486,63 @@
           "tools": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ToolHints"
+                "items": {
+                  "$ref": "#/components/schemas/ToolChoiceBody"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "tool hints, when asked for"
+            "description": "the tools that fit, best first (only with tools)",
+            "title": "Tools"
           }
         },
         "required": [
-          "query",
-          "query_type",
           "bundle_id",
-          "conversation",
-          "memories",
-          "knowledge",
-          "graph_facts",
-          "summaries",
-          "evidence",
-          "token_budget",
-          "token_estimate",
-          "cache_hit",
-          "built_at",
-          "rendered",
-          "handles"
+          "evidence_status",
+          "token_estimate"
         ],
         "title": "ContextResponse",
         "type": "object"
       },
-      "ConversationWindowBody": {
+      "ContextSummary": {
         "additionalProperties": false,
         "properties": {
-          "message_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Message Ids",
-            "type": "array"
-          },
-          "rendered": {
-            "default": "",
-            "title": "Rendered",
+          "id": {
+            "title": "Id",
             "type": "string"
+          },
+          "relevance": {
+            "description": "0..1, how close the item is to the question; comparable across the bundle",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "relevance"
+        ],
+        "title": "ContextSummary",
+        "type": "object"
+      },
+      "ConversationBody": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/WindowMessageBody"
+            },
+            "title": "Messages",
+            "type": "array"
           },
           "thread_id": {
             "anyOf": [
@@ -1410,14 +1554,12 @@
               }
             ],
             "title": "Thread Id"
-          },
-          "token_estimate": {
-            "default": 0,
-            "title": "Token Estimate",
-            "type": "integer"
           }
         },
-        "title": "ConversationWindowBody",
+        "required": [
+          "messages"
+        ],
+        "title": "ConversationBody",
         "type": "object"
       },
       "CreateMessagesRequest": {
@@ -1619,6 +1761,27 @@
           "observed_at"
         ],
         "title": "CurrentValueOut",
+        "type": "object"
+      },
+      "DatedMentionBody": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "description": "the date or range they mean, e.g. 2023-05-01..2023-05-07",
+            "title": "Date",
+            "type": "string"
+          },
+          "text": {
+            "description": "the words, e.g. \"last week\"",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "date"
+        ],
+        "title": "DatedMentionBody",
         "type": "object"
       },
       "DependencyStatus": {
@@ -2142,82 +2305,6 @@
           "observed_at"
         ],
         "title": "EvidenceRef",
-        "type": "object"
-      },
-      "EvidenceReportBody": {
-        "additionalProperties": false,
-        "description": "EvidenceReport: whether the packed evidence can answer the query.",
-        "properties": {
-          "escalations": {
-            "description": "strategies attempted",
-            "items": {
-              "type": "string"
-            },
-            "title": "Escalations",
-            "type": "array"
-          },
-          "grounding": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GroundingReportBody"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "per-claim verdicts when an answer was verified"
-          },
-          "llm_tokens": {
-            "default": 0,
-            "description": "LLM tokens spent building this report",
-            "title": "Llm Tokens",
-            "type": "integer"
-          },
-          "missing_groups": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Missing Groups",
-            "type": "array"
-          },
-          "notes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Notes",
-            "type": "array"
-          },
-          "required_groups": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Required Groups",
-            "type": "array"
-          },
-          "satisfied_groups": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Satisfied Groups",
-            "type": "array"
-          },
-          "status": {
-            "$ref": "#/components/schemas/EvidenceStatus",
-            "description": "COMPLETE: every required companion passage is present; INCOMPLETE: evidence exists but a required companion is missing or the subject asked about is not established; INSUFFICIENT: nothing usable was retrieved, do not answer from it."
-          },
-          "unused": {
-            "description": "retrieved-but-unused evidence (bounded)",
-            "items": {
-              "$ref": "#/components/schemas/UnusedEvidenceBody"
-            },
-            "title": "Unused",
-            "type": "array"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "EvidenceReportBody",
         "type": "object"
       },
       "EvidenceStatus": {
@@ -3096,89 +3183,6 @@
           "size_bytes"
         ],
         "title": "FileAckResponse",
-        "type": "object"
-      },
-      "GroundingReportBody": {
-        "additionalProperties": false,
-        "description": "GroundingReport: one verdict per claim and the per-claim hallucination rate.",
-        "properties": {
-          "borderline": {
-            "default": 0,
-            "title": "Borderline",
-            "type": "integer"
-          },
-          "claims": {
-            "items": {
-              "$ref": "#/components/schemas/ClaimVerdictBody"
-            },
-            "title": "Claims",
-            "type": "array"
-          },
-          "contradicted": {
-            "default": 0,
-            "title": "Contradicted",
-            "type": "integer"
-          },
-          "evidence_count": {
-            "default": 0,
-            "title": "Evidence Count",
-            "type": "integer"
-          },
-          "judge_consulted": {
-            "default": 0,
-            "description": "borderline claims sent to the LLM judge",
-            "title": "Judge Consulted",
-            "type": "integer"
-          },
-          "llm_tokens": {
-            "default": 0,
-            "description": "LLM tokens spent on this report",
-            "title": "Llm Tokens",
-            "type": "integer"
-          },
-          "nli_provider": {
-            "default": "",
-            "title": "Nli Provider",
-            "type": "string"
-          },
-          "notes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Notes",
-            "type": "array"
-          },
-          "per_claim_hallucination_rate": {
-            "default": 0.0,
-            "description": "(unsupported + contradicted) / claims",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Per Claim Hallucination Rate",
-            "type": "number"
-          },
-          "representative": {
-            "default": false,
-            "description": "False when the NLI is a deterministic stand-in",
-            "title": "Representative",
-            "type": "boolean"
-          },
-          "supported": {
-            "default": 0,
-            "title": "Supported",
-            "type": "integer"
-          },
-          "unsupported": {
-            "default": 0,
-            "title": "Unsupported",
-            "type": "integer"
-          },
-          "unused_count": {
-            "default": 0,
-            "title": "Unused Count",
-            "type": "integer"
-          }
-        },
-        "title": "GroundingReportBody",
         "type": "object"
       },
       "HintsRequest": {
@@ -4214,7 +4218,9 @@
         "title": "MessagesAckResponse",
         "type": "object"
       },
-      "MissingArgument": {
+      "MissingArgumentBody": {
+        "additionalProperties": false,
+        "description": "A required argument nothing could fill: ask the user ``question``.",
         "properties": {
           "arg": {
             "title": "Arg",
@@ -4229,23 +4235,19 @@
                 "type": "null"
               }
             ],
+            "description": "the entity type it names",
             "title": "Entity Type"
           },
           "question": {
             "title": "Question",
             "type": "string"
-          },
-          "tool": {
-            "title": "Tool",
-            "type": "string"
           }
         },
         "required": [
-          "tool",
           "arg",
           "question"
         ],
-        "title": "MissingArgument",
+        "title": "MissingArgumentBody",
         "type": "object"
       },
       "ModelKeyRequest": {
@@ -4515,83 +4517,6 @@
         "title": "PatchThreadRequest",
         "type": "object"
       },
-      "PlanHint": {
-        "properties": {
-          "procedure_id": {
-            "title": "Procedure Id",
-            "type": "string"
-          },
-          "steps": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Steps",
-            "type": "array"
-          },
-          "success_rate": {
-            "default": 0.0,
-            "title": "Success Rate",
-            "type": "number"
-          },
-          "support": {
-            "default": 0,
-            "title": "Support",
-            "type": "integer"
-          },
-          "title": {
-            "default": "",
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "procedure_id"
-        ],
-        "title": "PlanHint",
-        "type": "object"
-      },
-      "Prefill": {
-        "properties": {
-          "evidence_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "the call, entity, relation, block or memory it came from",
-            "title": "Evidence Id"
-          },
-          "source": {
-            "description": "where the value came from: procedure (a learned binding: an earlier step's output in this run, or the literal every successful run used), graph (an entity of the argument's type named in the task, or the id a tool returned for it), profile (a pinned profile line), memory (a memory whose predicate is the argument), task (a value the task names)",
-            "enum": [
-              "procedure",
-              "graph",
-              "profile",
-              "memory",
-              "task"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "tool": {
-            "title": "Tool",
-            "type": "string"
-          },
-          "value": {
-            "title": "Value"
-          }
-        },
-        "required": [
-          "tool",
-          "source"
-        ],
-        "title": "Prefill",
-        "type": "object"
-      },
       "Problem": {
         "description": "RFC 9457 problem details with the service's extension members.",
         "properties": {
@@ -4689,51 +4614,34 @@
         "title": "Problem",
         "type": "object"
       },
-      "ProcedureView": {
-        "description": "A procedure learned for the task.",
+      "ProcedureBody": {
+        "additionalProperties": false,
+        "description": "A procedure learned for the task: its tool sequence and how often it worked.",
         "properties": {
           "id": {
             "title": "Id",
             "type": "string"
           },
+          "runs": {
+            "description": "the successful runs it was learned from",
+            "title": "Runs",
+            "type": "integer"
+          },
           "steps": {
+            "description": "tool names, in order",
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "type": "string"
             },
             "title": "Steps",
             "type": "array"
           },
           "success_rate": {
-            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Success Rate",
             "type": "number"
           },
-          "support": {
-            "default": 0,
-            "title": "Support",
-            "type": "integer"
-          },
           "title": {
-            "default": "",
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "ProcedureView",
-        "type": "object"
-      },
-      "ProfileBlockBody": {
-        "properties": {
-          "block": {
-            "description": "user (the person the agent acts for), agent (this agent, for this user), workspace (the team), or one of them followed by .<name> (user.preferences)",
-            "title": "Block",
-            "type": "string"
-          },
-          "source_query": {
             "anyOf": [
               {
                 "type": "string"
@@ -4742,61 +4650,23 @@
                 "type": "null"
               }
             ],
-            "description": "the standing question the service keeps this block answering",
-            "title": "Source Query"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
+            "title": "Title"
           }
         },
         "required": [
-          "block",
-          "text",
-          "version",
-          "updated_at"
+          "id",
+          "steps",
+          "success_rate",
+          "runs"
         ],
-        "title": "ProfileBlockBody",
-        "type": "object"
-      },
-      "ProfileBlockView": {
-        "description": "A pinned profile block as the context carries it.",
-        "properties": {
-          "block": {
-            "title": "Block",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "block",
-          "text",
-          "version"
-        ],
-        "title": "ProfileBlockView",
+        "title": "ProcedureBody",
         "type": "object"
       },
       "ProfileResponse": {
         "properties": {
           "blocks": {
             "items": {
-              "$ref": "#/components/schemas/ProfileBlockBody"
+              "$ref": "#/components/schemas/memory_service__api__routers__v1__profile__ProfileBlockBody"
             },
             "title": "Blocks",
             "type": "array"
@@ -4824,12 +4694,19 @@
       },
       "PromptContextResponse": {
         "additionalProperties": false,
-        "description": "What a prompt needs: the rendered context, the handle verify and the handles refer to,\nand its size.",
+        "description": "format=prompt: what an agent puts in front of its model.",
         "examples": [
           {
-            "bundle_id": "6f1c\u2026",
-            "rendered": "## Profile\n### user\nname: Ann\n\n## Memories\n- [m1] \u2026",
-            "token_estimate": 1840
+            "bundle_id": "6f1c0e2a9b",
+            "evidence_status": "COMPLETE",
+            "rendered": "## Tools\n- erp-create_po (confidence 0.74, next step): amount = 700, cost_centre = 'CC-7'; missing supplier_id: Which supplier id should erp-create_po use?\n\n## Memories\n- [m1] 2026-10-04 Sun priya: We buy steel from Acme Steel.",
+            "token_estimate": 180,
+            "tools": [
+              {
+                "confidence": 0.74,
+                "name": "erp-create_po"
+              }
+            ]
           }
         ],
         "properties": {
@@ -4853,7 +4730,6 @@
           },
           "evidence_status": {
             "$ref": "#/components/schemas/EvidenceStatus",
-            "default": "COMPLETE",
             "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
           },
           "rendered": {
@@ -4865,11 +4741,11 @@
             "title": "Token Estimate",
             "type": "integer"
           },
-          "tool_candidates": {
+          "tools": {
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/ToolChoiceBrief"
                 },
                 "type": "array"
               },
@@ -4877,14 +4753,15 @@
                 "type": "null"
               }
             ],
-            "description": "the tools that fit the task, best first (only with tools)",
-            "title": "Tool Candidates"
+            "description": "the tools that fit, best first (only when tools were given)",
+            "title": "Tools"
           }
         },
         "required": [
-          "rendered",
           "bundle_id",
-          "token_estimate"
+          "rendered",
+          "token_estimate",
+          "evidence_status"
         ],
         "title": "PromptContextResponse",
         "type": "object"
@@ -5156,7 +5033,6 @@
           {
             "items": [
               {
-                "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
                 "document_id": "doc_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
                 "id": "chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
                 "kind": "chunk",
@@ -5502,28 +5378,6 @@
         "title": "RememberResponse",
         "type": "object"
       },
-      "Representation": {
-        "description": "Which representation of knowledge an object is.",
-        "enum": [
-          "RAW_FILE",
-          "DOCUMENT",
-          "DOCUMENT_VERSION",
-          "SECTION",
-          "SUBSECTION",
-          "PARAGRAPH",
-          "TABLE",
-          "CODE_BLOCK",
-          "CHUNK",
-          "SUMMARY",
-          "ENTITY",
-          "RELATION",
-          "EMBEDDING",
-          "MESSAGE",
-          "MEMORY"
-        ],
-        "title": "Representation",
-        "type": "string"
-      },
       "ReviewState": {
         "description": "Where a verdict that waits for a person stands. A record with no review was applied\nas it arrived.",
         "enum": [
@@ -5728,11 +5582,6 @@
       "SearchItem": {
         "description": "One result: enough to use it and cite it.",
         "properties": {
-          "citation": {
-            "description": "stable citation key, e.g. memory_id:mem_\u2026",
-            "title": "Citation",
-            "type": "string"
-          },
           "debug": {
             "anyOf": [
               {
@@ -5821,8 +5670,7 @@
         "required": [
           "id",
           "kind",
-          "text",
-          "citation"
+          "text"
         ],
         "title": "SearchItem",
         "type": "object"
@@ -6159,30 +6007,6 @@
         "title": "ThreadSummaryBody",
         "type": "object"
       },
-      "ThreadSummaryView": {
-        "description": "The thread's durable summary: every message up to ``covers_to_sequence``.",
-        "properties": {
-          "covers_to_sequence": {
-            "title": "Covers To Sequence",
-            "type": "integer"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "text",
-          "covers_to_sequence",
-          "version"
-        ],
-        "title": "ThreadSummaryView",
-        "type": "object"
-      },
       "ToolAnnotations": {
         "additionalProperties": false,
         "description": "The MCP tool annotations a gateway listing carries (hints, not guarantees).",
@@ -6235,88 +6059,132 @@
         "title": "ToolAnnotations",
         "type": "object"
       },
-      "ToolCandidate": {
+      "ToolChoiceBody": {
+        "additionalProperties": false,
+        "description": "A tool that fits the task: how well, how it has done, and its arguments.",
         "properties": {
+          "args": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "argument values already found, typed as the schema says",
+            "title": "Args"
+          },
+          "confidence": {
+            "description": "0..1, how well the tool fits the task (1 - e^-score: the order of the score)",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "missing": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MissingArgumentBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "required arguments nothing found",
+            "title": "Missing"
+          },
           "name": {
             "title": "Name",
             "type": "string"
           },
-          "score": {
-            "title": "Score",
-            "type": "number"
+          "next": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true for the learned plan's next step",
+            "title": "Next"
           },
           "success_rate": {
             "anyOf": [
               {
+                "maximum": 1.0,
+                "minimum": 0.0,
                 "type": "number"
               },
               {
                 "type": "null"
               }
             ],
+            "description": "share of its recorded calls that succeeded",
             "title": "Success Rate"
+          }
+        },
+        "required": [
+          "name",
+          "confidence"
+        ],
+        "title": "ToolChoiceBody",
+        "type": "object"
+      },
+      "ToolChoiceBrief": {
+        "additionalProperties": false,
+        "description": "A tool that fits the task, as the prompt form carries it: enough to narrow on.",
+        "properties": {
+          "confidence": {
+            "description": "0..1, how well the tool fits the task (1 - e^-score: the order of the score)",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
           },
-          "why": {
-            "default": "",
-            "title": "Why",
+          "name": {
+            "title": "Name",
             "type": "string"
           }
         },
         "required": [
           "name",
-          "score"
+          "confidence"
         ],
-        "title": "ToolCandidate",
+        "title": "ToolChoiceBrief",
         "type": "object"
       },
-      "ToolHints": {
-        "description": "Which tools fit a task, the learned plan, the next step and its arguments.",
+      "ToolHintsResponse": {
+        "additionalProperties": false,
+        "description": "Which tools fit a task, best first, and the learned plan.",
         "properties": {
-          "candidates": {
-            "items": {
-              "$ref": "#/components/schemas/ToolCandidate"
-            },
-            "title": "Candidates",
-            "type": "array"
-          },
-          "missing": {
-            "items": {
-              "$ref": "#/components/schemas/MissingArgument"
-            },
-            "title": "Missing",
-            "type": "array"
-          },
-          "next": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next"
-          },
           "plan": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/PlanHint"
+                "$ref": "#/components/schemas/ProcedureBody"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "prefill": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/Prefill"
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolChoiceBody"
             },
-            "description": "argument values found, keyed tool.arg",
-            "title": "Prefill",
-            "type": "object"
+            "title": "Tools",
+            "type": "array"
           }
         },
-        "title": "ToolHints",
+        "required": [
+          "tools"
+        ],
+        "title": "ToolHintsResponse",
         "type": "object"
       },
       "ToolStatsBody": {
@@ -6417,48 +6285,6 @@
           }
         },
         "title": "ToolsRequest",
-        "type": "object"
-      },
-      "UnusedEvidenceBody": {
-        "additionalProperties": false,
-        "description": "Retrieved but not packed (ranked out or over budget); the grounding cascade scans\nthese for contradictions with the answer.",
-        "properties": {
-          "item_id": {
-            "title": "Item Id",
-            "type": "string"
-          },
-          "kind": {
-            "description": "Record kind of the unused item: chunk, memory, summary or fact.",
-            "enum": [
-              "CHUNK",
-              "TABLE",
-              "PARAGRAPH",
-              "SECTION",
-              "SUBSECTION",
-              "CODE_BLOCK",
-              "chunk",
-              "SUMMARY",
-              "summary",
-              "ENTITY",
-              "RELATION",
-              "MEMORY",
-              "memory",
-              "fact"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "item_id",
-          "kind",
-          "text"
-        ],
-        "title": "UnusedEvidenceBody",
         "type": "object"
       },
       "UpdateKeyRequest": {
@@ -6856,6 +6682,30 @@
         "title": "Visibility",
         "type": "string"
       },
+      "WindowMessageBody": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "text"
+        ],
+        "title": "WindowMessageBody",
+        "type": "object"
+      },
       "WorkspaceMemberResponse": {
         "properties": {
           "added_at": {
@@ -6923,6 +6773,68 @@
           "created_at"
         ],
         "title": "WorkspaceResponse",
+        "type": "object"
+      },
+      "memory_service__api__routers__v1__profile__ProfileBlockBody": {
+        "properties": {
+          "block": {
+            "description": "user (the person the agent acts for), agent (this agent, for this user), workspace (the team), or one of them followed by .<name> (user.preferences)",
+            "title": "Block",
+            "type": "string"
+          },
+          "source_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the standing question the service keeps this block answering",
+            "title": "Source Query"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block",
+          "text",
+          "version",
+          "updated_at"
+        ],
+        "title": "ProfileBlockBody",
+        "type": "object"
+      },
+      "memory_service__api__schemas__context__ProfileBlockBody": {
+        "additionalProperties": false,
+        "properties": {
+          "block": {
+            "description": "user, agent, workspace or <level>.<name>",
+            "title": "Block",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block",
+          "text"
+        ],
+        "title": "ProfileBlockBody",
         "type": "object"
       }
     },
@@ -28730,7 +28642,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProfileBlockBody"
+                  "$ref": "#/components/schemas/memory_service__api__routers__v1__profile__ProfileBlockBody"
                 }
               }
             },
@@ -34669,7 +34581,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ToolHints"
+                  "$ref": "#/components/schemas/ToolHintsResponse"
                 }
               }
             },
@@ -35041,7 +34953,7 @@
             }
           }
         },
-        "summary": "Which tool fits a task, the learned plan, the next step and its arguments",
+        "summary": "Which tools fit a task, best first: confidence, track record, arguments, plan",
         "tags": [
           "tools"
         ]

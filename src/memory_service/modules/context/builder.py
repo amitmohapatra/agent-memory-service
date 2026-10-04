@@ -27,6 +27,7 @@ from memory_service.domain.context_bundle import (
     EvidenceReport,
     ScoreKind,
     UnusedEvidence,
+    WindowMessage,
 )
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType
@@ -43,6 +44,7 @@ from memory_service.modules.context.sections import (
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
+from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
@@ -75,7 +77,6 @@ def _cacheable(bundle: ContextBundle) -> bool:
 #: assembles a different bundle from the same query, so it must not read another's cache.
 CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion",)
 #: What a ``format=prompt`` response carries of the bundle.
-PROMPT_FIELDS: tuple[str, ...] = ("rendered", "bundle_id", "token_estimate")
 
 ContextFormat = Literal["prompt", "full"]
 
@@ -189,10 +190,12 @@ class _Lookup:
     """What one database read and one cache read say about a query, before any work."""
 
     bundle_id: str
-    #: where the full bundle is cached (the in-process reader's and the semantic cache's)
+    #: where the bundle record is cached (the in-process reader's and the semantic cache's)
     cache_key: str
-    #: where the prompt form is cached
+    #: where the API's prompt form is cached
     prompt_key: str
+    #: where the API's full form is cached
+    full_key: str
     revision_fp: str
     #: the revisions an authorization scope depends on, in that cache's key format
     authz_fp: str
@@ -267,7 +270,7 @@ class ContextBuilder:
         document_ids: Sequence[str] | None,
         tools: ToolsRequest | None,
         window: bool,
-        output: ContextFormat = "full",
+        output: ContextFormat | Literal["record"] = "record",
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
 
@@ -306,9 +309,11 @@ class ContextBuilder:
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
         prompt_key = f"ctxp:{cache_key}"
+        full_key = f"ctxf:{cache_key}"
         semantic = self._semantic_key(namespace, ctx, query) if tools is None else None
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
-        keys = [scope_key, prompt_key if output == "prompt" else cache_key, semantic]
+        answer = {"prompt": prompt_key, "full": full_key}.get(output, cache_key)
+        keys = [scope_key, answer, semantic]
         values: list[bytes | None] = [None] * len(keys)
         if self.cache is not None:
             with contextlib.suppress(CacheUnavailable):
@@ -320,6 +325,7 @@ class ContextBuilder:
             bundle_id=bundle_id,
             cache_key=cache_key,
             prompt_key=prompt_key,
+            full_key=full_key,
             revision_fp=revision_fp,
             authz_fp=authz_fp,
             scope=scope_raw,
@@ -382,12 +388,12 @@ class ContextBuilder:
             with timings.stage("scope"):
                 found = await self._lookup(ctx, query, budget, document_ids, tools, window)
             if found.bundle is not None:
-                return bundle_from_api(found.bundle)
+                return ContextBundle.model_validate_json(found.bundle)
             bundle = await self._fresh(
                 ctx, query, budget, document_ids, tools, window, found, timings
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        self._after_build(ctx, bundle, found, api=None)
+        self._after_build(ctx, bundle, found)
         return bundle
 
     async def build_api(
@@ -404,9 +410,8 @@ class ContextBuilder:
     ) -> bytes:
         """The context as the API sends it, serialised once.
 
-        Both forms are cached as the bytes a hit answers with - the prompt form
-        (``{rendered, bundle_id, token_estimate}``, and the tool candidates when tools were
-        given) and the full bundle - so a hit in either is the stored bytes untouched.
+        Both forms (``modules/context/views.py``) are cached as the bytes a hit answers with,
+        so a hit in either is the stored bytes untouched.
         ``debug`` asks for the build's diagnostics, which only a build has: it is never
         served from the cache. Callers that need the ContextBundle itself use ``build``.
         """
@@ -425,11 +430,10 @@ class ContextBuilder:
                 ctx, query, budget, document_ids, tools, window, found, timings
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        api = bundle_to_api(bundle)
-        self._after_build(ctx, bundle, found, api=api)
-        body = prompt_of(api) if output == "prompt" else _without_diagnostics(api)
+        self._after_build(ctx, bundle, found)
+        body = prompt_view(bundle) if output == "prompt" else full_view(bundle)
         if debug:
-            body["diagnostics"] = api.get("diagnostics", {})
+            body["diagnostics"] = bundle.diagnostics
         return orjson.dumps(body)
 
     async def _fresh(
@@ -591,8 +595,6 @@ class ContextBuilder:
         ctx: MemoryExecutionContext,
         bundle: ContextBundle,
         found: _Lookup,
-        *,
-        api: dict[str, Any] | None,
     ) -> None:
         """The bookkeeping a built bundle leaves behind, none of it on the request path: the
         served-access counts, the cached bundle, and the record of its handles and evidence
@@ -601,7 +603,7 @@ class ContextBuilder:
         if self.cache is None:
             return
         if _cacheable(bundle):
-            self._track(self._store(self.cache, found, bundle, api))
+            self._track(self._store(self.cache, found, bundle))
         self._track(self._remember(ctx, bundle))
 
     async def _remember(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
@@ -613,9 +615,9 @@ class ContextBuilder:
         cache: CacheProvider,
         found: _Lookup,
         bundle: ContextBundle,
-        api: dict[str, Any] | None,
     ) -> None:
-        """Write both forms to the cache after the caller has been answered.
+        """Write the bundle record and both API forms to the cache after the caller has been
+        answered.
 
         A bundle is 30-80 KB. Serialising it and pushing it to Dragonfly took that long off
         the front of every cache-miss response for the benefit of the *next* caller, who is
@@ -625,14 +627,17 @@ class ContextBuilder:
         a build.
         """
         try:
-            data = _without_diagnostics(api if api is not None else bundle_to_api(bundle))
+            record = bundle.model_copy(update={"cache_hit": True, "diagnostics": {}})
             await cache.set(
                 found.cache_key,
-                orjson.dumps({**data, "cache_hit": True}),
+                record.model_dump_json(exclude={"revision_fingerprint"}).encode(),
                 ttl_seconds=self.cache_ttl,
             )
             await cache.set(
-                found.prompt_key, orjson.dumps(prompt_of(data)), ttl_seconds=self.cache_ttl
+                found.prompt_key, orjson.dumps(prompt_view(bundle)), ttl_seconds=self.cache_ttl
+            )
+            await cache.set(
+                found.full_key, orjson.dumps(full_view(bundle)), ttl_seconds=self.cache_ttl
             )
         except CacheUnavailable:
             return
@@ -992,42 +997,13 @@ def render_window(
     return ConversationWindow(
         thread_id=thread_id,
         message_ids=[m.message_id for m in chosen],
+        messages=[
+            WindowMessage(message_id=m.message_id, role=m.role.value, text=m.content)
+            for m in chosen
+        ],
         rendered=rendered,
         token_estimate=used,
     )
-
-
-def bundle_to_api(bundle: ContextBundle) -> dict[str, Any]:
-    """The full wire form: the bundle, its rendering and its handles."""
-    data: dict[str, Any] = orjson.loads(bundle.model_dump_json(exclude={"revision_fingerprint"}))
-    data["rendered"] = bundle.render()
-    data["handles"] = bundle.handles()
-    return data
-
-
-def bundle_from_api(raw: bytes) -> ContextBundle:
-    """A cached wire bundle back as the domain object (the fields only the wire has dropped)."""
-    data = orjson.loads(raw)
-    for name in ("rendered", "handles"):
-        data.pop(name, None)
-    return ContextBundle.model_validate(data)
-
-
-def prompt_of(api: dict[str, Any]) -> dict[str, Any]:
-    """The prompt form of a bundle: the rendering, the bundle's handle and size, and - when
-    tools were given - the tools that fit, best first."""
-    body = {name: api[name] for name in PROMPT_FIELDS}
-    # Whether the memory holds evidence for the question: a caller that only reads the
-    # prompt form must still be able to tell "nothing to go on" from a full context, and
-    # answer "I don't know" instead of guessing (INSUFFICIENT).
-    body["evidence_status"] = (api.get("evidence") or {}).get("status", "COMPLETE")
-    if api.get("tools") is not None:
-        body["tool_candidates"] = [c["name"] for c in api["tools"]["candidates"]]
-    return body
-
-
-def _without_diagnostics(api: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in api.items() if k != "diagnostics"}
 
 
 async def _nothing() -> list[Any]:

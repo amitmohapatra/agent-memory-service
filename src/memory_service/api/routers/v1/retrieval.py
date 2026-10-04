@@ -11,17 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
-from memory_service.api.schemas.context import (
-    ContextItemBody,
-    ConversationWindowBody,
-    EvidenceReportBody,
-)
+from memory_service.api.schemas.context import ContextResponse, PromptContextResponse
 from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.context_bundle import ProcedureView, ProfileBlockView, ThreadSummaryView
-from memory_service.domain.enums import EvidenceStatus, QueryType
-from memory_service.domain.tools import ToolHints
+from memory_service.domain.enums import QueryType
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
@@ -79,7 +73,6 @@ _ITEM_EXAMPLE: dict[str, Any] = {
     "kind": "chunk",
     "text": "Adjusted EBITDA increased to EUR 98 million…",
     "observed_on": None,
-    "citation": "chunk_id:chk_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
     "document_id": "doc_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
     "page": 11,
 }
@@ -168,75 +161,11 @@ class ContextRequest(BaseModel):
     )
     format: Literal["prompt", "full"] = Field(
         default="prompt",
-        description="prompt: {rendered, bundle_id, token_estimate} (+ tool_candidates when "
-        "tools were given); full: the whole bundle",
+        description="prompt: what to put in front of the model (rendered, bundle_id, "
+        "token_estimate, evidence_status, and the tools that fit when tools were given); full: "
+        "the same content as structured data, without the rendering",
     )
     debug: bool = Field(default=False, description="add the build diagnostics")
-
-
-class PromptContextResponse(BaseModel):
-    """What a prompt needs: the rendered context, the handle verify and the handles refer to,
-    and its size."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "rendered": "## Profile\n### user\nname: Ann\n\n## Memories\n- [m1] …",
-                    "bundle_id": "6f1c…",
-                    "token_estimate": 1840,
-                }
-            ]
-        },
-    )
-
-    rendered: str = Field(description="prompt-ready; items are cited by handle ([m1], [d2]...)")
-    bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
-    token_estimate: int
-    tool_candidates: list[str] | None = Field(
-        default=None, description="the tools that fit the task, best first (only with tools)"
-    )
-    evidence_status: EvidenceStatus = Field(
-        default=EvidenceStatus.COMPLETE,
-        description="COMPLETE, INCOMPLETE (evidence for part of the question, or about "
-        "someone else) or INSUFFICIENT (nothing to go on: answer that you do not know "
-        "rather than guess)",
-    )
-    diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
-
-
-class ContextResponse(BaseModel):
-    """ContextBundle (format=full): bounded, ranked, provenance-carrying context."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    query: str
-    query_type: QueryType = Field(..., description=_QUERY_TYPE_DESCRIPTION)
-    bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
-    conversation: ConversationWindowBody
-    memories: list[ContextItemBody]
-    knowledge: list[ContextItemBody]
-    graph_facts: list[ContextItemBody]
-    summaries: list[ContextItemBody]
-    evidence: EvidenceReportBody
-    token_budget: int
-    token_estimate: int
-    cache_hit: bool
-    built_at: datetime
-    rendered: str
-    handles: dict[str, str] = Field(description="handle -> item id, as rendered cites them")
-    profile: list[ProfileBlockView] = Field(
-        default_factory=list, description="the pinned profile blocks of the user, agent, workspace"
-    )
-    thread_summary: ThreadSummaryView | None = Field(
-        default=None, description="the thread's durable summary; the window follows it"
-    )
-    procedures: list[ProcedureView] = Field(
-        default_factory=list, description="procedures learned for this task (only with tools)"
-    )
-    tools: ToolHints | None = Field(default=None, description="tool hints, when asked for")
-    diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
 
 
 @router.post(

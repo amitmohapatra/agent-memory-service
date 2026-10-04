@@ -19,7 +19,12 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import aggregate_statement, unverified_representation
 from memory_service.domain.predicates import is_multi_valued
-from memory_service.domain.tools import ToolHints
+from memory_service.domain.tools import ToolCandidate, ToolHints
+
+#: The native graph's link between a memory's speaker and an entity it names.
+MENTIONS = "mentions"
+#: Tool candidates the rendered Tools section shows (the next step is shown even past it).
+TOOLS_SHOWN_MAX = 3
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
@@ -70,6 +75,16 @@ class ContextItem(BaseModel):
     )
 
 
+class WindowMessage(BaseModel):
+    """One message of the conversation window."""
+
+    model_config = ConfigDict(frozen=True)
+
+    message_id: str
+    role: str
+    text: str
+
+
 class ConversationWindow(BaseModel):
     """The thread's messages after its durable summary, the most recent that fit."""
 
@@ -77,6 +92,7 @@ class ConversationWindow(BaseModel):
 
     thread_id: str | None = None
     message_ids: list[str] = Field(default_factory=list)
+    messages: list[WindowMessage] = Field(default_factory=list)
     rendered: str = ""
     token_estimate: int = 0
 
@@ -195,20 +211,6 @@ MOST_RELEVANT_MAX = 30
 #: tail at 63.2 per cent against the middle's 53.8 - the best evidence now sits at both peaks
 #: of the U rather than only the first.
 MOST_RELEVANT_SHARE = 0.0
-#: OFF by default, and an ablation knob rather than a decision.
-#:
-#: Repeating the top few at the tail would put the best evidence at both peaks of the U, and
-#: the paper's own tail figure (63.2) is well above its middle (53.8). But it breaks an
-#: invariant this renderer was built on and which a test pins: every memory body appears
-#: exactly once, the promoted ones standing in the timeline as a pointer rather than a second
-#: copy. Duplicating eight bodies is real tokens out of a budget that evicts memories when it
-#: is exceeded, so it is worth measuring and not worth assuming. The proportional head block
-#: above costs nothing and carries most of the same argument; this is the part that has to
-#: earn its place.
-REPEAT_MOST_RELEVANT_AT_END = False
-#: How many of the ranked block the tail repeat carries. The tail is a reminder, not a second
-#: copy of the bundle: past a handful it costs tokens the timeline needs.
-MOST_RELEVANT_TAIL = 8
 
 #: What stands in the timeline for a memory printed in full under "Most relevant". Keeps
 #: the date, the weekday and the speaker in their chronological place - which is what the
@@ -457,14 +459,38 @@ class ContextBundle(BaseModel):
             for i, item in enumerate(getattr(self, items), start=1)
         }
 
+    def redundant(self) -> frozenset[str]:
+        """Items the context would only repeat, left out of what it shows: a memory every
+        source of which is a message the recent conversation already shows, and a
+        ``mentions`` fact whose object the shown text already names. They stay in the bundle
+        (handles, verification); only the rendering and the wire form omit them."""
+        shown = set(self.conversation.message_ids)
+        out: set[str] = set()
+        for m in self.memories:
+            sources = {e.message_id for e in m.evidence if e.message_id}
+            if shown and sources and sources <= shown:
+                out.add(m.item_id)
+        said = " ".join(
+            [self.conversation.rendered, *(m.text for m in self.memories if m.item_id not in out)]
+        ).casefold()
+        for f in self.graph_facts:
+            named = str(f.attributes.get("object") or "").casefold()
+            if f.attributes.get("predicate") == MENTIONS and named and named in said:
+                out.add(f.item_id)
+        return frozenset(out)
+
     def render(self) -> str:
-        """Plain-text rendering suitable for a system prompt, citing by handle."""
+        """Plain-text rendering suitable for a system prompt, citing by handle. Nothing is
+        shown twice: what ``redundant`` names is left out."""
         refs = {item_id: handle for handle, item_id in self.handles().items()}
         parts = pinned_sections(self.profile, self.thread_summary, self.procedures, self.tools)
         if self.conversation.rendered:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
-        if self.memories:
-            # ``self.memories`` is the retrieval ranking, best first; the timeline below is a
+        repeated = self.redundant()
+        memories = [m for m in self.memories if m.item_id not in repeated]
+        facts = [f for f in self.graph_facts if f.item_id not in repeated]
+        if memories:
+            # ``memories`` is the retrieval ranking, best first; the timeline below is a
             # sorted copy, so both orders are available and neither is thrown away.
             #
             # Oldest first, each with its date and who it is about. Every system that scores
@@ -473,29 +499,18 @@ class ContextBundle(BaseModel):
             # chronological alone discards the ranking entirely, and the position a memory
             # then lands in decides how well it is read, so the best-ranked few are repeated
             # above the timeline (see MOST_RELEVANT_MAX).
-            ranked = _head_with_siblings(self.memories, _most_relevant_count(len(self.memories)))
+            ranked = _head_with_siblings(memories, _most_relevant_count(len(memories)))
             shown: set[str] = set()
-            if len(ranked) < len(self.memories):  # otherwise the block is the whole timeline
+            if len(ranked) < len(memories):  # otherwise the block is the whole timeline
                 shown = {m.item_id for m in ranked}
                 parts.append(
                     "## Most relevant\n"
                     + "\n".join(_memory_line(m, refs[m.item_id]) for m in ranked)
                 )
-            ordered = sorted(self.memories, key=lambda m: str(m.attributes.get("observed_at", "")))
+            ordered = sorted(memories, key=lambda m: str(m.attributes.get("observed_at", "")))
             parts.append("## Memories\n" + "\n".join(_timeline_lines(ordered, shown, refs)))
-        if self.memories and REPEAT_MOST_RELEVANT_AT_END and len(self.memories) > MOST_RELEVANT_MAX:
-            # The tail of the prompt is the second attention peak (63.2 against the middle's
-            # 53.8 in arXiv 2307.03172), and it is the last thing read before the question.
-            tail = self.memories[:MOST_RELEVANT_TAIL]
-            parts.append(
-                "## Most relevant, again\n"
-                + "\n".join(_memory_line(m, refs[m.item_id]) for m in tail)
-            )
-        if self.graph_facts:
-            parts.append(
-                "## Facts\n"
-                + "\n".join(f"- [{refs[f.item_id]}] {f.text}" for f in self.graph_facts)
-            )
+        if facts:
+            parts.append("## Facts\n" + "\n".join(f"- [{refs[f.item_id]}] {f.text}" for f in facts))
         if self.summaries:
             parts.append(
                 "## Summaries\n"
@@ -538,14 +553,27 @@ def procedures_section(procedures: Sequence[ProcedureView]) -> str | None:
 
 
 def tools_section(hints: ToolHints | None) -> str | None:
-    """The next tool, the arguments found for it (``tool.arg``) and what is missing: what
-    the model acts on. The candidates narrow the tools a caller offers; they are not text."""
-    if hints is None or not (hints.next or hints.prefill or hints.missing):
+    """The tools that fit, best first, each with its confidence, the arguments already found
+    and the required ones nothing found - what the model acts on and what it must ask."""
+    if hints is None or not hints.candidates:
         return None
-    lines = [f"- next: {hints.next}"] if hints.next else []
-    lines += [f"- {key} = {p.value!r} ({p.source})" for key, p in hints.prefill.items()]
-    lines += [f"- missing {m.tool}.{m.arg}: {m.question}" for m in hints.missing]
-    return "## Tools\n" + "\n".join(lines)
+    shown = [
+        c for i, c in enumerate(hints.candidates) if i < TOOLS_SHOWN_MAX or c.name == hints.next
+    ]
+    return "## Tools\n" + "\n".join(_tool_line(c, hints) for c in shown)
+
+
+def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str:
+    prefix = f"{candidate.name}."
+    found = {
+        k.removeprefix(prefix): p.value for k, p in hints.prefill.items() if k.startswith(prefix)
+    }
+    absent = [m for m in hints.missing if m.tool == candidate.name]
+    head = f"- {candidate.name} (confidence {candidate.confidence:.2f}"
+    head += ", next step)" if candidate.name == hints.next else ")"
+    details = [", ".join(f"{arg} = {value!r}" for arg, value in found.items())] if found else []
+    details += [f"missing {m.arg}: {m.question}" for m in absent]
+    return head + (": " + "; ".join(details) if details else "")
 
 
 def pinned_sections(
