@@ -40,6 +40,7 @@ is not finished).
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
 | [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
+| [0031](0031-runtime-freshness-overload-pools-readiness-workers.md) | Runtime: freshness by audience, overload bounds, one connection budget and PgBouncer, readiness, worker lifecycle and metrics, Qdrant scale-out, the tenant registry's channel | accepted; amends 0004, 0021 |
 
 ## Where the numbers behind these decisions are
 

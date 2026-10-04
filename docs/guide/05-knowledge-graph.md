@@ -234,8 +234,9 @@ starts before the search and runs underneath the encoder; it used to run after t
 "whose result it never read".
 
 **Bounded by the database, not a client timer.** The traversal is one SQL statement over
-indexed, per-hop-limited CTEs on a separate connection pool (`budgeted_pool_size` 4,
-`budgeted_pool_overflow` 4) whose connections carry `prefetch_budget_ms` — 150 ms — as their
+indexed, per-hop-limited CTEs on a separate connection pool (4 + 4 by default, a share of the
+pod's connection budget, connected directly to PostgreSQL when a transaction pooler fronts the
+request path - [deploy/database.md](../deploy/database.md)) whose connections carry `prefetch_budget_ms` — 150 ms — as their
 `statement_timeout` (`GraphSettings`, `adapters/graph/postgres_store.py`). PostgreSQL stops a
 slow walk; the query is then answered without graph facts. The reason this is server time:
 a client-side 150 ms timer measured the client's own scheduling as much as the graph, and on

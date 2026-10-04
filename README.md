@@ -130,10 +130,10 @@ without weights — see below.)
 The API is on **http://localhost:8080** — interactive docs at `/docs`, liveness at
 `/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`.
 
-`/health/ready` is the one to wire to a load balancer: `200` when every mandatory store answered
-(`ready`) *or* only an optional provider is down (`degraded`), and **`503`** when a mandatory one
-is (`not_ready`). Mandatory: `postgres`, `task_queue`, `qdrant`, `blob`, `openfga`. Optional:
-`cache`, `llm`. `/version` says which provider is actually *running* per port and lists anything
+`/health/ready` is the one to wire to a load balancer: `200` when everything answered
+(`ready`) *or* a dependency other than PostgreSQL is down (`degraded`), and **`503`** when
+PostgreSQL is down or the process is stopping (`not_ready`). Search, authorization, blob, the
+task queue, the cache and the gateway are reported, never decisive (ADR 0031). `/version` says which provider is actually *running* per port and lists anything
 that fell back under `degraded`. All of it, with the response bodies:
 [`docs/api/admin.md`](docs/api/admin.md).
 

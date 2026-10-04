@@ -247,9 +247,16 @@ rows as the planned follow-up, and it does not exist yet.
 Every recall and context assembly writes an entry to `memory_reads`: the credential, the
 principal it acted for, `recall` or `context`, the record ids served, a `query_hash` and a
 scope fingerprint — never the query text (`modules/audit/service.py`). Entries are written in
-batches off the request path, with a stated loss window of one flush interval if the process
-dies, and purged after 400 days (`read_audit_retention_days`, hourly purge). A tenant admin
-reads it with `GET /v1/reads`, newest first.
+batches off the request path and purged after 400 days (`read_audit_retention_days`, hourly
+purge). A tenant admin reads it with `GET /v1/reads`, newest first.
+
+What it guarantees: a graceful stop (SIGTERM) flushes everything queued before the pool
+closes. A process killed outright loses up to one flush interval (1 s) of entries plus a
+batch in flight. A queue that fills (10 000 entries, the store stalled for seconds) drops the
+newest entry, and so does a row that cannot be stored even on its own; both kinds are
+counted in `memory_read_audit_dropped_total`. It is an operational record with that loss
+window, not a compliance ledger: a read is never slowed or refused for its audit entry
+(ADR 0031).
 
 ---
 
