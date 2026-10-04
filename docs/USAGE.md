@@ -321,12 +321,12 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 
 ## 14. Through the harness
 
-Sections 1 to 13 are the SDK on its own: it plugs into any framework (LangGraph, OpenAI
-Agents, the Claude Agent SDK) or plain code, and the
-[SDK README](../sdk/python/README.md#use-it-on-its-own-or-with-the-harness) shows one turn.
-If your agent runs under [`agent-harness`](https://github.com/amitmohapatra/agent-harness)
-(`trellis-harness`, see its `docs/memory.md`), `h.wrap(agent)` with `MEMORY_URL` set does
-the above for you:
+Sections 1 to 13 are the SDK on its own, plugged into any framework (LangGraph, OpenAI
+Agents, the Claude Agent SDK) or plain code: Way 2 of
+[the two ways to use Trellis](../README.md#where-this-fits-two-ways-to-use-trellis), which
+shows one turn. Way 1: if your agent runs under
+[`agent-harness`](https://github.com/amitmohapatra/agent-harness) (`trellis-harness`, see its
+`docs/memory.md`), `h.wrap(agent)` with `MEMORY_URL` set does the above for you:
 
 - **Push:** `/v1/context` for the run's question with a 2,000-token budget, `window=False`
   when the framework keeps its own history, and the run's tool names when it has 5 or more
