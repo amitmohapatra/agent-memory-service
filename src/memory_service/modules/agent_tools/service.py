@@ -128,16 +128,34 @@ class AgentTool:
     args: type[_Args]
 
     def spec(self) -> dict[str, Any]:
-        schema = self.args.model_json_schema()
-        schema.pop("title", None)
-        return {"name": self.name, "description": self.description, "input_schema": schema}
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": lean_schema(self.args.model_json_schema()),
+        }
+
+
+def lean_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """The arguments' schema as a model reads it, every call: no ``title`` repeating a name,
+    and an optional argument as its one type - it is optional by not being ``required``, not
+    by an ``anyOf`` with null and a ``default: null`` beside it."""
+    schema.pop("title", None)
+    for prop in schema.get("properties", {}).values():
+        prop.pop("title", None)
+        options = [o for o in prop.get("anyOf", ()) if o != {"type": "null"}]
+        if "anyOf" in prop and len(options) == 1:
+            del prop["anyOf"]
+            prop.update(options[0])
+        if "default" in prop and prop["default"] is None:
+            del prop["default"]
+    return schema
 
 
 TOOLS: Final = (
     AgentTool(
         "memory_search",
         "Search what is remembered for this user, agent and conversation, and the documents "
-        "they may read. Returns items with id, kind, text, observed_on and citation.",
+        "they may read. Returns items with id, kind, text and observed_on.",
         MemorySearchArgs,
     ),
     AgentTool(
@@ -159,8 +177,8 @@ TOOLS: Final = (
     ),
     AgentTool(
         TOOL_SEARCH,
-        "Which of your tools fits a task: the next tool to call, the learned plan, argument "
-        "values already known and the ones still missing.",
+        "Which of your tools fit a task, best first, each with a 0-1 confidence, the argument "
+        "values already known and the ones still missing; the next step of the learned plan.",
         ToolSearchArgs,
     ),
 )
