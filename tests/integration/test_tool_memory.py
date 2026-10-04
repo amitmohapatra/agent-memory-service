@@ -345,7 +345,8 @@ async def test_a_typed_argument_links_the_call_to_the_entity_and_its_id(
         hints.prefill["erp-create_po.amount"],
     )
     assert supplier.value == "SUP-42" and supplier.source == "graph"
-    assert amount.value == "500" and amount.source == "task"
+    # the schema declares amount a number, so the task's "500" is filled as one
+    assert amount.value == 500 and amount.source == "task"
     assert hints.missing == []
 
 
