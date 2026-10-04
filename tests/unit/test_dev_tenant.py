@@ -74,6 +74,15 @@ def test_administration_without_a_tenant_acts_on_the_development_tenant(
     onboarded is still refused."""
     policy = dev_client.get("/v1/model-key/policy", headers=KEY)
     assert policy.status_code == 200, policy.text
+    # what the harness does on an agent's first run, with no tenant and no envelope key
+    # configured: the development envelope key (dev and test only) makes it work
+    agent_key = dev_client.put(
+        "/v1/agents/model-key",
+        headers=KEY,
+        json={"scope": {"agent_id": "ref"}, "virtual_key": "vk-dev-agent"},
+    )
+    assert agent_key.status_code == 200, agent_key.text
+    assert "vk-dev-agent" not in agent_key.text
     missing = dev_client.get(
         "/v1/model-key/policy", headers={**KEY, "X-Trellis-Tenant": f"nobody-{DEV_TENANT}"}
     )

@@ -98,7 +98,8 @@ bundle = await agent.context("What did we decide?")
 ```
 
 The service encrypts the virtual key and binds it to the tenant and agent owner. Registration
-requires the operator's envelope-key configuration. Rotation and revocation also affect
+requires the operator's envelope-key configuration (a local `dev` service derives a
+development one, so it works there with nothing set). Rotation and revocation also affect
 background jobs and retries. `await agent.advanced.model_keys.revoke()` prevents using that agent's
 credential and does not switch it to the operator key. Memory-service model calls exclude MCP.
 

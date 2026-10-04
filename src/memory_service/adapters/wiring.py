@@ -369,14 +369,17 @@ def _wire_llm(container: Container) -> None:
     Model keys, per-level policies and the daily usage ledger are wired whatever the
     configuration, so a tenant can register a key or a policy before the operator turns the
     model on."""
-    from memory_service.adapters.models.credential_cipher import AesCredentialCipher
+    from memory_service.adapters.models.credential_cipher import (
+        AesCredentialCipher,
+        envelope_settings,
+    )
     from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 
     uow_factory = container.services["uow_factory"]
-    cipher = AesCredentialCipher(container.settings.agent_credentials)
+    cipher = AesCredentialCipher(envelope_settings(container.settings))
     credentials = ModelCredentials(uow_factory, cipher)
     policies = ModelPolicies(uow_factory)
     usage = LLMUsage(uow_factory)

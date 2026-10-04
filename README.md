@@ -617,6 +617,7 @@ BIFROST_URL=https://<your-gateway>/v1
 BIFROST_VIRTUAL_KEY=            # optional: pays for tenants without a key of their own
 
 # Envelope keys that encrypt the agent and tenant model keys registered through the API
+# (required in staging and prod; dev and test derive an unprotected development key)
 # MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID=v1
 # MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS={"v1":"<base64-encoded-32-byte-key>"}
 
