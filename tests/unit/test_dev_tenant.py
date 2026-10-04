@@ -87,3 +87,21 @@ def test_administration_without_a_tenant_acts_on_the_development_tenant(
         "/v1/model-key/policy", headers={**KEY, "X-Trellis-Tenant": f"nobody-{DEV_TENANT}"}
     )
     assert missing.status_code == 404
+
+
+def test_a_key_issued_in_the_development_tenant_works_on_the_development_stack(
+    dev_client: TestClient,
+) -> None:
+    """The laptop issues the service key a deployment would use, with no onboarding first:
+    the development tenant gets its row the first time it is administered, and the issued
+    key authenticates beside the development key (a service key acts for its users)."""
+    issued = dev_client.post("/v1/keys", headers=KEY, json={"role": "service", "name": "harness"})
+    assert issued.status_code == 201, issued.text
+    token = issued.json()["token"]
+    me = dev_client.get("/v1/keys/self", headers={"X-API-Key": token})
+    assert me.status_code == 200, me.text
+    assert me.json()["tenant_id"] == DEV_TENANT and me.json()["role"] == "service"
+    again = dev_client.post("/v1/keys", headers=KEY, json={"role": "service", "name": "second"})
+    assert again.status_code == 201, "the row exists now: a second key needs no onboarding"
+    stranger = dev_client.get("/v1/keys/self", headers={"X-API-Key": "mk_nope.nope"})
+    assert stranger.status_code == 401, "neither a development key nor an issued one"

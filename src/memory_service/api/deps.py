@@ -34,6 +34,7 @@ from memory_service.domain.tenancy import (
     ANY_PRINCIPAL,
     PLATFORM_SCOPE,
     KeyRole,
+    Tenant,
     is_valid_tenant_id,
 )
 from memory_service.modules.auth.authentication import ServiceAuthenticator, ServicePrincipal
@@ -534,7 +535,19 @@ async def existing_administered_tenant(
         async with container.services["uow_factory"]() as uow:
             if await uow.tenants.get(tenant_id) is None:
                 raise NotFound("Tenant not found")
+    elif principal.mode == "trusted_dev":
+        await _onboard_development_tenant(container, tenant_id)
     return tenant_id
+
+
+async def _onboard_development_tenant(container: Container, tenant_id: str) -> None:
+    """A laptop's development tenant gets its row the first time it is administered, so
+    issuing a key or creating a workspace in it works without onboarding it first."""
+    async with container.services["uow_factory"]() as uow:
+        await uow.serialize(f"tenant-onboard:{tenant_id}")
+        if await uow.tenants.get(tenant_id) is None:
+            await uow.tenants.add(Tenant(tenant_id=tenant_id, name="Development"))
+            await uow.commit()
 
 
 AdministeredTenantDep = Annotated[str, Depends(get_administered_tenant)]

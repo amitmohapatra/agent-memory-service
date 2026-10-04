@@ -116,8 +116,9 @@ handed. `tenant_id` is null for a credential that names the tenant per request (
 key, an issuer's token). A development key reports the development tenant —
 `MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`, `default` unless set — and acts in it on every
 route when a request names no tenant, so a laptop's harness needs no tenant configured anywhere;
-`X-Trellis-Tenant` still names another, and administering the development tenant needs no
-onboarding row. `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
+`X-Trellis-Tenant` still names another. The development tenant gets its row the first time
+it is administered, and the development stack also accepts the keys it issued: `POST /v1/keys`
+with the development key gives the service key a deployment would use, ready at once. `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
 
 ## Model keys: two registered levels and the operator's, resolved in order
 

@@ -65,7 +65,13 @@ class ServiceAuthenticator:
     async def authenticate(self, headers: dict[str, str]) -> ServicePrincipal:
         mode = self.settings.mode
         if mode == "trusted_dev":
-            return self._trusted_dev(headers)
+            # a development key, or a key this service issued (so a laptop can exercise the
+            # tenant and service keys a deployment uses)
+            if (dev := self._trusted_dev(headers)) is not None:
+                return dev
+            if self.keys is not None:
+                return await self._api_key(headers)
+            raise AuthenticationFailed("Missing or invalid API key")
         if mode == "jwt":
             return await self._jwt(headers)
         if mode == "api_key":
@@ -101,12 +107,12 @@ class ServiceAuthenticator:
         )
 
     # -- modes ------------------------------------------------------------------
-    def _trusted_dev(self, headers: dict[str, str]) -> ServicePrincipal:
+    def _trusted_dev(self, headers: dict[str, str]) -> ServicePrincipal | None:
         key = headers.get(HEADERS.api_key.lower())
         if not key or not any(
             _same_secret(key, k.get_secret_value()) for k in self.settings.trusted_dev_api_keys
         ):
-            raise AuthenticationFailed("Missing or invalid API key")
+            return None
         return ServicePrincipal(
             service_id=f"dev:{hashlib.sha256(key.encode()).hexdigest()[:8]}",
             mode="trusted_dev",

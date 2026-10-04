@@ -61,8 +61,10 @@ together made the service feel broken before it was used:
 5. **A development key acts in the development tenant**, `authentication.trusted_dev_tenant`
    (`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`, default `default`, the harness's local
    tenant), when a request names none: on every route that builds a context, on tenant
-   administration (which needs no onboarding row for it), and in `GET /v1/keys/self`.
-   `X-Trellis-Tenant` still names another. Issued keys and tokens are unchanged.
+   administration (its row is created the first time it is administered), and in
+   `GET /v1/keys/self`. `X-Trellis-Tenant` still names another. The development stack also
+   authenticates the keys it issued, so a laptop exercises the service keys a deployment uses
+   (`POST /v1/keys` with the development key); `jwt` and `api_key` modes are unchanged.
 6. **A restricted key acts for the principals it lists and no others**: the request's user
    against `user:<id>`, its `agent_id` against `agent:<id>`, each a `403` naming the field. A
    request naming neither acts as the key itself, the anonymous service principal, which holds
