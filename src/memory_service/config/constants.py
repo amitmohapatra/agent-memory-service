@@ -280,6 +280,9 @@ class CacheTuning:
     hot_thread_max_messages: int = 200
     working_memory_ttl_seconds: int = 1800
     embedding_ttl_seconds: int = 7 * 24 * 3600
+    #: query vectors (``DenseSpaces.embed_query``): shorter than the document vectors', as
+    #: queries repeat within a session and a day, not across the week a corpus lives
+    query_embedding_ttl_seconds: int = 24 * 3600
     context_bundle_ttl_seconds: int = 300
     authz_ttl_seconds: int = 60
     #: short on purpose: a backend failure raises CacheUnavailable quickly and callers

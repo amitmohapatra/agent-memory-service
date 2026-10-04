@@ -460,6 +460,9 @@ def _wire_retrieval(container: Container) -> None:
         assist=container.services["llm_assist"],
     )
     container.services["indexer"] = indexer
+    container.dense_spaces.use_cache(
+        container.cache, ttl_seconds=constants.CACHE.query_embedding_ttl_seconds
+    )
     engine = RetrievalEngine(
         container.services["uow_factory"],
         container.services["authz"],

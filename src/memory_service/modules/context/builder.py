@@ -562,7 +562,7 @@ class ContextBuilder:
         """Return a reusable bundle or an encoding the retrieval miss can consume."""
         if found.semantic is None or self.semantic_cache is None:
             return None, None
-        embedding = await self.engine.indexer.embedding.embed_query(query)
+        embedding = await self.engine.indexer.spaces.embed_primary_query(query)
         raw = await self.semantic_cache.lookup(found.semantic, embedding)
         if raw is None:
             return None, embedding

@@ -25,8 +25,8 @@ def semantic_builder():
         return result
 
     builder.engine.retrieve = retrieve
-    builder.engine.indexer.embedding = SimpleNamespace(
-        embed_query=AsyncMock(return_value=[1.0, 0.0])
+    builder.engine.indexer.spaces = SimpleNamespace(
+        embed_primary_query=AsyncMock(return_value=[1.0, 0.0])
     )
     return builder
 
@@ -53,7 +53,7 @@ async def test_semantic_hit_keeps_current_query_identity_without_retrieving_agai
     assert builder.engine.calls == 1
     assert second.cache_hit and second.query == "please my timezone"
     assert second.bundle_id != first.bundle_id and second.memories == first.memories
-    assert builder.engine.indexer.embedding.embed_query.await_count == 1
+    assert builder.engine.indexer.spaces.embed_primary_query.await_count == 1
     await builder.close()
 
 
@@ -113,7 +113,7 @@ async def test_similar_surface_with_different_embedding_misses_and_reuses_the_en
     builder = semantic_builder()
     await builder.build(CTX, "my timezone?")
     await builder.drain()
-    builder.engine.indexer.embedding.embed_query.return_value = [0.0, 1.0]
+    builder.engine.indexer.spaces.embed_primary_query.return_value = [0.0, 1.0]
     original = builder.engine.retrieve
     builder.engine.retrieve = AsyncMock(side_effect=original)
     second = await builder.build(CTX, "please my timezone")
