@@ -319,3 +319,43 @@ async def test_a_working_memory_write_drops_the_cached_bundle_of_its_thread(cont
     assert not await _served(builder, ctx, query), "the bundle cached before the write"
     rebuilt = await builder.build(ctx, query)
     assert not rebuilt.cache_hit
+
+
+async def test_graph_enrichment_moves_only_the_audience_of_the_facts_it_wrote(
+    container, uow_factory
+):
+    """GRAPH was one counter per tenant bumped by every memory-index job: each write dropped
+    every cached bundle of the tenant, including users who could read none of the new facts.
+    The facts are readable by the memory's audience, and that is what moves now (ADR 0031)."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, U2, _observe
+
+    builder = container.services["context_builder"]
+    query = "who acquired Westfalen?"
+    for ctx in (U1, U2):
+        await builder.build(ctx, query)
+    await builder.drain()
+    async with uow_factory() as uow:
+        before = await uow.revisions.get_many(
+            "acme", [(RevisionKind.GRAPH, ""), (RevisionKind.TENANT, "")]
+        )
+
+    await _observe(
+        container,
+        uow_factory,
+        U1,
+        "Acme Corp acquired Westfalen GmbH in March 2025 for EUR 40 million.",
+        kind=ObservationKind.EVENT,
+        hints=ProcessingHints(visibility=Visibility.USER),
+    )
+    _, relations = await container.graph_store.count("acme")
+    assert relations, "the write produced no graph facts, so it tests nothing"
+
+    async with uow_factory() as uow:
+        after = await uow.revisions.get_many(
+            "acme", [(RevisionKind.GRAPH, ""), (RevisionKind.TENANT, "")]
+        )
+    assert after == before, "a USER memory's facts moved a tenant-wide revision"
+    assert not await _served(builder, U1, query)
+    assert await _served(builder, U2, query), "a reader of none of the facts lost its cache"
