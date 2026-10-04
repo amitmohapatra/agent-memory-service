@@ -68,6 +68,14 @@ The key the SDK derives covers the **bytes and the form**: the checksum plus fil
 message id, title, visibility and metadata. Identical bytes uploaded under a different name are a
 different document, not a replay — which is what you want when the same PDF arrives as
 `report.pdf` and `report-final.pdf`, and also what stops a retried upload from producing two.
+The `202` names the parse job in `Location` (`/v1/jobs/{id}`).
+
+## Size
+
+A request body is at most 25 MB (`MAX_BODY_BYTES`): a larger `Content-Length` is a `413` before
+anything is read, and a streamed (chunked) body is counted as it arrives and stopped with the same
+`413` once it passes. The file itself is read a megabyte at a time against the ingestion limit
+(`max_file_bytes`) and refused (`422`) the moment it passes it, never read whole first.
 
 ## Parsing, honestly
 

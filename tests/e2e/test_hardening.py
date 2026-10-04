@@ -58,3 +58,56 @@ def test_body_size_limit_is_enforced_before_parsing(limited) -> None:
         content=b"x" * 4096,
     )
     assert r.status_code == 413 and r.json()["code"] == "VALIDATION"
+
+
+def test_a_streamed_body_is_counted_against_the_limit(limited) -> None:
+    """No Content-Length (chunked) is no way past the limit: the bytes are counted as they
+    arrive and the same 413 problem answers once they pass it."""
+    client, _ = limited
+
+    def chunks():  # type: ignore[no-untyped-def]
+        for _ in range(8):
+            yield b"x" * 512
+
+    r = client.post(
+        "/v1/messages", headers={**H, "Content-Type": "application/json"}, content=chunks()
+    )
+    assert "content-length" not in {k.lower() for k in r.request.headers}
+    assert r.status_code == 413 and r.headers["content-type"] == "application/problem+json"
+    assert r.json()["code"] == "VALIDATION" and "2048" in r.json()["detail"]
+    small = client.post(
+        "/v1/messages",
+        headers={**H, "Content-Type": "application/json"},
+        content=iter(
+            [
+                b'{"scope": {"thread_id": "thr_s"}, ',
+                b'"messages": [{"role": "USER", "content": "hi"}]}',
+            ]
+        ),
+    )
+    assert small.status_code == 202, small.text
+
+
+async def test_an_upload_is_refused_as_it_passes_the_file_limit() -> None:
+    import io
+
+    from fastapi import UploadFile
+
+    from memory_service.api.routers.v1.files import UPLOAD_CHUNK_BYTES, read_bounded
+    from memory_service.domain.errors import ValidationFailed
+
+    class Counting(io.BytesIO):
+        reads = 0
+
+        def read(self, size: int | None = -1) -> bytes:
+            Counting.reads += 1
+            return super().read(size)
+
+    big = UploadFile(Counting(b"x" * (UPLOAD_CHUNK_BYTES * 10)))
+    with pytest.raises(ValidationFailed, match="exceeds"):
+        await read_bounded(big, UPLOAD_CHUNK_BYTES + 1)
+    assert Counting.reads == 2, "stopped at the chunk that passed the limit"
+    sized = UploadFile(io.BytesIO(b"abc"), size=10_000)
+    with pytest.raises(ValidationFailed):
+        await read_bounded(sized, 100)
+    assert await read_bounded(UploadFile(io.BytesIO(b"abc")), 100) == b"abc"

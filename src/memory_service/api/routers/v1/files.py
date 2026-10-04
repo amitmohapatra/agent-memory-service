@@ -159,6 +159,26 @@ _UPLOAD_ROUTE: dict[str, Any] = {
 }
 
 
+#: How much of an upload is read at a time while it is counted against the file limit.
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+async def read_bounded(file: UploadFile, limit: int) -> bytes:
+    """The upload's bytes, read a chunk at a time and refused the moment they pass ``limit``
+    - never the whole file first and the size after. A size the parser already knows is
+    refused before anything is read."""
+    if file.size is not None and file.size > limit:
+        raise ValidationFailed(f"file exceeds {limit} bytes", details={"size_bytes": file.size})
+    chunks: list[bytes] = []
+    seen = 0
+    while chunk := await file.read(UPLOAD_CHUNK_BYTES):
+        seen += len(chunk)
+        if seen > limit:
+            raise ValidationFailed(f"file exceeds {limit} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @router.post("/documents", tags=["documents"], name="upload_document", **_UPLOAD_ROUTE)
 async def upload_document(
     request: Request,
@@ -188,7 +208,8 @@ async def upload_document(
             "invalid scope/custom_metadata", details={"error": str(exc)[:300]}
         ) from exc
     ctx = build_context(request, container, scope_body)
-    data = await file.read()
+    service: IngestionService = container.services["ingestion"]
+    data = await read_bounded(file, service.cfg.max_file_bytes)
     filename = file.filename or "upload.bin"
     media_type = file.content_type or "application/octet-stream"
     if media_type == "application/octet-stream":
@@ -197,7 +218,6 @@ async def upload_document(
         media_type = mimetypes.guess_type(filename)[0] or media_type
     checksum = content_hash(data)
     key = request.state.idempotency_key or f"file-{ctx.tenant_id}-{checksum}-{message_id or ''}"
-    service: IngestionService = container.services["ingestion"]
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         ack = await service.accept_file(
