@@ -10,9 +10,16 @@ Every SDK snippet below runs inside an `async` function and assumes:
 ```python
 from trellis.memory import MemoryClient
 
-memory = MemoryClient("http://localhost:8080", api_key=SERVICE_KEY)
-ctx = memory.bind(user_id="u1", thread_id="chat-42")  # tenant_id too with a dev key
+memory = MemoryClient()  # MEMORY_URL and TRELLIS_API_KEY; or MemoryClient(url, api_key=SERVICE_KEY)
+ctx = memory.bind(user_id="u1", thread_id="chat-42")  # the key names the tenant
 ```
+
+A development key (`dev-key` on the local stack) names the development tenant, `default`
+(`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`): with it no tenant is needed either, and
+`bind(tenant_id=...)` picks another. The client retries what cannot duplicate anything, honours
+`Retry-After`, and fails fast with `CircuitOpenError` (a retryable
+`DependencyUnavailableError`) while the service is down — see
+[the SDK README](../sdk/python/README.md#retries-and-the-circuit-breaker).
 
 ---
 
@@ -43,6 +50,9 @@ print((await MemoryClient(url, api_key=service.token).tenant.keys.whoami()).role
   policy, the read audit, the feedback review queue); `service` reads and writes memory for the
   users and agents it may act for. Give an agent a service key, never the admin key.
 - The tenant comes from the key; a `X-Trellis-Tenant` header that disagrees is a `403`.
+- `may_act_as` restricts a key to the listed principals: the request's user must be listed as
+  `user:<id>` and its `agent_id` as `agent:<id>`, or it is a `403`; a restricted key naming
+  neither acts only as itself.
 - A secret is shown once; with `idempotency_key` a retry replays the record with `token=None`.
 - A `WORKSPACE`-visible write needs the workspace row and a membership first, or it answers
   `Workspace not found`. Workspace roles are `admin`, `member` (read + write) and `viewer`

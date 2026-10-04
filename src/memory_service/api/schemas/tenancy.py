@@ -111,8 +111,9 @@ class KeySelfResponse(BaseModel):
 
     key_id: str = Field(description="the key's id (never the secret)")
     tenant_id: str | None = Field(
-        description="the tenant the key speaks for; null for a key that names the tenant per "
-        "request (the platform key, development keys)"
+        description="the tenant the key speaks for; a development key's is the development "
+        "tenant it acts in unless a request names another; null for a credential that names "
+        "the tenant per request (the platform key, an issuer's token)"
     )
     principal: str = Field(description="who the caller is; a principal the key may always be")
     role: str = Field(description="platform, admin, service, trusted_dev or jwt")

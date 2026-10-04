@@ -818,7 +818,9 @@ class ApiKeyInfo(BaseModel):
 
 
 class KeyInfo(BaseModel):
-    """Who a key is (``keys.whoami``)."""
+    """Who a key is (``keys.whoami``). ``tenant_id`` is the tenant it acts in - a
+    development key's is the service's development tenant - and None for the platform key
+    and an issuer's token, which name the tenant per call."""
 
     key_id: str
     tenant_id: str | None = None

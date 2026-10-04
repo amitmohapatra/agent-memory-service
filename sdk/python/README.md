@@ -23,7 +23,9 @@ dedup, memory types, TTLs, cache keys and task queues. Those are service configu
 `MemoryClient()` reads the platform's shared names: `MEMORY_URL` for the service (the local
 stack's `http://localhost:8080` when unset) and `TRELLIS_API_KEY` for the key. Arguments win:
 `MemoryClient(url, api_key=...)`, or `bearer_token=` for a token (then no key is read from the
-environment).
+environment). Against the local stack's development key (`dev-key`) no tenant is needed
+either: a development key acts in the service's development tenant, `default`, unless a call
+names another (`bind(tenant_id=...)`).
 
 | Argument | Default | What it does |
 |---|---|---|
@@ -61,7 +63,7 @@ outage degrades in microseconds instead of paying the timeout and every retry on
 try:
     pushed = await ctx.context(question)
 except DependencyUnavailableError:  # CircuitOpenError is one; retryable, with retry_after
-    pushed = None                     # answer without memory this turn
+    pushed = None  # answer without memory this turn
 ```
 
 ## The verbs

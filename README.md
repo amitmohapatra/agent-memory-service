@@ -10,11 +10,12 @@ nothing about your agent library.
 ```python
 from trellis.memory import MemoryClient
 
-memory = MemoryClient("http://localhost:8080", api_key="dev-key")
+# MEMORY_URL and TRELLIS_API_KEY name the service and the key; the local stack is the
+# default address, and its development key acts in the tenant "default"
+memory = MemoryClient(api_key="dev-key")
 
 ctx = memory.bind(
-    tenant_id="acme",
-    user_id="u1",
+    user_id="u1",  # tenant_id="acme" names another tenant; an issued key names its own
     # your own id: the service creates the thread on first use (and its session and turns,
     # unless you pass session_id / turn_id of your own)
     thread_id="chat-42",
@@ -43,8 +44,11 @@ read [`docs/MEASUREMENTS.md`](docs/MEASUREMENTS.md) and
 decision guide: push vs pull, which write and which read fits which job, corrections, feedback
 review, model keys and policy, with the SDK call and the gotchas for each.
 
-**One thing to do first on a fresh service**: onboard the tenant (and a workspace, if you will
-write anything WORKSPACE-visible) — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
+**On a fresh local service there is nothing to set up for memory**: the development key acts in
+the tenant `default` (`MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT`), which is also what
+`GET /v1/keys/self` reports, so a harness started with only `MEMORY_URL` and `TRELLIS_API_KEY`
+needs no tenant either. Workspaces are different: to write anything WORKSPACE-visible, onboard
+the tenant and the team first — `POST /v1/admin/tenants`, then `POST /v1/workspaces` and a
 member. See [`docs/api/tenancy.md`](docs/api/tenancy.md); skipping it is why a first script gets
 `Workspace not found`.
 
@@ -128,7 +132,8 @@ suite and `examples/serve.py` do have a deterministic stand-in, which is why the
 without weights — see below.)
 
 The API is on **http://localhost:8080** — interactive docs at `/docs`, liveness at
-`/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`.
+`/health/live` and readiness at `/health/ready`. The dev API key is `dev-key`; it acts in the
+tenant `default` unless a request names another (`X-Trellis-Tenant`, or `bind(tenant_id=...)`).
 
 `/health/ready` is the one to wire to a load balancer: `200` when every mandatory store answered
 (`ready`) *or* only an optional provider is down (`degraded`), and **`503`** when a mandatory one

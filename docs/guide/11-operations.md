@@ -94,6 +94,7 @@ then defaults. Every credential is a `SecretStr`, and `/version` shows a redacte
 | `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` | unset | the platform operator (chapter 7); unset = nobody can onboard |
 | `MEMORY__AUTHENTICATION__JWT_ISSUER`, `__JWT_AUDIENCE`, `__JWT_JWKS_URL`, `__TENANT_CLAIM` | unset | `jwt` mode when the JWKS URL is set |
 | `MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS` | `[]` | development only |
+| `MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT` | `default` | the tenant a development key acts in (and `GET /v1/keys/self` reports) when a request names none |
 | `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID`, `__ENCRYPTION_KEYS` | unset | envelope keys that encrypt registered model keys |
 | `MEMORY__HINDSIGHT__BASE_URL`, `__API_KEY` | unset | the optional extraction service (chapter 8) |
 | `MEMORY__RETAIL_CALENDAR` | unset | a fiscal calendar such as `454`; resolves fiscal phrases and expands planning shorthand (chapter 3) |
