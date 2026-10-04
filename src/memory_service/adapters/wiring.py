@@ -174,11 +174,13 @@ def _wire_services(container: Container) -> None:
     settings = container.settings
     uow_factory = container.services["uow_factory"]
     container.services["idempotency"] = IdempotencyService(container.cache)
-    registry = TenantRegistry(uow_factory)
+    registry = TenantRegistry(uow_factory, cache=container.cache)
     registry.start()
     container.services["tenant_registry"] = registry
     container.add_closer("tenant_registry", registry.close)
-    keys = ApiKeyVerifier(uow_factory, container.cache, known=registry.knows_key)
+    keys = ApiKeyVerifier(
+        uow_factory, container.cache, known=registry.knows_key, remember=registry.remember_key
+    )
     container.services["api_keys"] = keys
     container.services["authenticator"] = ServiceAuthenticator(settings.authentication, keys=keys)
     authz = AuthorizationService(

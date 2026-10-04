@@ -223,10 +223,6 @@ class SqlApiKeyRepository:
             update(ApiKeyRow).where(ApiKeyRow.key_id == key_id).values(last_used_at=at)
         )
 
-    async def live_key_ids(self) -> list[str]:
-        stmt = select(ApiKeyRow.key_id).where(_live())
-        return list((await self.s.scalars(stmt)).all())
-
     async def count_live(self, tenant_id: str) -> int:
         stmt = select(func.count()).where(ApiKeyRow.tenant_id == tenant_id, _live())
         return int((await self.s.scalar(stmt)) or 0)

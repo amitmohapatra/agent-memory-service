@@ -43,8 +43,9 @@ MAX_TOUCH_MEMO = 10_000
 #: well-formed garbage tokens is the one shape the per-credential limiter cannot see (each
 #: is its own bucket); past this budget an id nothing on this instance recognises - not the
 #: registry's list of live keys, not a key this process has served - is refused without a
-#: read. A key issued on another instance during such a flood may be refused until the
-#: registry's next refresh; every key this instance knows keeps verifying.
+#: read. A key issued on another instance is announced to this one at once (the registry's
+#: channel); with the cache down, such a key may be refused until the flood's minute ends.
+#: Every key this instance knows keeps verifying.
 UNKNOWN_IDS_PER_MINUTE = 600
 
 
@@ -76,6 +77,7 @@ class ApiKeyVerifier:
         touch_every_seconds: int = 60,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         known: Callable[[str], bool] | None = None,
+        remember: Callable[[str], None] | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.cache = cache
@@ -85,6 +87,8 @@ class ApiKeyVerifier:
         #: whether an id is a live key as far as this instance knows (the tenant registry);
         #: without it the unknown-id budget refuses nothing, it only caches misses
         self.known = known
+        #: told of every key that verifies, so the registry learns live keys one by one
+        self.remember = remember
         self._touched: dict[str, datetime] = {}
         #: ids the store did not know, with the instant that answer expires (a local copy of
         #: the shared MISSING marker, so a repeated guess costs no cache read either)
@@ -117,6 +121,8 @@ class ApiKeyVerifier:
                 "tenant is suspended", details={"tenant_id": cached.key.tenant_id}
             )
         record = cached.key
+        if self.remember is not None:
+            self.remember(key_id)
         last = self._touched.get(key_id) or record.last_used_at
         if last is None or now - last > self.touch_every:
             # Only a successful use is a use: a wrong secret against a real id must not move

@@ -66,7 +66,13 @@ What the verifier guarantees (`modules/auth/keys.py`, ADR 0021):
   set-if-absent.
 - **A flood of garbage tokens costs a bounded amount.** Unknown ids are cached as missing for
   five seconds, and each instance reads the store for at most 600 unrecognised ids a minute
-  (`UNKNOWN_IDS_PER_MINUTE`).
+  (`UNKNOWN_IDS_PER_MINUTE`). "Recognised" is a key this process has issued, verified or been
+  told about on the tenant registry's channel (ADR 0031).
+- **Suspensions and revocations reach every process promptly.** The instance that makes the
+  change publishes it on the cache's pub/sub channel (`trellis:tenancy`), and every API
+  worker of every pod applies it on arrival. With the cache down, the registry's one-minute
+  refresh of quotas and suspensions is the bound, and the verifier's tombstones still decide
+  for keys.
 - **A secret is shown once.** An idempotent retry of key issuance or onboarding replays the
   record with `token: null`.
 - **A tenant holds at most 1,000 live keys** (`MAX_KEYS_PER_TENANT` in `domain/tenancy.py`).
