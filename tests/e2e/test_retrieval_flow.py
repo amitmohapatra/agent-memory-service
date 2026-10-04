@@ -57,7 +57,7 @@ def test_recall_and_context_over_http(client) -> None:
     top = body["items"][0]
     assert top["document_id"] == doc_id and top["page"] == 11
     assert "increased to EUR 98" in top["text"]
-    assert top["citation"] == f"chunk_id:{top['id']}" and top["kind"] == "chunk"
+    assert top["kind"] == "chunk" and "citation" not in top
     assert top["debug"]["representation"] == "CHUNK"
     assert set(top["debug"]["retrievers"]) <= {"fusion", "dense_en", "dense_ml", "bm25", "exact"}
 
@@ -76,17 +76,16 @@ def test_recall_and_context_over_http(client) -> None:
         json={"scope": scope, "query": Q, "token_budget": 3000, "format": "full"},
     )
     assert r.status_code == 200, r.text
+    r_full = r.content
     bundle = r.json()
-    assert bundle["cache_hit"] is False and bundle["token_estimate"] <= 3000
+    assert bundle["token_estimate"] <= 3000 and "rendered" not in bundle
     assert bundle["conversation"]["thread_id"] == scope["thread_id"]
-    assert "here is the FY26 report" in bundle["conversation"]["rendered"]
-    assert bundle["knowledge"][0]["item_id"] == top["id"]
-    assert bundle["evidence"]["status"] == "COMPLETE"
-    assert {"defined_by:Adjusted EBITDA", "footnote:3", "cross_reference:Section 8"} <= {
-        name.rsplit(":", 1)[0] for name in bundle["evidence"]["required_groups"]
-    }
-    assert bundle["summaries"] and "## Summaries" in bundle["rendered"]
-    assert bundle["thread_summary"] is None  # a short thread has no durable summary yet
+    assert any("here is the FY26 report" in m["text"] for m in bundle["conversation"]["messages"])
+    assert bundle["knowledge"][0]["id"] == top["id"]
+    # every companion the definition, footnote and cross-reference need is in the bundle
+    assert bundle["evidence_status"] == "COMPLETE" and "missing_evidence" not in bundle
+    assert bundle["summaries"]
+    assert "thread_summary" not in bundle  # a short thread has no durable summary yet
     # an unrelated question is INSUFFICIENT (recall items carry no evidence report)
     r = client.post(
         "/v1/context",
@@ -97,8 +96,7 @@ def test_recall_and_context_over_http(client) -> None:
             "format": "full",
         },
     )
-    assert r.json()["evidence"]["status"] == "INSUFFICIENT"
-    assert "## Evidence status\nINSUFFICIENT" in r.json()["rendered"]
+    assert r.json()["evidence_status"] == "INSUFFICIENT"
     # the prompt form says so too, so a caller that reads only it can abstain
     for query, status in (
         ("Who won the 1998 football championship?", "INSUFFICIENT"),
@@ -108,18 +106,18 @@ def test_recall_and_context_over_http(client) -> None:
         assert set(prompt) >= {"rendered", "bundle_id", "token_estimate", "evidence_status"}
         if status:
             assert prompt["evidence_status"] == status
+            assert "## Evidence status\nINSUFFICIENT" in prompt["rendered"]
         else:
             assert prompt["evidence_status"] != "INSUFFICIENT"
-    assert (
-        "## Recent conversation" in bundle["rendered"]
-        and "increased to EUR 98" in bundle["rendered"]
-    )
+            assert "## Recent conversation" in prompt["rendered"]
+            assert "## Summaries" in prompt["rendered"]
+    # a repeat is the cached bytes: the same bundle, byte for byte
     again = client.post(
         "/v1/context",
         headers=H,
         json={"scope": scope, "query": Q, "token_budget": 3000, "format": "full"},
-    ).json()
-    assert again["cache_hit"] is True
+    )
+    assert again.content == r_full
 
     # validation and authorization
     assert (
@@ -150,15 +148,17 @@ async def test_sdk_context_and_recall(app, client) -> None:
     memory = sdk_client(app)
     ctx = memory.bind(tenant_id="acme", user_id="u1", **scope)
     bundle = await ctx.context(Q, token_budget=4000, format="full")
-    assert bundle.query_type == "DOCUMENT_MULTI_HOP" and bundle.knowledge
-    assert bundle.knowledge[0].document_id == doc_id and bundle.knowledge[0].page == 11
-    assert bundle.evidence.status == "COMPLETE" and bundle.token_estimate <= 4000
-    assert "increased to EUR 98" in bundle.rendered
-    assert bundle.evidence.required_groups and not bundle.evidence.missing_groups
+    assert bundle.knowledge and bundle.knowledge[0].document_id == doc_id
+    assert bundle.knowledge[0].page == 11 and 0.0 <= bundle.knowledge[0].relevance <= 1.0
+    assert bundle.evidence_status == "COMPLETE" and bundle.token_estimate <= 4000
+    assert any("increased to EUR 98" in k.text for k in bundle.knowledge)
+    assert not bundle.missing_evidence
+    prompt = await ctx.context(Q, token_budget=4000)
+    assert "increased to EUR 98" in prompt.rendered and prompt.bundle_id == bundle.bundle_id
     lenient = await ctx.context("Who won the 1998 football championship?", format="full")
-    assert lenient.evidence.status == "INSUFFICIENT"
+    assert lenient.insufficient
     items = await ctx.search("restructuring programme headcount", limit=3)
-    assert 0 < len(items) <= 3 and items[0].citation.startswith("chunk_id:")
+    assert 0 < len(items) <= 3 and items[0].kind == "chunk"
     assert any("headcount" in i.text for i in items)
     # a child agent inherits the user's access to the thread-scoped document
     agent = ctx.agent("analyst", agent_run_id=new_id("agent_run"))

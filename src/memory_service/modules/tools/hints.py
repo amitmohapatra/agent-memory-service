@@ -24,7 +24,7 @@ import asyncio
 import math
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
@@ -213,6 +213,8 @@ class _Resolution:
     profile: Sequence[Any] = ()
     #: the values the task names: (kind, value, the argument the words before it name)
     slots: list[tuple[str, str, str | None]] = field(default_factory=list)
+    #: every candidate's arguments: a value named for another tool's argument is not this one's
+    labels: Sequence[str] = ()
 
 
 class ToolHintsService:
@@ -277,22 +279,13 @@ class ToolHintsService:
         candidates = _candidates(found, plan, step, stats, available, min(k, HINTS_K_MAX))
         tool = step or (candidates[0].name if candidates else None)
         # every candidate's arguments, not only the next step's: the caller may take another
-        found = await asyncio.gather(
-            *(
-                self.arguments(
-                    _Resolution(
-                        ctx, task, entries[c.name], plan, done, scope_keys, memories, profile
-                    )
-                )
+        prefill, missing = await self._every_argument(
+            [
+                _Resolution(ctx, task, entries[c.name], plan, done, scope_keys, memories, profile)
                 for c in candidates
                 if c.name in entries
-            )
+            ]
         )
-        prefill: dict[str, Prefill] = {}
-        missing: list[MissingArgument] = []
-        for values, absent in found:
-            prefill.update(values)
-            missing.extend(absent)
         return ToolHints(
             candidates=candidates,
             plan=_plan_hint(plan),
@@ -301,9 +294,23 @@ class ToolHintsService:
             missing=missing,
         )
 
+    async def _every_argument(
+        self, jobs: list[_Resolution]
+    ) -> tuple[dict[str, Prefill], list[MissingArgument]]:
+        """The arguments of every tool, each read knowing all of their names: a value the
+        task names for one tool's argument is not another tool's to take."""
+        labels = sorted({arg for job in jobs for arg in _arguments(job.tool, job.plan)})
+        found = await asyncio.gather(*(self.arguments(replace(job, labels=labels)) for job in jobs))
+        prefill: dict[str, Prefill] = {}
+        missing: list[MissingArgument] = []
+        for values, absent in found:
+            prefill.update(values)
+            missing.extend(absent)
+        return prefill, missing
+
     async def arguments(self, job: _Resolution) -> tuple[dict[str, Prefill], list[MissingArgument]]:
         arguments = _arguments(job.tool, job.plan)
-        job.slots = _labelled_slots(job.task, arguments)
+        job.slots = _labelled_slots(job.task, sorted({*arguments, *job.labels}))
         prefill: dict[str, Prefill] = {}
         missing: list[MissingArgument] = []
         for arg in arguments:
@@ -321,6 +328,7 @@ class ToolHintsService:
             or _from_profile(job, arg)
             or _from_memories(job, arg)
             or _from_task(job, arg)
+            or _from_memory_text(job, arg)
         )
 
     async def _from_graph(self, job: _Resolution, arg: str) -> Prefill | None:
@@ -433,6 +441,21 @@ def _from_memories(job: _Resolution, arg: str) -> Prefill | None:
     return None
 
 
+def _from_memory_text(job: _Resolution, arg: str) -> Prefill | None:
+    """A value a memory in hand names for this argument ("their supplier id is SUP-40" for
+    ``supplier_id``): only a labelled one, and only after the task, which always wins."""
+    for item in job.memories:
+        for _, value, label in _labelled_slots(str(getattr(item, "text", "")), [arg]):
+            if label == arg:
+                return Prefill(
+                    tool=job.tool.name,
+                    value=value,
+                    source="memory",
+                    evidence_id=str(getattr(item, "item_id", "")),
+                )
+    return None
+
+
 def _slot_kinds(job: _Resolution, arg: str) -> list[str]:
     if job.tool.argument_entity_types.get(arg):
         return ["entity"]
@@ -444,8 +467,8 @@ def _from_task(job: _Resolution, arg: str) -> Prefill | None:
     """A value the task names for this argument: first one the words before it name it for
     ("cost centre CC-7" for ``cost_centre``), then one of the kind the argument's name asks
     for that the task does not name for another argument. Each value fills one argument."""
-    for index, (kind, value, label) in enumerate(job.slots):
-        if label == arg and (kind in _IDENTIFIER_KINDS or not _asks_identifier(arg)):
+    for index, (_, value, label) in enumerate(job.slots):
+        if label == arg:
             job.slots.pop(index)
             return Prefill(tool=job.tool.name, value=value, source="task")
     for wanted in _slot_kinds(job, arg):
@@ -464,26 +487,34 @@ def _asks_identifier(arg: str) -> bool:
 def _labelled_slots(task: str, arguments: Sequence[str]) -> list[tuple[str, str, str | None]]:
     """The values the task names, each with the argument the words just before it name, if
     any: "for cost centre CC-7" names ``cost_centre``. Only the words since the previous
-    value count, so a label never reaches back past one."""
-    named = {arg: _name_words(arg) for arg in arguments}
+    value count, so a label never reaches back past one. An argument that asks for an
+    identifier is no label for a name ("from supplier Acme" is not ``supplier_id``): the
+    name stays free for the argument that takes one."""
     out: list[tuple[str, str, str | None]] = []
     previous_end = 0
     for kind, value in task_slots(task):
         at = task.find(value, previous_end)
         at = at if at >= 0 else task.find(value)
+        named = {
+            arg: _name_words(arg)
+            for arg in arguments
+            if kind in _IDENTIFIER_KINDS or not _asks_identifier(arg)
+        }
         between = [w.casefold() for w in _WORD.findall(task[previous_end:at])]
-        context = between[-SLOT_CONTEXT_WORDS:]
-        label = next(
-            (
-                arg
-                for arg, words in named.items()
-                if any(_same(word, near) for word in words for near in context)
-            ),
-            None,
-        )
+        # an identifier that spells its argument ("SKU-22" for ``sku``) names it first
+        own = _WORD.findall(value.casefold()) if kind == "id" else []
+        label = _named(named, own) or _named(named, between[-SLOT_CONTEXT_WORDS:])
         out.append((kind, value, label))
         previous_end = max(previous_end, at + len(value))
     return out
+
+
+def _named(named: dict[str, list[str]], near: Sequence[str]) -> str | None:
+    """The first argument one of whose name words is among ``near``."""
+    return next(
+        (arg for arg, words in named.items() if any(_same(w, n) for w in words for n in near)),
+        None,
+    )
 
 
 def _name_words(arg: str) -> list[str]:
@@ -520,5 +551,5 @@ def _missing(tool: ToolDescriptor, arg: str) -> MissingArgument:
         tool=tool.name,
         arg=arg,
         entity_type=entity_type,
-        question=f"Which {words} should {tool.name} use?",
+        question=f"{tool.name} needs {words!r}: what should it be?",
     )

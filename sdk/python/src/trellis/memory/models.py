@@ -109,23 +109,6 @@ DocumentStatus = Literal["STAGED", "READY", "FAILED"]
 ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
 #: What ``search`` reads: memories, document passages, document summaries, thread messages.
 SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
-#: An unused evidence item's kind: a bundle item's representation or a record kind.
-EvidenceKind = Literal[
-    "CHUNK",
-    "TABLE",
-    "PARAGRAPH",
-    "SECTION",
-    "SUBSECTION",
-    "CODE_BLOCK",
-    "chunk",
-    "SUMMARY",
-    "summary",
-    "ENTITY",
-    "RELATION",
-    "MEMORY",
-    "memory",
-    "fact",
-]
 ClaimVerdictValue = Literal["supported", "unsupported", "contradicted", "borderline"]
 GroundingMethod = Literal["citation", "nli", "judge"]
 ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]

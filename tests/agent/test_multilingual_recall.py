@@ -73,11 +73,17 @@ async def test_a_team_reads_back_its_own_language(
     [ack] = await writer.history.add([("USER", statement)])
     assert ack.message_id
 
-    # the same-language question finds the statement first, and the bundle carries it
+    # the same-language question finds the statement first, and the bundle carries it - once:
+    # as the turn in the window, and not again as the memory read out of it
     recalled = await writer.search(question, kinds=["memory"])
     assert recalled and statement in _texts(recalled)[:1], _texts(recalled)[:3]
     bundle = await writer.context(question, format="full")
-    assert statement in _texts(bundle.memories)
+    shown = [m.text for m in bundle.conversation.messages] if bundle.conversation else []
+    shown += _texts(bundle.memories)
+    assert any(statement in text for text in shown), shown
+    assert statement not in _texts(bundle.memories) or not any(
+        statement in m.text for m in bundle.conversation.messages
+    ), "said once"
 
     # another tenant, another key: none of it
     other = await platform.admin.create_tenant(f"Other {language}", tenant_id=f"other-{language}")

@@ -92,26 +92,30 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     bundle = await agent.context(TASK, token_budget=6000, tools=[LOOKUP, UPDATE], format="full")
     # the pinned sections
     assert [b.block for b in bundle.profile] == ["user"]
-    assert bundle.thread_summary is not None and bundle.thread_summary.covers_to_sequence >= 20
+    assert bundle.thread_summary, "a long thread is summarised"
     # the window carries what the summary does not cover yet
-    assert bundle.conversation.message_ids, "the latest message is in the window"
-    assert "reprice Q-1183" in bundle.conversation.rendered
+    assert bundle.conversation is not None and bundle.conversation.messages
+    assert any("reprice Q-1183" in m.text for m in bundle.conversation.messages)
     # what answers the task
     assert any("1200 EUR" in m.text for m in bundle.memories), bundle.memories
     assert any("approver" in k.text for k in bundle.knowledge), bundle.knowledge
-    assert any("Q-1183" in f.text for f in bundle.graph_facts), bundle.graph_facts
+    # a fact about the task (a "mentions" fact whose object the text already shows is dropped)
+    about = {"Q-1183", "EMEA", "SKU-22"}
+    assert any({f.subject, f.object} & about for f in bundle.graph_facts), bundle.graph_facts
     # what the agent learned to do
-    assert [s["tool"] for s in bundle.procedures[0].steps] == [LOOKUP, UPDATE]
-    assert bundle.tools is not None and bundle.tools.next == LOOKUP
-    assert bundle.tools.prefill[f"{LOOKUP}.region"].value == "EMEA"
-    assert bundle.tools.prefill[f"{LOOKUP}.sku"].value == "SKU-22"
-    # every item is citable by its handle, and every handle names an item of the bundle
-    ids = {i.item_id for i in (*bundle.memories, *bundle.knowledge, *bundle.graph_facts)}
-    assert bundle.handles and set(bundle.handles.values()) <= ids | {
-        s.item_id for s in bundle.summaries
-    }
+    assert bundle.procedures[0].steps == [LOOKUP, UPDATE]
+    lookup = bundle.tools[0]
+    assert lookup.name == LOOKUP and lookup.next and 0.0 <= lookup.confidence <= 1.0
+    assert lookup.args == {"region": "EMEA", "sku": "SKU-22"} and not lookup.missing
+    # every number is 0..1, and nothing is said twice
+    items = (*bundle.memories, *bundle.knowledge, *bundle.graph_facts, *bundle.summaries)
+    assert all(0.0 <= i.relevance <= 1.0 for i in items)
+    assert len({i.id for i in items}) == len(items)
 
-    rendered = bundle.rendered
+    # The prompt form is the same context, rendered, with the tools that fit.
+    prompt = await agent.context(TASK, token_budget=6000, tools=[LOOKUP, UPDATE])
+    assert prompt.bundle_id == bundle.bundle_id and prompt.tool_names[0] == LOOKUP
+    rendered = prompt.rendered
     order = [
         "## Profile",
         "## Conversation summary",
@@ -122,15 +126,12 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     assert [rendered.index(h) for h in order] == sorted(rendered.index(h) for h in order)
     assert "## Knowledge" in rendered and "## Facts" in rendered
 
-    # The prompt form is the same context, rendered, with the tools that fit.
-    prompt = await agent.context(TASK, token_budget=6000, tools=[LOOKUP, UPDATE])
-    assert prompt.rendered == rendered and prompt.bundle_id
-    assert prompt.tool_candidates and prompt.tool_candidates[0] == LOOKUP
-
     # A framework that keeps its own history asks without the window: the summary stays.
     own = await agent.context(TASK, token_budget=6000, window=False, format="full")
-    assert own.conversation.message_ids == [] and "## Recent conversation" not in own.rendered
-    assert own.thread_summary is not None and own.tools is None and own.procedures == []
+    assert own.conversation is None, "an absent section is none"
+    assert own.thread_summary and own.tools == [] and own.procedures == []
+    bare = await agent.context(TASK, token_budget=6000, window=False)
+    assert "## Recent conversation" not in bare.rendered and bare.tools is None
 
     # An edit to the profile is in the next context: nothing stale is served from cache.
     await agent.profile.edit("user", "APAC", old="EMEA")
@@ -149,7 +150,8 @@ async def test_the_arguments_nothing_can_fill_are_asked_for(app, running) -> Non
         step=0,
     )
     bundle = await agent.context(TASK, token_budget=6000, tools=[LOOKUP, UPDATE], format="full")
-    assert bundle.tools is not None and bundle.tools.next == UPDATE
-    assert bundle.tools.prefill[f"{UPDATE}.quote"].value == "Q-1183"
-    assert [(m.tool, m.arg) for m in bundle.tools.missing] == [(UPDATE, "approver")]
-    assert f"missing {UPDATE}.approver" in bundle.rendered
+    update = next(t for t in bundle.tools if t.next)
+    assert update.name == UPDATE and update.args["quote"] == "Q-1183"
+    assert [m.arg for m in update.missing] == ["approver"] and update.missing[0].question
+    prompt = await agent.context(TASK, token_budget=6000, tools=[LOOKUP, UPDATE])
+    assert "missing approver" in prompt.rendered

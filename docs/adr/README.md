@@ -39,6 +39,7 @@ is not finished).
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
+| [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
 
 ## Where the numbers behind these decisions are
 

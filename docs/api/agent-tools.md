@@ -16,12 +16,12 @@ that change nothing).
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `memory_search` | `query`, `kinds?` (memory, chunk, summary, message — this conversation), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, citation, …}]` (the `/v1/recall` item) |
+| `memory_search` | `query`, `kinds?` (memory, chunk, summary, message — this conversation), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, …}]` (the `/v1/recall` item) |
 | `memory_remember` | `content`, `kind` (the 8 primary kinds), `scope` (user, agent, run, thread, group, workspace) | `{id, deduplicated}` |
 | `memory_update` | `id` (or its bundle handle, `m3`), `content` | `{id, supersedes}` |
 | `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}` |
 | `profile_edit` | `block`, `old` (empty replaces the block), `new` | `{block, text, version}`; 409 when `old` is gone |
-| `tool_search` | `task` | `{next, plan: {title, steps}, prefill: {"tool.arg": value}, missing: [{arg, question}]}` |
+| `tool_search` | `task` | `{tools: [{name, confidence, success_rate?, next?, args?, missing?}], plan?}` (the `/v1/tools/hints` answer) |
 
 Descriptions and schemas are language-neutral: queries and content may be in any language.
 Bad arguments answer 422 naming the field (`args.<field>`); an unknown tool 404. Writes follow

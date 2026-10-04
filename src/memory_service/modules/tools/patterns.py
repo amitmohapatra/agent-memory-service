@@ -18,7 +18,9 @@ from memory_service.modules.ingestion.context_graph import extract_entities
 
 MAX_PATTERN_CHARS = 300
 
-_MONEY = re.compile(r"\b(?:EUR|USD|GBP|CHF|JPY|INR|CAD|AUD)\s?[\d,.]+\b|\B[$€£]\s?[\d,.]+\b")
+_CURRENCY = r"(?:EUR|USD|GBP|CHF|JPY|INR|CAD|AUD)"
+#: "EUR 700", "$700" and "700 EUR": a currency code after the amount is still the amount's.
+_MONEY = re.compile(rf"\b{_CURRENCY}\s?[\d,.]+\b|\B[$€£]\s?[\d,.]+\b|\b\d[\d,.]*\s?{_CURRENCY}\b")
 _DATE = re.compile(
     r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"
     r"|\b(?:Q[1-4]|FY)\s?\d{2,4}\b",
@@ -60,11 +62,22 @@ def _typed(task: str) -> tuple[str, list[tuple[str, str]]]:
     for kind, regex in _SHAPES_BEFORE_ENTITIES:
         text = replace(kind, regex, text)
     for name in extract_entities(text, max_entities=12):
-        if len(name) >= 3 and not name.startswith("{"):
+        if len(name) >= 3 and not name.startswith("{") and not _sentence_opener(text, name):
             text = replace("entity", re.compile(rf"\b{re.escape(name)}\b"), text)
     for kind, regex in _SHAPES_AFTER_ENTITIES:
         text = replace(kind, regex, text)
     return text, slots
+
+
+def _sentence_opener(text: str, name: str) -> bool:
+    """ "Order 700 EUR of steel" - a single capitalised word that opens a sentence is the
+    sentence's capital, not a name (unless the task capitalises it elsewhere too)."""
+    if " " in name or len(re.findall(rf"\b{re.escape(name)}\b", text)) != 1:
+        return False
+    at = re.search(rf"\b{re.escape(name)}\b", text)
+    return at is not None and (
+        at.start() == 0 or text[: at.start()].rstrip().endswith((".", "!", "?", ":", ";"))
+    )
 
 
 def task_pattern(task: str, *, max_chars: int = MAX_PATTERN_CHARS) -> str:

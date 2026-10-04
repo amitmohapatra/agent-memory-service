@@ -316,7 +316,7 @@ If your agent runs under [`agent-harness`](https://github.com/amitmohapatra/agen
 
 - **Push:** `/v1/context` for the run's question with a 2,000-token budget, `window=False`
   when the framework keeps its own history, and the run's tool names when it has 5 or more
-  (so `tool_candidates` narrow what the model is offered).
+  (so the `tools` that come back, each with a confidence, narrow what the model is offered).
 - **Pull:** adds the six agent tools to the run's tools.
 - **Records:** the transcript (`history.add`, named by `source_system`/`source_message_id`),
   every non-memory tool call (`record_tool`), and interrupt decisions as feedback.
