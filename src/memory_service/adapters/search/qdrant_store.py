@@ -78,6 +78,15 @@ _CONNECTION_ERRORS = (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadE
 _EMPTY_RESPONSE_SIGNS = ("object has no attribute 'result'", "returned None")
 
 
+def _unavailable(operation: str, exc: BaseException) -> DependencyUnavailable:
+    """The 503 a failed call becomes. The client's message goes to the log, never into the
+    problem's ``detail``: it can quote the server's URL, collection names and payloads."""
+    log.warning(
+        "qdrant.failed", operation=operation, error_type=type(exc).__name__, error=str(exc)[:500]
+    )
+    return DependencyUnavailable(f"qdrant {operation} failed: {type(exc).__name__}")
+
+
 def _is_empty_response(exc: BaseException) -> bool:
     """Whether the client raised because it had no response to unwrap (see the note above)."""
     if not isinstance(exc, AttributeError | AssertionError):
@@ -402,9 +411,7 @@ class QdrantSearchStore:
                 await self._ensure_payload_indexes(name)
                 await self._reconcile_payload_storage(name, spec)
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant ensure_collection failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("ensure_collection", exc) from exc
         self._known.add(name)
 
     async def _reconcile_payload_storage(self, name: str, spec: CollectionSpec) -> None:
@@ -652,12 +659,13 @@ class QdrantSearchStore:
                     ),
                 )
             except Exception as exc:
-                detail = (
-                    "the search server sent no response body (retried once already)"
-                    if _is_empty_response(exc)
-                    else f"{type(exc).__name__}: {exc}"
-                )
-                raise DependencyUnavailable(f"qdrant hybrid query failed: {detail}") from exc
+                if _is_empty_response(exc):
+                    log.warning("qdrant.failed", operation="hybrid query", error=str(exc)[:500])
+                    raise DependencyUnavailable(
+                        "qdrant hybrid query failed: the search server sent no response body "
+                        "(retried once already)"
+                    ) from exc
+                raise _unavailable("hybrid query", exc) from exc
         # Native RRF leaves equal-score ordering unspecified. Resolve ties before the
         # engine deduplicates/cuts the pool, or identical queries can pack different
         # evidence. This stabilizes the returned pool without another RPC or wider search;
@@ -701,9 +709,7 @@ class QdrantSearchStore:
                     ),
                 )
             except Exception as exc:
-                raise DependencyUnavailable(
-                    f"qdrant arms query failed: {type(exc).__name__}: {exc}"
-                ) from exc
+                raise _unavailable("arms query", exc) from exc
             payloads = await self._payloads(collection, responses)
         out: dict[VectorName, list[SearchHit]] = {}
         for (name, _), response in zip(arms, responses, strict=True):
@@ -741,9 +747,7 @@ class QdrantSearchStore:
                 ),
             )
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant arms payload read failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("arms payload read", exc) from exc
         return {str(p.id): dict(p.payload or {}) for p in points}
 
     async def get(self, collection: str, record_ids: Sequence[str]) -> list[SearchRecord]:
@@ -791,9 +795,7 @@ class QdrantSearchStore:
         try:
             listing = await self._client.get_collections()
         except Exception as exc:
-            raise DependencyUnavailable(
-                f"qdrant get_collections failed: {type(exc).__name__}: {exc}"
-            ) from exc
+            raise _unavailable("get_collections", exc) from exc
         return [c.name[len(prefix) :] for c in listing.collections if c.name.startswith(prefix)]
 
     async def ping(self) -> bool:

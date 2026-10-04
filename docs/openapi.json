@@ -14,7 +14,7 @@
         }
       },
       "Retry-After": {
-        "description": "Seconds until the rate-limit window resets (on 429).",
+        "description": "Seconds to wait before retrying: until the rate-limit window resets (429), or until an unavailable or timed-out dependency is worth asking again (503, 504).",
         "schema": {
           "type": "string"
         }
@@ -2113,7 +2113,7 @@
         "type": "object"
       },
       "ErrorCode": {
-        "description": "Public API error categories (``api/errors.py`` carries them in problem details).",
+        "description": "Public API error categories (``api/errors.py`` carries them in problem details).\n\nEvery value is one the service produces: TIMEOUT is a database statement stopped at its\nbudget (504); there is no category a client can be told about but never receive.",
         "enum": [
           "VALIDATION",
           "AUTHENTICATION",
@@ -2124,7 +2124,6 @@
           "RATE_LIMIT",
           "DEPENDENCY_UNAVAILABLE",
           "TIMEOUT",
-          "RETRYABLE_PROCESSING",
           "CORRUPT_SOURCE",
           "INTERNAL"
         ],
@@ -6854,7 +6853,7 @@
     }
   },
   "info": {
-    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nAn id starts with a letter or digit, continues with letters, digits and `._:-`, and is at\nmost 200 characters. A request carrying any scope or credential header more than once with\ndifferent values is refused (422) before the credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
+    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes persistent writes safe to retry (24h window). |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nAn id starts with a letter or digit, continues with letters, digits and `._:-`, and is at\nmost 200 characters. A request carrying any scope or credential header more than once with\ndifferent values is refused (422) before the credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
     "title": "trellis-memory API",
     "version": "0.3.0"
   },
@@ -7433,6 +7432,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -7941,6 +7943,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -8413,6 +8418,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -8930,6 +8938,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -9393,6 +9404,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -9910,6 +9924,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -10538,6 +10555,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11127,6 +11147,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -11634,6 +11657,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -12054,6 +12080,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -12560,6 +12589,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -13116,6 +13148,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -13736,6 +13771,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -14232,6 +14270,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -14714,6 +14755,9 @@
             "headers": {
               "Link": {
                 "$ref": "#/components/headers/Link"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -15270,6 +15314,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -15815,6 +15862,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -16359,6 +16409,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -16911,6 +16964,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -17546,6 +17602,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -18102,6 +18161,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -18636,6 +18698,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -19153,6 +19218,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -19527,6 +19595,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -20036,6 +20107,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -20561,6 +20635,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -21163,6 +21240,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -21705,6 +21785,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -22306,6 +22389,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -22859,6 +22945,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -23447,6 +23536,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -23965,6 +24057,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -24426,6 +24521,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -24982,6 +25080,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -25490,6 +25591,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -25960,6 +26064,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -26476,6 +26583,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -26948,6 +27058,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -27464,6 +27577,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -27974,6 +28090,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -28520,6 +28639,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -29037,6 +29159,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -29610,6 +29735,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -30022,6 +30150,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -30595,6 +30726,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -31139,6 +31273,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -31606,6 +31743,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -32242,6 +32382,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -32808,6 +32951,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -33371,6 +33517,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34007,6 +34156,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -34467,6 +34619,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -34929,6 +35084,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35390,6 +35548,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -35850,6 +36011,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -36385,6 +36549,9 @@
               "Link": {
                 "$ref": "#/components/headers/Link"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -36901,6 +37068,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -37411,6 +37581,9 @@
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
               },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -37890,6 +38063,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38375,6 +38551,9 @@
             },
             "description": "PostgreSQL unavailable",
             "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
               },
@@ -38893,6 +39072,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"
@@ -39427,6 +39609,9 @@
             "headers": {
               "Idempotent-Replayed": {
                 "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
               },
               "X-Correlation-ID": {
                 "$ref": "#/components/headers/X-Correlation-ID"

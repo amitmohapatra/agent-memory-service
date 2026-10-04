@@ -766,6 +766,10 @@ Every error is an RFC 9457 problem (`application/problem+json`):
  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "request_id": "req_01J...", "details": {}}
 ```
 
+A retryable `429`, `503` (`DEPENDENCY_UNAVAILABLE`: PostgreSQL, Qdrant or OpenFGA away, the
+database pool exhausted) or `504` (`TIMEOUT`: a database statement stopped at its budget)
+carries `Retry-After` in seconds.
+
 The SDK raises one exception class per `code` (`AuthorizationError`, `NotFoundError`,
 `RateLimitedError`, ...) with `trace_id` and `request_id` on it, `TimeoutError` or
 `DependencyUnavailableError` (status 0) when no response came, and retries `retryable`

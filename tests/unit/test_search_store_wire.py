@@ -482,6 +482,25 @@ async def test_the_hybrid_failure_is_still_a_dependency_error() -> None:
         )
 
 
+async def test_the_hybrid_failure_keeps_the_clients_message_out_of_the_problem() -> None:
+    """The client's text can name the server's URL and collections; the problem detail a
+    caller reads says which call failed and how, and the message goes to the log only."""
+    client = FakeClient(
+        error=RuntimeError("http://qdrant.internal:6333/collections/tm_memories refused"),
+        fail_times=5,
+    )
+    with pytest.raises(DependencyUnavailable) as raised:
+        await _store(client).search_hybrid(
+            "c",
+            dense={VectorName.DENSE_ML: [0.1] * 4},
+            sparse=SparseVector(indices=[1], values=[1.0]),
+            flt=_flt(),
+            limit=5,
+            prefetch_limit=8,
+        )
+    assert raised.value.message == "qdrant hybrid query failed: RuntimeError"
+
+
 # --- transport --------------------------------------------------------------------------------
 
 

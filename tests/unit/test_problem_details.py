@@ -94,3 +94,87 @@ def test_a_validation_problem_keeps_the_field_errors_in_details(client: TestClie
     body = r.json()
     assert body["code"] == "VALIDATION" and body["type"] == "urn:trellis:problem:validation"
     assert body["details"]["errors"][0]["loc"][:2] == ["body", "query"]
+
+
+# -- dependencies: what a database failure tells the client ----------------------------
+
+
+def _failing_app(error: Exception) -> TestClient:
+    """A bare app with the service's handlers and one route that raises ``error``."""
+    from fastapi import FastAPI
+
+    from memory_service.api.errors import install_error_handlers
+
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/boom")
+    async def boom() -> None:
+        raise error
+
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def _driver_errors() -> dict[str, tuple[Exception, int, str]]:
+    import psycopg.errors
+    from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
+    from sqlalchemy.exc import TimeoutError as PoolTimeout
+
+    secret = Exception("password=hunter2 host=db.internal")
+    cancelled = psycopg.errors.QueryCanceled("canceling statement due to statement timeout")
+    return {
+        "operational": (OperationalError("SELECT 1", {}, secret), 503, "DEPENDENCY_UNAVAILABLE"),
+        "interface": (InterfaceError("SELECT 1", {}, secret), 503, "DEPENDENCY_UNAVAILABLE"),
+        "invalidated": (
+            DBAPIError("SELECT 1", {}, secret, connection_invalidated=True),
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+        ),
+        "pool timeout": (PoolTimeout("QueuePool limit reached"), 503, "DEPENDENCY_UNAVAILABLE"),
+        "statement timeout": (OperationalError("SELECT 1", {}, cancelled), 504, "TIMEOUT"),
+    }
+
+
+def test_a_database_outage_is_a_retryable_problem_with_retry_after() -> None:
+    for name, (error, status, code) in _driver_errors().items():
+        r = _failing_app(error).get("/boom")
+        assert r.status_code == status, name
+        body = r.json()
+        assert body["code"] == code and body["retryable"] is True, name
+        assert r.headers["Retry-After"] == "5", name
+        assert "hunter2" not in r.text and "SELECT" not in r.text, name
+
+
+def test_any_other_driver_error_stays_an_internal_error() -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    r = _failing_app(IntegrityError("INSERT", {}, Exception("duplicate key"))).get("/boom")
+    assert r.status_code == 500 and r.json()["code"] == "INTERNAL"
+    assert "Retry-After" not in r.headers and "duplicate" not in r.text
+
+
+def test_a_failure_that_names_its_wait_is_told_to_the_client() -> None:
+    from memory_service.domain.errors import DependencyUnavailable
+
+    error = DependencyUnavailable("llm circuit open", details={"retry_after_seconds": 2.2})
+    r = _failing_app(error).get("/boom")
+    assert r.status_code == 503 and r.headers["Retry-After"] == "3"
+
+
+def test_a_405_keeps_the_allow_header(client: TestClient) -> None:
+    r = client.put("/health/live")
+    assert r.status_code == 405 and r.headers["content-type"] == PROBLEM_MEDIA_TYPE
+    assert r.headers["Allow"] == "GET"
+
+
+def test_every_documented_code_is_one_the_service_can_produce() -> None:
+    """A code in the enum is a promise a client codes against; none is advertised unused."""
+    from memory_service.domain import errors
+
+    produced = {
+        cls.code
+        for cls in vars(errors).values()
+        if isinstance(cls, type) and issubclass(cls, errors.MemoryServiceError)
+    }
+    # the middleware writes RATE_LIMIT (429) itself; nothing else is produced outside a class
+    assert set(ErrorCode) == produced | {ErrorCode.RATE_LIMIT}

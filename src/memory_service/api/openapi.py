@@ -62,7 +62,9 @@ different values is refused (422) before the credential is read.
 Every error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):
 `type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,
 `retryable=true` means the same request may succeed later, and `trace_id` / `request_id`
-are what to quote.
+are what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a
+dependency that is down (PostgreSQL unreachable or its pool exhausted, the search or
+authorization server away), 504 a database statement stopped at its time budget.
 
 ### Versioning
 Public routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its
@@ -178,11 +180,16 @@ PAGED_RESPONSE_HEADERS: dict[str, str] = {
 }
 #: Every public operation can answer these before the route runs.
 EDGE_STATUSES = (413, 429)
+#: The retryable statuses whose responses say when to retry (``Retry-After``).
+RETRY_AFTER_STATUSES = frozenset({"429", "503", "504"})
 
 
 def _header_components() -> dict[str, Any]:
     described = {**RESPONSE_HEADERS, **WRITE_RESPONSE_HEADERS, **PAGED_RESPONSE_HEADERS}
-    described[RETRY_AFTER_HEADER] = "Seconds until the rate-limit window resets (on 429)."
+    described[RETRY_AFTER_HEADER] = (
+        "Seconds to wait before retrying: until the rate-limit window resets (429), or until "
+        "an unavailable or timed-out dependency is worth asking again (503, 504)."
+    )
     components: dict[str, Any] = {
         name: {"description": text, "schema": {"type": "string"}}
         for name, text in described.items()
@@ -206,7 +213,7 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
         headers += list(PAGED_RESPONSE_HEADERS)
     for status, response in responses.items():
         response.setdefault("headers", {}).update(_response_header_refs(headers))
-        if status == "429":
+        if status in RETRY_AFTER_STATUSES:
             response["headers"].update(_response_header_refs([RETRY_AFTER_HEADER]))
         for media in response.get("content", {}).values():
             example = media.get("example")

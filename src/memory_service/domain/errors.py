@@ -68,6 +68,14 @@ class DependencyUnavailable(MemoryServiceError):
     retryable = True
 
 
+class OperationTimedOut(MemoryServiceError):
+    """A backing store stopped the operation at its time budget (a statement timeout)."""
+
+    code = ErrorCode.TIMEOUT
+    http_status = 504
+    retryable = True
+
+
 class CorruptSource(MemoryServiceError):
     """Source bytes failed checksum / parse validation."""
 

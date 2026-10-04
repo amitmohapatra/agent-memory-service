@@ -47,7 +47,11 @@ WORKSPACE-visible write needs a workspace row and a member ([tenancy.md](tenancy
 **Errors are RFC 9457 problem documents** (`application/problem+json`) with a `type`, a `title`,
 a `status`, a `detail` and, where a field is at fault, `errors`. The SDK raises them as
 `ValidationError`, `AuthenticationError`, `AuthorizationError`, `NotFoundError`,
-`ConflictError`, `RateLimitedError` and friends from `trellis.memory.errors`. Insufficient
+`ConflictError`, `RateLimitedError` and friends from `trellis.memory.errors`. `retryable: true`
+means the same request may pass later, and a retryable `429`, `503` or `504` says when in
+`Retry-After` (seconds): `503 DEPENDENCY_UNAVAILABLE` is a store that is down (PostgreSQL
+unreachable or its pool exhausted, Qdrant or OpenFGA away), `504 TIMEOUT` a database statement
+stopped at its budget. A `detail` never quotes a driver's or a server's message. Insufficient
 evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
 
 **Pagination is a cursor**, not an offset: a list route answers `{"…": [...], "next_cursor": …}`
