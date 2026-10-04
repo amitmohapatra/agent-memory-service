@@ -100,35 +100,6 @@ ScopeLevel = Literal["AGENT", "AGENT_GROUP", "THREAD", "USER", "WORKSPACE", "TEN
 TemporalStatus = Literal[
     "CURRENT", "SUPERSEDED", "EXPIRED", "CONTRADICTED", "RETRACTED", "ARCHIVED"
 ]
-Representation = Literal[
-    "RAW_FILE",
-    "DOCUMENT",
-    "DOCUMENT_VERSION",
-    "SECTION",
-    "SUBSECTION",
-    "PARAGRAPH",
-    "TABLE",
-    "CODE_BLOCK",
-    "CHUNK",
-    "SUMMARY",
-    "ENTITY",
-    "RELATION",
-    "EMBEDDING",
-    "MESSAGE",
-    "MEMORY",
-]
-QueryType = Literal[
-    "EXACT_IDENTIFIER",
-    "CONVERSATION_HISTORY",
-    "USER_MEMORY",
-    "DECISION",
-    "DOCUMENT_LOCAL",
-    "DOCUMENT_MULTI_HOP",
-    "ENTITY_RELATION",
-    "TEMPORAL",
-    "GLOBAL_SUMMARY",
-    "GENERAL_SEMANTIC",
-]
 EvidenceStatus = Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
 #: EVENT: something that happened, told to the service to learn from (always INTERNAL)
 MessageRole = Literal["USER", "ASSISTANT", "SYSTEM", "TOOL", "AGENT", "EVENT"]
@@ -328,7 +299,6 @@ class SearchItem(BaseModel):
     kind: str
     text: str
     observed_on: str | None = None
-    citation: str
     document_id: str | None = None
     page: int | None = None
     #: the conversation an ``episode`` item is
@@ -339,34 +309,87 @@ class SearchItem(BaseModel):
     debug: dict[str, Any] | None = None
 
 
-class ContextItem(BaseModel):
-    """One ranked item of a full context bundle."""
+class ContextMemory(BaseModel):
+    """A memory of a full context (``context(..., format="full")``)."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    item_id: str
-    representation: Representation
+    id: str
     text: str
-    score: float = 0.0
-    relevance: float = 0.0
-    citation: str
+    #: 0..1, how close it is to the question; comparable across the bundle
+    relevance: float
+    observed_at: str | None = None
+    #: who or what it is about
+    subject: str | None = None
+    #: relative dates in the text, resolved: [{"text": "last week", "date": "a..b"}]
+    dates: list[dict[str, str]] = Field(default_factory=list)
+    #: the messages or documents it came from
+    sources: list[str] = Field(default_factory=list)
+
+
+class ContextPassage(BaseModel):
+    """A document passage of a full context."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    text: str
+    relevance: float
+    #: table, paragraph, ...; None: a chunk
+    kind: str | None = None
     document_id: str | None = None
     page: int | None = None
-    section_path: str | None = None
-    evidence: list[EvidenceRef] = Field(default_factory=list)
-    attributes: dict[str, Any] = Field(default_factory=dict)
-
-    @property
-    def predicate(self) -> str | None:
-        return self.attributes.get("predicate")
+    section: str | None = None
 
 
-class ConversationWindow(BaseModel):
+class ContextFact(BaseModel):
+    """A knowledge-graph fact of a full context."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    subject: str
+    predicate: str
+    object: str
+    relevance: float
+    observed_at: str | None = None
+    valid_from: str | None = None
+    valid_to: str | None = None
+    document_id: str | None = None
+
+
+class ContextSummary(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    text: str
+    relevance: float
+
+
+class WindowMessage(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    role: str
+    text: str
+
+
+class Conversation(BaseModel):
+    """The thread's recent messages a full context carries."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
     thread_id: str | None = None
-    message_ids: list[str] = Field(default_factory=list)
-    rendered: str = ""
+    messages: list[WindowMessage] = Field(default_factory=list)
+
+
+class PinnedBlock(BaseModel):
+    """A pinned profile block as a full context carries it."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    block: str
+    text: str
 
 
 class ClaimVerdict(BaseModel):
@@ -420,26 +443,14 @@ class VerifyReport(GroundingReport):
     feedback_id: str | None = None
 
 
-class UnusedEvidence(BaseModel):
+class ToolChoiceBrief(BaseModel):
+    """A tool that fits the task, as the prompt form carries it."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    item_id: str
-    kind: EvidenceKind = "chunk"
-    text: str
-
-
-class EvidenceReport(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    status: EvidenceStatus
-    required_groups: list[str] = Field(default_factory=list)
-    satisfied_groups: list[str] = Field(default_factory=list)
-    missing_groups: list[str] = Field(default_factory=list)
-    escalations: list[str] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
-    unused: list[UnusedEvidence] = Field(default_factory=list)
-    grounding: GroundingReport | None = None
-    llm_tokens: int = 0
+    name: str
+    #: 0..1, how well it fits the task
+    confidence: float
 
 
 class PromptContext(BaseModel):
@@ -448,46 +459,49 @@ class PromptContext(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    rendered: str
     bundle_id: str
+    rendered: str
     token_estimate: int
-    #: the tools that fit the task, best first (only when ``tools`` were given)
-    tool_candidates: list[str] | None = None
     #: INSUFFICIENT: the memory holds nothing for this question - say you do not know
     evidence_status: EvidenceStatus = "COMPLETE"
+    #: the tools that fit the task, best first (only when ``tools`` were given)
+    tools: list[ToolChoiceBrief] | None = None
     #: the build's diagnostics (only with ``debug=True``)
     diagnostics: dict[str, Any] | None = None
 
+    @property
+    def tool_names(self) -> list[str]:
+        """The tools that fit, best first; empty when ``tools`` were not given."""
+        return [t.name for t in self.tools or ()]
+
 
 class ContextBundle(BaseModel):
-    """The whole bundle (``context(..., format="full")``): bounded, ranked context for the
-    current turn, the rendering and its handles."""
+    """The context as structured data (``context(..., format="full")``), for a caller that
+    builds its own prompt: the same content the prompt form renders, without the rendering.
+    A section with nothing in it is empty."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    query: str
-    query_type: QueryType
-    bundle_id: str = ""
-    conversation: ConversationWindow
-    memories: list[ContextItem] = Field(default_factory=list)
-    knowledge: list[ContextItem] = Field(default_factory=list)
-    graph_facts: list[ContextItem] = Field(default_factory=list)
-    summaries: list[ContextItem] = Field(default_factory=list)
-    evidence: EvidenceReport
-    token_budget: int
+    bundle_id: str
+    evidence_status: EvidenceStatus
     token_estimate: int
-    rendered: str = ""
-    handles: dict[str, str] = Field(default_factory=dict)
-    cache_hit: bool = False
-    profile: list[ProfileBlock] = Field(default_factory=list)
-    thread_summary: ThreadSummary | None = None
+    #: required companion evidence that is not there
+    missing_evidence: list[str] = Field(default_factory=list)
+    conversation: Conversation | None = None
+    thread_summary: str | None = None
+    profile: list[PinnedBlock] = Field(default_factory=list)
     procedures: list[ProcedureView] = Field(default_factory=list)
-    #: present when the request asked for ``tools``
-    tools: ToolHints | None = None
+    #: the tools that fit, best first (only when ``tools`` were given)
+    tools: list[ToolChoice] = Field(default_factory=list)
+    memories: list[ContextMemory] = Field(default_factory=list)
+    knowledge: list[ContextPassage] = Field(default_factory=list)
+    graph_facts: list[ContextFact] = Field(default_factory=list)
+    summaries: list[ContextSummary] = Field(default_factory=list)
+    diagnostics: dict[str, Any] | None = None
 
     @property
     def insufficient(self) -> bool:
-        return self.evidence.status == "INSUFFICIENT"
+        return self.evidence_status == "INSUFFICIENT"
 
 
 class ThreadInfo(BaseModel):
@@ -693,59 +707,47 @@ class ApprovalSuggestion(BaseModel):
     agent_id: str | None = None
 
 
-class ToolCandidate(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    name: str
-    score: float
-    success_rate: float | None = None
-    why: str = ""
-
-
-class ToolPlanHint(BaseModel):
-    """The stored procedure that fits the task, as the steps to follow."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    procedure_id: str = ""
-    title: str = ""
-    steps: list[dict[str, Any]] = Field(default_factory=list)
-    success_rate: float = 0.0
-    support: int = 0
-
-
-class Prefill(BaseModel):
-    """A value for one argument of the next tool, and where it came from."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    tool: str
-    value: Any = None
-    source: Literal["procedure", "graph", "profile", "memory", "task"]
-    evidence_id: str | None = None
-
-
 class MissingArgument(BaseModel):
     """A required argument nothing could fill: ask the user ``question``."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    tool: str
     arg: str
-    entity_type: str | None = None
     question: str
+    #: the entity type the argument names (e.g. ORG), when the catalog says
+    entity_type: str | None = None
 
 
-class ToolHints(BaseModel):
-    """Which tool to call for a task, the learned plan, the next step and its arguments."""
+class ToolChoice(BaseModel):
+    """A tool that fits the task: how well, how it has done, and its arguments."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    candidates: list[ToolCandidate] = Field(default_factory=list)
-    plan: ToolPlanHint | None = None
-    next: str | None = None
-    prefill: dict[str, Prefill] = Field(default_factory=dict)
+    name: str
+    #: 0..1, how well it fits the task
+    confidence: float
+    #: share of its recorded calls that succeeded; None: never called
+    success_rate: float | None = None
+    #: the learned plan's next step
+    next: bool = False
+    #: argument values already found, typed as the tool's schema says
+    args: dict[str, Any] = Field(default_factory=dict)
+    #: required arguments nothing found
     missing: list[MissingArgument] = Field(default_factory=list)
+
+
+class ToolHints(BaseModel):
+    """Which tools fit a task, best first, and the learned plan (``tool_hints``)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    tools: list[ToolChoice] = Field(default_factory=list)
+    plan: ProcedureView | None = None
+
+    @property
+    def next(self) -> ToolChoice | None:
+        """The plan's next step, else the best choice."""
+        return next((t for t in self.tools if t.next), self.tools[0] if self.tools else None)
 
 
 class AgentTool(BaseModel):
@@ -788,15 +790,17 @@ class ThreadSummary(BaseModel):
 
 
 class ProcedureView(BaseModel):
-    """A procedure learned for the task: its steps and how well it has worked."""
+    """A procedure learned for the task: its tool sequence and how often it worked."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
     id: str
-    title: str = ""
-    steps: list[dict[str, Any]] = Field(default_factory=list)
+    title: str | None = None
+    #: tool names, in order
+    steps: list[str] = Field(default_factory=list)
     success_rate: float = 0.0
-    support: int = 0
+    #: the successful runs it was learned from
+    runs: int = 0
 
 
 # --- platform administration -----------------------------------------------------

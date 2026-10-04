@@ -23,6 +23,7 @@ from memory_service.api.deps import (
     build_context,
 )
 from memory_service.api.errors import error_responses
+from memory_service.api.schemas.context import ToolHintsResponse
 from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
 from memory_service.domain.learning import (
@@ -35,10 +36,10 @@ from memory_service.domain.tools import (
     SideEffects,
     ToolAnnotations,
     ToolDescriptor,
-    ToolHints,
     ToolStats,
     ToolStatus,
 )
+from memory_service.modules.context.views import hints_view
 from memory_service.modules.tools import approvals
 from memory_service.modules.tools.hints import HINTS_K_MAX
 from memory_service.modules.tools.service import CATALOG_MAX
@@ -422,19 +423,20 @@ async def put_catalog(
 
 @router.post(
     "/tools/hints",
-    response_model=ToolHints,
+    response_model=ToolHintsResponse,
+    response_model_exclude_none=True,
     tags=["tools"],
-    summary="Which tool fits a task, the learned plan, the next step and its arguments",
+    summary="Which tools fit a task, best first: confidence, track record, arguments, plan",
     responses=_ERRORS,
 )
 async def tool_hints(
     request: Request, body: HintsRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> ToolHints:
+) -> dict[str, Any]:
     ctx = build_context(request, container, body.scope)
     visibility = await container.services["authz"].visibility(ctx)
     async with container.services["uow_factory"]() as uow:
         profile = await container.services["profile"].blocks(uow, ctx)
-    return await container.services["tool_hints"].hints(
+    hints = await container.services["tool_hints"].hints(
         ctx,
         body.task,
         available=body.available,
@@ -442,6 +444,7 @@ async def tool_hints(
         scope_keys=list(visibility.keys),
         profile=profile,
     )
+    return hints_view(hints)
 
 
 @router.get(

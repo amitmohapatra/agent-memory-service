@@ -26,19 +26,44 @@ def _body(route: respx.Route) -> dict:
 
 
 _BUNDLE = {
-    "query": "q",
-    "query_type": "GENERAL_SEMANTIC",
     "bundle_id": "b1",
-    "conversation": {"thread_id": "thr_1"},
-    "evidence": {"status": "COMPLETE"},
-    "token_budget": 2000,
+    "evidence_status": "COMPLETE",
     "token_estimate": 10,
-    "rendered": "## Profile\n...",
-    "handles": {"m1": "mem_1"},
-    "profile": [{"block": "user", "text": "Prefers email.", "version": 3}],
-    "thread_summary": {"text": "Asked for a PO.", "covers_to_sequence": 20, "version": 1},
-    "procedures": [{"id": "prc_1", "title": "Order", "steps": [], "success_rate": 1.0}],
-    "tools": {"candidates": [{"name": "erp-create_po", "score": 0.9}], "next": "erp-create_po"},
+    "conversation": {
+        "thread_id": "thr_1",
+        "messages": [{"id": "msg_1", "role": "USER", "text": "Order paper."}],
+    },
+    "thread_summary": "Asked for a PO.",
+    "profile": [{"block": "user", "text": "Prefers email."}],
+    "procedures": [
+        {
+            "id": "prc_1",
+            "title": "Order",
+            "steps": ["erp-create_po"],
+            "success_rate": 1.0,
+            "runs": 4,
+        }
+    ],
+    "tools": [
+        {
+            "name": "erp-create_po",
+            "confidence": 0.74,
+            "success_rate": 1.0,
+            "next": True,
+            "args": {"amount": 700},
+            "missing": [{"arg": "supplier_id", "question": "Which supplier id?"}],
+        }
+    ],
+    "memories": [{"id": "mem_1", "text": "Prefers email.", "relevance": 0.4}],
+    "graph_facts": [
+        {
+            "id": "rel_1",
+            "subject": "u1",
+            "predicate": "works_at",
+            "object": "Acme",
+            "relevance": 0.2,
+        }
+    ],
 }
 
 
@@ -50,7 +75,8 @@ async def test_context_is_the_prompt_by_default(ctx) -> None:
             "rendered": "## Memories\n- [m1] Prefers email.",
             "bundle_id": "b1",
             "token_estimate": 12,
-            "tool_candidates": ["erp-create_po"],
+            "evidence_status": "COMPLETE",
+            "tools": [{"name": "erp-create_po", "confidence": 0.74}],
         },
     )
     pushed = await ctx.context(
@@ -61,7 +87,8 @@ async def test_context_is_the_prompt_by_default(ctx) -> None:
     assert body["format"] == "prompt" and body["window"] is False and body["token_budget"] == 2000
     assert "use_llm" not in body and "since_revision" not in body
     assert isinstance(pushed, PromptContext)
-    assert pushed.bundle_id == "b1" and pushed.tool_candidates == ["erp-create_po"]
+    assert pushed.bundle_id == "b1" and pushed.tool_names == ["erp-create_po"]
+    assert pushed.tools is not None and pushed.tools[0].confidence == 0.74
 
 
 @respx.mock
@@ -69,11 +96,14 @@ async def test_the_full_bundle_reads_every_section(ctx) -> None:
     route = respx.post(f"{BASE}/v1/context").respond(200, json=_BUNDLE)
     bundle = await ctx.context("order paper", format="full", debug=True)
     assert _body(route)["format"] == "full" and _body(route)["debug"] is True
-    assert isinstance(bundle, ContextBundle) and bundle.handles == {"m1": "mem_1"}
-    assert bundle.profile[0].block == "user"
-    assert bundle.thread_summary is not None and bundle.thread_summary.covers_to_sequence == 20
-    assert bundle.procedures[0].id == "prc_1"
-    assert isinstance(bundle.tools, ToolHints) and bundle.tools.next == "erp-create_po"
+    assert isinstance(bundle, ContextBundle) and not bundle.insufficient
+    assert bundle.conversation is not None and bundle.conversation.messages[0].id == "msg_1"
+    assert bundle.thread_summary == "Asked for a PO." and bundle.profile[0].block == "user"
+    assert bundle.procedures[0].steps == ["erp-create_po"] and bundle.procedures[0].runs == 4
+    tool = bundle.tools[0]
+    assert tool.next and tool.args == {"amount": 700} and tool.missing[0].arg == "supplier_id"
+    assert bundle.memories[0].relevance == 0.4 and bundle.graph_facts[0].object == "Acme"
+    assert bundle.knowledge == [] and bundle.summaries == [], "an absent section is empty"
 
 
 @respx.mock
@@ -81,21 +111,22 @@ async def test_tool_hints_names_the_available_tools(ctx) -> None:
     route = respx.post(f"{BASE}/v1/tools/hints").respond(
         200,
         json={
-            "candidates": [{"name": "erp-create_po", "score": 0.8, "why": "worked before"}],
-            "prefill": {
-                "erp-create_po.supplier": {
-                    "tool": "erp-create_po",
-                    "value": "Acme",
-                    "source": "graph",
+            "tools": [
+                {
+                    "name": "erp-create_po",
+                    "confidence": 0.62,
+                    "args": {"supplier": "Acme"},
+                    "missing": [{"arg": "qty", "question": "How many?"}],
                 }
-            },
-            "missing": [{"tool": "erp-create_po", "arg": "qty", "question": "How many?"}],
+            ],
+            "plan": {"id": "prc_1", "steps": ["erp-create_po"], "success_rate": 1.0, "runs": 3},
         },
     )
     hints = await ctx.tool_hints("order paper", available=["erp-create_po"], k=3)
     assert _body(route)["available"] == ["erp-create_po"] and _body(route)["k"] == 3
-    assert hints.prefill["erp-create_po.supplier"].value == "Acme"
-    assert hints.missing[0].arg == "qty"
+    assert isinstance(hints, ToolHints) and hints.next is not None
+    assert hints.next.args["supplier"] == "Acme" and hints.next.missing[0].arg == "qty"
+    assert hints.plan is not None and hints.plan.steps == ["erp-create_po"]
 
 
 @respx.mock
@@ -247,7 +278,6 @@ async def test_search_returns_items_and_sends_the_time_window(ctx) -> None:
                     "kind": "memory",
                     "text": "Prefers email.",
                     "observed_on": "2026-09-01",
-                    "citation": "memory_id:mem_1",
                 }
             ]
         },

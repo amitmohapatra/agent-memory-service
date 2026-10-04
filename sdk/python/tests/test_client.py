@@ -167,24 +167,17 @@ async def test_context_bundle_parses_and_flags_insufficient(client: MemoryClient
         return_value=httpx.Response(
             200,
             json={
-                "query": "q",
-                "query_type": "GENERAL_SEMANTIC",
-                "conversation": {"rendered": ""},
-                "memories": [],
-                "knowledge": [],
-                "graph_facts": [],
-                "summaries": [],
-                "evidence": {"status": "INSUFFICIENT", "missing_groups": ["PAGE11"]},
-                "token_budget": 100,
-                "token_estimate": 0,
-                "rendered": "",
                 "bundle_id": "b1",
+                "evidence_status": "INSUFFICIENT",
+                "token_estimate": 0,
+                "missing_evidence": ["PAGE11"],
             },
         )
     )
     ctx = client.bind(tenant_id="acme")
     bundle = await ctx.context("q", format="full")
-    assert bundle.insufficient and bundle.evidence.missing_groups == ["PAGE11"]
+    assert bundle.insufficient and bundle.missing_evidence == ["PAGE11"]
+    assert bundle.memories == [] and bundle.conversation is None
 
 
 @respx.mock

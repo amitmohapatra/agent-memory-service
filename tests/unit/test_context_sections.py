@@ -61,8 +61,8 @@ def test_the_pinned_sections_fit_half_the_budget_in_priority_order() -> None:
 
 
 def test_each_section_costs_what_it_renders_to() -> None:
-    """The tools section renders only the next tool, its arguments and what is missing:
-    costing the whole hints object (candidates and all) dropped it from budgets it fit."""
+    """The tools section renders a few candidates, their arguments and what is missing, not
+    all twenty: costing the whole hints object dropped it from budgets it fit."""
     from memory_service.domain.context_bundle import tools_section
     from memory_service.modules.ingestion.hierarchy import estimate_tokens
 
@@ -128,7 +128,9 @@ def test_the_prompt_starts_from_the_pinned_sections() -> None:
     positions = [rendered.index(heading) for heading in order]
     assert positions == sorted(positions)
     assert "erp-get_stock -> erp-create_po (worked 90% of 10 runs)" in rendered
-    assert "- erp-create_po.supplier = 'Acme' (graph)" in rendered
-    assert "- missing erp-create_po.qty: How many?" in rendered
-    assert "step 2" not in rendered, "the candidates narrow the tools; they are not text"
+    assert (
+        "- erp-create_po (confidence 0.00, next step): supplier = 'Acme'; "
+        "missing qty: How many?" in rendered
+    ), rendered
+    assert "step 2" not in rendered, "the why is for the full form, not the prompt"
     assert "[m1] Acme supplies paper" in rendered

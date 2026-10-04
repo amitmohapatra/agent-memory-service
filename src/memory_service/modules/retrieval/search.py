@@ -47,15 +47,6 @@ DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 HISTORY_SCAN: Final = 200
 _WORD: Final = re.compile(r"\w+")
 
-_CITATION: Final = {
-    "chunk": "chunk_id",
-    "memory": "memory_id",
-    "summary": "summary_id",
-    "episode": "episode_id",
-    "fact": "relation_id",
-    "message": "message_id",
-}
-
 
 class SearchItem(BaseModel):
     """One result: enough to use it and cite it."""
@@ -68,7 +59,6 @@ class SearchItem(BaseModel):
     observed_on: str | None = Field(
         default=None, description="the day it was observed (YYYY-MM-DD), when known"
     )
-    citation: str = Field(description="stable citation key, e.g. memory_id:mem_…")
     document_id: str | None = None
     page: int | None = None
     thread_id: str | None = Field(
@@ -101,10 +91,6 @@ def _day(raw: Any) -> str | None:
     return str(raw)[:10] if raw else None
 
 
-def citation(kind: str, record_id: str) -> str:
-    return f"{_CITATION.get(kind, kind)}:{record_id}"
-
-
 def _clip(text: str, chars: int | None) -> str:
     return text if chars is None or len(text) <= chars else text[:chars] + "…"
 
@@ -116,7 +102,6 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
         kind=c.kind,
         text=_clip(c.text, text_chars),
         observed_on=_day(c.payload.get("observed_at")),
-        citation=citation(c.kind, c.record_id),
         document_id=c.payload.get("document_id"),
         page=int(page) if isinstance(page, int | float) else None,
         thread_id=c.payload.get("thread_id") if c.kind == "episode" else None,
@@ -143,7 +128,6 @@ def _message_item(m: Message, overlap: int, *, debug: bool, text_chars: int | No
         kind="message",
         text=_clip(f"{m.role.value}: {m.content}", text_chars),
         observed_on=m.occurred_at.date().isoformat(),
-        citation=citation("message", m.message_id),
         debug={"overlap": overlap, "sequence": m.sequence} if debug else None,
     )
 

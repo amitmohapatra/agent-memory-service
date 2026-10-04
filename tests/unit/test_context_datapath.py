@@ -21,13 +21,15 @@ import pytest
 
 from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
 from memory_service.adapters.cache.memory_cache import MemoryCache
+from memory_service.api.schemas.context import ContextResponse
 from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ContextBundle, ConversationWindow
 from memory_service.domain.enums import QueryType
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
-from memory_service.modules.context.builder import ContextBuilder, bundle_to_api
+from memory_service.modules.context.builder import ContextBuilder
+from memory_service.modules.context.views import full_view
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.retrieval.engine import Candidate, RetrievalResult
 from memory_service.modules.retrieval.router import QueryRouter
@@ -194,9 +196,9 @@ async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(c
         with bound_to("acme", "user:u1", uses=["query_expansion"]):
             await first.build_api(CTX, QUERY, output="full")
             await first.drain()
-            assert orjson.loads(await unchanged.build_api(CTX, QUERY, output="full"))["cache_hit"]
+            assert (await unchanged.build(CTX, QUERY)).cache_hit
         with bound_to("acme", "user:u1", uses=["query_expansion"], models=models):
-            assert not orjson.loads(await changed.build_api(CTX, QUERY, output="full"))["cache_hit"]
+            assert not (await changed.build(CTX, QUERY)).cache_hit
         assert changed.engine.calls == 1 and unchanged.engine.calls == 0
         assert "operator-key" not in changed._fingerprint
     finally:
@@ -521,16 +523,14 @@ async def test_a_cache_hit_returns_the_stored_bytes(output) -> None:
     builder = _builder(cache)
     first = await builder.build_api(CTX, QUERY, output=output)
     await builder.drain()
-    prefix = "ctxp:" if output == "prompt" else "ctx:"
+    prefix = "ctxp:" if output == "prompt" else "ctxf:"
     stored = next(v for k, (v, _) in cache._data.items() if k.startswith(prefix))
 
     again = await builder.build_api(CTX, QUERY, output=output)
     assert again is stored, "a hit must be the stored bytes, not a parse and a re-serialisation"
-    assert orjson.loads(again) == {
-        **orjson.loads(first),
-        **({"cache_hit": True} if output == "full" else {}),
-    }
-    assert orjson.loads(again)["rendered"]
+    assert orjson.loads(again) == orjson.loads(first)
+    # the prompt form is the rendering; the full form is the same content as data, not both
+    assert ("rendered" in orjson.loads(again)) is (output == "prompt")
 
 
 async def test_the_prompt_form_is_four_fields_and_debug_is_never_a_cache_hit() -> None:
@@ -542,28 +542,21 @@ async def test_the_prompt_form_is_four_fields_and_debug_is_never_a_cache_hit() -
     assert prompt["evidence_status"] in {"COMPLETE", "INCOMPLETE", "INSUFFICIENT"}
     await builder.drain()
     debug = orjson.loads(await builder.build_api(CTX, QUERY, output="full", debug=True))
-    assert debug["cache_hit"] is False and "timings_ms" in debug["diagnostics"]
+    assert "timings_ms" in debug["diagnostics"], "a debug answer is always a fresh build"
     assert "diagnostics" not in orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
     await builder.close()
 
 
-async def test_the_bytes_are_what_the_router_would_have_built() -> None:
-    """``build_api`` replaces ``ContextResponse.model_validate(bundle_to_api(bundle))``; the
-    content it sends must be identical to what that produced."""
+async def test_the_bytes_are_the_full_view_of_the_bundle() -> None:
+    """``build_api`` sends ``full_view`` of the bundle ``build`` makes, and it is a valid
+    ContextResponse: no field the schema does not declare, every number in 0..1."""
     builder = _builder(MemoryCache())
     payload = orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
     fresh = _builder(MemoryCache())
-    expected = bundle_to_api(await fresh.build(CTX, QUERY))
-    for key in ("query", "query_type", "evidence", "rendered", "token_budget", "cache_hit"):
-        assert payload[key] == expected[key], key
-    # every field but the evidence refs, whose observed_at is the moment each was built
-    trimmed = [{k: v for k, v in m.items() if k != "evidence"} for m in payload["memories"]]
-    assert trimmed == [
-        {k: v for k, v in m.items() if k != "evidence"} for m in expected["memories"]
-    ]
-    assert [e["source_id"] for m in payload["memories"] for e in m["evidence"]] == [
-        e["source_id"] for m in expected["memories"] for e in m["evidence"]
-    ]
+    assert payload == full_view(await fresh.build(CTX, QUERY))
+    ContextResponse.model_validate(payload)
+    assert all(0.0 <= m["relevance"] <= 1.0 for m in payload["memories"])
+    assert "rendered" not in payload and "handles" not in payload
 
 
 async def test_a_built_bundle_leaves_its_handles_and_evidence_for_later_calls() -> None:
@@ -572,27 +565,29 @@ async def test_a_built_bundle_leaves_its_handles_and_evidence_for_later_calls() 
     cache = MemoryCache()
     builder = _builder(cache)
     payload = orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
+    prompt = orjson.loads(await builder.build_api(CTX, QUERY, output="prompt"))
     await builder.drain()
     record = await builder.records.load(CTX, payload["bundle_id"])
     assert record is not None
-    assert (
-        record.handles
-        == payload["handles"]
-        == {f"m{i}": m["item_id"] for i, m in enumerate(payload["memories"], start=1)}
-    )
-    assert [e.citation for e in record.evidence] == list(payload["handles"])
+    assert record.handles == {f"m{i}": m["id"] for i, m in enumerate(payload["memories"], start=1)}
+    assert [e.citation for e in record.evidence] == list(record.handles)
     other = MemoryExecutionContext(tenant_id="acme", user_id="u2")
     assert await builder.records.load(other, payload["bundle_id"]) is None
-    assert "[m1]" in payload["rendered"] and "memory_id:" not in payload["rendered"]
+    assert "[m1]" in prompt["rendered"] and "memory_id:" not in prompt["rendered"]
 
 
 async def test_the_two_entry_points_share_one_cache() -> None:
     cache = MemoryCache()
     builder = _builder(cache)
-    await builder.build(CTX, QUERY)
+    bundle = await builder.build(CTX, QUERY)
     await builder.drain()
-    hit = await builder.build_api(CTX, QUERY, output="full")
-    assert orjson.loads(hit)["cache_hit"] is True
+
+    async def no_second_build(*_: object, **__: object) -> None:
+        raise AssertionError("served from the cache the first build filled")
+
+    builder._fresh = no_second_build  # type: ignore[method-assign]
+    assert orjson.loads(await builder.build_api(CTX, QUERY, output="full")) == full_view(bundle)
+    assert (await builder.build(CTX, QUERY)).cache_hit is True
 
 
 # ---------------------------------------------------------------------------

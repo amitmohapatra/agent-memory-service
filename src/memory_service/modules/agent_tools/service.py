@@ -28,6 +28,7 @@ from memory_service.domain.pulls import (
     PULL_SETTLE,
     AgentPull,
 )
+from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
 from memory_service.modules.tools.patterns import task_pattern
@@ -326,14 +327,4 @@ class AgentTools:
             scope_keys=list(visibility.keys),
             profile=profile,
         )
-        plan = hints.plan
-        return {
-            "next": hints.next,
-            "plan": {"title": plan.title, "steps": [str(s.get("tool")) for s in plan.steps]}
-            if plan is not None
-            else None,
-            "prefill": {key: p.value for key, p in hints.prefill.items()},
-            "missing": [
-                {"arg": f"{m.tool}.{m.arg}", "question": m.question} for m in hints.missing
-            ],
-        }
+        return hints_view(hints)
