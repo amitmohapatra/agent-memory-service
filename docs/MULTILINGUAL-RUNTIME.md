@@ -65,7 +65,7 @@ sequenceDiagram
         I->>EN: embed_documents(texts)
         I->>ML: embed_documents(texts)
     end
-    I->>Q: upsert(points: dense_en, dense_ml, bm25; payload: script, entities, dated_mentions, ...)
+    I->>Q: upsert(points: dense_en, dense_ml, bm25#59; payload: script, entities, dated_mentions, ...)
 ```
 
 Payload fields `script` and `entities` are indexed and matched inside the store; they are

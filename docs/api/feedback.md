@@ -40,7 +40,7 @@ sequenceDiagram
     P->>DB: the run's explicit outcome (confirm/approve = success)
     P->>M: each cited memory (evidence_refs): confidence ± 0.05, reinforced when affirmed
   else target is a tool call
-    P->>DB: tool statistics + approval pattern (agent, tool, argument shape); reject labels the run
+    P->>DB: tool statistics + approval pattern (agent, tool, argument shape)#59; reject labels the run
   else target is a procedure
     P->>DB: reject → the procedure is no longer offered (until its steps change)
   end
