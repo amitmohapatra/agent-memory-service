@@ -17,6 +17,7 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
+from memory_service.api.params import ProfileBlockPath
 from memory_service.domain.profile import (
     PROFILE_BLOCK_MAX_CHARS,
     SOURCE_QUERY_MAX_CHARS,
@@ -34,9 +35,9 @@ _BLOCK_DESCRIPTION = (
 
 class ProfileBlockBody(BaseModel):
     block: str = Field(description=_BLOCK_DESCRIPTION)
-    text: str
-    version: int
-    updated_at: datetime
+    text: str = Field(description="The block's text, as the context renders it.")
+    version: int = Field(description="How many times the block was edited (1 for the first write).")
+    updated_at: datetime = Field(description="When the record last changed (ISO 8601, UTC).")
     source_query: str | None = Field(
         default=None, description="the standing question the service keeps this block answering"
     )
@@ -53,7 +54,9 @@ class ProfileBlockBody(BaseModel):
 
 
 class ProfileResponse(BaseModel):
-    blocks: list[ProfileBlockBody]
+    blocks: list[ProfileBlockBody] = Field(
+        description="The user's, the agent's and the workspace's blocks."
+    )
 
 
 class EditBlockRequest(BaseModel):
@@ -68,7 +71,12 @@ class EditBlockRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     old: str = Field(
         default="",
         max_length=PROFILE_BLOCK_MAX_CHARS,
@@ -115,7 +123,7 @@ async def get_profile(ctx: HeaderContextDep, container: ContainerDep) -> Profile
     responses=error_responses(401, 403, 404, 409, 422, 503),
 )
 async def edit_profile_block(
-    block: str,
+    block: ProfileBlockPath,
     request: Request,
     body: EditBlockRequest,
     container: ContainerDep,

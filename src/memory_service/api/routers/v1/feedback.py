@@ -25,7 +25,7 @@ from memory_service.api.errors import error_responses
 from memory_service.api.headers import DEPRECATION_HEADER, LINK_HEADER
 from memory_service.api.idempotent import resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, next_link, page
-from memory_service.api.params import limit_query
+from memory_service.api.params import FeedbackIdPath, limit_query
 from memory_service.api.schemas.feedback import (
     FeedbackListResponse,
     FeedbackRequest,
@@ -249,7 +249,7 @@ async def _pending(
     summary="Read one feedback record, with its projection once it has run",
 )
 async def get_feedback(
-    feedback_id: str, container: ContainerDep, ctx: HeaderContextDep
+    feedback_id: FeedbackIdPath, container: ContainerDep, ctx: HeaderContextDep
 ) -> FeedbackResponse:
     async with container.services["uow_factory"]() as uow:
         return FeedbackResponse.of(await _service(container).get(uow, ctx, feedback_id))
@@ -315,7 +315,7 @@ ReviewBody = Annotated[
 )
 async def approve_feedback(
     request: Request,
-    feedback_id: str,
+    feedback_id: FeedbackIdPath,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     body: ReviewBody = None,
@@ -332,7 +332,7 @@ async def approve_feedback(
 )
 async def dismiss_feedback(
     request: Request,
-    feedback_id: str,
+    feedback_id: FeedbackIdPath,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     body: ReviewBody = None,

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from memory_service.api.deps import ContainerDep, HeaderContextDep
 from memory_service.api.errors import error_responses
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
-from memory_service.api.params import limit_query
+from memory_service.api.params import EntityIdPath, limit_query
 from memory_service.config.constants import GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, RelationStatus
@@ -26,12 +26,18 @@ _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 class EntityOut(BaseModel):
-    entity_id: str
-    name: str
-    canonical_name: str
-    entity_type: str
-    mention_count: int
-    aliases: list[str] = Field(default_factory=list)
+    entity_id: str = Field(description="The entity's id (ent_...).")
+    name: str = Field(description="The entity's display name, as most often written.")
+    canonical_name: str = Field(
+        description="The normalised name the entity is matched by (case and punctuation folded)."
+    )
+    entity_type: str = Field(
+        description="The entity's type, e.g. ORG, PERSON, PRODUCT, MONEY, DATE."
+    )
+    mention_count: int = Field(
+        description="How many times it was mentioned in what the caller may read."
+    )
+    aliases: list[str] = Field(default_factory=list, description="Other names it was written as.")
     summary: str = Field(
         default="",
         description="one paragraph over the entity's current facts; empty until "
@@ -40,11 +46,11 @@ class EntityOut(BaseModel):
 
 
 class FactOut(BaseModel):
-    relation_id: str
-    subject: str
-    predicate: str
-    object: str
-    fact_text: str
+    relation_id: str = Field(description="The fact's id (rel_...).")
+    subject: str = Field(description="The entity the fact is about (its name).")
+    predicate: str = Field(description="The relation, e.g. employs, reported, replaced_by.")
+    object: str = Field(description="The entity or value it relates to (a name, or a literal).")
+    fact_text: str = Field(description="The fact as one sentence.")
     status: RelationStatus = Field(
         ...,
         description="CURRENT unless the traversal carries as_of or valid_at, which also return "
@@ -57,27 +63,42 @@ class FactOut(BaseModel):
         "which), causal (why), structural (where it appears in the corpus), procedural (a "
         "tool call used the entity, or returned the id that identifies it)",
     )
-    valid_from: datetime | None = None
-    valid_to: datetime | None = None
-    observed_at: datetime
-    confidence: float
-    memory_id: str | None = None
-    document_id: str | None = None
+    valid_from: datetime | None = Field(
+        default=None, description="When it became true (valid time), when known."
+    )
+    valid_to: datetime | None = Field(
+        default=None, description="When it stopped being true (valid time), when known."
+    )
+    observed_at: datetime = Field(description="When the service learned it (knowledge time).")
+    confidence: float = Field(description="0..1, how far the extraction trusts it.")
+    memory_id: str | None = Field(
+        default=None, description="The memory it was extracted from, if any."
+    )
+    document_id: str | None = Field(
+        default=None, description="The document it was extracted from, if any."
+    )
     attributes: dict[str, Any] = Field(
         default_factory=dict,
         description="Structured fact data: period, currency, amount, change, table, page ...",
     )
-    evidence: list[EvidenceRef] = Field(default_factory=list)
+    evidence: list[EvidenceRef] = Field(
+        default_factory=list, description="Where it came from (at most three references)."
+    )
 
 
 class NeighborhoodOut(BaseModel):
-    entities: list[EntityOut]
-    facts: list[FactOut]
-    visited: int
+    entities: list[EntityOut] = Field(description="The entities reached, the start included.")
+    facts: list[FactOut] = Field(description="The facts traversed between them.")
+    visited: int = Field(
+        description="How many entities the traversal visited (a bound on its cost)."
+    )
 
 
 class EntityListResponse(BaseModel):
-    entities: list[EntityOut]
+    entities: list[EntityOut] = Field(
+        description="The page: entities the text names first, then those whose name starts "
+        "with it, most mentioned first."
+    )
     next_cursor: str | None = Field(
         default=None,
         description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
@@ -85,15 +106,17 @@ class EntityListResponse(BaseModel):
 
 
 class CurrentValueOut(BaseModel):
-    predicate: str
-    value: str
-    relation_id: str
-    valid_from: datetime | None = None
-    observed_at: datetime
+    predicate: str = Field(description="The relation, e.g. ceo or headquarters.")
+    value: str = Field(description="Its newest current value (an entity's name, or a literal).")
+    relation_id: str = Field(description="The fact that holds the value (rel_...).")
+    valid_from: datetime | None = Field(
+        default=None, description="When the value became true, when known."
+    )
+    observed_at: datetime = Field(description="When the service learned it.")
 
 
 class EntityProfileResponse(BaseModel):
-    entity: EntityOut
+    entity: EntityOut = Field(description="The entity itself.")
     current: list[CurrentValueOut] = Field(
         description="the newest current value of each predicate the entity is the subject of"
     )
@@ -159,7 +182,7 @@ async def search_entities(
     responses=_READ_ERRORS,
 )
 async def entity_profile(
-    entity_id: str,
+    entity_id: EntityIdPath,
     ctx: HeaderContextDep,
     container: ContainerDep,
     depth: Annotated[

@@ -48,8 +48,13 @@ class AgentKeyRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody
-    virtual_key: SecretStr = Field(min_length=1, max_length=4096)
+    scope: ScopeBody = Field(description="The agent the key is for: agent_id is required.")
+    virtual_key: SecretStr = Field(
+        min_length=1,
+        max_length=4096,
+        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
+        "never returned.",
+    )
 
 
 class ModelKeyRequest(BaseModel):
@@ -57,14 +62,29 @@ class ModelKeyRequest(BaseModel):
         extra="forbid", json_schema_extra={"examples": [{"virtual_key": "vk-example"}]}
     )
 
-    virtual_key: SecretStr = Field(min_length=1, max_length=4096)
+    virtual_key: SecretStr = Field(
+        min_length=1,
+        max_length=4096,
+        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
+        "never returned.",
+    )
 
 
 class AgentKeyStatus(BaseModel):
-    registered: bool
-    revoked: bool
-    revision: int
-    updated_at: datetime | None = None
+    registered: bool = Field(
+        description="true: a key (or a revocation of one) is stored at this level."
+    )
+    revoked: bool = Field(
+        description="true: the stored key was revoked; calls at this level are refused "
+        "rather than falling back to another level's key."
+    )
+    revision: int = Field(
+        description="How many times the key was set or revoked (0: never); it changes on "
+        "every rotation."
+    )
+    updated_at: datetime | None = Field(
+        default=None, description="When it was last set or revoked; null when never."
+    )
 
 
 def _status(record: StoredCredential | None) -> AgentKeyStatus:
@@ -277,11 +297,22 @@ class ModelPolicyStatus(BaseModel):
         description="false: the tenant has set no policy, so the default applies (every use, "
         "reads assisted, the default model per use)"
     )
-    uses: list[LLMUse]
-    read_assist: bool
-    models: dict[str, str]
-    revision: int
-    updated_at: datetime | None = None
+    uses: list[LLMUse] = Field(
+        description="What the model may be called for in this tenant "
+        "(contextual_extraction, summaries, grounding_judge, ...)."
+    )
+    read_assist: bool = Field(
+        description="Whether reads (/v1/context, /v1/recall, /v1/verify, "
+        "/v1/graph/entities) consult the model."
+    )
+    models: dict[str, str] = Field(
+        description="The gateway model (provider/model) each use calls; a use not named "
+        "calls the service's default."
+    )
+    revision: int = Field(description="How many times the policy was set (0: never).")
+    updated_at: datetime | None = Field(
+        default=None, description="When it was last set; null when never."
+    )
 
 
 def _policy_status(stored: StoredPolicy | None) -> ModelPolicyStatus:
@@ -364,19 +395,23 @@ async def set_tenant_policy(
 
 
 class UsageDayOut(BaseModel):
-    day: date
+    day: date = Field(description="The day (UTC, YYYY-MM-DD).")
     use: LLMUse = Field(
         description="What the model was called for, as the tenant policy names it "
         "(contextual_extraction, summaries, grounding_judge, ...)."
     )
-    tokens: int
-    calls: int
+    tokens: int = Field(
+        description="Model tokens spent that day for that use (prompt and completion)."
+    )
+    calls: int = Field(description="Model calls made that day for that use.")
 
 
 class ModelUsageResponse(BaseModel):
-    since: date
-    until: date
-    days: list[UsageDayOut]
+    since: date = Field(description="The first day of the window (UTC).")
+    until: date = Field(description="The last day of the window (UTC).")
+    days: list[UsageDayOut] = Field(
+        description="One row per day and use that saw a call, oldest first."
+    )
 
 
 @router.get(

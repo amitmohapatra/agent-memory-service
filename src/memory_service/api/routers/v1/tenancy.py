@@ -22,7 +22,7 @@ from memory_service.api.deps import (
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import NO_CONTENT, resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
-from memory_service.api.params import WorkspaceIdPath, limit_query
+from memory_service.api.params import KeyIdPath, PrincipalRefPath, WorkspaceIdPath, limit_query
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
     CreateWorkspaceRequest,
@@ -130,7 +130,7 @@ async def list_keys(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "keys")] = 100,
 ) -> list[ApiKeyResponse]:
     position = decode_cursor(cursor, fields={"created_at": datetime, "key_id": str})
     after = (position["created_at"], position["key_id"]) if position else None
@@ -153,7 +153,7 @@ async def list_keys(
 )
 async def update_key(
     request: Request,
-    key_id: str,
+    key_id: KeyIdPath,
     body: UpdateKeyRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
@@ -188,7 +188,7 @@ async def update_key(
     summary="Revoke a key; it fails on its next request from any instance",
 )
 async def revoke_key(
-    request: Request, key_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request, key_id: KeyIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> Response:
     verifier = container.services["api_keys"]
 
@@ -266,7 +266,7 @@ async def list_workspaces(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "workspaces")] = 100,
 ) -> list[WorkspaceResponse]:
     position = decode_cursor(cursor, fields=("workspace_id",))
     async with container.services["uow_factory"]() as uow:
@@ -287,7 +287,7 @@ async def list_workspaces(
     summary="Get a workspace",
 )
 async def get_workspace(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    workspace_id: WorkspaceIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> WorkspaceResponse:
     async with container.services["uow_factory"]() as uow:
         return WorkspaceResponse.of(
@@ -303,7 +303,10 @@ async def get_workspace(
     "is revoked at once",
 )
 async def delete_workspace(
-    request: Request, workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    workspace_id: WorkspaceIdPath,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
 ) -> Response:
     verifier = container.services["api_keys"]
 
@@ -367,8 +370,8 @@ async def list_members(
 )
 async def set_member(
     request: Request,
-    workspace_id: str,
-    principal_ref: str,
+    workspace_id: WorkspaceIdPath,
+    principal_ref: PrincipalRefPath,
     body: SetMemberRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
@@ -407,8 +410,8 @@ async def set_member(
 )
 async def remove_member(
     request: Request,
-    workspace_id: str,
-    principal_ref: str,
+    workspace_id: WorkspaceIdPath,
+    principal_ref: PrincipalRefPath,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
 ) -> Response:
@@ -456,7 +459,7 @@ async def list_reads(
         ),
     ] = None,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    limit: Annotated[int, limit_query(1000, "entries")] = 100,
 ) -> list[ReadAuditResponse]:
     position = decode_cursor(cursor, fields={"before": datetime})
     if position is not None:

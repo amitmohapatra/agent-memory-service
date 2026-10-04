@@ -51,19 +51,69 @@ class ScopeBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str | None = Field(default=None, examples=["acme"])
-    workspace_id: str | None = Field(default=None, examples=["ws-finance"])
-    user_id: str | None = Field(default=None, examples=["u-123"])
-    thread_id: str | None = Field(default=None, examples=["thr_01J8Z"])
-    session_id: str | None = Field(default=None, examples=["ses_01J8Z"])
-    turn_id: str | None = Field(default=None, examples=["trn_01J8Z"])
-    work_id: str | None = None
-    task_id: str | None = None
-    agent_id: str | None = Field(default=None, examples=["research"])
-    agent_group_id: str | None = None
-    agent_run_id: str | None = None
-    parent_agent_run_id: str | None = None
-    correlation_id: str | None = None
+    tenant_id: str | None = Field(
+        default=None,
+        examples=["acme"],
+        description="The tenant; optional (the trusted header or the key names it) and, "
+        "when sent, must equal X-Trellis-Tenant.",
+    )
+    workspace_id: str | None = Field(
+        default=None,
+        examples=["ws-finance"],
+        description="The workspace (team) acted in; when sent, must equal X-Trellis-Workspace.",
+    )
+    user_id: str | None = Field(
+        default=None,
+        examples=["u-123"],
+        description="The end user acted for; when sent, must equal X-Trellis-User.",
+    )
+    thread_id: str | None = Field(
+        default=None,
+        examples=["thr_01J8Z"],
+        description="The conversation thread: THREAD-visible records of it are readable and"
+        " writes are anchored to it.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        examples=["ses_01J8Z"],
+        description="The open session within the thread (one sitting of a conversation).",
+    )
+    turn_id: str | None = Field(
+        default=None,
+        examples=["trn_01J8Z"],
+        description="One user turn (a question and its answer) within the session.",
+    )
+    work_id: str | None = Field(
+        default=None,
+        description="A unit of work spanning several agents and turns; WORK-visible records"
+        " of it are readable.",
+    )
+    task_id: str | None = Field(default=None, description="A task inside the unit of work.")
+    agent_id: str | None = Field(
+        default=None,
+        examples=["research"],
+        description="The logical agent acting (e.g. research): the call acts as agent:<id> "
+        "for the user.",
+    )
+    agent_group_id: str | None = Field(
+        default=None,
+        description="The group of cooperating agents; AGENT_GROUP-visible records of it are"
+        " readable.",
+    )
+    agent_run_id: str | None = Field(
+        default=None,
+        description="This execution of the agent (requires agent_id); RUN-visible records "
+        "of the run are readable.",
+    )
+    parent_agent_run_id: str | None = Field(
+        default=None,
+        description="The run that spawned this one, whose RUN-visible records this run may read.",
+    )
+    correlation_id: str | None = Field(
+        default=None,
+        description="An opaque id grouping related requests; wins over X-Correlation-ID and"
+        " is echoed in the response header.",
+    )
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
 

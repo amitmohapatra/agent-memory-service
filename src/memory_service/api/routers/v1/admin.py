@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Request, Response
 
 from memory_service.api.deps import ContainerDep, PlatformDep, request_context
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
+from memory_service.api.params import TenantIdPath, limit_query
 from memory_service.api.schemas.tenancy import (
     CreatedTenantResponse,
     CreateTenantRequest,
@@ -102,7 +103,7 @@ async def list_tenants(
     container: ContainerDep,
     _: PlatformDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "tenants")] = 100,
 ) -> list[TenantResponse]:
     position = decode_cursor(cursor, fields=("tenant_id",))
     start = position["tenant_id"] if position else ""
@@ -119,7 +120,9 @@ async def list_tenants(
     responses=_READ_ERRORS,
     summary="Get a tenant",
 )
-async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) -> TenantResponse:
+async def get_tenant(
+    tenant_id: TenantIdPath, container: ContainerDep, _: PlatformDep
+) -> TenantResponse:
     async with container.services["uow_factory"]() as uow:
         return TenantResponse.of(await _service(container).get_tenant(uow, tenant_id))
 
@@ -135,7 +138,7 @@ async def get_tenant(tenant_id: str, container: ContainerDep, _: PlatformDep) ->
 )
 async def update_tenant(
     request: Request,
-    tenant_id: str,
+    tenant_id: TenantIdPath,
     body: UpdateTenantRequest,
     container: ContainerDep,
     _: PlatformDep,

@@ -82,11 +82,23 @@ _REPORT_EXAMPLE: dict[str, Any] = {
 class VerifyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_VERIFY_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     bundle_id: str = Field(
         ..., min_length=1, max_length=64, description="the context the answer was given"
     )
-    answer: str = Field(..., min_length=1, max_length=8_000, examples=[_ANSWER])
+    answer: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        examples=[_ANSWER],
+        description="The answer to check, as the model wrote it (1-8000 characters); handle"
+        " citations ([m1], [d2]) resolve within the bundle.",
+    )
     run_id: str | None = Field(
         default=None,
         max_length=200,

@@ -24,9 +24,13 @@ class LiveResponse(BaseModel):
 
 
 class DependencyStatus(BaseModel):
-    ok: bool
-    mandatory: bool
-    error: str | None = None
+    ok: bool = Field(description="Whether it answered the probe.")
+    mandatory: bool = Field(
+        description="Whether the service cannot serve without it (not_ready when down)."
+    )
+    error: str | None = Field(
+        default=None, description="What the probe saw when it failed (no secrets)."
+    )
 
 
 class ReadyResponse(BaseModel):
@@ -44,12 +48,15 @@ class ReadyResponse(BaseModel):
                 "cache": {"ok": False, "mandatory": False},
             }
         ],
+        description="Each backing store and provider by name, with its probe result.",
     )
 
 
 class VersionResponse(BaseModel):
-    service: str = Field(..., examples=[constants.SERVICE_NAME])
-    version: str = Field(..., examples=[__version__])
+    service: str = Field(
+        ..., examples=[constants.SERVICE_NAME], description="The service name (trellis-memory)."
+    )
+    version: str = Field(..., examples=[__version__], description="The running release.")
     api_version: Literal["v1"] = Field(
         ..., description="The public API version the routes live under (/v1).", examples=["v1"]
     )

@@ -13,6 +13,7 @@ from memory_service.api.caching import conditional, etag_of
 from memory_service.api.deps import ContainerDep, ScopeBody, ServicePrincipalDep, build_context
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import run_idempotent
+from memory_service.api.params import AgentToolNamePath
 from memory_service.modules.agent_tools.service import AgentTools
 
 router = APIRouter()
@@ -22,13 +23,15 @@ _LIST_ERRORS = error_responses(401, 403, 422, 503)
 
 
 class AgentToolSpec(BaseModel):
-    name: str
-    description: str
+    name: str = Field(
+        description="The tool's name, the path segment of POST /v1/agent-tools/{name}."
+    )
+    description: str = Field(description="What the tool does, written for the model that calls it.")
     input_schema: dict[str, Any] = Field(description="JSON schema of the tool's arguments")
 
 
 class AgentToolsResponse(BaseModel):
-    tools: list[AgentToolSpec]
+    tools: list[AgentToolSpec] = Field(description="Every memory tool an agent may call.")
 
 
 class CallRequest(BaseModel):
@@ -39,7 +42,12 @@ class CallRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     args: dict[str, Any] = Field(default_factory=dict, description="the tool's arguments")
     toolbox: list[str] | None = Field(
         default=None,
@@ -89,7 +97,11 @@ async def list_agent_tools(request: Request, _: ServicePrincipalDep) -> Response
     responses=_ERRORS,
 )
 async def call_agent_tool(
-    name: str, request: Request, body: CallRequest, container: ContainerDep, _: ServicePrincipalDep
+    name: AgentToolNamePath,
+    request: Request,
+    body: CallRequest,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
 ) -> Response | CallResponse:
     """With ``Idempotency-Key``, a retried call (a ``remember`` whose answer was lost) gets
     the first result instead of a second write. The tool writes in units of work of its own;

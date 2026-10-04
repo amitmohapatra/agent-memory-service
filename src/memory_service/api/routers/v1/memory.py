@@ -27,6 +27,16 @@ from memory_service.api.idempotent import (
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
+from memory_service.api.params import (
+    AgentGroupIdQuery,
+    AgentIdQuery,
+    AgentRunIdQuery,
+    MemoryIdPath,
+    ParentAgentRunIdQuery,
+    ThreadIdQuery,
+    WorkIdQuery,
+    limit_query,
+)
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
     Lifetime,
@@ -59,8 +69,19 @@ class RememberRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_REMEMBER_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    content: str = Field(..., min_length=1, max_length=8_000)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        description="The statement to store, verbatim (1-8000 characters): nothing is "
+        "extracted from it.",
+    )
     memory_type: MemoryType = Field(
         default=MemoryType.SEMANTIC,
         description=(
@@ -111,7 +132,9 @@ class RememberRequest(BaseModel):
 
 
 class RememberResponse(BaseModel):
-    memory_id: str
+    memory_id: str = Field(
+        description="The stored memory (mem_...), or the existing one when deduplicated."
+    )
     deduplicated: bool = Field(
         description="true: the same content was already a current memory in this scope, "
         "and that memory's id is returned"
@@ -129,8 +152,18 @@ class SupersedeRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    content: str = Field(..., min_length=1, max_length=8_000)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        description="The new statement that replaces the memory (1-8000 characters).",
+    )
     reason: str = Field(default="", max_length=500, description="why it changed")
     bundle_id: str | None = Field(
         default=None, max_length=64, description="the context whose handle the path names"
@@ -145,8 +178,8 @@ class SupersedeResponse(BaseModel):
 class MemoryResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    memory_id: str
-    content: str
+    memory_id: str = Field(description="The memory's id (mem_...).")
+    content: str = Field(description="The memory as it is retrieved: one statement in words.")
     memory_type: MemoryType = Field(
         ...,
         description=(
@@ -171,10 +204,21 @@ class MemoryResponse(BaseModel):
         description="Where the memory is anchored (distinct from visibility): AGENT, "
         "AGENT_GROUP, WORK, THREAD, USER, GROUP, WORKSPACE, TENANT or GLOBAL.",
     )
-    owner_principal: str
-    subject: str | None = None
-    predicate: str | None = None
-    object: str | None = None
+    owner_principal: str = Field(
+        description="Who the memory is owned by: user:<id> or agent:<id> (the rule for who "
+        "may forget or correct it)."
+    )
+    subject: str | None = Field(
+        default=None, description="The entity the memory is about, when it names one."
+    )
+    predicate: str | None = Field(
+        default=None,
+        description="The relation of a structured fact (subject predicate object), when the"
+        " memory is one.",
+    )
+    object: str | None = Field(
+        default=None, description="The value of a structured fact, when the memory is one."
+    )
     temporal_status: TemporalStatus = Field(
         ...,
         description="CURRENT is the live value; SUPERSEDED was replaced by a newer memory "
@@ -182,14 +226,27 @@ class MemoryResponse(BaseModel):
         "superseding, so it sets no memory to it today); EXPIRED passed its "
         "valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept.",
     )
-    valid_from: datetime | None = None
-    valid_to: datetime | None = None
-    observed_at: datetime
-    supersedes: str | None = None
-    superseded_by: str | None = None
-    confidence: float
-    importance: float
-    reinforcement_count: int
+    valid_from: datetime | None = Field(
+        default=None, description="When it became true (valid time), when known."
+    )
+    valid_to: datetime | None = Field(
+        default=None, description="When it stopped being true (valid time), when known."
+    )
+    observed_at: datetime = Field(description="When the service learned it (knowledge time).")
+    supersedes: str | None = Field(
+        default=None, description="The earlier version this memory replaced, if any."
+    )
+    superseded_by: str | None = Field(
+        default=None, description="The newer version that replaced this one, when SUPERSEDED."
+    )
+    confidence: float = Field(
+        description="0..1, how far the service trusts it: raised by corroboration, lowered "
+        "by contradiction."
+    )
+    importance: float = Field(description="0..1, how much it matters for retrieval and retention.")
+    reinforcement_count: int = Field(
+        description="How many times it was stated or confirmed (at least 1)."
+    )
     contributors: list[str] = Field(
         default_factory=list, description="Other principals that corroborated this memory"
     )
@@ -204,10 +261,17 @@ class MemoryResponse(BaseModel):
     contradicts: list[str] = Field(
         default_factory=list, description="CURRENT memories this one conflicts with"
     )
-    evidence: list[EvidenceRef]
-    category: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    evidence: list[EvidenceRef] = Field(
+        description="Where it came from: the messages, documents, statements or memories it"
+        " rests on."
+    )
+    category: str | None = Field(
+        default=None,
+        description="How the pipeline filed it (e.g. stated, preference, attribute, "
+        "decision, source_fact, verbatim_turn, tool_result); null when unfiled.",
+    )
+    created_at: datetime = Field(description="When the record was created (ISO 8601, UTC).")
+    updated_at: datetime = Field(description="When the record last changed (ISO 8601, UTC).")
     indexed_at: datetime | None = Field(
         default=None,
         description=(
@@ -221,7 +285,10 @@ class MemoryResponse(BaseModel):
 
 
 class MemoryListResponse(BaseModel):
-    memories: list[MemoryResponse]
+    memories: list[MemoryResponse] = Field(
+        description="The page: current memories anchored to the caller's scopes, newest "
+        "created first."
+    )
     next_cursor: str | None = Field(
         default=None, description="pass as `cursor` for the next page; null on the last"
     )
@@ -324,7 +391,7 @@ async def remember(
 )
 async def supersede_memory(
     request: Request,
-    memory_id: str,
+    memory_id: MemoryIdPath,
     body: SupersedeRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
@@ -369,15 +436,21 @@ async def list_memories(
             )
         ),
     ] = None,
-    include_superseded: bool = False,
+    include_superseded: Annotated[
+        bool,
+        Query(
+            description="true: also list memories a newer version replaced (SUPERSEDED), for "
+            "a memory's history."
+        ),
+    ] = False,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
-    thread_id: str | None = None,
-    work_id: str | None = None,
-    agent_id: str | None = None,
-    agent_group_id: str | None = None,
-    agent_run_id: str | None = None,
-    parent_agent_run_id: str | None = None,
+    limit: Annotated[int, limit_query(500, "memories")] = 100,
+    thread_id: ThreadIdQuery = None,
+    work_id: WorkIdQuery = None,
+    agent_id: AgentIdQuery = None,
+    agent_group_id: AgentGroupIdQuery = None,
+    agent_run_id: AgentRunIdQuery = None,
+    parent_agent_run_id: ParentAgentRunIdQuery = None,
 ) -> MemoryListResponse:
     """Security fields come from trusted headers; lineage anchors (thread, work, agent) are
     query parameters so a caller can list the memories of a specific thread or agent.
@@ -427,7 +500,7 @@ async def list_memories(
     responses=_READ_ERRORS,
 )
 async def get_memory(
-    memory_id: str, ctx: HeaderContextDep, container: ContainerDep
+    memory_id: MemoryIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MemoryResponse:
     async with container.services["uow_factory"]() as uow:
         memory = await _service(container).get_memory(uow, ctx, memory_id)
@@ -443,7 +516,7 @@ async def get_memory(
 )
 async def forget_memory(
     request: Request,
-    memory_id: str,
+    memory_id: MemoryIdPath,
     ctx: HeaderContextDep,
     container: ContainerDep,
     bundle_id: Annotated[
@@ -478,7 +551,7 @@ async def forget_memory(
     responses=_READ_ERRORS,
 )
 async def restore_memory(
-    request: Request, memory_id: str, ctx: HeaderContextDep, container: ContainerDep
+    request: Request, memory_id: MemoryIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> Response:
     async def handler(uow):  # type: ignore[no-untyped-def]
         memory = await _service(container).restore(

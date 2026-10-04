@@ -86,14 +86,23 @@ _CONTEXT_EXAMPLE: dict[str, Any] = {
 class RecallRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_RECALL_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        examples=[_SCOPE],
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     query: str = Field(
         ...,
         min_length=1,
         max_length=4000,
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
+        description="What to look for, in words (1-4000 characters).",
     )
-    limit: int = Field(default=20, ge=1, le=100, examples=[20])
+    limit: int = Field(
+        default=20, ge=1, le=100, examples=[20], description="The most items to return (1-100)."
+    )
     kinds: list[SearchKind] = Field(
         default_factory=lambda: list(DEFAULT_KINDS),
         min_length=1,
@@ -133,7 +142,7 @@ class RecallRequest(BaseModel):
 class RecallResponse(BaseModel):
     model_config = ConfigDict(json_schema_extra={"examples": [{"items": [_ITEM_EXAMPLE]}]})
 
-    items: list[SearchItem]
+    items: list[SearchItem] = Field(description="The items, best first.")
     query_type: QueryType | None = Field(
         default=None, description=_QUERY_TYPE_DESCRIPTION + " Only with debug."
     )
@@ -143,15 +152,34 @@ class RecallResponse(BaseModel):
 class ContextRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CONTEXT_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody, examples=[_SCOPE])
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        examples=[_SCOPE],
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
     query: str = Field(
         ...,
         min_length=1,
         max_length=4000,
         examples=["Why did Adjusted EBITDA increase despite lower revenue?"],
+        description="The current turn's question, in words (1-4000 characters).",
     )
-    token_budget: int | None = Field(default=None, ge=200, le=16_000, examples=[6000])
-    document_ids: list[str] | None = Field(default=None, max_length=100, examples=[None])
+    token_budget: int | None = Field(
+        default=None,
+        ge=200,
+        le=16_000,
+        examples=[6000],
+        description="The most tokens the context may take (200-16000); omitted: the "
+        "service's default.",
+    )
+    document_ids: list[str] | None = Field(
+        default=None,
+        max_length=100,
+        examples=[None],
+        description="Restrict document knowledge to these documents (at most 100).",
+    )
     tools: ToolsRequest | None = Field(
         default=None,
         description="the agent's callable tools (available: null means any catalog tool): "

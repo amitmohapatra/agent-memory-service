@@ -51,8 +51,13 @@ class ToolsRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    available: list[str] | None = Field(default=None, max_length=500)
-    k: int = Field(default=8, ge=1, le=20)
+    available: list[str] | None = Field(
+        default=None,
+        max_length=500,
+        description="The tools the agent can call (at most 500); null: any catalog tool; "
+        "empty: none.",
+    )
+    k: int = Field(default=8, ge=1, le=20, description="The most tools to hint (1-20).")
 
     @property
     def any(self) -> bool:

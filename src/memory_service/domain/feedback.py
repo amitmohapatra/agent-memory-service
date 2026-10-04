@@ -89,10 +89,17 @@ class ReviewState(StrEnum):
 class FeedbackReview(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    state: ReviewState
+    state: ReviewState = Field(
+        description="pending (waits for a tenant admin), approved (applied) or dismissed "
+        "(kept for statistics, never applied)."
+    )
     reviewed_by: str | None = Field(default=None, description="the admin who decided")
-    reviewed_at: datetime | None = None
-    note: str | None = Field(default=None, max_length=COMMENT_MAX_CHARS)
+    reviewed_at: datetime | None = Field(
+        default=None, description="When it was decided (ISO 8601, UTC); null while pending."
+    )
+    note: str | None = Field(
+        default=None, max_length=COMMENT_MAX_CHARS, description="Why, as the reviewer wrote it."
+    )
 
 
 class ProjectionAction(StrEnum):
@@ -134,19 +141,38 @@ class FeedbackEvidenceRef(BaseModel):
     source_type: EvidenceSource = Field(
         default=EvidenceSource.MEMORY, description=EVIDENCE_SOURCE_DESCRIPTION
     )
-    source_id: str = Field(min_length=1, max_length=200)
-    message_id: str | None = None
-    document_id: str | None = None
-    chunk_id: str | None = None
-    page: int | None = None
-    citation: str | None = Field(default=None, max_length=2000)
-    observed_at: AwareDatetime | None = None
+    source_id: str = Field(
+        min_length=1, max_length=200, description="The source object's id; also the evidence id."
+    )
+    message_id: str | None = Field(
+        default=None, description="The message it was taken from, if any."
+    )
+    document_id: str | None = Field(
+        default=None, description="The document it was taken from, if any."
+    )
+    chunk_id: str | None = Field(default=None, description="The document passage, if any.")
+    page: int | None = Field(
+        default=None,
+        description="The 1-based page of the document it is on, when the document has pages.",
+    )
+    citation: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="A citation or quoted text to show a reader (at most 2000 characters).",
+    )
+    observed_at: AwareDatetime | None = Field(
+        default=None, description="When it was observed (ISO 8601, timezone-aware)."
+    )
 
 
 class FeedbackProjection(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    action: ProjectionAction
+    action: ProjectionAction = Field(
+        description="What the projector did: none (and why, in reason), memory_reinforced, "
+        "memory_retracted, memory_superseded, run_labelled, tool_call_counted "
+        "or procedure_rejected."
+    )
     memory_id: str | None = Field(default=None, description="the memory the verdict landed on")
     memory_ids: list[str] = Field(
         default_factory=list, description="the cited memories a run verdict adjusted"
@@ -155,8 +181,12 @@ class FeedbackProjection(BaseModel):
     superseded_by: str | None = Field(
         default=None, description="the corrected memory, for MEMORY_SUPERSEDED"
     )
-    reason: str | None = Field(default=None, max_length=500)
-    projected_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    reason: str | None = Field(
+        default=None, max_length=500, description="Why it did what it did (always set for none)."
+    )
+    projected_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), description="When it ran (ISO 8601, UTC)."
+    )
 
 
 class Feedback(BaseModel):

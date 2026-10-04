@@ -22,7 +22,7 @@ from memory_service.api.idempotent import (
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
-from memory_service.api.params import ThreadIdPath, limit_query
+from memory_service.api.params import JobIdPath, MessageIdPath, ThreadIdPath, limit_query
 from memory_service.api.schemas.conversation import (
     CreateMessagesRequest,
     JobResponse,
@@ -323,7 +323,7 @@ def _first_message_job(body: dict[str, Any]) -> str | None:
     responses=_READ_ERRORS,
 )
 async def get_message(
-    message_id: str, ctx: HeaderContextDep, container: ContainerDep
+    message_id: MessageIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MessageResponse:
     async with container.services["uow_factory"]() as uow:
         message = await _service(container).get_message(uow, ctx, message_id)
@@ -345,7 +345,7 @@ def _queue(name: str | None) -> Queue | None:
     summary="Background job status",
     responses=_READ_ERRORS,
 )
-async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -> JobResponse:
+async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: ContainerDep) -> JobResponse:
     """Accepts outbox references (``obx_<n>``) and task-queue ids."""
     if job_id.startswith("obx_"):
         from memory_service.adapters.db.orm import OutboxRow

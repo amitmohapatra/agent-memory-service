@@ -58,20 +58,38 @@ class EvidenceRef(BaseModel):
 
     source_type: EvidenceSource = Field(default=..., description=EVIDENCE_SOURCE_DESCRIPTION)
     source_id: str = Field(..., description="Primary identifier of the source object.")
-    message_id: str | None = None
-    document_id: str | None = None
-    document_version_id: str | None = None
-    chunk_id: str | None = None
+    message_id: str | None = Field(
+        default=None, description="The message it was taken from, if any."
+    )
+    document_id: str | None = Field(
+        default=None, description="The document it was taken from, if any."
+    )
+    document_version_id: str | None = Field(
+        default=None, description="The parsed version of the document (dcv_...)."
+    )
+    chunk_id: str | None = Field(default=None, description="The document passage (chk_...).")
     node_id: str | None = Field(default=None, description="Document Context Graph node.")
-    page: int | None = None
+    page: int | None = Field(
+        default=None,
+        description="The 1-based page of the document it is on, when the document has pages.",
+    )
     span_start: int | None = Field(default=None, description="Character offset in source text.")
-    span_end: int | None = None
-    agent_id: str | None = None
-    agent_run_id: str | None = None
-    tool_run_id: str | None = None
-    observed_at: datetime
+    span_end: int | None = Field(
+        default=None, description="Character offset in the source text where it ends."
+    )
+    agent_id: str | None = Field(
+        default=None, description="The agent that produced it, for an agent's result or statement."
+    )
+    agent_run_id: str | None = Field(default=None, description="The run that produced it.")
+    tool_run_id: str | None = Field(default=None, description="The tool call it came from.")
+    observed_at: datetime = Field(description="When it was observed (ISO 8601, UTC).")
     source_hash: str | None = Field(default=None, description="SHA-256 of the source bytes/text.")
-    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="0..1, how far the extraction trusts this piece of evidence.",
+    )
 
     def citation_key(self) -> str:
         """Short, stable key for citations: prefers the most specific locator."""

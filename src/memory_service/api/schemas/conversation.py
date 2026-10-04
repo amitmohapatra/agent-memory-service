@@ -23,9 +23,11 @@ _SCOPE_EXAMPLE: dict[str, Any] = {
 class AttachmentIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    filename: str = Field(..., examples=["report.pdf"])
-    media_type: str = Field(..., examples=["application/pdf"])
-    size_bytes: int = Field(..., ge=0, examples=[204800])
+    filename: str = Field(..., examples=["report.pdf"], description="The attached file's name.")
+    media_type: str = Field(
+        ..., examples=["application/pdf"], description="Its media type, e.g. application/pdf."
+    )
+    size_bytes: int = Field(..., ge=0, examples=[204800], description="Its size in bytes.")
     checksum: str = Field(
         ...,
         description="SHA-256 hex of the raw bytes",
@@ -42,8 +44,18 @@ class PatchThreadRequest(BaseModel):
         json_schema_extra={"examples": [{"title": "Q3 planning", "custom_metadata": {}}]},
     )
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    title: str | None = Field(default=None, max_length=500, examples=["Q3 planning"])
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
+    title: str | None = Field(
+        default=None,
+        max_length=500,
+        examples=["Q3 planning"],
+        description="The thread's title (at most 500 characters); omitted: unchanged.",
+    )
     custom_metadata: CustomMetadata | None = Field(
         default=None, description="replaces the thread's metadata when given"
     )
@@ -52,11 +64,13 @@ class PatchThreadRequest(BaseModel):
 class ThreadSummaryBody(BaseModel):
     """The thread's durable summary: every message up to ``covers_to_sequence``."""
 
-    text: str
-    covers_to_sequence: int
-    version: int
+    text: str = Field(description="The summary of the conversation so far.")
+    covers_to_sequence: int = Field(
+        description="The last message sequence it covers; later messages are the context's window."
+    )
+    version: int = Field(description="How many times it was rewritten (1 for the first).")
     model: str = Field(description="the model that wrote it, or extractive without one")
-    created_at: datetime
+    created_at: datetime = Field(description="When this version was written (ISO 8601, UTC).")
 
 
 class ThreadResponse(BaseModel):
@@ -78,15 +92,24 @@ class ThreadResponse(BaseModel):
         }
     )
 
-    thread_id: str
-    tenant_id: str
-    workspace_id: str | None = None
-    owner_user_id: str | None = None
-    title: str | None = None
-    revision: int
-    created_at: datetime
-    updated_at: datetime
-    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    thread_id: str = Field(description="The thread's id (thr_... or the caller's own id).")
+    tenant_id: str = Field(description="The tenant the record belongs to.")
+    workspace_id: str | None = Field(
+        default=None, description="The workspace it was created in; null: none."
+    )
+    owner_user_id: str | None = Field(
+        default=None, description="The user who started it; null when an agent run did."
+    )
+    title: str | None = Field(default=None, description="The thread's title, when it has one.")
+    revision: int = Field(
+        description="Bumped on every change to the thread or its messages: a cached context"
+        " of an older revision is stale."
+    )
+    created_at: datetime = Field(description="When the record was created (ISO 8601, UTC).")
+    updated_at: datetime = Field(description="When the record last changed (ISO 8601, UTC).")
+    custom_metadata: dict[str, Any] = Field(
+        default_factory=dict, description="The caller-defined JSON set on the thread."
+    )
     summary: ThreadSummaryBody | None = Field(
         default=None, description="the durable summary, once the thread has one"
     )
@@ -115,19 +138,34 @@ class MessageIn(BaseModel):
         min_length=0,
         max_length=2_000_000,
         examples=["Why did EBITDA increase despite lower revenue?"],
+        description="The message text (at most 2,000,000 characters); an EVENT needs some.",
     )
-    attachments: list[AttachmentIn] = Field(default_factory=list)
+    attachments: list[AttachmentIn] = Field(
+        default_factory=list,
+        description="Files attached to the message; a document_id links one already ingested.",
+    )
     custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
     occurred_at: UtcDateTime | None = Field(
         default=None,
         description="When the message was originally sent, for imports of an older "
         f"conversation; omitted: now. {UTC_RULE}",
     )
-    source_system: str | None = Field(default=None, max_length=100, examples=["slack"])
-    source_message_id: str | None = Field(
-        default=None, max_length=400, examples=["1726300000.000100"]
+    source_system: str | None = Field(
+        default=None,
+        max_length=100,
+        examples=["slack"],
+        description="The system the message was imported from (e.g. slack), with "
+        "source_message_id: a re-import of the same pair is deduplicated.",
     )
-    parent_message_id: str | None = None
+    source_message_id: str | None = Field(
+        default=None,
+        max_length=400,
+        examples=["1726300000.000100"],
+        description="The message's id in source_system (at most 400 characters).",
+    )
+    parent_message_id: str | None = Field(
+        default=None, description="The message this one answers or continues, when threaded."
+    )
 
     @model_validator(mode="after")
     def _an_event_says_something(self) -> MessageIn:
@@ -167,7 +205,12 @@ class CreateMessagesRequest(BaseModel):
         "acknowledgements return the ids used.",
         examples=[_SCOPE_EXAMPLE],
     )
-    messages: list[MessageIn] = Field(..., min_length=1, max_length=MESSAGES_MAX)
+    messages: list[MessageIn] = Field(
+        ...,
+        min_length=1,
+        max_length=MESSAGES_MAX,
+        description="The messages to append, in order (1-100).",
+    )
 
 
 class MessageAckResponse(BaseModel):
@@ -190,16 +233,24 @@ class MessageAckResponse(BaseModel):
         }
     )
 
-    message_id: str
-    thread_id: str
-    session_id: str
-    turn_id: str
-    sequence: int
+    message_id: str = Field(description="The stored message (msg_...).")
+    thread_id: str = Field(description="The thread it was appended to.")
+    session_id: str = Field(
+        description="The session it joined (the scope's, else the thread's own)."
+    )
+    turn_id: str = Field(description="The turn it joined (a USER message opens the next one).")
+    sequence: int = Field(description="Its position in the thread, from 1.")
     job_ids: list[str] = Field(
         default_factory=list, description="Job references; poll GET /v1/jobs/{job_id}"
     )
-    deduplicated: bool = False
-    observation_id: str | None = None
+    deduplicated: bool = Field(
+        default=False,
+        description="true: the same message was already stored (same lineage and content, "
+        "or the same source id); its acknowledgement is returned.",
+    )
+    observation_id: str | None = Field(
+        default=None, description="The observation the message recorded (obs_...), when one was."
+    )
 
 
 class MessageResponse(BaseModel):
@@ -225,10 +276,10 @@ class MessageResponse(BaseModel):
         }
     )
 
-    message_id: str
-    thread_id: str
-    session_id: str
-    turn_id: str
+    message_id: str = Field(description="The message's id (msg_...).")
+    thread_id: str = Field(description="The thread it belongs to.")
+    session_id: str = Field(description="The session it belongs to.")
+    turn_id: str = Field(description="The turn it belongs to.")
     role: MessageRole = Field(
         ...,
         description="Who produced it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT.",
@@ -237,11 +288,17 @@ class MessageResponse(BaseModel):
         ...,
         description="VISIBLE messages form the chat history; INTERNAL ones are agent/tool steps.",
     )
-    sequence: int
-    content: str
-    author_principal: str
-    agent_run_id: str | None = None
-    occurred_at: datetime
+    sequence: int = Field(description="Its position in the thread, from 1.")
+    content: str = Field(
+        description="The message text (restored from the archive when it was purged)."
+    )
+    author_principal: str = Field(description="Who wrote it: user:<id> or agent:<id>.")
+    agent_run_id: str | None = Field(
+        default=None, description="The run that wrote it, for an agent's message."
+    )
+    occurred_at: datetime = Field(
+        description="When it was sent (the import's original time, else when stored)."
+    )
     archive_status: ArchiveStatus = Field(
         ...,
         description=(
@@ -249,14 +306,20 @@ class MessageResponse(BaseModel):
             "written and verified) or PURGED (large payload removed from the hot store)."
         ),
     )
-    attachments: list[AttachmentIn] = Field(default_factory=list)
-    custom_metadata: dict[str, Any] = Field(default_factory=dict)
+    attachments: list[AttachmentIn] = Field(
+        default_factory=list, description="The files attached to it."
+    )
+    custom_metadata: dict[str, Any] = Field(
+        default_factory=dict, description="The caller-defined JSON set on the message."
+    )
 
 
 class MessagesAckResponse(BaseModel):
     """One acknowledgement per message, in request order."""
 
-    messages: list[MessageAckResponse]
+    messages: list[MessageAckResponse] = Field(
+        description="One acknowledgement per message, in request order."
+    )
 
 
 class MessageListResponse(BaseModel):
@@ -272,8 +335,10 @@ class MessageListResponse(BaseModel):
         }
     )
 
-    thread_id: str
-    messages: list[MessageResponse]
+    thread_id: str = Field(description="The thread listed.")
+    messages: list[MessageResponse] = Field(
+        description="The page, oldest first: the newest messages before the cursor."
+    )
     next_before_sequence: int | None = Field(
         default=None, description="Pass as ?before_sequence= to page backwards"
     )
@@ -298,8 +363,10 @@ class JobResponse(BaseModel):
         }
     )
 
-    job_id: str
-    task_name: str
+    job_id: str = Field(description="The job, as asked for (obx_<n> or a queue id).")
+    task_name: str = Field(
+        description="What the job does, e.g. memory.process_observation or document.parse."
+    )
     queue: Queue | None = Field(
         description="The work queue that runs it (chat-fast, memory-extract, embedding, "
         "document-parse, graph, summary, archive, evaluation, import, reconcile); null when "
@@ -310,5 +377,7 @@ class JobResponse(BaseModel):
         description="PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts "
         "exhausted; see last_error), RETRYING (failed, will run again) or CANCELLED.",
     )
-    attempts: int = 0
-    last_error: str | None = None
+    attempts: int = Field(default=0, description="How many times it has run so far.")
+    last_error: str | None = Field(
+        default=None, description="Why the last attempt failed, when one did."
+    )

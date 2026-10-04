@@ -93,9 +93,11 @@
         ],
         "properties": {
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The agent the key is for: agent_id is required."
           },
           "virtual_key": {
+            "description": "The Bifrost virtual key (1-4096 characters); stored encrypted and never returned.",
             "format": "password",
             "maxLength": 4096,
             "minLength": 1,
@@ -114,14 +116,17 @@
       "AgentKeyStatus": {
         "properties": {
           "registered": {
+            "description": "true: a key (or a revocation of one) is stored at this level.",
             "title": "Registered",
             "type": "boolean"
           },
           "revision": {
+            "description": "How many times the key was set or revoked (0: never); it changes on every rotation.",
             "title": "Revision",
             "type": "integer"
           },
           "revoked": {
+            "description": "true: the stored key was revoked; calls at this level are refused rather than falling back to another level's key.",
             "title": "Revoked",
             "type": "boolean"
           },
@@ -135,6 +140,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it was last set or revoked; null when never.",
             "title": "Updated At"
           }
         },
@@ -149,6 +155,7 @@
       "AgentToolSpec": {
         "properties": {
           "description": {
+            "description": "What the tool does, written for the model that calls it.",
             "title": "Description",
             "type": "string"
           },
@@ -159,6 +166,7 @@
             "type": "object"
           },
           "name": {
+            "description": "The tool's name, the path segment of POST /v1/agent-tools/{name}.",
             "title": "Name",
             "type": "string"
           }
@@ -174,6 +182,7 @@
       "AgentToolsResponse": {
         "properties": {
           "tools": {
+            "description": "Every memory tool an agent may call.",
             "items": {
               "$ref": "#/components/schemas/AgentToolSpec"
             },
@@ -190,11 +199,13 @@
       "ApiKeyResponse": {
         "properties": {
           "created_at": {
+            "description": "When it was issued (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "created_by": {
+            "description": "Who issued it: key:<id> of the issuing key, or platform.",
             "title": "Created By",
             "type": "string"
           },
@@ -208,9 +219,11 @@
                 "type": "null"
               }
             ],
+            "description": "When it stops working; null: never.",
             "title": "Expires At"
           },
           "key_id": {
+            "description": "The key's id: the part of mk_<key_id>.<secret> before the dot (never the secret).",
             "title": "Key Id",
             "type": "string"
           },
@@ -224,6 +237,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it last authenticated a request (updated at most once a minute); null: never used.",
             "title": "Last Used At"
           },
           "may_act_as": {
@@ -235,6 +249,7 @@
             "type": "array"
           },
           "name": {
+            "description": "The name it was issued under, for people (two keys may share one).",
             "title": "Name",
             "type": "string"
           },
@@ -248,6 +263,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it was revoked; null while it is not.",
             "title": "Revoked At"
           },
           "role": {
@@ -255,6 +271,7 @@
             "description": "admin or service; platform is never a stored key"
           },
           "tenant_id": {
+            "description": "The tenant the key speaks for.",
             "title": "Tenant Id",
             "type": "string"
           },
@@ -267,6 +284,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace a service key is pinned to; null: any workspace of the tenant.",
             "title": "Workspace Id"
           }
         },
@@ -302,13 +320,16 @@
                 "type": "null"
               }
             ],
+            "description": "The agent whose decisions these are; null: the tenant's.",
             "title": "Agent Id"
           },
           "approvals": {
+            "description": "How many calls of this shape were approved.",
             "title": "Approvals",
             "type": "integer"
           },
           "approve_rate": {
+            "description": "0..1, approvals / support.",
             "title": "Approve Rate",
             "type": "number"
           },
@@ -318,6 +339,7 @@
             "type": "string"
           },
           "edits": {
+            "description": "How many had their arguments changed before approval.",
             "title": "Edits",
             "type": "integer"
           },
@@ -327,6 +349,7 @@
             "type": "string"
           },
           "rejections": {
+            "description": "How many were rejected.",
             "title": "Rejections",
             "type": "integer"
           },
@@ -340,10 +363,12 @@
             "type": "string"
           },
           "support": {
+            "description": "approvals + rejections + edits: the decisions the rule rests on.",
             "title": "Support",
             "type": "integer"
           },
           "tool": {
+            "description": "The tool the rule is for.",
             "title": "Tool",
             "type": "string"
           }
@@ -379,6 +404,7 @@
             "title": "Next Cursor"
           },
           "suggestions": {
+            "description": "The rules offered, most supported first.",
             "items": {
               "$ref": "#/components/schemas/ApprovalSuggestionBody"
             },
@@ -426,6 +452,7 @@
             "title": "Document Id"
           },
           "filename": {
+            "description": "The attached file's name.",
             "examples": [
               "report.pdf"
             ],
@@ -433,6 +460,7 @@
             "type": "string"
           },
           "media_type": {
+            "description": "Its media type, e.g. application/pdf.",
             "examples": [
               "application/pdf"
             ],
@@ -440,6 +468,7 @@
             "type": "string"
           },
           "size_bytes": {
+            "description": "Its size in bytes.",
             "examples": [
               204800
             ],
@@ -468,10 +497,12 @@
                 "type": "null"
               }
             ],
+            "description": "Caller-defined JSON object (at most 32 keys, 2 levels, 8192 bytes), kept on the document.",
             "title": "Custom Metadata"
           },
           "file": {
             "contentMediaType": "application/octet-stream",
+            "description": "The file's bytes (at most the ingestion limit, and 25 MB per request).",
             "title": "File",
             "type": "string"
           },
@@ -484,6 +515,7 @@
                 "type": "null"
               }
             ],
+            "description": "The message (msg_...) the file was attached to; the document joins its thread.",
             "title": "Message Id"
           },
           "scope": {
@@ -495,6 +527,7 @@
                 "type": "null"
               }
             ],
+            "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. Omitted: the headers' scope alone.",
             "title": "Scope"
           },
           "title": {
@@ -506,6 +539,7 @@
                 "type": "null"
               }
             ],
+            "description": "The document's title (shown in citations); omitted: the filename.",
             "title": "Title"
           },
           "visibility": {
@@ -546,7 +580,8 @@
             "type": "object"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           },
           "toolbox": {
             "anyOf": [
@@ -612,11 +647,13 @@
           },
           "description": {
             "default": "",
+            "description": "What the tool does (at most 4000 characters).",
             "maxLength": 4000,
             "title": "Description",
             "type": "string"
           },
           "examples": {
+            "description": "Example argument objects (at most 20).",
             "items": {
               "additionalProperties": true,
               "type": "object"
@@ -627,10 +664,12 @@
           },
           "input_schema": {
             "additionalProperties": true,
+            "description": "The JSON Schema of the tool's arguments (at most 64 KiB).",
             "title": "Input Schema",
             "type": "object"
           },
           "name": {
+            "description": "The tool's name (1-200 characters), unique in the scope; the upsert key.",
             "maxLength": 200,
             "minLength": 1,
             "title": "Name",
@@ -671,6 +710,7 @@
                 "type": "null"
               }
             ],
+            "description": "The MCP server that provides it, for source mcp.",
             "title": "Server"
           },
           "side_effects": {
@@ -726,6 +766,7 @@
             "title": "Next Cursor"
           },
           "tools": {
+            "description": "The entries, by name.",
             "items": {
               "$ref": "#/components/schemas/CatalogTool"
             },
@@ -774,9 +815,11 @@
         ],
         "properties": {
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them. A workspace in the scope makes the entries the workspace's own."
           },
           "tools": {
+            "description": "The entries to upsert by name (1-500).",
             "items": {
               "$ref": "#/components/schemas/CatalogEntry"
             },
@@ -795,6 +838,7 @@
       "CatalogResponse": {
         "properties": {
           "tools": {
+            "description": "The entries, by name.",
             "items": {
               "$ref": "#/components/schemas/CatalogTool"
             },
@@ -827,20 +871,24 @@
                 "type": "null"
               }
             ],
+            "description": "The expression over the arguments that asks a person before a call (trellis.memory.approval); null: none.",
             "title": "Approve When"
           },
           "argument_entity_types": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Argument name -> the entity type its value names (e.g. supplier: ORG).",
             "title": "Argument Entity Types",
             "type": "object"
           },
           "description": {
+            "description": "What the tool does.",
             "title": "Description",
             "type": "string"
           },
           "examples": {
+            "description": "Example argument objects.",
             "items": {
               "additionalProperties": true,
               "type": "object"
@@ -850,14 +898,17 @@
           },
           "input_schema": {
             "additionalProperties": true,
+            "description": "The JSON Schema of its arguments.",
             "title": "Input Schema",
             "type": "object"
           },
           "name": {
+            "description": "The tool's name.",
             "title": "Name",
             "type": "string"
           },
           "required": {
+            "description": "The required argument names.",
             "items": {
               "type": "string"
             },
@@ -875,6 +926,7 @@
             "type": "string"
           },
           "schema_hash": {
+            "description": "Digest of the input schema: equal hashes, equal schemas.",
             "title": "Schema Hash",
             "type": "string"
           },
@@ -887,6 +939,7 @@
                 "type": "null"
               }
             ],
+            "description": "The MCP server that provides it, for source mcp.",
             "title": "Server"
           },
           "side_effects": {
@@ -903,6 +956,7 @@
                 "type": "null"
               }
             ],
+            "description": "What a call changes, as set: read, write or irreversible; null when unknown (risk then follows the annotations).",
             "title": "Side Effects"
           },
           "source": {
@@ -919,13 +973,16 @@
             "type": "string"
           },
           "stats": {
-            "$ref": "#/components/schemas/ToolStatsBody"
+            "$ref": "#/components/schemas/ToolStatsBody",
+            "description": "What the calls recorded for it add up to."
           },
           "tool_id": {
+            "description": "The entry's id (tol_...).",
             "title": "Tool Id",
             "type": "string"
           },
           "version": {
+            "description": "Bumped whenever the description or the schema changes.",
             "title": "Version",
             "type": "integer"
           },
@@ -938,6 +995,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace whose own entry this is; null: the tenant's.",
             "title": "Workspace Id"
           }
         },
@@ -991,6 +1049,7 @@
             "type": "array"
           },
           "claim": {
+            "description": "One checkable statement split from the answer.",
             "title": "Claim",
             "type": "string"
           },
@@ -1030,6 +1089,7 @@
             "type": "string"
           },
           "notes": {
+            "description": "What the cascade noticed deciding it (e.g. a number that differs).",
             "items": {
               "type": "string"
             },
@@ -1075,13 +1135,16 @@
                 "type": "null"
               }
             ],
+            "description": "The document it was extracted from, if any.",
             "title": "Document Id"
           },
           "id": {
+            "description": "The fact's handle in this context (f1, f2 ...); resolves with bundle_id.",
             "title": "Id",
             "type": "string"
           },
           "object": {
+            "description": "The entity or value it relates to.",
             "title": "Object",
             "type": "string"
           },
@@ -1094,9 +1157,11 @@
                 "type": "null"
               }
             ],
+            "description": "When the service learned it (YYYY-MM-DD).",
             "title": "Observed At"
           },
           "predicate": {
+            "description": "The relation, e.g. ceo or reported.",
             "title": "Predicate",
             "type": "string"
           },
@@ -1108,6 +1173,7 @@
             "type": "number"
           },
           "subject": {
+            "description": "The entity the fact is about.",
             "title": "Subject",
             "type": "string"
           },
@@ -1120,6 +1186,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it became true (YYYY-MM-DD), when known.",
             "title": "Valid From"
           },
           "valid_to": {
@@ -1131,6 +1198,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it stopped being true (YYYY-MM-DD), when known.",
             "title": "Valid To"
           }
         },
@@ -1163,6 +1231,7 @@
             "title": "Dates"
           },
           "id": {
+            "description": "The memory's handle in this context (m1, m2 ...); resolves with bundle_id.",
             "title": "Id",
             "type": "string"
           },
@@ -1213,6 +1282,7 @@
             "title": "Subject"
           },
           "text": {
+            "description": "The memory, as the model reads it.",
             "title": "Text",
             "type": "string"
           }
@@ -1237,9 +1307,11 @@
                 "type": "null"
               }
             ],
+            "description": "The document (doc_...) it comes from.",
             "title": "Document Id"
           },
           "id": {
+            "description": "The passage's handle in this context (d1, d2 ...); resolves with bundle_id.",
             "title": "Id",
             "type": "string"
           },
@@ -1268,6 +1340,7 @@
                 "type": "null"
               }
             ],
+            "description": "The 1-based page of the document it is on, when the document has pages.",
             "title": "Page"
           },
           "relevance": {
@@ -1290,6 +1363,7 @@
             "title": "Section"
           },
           "text": {
+            "description": "The passage text.",
             "title": "Text",
             "type": "string"
           }
@@ -1335,6 +1409,7 @@
                 "type": "null"
               }
             ],
+            "description": "Restrict document knowledge to these documents (at most 100).",
             "examples": [
               null
             ],
@@ -1351,6 +1426,7 @@
             "type": "string"
           },
           "query": {
+            "description": "The current turn's question, in words (1-4000 characters).",
             "examples": [
               "Why did Adjusted EBITDA increase despite lower revenue?"
             ],
@@ -1361,6 +1437,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them.",
             "examples": [
               {
                 "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
@@ -1380,6 +1457,7 @@
                 "type": "null"
               }
             ],
+            "description": "The most tokens the context may take (200-16000); omitted: the service's default.",
             "examples": [
               6000
             ],
@@ -1458,6 +1536,7 @@
                 "type": "null"
               }
             ],
+            "description": "Knowledge-graph facts that bear on it.",
             "title": "Graph Facts"
           },
           "knowledge": {
@@ -1472,6 +1551,7 @@
                 "type": "null"
               }
             ],
+            "description": "Document passages that bear on it, best first.",
             "title": "Knowledge"
           },
           "memories": {
@@ -1486,6 +1566,7 @@
                 "type": "null"
               }
             ],
+            "description": "What is remembered that bears on the question, best first.",
             "title": "Memories"
           },
           "missing_evidence": {
@@ -1530,6 +1611,7 @@
                 "type": "null"
               }
             ],
+            "description": "The pinned profile blocks (user, agent, workspace).",
             "title": "Profile"
           },
           "summaries": {
@@ -1544,6 +1626,7 @@
                 "type": "null"
               }
             ],
+            "description": "Document summaries that bear on it.",
             "title": "Summaries"
           },
           "thread_summary": {
@@ -1559,6 +1642,7 @@
             "title": "Thread Summary"
           },
           "token_estimate": {
+            "description": "Approximate tokens of the content (what it costs in a prompt).",
             "title": "Token Estimate",
             "type": "integer"
           },
@@ -1590,6 +1674,7 @@
         "additionalProperties": false,
         "properties": {
           "id": {
+            "description": "The summary's handle in this context (s1, s2 ...).",
             "title": "Id",
             "type": "string"
           },
@@ -1601,6 +1686,7 @@
             "type": "number"
           },
           "text": {
+            "description": "The summary text.",
             "title": "Text",
             "type": "string"
           }
@@ -1617,6 +1703,7 @@
         "additionalProperties": false,
         "properties": {
           "messages": {
+            "description": "The thread's most recent messages after its summary, oldest first.",
             "items": {
               "$ref": "#/components/schemas/WindowMessageBody"
             },
@@ -1632,6 +1719,7 @@
                 "type": "null"
               }
             ],
+            "description": "The thread the window comes from.",
             "title": "Thread Id"
           }
         },
@@ -1664,6 +1752,7 @@
         ],
         "properties": {
           "messages": {
+            "description": "The messages to append, in order (1-100).",
             "items": {
               "$ref": "#/components/schemas/MessageIn"
             },
@@ -1701,6 +1790,7 @@
         ],
         "properties": {
           "name": {
+            "description": "The tenant's display name (1-200 characters).",
             "maxLength": 200,
             "minLength": 1,
             "title": "Name",
@@ -1761,6 +1851,7 @@
         ],
         "properties": {
           "name": {
+            "description": "The workspace's display name (1-200 characters).",
             "maxLength": 200,
             "minLength": 1,
             "title": "Name",
@@ -1788,10 +1879,12 @@
       "CreatedTenantResponse": {
         "properties": {
           "admin_key": {
-            "$ref": "#/components/schemas/IssuedKeyResponse"
+            "$ref": "#/components/schemas/IssuedKeyResponse",
+            "description": "Its first admin key; the token is shown on this response only."
           },
           "tenant": {
-            "$ref": "#/components/schemas/TenantResponse"
+            "$ref": "#/components/schemas/TenantResponse",
+            "description": "The onboarded tenant."
           }
         },
         "required": [
@@ -1804,15 +1897,18 @@
       "CurrentValueOut": {
         "properties": {
           "observed_at": {
+            "description": "When the service learned it.",
             "format": "date-time",
             "title": "Observed At",
             "type": "string"
           },
           "predicate": {
+            "description": "The relation, e.g. ceo or headquarters.",
             "title": "Predicate",
             "type": "string"
           },
           "relation_id": {
+            "description": "The fact that holds the value (rel_...).",
             "title": "Relation Id",
             "type": "string"
           },
@@ -1826,9 +1922,11 @@
                 "type": "null"
               }
             ],
+            "description": "When the value became true, when known.",
             "title": "Valid From"
           },
           "value": {
+            "description": "Its newest current value (an entity's name, or a literal).",
             "title": "Value",
             "type": "string"
           }
@@ -1874,13 +1972,16 @@
                 "type": "null"
               }
             ],
+            "description": "What the probe saw when it failed (no secrets).",
             "title": "Error"
           },
           "mandatory": {
+            "description": "Whether the service cannot serve without it (not_ready when down).",
             "title": "Mandatory",
             "type": "boolean"
           },
           "ok": {
+            "description": "Whether it answered the probe.",
             "title": "Ok",
             "type": "boolean"
           }
@@ -1915,10 +2016,12 @@
             "description": "Where the raw bytes live: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob store, verified) or PURGED (removed from the hot database after the grace period)."
           },
           "checksum": {
+            "description": "SHA-256 of the bytes, hex.",
             "title": "Checksum",
             "type": "string"
           },
           "created_at": {
+            "description": "When the record was created (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
@@ -1932,18 +2035,22 @@
                 "type": "null"
               }
             ],
+            "description": "The parsed version retrieval reads (dcv_...); null until the first parse.",
             "title": "Current Version Id"
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "The caller-defined JSON given at upload.",
             "title": "Custom Metadata",
             "type": "object"
           },
           "document_id": {
+            "description": "The document's id (doc_...).",
             "title": "Document Id",
             "type": "string"
           },
           "filename": {
+            "description": "The uploaded file's name.",
             "title": "Filename",
             "type": "string"
           },
@@ -1956,13 +2063,16 @@
                 "type": "null"
               }
             ],
+            "description": "Why the parse job gave up, when status is FAILED.",
             "title": "Last Error"
           },
           "media_type": {
+            "description": "The file's media type (e.g. application/pdf), as uploaded or guessed from the name.",
             "title": "Media Type",
             "type": "string"
           },
           "size_bytes": {
+            "description": "The file's size in bytes.",
             "title": "Size Bytes",
             "type": "integer"
           },
@@ -1971,6 +2081,7 @@
             "description": "STAGED: accepted, parse job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error."
           },
           "tenant_id": {
+            "description": "The tenant the record belongs to.",
             "title": "Tenant Id",
             "type": "string"
           },
@@ -1983,9 +2094,11 @@
                 "type": "null"
               }
             ],
+            "description": "The thread the document was attached to, if any.",
             "title": "Thread Id"
           },
           "title": {
+            "description": "The title given at upload, else the filename.",
             "title": "Title",
             "type": "string"
           }
@@ -2051,7 +2164,8 @@
             "type": "string"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           },
           "source_query": {
             "anyOf": [
@@ -2073,6 +2187,7 @@
       "EntityListResponse": {
         "properties": {
           "entities": {
+            "description": "The page: entities the text names first, then those whose name starts with it, most mentioned first.",
             "items": {
               "$ref": "#/components/schemas/EntityOut"
             },
@@ -2101,6 +2216,7 @@
       "EntityOut": {
         "properties": {
           "aliases": {
+            "description": "Other names it was written as.",
             "items": {
               "type": "string"
             },
@@ -2108,22 +2224,27 @@
             "type": "array"
           },
           "canonical_name": {
+            "description": "The normalised name the entity is matched by (case and punctuation folded).",
             "title": "Canonical Name",
             "type": "string"
           },
           "entity_id": {
+            "description": "The entity's id (ent_...).",
             "title": "Entity Id",
             "type": "string"
           },
           "entity_type": {
+            "description": "The entity's type, e.g. ORG, PERSON, PRODUCT, MONEY, DATE.",
             "title": "Entity Type",
             "type": "string"
           },
           "mention_count": {
+            "description": "How many times it was mentioned in what the caller may read.",
             "title": "Mention Count",
             "type": "integer"
           },
           "name": {
+            "description": "The entity's display name, as most often written.",
             "title": "Name",
             "type": "string"
           },
@@ -2155,7 +2276,8 @@
             "type": "array"
           },
           "entity": {
-            "$ref": "#/components/schemas/EntityOut"
+            "$ref": "#/components/schemas/EntityOut",
+            "description": "The entity itself."
           },
           "evidence": {
             "description": "where the entity was seen",
@@ -2234,6 +2356,7 @@
                 "type": "null"
               }
             ],
+            "description": "The agent that produced it, for an agent's result or statement.",
             "title": "Agent Id"
           },
           "agent_run_id": {
@@ -2245,6 +2368,7 @@
                 "type": "null"
               }
             ],
+            "description": "The run that produced it.",
             "title": "Agent Run Id"
           },
           "chunk_id": {
@@ -2256,6 +2380,7 @@
                 "type": "null"
               }
             ],
+            "description": "The document passage (chk_...).",
             "title": "Chunk Id"
           },
           "confidence": {
@@ -2269,6 +2394,7 @@
                 "type": "null"
               }
             ],
+            "description": "0..1, how far the extraction trusts this piece of evidence.",
             "title": "Confidence"
           },
           "document_id": {
@@ -2280,6 +2406,7 @@
                 "type": "null"
               }
             ],
+            "description": "The document it was taken from, if any.",
             "title": "Document Id"
           },
           "document_version_id": {
@@ -2291,6 +2418,7 @@
                 "type": "null"
               }
             ],
+            "description": "The parsed version of the document (dcv_...).",
             "title": "Document Version Id"
           },
           "message_id": {
@@ -2302,6 +2430,7 @@
                 "type": "null"
               }
             ],
+            "description": "The message it was taken from, if any.",
             "title": "Message Id"
           },
           "node_id": {
@@ -2317,6 +2446,7 @@
             "title": "Node Id"
           },
           "observed_at": {
+            "description": "When it was observed (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Observed At",
             "type": "string"
@@ -2330,6 +2460,7 @@
                 "type": "null"
               }
             ],
+            "description": "The 1-based page of the document it is on, when the document has pages.",
             "title": "Page"
           },
           "source_hash": {
@@ -2362,6 +2493,7 @@
                 "type": "null"
               }
             ],
+            "description": "Character offset in the source text where it ends.",
             "title": "Span End"
           },
           "span_start": {
@@ -2385,6 +2517,7 @@
                 "type": "null"
               }
             ],
+            "description": "The tool call it came from.",
             "title": "Tool Run Id"
           }
         },
@@ -2434,6 +2567,7 @@
             "type": "object"
           },
           "confidence": {
+            "description": "0..1, how far the extraction trusts it.",
             "title": "Confidence",
             "type": "number"
           },
@@ -2446,9 +2580,11 @@
                 "type": "null"
               }
             ],
+            "description": "The document it was extracted from, if any.",
             "title": "Document Id"
           },
           "evidence": {
+            "description": "Where it came from (at most three references).",
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
             },
@@ -2456,6 +2592,7 @@
             "type": "array"
           },
           "fact_text": {
+            "description": "The fact as one sentence.",
             "title": "Fact Text",
             "type": "string"
           },
@@ -2480,22 +2617,27 @@
                 "type": "null"
               }
             ],
+            "description": "The memory it was extracted from, if any.",
             "title": "Memory Id"
           },
           "object": {
+            "description": "The entity or value it relates to (a name, or a literal).",
             "title": "Object",
             "type": "string"
           },
           "observed_at": {
+            "description": "When the service learned it (knowledge time).",
             "format": "date-time",
             "title": "Observed At",
             "type": "string"
           },
           "predicate": {
+            "description": "The relation, e.g. employs, reported, replaced_by.",
             "title": "Predicate",
             "type": "string"
           },
           "relation_id": {
+            "description": "The fact's id (rel_...).",
             "title": "Relation Id",
             "type": "string"
           },
@@ -2511,6 +2653,7 @@
             "type": "string"
           },
           "subject": {
+            "description": "The entity the fact is about (its name).",
             "title": "Subject",
             "type": "string"
           },
@@ -2524,6 +2667,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it became true (valid time), when known.",
             "title": "Valid From"
           },
           "valid_to": {
@@ -2536,6 +2680,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it stopped being true (valid time), when known.",
             "title": "Valid To"
           }
         },
@@ -2565,6 +2710,7 @@
                 "type": "null"
               }
             ],
+            "description": "The document passage, if any.",
             "title": "Chunk Id"
           },
           "citation": {
@@ -2577,6 +2723,7 @@
                 "type": "null"
               }
             ],
+            "description": "A citation or quoted text to show a reader (at most 2000 characters).",
             "title": "Citation"
           },
           "document_id": {
@@ -2588,6 +2735,7 @@
                 "type": "null"
               }
             ],
+            "description": "The document it was taken from, if any.",
             "title": "Document Id"
           },
           "message_id": {
@@ -2599,6 +2747,7 @@
                 "type": "null"
               }
             ],
+            "description": "The message it was taken from, if any.",
             "title": "Message Id"
           },
           "observed_at": {
@@ -2611,6 +2760,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it was observed (ISO 8601, timezone-aware).",
             "title": "Observed At"
           },
           "page": {
@@ -2622,9 +2772,11 @@
                 "type": "null"
               }
             ],
+            "description": "The 1-based page of the document it is on, when the document has pages.",
             "title": "Page"
           },
           "source_id": {
+            "description": "The source object's id; also the evidence id.",
             "maxLength": 200,
             "minLength": 1,
             "title": "Source Id",
@@ -2645,6 +2797,7 @@
       "FeedbackListResponse": {
         "properties": {
           "feedback": {
+            "description": "The page, newest first.",
             "items": {
               "$ref": "#/components/schemas/FeedbackResponse"
             },
@@ -2674,7 +2827,8 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "$ref": "#/components/schemas/ProjectionAction"
+            "$ref": "#/components/schemas/ProjectionAction",
+            "description": "What the projector did: none (and why, in reason), memory_reinforced, memory_retracted, memory_superseded, run_labelled, tool_call_counted or procedure_rejected."
           },
           "memory_id": {
             "anyOf": [
@@ -2697,6 +2851,7 @@
             "type": "array"
           },
           "projected_at": {
+            "description": "When it ran (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Projected At",
             "type": "string"
@@ -2711,6 +2866,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why it did what it did (always set for none).",
             "title": "Reason"
           },
           "run_id": {
@@ -2768,6 +2924,7 @@
                 "type": "null"
               }
             ],
+            "description": "The agent whose work is judged, when an agent's.",
             "title": "Agent Id"
           },
           "agent_run_id": {
@@ -2779,6 +2936,7 @@
                 "type": "null"
               }
             ],
+            "description": "The run whose work is judged, when a run's.",
             "title": "Agent Run Id"
           },
           "comment": {
@@ -2791,9 +2949,11 @@
                 "type": "null"
               }
             ],
+            "description": "Why, in words, for the record.",
             "title": "Comment"
           },
           "correction": {
+            "description": "What it should say instead: required for correct and edit (text, or {content: ...} for a memory); bounded JSON.",
             "title": "Correction"
           },
           "created_at": {
@@ -2810,6 +2970,7 @@
             "title": "Created At"
           },
           "evidence_refs": {
+            "description": "What the verdict points at, e.g. the memories an answer cited (at most 50); each must be readable by the caller.",
             "items": {
               "$ref": "#/components/schemas/FeedbackEvidenceRef"
             },
@@ -2827,6 +2988,7 @@
                 "type": "null"
               }
             ],
+            "description": "A client id (at most 200 characters) that makes a retry return the stored record (200) instead of a duplicate; omitted: the service generates one (fb_...).",
             "title": "Feedback Id"
           },
           "metadata": {
@@ -2845,6 +3007,7 @@
                 "type": "null"
               }
             ],
+            "description": "Who judged, as the client names them (a user id, judge:<name>).",
             "title": "Reviewer"
           },
           "score": {
@@ -2858,20 +3021,24 @@
                 "type": "null"
               }
             ],
+            "description": "0..1, an optional graded judgement (1: fully right).",
             "title": "Score"
           },
           "source": {
             "$ref": "#/components/schemas/FeedbackSource",
-            "default": "human"
+            "default": "human",
+            "description": "Where the verdict comes from: human, interrupt (a person answering an approval prompt), judge (an automated evaluator) or system (derived from a run's status)."
           },
           "target_id": {
+            "description": "The judged object's id: a run id, mem_..., an invocation id (tiv_...) or a procedure id (prc_...).",
             "maxLength": 200,
             "minLength": 1,
             "title": "Target Id",
             "type": "string"
           },
           "target_kind": {
-            "$ref": "#/components/schemas/FeedbackTargetKind"
+            "$ref": "#/components/schemas/FeedbackTargetKind",
+            "description": "What is judged: run (an agent run and the answer it gave), memory, tool_call (a recorded invocation) or procedure (a learned tool plan)."
           },
           "tenant_id": {
             "anyOf": [
@@ -2882,6 +3049,7 @@
                 "type": "null"
               }
             ],
+            "description": "The tenant; optional (the trusted header decides it) and refused when it disagrees.",
             "title": "Tenant Id"
           },
           "trace_id": {
@@ -2906,10 +3074,12 @@
                 "type": "null"
               }
             ],
+            "description": "The person giving the verdict; filled from X-Trellis-User and refused when it disagrees.",
             "title": "User Id"
           },
           "verdict": {
-            "$ref": "#/components/schemas/FeedbackVerdict"
+            "$ref": "#/components/schemas/FeedbackVerdict",
+            "description": "confirm or approve (it is right), reject (it is wrong), correct or edit (it should say the correction instead)."
           },
           "workspace_id": {
             "anyOf": [
@@ -2920,6 +3090,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace the verdict was given in; filled from X-Trellis-Workspace and refused when it disagrees.",
             "title": "Workspace Id"
           }
         },
@@ -2942,6 +3113,7 @@
                 "type": "null"
               }
             ],
+            "description": "The agent whose work is judged, when an agent's.",
             "title": "Agent Id"
           },
           "agent_run_id": {
@@ -2953,6 +3125,7 @@
                 "type": "null"
               }
             ],
+            "description": "The run whose work is judged, when a run's.",
             "title": "Agent Run Id"
           },
           "author_record": {
@@ -2979,17 +3152,21 @@
                 "type": "null"
               }
             ],
+            "description": "Why, in words, for the record.",
             "title": "Comment"
           },
           "correction": {
+            "description": "What it should say instead: required for correct and edit (text, or {content: ...} for a memory); bounded JSON.",
             "title": "Correction"
           },
           "created_at": {
+            "description": "When the service stored it (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "evidence_refs": {
+            "description": "What the verdict points at, e.g. the memories an answer cited (at most 50); each must be readable by the caller.",
             "items": {
               "$ref": "#/components/schemas/FeedbackEvidenceRef"
             },
@@ -2997,11 +3174,13 @@
             "type": "array"
           },
           "feedback_id": {
+            "description": "The record's id (the client's, or fb_...).",
             "title": "Feedback Id",
             "type": "string"
           },
           "metadata": {
             "additionalProperties": true,
+            "description": "The caller-defined JSON sent with it.",
             "title": "Metadata",
             "type": "object"
           },
@@ -3036,6 +3215,7 @@
                 "type": "null"
               }
             ],
+            "description": "Who judged, as the client names them (a user id, judge:<name>).",
             "title": "Reviewer"
           },
           "score": {
@@ -3047,19 +3227,24 @@
                 "type": "null"
               }
             ],
+            "description": "0..1, an optional graded judgement (1: fully right).",
             "title": "Score"
           },
           "source": {
-            "$ref": "#/components/schemas/FeedbackSource"
+            "$ref": "#/components/schemas/FeedbackSource",
+            "description": "Where the verdict comes from: human, interrupt (a person answering an approval prompt), judge (an automated evaluator) or system (derived from a run's status)."
           },
           "target_id": {
+            "description": "The judged object's id: a run id, mem_..., an invocation id (tiv_...) or a procedure id (prc_...).",
             "title": "Target Id",
             "type": "string"
           },
           "target_kind": {
-            "$ref": "#/components/schemas/FeedbackTargetKind"
+            "$ref": "#/components/schemas/FeedbackTargetKind",
+            "description": "What is judged: run (an agent run and the answer it gave), memory, tool_call (a recorded invocation) or procedure (a learned tool plan)."
           },
           "tenant_id": {
+            "description": "The tenant the record belongs to.",
             "title": "Tenant Id",
             "type": "string"
           },
@@ -3072,6 +3257,7 @@
                 "type": "null"
               }
             ],
+            "description": "The trace of the request that stored it (32 hex).",
             "title": "Trace Id"
           },
           "user_id": {
@@ -3083,10 +3269,12 @@
                 "type": "null"
               }
             ],
+            "description": "The person who gave it, if a person.",
             "title": "User Id"
           },
           "verdict": {
-            "$ref": "#/components/schemas/FeedbackVerdict"
+            "$ref": "#/components/schemas/FeedbackVerdict",
+            "description": "confirm or approve (it is right), reject (it is wrong), correct or edit (it should say the correction instead)."
           },
           "workspace_id": {
             "anyOf": [
@@ -3097,6 +3285,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace the verdict was given in, if any.",
             "title": "Workspace Id"
           }
         },
@@ -3136,6 +3325,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why, as the reviewer wrote it.",
             "title": "Note"
           },
           "reviewed_at": {
@@ -3148,6 +3338,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it was decided (ISO 8601, UTC); null while pending.",
             "title": "Reviewed At"
           },
           "reviewed_by": {
@@ -3163,7 +3354,8 @@
             "title": "Reviewed By"
           },
           "state": {
-            "$ref": "#/components/schemas/ReviewState"
+            "$ref": "#/components/schemas/ReviewState",
+            "description": "pending (waits for a tenant admin), approved (applied) or dismissed (kept for statistics, never applied)."
           }
         },
         "required": [
@@ -3245,23 +3437,28 @@
         ],
         "properties": {
           "checksum": {
+            "description": "SHA-256 of the bytes, hex: identical bytes in a tenant are one document.",
             "title": "Checksum",
             "type": "string"
           },
           "deduplicated": {
             "default": false,
+            "description": "true: the same bytes were already a document the caller may read, and its id is returned (no job is queued).",
             "title": "Deduplicated",
             "type": "boolean"
           },
           "document_id": {
+            "description": "The document the upload created (doc_...), or the existing one when deduplicated.",
             "title": "Document Id",
             "type": "string"
           },
           "filename": {
+            "description": "The uploaded file's name.",
             "title": "Filename",
             "type": "string"
           },
           "job_ids": {
+            "description": "The parse job queued for it (obx_...); poll GET /v1/jobs/{job_id}.",
             "items": {
               "type": "string"
             },
@@ -3277,9 +3474,11 @@
                 "type": "null"
               }
             ],
+            "description": "The FILE observation the upload recorded, when one was.",
             "title": "Observation Id"
           },
           "size_bytes": {
+            "description": "The file's size in bytes.",
             "title": "Size Bytes",
             "type": "integer"
           }
@@ -3328,15 +3527,18 @@
           },
           "k": {
             "default": 8,
+            "description": "The most tools to return.",
             "maximum": 20.0,
             "minimum": 1.0,
             "title": "K",
             "type": "integer"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           },
           "task": {
+            "description": "What the agent has to do, in words (1-4000 characters).",
             "maxLength": 4000,
             "minLength": 1,
             "title": "Task",
@@ -3369,6 +3571,7 @@
                 "type": "null"
               }
             ],
+            "description": "Days until the key stops working (1-3660); omitted: never.",
             "title": "Expires In Days"
           },
           "may_act_as": {
@@ -3381,6 +3584,7 @@
             "type": "array"
           },
           "name": {
+            "description": "A name for people (1-200 characters), e.g. the service that will hold it.",
             "maxLength": 200,
             "minLength": 1,
             "title": "Name",
@@ -3418,11 +3622,13 @@
       "IssuedKeyResponse": {
         "properties": {
           "created_at": {
+            "description": "When it was issued (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "created_by": {
+            "description": "Who issued it: key:<id> of the issuing key, or platform.",
             "title": "Created By",
             "type": "string"
           },
@@ -3436,9 +3642,11 @@
                 "type": "null"
               }
             ],
+            "description": "When it stops working; null: never.",
             "title": "Expires At"
           },
           "key_id": {
+            "description": "The key's id: the part of mk_<key_id>.<secret> before the dot (never the secret).",
             "title": "Key Id",
             "type": "string"
           },
@@ -3452,6 +3660,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it last authenticated a request (updated at most once a minute); null: never used.",
             "title": "Last Used At"
           },
           "may_act_as": {
@@ -3463,6 +3672,7 @@
             "type": "array"
           },
           "name": {
+            "description": "The name it was issued under, for people (two keys may share one).",
             "title": "Name",
             "type": "string"
           },
@@ -3476,6 +3686,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it was revoked; null while it is not.",
             "title": "Revoked At"
           },
           "role": {
@@ -3483,6 +3694,7 @@
             "description": "admin or service; platform is never a stored key"
           },
           "tenant_id": {
+            "description": "The tenant the key speaks for.",
             "title": "Tenant Id",
             "type": "string"
           },
@@ -3507,6 +3719,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace a service key is pinned to; null: any workspace of the tenant.",
             "title": "Workspace Id"
           }
         },
@@ -3540,10 +3753,12 @@
         "properties": {
           "attempts": {
             "default": 0,
+            "description": "How many times it has run so far.",
             "title": "Attempts",
             "type": "integer"
           },
           "job_id": {
+            "description": "The job, as asked for (obx_<n> or a queue id).",
             "title": "Job Id",
             "type": "string"
           },
@@ -3556,6 +3771,7 @@
                 "type": "null"
               }
             ],
+            "description": "Why the last attempt failed, when one did.",
             "title": "Last Error"
           },
           "queue": {
@@ -3574,6 +3790,7 @@
             "description": "PENDING (queued, not picked up), RUNNING, SUCCEEDED, FAILED (attempts exhausted; see last_error), RETRYING (failed, will run again) or CANCELLED."
           },
           "task_name": {
+            "description": "What the job does, e.g. memory.process_observation or document.parse.",
             "title": "Task Name",
             "type": "string"
           }
@@ -3697,6 +3914,7 @@
       "MemoryListResponse": {
         "properties": {
           "memories": {
+            "description": "The page: current memories anchored to the caller's scopes, newest created first.",
             "items": {
               "$ref": "#/components/schemas/MemoryResponse"
             },
@@ -3734,13 +3952,16 @@
                 "type": "null"
               }
             ],
+            "description": "How the pipeline filed it (e.g. stated, preference, attribute, decision, source_fact, verbatim_turn, tool_result); null when unfiled.",
             "title": "Category"
           },
           "confidence": {
+            "description": "0..1, how far the service trusts it: raised by corroboration, lowered by contradiction.",
             "title": "Confidence",
             "type": "number"
           },
           "content": {
+            "description": "The memory as it is retrieved: one statement in words.",
             "title": "Content",
             "type": "string"
           },
@@ -3761,6 +3982,7 @@
             "type": "array"
           },
           "created_at": {
+            "description": "When the record was created (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
@@ -3772,6 +3994,7 @@
             "type": "integer"
           },
           "evidence": {
+            "description": "Where it came from: the messages, documents, statements or memories it rests on.",
             "items": {
               "$ref": "#/components/schemas/EvidenceRef"
             },
@@ -3779,6 +4002,7 @@
             "type": "array"
           },
           "importance": {
+            "description": "0..1, how much it matters for retrieval and retention.",
             "title": "Importance",
             "type": "number"
           },
@@ -3800,6 +4024,7 @@
             "description": "EPHEMERAL (within the turn), SHORT_TERM (the current thread or session), LONG_TERM (durable) or ARCHIVAL (kept for audit, out of retrieval)."
           },
           "memory_id": {
+            "description": "The memory's id (mem_...).",
             "title": "Memory Id",
             "type": "string"
           },
@@ -3816,14 +4041,17 @@
                 "type": "null"
               }
             ],
+            "description": "The value of a structured fact, when the memory is one.",
             "title": "Object"
           },
           "observed_at": {
+            "description": "When the service learned it (knowledge time).",
             "format": "date-time",
             "title": "Observed At",
             "type": "string"
           },
           "owner_principal": {
+            "description": "Who the memory is owned by: user:<id> or agent:<id> (the rule for who may forget or correct it).",
             "title": "Owner Principal",
             "type": "string"
           },
@@ -3836,9 +4064,11 @@
                 "type": "null"
               }
             ],
+            "description": "The relation of a structured fact (subject predicate object), when the memory is one.",
             "title": "Predicate"
           },
           "reinforcement_count": {
+            "description": "How many times it was stated or confirmed (at least 1).",
             "title": "Reinforcement Count",
             "type": "integer"
           },
@@ -3855,6 +4085,7 @@
                 "type": "null"
               }
             ],
+            "description": "The entity the memory is about, when it names one.",
             "title": "Subject"
           },
           "superseded_by": {
@@ -3866,6 +4097,7 @@
                 "type": "null"
               }
             ],
+            "description": "The newer version that replaced this one, when SUPERSEDED.",
             "title": "Superseded By"
           },
           "supersedes": {
@@ -3877,6 +4109,7 @@
                 "type": "null"
               }
             ],
+            "description": "The earlier version this memory replaced, if any.",
             "title": "Supersedes"
           },
           "temporal_status": {
@@ -3884,6 +4117,7 @@
             "description": "CURRENT is the live value; SUPERSEDED was replaced by a newer memory (see superseded_by); CONTRADICTED is reserved (the service resolves a conflict by superseding, so it sets no memory to it today); EXPIRED passed its valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept."
           },
           "updated_at": {
+            "description": "When the record last changed (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
@@ -3898,6 +4132,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it became true (valid time), when known.",
             "title": "Valid From"
           },
           "valid_to": {
@@ -3910,6 +4145,7 @@
                 "type": "null"
               }
             ],
+            "description": "When it stopped being true (valid time), when known.",
             "title": "Valid To"
           },
           "visibility": {
@@ -3989,6 +4225,7 @@
         "properties": {
           "deduplicated": {
             "default": false,
+            "description": "true: the same message was already stored (same lineage and content, or the same source id); its acknowledgement is returned.",
             "title": "Deduplicated",
             "type": "boolean"
           },
@@ -4001,6 +4238,7 @@
             "type": "array"
           },
           "message_id": {
+            "description": "The stored message (msg_...).",
             "title": "Message Id",
             "type": "string"
           },
@@ -4013,21 +4251,26 @@
                 "type": "null"
               }
             ],
+            "description": "The observation the message recorded (obs_...), when one was.",
             "title": "Observation Id"
           },
           "sequence": {
+            "description": "Its position in the thread, from 1.",
             "title": "Sequence",
             "type": "integer"
           },
           "session_id": {
+            "description": "The session it joined (the scope's, else the thread's own).",
             "title": "Session Id",
             "type": "string"
           },
           "thread_id": {
+            "description": "The thread it was appended to.",
             "title": "Thread Id",
             "type": "string"
           },
           "turn_id": {
+            "description": "The turn it joined (a USER message opens the next one).",
             "title": "Turn Id",
             "type": "string"
           }
@@ -4046,6 +4289,7 @@
         "additionalProperties": false,
         "properties": {
           "attachments": {
+            "description": "Files attached to the message; a document_id links one already ingested.",
             "items": {
               "$ref": "#/components/schemas/AttachmentIn"
             },
@@ -4053,6 +4297,7 @@
             "type": "array"
           },
           "content": {
+            "description": "The message text (at most 2,000,000 characters); an EVENT needs some.",
             "examples": [
               "Why did EBITDA increase despite lower revenue?"
             ],
@@ -4102,6 +4347,7 @@
                 "type": "null"
               }
             ],
+            "description": "The message this one answers or continues, when threaded.",
             "title": "Parent Message Id"
           },
           "role": {
@@ -4121,6 +4367,7 @@
                 "type": "null"
               }
             ],
+            "description": "The message's id in source_system (at most 400 characters).",
             "examples": [
               "1726300000.000100"
             ],
@@ -4136,6 +4383,7 @@
                 "type": "null"
               }
             ],
+            "description": "The system the message was imported from (e.g. slack), with source_message_id: a re-import of the same pair is deduplicated.",
             "examples": [
               "slack"
             ],
@@ -4167,6 +4415,7 @@
         ],
         "properties": {
           "messages": {
+            "description": "The page, oldest first: the newest messages before the cursor.",
             "items": {
               "$ref": "#/components/schemas/MessageResponse"
             },
@@ -4198,6 +4447,7 @@
             "title": "Next Cursor"
           },
           "thread_id": {
+            "description": "The thread listed.",
             "title": "Thread Id",
             "type": "string"
           }
@@ -4237,6 +4487,7 @@
                 "type": "null"
               }
             ],
+            "description": "The run that wrote it, for an agent's message.",
             "title": "Agent Run Id"
           },
           "archive_status": {
@@ -4244,6 +4495,7 @@
             "description": "Where the content lives: STAGED (PostgreSQL only), ARCHIVING, ARCHIVED (blob written and verified) or PURGED (large payload removed from the hot store)."
           },
           "attachments": {
+            "description": "The files attached to it.",
             "items": {
               "$ref": "#/components/schemas/AttachmentIn"
             },
@@ -4251,15 +4503,18 @@
             "type": "array"
           },
           "author_principal": {
+            "description": "Who wrote it: user:<id> or agent:<id>.",
             "title": "Author Principal",
             "type": "string"
           },
           "content": {
+            "description": "The message text (restored from the archive when it was purged).",
             "title": "Content",
             "type": "string"
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "The caller-defined JSON set on the message.",
             "title": "Custom Metadata",
             "type": "object"
           },
@@ -4268,10 +4523,12 @@
             "description": "VISIBLE messages form the chat history; INTERNAL ones are agent/tool steps."
           },
           "message_id": {
+            "description": "The message's id (msg_...).",
             "title": "Message Id",
             "type": "string"
           },
           "occurred_at": {
+            "description": "When it was sent (the import's original time, else when stored).",
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
@@ -4281,18 +4538,22 @@
             "description": "Who produced it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT."
           },
           "sequence": {
+            "description": "Its position in the thread, from 1.",
             "title": "Sequence",
             "type": "integer"
           },
           "session_id": {
+            "description": "The session it belongs to.",
             "title": "Session Id",
             "type": "string"
           },
           "thread_id": {
+            "description": "The thread it belongs to.",
             "title": "Thread Id",
             "type": "string"
           },
           "turn_id": {
+            "description": "The turn it belongs to.",
             "title": "Turn Id",
             "type": "string"
           }
@@ -4329,6 +4590,7 @@
         "description": "One acknowledgement per message, in request order.",
         "properties": {
           "messages": {
+            "description": "One acknowledgement per message, in request order.",
             "items": {
               "$ref": "#/components/schemas/MessageAckResponse"
             },
@@ -4347,6 +4609,7 @@
         "description": "A required argument nothing could fill: ask the user ``question``.",
         "properties": {
           "arg": {
+            "description": "The argument's name.",
             "title": "Arg",
             "type": "string"
           },
@@ -4363,6 +4626,7 @@
             "title": "Entity Type"
           },
           "question": {
+            "description": "A question the agent can ask the user to fill it.",
             "title": "Question",
             "type": "string"
           }
@@ -4383,6 +4647,7 @@
         ],
         "properties": {
           "virtual_key": {
+            "description": "The Bifrost virtual key (1-4096 characters); stored encrypted and never returned.",
             "format": "password",
             "maxLength": 4096,
             "minLength": 1,
@@ -4479,14 +4744,17 @@
             "additionalProperties": {
               "type": "string"
             },
+            "description": "The gateway model (provider/model) each use calls; a use not named calls the service's default.",
             "title": "Models",
             "type": "object"
           },
           "read_assist": {
+            "description": "Whether reads (/v1/context, /v1/recall, /v1/verify, /v1/graph/entities) consult the model.",
             "title": "Read Assist",
             "type": "boolean"
           },
           "revision": {
+            "description": "How many times the policy was set (0: never).",
             "title": "Revision",
             "type": "integer"
           },
@@ -4505,9 +4773,11 @@
                 "type": "null"
               }
             ],
+            "description": "When it was last set; null when never.",
             "title": "Updated At"
           },
           "uses": {
+            "description": "What the model may be called for in this tenant (contextual_extraction, summaries, grounding_judge, ...).",
             "items": {
               "enum": [
                 "contextual_extraction",
@@ -4542,6 +4812,7 @@
       "ModelUsageResponse": {
         "properties": {
           "days": {
+            "description": "One row per day and use that saw a call, oldest first.",
             "items": {
               "$ref": "#/components/schemas/UsageDayOut"
             },
@@ -4549,11 +4820,13 @@
             "type": "array"
           },
           "since": {
+            "description": "The first day of the window (UTC).",
             "format": "date",
             "title": "Since",
             "type": "string"
           },
           "until": {
+            "description": "The last day of the window (UTC).",
             "format": "date",
             "title": "Until",
             "type": "string"
@@ -4570,6 +4843,7 @@
       "NeighborhoodOut": {
         "properties": {
           "entities": {
+            "description": "The entities reached, the start included.",
             "items": {
               "$ref": "#/components/schemas/EntityOut"
             },
@@ -4577,6 +4851,7 @@
             "type": "array"
           },
           "facts": {
+            "description": "The facts traversed between them.",
             "items": {
               "$ref": "#/components/schemas/FactOut"
             },
@@ -4584,6 +4859,7 @@
             "type": "array"
           },
           "visited": {
+            "description": "How many entities the traversal visited (a bound on its cost).",
             "title": "Visited",
             "type": "integer"
           }
@@ -4620,7 +4896,8 @@
             "title": "Custom Metadata"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           },
           "title": {
             "anyOf": [
@@ -4632,6 +4909,7 @@
                 "type": "null"
               }
             ],
+            "description": "The thread's title (at most 500 characters); omitted: unchanged.",
             "examples": [
               "Q3 planning"
             ],
@@ -4743,6 +5021,7 @@
         "description": "A procedure learned for the task: its tool sequence and how often it worked.",
         "properties": {
           "id": {
+            "description": "The procedure's id (prc_...).",
             "title": "Id",
             "type": "string"
           },
@@ -4760,6 +5039,7 @@
             "type": "array"
           },
           "success_rate": {
+            "description": "0..1, the share of runs that followed it and succeeded.",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Success Rate",
@@ -4774,6 +5054,7 @@
                 "type": "null"
               }
             ],
+            "description": "What the procedure does, in words, when one was distilled.",
             "title": "Title"
           }
         },
@@ -4789,6 +5070,7 @@
       "ProfileResponse": {
         "properties": {
           "blocks": {
+            "description": "The user's, the agent's and the workspace's blocks.",
             "items": {
               "$ref": "#/components/schemas/memory_service__api__routers__v1__profile__ProfileBlockBody"
             },
@@ -4862,6 +5144,7 @@
             "type": "string"
           },
           "token_estimate": {
+            "description": "Approximate tokens of the rendered text (what it costs in the prompt).",
             "title": "Token Estimate",
             "type": "integer"
           },
@@ -4926,6 +5209,7 @@
       "ReadAuditResponse": {
         "properties": {
           "at": {
+            "description": "When the read happened (ISO 8601, UTC).",
             "format": "date-time",
             "title": "At",
             "type": "string"
@@ -4950,10 +5234,12 @@
             "type": "string"
           },
           "query_hash": {
+            "description": "SHA-256 of the query text, hex; the text itself is never stored.",
             "title": "Query Hash",
             "type": "string"
           },
           "record_ids": {
+            "description": "The records the read returned (recall); empty for a context assembly, whose records are in the bundle.",
             "items": {
               "type": "string"
             },
@@ -4961,6 +5247,7 @@
             "type": "array"
           },
           "scope_fingerprint": {
+            "description": "A digest of the scope the read ran under (tenant, workspace, user, agent, thread ...): equal fingerprints, equal scope.",
             "title": "Scope Fingerprint",
             "type": "string"
           }
@@ -4983,6 +5270,7 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/DependencyStatus"
             },
+            "description": "Each backing store and provider by name, with its probe result.",
             "examples": [
               {
                 "cache": {
@@ -5108,6 +5396,7 @@
           },
           "limit": {
             "default": 20,
+            "description": "The most items to return (1-100).",
             "examples": [
               20
             ],
@@ -5117,6 +5406,7 @@
             "type": "integer"
           },
           "query": {
+            "description": "What to look for, in words (1-4000 characters).",
             "examples": [
               "Why did Adjusted EBITDA increase despite lower revenue?"
             ],
@@ -5127,6 +5417,7 @@
           },
           "scope": {
             "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them.",
             "examples": [
               {
                 "session_id": "ses_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
@@ -5197,6 +5488,7 @@
             "title": "Diagnostics"
           },
           "items": {
+            "description": "The items, best first.",
             "items": {
               "$ref": "#/components/schemas/SearchItem"
             },
@@ -5246,6 +5538,7 @@
         "properties": {
           "args": {
             "additionalProperties": true,
+            "description": "The arguments it ran with (at most 64 KiB of JSON); redacted paths are never stored.",
             "title": "Args",
             "type": "object"
           },
@@ -5259,6 +5552,7 @@
                 "type": "null"
               }
             ],
+            "description": "What the call cost, in the caller's unit (e.g. USD).",
             "title": "Cost"
           },
           "error_class": {
@@ -5270,6 +5564,7 @@
                 "type": "null"
               }
             ],
+            "description": "The exception or error type, when status is error.",
             "title": "Error Class"
           },
           "latency_ms": {
@@ -5282,9 +5577,11 @@
                 "type": "null"
               }
             ],
+            "description": "How long the call took, in milliseconds.",
             "title": "Latency Ms"
           },
           "output": {
+            "description": "What it returned (at most 256 KiB of JSON); large outputs go to the blob store and a summary is kept.",
             "title": "Output"
           },
           "output_summary": {
@@ -5296,10 +5593,12 @@
                 "type": "null"
               }
             ],
+            "description": "A summary of the output to keep instead of deriving one.",
             "title": "Output Summary"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them. The agent run (agent_run_id) keys the step."
           },
           "status": {
             "default": "ok",
@@ -5324,9 +5623,11 @@
                 "type": "null"
               }
             ],
+            "description": "The call's position in the run (from 0); omitted: the run's next.",
             "title": "Step"
           },
           "sub_calls": {
+            "description": "For a code-mode script: the tool calls it made, in order (at most 64).",
             "items": {
               "$ref": "#/components/schemas/SubCallIn"
             },
@@ -5342,6 +5643,7 @@
             "type": "string"
           },
           "tool": {
+            "description": "The tool that ran (its catalog name; an unknown one is added).",
             "maxLength": 200,
             "minLength": 1,
             "title": "Tool",
@@ -5362,10 +5664,12 @@
       "RecordResponse": {
         "properties": {
           "args_hash": {
+            "description": "Digest of the full arguments: an identical call has the same one.",
             "title": "Args Hash",
             "type": "string"
           },
           "invocation_id": {
+            "description": "The recorded call (tiv_...).",
             "title": "Invocation Id",
             "type": "string"
           },
@@ -5375,6 +5679,7 @@
             "type": "boolean"
           },
           "step": {
+            "description": "The call's position in the run.",
             "title": "Step",
             "type": "integer"
           }
@@ -5401,6 +5706,7 @@
         ],
         "properties": {
           "content": {
+            "description": "The statement to store, verbatim (1-8000 characters): nothing is extracted from it.",
             "maxLength": 8000,
             "minLength": 1,
             "title": "Content",
@@ -5432,7 +5738,8 @@
             "description": "The kind of memory: SEMANTIC (a fact), PREFERENCE, EPISODIC (something that happened), PROCEDURAL (how to do something), TASK, USER (a profile attribute), TOOL or OUTCOME are the ones a caller normally states."
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           },
           "subject": {
             "anyOf": [
@@ -5507,6 +5814,7 @@
             "type": "array"
           },
           "memory_id": {
+            "description": "The stored memory (mem_...), or the existing one when deduplicated.",
             "title": "Memory Id",
             "type": "string"
           }
@@ -5541,6 +5849,7 @@
                 "type": "null"
               }
             ],
+            "description": "The group of cooperating agents; AGENT_GROUP-visible records of it are readable.",
             "title": "Agent Group Id"
           },
           "agent_id": {
@@ -5552,6 +5861,7 @@
                 "type": "null"
               }
             ],
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user.",
             "examples": [
               "research"
             ],
@@ -5566,6 +5876,7 @@
                 "type": "null"
               }
             ],
+            "description": "This execution of the agent (requires agent_id); RUN-visible records of the run are readable.",
             "title": "Agent Run Id"
           },
           "correlation_id": {
@@ -5577,6 +5888,7 @@
                 "type": "null"
               }
             ],
+            "description": "An opaque id grouping related requests; wins over X-Correlation-ID and is echoed in the response header.",
             "title": "Correlation Id"
           },
           "custom_metadata": {
@@ -5594,6 +5906,7 @@
                 "type": "null"
               }
             ],
+            "description": "The run that spawned this one, whose RUN-visible records this run may read.",
             "title": "Parent Agent Run Id"
           },
           "session_id": {
@@ -5605,6 +5918,7 @@
                 "type": "null"
               }
             ],
+            "description": "The open session within the thread (one sitting of a conversation).",
             "examples": [
               "ses_01J8Z"
             ],
@@ -5619,6 +5933,7 @@
                 "type": "null"
               }
             ],
+            "description": "A task inside the unit of work.",
             "title": "Task Id"
           },
           "tenant_id": {
@@ -5630,6 +5945,7 @@
                 "type": "null"
               }
             ],
+            "description": "The tenant; optional (the trusted header or the key names it) and, when sent, must equal X-Trellis-Tenant.",
             "examples": [
               "acme"
             ],
@@ -5644,6 +5960,7 @@
                 "type": "null"
               }
             ],
+            "description": "The conversation thread: THREAD-visible records of it are readable and writes are anchored to it.",
             "examples": [
               "thr_01J8Z"
             ],
@@ -5658,6 +5975,7 @@
                 "type": "null"
               }
             ],
+            "description": "One user turn (a question and its answer) within the session.",
             "examples": [
               "trn_01J8Z"
             ],
@@ -5672,6 +5990,7 @@
                 "type": "null"
               }
             ],
+            "description": "The end user acted for; when sent, must equal X-Trellis-User.",
             "examples": [
               "u-123"
             ],
@@ -5686,6 +6005,7 @@
                 "type": "null"
               }
             ],
+            "description": "A unit of work spanning several agents and turns; WORK-visible records of it are readable.",
             "title": "Work Id"
           },
           "workspace_id": {
@@ -5697,6 +6017,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace (team) acted in; when sent, must equal X-Trellis-Workspace.",
             "examples": [
               "ws-finance"
             ],
@@ -5744,9 +6065,11 @@
                 "type": "null"
               }
             ],
+            "description": "The document it comes from, for a chunk or a summary.",
             "title": "Document Id"
           },
           "id": {
+            "description": "The item's id (mem_..., chk_..., a summary or a message id): what to cite and to fetch.",
             "title": "Id",
             "type": "string"
           },
@@ -5783,6 +6106,7 @@
                 "type": "null"
               }
             ],
+            "description": "The 1-based page of the document it is on, when the document has pages.",
             "title": "Page"
           },
           "superseded": {
@@ -5798,6 +6122,7 @@
             "title": "Superseded"
           },
           "text": {
+            "description": "The item's text (clipped for long passages).",
             "title": "Text",
             "type": "string"
           },
@@ -5851,6 +6176,7 @@
         "properties": {
           "args": {
             "additionalProperties": true,
+            "description": "The arguments it was called with (bounded JSON).",
             "title": "Args",
             "type": "object"
           },
@@ -5863,11 +6189,13 @@
             "type": "object"
           },
           "ordinal": {
+            "description": "Its position in the script, from 0.",
             "minimum": 0.0,
             "title": "Ordinal",
             "type": "integer"
           },
           "tool": {
+            "description": "The tool the script called.",
             "title": "Tool",
             "type": "string"
           }
@@ -5902,6 +6230,7 @@
             "title": "Bundle Id"
           },
           "content": {
+            "description": "The new statement that replaces the memory (1-8000 characters).",
             "maxLength": 8000,
             "minLength": 1,
             "title": "Content",
@@ -5915,7 +6244,8 @@
             "type": "string"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           }
         },
         "required": [
@@ -5960,11 +6290,13 @@
       "TenantResponse": {
         "properties": {
           "created_at": {
+            "description": "When it was onboarded (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "name": {
+            "description": "The tenant's display name.",
             "title": "Name",
             "type": "string"
           },
@@ -5977,6 +6309,7 @@
                 "type": "null"
               }
             ],
+            "description": "The tenant's own request quota per minute and credential; null: the service default.",
             "title": "Rate Limit Per Minute"
           },
           "retention_days": {
@@ -5988,6 +6321,7 @@
                 "type": "null"
               }
             ],
+            "description": "Days after which canonical memories are forgotten; null: kept.",
             "title": "Retention Days"
           },
           "status": {
@@ -6000,10 +6334,12 @@
             "type": "string"
           },
           "tenant_id": {
+            "description": "The tenant's id.",
             "title": "Tenant Id",
             "type": "string"
           },
           "updated_at": {
+            "description": "When the record last changed (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
@@ -6037,12 +6373,14 @@
         ],
         "properties": {
           "created_at": {
+            "description": "When the record was created (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "custom_metadata": {
             "additionalProperties": true,
+            "description": "The caller-defined JSON set on the thread.",
             "title": "Custom Metadata",
             "type": "object"
           },
@@ -6055,9 +6393,11 @@
                 "type": "null"
               }
             ],
+            "description": "The user who started it; null when an agent run did.",
             "title": "Owner User Id"
           },
           "revision": {
+            "description": "Bumped on every change to the thread or its messages: a cached context of an older revision is stale.",
             "title": "Revision",
             "type": "integer"
           },
@@ -6073,10 +6413,12 @@
             "description": "the durable summary, once the thread has one"
           },
           "tenant_id": {
+            "description": "The tenant the record belongs to.",
             "title": "Tenant Id",
             "type": "string"
           },
           "thread_id": {
+            "description": "The thread's id (thr_... or the caller's own id).",
             "title": "Thread Id",
             "type": "string"
           },
@@ -6089,9 +6431,11 @@
                 "type": "null"
               }
             ],
+            "description": "The thread's title, when it has one.",
             "title": "Title"
           },
           "updated_at": {
+            "description": "When the record last changed (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
@@ -6105,6 +6449,7 @@
                 "type": "null"
               }
             ],
+            "description": "The workspace it was created in; null: none.",
             "title": "Workspace Id"
           }
         },
@@ -6122,10 +6467,12 @@
         "description": "The thread's durable summary: every message up to ``covers_to_sequence``.",
         "properties": {
           "covers_to_sequence": {
+            "description": "The last message sequence it covers; later messages are the context's window.",
             "title": "Covers To Sequence",
             "type": "integer"
           },
           "created_at": {
+            "description": "When this version was written (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
@@ -6136,10 +6483,12 @@
             "type": "string"
           },
           "text": {
+            "description": "The summary of the conversation so far.",
             "title": "Text",
             "type": "string"
           },
           "version": {
+            "description": "How many times it was rewritten (1 for the first).",
             "title": "Version",
             "type": "integer"
           }
@@ -6167,6 +6516,7 @@
                 "type": "null"
               }
             ],
+            "description": "MCP destructiveHint: a call may destroy or overwrite (risk irreversible).",
             "title": "Destructivehint"
           },
           "idempotentHint": {
@@ -6178,6 +6528,7 @@
                 "type": "null"
               }
             ],
+            "description": "MCP idempotentHint: repeating a call with the same arguments has no further effect.",
             "title": "Idempotenthint"
           },
           "openWorldHint": {
@@ -6189,6 +6540,7 @@
                 "type": "null"
               }
             ],
+            "description": "MCP openWorldHint: the tool reaches outside systems (the web, third parties).",
             "title": "Openworldhint"
           },
           "readOnlyHint": {
@@ -6200,6 +6552,7 @@
                 "type": "null"
               }
             ],
+            "description": "MCP readOnlyHint: the tool changes nothing (risk read).",
             "title": "Readonlyhint"
           }
         },
@@ -6246,6 +6599,7 @@
             "title": "Missing"
           },
           "name": {
+            "description": "The tool's name, as the catalog and the agent call it.",
             "title": "Name",
             "type": "string"
           },
@@ -6295,6 +6649,7 @@
             "type": "number"
           },
           "name": {
+            "description": "The tool's name, as the catalog and the agent call it.",
             "title": "Name",
             "type": "string"
           }
@@ -6318,9 +6673,11 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The procedure learned for this kind of task, when there is one."
           },
           "tools": {
+            "description": "The tools that fit, best first.",
             "items": {
               "$ref": "#/components/schemas/ToolChoiceBody"
             },
@@ -6338,6 +6695,7 @@
         "properties": {
           "approvals": {
             "default": 0,
+            "description": "Approval decisions recorded for its calls.",
             "title": "Approvals",
             "type": "integer"
           },
@@ -6350,20 +6708,24 @@
                 "type": "null"
               }
             ],
+            "description": "Mean latency of the calls, in milliseconds; null when none reported one.",
             "title": "Avg Latency Ms"
           },
           "calls": {
             "default": 0,
+            "description": "Recorded calls.",
             "title": "Calls",
             "type": "integer"
           },
           "edits": {
             "default": 0,
+            "description": "Decisions that changed the arguments before approving.",
             "title": "Edits",
             "type": "integer"
           },
           "failures": {
             "default": 0,
+            "description": "Calls that ended otherwise (error, timeout, rejected, cancelled).",
             "title": "Failures",
             "type": "integer"
           },
@@ -6377,10 +6739,12 @@
                 "type": "null"
               }
             ],
+            "description": "When it was last called (ISO 8601, UTC); null: never.",
             "title": "Last Used At"
           },
           "rejections": {
             "default": 0,
+            "description": "Rejection decisions recorded for its calls.",
             "title": "Rejections",
             "type": "integer"
           },
@@ -6393,10 +6757,12 @@
                 "type": "null"
               }
             ],
+            "description": "0..1, successes / calls; null before the first call.",
             "title": "Success Rate"
           },
           "successes": {
             "default": 0,
+            "description": "Calls that ended ok.",
             "title": "Successes",
             "type": "integer"
           }
@@ -6421,10 +6787,12 @@
                 "type": "null"
               }
             ],
+            "description": "The tools the agent can call (at most 500); null: any catalog tool; empty: none.",
             "title": "Available"
           },
           "k": {
             "default": 8,
+            "description": "The most tools to hint (1-20).",
             "maximum": 20.0,
             "minimum": 1.0,
             "title": "K",
@@ -6480,11 +6848,13 @@
         "properties": {
           "clear_rate_limit": {
             "default": false,
+            "description": "true: remove the tenant's own quota, so the service default applies again.",
             "title": "Clear Rate Limit",
             "type": "boolean"
           },
           "clear_retention": {
             "default": false,
+            "description": "true: remove the retention limit (memories are kept until forgotten).",
             "title": "Clear Retention",
             "type": "boolean"
           },
@@ -6499,6 +6869,7 @@
                 "type": "null"
               }
             ],
+            "description": "A new display name (1-200 characters); omitted: unchanged.",
             "title": "Name"
           },
           "rate_limit_per_minute": {
@@ -6524,6 +6895,7 @@
                 "type": "null"
               }
             ],
+            "description": "Forget canonical memories older than this many days (at least 1); omitted: unchanged.",
             "title": "Retention Days"
           },
           "status": {
@@ -6549,15 +6921,18 @@
       "UsageDayOut": {
         "properties": {
           "calls": {
+            "description": "Model calls made that day for that use.",
             "title": "Calls",
             "type": "integer"
           },
           "day": {
+            "description": "The day (UTC, YYYY-MM-DD).",
             "format": "date",
             "title": "Day",
             "type": "string"
           },
           "tokens": {
+            "description": "Model tokens spent that day for that use (prompt and completion).",
             "title": "Tokens",
             "type": "integer"
           },
@@ -6603,6 +6978,7 @@
         ],
         "properties": {
           "answer": {
+            "description": "The answer to check, as the model wrote it (1-8000 characters); handle citations ([m1], [d2]) resolve within the bundle.",
             "examples": [
               "Adjusted EBITDA increased to EUR 98 million [d1]. Revenue fell to EUR 400 million because of lower volumes."
             ],
@@ -6632,7 +7008,8 @@
             "title": "Run Id"
           },
           "scope": {
-            "$ref": "#/components/schemas/ScopeBody"
+            "$ref": "#/components/schemas/ScopeBody",
+            "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them."
           }
         },
         "required": [
@@ -6694,10 +7071,12 @@
         "properties": {
           "borderline": {
             "default": 0,
+            "description": "How many claims nothing could decide.",
             "title": "Borderline",
             "type": "integer"
           },
           "claims": {
+            "description": "One verdict per claim, in answer order.",
             "items": {
               "$ref": "#/components/schemas/ClaimVerdictBody"
             },
@@ -6706,11 +7085,13 @@
           },
           "contradicted": {
             "default": 0,
+            "description": "How many claims the evidence contradicts.",
             "title": "Contradicted",
             "type": "integer"
           },
           "evidence_count": {
             "default": 0,
+            "description": "How many evidence items the answer was checked against.",
             "title": "Evidence Count",
             "type": "integer"
           },
@@ -6740,10 +7121,12 @@
           },
           "nli_provider": {
             "default": "",
+            "description": "The entailment model that judged (its id and weights digest).",
             "title": "Nli Provider",
             "type": "string"
           },
           "notes": {
+            "description": "What the check noticed about the answer as a whole.",
             "items": {
               "type": "string"
             },
@@ -6766,16 +7149,19 @@
           },
           "supported": {
             "default": 0,
+            "description": "How many claims were supported.",
             "title": "Supported",
             "type": "integer"
           },
           "unsupported": {
             "default": 0,
+            "description": "How many claims the evidence does not support.",
             "title": "Unsupported",
             "type": "integer"
           },
           "unused_count": {
             "default": 0,
+            "description": "How many retrieved items the answer was not given but that were checked for contradiction.",
             "title": "Unused Count",
             "type": "integer"
           }
@@ -6831,6 +7217,7 @@
             "type": "object"
           },
           "service": {
+            "description": "The service name (trellis-memory).",
             "examples": [
               "trellis-memory"
             ],
@@ -6838,6 +7225,7 @@
             "type": "string"
           },
           "version": {
+            "description": "The running release.",
             "examples": [
               "0.3.0"
             ],
@@ -6872,6 +7260,7 @@
         "additionalProperties": false,
         "properties": {
           "id": {
+            "description": "The message's id (msg_...).",
             "title": "Id",
             "type": "string"
           },
@@ -6880,6 +7269,7 @@
             "description": "Who said it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT (something that happened, told to the service)."
           },
           "text": {
+            "description": "What was said.",
             "title": "Text",
             "type": "string"
           }
@@ -6895,15 +7285,18 @@
       "WorkspaceMemberResponse": {
         "properties": {
           "added_at": {
+            "description": "When it was admitted or its role last set (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Added At",
             "type": "string"
           },
           "added_by": {
+            "description": "Who admitted it: key:<id> of the administering key.",
             "title": "Added By",
             "type": "string"
           },
           "principal": {
+            "description": "The member: user:<id> or agent:<id>.",
             "title": "Principal",
             "type": "string"
           },
@@ -6918,6 +7311,7 @@
             "type": "string"
           },
           "workspace_id": {
+            "description": "The workspace.",
             "title": "Workspace Id",
             "type": "string"
           }
@@ -6935,19 +7329,23 @@
       "WorkspaceResponse": {
         "properties": {
           "created_at": {
+            "description": "When the record was created (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
           "name": {
+            "description": "The workspace's display name.",
             "title": "Name",
             "type": "string"
           },
           "tenant_id": {
+            "description": "The tenant the record belongs to.",
             "title": "Tenant Id",
             "type": "string"
           },
           "workspace_id": {
+            "description": "The workspace's id.",
             "title": "Workspace Id",
             "type": "string"
           }
@@ -6981,15 +7379,18 @@
             "title": "Source Query"
           },
           "text": {
+            "description": "The block's text, as the context renders it.",
             "title": "Text",
             "type": "string"
           },
           "updated_at": {
+            "description": "When the record last changed (ISO 8601, UTC).",
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
           },
           "version": {
+            "description": "How many times the block was edited (1 for the first write).",
             "title": "Version",
             "type": "integer"
           }
@@ -7012,6 +7413,7 @@
             "type": "string"
           },
           "text": {
+            "description": "The block's text.",
             "title": "Text",
             "type": "string"
           }
@@ -7149,11 +7551,13 @@
             }
           },
           {
+            "description": "The most tenants one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most tenants one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -8124,10 +8528,12 @@
         "operationId": "admin.get_tenant",
         "parameters": [
           {
+            "description": "The tenant. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "tenant_id",
             "required": true,
             "schema": {
+              "description": "The tenant. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Tenant Id",
               "type": "string"
             }
@@ -8553,10 +8959,12 @@
         "operationId": "admin.update_tenant",
         "parameters": [
           {
+            "description": "The tenant. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "tenant_id",
             "required": true,
             "schema": {
+              "description": "The tenant. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Tenant Id",
               "type": "string"
             }
@@ -9499,10 +9907,12 @@
         "operationId": "agent_tools.call_agent_tool",
         "parameters": [
           {
+            "description": "The memory tool to call, as GET /v1/agent-tools lists it (e.g. memory_search).",
             "in": "path",
             "name": "name",
             "required": true,
             "schema": {
+              "description": "The memory tool to call, as GET /v1/agent-tools lists it (e.g. memory_search).",
               "title": "Name",
               "type": "string"
             }
@@ -12202,27 +12612,32 @@
                 "$ref": "#/components/schemas/Body_documents_upload_document",
                 "properties": {
                   "custom_metadata": {
+                    "description": "Caller-defined JSON object (at most 32 keys, 2 levels, 8192 bytes), kept on the document.",
                     "example": "{\"source\":\"upload\"}",
                     "type": "string"
                   },
                   "file": {
+                    "description": "The file's bytes (at most the ingestion limit, and 25 MB per request).",
                     "format": "binary",
                     "type": "string"
                   },
                   "message_id": {
+                    "description": "The message (msg_...) the file was attached to; the document joins its thread.",
                     "example": "msg_01J8ZK7Q9V3W2X1Y0ZABCDEFGH",
                     "type": "string"
                   },
                   "scope": {
-                    "description": "JSON-encoded scope",
+                    "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. Omitted: the headers' scope alone.",
                     "example": "{\"thread_id\":\"thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH\"}",
                     "type": "string"
                   },
                   "title": {
+                    "description": "The document's title (shown in citations); omitted: the filename.",
                     "example": "ACME FY26 Annual Report",
                     "type": "string"
                   },
                   "visibility": {
+                    "description": "Who may retrieve the document, narrowest first; omitted: the thread, else the user.",
                     "enum": [
                       "PRIVATE",
                       "USER",
@@ -12639,10 +13054,12 @@
         "operationId": "documents.get_document",
         "parameters": [
           {
+            "description": "The document id (doc_...) an upload returned.",
             "in": "path",
             "name": "document_id",
             "required": true,
             "schema": {
+              "description": "The document id (doc_...) an upload returned.",
               "title": "Document Id",
               "type": "string"
             }
@@ -14884,10 +15301,12 @@
         "operationId": "feedback.get_feedback",
         "parameters": [
           {
+            "description": "The feedback record's id (fb_...).",
             "in": "path",
             "name": "feedback_id",
             "required": true,
             "schema": {
+              "description": "The feedback record's id (fb_...).",
               "title": "Feedback Id",
               "type": "string"
             }
@@ -15459,10 +15878,12 @@
         "operationId": "feedback.approve_feedback",
         "parameters": [
           {
+            "description": "The feedback record's id (fb_...).",
             "in": "path",
             "name": "feedback_id",
             "required": true,
             "schema": {
+              "description": "The feedback record's id (fb_...).",
               "title": "Feedback Id",
               "type": "string"
             }
@@ -16007,10 +16428,12 @@
         "operationId": "feedback.dismiss_feedback",
         "parameters": [
           {
+            "description": "The feedback record's id (fb_...).",
             "in": "path",
             "name": "feedback_id",
             "required": true,
             "schema": {
+              "description": "The feedback record's id (fb_...).",
               "title": "Feedback Id",
               "type": "string"
             }
@@ -17167,10 +17590,12 @@
         "operationId": "graph.entity_profile",
         "parameters": [
           {
+            "description": "The graph entity's id (ent_...).",
             "in": "path",
             "name": "entity_id",
             "required": true,
             "schema": {
+              "description": "The graph entity's id (ent_...).",
               "title": "Entity Id",
               "type": "string"
             }
@@ -17822,10 +18247,12 @@
         "operationId": "jobs.get_job",
         "parameters": [
           {
+            "description": "The job: an outbox reference (obx_<n>) from a write's job_ids, or a queue id.",
             "in": "path",
             "name": "job_id",
             "required": true,
             "schema": {
+              "description": "The job: an outbox reference (obx_<n>) from a write's job_ids, or a queue id.",
               "title": "Job Id",
               "type": "string"
             }
@@ -18415,11 +18842,13 @@
             }
           },
           {
+            "description": "The most keys one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most keys one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -19785,10 +20214,12 @@
         "operationId": "tenancy.revoke_key",
         "parameters": [
           {
+            "description": "The API key's id (the part of mk_<key_id>.<secret> before the dot).",
             "in": "path",
             "name": "key_id",
             "required": true,
             "schema": {
+              "description": "The API key's id (the part of mk_<key_id>.<secret> before the dot).",
               "title": "Key Id",
               "type": "string"
             }
@@ -20296,10 +20727,12 @@
         "operationId": "tenancy.update_key",
         "parameters": [
           {
+            "description": "The API key's id (the part of mk_<key_id>.<secret> before the dot).",
             "in": "path",
             "name": "key_id",
             "required": true,
             "schema": {
+              "description": "The API key's id (the part of mk_<key_id>.<secret> before the dot).",
               "title": "Key Id",
               "type": "string"
             }
@@ -20848,11 +21281,13 @@
             }
           },
           {
+            "description": "true: also list memories a newer version replaced (SUPERSEDED), for a memory's history.",
             "in": "query",
             "name": "include_superseded",
             "required": false,
             "schema": {
               "default": false,
+              "description": "true: also list memories a newer version replaced (SUPERSEDED), for a memory's history.",
               "title": "Include Superseded",
               "type": "boolean"
             }
@@ -20877,11 +21312,13 @@
             }
           },
           {
+            "description": "The most memories one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most memories one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -20889,6 +21326,7 @@
             }
           },
           {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "thread_id",
             "required": false,
@@ -20901,10 +21339,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Thread Id"
             }
           },
           {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "work_id",
             "required": false,
@@ -20917,10 +21357,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Work Id"
             }
           },
           {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_id",
             "required": false,
@@ -20933,10 +21375,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Id"
             }
           },
           {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_group_id",
             "required": false,
@@ -20949,10 +21393,12 @@
                   "type": "null"
                 }
               ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Group Id"
             }
           },
           {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "agent_run_id",
             "required": false,
@@ -20965,10 +21411,12 @@
                   "type": "null"
                 }
               ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Agent Run Id"
             }
           },
           {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "query",
             "name": "parent_agent_run_id",
             "required": false,
@@ -20981,6 +21429,7 @@
                   "type": "null"
                 }
               ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Parent Agent Run Id"
             }
           },
@@ -21980,10 +22429,12 @@
         "operationId": "memory.forget_memory",
         "parameters": [
           {
+            "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
             "in": "path",
             "name": "memory_id",
             "required": true,
             "schema": {
+              "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
               "title": "Memory Id",
               "type": "string"
             }
@@ -22597,10 +23048,12 @@
         "operationId": "memory.get_memory",
         "parameters": [
           {
+            "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
             "in": "path",
             "name": "memory_id",
             "required": true,
             "schema": {
+              "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
               "title": "Memory Id",
               "type": "string"
             }
@@ -23171,10 +23624,12 @@
         "operationId": "memory.restore_memory",
         "parameters": [
           {
+            "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
             "in": "path",
             "name": "memory_id",
             "required": true,
             "schema": {
+              "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
               "title": "Memory Id",
               "type": "string"
             }
@@ -23778,10 +24233,12 @@
         "operationId": "memory.supersede_memory",
         "parameters": [
           {
+            "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
             "in": "path",
             "name": "memory_id",
             "required": true,
             "schema": {
+              "description": "The memory: its id (mem_...), or the handle a context cited it by (m3) together with that context's bundle_id.",
               "title": "Memory Id",
               "type": "string"
             }
@@ -24767,10 +25224,12 @@
         "operationId": "messages.get_message",
         "parameters": [
           {
+            "description": "The message id (msg_...).",
             "in": "path",
             "name": "message_id",
             "required": true,
             "schema": {
+              "description": "The message id (msg_...).",
               "title": "Message Id",
               "type": "string"
             }
@@ -28776,10 +29235,12 @@
         "operationId": "profile.edit_profile_block",
         "parameters": [
           {
+            "description": "The block: user (the person the agent acts for), agent (this agent, for this user), workspace (the team), or one of them followed by .<name> (user.preferences).",
             "in": "path",
             "name": "block",
             "required": true,
             "schema": {
+              "description": "The block: user (the person the agent acts for), agent (this agent, for this user), workspace (the team), or one of them followed by .<name> (user.preferences).",
               "title": "Block",
               "type": "string"
             }
@@ -29354,11 +29815,13 @@
             }
           },
           {
+            "description": "The most entries one page holds (1-1000); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most entries one page holds (1-1000); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 1000,
               "minimum": 1,
               "title": "Limit",
@@ -33807,10 +34270,12 @@
         "operationId": "tools.accept_approval_suggestion",
         "parameters": [
           {
+            "description": "The approval suggestion's id, as GET /v1/tools/approval-suggestions lists it.",
             "in": "path",
             "name": "suggestion_id",
             "required": true,
             "schema": {
+              "description": "The approval suggestion's id, as GET /v1/tools/approval-suggestions lists it.",
               "title": "Suggestion Id",
               "type": "string"
             }
@@ -36272,11 +36737,13 @@
             }
           },
           {
+            "description": "The most workspaces one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
             "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
               "default": 100,
+              "description": "The most workspaces one page holds (1-500); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
               "maximum": 500,
               "minimum": 1,
               "title": "Limit",
@@ -37264,10 +37731,12 @@
         "operationId": "tenancy.delete_workspace",
         "parameters": [
           {
+            "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {
+              "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Workspace Id",
               "type": "string"
             }
@@ -37775,10 +38244,12 @@
         "operationId": "tenancy.get_workspace",
         "parameters": [
           {
+            "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {
+              "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Workspace Id",
               "type": "string"
             }
@@ -38716,19 +39187,23 @@
         "operationId": "tenancy.remove_member",
         "parameters": [
           {
+            "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {
+              "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Workspace Id",
               "type": "string"
             }
           },
           {
+            "description": "The member: user:<id> or agent:<id>.",
             "in": "path",
             "name": "principal_ref",
             "required": true,
             "schema": {
+              "description": "The member: user:<id> or agent:<id>.",
               "title": "Principal Ref",
               "type": "string"
             }
@@ -39236,19 +39711,23 @@
         "operationId": "tenancy.set_member",
         "parameters": [
           {
+            "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
             "in": "path",
             "name": "workspace_id",
             "required": true,
             "schema": {
+              "description": "The workspace (team). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
               "title": "Workspace Id",
               "type": "string"
             }
           },
           {
+            "description": "The member: user:<id> or agent:<id>.",
             "in": "path",
             "name": "principal_ref",
             "required": true,
             "schema": {
+              "description": "The member: user:<id> or agent:<id>.",
               "title": "Principal Ref",
               "type": "string"
             }

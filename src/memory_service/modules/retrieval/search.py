@@ -53,18 +53,26 @@ class SearchItem(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    id: str
+    id: str = Field(
+        description="The item's id (mem_..., chk_..., a summary or a message id): what to "
+        "cite and to fetch."
+    )
     kind: SearchKind = Field(
         description="What the item is: memory (something learned or stated), chunk (a "
         "document passage), summary (a document summary), episode (an earlier conversation "
         "of this user) or message (this thread's history)."
     )
-    text: str
+    text: str = Field(description="The item's text (clipped for long passages).")
     observed_on: str | None = Field(
         default=None, description="the day it was observed (YYYY-MM-DD), when known"
     )
-    document_id: str | None = None
-    page: int | None = None
+    document_id: str | None = Field(
+        default=None, description="The document it comes from, for a chunk or a summary."
+    )
+    page: int | None = Field(
+        default=None,
+        description="The 1-based page of the document it is on, when the document has pages.",
+    )
     thread_id: str | None = Field(
         default=None, description="the conversation an episode is (its messages: /v1/threads)"
     )
