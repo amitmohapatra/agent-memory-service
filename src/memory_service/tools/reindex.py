@@ -76,6 +76,11 @@ async def rebuild_search_index(
         # points, and only a whole-store rebuild may drop a collection.
         from memory_service.ports.search import SearchFilter
 
+        if tenant_id:
+            # After an index loss or a model change (a new fingerprint) the collections do
+            # not exist yet, and removing a tenant's points from a missing collection raises:
+            # create them first, so there is simply nothing to remove.
+            await indexer.ensure_collections()
         for base in (KNOWLEDGE, MEMORIES):
             name = indexer.collection(base)
             if tenant_id:

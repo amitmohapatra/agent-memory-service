@@ -178,6 +178,27 @@ async def test_a_tenant_rebuild_removes_and_restores_only_that_tenant(
     assert seeded["acme_memory"] in await _ids(container, memories, "acme")
 
 
+async def test_a_tenant_drop_after_the_index_was_lost_rebuilds_instead_of_failing(
+    container, uow_factory
+) -> None:
+    """After an index loss or a model change the collections do not exist yet: a tenant's
+    drop has nothing to remove, and the rebuild goes ahead."""
+    seeded = await _seed(container, uow_factory)
+    knowledge, memories = _names(container)
+    await container.search.drop_collection(knowledge)
+    await container.search.drop_collection(memories)
+
+    report = await rebuild_search_index(container, tenant_id="acme", drop=True)
+
+    assert report.ok
+    assert report.dropped == [
+        f"{knowledge} (tenant acme: 0 points)",
+        f"{memories} (tenant acme: 0 points)",
+    ]
+    assert report.documents == 1 and report.episodes == 1
+    assert seeded["acme_memory"] in await _ids(container, memories, "acme")
+
+
 async def test_a_tenant_rebuild_counts_only_that_tenants_rows(container, uow_factory) -> None:
     await _seed(container, uow_factory)
     acme = await rebuild_search_index(container, tenant_id="acme")
