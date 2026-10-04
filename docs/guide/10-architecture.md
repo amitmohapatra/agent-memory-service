@@ -122,7 +122,8 @@ Step by step:
 
 1. **Middleware** (`api/middleware.py`). `CorrelationMiddleware` assigns the request and
    correlation ids, continues an incoming `traceparent` (ADR 0022), enforces the 25 MB body
-   limit (`MAX_BODY_BYTES`) and refuses a scope or credential header sent twice with
+   limit (`MAX_BODY_BYTES`: from `Content-Length` before the body is read, and by counting
+   the bytes of a streamed body as they arrive), bounds `Idempotency-Key` and refuses a scope or credential header sent twice with
    different values. `RateLimitMiddleware` counts the credential's one-minute window
    (chapter 7).
 2. **Authentication and context** (`api/deps.py`). The credential is verified; the tenant,

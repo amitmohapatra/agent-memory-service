@@ -22,7 +22,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.errors import Conflict, NotFound, ScopeDenied
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.ids import content_hash, new_id
 from memory_service.domain.memory import CanonicalMemory, TemporalState
@@ -65,7 +65,7 @@ def _stated(
 ) -> EvidenceRef:
     """Evidence for a stated memory: the principal's own statement, at this instant."""
     return EvidenceRef(
-        source_type="statement",
+        source_type=EvidenceSource.STATEMENT,
         source_id=memory_id,
         agent_id=ctx.agent_id,
         agent_run_id=ctx.agent_run_id,

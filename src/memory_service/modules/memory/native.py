@@ -29,7 +29,7 @@ from memory_service.domain.enums import (
     ObservationKind,
     Visibility,
 )
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import content_hash
 from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
@@ -348,12 +348,12 @@ def _clean_object(text: str) -> str:
 
 def _evidence(observation: Observation) -> list[EvidenceRef]:
     source_type = {
-        ObservationKind.MESSAGE: "message",
-        ObservationKind.FILE: "file",
-        ObservationKind.AGENT_RESULT: "agent_result",
-        ObservationKind.TOOL_RESULT: "tool_result",
-        ObservationKind.IMPORT: "import",
-    }.get(observation.kind, "observation")
+        ObservationKind.MESSAGE: EvidenceSource.MESSAGE,
+        ObservationKind.FILE: EvidenceSource.FILE,
+        ObservationKind.AGENT_RESULT: EvidenceSource.AGENT_RESULT,
+        ObservationKind.TOOL_RESULT: EvidenceSource.TOOL_RESULT,
+        ObservationKind.IMPORT: EvidenceSource.IMPORT,
+    }.get(observation.kind, EvidenceSource.OBSERVATION)
     return [
         EvidenceRef(
             source_type=source_type,

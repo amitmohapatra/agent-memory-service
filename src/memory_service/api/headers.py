@@ -27,6 +27,15 @@ RATE_LIMIT_LIMIT_HEADER: Final = "X-RateLimit-Limit"
 RATE_LIMIT_REMAINING_HEADER: Final = "X-RateLimit-Remaining"
 RETRY_AFTER_HEADER: Final = "Retry-After"
 LINK_HEADER: Final = "Link"
+LOCATION_HEADER: Final = "Location"
+DEPRECATION_HEADER: Final = "Deprecation"
+ETAG_HEADER: Final = "ETag"
+IF_NONE_MATCH_HEADER: Final = "If-None-Match"
+CACHE_CONTROL_HEADER: Final = "Cache-Control"
+
+#: The longest Idempotency-Key a client may send (the store keeps 300 characters, and the
+#: service's own derived keys need room beside a client's in the same column).
+IDEMPOTENCY_KEY_MAX_CHARS: Final = 255
 
 #: response header -> the ``scope["state"]`` key the correlation middleware keeps it under
 CORRELATION_STATE: Final[Mapping[str, str]] = {
@@ -93,3 +102,20 @@ def refuse_ambiguous_headers(headers: Mapping[str, str]) -> None:
                 f"{name} was sent more than once with different values; send one",
                 details={"field": name},
             )
+
+
+def idempotency_key_of(headers: Mapping[str, str]) -> str | None:
+    """The request's ``Idempotency-Key``: absent or blank is none, longer than
+    :data:`IDEMPOTENCY_KEY_MAX_CHARS` or sent twice with different values is refused."""
+    values = scope_values(headers, IDEMPOTENCY_KEY_HEADER)
+    if len(set(values)) > 1:
+        raise ValidationFailed(
+            f"{IDEMPOTENCY_KEY_HEADER} was sent more than once with different values; send one",
+            details={"field": IDEMPOTENCY_KEY_HEADER},
+        )
+    if values and len(values[0]) > IDEMPOTENCY_KEY_MAX_CHARS:
+        raise ValidationFailed(
+            f"{IDEMPOTENCY_KEY_HEADER} is at most {IDEMPOTENCY_KEY_MAX_CHARS} characters",
+            details={"field": IDEMPOTENCY_KEY_HEADER},
+        )
+    return values[0] if values else None

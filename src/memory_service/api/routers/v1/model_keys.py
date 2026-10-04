@@ -21,7 +21,7 @@ from memory_service.api.deps import (
     request_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import default_idempotency_key, run_idempotent
+from memory_service.api.idempotent import NO_CONTENT, default_idempotency_key, run_idempotent
 from memory_service.config.settings import ALL_LLM_USES, LLMUse
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.provenance import require_permitted_model
@@ -33,6 +33,8 @@ from memory_service.ports.llm import StoredPolicy
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 #: the usage ledger's default window and the widest one a read may ask for
 USAGE_DEFAULT_DAYS = 30
 USAGE_MAX_DAYS = 366
@@ -46,8 +48,13 @@ class AgentKeyRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody
-    virtual_key: SecretStr = Field(min_length=1, max_length=4096)
+    scope: ScopeBody = Field(description="The agent the key is for: agent_id is required.")
+    virtual_key: SecretStr = Field(
+        min_length=1,
+        max_length=4096,
+        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
+        "never returned.",
+    )
 
 
 class ModelKeyRequest(BaseModel):
@@ -55,14 +62,29 @@ class ModelKeyRequest(BaseModel):
         extra="forbid", json_schema_extra={"examples": [{"virtual_key": "vk-example"}]}
     )
 
-    virtual_key: SecretStr = Field(min_length=1, max_length=4096)
+    virtual_key: SecretStr = Field(
+        min_length=1,
+        max_length=4096,
+        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
+        "never returned.",
+    )
 
 
 class AgentKeyStatus(BaseModel):
-    registered: bool
-    revoked: bool
-    revision: int
-    updated_at: datetime | None = None
+    registered: bool = Field(
+        description="true: a key (or a revocation of one) is stored at this level."
+    )
+    revoked: bool = Field(
+        description="true: the stored key was revoked; calls at this level are refused "
+        "rather than falling back to another level's key."
+    )
+    revision: int = Field(
+        description="How many times the key was set or revoked (0: never); it changes on "
+        "every rotation."
+    )
+    updated_at: datetime | None = Field(
+        default=None, description="When it was last set or revoked; null when never."
+    )
 
 
 def _status(record: StoredCredential | None) -> AgentKeyStatus:
@@ -89,7 +111,7 @@ def _digest(key: SecretStr) -> str:
     "/agents/model-key",
     response_model=AgentKeyStatus,
     tags=["agents"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the acting agent's model-key status, without its secret",
 )
 async def key_status(container: ContainerDep, ctx: HeaderContextDep) -> AgentKeyStatus:
@@ -129,15 +151,17 @@ async def set_key(
 
 @router.delete(
     "/agents/model-key",
-    response_model=AgentKeyStatus,
+    status_code=204,
     tags=["agents"],
     responses=_ERRORS,
     summary="Revoke the acting agent's model key and invalidate assisted read caches",
+    description="204: the key is revoked (a revocation tombstone, so the agent never borrows "
+    "the tenant's key); `GET /v1/agents/model-key` reads the status afterwards.",
 )
 async def revoke_key(request: Request, container: ContainerDep, ctx: HeaderContextDep):
     async def write(uow):  # type: ignore[no-untyped-def]
-        record = await _service(container).set(uow, ctx, None)
-        return 200, _status(record).model_dump(mode="json"), None
+        await _service(container).set(uow, ctx, None)
+        return NO_CONTENT, {}, None
 
     return await run_idempotent(
         request,
@@ -165,6 +189,8 @@ async def _put_level(
 
     async def write(uow):  # type: ignore[no-untyped-def]
         record = await _service(container).set_for(uow, identity, key)
+        if key is None:
+            return NO_CONTENT, {}, None
         return 200, _status(record).model_dump(mode="json"), None
 
     payload = {"principal": identity.principal_id, "action": action}
@@ -185,7 +211,7 @@ async def _put_level(
     "/model-key",
     response_model=AgentKeyStatus,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the tenant's model-key status (used by agents without a key of their own)",
 )
 async def tenant_key_status(
@@ -214,10 +240,11 @@ async def set_tenant_key(
 
 @router.delete(
     "/model-key",
-    response_model=AgentKeyStatus,
+    status_code=204,
     tags=["tenancy"],
     responses=_ERRORS,
     summary="Revoke the tenant's model key",
+    description="204: the key is revoked; `GET /v1/model-key` reads the status afterwards.",
 )
 async def revoke_tenant_key(
     request: Request, container: ContainerDep, tenant_id: AdministeredTenantDep
@@ -270,11 +297,22 @@ class ModelPolicyStatus(BaseModel):
         description="false: the tenant has set no policy, so the default applies (every use, "
         "reads assisted, the default model per use)"
     )
-    uses: list[LLMUse]
-    read_assist: bool
-    models: dict[str, str]
-    revision: int
-    updated_at: datetime | None = None
+    uses: list[LLMUse] = Field(
+        description="What the model may be called for in this tenant "
+        "(contextual_extraction, summaries, grounding_judge, ...)."
+    )
+    read_assist: bool = Field(
+        description="Whether reads (/v1/context, /v1/recall, /v1/verify, "
+        "/v1/graph/entities) consult the model."
+    )
+    models: dict[str, str] = Field(
+        description="The gateway model (provider/model) each use calls; a use not named "
+        "calls the service's default."
+    )
+    revision: int = Field(description="How many times the policy was set (0: never).")
+    updated_at: datetime | None = Field(
+        default=None, description="When it was last set; null when never."
+    )
 
 
 def _policy_status(stored: StoredPolicy | None) -> ModelPolicyStatus:
@@ -308,7 +346,7 @@ def _policies(container) -> ModelPolicies:  # type: ignore[no-untyped-def]
     "/model-key/policy",
     response_model=ModelPolicyStatus,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Read the tenant's model policy: uses, read assistance, the model per use",
 )
 async def tenant_policy(
@@ -357,23 +395,30 @@ async def set_tenant_policy(
 
 
 class UsageDayOut(BaseModel):
-    day: date
-    use: str
-    tokens: int
-    calls: int
+    day: date = Field(description="The day (UTC, YYYY-MM-DD).")
+    use: LLMUse = Field(
+        description="What the model was called for, as the tenant policy names it "
+        "(contextual_extraction, summaries, grounding_judge, ...)."
+    )
+    tokens: int = Field(
+        description="Model tokens spent that day for that use (prompt and completion)."
+    )
+    calls: int = Field(description="Model calls made that day for that use.")
 
 
 class ModelUsageResponse(BaseModel):
-    since: date
-    until: date
-    days: list[UsageDayOut]
+    since: date = Field(description="The first day of the window (UTC).")
+    until: date = Field(description="The last day of the window (UTC).")
+    days: list[UsageDayOut] = Field(
+        description="One row per day and use that saw a call, oldest first."
+    )
 
 
 @router.get(
     "/model-key/usage",
     response_model=ModelUsageResponse,
     tags=["tenancy"],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="The tenant's model tokens and calls per day and use",
 )
 async def tenant_usage(
@@ -393,5 +438,8 @@ async def tenant_usage(
     return ModelUsageResponse(
         since=since,
         until=until,
-        days=[UsageDayOut(day=d.day, use=d.use, tokens=d.tokens, calls=d.calls) for d in days],
+        days=[
+            UsageDayOut(day=d.day, use=cast("LLMUse", d.use), tokens=d.tokens, calls=d.calls)
+            for d in days
+        ],
     )

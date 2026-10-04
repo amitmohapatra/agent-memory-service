@@ -8,6 +8,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from memory_service.api.openapi import UNKEYED_POSTS
+
 pytestmark = pytest.mark.contract
 
 OPERATION_ID = re.compile(r"^[a-z_]+\.[a-z_]+$")
@@ -67,10 +69,15 @@ def test_errors_are_problem_details(client: TestClient) -> None:
             }
 
 
-def test_no_operation_is_a_deprecated_alias(client: TestClient) -> None:
+#: The one deprecated alias (ADR 0030): the review queue moved to GET /v1/feedback?review=pending.
+DEPRECATED_ALIASES = {"feedback.pending_feedback"}
+
+
+def test_the_only_deprecated_operation_is_the_review_queue_alias(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
     assert "/v1/files" not in schema["paths"]
-    assert not [path for _, path, op in _operations(schema) if op.get("deprecated")]
+    deprecated = {op["operationId"] for _, _, op in _operations(schema) if op.get("deprecated")}
+    assert deprecated == DEPRECATED_ALIASES
     assert "X-Memory-LLM-Tokens" not in schema["components"]["headers"]
 
 
@@ -102,13 +109,15 @@ def test_every_public_operation_documents_edge_statuses_and_response_headers(
                 assert ref == {"$ref": f"#/components/headers/{name}"} and name in components
             if status == "429":
                 assert "Retry-After" in headers
-            if method != "get":
+            if method != "get" and op["operationId"] not in UNKEYED_POSTS:
                 assert "Idempotent-Replayed" in headers, f"{method.upper()} {path} {status}"
+            if status == "201":
+                assert "Location" in headers, f"{method.upper()} {path} {status}"
             problem = response.get("content", {}).get("application/problem+json", {})
             example = problem.get("example")
             if example is not None:
                 assert example["instance"] == path
-    assert "Deprecation" not in components and "X-Memory-LLM-Tokens" not in components
+    assert "X-Memory-LLM-Tokens" not in components
 
 
 def test_form_body_schemas_keep_their_full_names(client: TestClient) -> None:
@@ -119,3 +128,46 @@ def test_form_body_schemas_keep_their_full_names(client: TestClient) -> None:
         title = str(definition.get("title", ""))
         if title.startswith("Body_"):
             assert name == title.replace(".", "_"), name
+
+
+def test_the_operational_routes_need_no_credential(client: TestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    for method, path, op in _operations(schema):
+        if path.startswith(("/health", "/metrics", "/version")):
+            assert op["security"] == [], f"{method.upper()} {path}"
+        else:
+            assert "security" not in op, f"{method.upper()} {path}: the document's default"
+    assert schema["info"]["license"]["identifier"] == "Apache-2.0"
+    assert schema["info"]["contact"]["url"].startswith("https://")
+
+
+def test_no_read_documents_a_conflict_it_cannot_raise(client: TestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    reads = [f"GET {path}" for method, path, op in _operations(schema) if method == "get"]
+    conflicted = [
+        f"GET {path}"
+        for method, path, op in _operations(schema)
+        if method == "get" and "409" in op["responses"]
+    ]
+    assert reads and not conflicted
+
+
+def test_every_request_instant_is_read_as_utc(client: TestClient) -> None:
+    """A naive request instant is UTC, and the document says so wherever one is taken."""
+    schema = client.get("/openapi.json").json()
+    schemas = schema["components"]["schemas"]
+    for name, definition in schemas.items():
+        if not name.endswith(("Request", "In", "Body_documents_upload_document")):
+            continue
+        for field, prop in (definition.get("properties") or {}).items():
+            formats = {prop.get("format")} | {o.get("format") for o in prop.get("anyOf", [])}
+            if "date-time" in formats:
+                assert "UTC" in prop.get("description", ""), f"{name}.{field}"
+    for method, path, op in _operations(schema):
+        for param in op.get("parameters", []):
+            param_schema = param.get("schema", {})
+            formats = {param_schema.get("format")} | {
+                o.get("format") for o in param_schema.get("anyOf", [])
+            }
+            if "date-time" in formats:
+                assert "UTC" in param.get("description", ""), f"{method} {path} {param['name']}"

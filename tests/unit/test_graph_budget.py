@@ -151,7 +151,10 @@ async def test_one_relation_cannot_overrun_the_evidence_expansion_budget(budget)
     answer = _answer()
     answer.relations[0].evidence = [
         EvidenceRef(
-            source_type="chunk", source_id=f"c{i}", chunk_id=f"c{i}", observed_at=datetime.now(UTC)
+            source_type="document_chunk",
+            source_id=f"c{i}",
+            chunk_id=f"c{i}",
+            observed_at=datetime.now(UTC),
         )
         for i in range(20)
     ]

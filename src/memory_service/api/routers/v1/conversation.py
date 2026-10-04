@@ -2,24 +2,27 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
     ContainerDep,
     HeaderContextDep,
     ServicePrincipalDep,
+    ThreadContextDep,
     build_context,
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import (
+    NO_CONTENT,
     default_idempotency_key,
     derived_or_body,
+    first_job,
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next
+from memory_service.api.params import JobIdPath, MessageIdPath, ThreadIdPath, limit_query
 from memory_service.api.schemas.conversation import (
     CreateMessagesRequest,
     JobResponse,
@@ -37,6 +40,7 @@ from memory_service.domain.enums import ArchiveStatus, JobStatus
 from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.profile import ThreadSummary
 from memory_service.modules.conversation.service import ConversationService
+from memory_service.ports.tasks import Queue
 
 router = APIRouter()
 
@@ -100,19 +104,28 @@ async def _hydrate(archive, message: Message) -> Message:  # type: ignore[no-unt
     responses=_WRITE_ERRORS,
 )
 async def patch_thread(
-    thread_id: str,
+    thread_id: ThreadIdPath,
     request: Request,
     body: PatchThreadRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
-) -> ThreadResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope.model_copy(update={"thread_id": thread_id}))
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         thread = await _service(container).patch_thread(
             uow, ctx, thread_id, title=body.title, custom_metadata=body.custom_metadata
         )
-        await uow.commit()
-    return _thread_response(thread)
+        return 200, _thread_response(thread).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"thread_id": thread_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )
 
 
 @router.get(
@@ -123,7 +136,7 @@ async def patch_thread(
     responses=_READ_ERRORS,
 )
 async def get_thread(
-    thread_id: str, ctx: HeaderContextDep, container: ContainerDep
+    thread_id: ThreadIdPath, ctx: ThreadContextDep, container: ContainerDep
 ) -> ThreadResponse:
     async with container.services["uow_factory"]() as uow:
         thread = await _service(container).get_thread(uow, ctx, thread_id)
@@ -138,10 +151,24 @@ async def get_thread(
     summary="Soft-delete a thread",
     responses=_READ_ERRORS,
 )
-async def delete_thread(thread_id: str, ctx: HeaderContextDep, container: ContainerDep) -> None:
-    async with container.services["uow_factory"]() as uow:
+async def delete_thread(
+    request: Request, thread_id: ThreadIdPath, ctx: ThreadContextDep, container: ContainerDep
+) -> Response:
+    """With ``Idempotency-Key``, a retry of a delete that succeeded is its 204 again, not
+    the 404 the deleted thread would now earn."""
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         await _service(container).delete_thread(uow, ctx, thread_id)
-        await uow.commit()
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "delete", "thread_id": thread_id},
+        handler=handler,
+    )
 
 
 @router.get(
@@ -154,10 +181,10 @@ async def delete_thread(thread_id: str, ctx: HeaderContextDep, container: Contai
 async def list_messages(
     request: Request,
     response: Response,
-    thread_id: str,
-    ctx: HeaderContextDep,
+    thread_id: ThreadIdPath,
+    ctx: ThreadContextDep,
     container: ContainerDep,
-    limit: Annotated[int, Query(ge=1, le=500, examples=[50])] = 50,
+    limit: Annotated[int, limit_query(500, "messages")] = 50,
     before_sequence: Annotated[
         int | None, Query(ge=1, description="Return messages with sequence < this value")
     ] = None,
@@ -225,7 +252,7 @@ def _with_thread(ctx: MemoryExecutionContext) -> MemoryExecutionContext:
 )
 async def create_messages(
     request: Request, body: CreateMessagesRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
+) -> Response:
     ctx = _with_thread(build_context(request, container, body.scope))
     identity: tuple[str, ...] = (
         "messages",
@@ -269,7 +296,23 @@ async def create_messages(
 
         return 202, acks, after_commit
 
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=key,
+        payload=payload,
+        handler=handler,
+        location=_first_message_job,
+    )
+
+
+def _first_message_job(body: dict[str, Any]) -> str | None:
+    """``Location`` of an accepted batch: the first job any of its messages queued."""
+    for ack in body.get("messages") or []:
+        if where := first_job(ack):
+            return where
+    return None
 
 
 @router.get(
@@ -280,7 +323,7 @@ async def create_messages(
     responses=_READ_ERRORS,
 )
 async def get_message(
-    message_id: str, ctx: HeaderContextDep, container: ContainerDep
+    message_id: MessageIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MessageResponse:
     async with container.services["uow_factory"]() as uow:
         message = await _service(container).get_message(uow, ctx, message_id)
@@ -290,6 +333,11 @@ async def get_message(
 # --------------------------------------------------------------------------- jobs
 
 
+def _queue(name: str | None) -> Queue | None:
+    """The queue a job runs on; ``None`` when the queue no longer reports one."""
+    return Queue(name) if name in {q.value for q in Queue} else None
+
+
 @router.get(
     "/jobs/{job_id}",
     response_model=JobResponse,
@@ -297,7 +345,7 @@ async def get_message(
     summary="Background job status",
     responses=_READ_ERRORS,
 )
-async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -> JobResponse:
+async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: ContainerDep) -> JobResponse:
     """Accepts outbox references (``obx_<n>``) and task-queue ids."""
     if job_id.startswith("obx_"):
         from memory_service.adapters.db.orm import OutboxRow
@@ -310,7 +358,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
             return JobResponse(
                 job_id=job_id,
                 task_name=row.task_name,
-                queue=row.queue,
+                queue=_queue(row.queue),
                 status=JobStatus.PENDING,
                 attempts=row.attempts,
                 last_error=row.last_error,
@@ -320,14 +368,14 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
             return JobResponse(
                 job_id=job_id,
                 task_name=row.task_name,
-                queue=row.queue,
+                queue=_queue(row.queue),
                 status=JobStatus.PENDING,
                 attempts=row.attempts,
             )
         return JobResponse(
             job_id=job_id,
             task_name=row.task_name,
-            queue=row.queue,
+            queue=_queue(row.queue),
             status=info.status,
             attempts=info.attempts,
             last_error=info.last_error,
@@ -352,7 +400,7 @@ async def get_job(job_id: str, ctx: HeaderContextDep, container: ContainerDep) -
     return JobResponse(
         job_id=info.job_id,
         task_name=info.task_name,
-        queue=info.queue,
+        queue=_queue(info.queue),
         status=info.status,
         attempts=info.attempts,
         last_error=info.last_error,

@@ -118,7 +118,8 @@ def test_the_early_413_carries_the_trace_headers_too(settings, overrides) -> Non
     assert r.headers["traceparent"].startswith(f"00-{TRACE}-") and r.headers["X-Request-ID"]
     body = r.json()
     assert body["trace_id"] == TRACE and body["request_id"] == r.headers["X-Request-ID"]
-    assert body["type"] == "urn:trellis:problem:validation" and body["title"] == "Invalid request"
+    assert body["type"] == "urn:trellis:problem:payload-too-large"
+    assert body["title"] == "Payload too large" and body["code"] == "PAYLOAD_TOO_LARGE"
     assert body["status"] == 413 and body["instance"] == "/version"
 
 

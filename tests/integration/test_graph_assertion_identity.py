@@ -36,7 +36,9 @@ async def test_same_amount_in_two_periods_survives_sql_deduplication(container):
             visibility_keys=keys,
             observed_at=now,
             attributes={"period": period},
-            evidence=[EvidenceRef(source_type="document", source_id="doc_source", observed_at=now)],
+            evidence=[
+                EvidenceRef(source_type="document_chunk", source_id="doc_source", observed_at=now)
+            ],
         )
         for number, period in enumerate(("FY25", "FY26", "FY26"))
     ]

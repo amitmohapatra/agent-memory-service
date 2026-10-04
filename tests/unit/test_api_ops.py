@@ -75,7 +75,7 @@ def test_problem_for_unknown_route(client: TestClient) -> None:
 def test_body_limit_returns_a_problem(client: TestClient) -> None:
     r = client.post("/version", headers={"Content-Length": str(10**9)}, content=b"")
     assert r.status_code == 413
-    assert r.json()["code"] == "VALIDATION"
+    assert r.json()["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_domain_error_maps_to_a_problem(settings, overrides) -> None:

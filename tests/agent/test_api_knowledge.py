@@ -131,10 +131,16 @@ async def test_a_run_s_outcome_follows_the_highest_ranked_verdict(app, running) 
 
 
 @pytest.mark.covers(
-    "feedback.pending_feedback", "feedback.approve_feedback", "feedback.dismiss_feedback"
+    "feedback.list_feedback",
+    "feedback.pending_feedback",
+    "feedback.approve_feedback",
+    "feedback.dismiss_feedback",
 )
 @pytest.mark.covers_error(
-    "feedback.pending_feedback", "feedback.approve_feedback", "feedback.dismiss_feedback"
+    "feedback.list_feedback",
+    "feedback.pending_feedback",
+    "feedback.approve_feedback",
+    "feedback.dismiss_feedback",
 )
 async def test_votes_wait_in_a_queue_only_the_tenant_administrator_reviews(app, running) -> None:
     harness = await _harness(app)
@@ -148,6 +154,12 @@ async def test_votes_wait_in_a_queue_only_the_tenant_administrator_reviews(app, 
     queue = await admin.feedback.pending()
     assert [f.feedback_id for f in queue.items] == [down.feedback_id, up.feedback_id]
     assert queue.items[0].author_record == {"pending": 2, "approved": 0, "dismissed": 0}
+    # the old route is a deprecated alias of GET /v1/feedback?review=pending: the same queue
+    legacy = await admin._request("GET", "/v1/feedback/pending")
+    assert [f["feedback_id"] for f in legacy["feedback"]] == [down.feedback_id, up.feedback_id]
+    with pytest.raises(MemoryError) as refused_alias:
+        await user._request("GET", "/v1/feedback/pending")
+    assert refused_alias.value.status == 403
 
     # the service key that cast the votes may not review them
     for review in (user.feedback.pending(), user.feedback.approve(up.feedback_id)):

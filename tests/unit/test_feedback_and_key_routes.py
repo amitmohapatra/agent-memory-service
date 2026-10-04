@@ -156,7 +156,9 @@ def test_tenant_and_agent_model_keys_are_administered_without_showing_secrets(
     assert "vk-tenant-test" not in tenant.text
     rotated = app_client.put("/v1/model-key", headers=ADMIN, json={"virtual_key": "vk-tenant-2"})
     assert rotated.json()["revision"] == 2
-    assert app_client.delete("/v1/model-key", headers=ADMIN).json()["revoked"]
+    revoked = app_client.delete("/v1/model-key", headers=ADMIN)
+    assert revoked.status_code == 204 and revoked.content == b""
+    assert app_client.get("/v1/model-key", headers=ADMIN).json()["revoked"]
     assert (
         app_client.put(
             "/v1/model-key", headers=ADMIN, json={"virtual_key": "has space"}

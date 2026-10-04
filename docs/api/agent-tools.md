@@ -9,7 +9,7 @@ that change nothing).
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `GET /v1/agent-tools` | the tools, each `{name, description, input_schema}` | `ctx.agent_tools()` |
+| `GET /v1/agent-tools` | the tools, each `{name, description, input_schema}`; `ETag` + `Cache-Control: private, max-age=300`, `If-None-Match` → `304` | `ctx.agent_tools()` |
 | `POST /v1/agent-tools/{name}` `{"args": {...}}` | call one; answers `{"result": ...}` | `ctx.call_agent_tool(name, args)` |
 
 ## The tools (the final set)

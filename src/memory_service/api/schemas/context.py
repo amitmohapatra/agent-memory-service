@@ -8,11 +8,11 @@ are the contract the SDK relies on, so nothing extra is allowed through.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_service.domain.enums import EvidenceStatus
+from memory_service.domain.enums import EvidenceStatus, MessageRole
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
 
 _CLAIM_EXAMPLE: dict[str, Any] = {
@@ -31,7 +31,7 @@ _CLAIM_EXAMPLE: dict[str, Any] = {
 class ClaimVerdictBody(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_CLAIM_EXAMPLE]})
 
-    claim: str
+    claim: str = Field(description="One checkable statement split from the answer.")
     verdict: ClaimVerdict = Field(
         ...,
         description="supported: every fact in the claim follows from the evidence; "
@@ -50,7 +50,10 @@ class ClaimVerdictBody(BaseModel):
         description="The cheapest stage that decided the claim: citation (the cited item "
         "settles it), nli (cross-encoder entailment) or judge (LLM, borderline claims only).",
     )
-    notes: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(
+        default_factory=list,
+        description="What the cascade noticed deciding it (e.g. a number that differs).",
+    )
 
 
 class GroundingReportBody(BaseModel):
@@ -58,23 +61,37 @@ class GroundingReportBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    claims: list[ClaimVerdictBody] = Field(default_factory=list)
-    supported: int = 0
-    unsupported: int = 0
-    contradicted: int = 0
-    borderline: int = 0
+    claims: list[ClaimVerdictBody] = Field(
+        default_factory=list, description="One verdict per claim, in answer order."
+    )
+    supported: int = Field(default=0, description="How many claims were supported.")
+    unsupported: int = Field(
+        default=0, description="How many claims the evidence does not support."
+    )
+    contradicted: int = Field(default=0, description="How many claims the evidence contradicts.")
+    borderline: int = Field(default=0, description="How many claims nothing could decide.")
     per_claim_hallucination_rate: float = Field(
         default=0.0, ge=0.0, le=1.0, description="(unsupported + contradicted) / claims"
     )
-    nli_provider: str = ""
+    nli_provider: str = Field(
+        default="", description="The entailment model that judged (its id and weights digest)."
+    )
     representative: bool = Field(
         default=False, description="False when the NLI is a deterministic stand-in"
     )
     judge_consulted: int = Field(default=0, description="borderline claims sent to the LLM judge")
     llm_tokens: int = Field(default=0, description="LLM tokens spent on this report")
-    evidence_count: int = 0
-    unused_count: int = 0
-    notes: list[str] = Field(default_factory=list)
+    evidence_count: int = Field(
+        default=0, description="How many evidence items the answer was checked against."
+    )
+    unused_count: int = Field(
+        default=0,
+        description="How many retrieved items the answer was not given but that were "
+        "checked for contradiction.",
+    )
+    notes: list[str] = Field(
+        default_factory=list, description="What the check noticed about the answer as a whole."
+    )
 
 
 # --------------------------------------------------------------------------- tools
@@ -88,7 +105,7 @@ class ToolChoiceBrief(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
+    name: str = Field(description="The tool's name, as the catalog and the agent call it.")
     confidence: float = Field(..., ge=0.0, le=1.0, description=_CONFIDENCE)
 
 
@@ -97,8 +114,8 @@ class MissingArgumentBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    arg: str
-    question: str
+    arg: str = Field(description="The argument's name.")
+    question: str = Field(description="A question the agent can ask the user to fill it.")
     entity_type: str | None = Field(default=None, description="the entity type it names")
 
 
@@ -107,7 +124,7 @@ class ToolChoiceBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
+    name: str = Field(description="The tool's name, as the catalog and the agent call it.")
     confidence: float = Field(..., ge=0.0, le=1.0, description=_CONFIDENCE)
     success_rate: float | None = Field(
         default=None, ge=0.0, le=1.0, description="share of its recorded calls that succeeded"
@@ -126,10 +143,14 @@ class ProcedureBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    title: str | None = None
+    id: str = Field(description="The procedure's id (prc_...).")
+    title: str | None = Field(
+        default=None, description="What the procedure does, in words, when one was distilled."
+    )
     steps: list[str] = Field(description="tool names, in order")
-    success_rate: float = Field(..., ge=0.0, le=1.0)
+    success_rate: float = Field(
+        ..., ge=0.0, le=1.0, description="0..1, the share of runs that followed it and succeeded."
+    )
     runs: int = Field(description="the successful runs it was learned from")
 
 
@@ -138,8 +159,10 @@ class ToolHintsResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tools: list[ToolChoiceBody]
-    plan: ProcedureBody | None = None
+    tools: list[ToolChoiceBody] = Field(description="The tools that fit, best first.")
+    plan: ProcedureBody | None = Field(
+        default=None, description="The procedure learned for this kind of task, when there is one."
+    )
 
 
 # --------------------------------------------------------------------------- context
@@ -160,8 +183,10 @@ class DatedMentionBody(BaseModel):
 class ContextMemory(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    text: str
+    id: str = Field(
+        description="The memory's handle in this context (m1, m2 ...); resolves with bundle_id."
+    )
+    text: str = Field(description="The memory, as the model reads it.")
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
     observed_at: str | None = Field(default=None, description="when it was said or learned")
     subject: str | None = Field(default=None, description="who or what it is about")
@@ -174,57 +199,83 @@ class ContextMemory(BaseModel):
 class ContextPassage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    text: str
+    id: str = Field(
+        description="The passage's handle in this context (d1, d2 ...); resolves with bundle_id."
+    )
+    text: str = Field(description="The passage text.")
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
-    kind: str | None = Field(default=None, description="table, paragraph, ...; absent: a chunk")
-    document_id: str | None = None
-    page: int | None = None
+    kind: Literal["relation", "memory"] | None = Field(
+        default=None,
+        description="Absent for a document passage (a chunk); relation or memory for a fact or "
+        "memory carried in as a passage's required companion.",
+    )
+    document_id: str | None = Field(
+        default=None, description="The document (doc_...) it comes from."
+    )
+    page: int | None = Field(
+        default=None,
+        description="The 1-based page of the document it is on, when the document has pages.",
+    )
     section: str | None = Field(default=None, description="e.g. 'Financial Results > EBITDA'")
 
 
 class ContextFact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    subject: str
-    predicate: str
-    object: str
+    id: str = Field(
+        description="The fact's handle in this context (f1, f2 ...); resolves with bundle_id."
+    )
+    subject: str = Field(description="The entity the fact is about.")
+    predicate: str = Field(description="The relation, e.g. ceo or reported.")
+    object: str = Field(description="The entity or value it relates to.")
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
-    observed_at: str | None = None
-    valid_from: str | None = None
-    valid_to: str | None = None
-    document_id: str | None = None
+    observed_at: str | None = Field(
+        default=None, description="When the service learned it (YYYY-MM-DD)."
+    )
+    valid_from: str | None = Field(
+        default=None, description="When it became true (YYYY-MM-DD), when known."
+    )
+    valid_to: str | None = Field(
+        default=None, description="When it stopped being true (YYYY-MM-DD), when known."
+    )
+    document_id: str | None = Field(
+        default=None, description="The document it was extracted from, if any."
+    )
 
 
 class ContextSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    text: str
+    id: str = Field(description="The summary's handle in this context (s1, s2 ...).")
+    text: str = Field(description="The summary text.")
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
 
 
 class WindowMessageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str
-    role: str
-    text: str
+    id: str = Field(description="The message's id (msg_...).")
+    role: MessageRole = Field(
+        description="Who said it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT (something "
+        "that happened, told to the service)."
+    )
+    text: str = Field(description="What was said.")
 
 
 class ConversationBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    thread_id: str | None = None
-    messages: list[WindowMessageBody]
+    thread_id: str | None = Field(default=None, description="The thread the window comes from.")
+    messages: list[WindowMessageBody] = Field(
+        description="The thread's most recent messages after its summary, oldest first."
+    )
 
 
 class ProfileBlockBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     block: str = Field(description="user, agent, workspace or <level>.<name>")
-    text: str
+    text: str = Field(description="The block's text.")
 
 
 class PromptContextResponse(BaseModel):
@@ -250,7 +301,9 @@ class PromptContextResponse(BaseModel):
 
     bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
     rendered: str = Field(description="prompt-ready; items are cited by handle ([m1], [d2]...)")
-    token_estimate: int
+    token_estimate: int = Field(
+        description="Approximate tokens of the rendered text (what it costs in the prompt)."
+    )
     evidence_status: EvidenceStatus = Field(..., description=_EVIDENCE_STATUS)
     tools: list[ToolChoiceBrief] | None = Field(
         default=None, description="the tools that fit, best first (only when tools were given)"
@@ -266,7 +319,9 @@ class ContextResponse(BaseModel):
 
     bundle_id: str = Field(description="for /v1/verify and for resolving the handles")
     evidence_status: EvidenceStatus = Field(..., description=_EVIDENCE_STATUS)
-    token_estimate: int
+    token_estimate: int = Field(
+        description="Approximate tokens of the content (what it costs in a prompt)."
+    )
     missing_evidence: list[str] | None = Field(
         default=None, description="required companion evidence that is not there"
     )
@@ -274,15 +329,25 @@ class ContextResponse(BaseModel):
         default=None, description="the thread's recent messages (with window)"
     )
     thread_summary: str | None = Field(default=None, description="the thread's durable summary")
-    profile: list[ProfileBlockBody] | None = None
+    profile: list[ProfileBlockBody] | None = Field(
+        default=None, description="The pinned profile blocks (user, agent, workspace)."
+    )
     procedures: list[ProcedureBody] | None = Field(
         default=None, description="procedures learned for the task (only with tools)"
     )
     tools: list[ToolChoiceBody] | None = Field(
         default=None, description="the tools that fit, best first (only with tools)"
     )
-    memories: list[ContextMemory] | None = None
-    knowledge: list[ContextPassage] | None = None
-    graph_facts: list[ContextFact] | None = None
-    summaries: list[ContextSummary] | None = None
+    memories: list[ContextMemory] | None = Field(
+        default=None, description="What is remembered that bears on the question, best first."
+    )
+    knowledge: list[ContextPassage] | None = Field(
+        default=None, description="Document passages that bear on it, best first."
+    )
+    graph_facts: list[ContextFact] | None = Field(
+        default=None, description="Knowledge-graph facts that bear on it."
+    )
+    summaries: list[ContextSummary] | None = Field(
+        default=None, description="Document summaries that bear on it."
+    )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")

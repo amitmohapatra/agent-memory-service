@@ -351,7 +351,14 @@ class TenancyService:
         )
 
     async def members(
-        self, uow: UnitOfWork, tenant_id: str, workspace_id: str
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        workspace_id: str,
+        *,
+        after: str = "",
+        limit: int | None = None,
     ) -> list[WorkspaceMember]:
+        """A page of the workspace's members by principal, after ``after``."""
         await self.get_workspace(uow, tenant_id, workspace_id)
-        return await uow.workspaces.members(tenant_id, workspace_id)
+        return await uow.workspaces.members(tenant_id, workspace_id, after=after, limit=limit)

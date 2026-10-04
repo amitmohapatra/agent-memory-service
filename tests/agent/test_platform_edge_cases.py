@@ -149,8 +149,8 @@ async def test_revocation_is_idempotent_and_the_audit_pages_newest_first(app, ru
     older = await admin.tenant.reads(before=reads[-1].at)
     assert len(older) == 1 and older[0].at < reads[-1].at, "the next page is the older entry"
     assert await admin.tenant.reads(before=older[-1].at) == [], "and then there is nothing"
-    newer = await admin.tenant.reads(after=reads[1].at)
-    assert [r.at for r in newer] == [reads[0].at], "after= is a since-filter"
+    newer = await admin.tenant.reads(since=reads[1].at)
+    assert [r.at for r in newer] == [reads[0].at], "since= keeps only newer entries"
     await admin.tenant.keys.revoke(service.key_id)
     await admin.tenant.keys.revoke(service.key_id)  # already revoked: still 204
     await admin.tenant.keys.revoke("nonexistent-key-id")  # unknown: still 204, leaks nothing
@@ -525,7 +525,7 @@ async def test_odd_identifiers_and_control_characters_are_request_errors(app, ru
     )
     assert created.status_code == 201 and created.json()["name"] == "Finance", "sanitised, stored"
     assert (
-        running.get("/v1/admin/tenants", headers={**PLATFORM}, params={"after": "a b"}).status_code
+        running.get("/v1/admin/tenants", headers={**PLATFORM}, params={"cursor": "a b"}).status_code
         == 422
     )
 

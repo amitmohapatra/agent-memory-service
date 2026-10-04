@@ -23,7 +23,7 @@ from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
-from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.graph import layer_for
 from memory_service.domain.ids import stable_key
 from memory_service.domain.language import is_english
@@ -540,7 +540,7 @@ class NativeGraphEnrichment:
 
         def chunk_ref(c: Chunk) -> EvidenceRef:
             return EvidenceRef(
-                source_type="document_chunk",
+                source_type=EvidenceSource.DOCUMENT_CHUNK,
                 source_id=c.chunk_id,
                 document_id=version.document_id,
                 document_version_id=version.document_version_id,
@@ -552,7 +552,7 @@ class NativeGraphEnrichment:
 
         def node_ref(n: DocumentNode) -> EvidenceRef:
             return EvidenceRef(
-                source_type="document_chunk",
+                source_type=EvidenceSource.DOCUMENT_CHUNK,
                 source_id=n.node_id,
                 document_id=version.document_id,
                 document_version_id=version.document_version_id,

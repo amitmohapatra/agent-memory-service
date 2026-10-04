@@ -172,7 +172,9 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     other = client.get("/v1/agents/model-key?agent_id=writer", headers=headers)
     assert other.status_code == 200 and not other.json()["registered"]
     revoked = client.delete("/v1/agents/model-key?agent_id=research", headers=headers)
-    assert revoked.status_code == 200 and revoked.json()["revoked"]
+    assert revoked.status_code == 204 and revoked.content == b""
+    status = client.get("/v1/agents/model-key?agent_id=research", headers=headers)
+    assert status.json()["revoked"]
     invalid = client.put(
         "/v1/agents/model-key", headers=headers, json={**body, "virtual_key": "vk-secret\ninvalid"}
     )
@@ -231,7 +233,7 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                 assert gateway.route.calls.last.request.headers["x-bf-vk"] == key
             assert (
                 client.delete("/v1/agents/model-key?agent_id=research", headers=headers).status_code
-                == 200
+                == 204
             )
             assert (
                 client.post(

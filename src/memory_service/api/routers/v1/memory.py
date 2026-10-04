@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import (
@@ -21,11 +20,23 @@ from memory_service.api.deps import (
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.idempotent import (
+    NO_CONTENT,
     default_idempotency_key,
     derived_or_body,
+    resource_at,
     run_idempotent,
 )
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, page
+from memory_service.api.params import (
+    AgentGroupIdQuery,
+    AgentIdQuery,
+    AgentRunIdQuery,
+    MemoryIdPath,
+    ParentAgentRunIdQuery,
+    ThreadIdQuery,
+    WorkIdQuery,
+    limit_query,
+)
 from memory_service.api.validation import CustomMetadata
 from memory_service.domain.enums import (
     Lifetime,
@@ -35,6 +46,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.memory.service import MemoryService
 
@@ -57,8 +69,19 @@ class RememberRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", json_schema_extra={"examples": [_REMEMBER_EXAMPLE]})
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    content: str = Field(..., min_length=1, max_length=8_000)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        description="The statement to store, verbatim (1-8000 characters): nothing is "
+        "extracted from it.",
+    )
     memory_type: MemoryType = Field(
         default=MemoryType.SEMANTIC,
         description=(
@@ -88,8 +111,13 @@ class RememberRequest(BaseModel):
         max_length=20,
         description="Entities the memory names: linked in the graph and anchored in search",
     )
-    valid_from: datetime | None = Field(default=None, description="When it became true")
-    valid_to: datetime | None = Field(default=None, description="When it stops being true")
+    valid_from: UtcDateTime | None = Field(
+        default=None, description=f"When the statement became true. {UTC_RULE}"
+    )
+    valid_to: UtcDateTime | None = Field(
+        default=None,
+        description=f"When the statement stops being true (after valid_from). {UTC_RULE}",
+    )
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -104,7 +132,9 @@ class RememberRequest(BaseModel):
 
 
 class RememberResponse(BaseModel):
-    memory_id: str
+    memory_id: str = Field(
+        description="The stored memory (mem_...), or the existing one when deduplicated."
+    )
     deduplicated: bool = Field(
         description="true: the same content was already a current memory in this scope, "
         "and that memory's id is returned"
@@ -122,8 +152,18 @@ class SupersedeRequest(BaseModel):
         },
     )
 
-    scope: ScopeBody = Field(default_factory=ScopeBody)
-    content: str = Field(..., min_length=1, max_length=8_000)
+    scope: ScopeBody = Field(
+        default_factory=ScopeBody,
+        description="The lineage the call acts in (thread, session, turn, work, agent, "
+        "run). Tenant, workspace and user come from the trusted headers; a "
+        "value here must agree with them.",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        description="The new statement that replaces the memory (1-8000 characters).",
+    )
     reason: str = Field(default="", max_length=500, description="why it changed")
     bundle_id: str | None = Field(
         default=None, max_length=64, description="the context whose handle the path names"
@@ -138,8 +178,8 @@ class SupersedeResponse(BaseModel):
 class MemoryResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    memory_id: str
-    content: str
+    memory_id: str = Field(description="The memory's id (mem_...).")
+    content: str = Field(description="The memory as it is retrieved: one statement in words.")
     memory_type: MemoryType = Field(
         ...,
         description=(
@@ -164,10 +204,21 @@ class MemoryResponse(BaseModel):
         description="Where the memory is anchored (distinct from visibility): AGENT, "
         "AGENT_GROUP, WORK, THREAD, USER, GROUP, WORKSPACE, TENANT or GLOBAL.",
     )
-    owner_principal: str
-    subject: str | None = None
-    predicate: str | None = None
-    object: str | None = None
+    owner_principal: str = Field(
+        description="Who the memory is owned by: user:<id> or agent:<id> (the rule for who "
+        "may forget or correct it)."
+    )
+    subject: str | None = Field(
+        default=None, description="The entity the memory is about, when it names one."
+    )
+    predicate: str | None = Field(
+        default=None,
+        description="The relation of a structured fact (subject predicate object), when the"
+        " memory is one.",
+    )
+    object: str | None = Field(
+        default=None, description="The value of a structured fact, when the memory is one."
+    )
     temporal_status: TemporalStatus = Field(
         ...,
         description="CURRENT is the live value; SUPERSEDED was replaced by a newer memory "
@@ -175,14 +226,27 @@ class MemoryResponse(BaseModel):
         "superseding, so it sets no memory to it today); EXPIRED passed its "
         "valid_to; RETRACTED was withdrawn; ARCHIVED was forgotten by policy but kept.",
     )
-    valid_from: datetime | None = None
-    valid_to: datetime | None = None
-    observed_at: datetime
-    supersedes: str | None = None
-    superseded_by: str | None = None
-    confidence: float
-    importance: float
-    reinforcement_count: int
+    valid_from: datetime | None = Field(
+        default=None, description="When it became true (valid time), when known."
+    )
+    valid_to: datetime | None = Field(
+        default=None, description="When it stopped being true (valid time), when known."
+    )
+    observed_at: datetime = Field(description="When the service learned it (knowledge time).")
+    supersedes: str | None = Field(
+        default=None, description="The earlier version this memory replaced, if any."
+    )
+    superseded_by: str | None = Field(
+        default=None, description="The newer version that replaced this one, when SUPERSEDED."
+    )
+    confidence: float = Field(
+        description="0..1, how far the service trusts it: raised by corroboration, lowered "
+        "by contradiction."
+    )
+    importance: float = Field(description="0..1, how much it matters for retrieval and retention.")
+    reinforcement_count: int = Field(
+        description="How many times it was stated or confirmed (at least 1)."
+    )
     contributors: list[str] = Field(
         default_factory=list, description="Other principals that corroborated this memory"
     )
@@ -197,10 +261,17 @@ class MemoryResponse(BaseModel):
     contradicts: list[str] = Field(
         default_factory=list, description="CURRENT memories this one conflicts with"
     )
-    evidence: list[EvidenceRef]
-    category: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    evidence: list[EvidenceRef] = Field(
+        description="Where it came from: the messages, documents, statements or memories it"
+        " rests on."
+    )
+    category: str | None = Field(
+        default=None,
+        description="How the pipeline filed it (e.g. stated, preference, attribute, "
+        "decision, source_fact, verbatim_turn, tool_result); null when unfiled.",
+    )
+    created_at: datetime = Field(description="When the record was created (ISO 8601, UTC).")
+    updated_at: datetime = Field(description="When the record last changed (ISO 8601, UTC).")
     indexed_at: datetime | None = Field(
         default=None,
         description=(
@@ -214,7 +285,10 @@ class MemoryResponse(BaseModel):
 
 
 class MemoryListResponse(BaseModel):
-    memories: list[MemoryResponse]
+    memories: list[MemoryResponse] = Field(
+        description="The page: current memories anchored to the caller's scopes, newest "
+        "created first."
+    )
     next_cursor: str | None = Field(
         default=None, description="pass as `cursor` for the next page; null on the last"
     )
@@ -269,7 +343,7 @@ def _service(container: Any) -> MemoryService:
 )
 async def remember(
     request: Request, body: RememberRequest, container: ContainerDep, _: ServicePrincipalDep
-) -> JSONResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
     identity = ("remember", body.memory_type.value, body.content)
     key = request.state.idempotency_key or default_idempotency_key(ctx, *identity)
@@ -297,7 +371,15 @@ async def remember(
         )
         return 201, RememberResponse(**ack.__dict__).model_dump(mode="json"), None
 
-    return await run_idempotent(request, container, ctx, key=key, payload=payload, handler=handler)
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=key,
+        payload=payload,
+        handler=handler,
+        location=resource_at("/v1/memories/{}", "memory_id"),
+    )
 
 
 @router.post(
@@ -309,11 +391,11 @@ async def remember(
 )
 async def supersede_memory(
     request: Request,
-    memory_id: str,
+    memory_id: MemoryIdPath,
     body: SupersedeRequest,
     container: ContainerDep,
     _: ServicePrincipalDep,
-) -> JSONResponse:
+) -> Response:
     ctx = build_context(request, container, body.scope)
     memory_id = await container.services["bundle_records"].resolve(
         ctx, memory_id, bundle_id=body.bundle_id
@@ -354,15 +436,21 @@ async def list_memories(
             )
         ),
     ] = None,
-    include_superseded: bool = False,
+    include_superseded: Annotated[
+        bool,
+        Query(
+            description="true: also list memories a newer version replaced (SUPERSEDED), for "
+            "a memory's history."
+        ),
+    ] = False,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
-    thread_id: str | None = None,
-    work_id: str | None = None,
-    agent_id: str | None = None,
-    agent_group_id: str | None = None,
-    agent_run_id: str | None = None,
-    parent_agent_run_id: str | None = None,
+    limit: Annotated[int, limit_query(500, "memories")] = 100,
+    thread_id: ThreadIdQuery = None,
+    work_id: WorkIdQuery = None,
+    agent_id: AgentIdQuery = None,
+    agent_group_id: AgentGroupIdQuery = None,
+    agent_run_id: AgentRunIdQuery = None,
+    parent_agent_run_id: ParentAgentRunIdQuery = None,
 ) -> MemoryListResponse:
     """Security fields come from trusted headers; lineage anchors (thread, work, agent) are
     query parameters so a caller can list the memories of a specific thread or agent.
@@ -412,7 +500,7 @@ async def list_memories(
     responses=_READ_ERRORS,
 )
 async def get_memory(
-    memory_id: str, ctx: HeaderContextDep, container: ContainerDep
+    memory_id: MemoryIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MemoryResponse:
     async with container.services["uow_factory"]() as uow:
         memory = await _service(container).get_memory(uow, ctx, memory_id)
@@ -427,19 +515,32 @@ async def get_memory(
     responses=_READ_ERRORS,
 )
 async def forget_memory(
-    memory_id: str,
+    request: Request,
+    memory_id: MemoryIdPath,
     ctx: HeaderContextDep,
     container: ContainerDep,
     bundle_id: Annotated[
         str | None, Query(max_length=64, description="the context whose handle the path names")
     ] = None,
-) -> None:
-    memory_id = await container.services["bundle_records"].resolve(
-        ctx, memory_id, bundle_id=bundle_id
+) -> Response:
+    """With ``Idempotency-Key``, a retry of a forget that succeeded is its 204 again, not
+    the 404 the forgotten memory would now earn."""
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        resolved = await container.services["bundle_records"].resolve(
+            ctx, memory_id, bundle_id=bundle_id
+        )
+        await _service(container).forget(uow, ctx, resolved)
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "forget", "memory_id": memory_id, "bundle_id": bundle_id},
+        handler=handler,
     )
-    async with container.services["uow_factory"]() as uow:
-        await _service(container).forget(uow, ctx, memory_id)
-        await uow.commit()
 
 
 @router.post(
@@ -450,11 +551,19 @@ async def forget_memory(
     responses=_READ_ERRORS,
 )
 async def restore_memory(
-    memory_id: str, ctx: HeaderContextDep, container: ContainerDep
-) -> MemoryResponse:
-    async with container.services["uow_factory"]() as uow:
+    request: Request, memory_id: MemoryIdPath, ctx: HeaderContextDep, container: ContainerDep
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         memory = await _service(container).restore(
             uow, ctx, memory_id, container.services["forgetting"]
         )
-        await uow.commit()
-    return MemoryResponse(**memory_to_api(memory))
+        return 200, MemoryResponse(**memory_to_api(memory)).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload={"action": "restore", "memory_id": memory_id},
+        handler=handler,
+    )

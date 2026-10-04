@@ -195,8 +195,14 @@ class ToolCatalogAPI:
         """Catalog entries visible in this scope; ``names`` narrows to those tools (a name
         the catalog does not know is absent from the answer)."""
         params: dict[str, Any] = {"names": list(names)} if names else {}
-        data = await self._ctx._request("GET", "/v1/tools", params=params)
-        return [CatalogTool.model_validate(t) for t in data.get("tools", [])]
+        tools: list[CatalogTool] = []
+        while True:
+            data = await self._ctx._request("GET", "/v1/tools", params=params)
+            tools += [CatalogTool.model_validate(t) for t in data.get("tools", [])]
+            # a page holds the whole catalog at its bound; follow the cursor past it anyway
+            if not data.get("next_cursor"):
+                return tools
+            params = {**params, "cursor": data["next_cursor"]}
 
     async def put_catalog(
         self, tools: Sequence[dict[str, Any]], *, idempotency_key: str | None = None
@@ -253,10 +259,9 @@ class ModelKeysAPI:
         )
 
     async def revoke(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        data = await self._ctx._request(
-            "DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key
-        )
-        return AgentKeyStatus.model_validate(data)
+        """Revoke the key. The service answers 204; the status it leaves is read back."""
+        await self._ctx._request("DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key)
+        return await self.status()
 
 
 class MemoriesAPI:

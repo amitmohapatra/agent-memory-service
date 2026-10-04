@@ -42,8 +42,10 @@ classDiagram
     source_hash
   }
   class Source {
-    message, document chunk,
-    tool result, import
+    message, file, document_chunk,
+    agent_result, tool_result, import,
+    observation, statement, memory,
+    graph_fact, summary, episode, feedback
   }
   Observation --> CanonicalMemory : the pipeline derives zero or more
   CanonicalMemory "1" *-- "1..*" EvidenceRef : evidence

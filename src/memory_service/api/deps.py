@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memory_service.api.headers import require_one_value
-from memory_service.api.schemas.tenancy import KeySelfResponse
+from memory_service.api.params import (
+    AgentGroupIdQuery,
+    AgentIdQuery,
+    AgentRunIdQuery,
+    ParentAgentRunIdQuery,
+    SessionIdQuery,
+    TaskIdQuery,
+    ThreadIdPath,
+    ThreadIdQuery,
+    WorkIdQuery,
+)
+from memory_service.api.schemas.tenancy import KeySelfResponse, KeySelfRole
 from memory_service.api.validation import CustomMetadata
 from memory_service.application.container import Container
 from memory_service.config.constants import HEADERS
@@ -40,19 +51,69 @@ class ScopeBody(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    tenant_id: str | None = Field(default=None, examples=["acme"])
-    workspace_id: str | None = Field(default=None, examples=["ws-finance"])
-    user_id: str | None = Field(default=None, examples=["u-123"])
-    thread_id: str | None = Field(default=None, examples=["thr_01J8Z"])
-    session_id: str | None = Field(default=None, examples=["ses_01J8Z"])
-    turn_id: str | None = Field(default=None, examples=["trn_01J8Z"])
-    work_id: str | None = None
-    task_id: str | None = None
-    agent_id: str | None = Field(default=None, examples=["research"])
-    agent_group_id: str | None = None
-    agent_run_id: str | None = None
-    parent_agent_run_id: str | None = None
-    correlation_id: str | None = None
+    tenant_id: str | None = Field(
+        default=None,
+        examples=["acme"],
+        description="The tenant; optional (the trusted header or the key names it) and, "
+        "when sent, must equal X-Trellis-Tenant.",
+    )
+    workspace_id: str | None = Field(
+        default=None,
+        examples=["ws-finance"],
+        description="The workspace (team) acted in; when sent, must equal X-Trellis-Workspace.",
+    )
+    user_id: str | None = Field(
+        default=None,
+        examples=["u-123"],
+        description="The end user acted for; when sent, must equal X-Trellis-User.",
+    )
+    thread_id: str | None = Field(
+        default=None,
+        examples=["thr_01J8Z"],
+        description="The conversation thread: THREAD-visible records of it are readable and"
+        " writes are anchored to it.",
+    )
+    session_id: str | None = Field(
+        default=None,
+        examples=["ses_01J8Z"],
+        description="The open session within the thread (one sitting of a conversation).",
+    )
+    turn_id: str | None = Field(
+        default=None,
+        examples=["trn_01J8Z"],
+        description="One user turn (a question and its answer) within the session.",
+    )
+    work_id: str | None = Field(
+        default=None,
+        description="A unit of work spanning several agents and turns; WORK-visible records"
+        " of it are readable.",
+    )
+    task_id: str | None = Field(default=None, description="A task inside the unit of work.")
+    agent_id: str | None = Field(
+        default=None,
+        examples=["research"],
+        description="The logical agent acting (e.g. research): the call acts as agent:<id> "
+        "for the user.",
+    )
+    agent_group_id: str | None = Field(
+        default=None,
+        description="The group of cooperating agents; AGENT_GROUP-visible records of it are"
+        " readable.",
+    )
+    agent_run_id: str | None = Field(
+        default=None,
+        description="This execution of the agent (requires agent_id); RUN-visible records "
+        "of the run are readable.",
+    )
+    parent_agent_run_id: str | None = Field(
+        default=None,
+        description="The run that spawned this one, whose RUN-visible records this run may read.",
+    )
+    correlation_id: str | None = Field(
+        default=None,
+        description="An opaque id grouping related requests; wins over X-Correlation-ID and"
+        " is echoed in the response header.",
+    )
     custom_metadata: CustomMetadata = Field(default_factory=dict)
 
 
@@ -280,38 +341,63 @@ def build_context(
     return ctx
 
 
-async def get_header_context(
-    request: Request,
-    container: ContainerDep,
-    _: ServicePrincipalDep,
-    thread_id: str | None = None,
-    session_id: str | None = None,
-    work_id: str | None = None,
-    task_id: str | None = None,
-    agent_id: str | None = None,
-    agent_group_id: str | None = None,
-    agent_run_id: str | None = None,
-    parent_agent_run_id: str | None = None,
-) -> MemoryExecutionContext:
-    """Context for GET/DELETE routes (no body): security fields from trusted headers, the
-    lineage (thread, work, agent run, agent group) from optional query parameters so an
-    agent reads and forgets with the same identity it wrote with."""
-    return build_context(
-        request,
-        container,
-        ScopeBody(
-            thread_id=thread_id,
-            session_id=session_id,
-            work_id=work_id,
-            task_id=task_id,
-            agent_id=agent_id,
-            agent_group_id=agent_group_id,
-            agent_run_id=agent_run_id,
-            parent_agent_run_id=parent_agent_run_id,
-        ),
+def _lineage_but_thread(
+    session_id: SessionIdQuery = None,
+    work_id: WorkIdQuery = None,
+    task_id: TaskIdQuery = None,
+    agent_id: AgentIdQuery = None,
+    agent_group_id: AgentGroupIdQuery = None,
+    agent_run_id: AgentRunIdQuery = None,
+    parent_agent_run_id: ParentAgentRunIdQuery = None,
+) -> ScopeBody:
+    return ScopeBody(
+        session_id=session_id,
+        work_id=work_id,
+        task_id=task_id,
+        agent_id=agent_id,
+        agent_group_id=agent_group_id,
+        agent_run_id=agent_run_id,
+        parent_agent_run_id=parent_agent_run_id,
     )
 
 
+_LineageButThread = Annotated[ScopeBody, Depends(_lineage_but_thread)]
+
+
+def lineage_query(base: _LineageButThread, thread_id: ThreadIdQuery = None) -> ScopeBody:
+    """The lineage of a GET/DELETE route (no body) from its optional query parameters, so
+    an agent reads and forgets with the same identity it wrote with."""
+    return base.model_copy(update={"thread_id": thread_id})
+
+
+def thread_lineage(base: _LineageButThread, thread_id: ThreadIdPath) -> ScopeBody:
+    """:func:`lineage_query` for a route under ``/threads/{thread_id}``: the path names the
+    thread the call acts in."""
+    return base.model_copy(update={"thread_id": thread_id})
+
+
+LineageDep = Annotated[ScopeBody, Depends(lineage_query)]
+
+
+async def get_header_context(
+    request: Request, container: ContainerDep, _: ServicePrincipalDep, lineage: LineageDep
+) -> MemoryExecutionContext:
+    """Context for GET/DELETE routes (no body): security fields from trusted headers, the
+    lineage (thread, work, agent run, agent group) from optional query parameters."""
+    return build_context(request, container, lineage)
+
+
+async def get_thread_context(
+    request: Request,
+    container: ContainerDep,
+    _: ServicePrincipalDep,
+    lineage: Annotated[ScopeBody, Depends(thread_lineage)],
+) -> MemoryExecutionContext:
+    """:func:`get_header_context` for the routes of one thread (its id is the path's)."""
+    return build_context(request, container, lineage)
+
+
+ThreadContextDep = Annotated[MemoryExecutionContext, Depends(get_thread_context)]
 HeaderContextDep = Annotated[MemoryExecutionContext, Depends(get_header_context)]
 
 
@@ -331,7 +417,7 @@ def key_self_of(principal: ServicePrincipal, container: Container) -> KeySelfRes
             key_id=str(claims["key_id"]),
             tenant_id=str(claims["tenant"]),
             principal=principal.service_id,
-            role=str(claims["role"]),
+            role=cast("KeySelfRole", str(claims["role"])),
             may_act_as=list(claims.get("may_act_as") or []),
         )
     # an issuer's token names its tenant per request; a development key acts in the
@@ -340,7 +426,7 @@ def key_self_of(principal: ServicePrincipal, container: Container) -> KeySelfRes
         key_id=principal.service_id,
         tenant_id=credential_tenant(principal, container),
         principal=principal.service_id,
-        role=principal.mode,
+        role=cast("KeySelfRole", principal.mode),
         may_act_as=[ANY_PRINCIPAL],
     )
 
@@ -371,14 +457,19 @@ def is_tenant_administrator(principal: ServicePrincipal) -> bool:
     return _has_role(principal, (KeyRole.ADMIN, KeyRole.PLATFORM))
 
 
+def ensure_role(principal: ServicePrincipal, *roles: KeyRole) -> ServicePrincipal:
+    """The principal, when its credential holds one of ``roles``; else 403."""
+    if not _has_role(principal, roles):
+        raise AuthorizationFailed(
+            "this credential may not perform that administration",
+            details={"required_role": [r.value for r in roles]},
+        )
+    return principal
+
+
 def require_role(*roles: KeyRole) -> Any:
     async def dependency(principal: ServicePrincipalDep) -> ServicePrincipal:
-        if not _has_role(principal, roles):
-            raise AuthorizationFailed(
-                "this credential may not perform that administration",
-                details={"required_role": [r.value for r in roles]},
-            )
-        return principal
+        return ensure_role(principal, *roles)
 
     return Depends(dependency)
 
@@ -431,6 +522,13 @@ async def get_administered_tenant(
     document. The tenant must exist when the header alone names it: the platform's typo
     must not create rows for a tenant nobody onboarded. The credential's own tenant (a key's,
     or the development tenant of a development key) needs no row."""
+    return await existing_administered_tenant(request, principal, container)
+
+
+async def existing_administered_tenant(
+    request: Request, principal: ServicePrincipal, container: Container
+) -> str:
+    """:func:`administered_tenant`, which must exist when the header alone names it."""
     tenant_id = administered_tenant(request, principal, container)
     if credential_tenant(principal, container) != tenant_id:
         async with container.services["uow_factory"]() as uow:

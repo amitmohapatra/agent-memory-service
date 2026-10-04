@@ -51,7 +51,7 @@ async def test_semantic_graph_returns_multihop_facts_without_widening_access(con
             observed_at=datetime(2023, 1, 1, tzinfo=UTC),
             evidence=[
                 EvidenceRef(
-                    source_type="fixture",
+                    source_type="import",
                     source_id=f"source_{i}",
                     observed_at=datetime(2023, 1, 1, tzinfo=UTC),
                 )

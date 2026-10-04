@@ -59,6 +59,10 @@ class ValidationError(MemoryError):
     pass
 
 
+class PayloadTooLargeError(ValidationError):
+    """413: the body or the file is larger than the service accepts; never retryable as is."""
+
+
 class RateLimitedError(MemoryError):
     pass
 
@@ -86,9 +90,9 @@ _BY_CODE: dict[str, type[MemoryError]] = {
     "NOT_FOUND": NotFoundError,
     "CONFLICT": ConflictError,
     "VALIDATION": ValidationError,
+    "PAYLOAD_TOO_LARGE": PayloadTooLargeError,
     "RATE_LIMIT": RateLimitedError,
     "DEPENDENCY_UNAVAILABLE": DependencyUnavailableError,
-    "RETRYABLE_PROCESSING": DependencyUnavailableError,
     "TIMEOUT": TimeoutError,
     "CORRUPT_SOURCE": ValidationError,
     "CIRCUIT_OPEN": CircuitOpenError,
@@ -105,7 +109,7 @@ _BY_STATUS: dict[int, tuple[type[MemoryError], str, bool]] = {
     403: (AuthorizationError, "AUTHORIZATION", False),
     404: (NotFoundError, "NOT_FOUND", False),
     409: (ConflictError, "CONFLICT", False),
-    413: (ValidationError, "VALIDATION", False),
+    413: (PayloadTooLargeError, "PAYLOAD_TOO_LARGE", False),
     422: (ValidationError, "VALIDATION", False),
     429: (RateLimitedError, "RATE_LIMIT", True),
     502: (DependencyUnavailableError, "DEPENDENCY_UNAVAILABLE", True),

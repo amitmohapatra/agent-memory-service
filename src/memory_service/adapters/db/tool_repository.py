@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Text, func, select, update
+from sqlalchemy import Text, and_, func, literal, or_, select, tuple_, update
 from sqlalchemy import false as sa_false
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -223,10 +223,12 @@ class SqlToolRepository:
         workspace_id: str | None,
         names: Sequence[str] | None = None,
         limit: int,
+        after: str = "",
     ) -> list[ToolDescriptor]:
         stmt = select(ToolRow).where(
             ToolRow.tenant_id == tenant_id,
             ToolRow.workspace_id.in_(_workspaces(workspace_id)),
+            ToolRow.name > after,
         )
         if names is not None:
             stmt = stmt.where(ToolRow.name.in_(list(names)))
@@ -448,6 +450,7 @@ class SqlToolRepository:
         tool_name: str | None,
         min_support: int,
         limit: int,
+        after: tuple[int, str, str] | None = None,
     ) -> list[ApprovalCounts]:
         row = ApprovalPatternRow
         support = row.approvals + row.rejections + row.edits
@@ -456,6 +459,18 @@ class SqlToolRepository:
         )
         if tool_name is not None:
             stmt = stmt.where(row.tool_name == tool_name)
+        if after is not None:
+            last_support, last_tool, last_shape = after
+            stmt = stmt.where(
+                or_(
+                    support < last_support,
+                    and_(
+                        support == last_support,
+                        tuple_(row.tool_name, row.arg_shape)
+                        > tuple_(literal(last_tool), literal(last_shape)),
+                    ),
+                )
+            )
         stmt = stmt.order_by(support.desc(), row.tool_name, row.arg_shape).limit(limit)
         return [_to_counts(r) for r in (await self.s.execute(stmt)).scalars()]
 

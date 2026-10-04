@@ -168,7 +168,7 @@ def test_the_request_sees_the_ids_the_middleware_set(settings, overrides) -> Non
 def test_the_body_limit_is_enforced_before_the_body_is_read(settings, overrides) -> None:
     with TestClient(create_app(settings, overrides=overrides)) as client:
         r = client.post("/version", headers={"Content-Length": str(10**9)}, content=b"")
-    assert r.status_code == 413 and r.json()["code"] == "VALIDATION"
+    assert r.status_code == 413 and r.json()["code"] == "PAYLOAD_TOO_LARGE"
 
 
 def test_a_request_is_counted_once_under_its_route(settings, overrides) -> None:

@@ -15,6 +15,7 @@ handlers below and the two responses the middleware writes before a route runs (
 
 from __future__ import annotations
 
+import math
 from typing import Any, Final
 
 from fastapi import FastAPI, Request
@@ -23,7 +24,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from memory_service.api.headers import correlation_headers
+from memory_service.adapters.db.errors import DATABASE_ERRORS, database_error
+from memory_service.api.headers import RETRY_AFTER_HEADER, correlation_headers
 from memory_service.config.constants import MAX_BODY_BYTES
 from memory_service.domain.enums import ErrorCode
 from memory_service.domain.errors import MemoryServiceError
@@ -42,13 +44,21 @@ PROBLEM_TITLES: Final[dict[ErrorCode, str]] = {
     ErrorCode.SCOPE_DENIED: "Outside the caller's scope",
     ErrorCode.NOT_FOUND: "Not found",
     ErrorCode.CONFLICT: "Conflict",
+    ErrorCode.PAYLOAD_TOO_LARGE: "Payload too large",
     ErrorCode.RATE_LIMIT: "Too many requests",
     ErrorCode.DEPENDENCY_UNAVAILABLE: "A dependency is unavailable",
     ErrorCode.TIMEOUT: "Operation timed out",
-    ErrorCode.RETRYABLE_PROCESSING: "Processing did not complete",
     ErrorCode.CORRUPT_SOURCE: "Source could not be processed",
     ErrorCode.INTERNAL: "Internal error",
 }
+
+
+#: The ``Retry-After`` a retryable 503 or 504 carries when the failure names no wait of its
+#: own: long enough for a pool to drain or a restarted store to accept connections again,
+#: short enough that a client following it does not stall a conversation.
+DEPENDENCY_RETRY_AFTER_SECONDS: Final = 5
+#: Statuses whose retryable problems tell the client when to come back (429 sets its own).
+_RETRY_AFTER_STATUSES: Final = frozenset({503, 504})
 
 
 def problem_type(code: ErrorCode) -> str:
@@ -124,9 +134,25 @@ def build_problem(
     )
 
 
+def retry_after(problem: Problem) -> str | None:
+    """Seconds to wait before retrying a retryable 503/504: the failure's own hint
+    (``details.retry_after_seconds``, as an open LLM circuit gives one), else the default."""
+    if not problem.retryable or problem.status not in _RETRY_AFTER_STATUSES:
+        return None
+    hint = problem.details.get("retry_after_seconds")
+    if isinstance(hint, int | float) and not isinstance(hint, bool) and hint > 0:
+        return str(math.ceil(hint))
+    return str(DEPENDENCY_RETRY_AFTER_SECONDS)
+
+
 def problem_response(problem: Problem, *, headers: dict[str, str] | None = None) -> ProblemResponse:
+    """The problem as a response; a retryable 503/504 also says when to retry."""
+    merged = dict(headers or {})
+    wait = retry_after(problem)
+    if wait is not None:
+        merged.setdefault(RETRY_AFTER_HEADER, wait)
     return ProblemResponse(
-        status_code=problem.status, content=problem.model_dump(mode="json"), headers=headers
+        status_code=problem.status, content=problem.model_dump(mode="json"), headers=merged
     )
 
 
@@ -149,7 +175,7 @@ ERROR_EXAMPLES: dict[int, dict[str, Any]] = {
         "retryable": False,
     },
     413: {
-        "code": ErrorCode.VALIDATION,
+        "code": ErrorCode.PAYLOAD_TOO_LARGE,
         "detail": f"Body exceeds {MAX_BODY_BYTES} bytes",
         "retryable": False,
     },
@@ -198,6 +224,7 @@ def _problem(
     retryable: bool,
     status: int,
     details: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> ProblemResponse:
     return problem_response(
         build_problem(
@@ -209,23 +236,40 @@ def _problem(
             trace_id=getattr(request.state, "trace_id", None),
             request_id=getattr(request.state, "request_id", None),
             details=details,
-        )
+        ),
+        headers=headers,
+    )
+
+
+def _domain_problem(request: Request, exc: MemoryServiceError) -> ProblemResponse:
+    if exc.http_status >= 500:
+        log.error("request.failed", code=exc.code, message=exc.message, path=request.url.path)
+    return _problem(
+        request,
+        code=exc.code,
+        message=exc.message,
+        retryable=exc.retryable,
+        status=exc.http_status,
+        details=exc.details,
     )
 
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(MemoryServiceError)
     async def _domain_error(request: Request, exc: MemoryServiceError) -> ProblemResponse:
-        if exc.http_status >= 500:
-            log.error("request.failed", code=exc.code, message=exc.message, path=request.url.path)
-        return _problem(
-            request,
-            code=exc.code,
-            message=exc.message,
-            retryable=exc.retryable,
-            status=exc.http_status,
-            details=exc.details,
-        )
+        return _domain_problem(request, exc)
+
+    async def _database_error(request: Request, exc: Exception) -> ProblemResponse:
+        # PostgreSQL away, the pool exhausted, a statement stopped at its budget: a 503 or
+        # 504 the client retries. Anything else the driver raises is a bug and stays the 500
+        # the unhandled handler below writes.
+        failure = database_error(exc)
+        if failure is None:
+            raise exc
+        return _domain_problem(request, failure)
+
+    for database_exception in DATABASE_ERRORS:
+        app.add_exception_handler(database_exception, _database_error)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> ProblemResponse:
@@ -250,19 +294,21 @@ def install_error_handlers(app: FastAPI) -> None:
             404: ErrorCode.NOT_FOUND,
             405: ErrorCode.VALIDATION,
             409: ErrorCode.CONFLICT,
-            413: ErrorCode.VALIDATION,
+            413: ErrorCode.PAYLOAD_TOO_LARGE,
             422: ErrorCode.VALIDATION,
             429: ErrorCode.RATE_LIMIT,
         }
         code = mapping.get(
             exc.status_code, ErrorCode.INTERNAL if exc.status_code >= 500 else ErrorCode.VALIDATION
         )
+        # the exception's own headers survive: Allow on a 405, WWW-Authenticate on a 401
         return _problem(
             request,
             code=code,
             message=str(exc.detail),
             retryable=exc.status_code in (429, 503, 504),
             status=exc.status_code,
+            headers=dict(exc.headers) if exc.headers else None,
         )
 
     @app.exception_handler(Exception)

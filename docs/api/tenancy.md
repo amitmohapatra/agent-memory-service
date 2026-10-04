@@ -39,9 +39,9 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `DELETE /v1/workspaces/{id}` | delete it; every member loses the audience and every key bound to it is revoked at once | `t.workspaces.delete(id)` |
 | `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>` or `agent:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
 | `DELETE /v1/workspaces/{id}/members/{principal_ref}` | remove a member; its next request no longer reads the workspace | `t.workspaces.remove_member(id, principal)` |
-| `GET /v1/workspaces/{id}/members` | who is in it | `t.workspaces.members(id)` |
-| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` |
-| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` |
+| `GET /v1/workspaces/{id}/members` | who is in it, by principal (cursor paged) | `t.workspaces.members(id)`, `.members_page(id, cursor=…)` |
+| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read; `DELETE` answers `204`) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` (reads the status back) |
+| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key (`DELETE` answers `204`) | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` (reads the status back) |
 | `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted, the model per use | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…, models=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
@@ -201,7 +201,8 @@ Each entry names the credential and the principal that read, whether it was a `r
 `context` assembly, the `record_ids` that came back, and a `query_hash` plus a `scope_fingerprint`
 rather than the query text — the audit answers *who read which records* without becoming a second
 copy of what was asked. Newest first, pageable by cursor (or `before=<the last entry's at>`);
-`after` is a since-filter. The keyset is the instant, so entries sharing one instant across a page
+`since=<instant>` keeps only newer entries (a filter that stays the same across pages; it was
+`after` before ADR 0030). The keyset is the instant, so entries sharing one instant across a page
 boundary need a larger page.
 
 ## What this area does not do

@@ -39,11 +39,11 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | Route | Purpose | SDK |
 | --- | --- | --- |
 | `PUT /v1/tools/catalog` | upsert catalog entries by name (idempotent) | `ctx.advanced.tools.put_catalog([...])` |
-| `GET /v1/tools?names=…` | the catalog visible in this scope, with statistics | `ctx.advanced.tools.catalog(names=…)` |
+| `GET /v1/tools?names=…` | the catalog visible in this scope, by name, with statistics (cursor paged; a page holds the whole 500-entry catalog by default). `ETag` + `Cache-Control: private, no-cache`: send it back in `If-None-Match` and an unchanged catalog is a `304` without a body — how a harness refreshes approval tiers cheaply | `ctx.advanced.tools.catalog(names=…)` (follows the cursor) |
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
-| `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support | `ctx.advanced.tools.approval_suggestions(tool=…)` |
+| `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
 
 `POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's

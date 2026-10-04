@@ -25,7 +25,7 @@ sequenceDiagram
   alt a vote (needs review)
     F->>DB: the feedback row, review.state = pending — no job
     F-->>R: 201 Feedback {feedback_id, …, review: {state: pending}, projection: null}
-    Note over F,DB: GET /v1/feedback/pending → POST /v1/feedback/{id}/approve (tenant admin key)
+    Note over F,DB: GET /v1/feedback?review=pending → POST /v1/feedback/{id}/approve (tenant admin key)
     F->>DB: on approve: the projection job, as if it had just arrived
   else applied as it arrives
     F->>DB: the feedback row + its projection job, one transaction
@@ -52,7 +52,9 @@ The projection is a separate, later fact, which is why `GET` is worth doing: a `
 before the projector runs, so the record you get back has `projection: null`.
 
 An answer's `evidence_refs` name what it cited (`{"source_type": "memory", "source_id":
-"mem_…"}`); each must be a memory the reviewer may read, or the `POST` is refused. Memory
+"mem_…"}`; `source_type` is one of the service's evidence sources: `memory`, `message`, `file`,
+`document_chunk`, `agent_result`, `tool_result`, `import`, `observation`, `statement`,
+`graph_fact`, `summary`, `episode`, `feedback`); each must be a memory the reviewer may read, or the `POST` is refused. Memory
 standing — confidence and reinforcement — is part of the retrieval ranking: a bounded factor
 (at most ±15%) on the fused score, so it reorders near-ties and never outweighs relevance.
 
@@ -63,7 +65,8 @@ standing — confidence and reinforcement — is part of the retrieval ranking: 
 | `POST /v1/feedback` | record a judgement on a run, memory, tool call or procedure | `ctx.feedback(...)` |
 | `GET /v1/feedback/{feedback_id}` | one record, with its projection once it has run | `ctx.feedback.get(id)` |
 | `GET /v1/feedback?target_kind=…&target_id=…` | the feedback on one target, newest first (cursor paged) | `ctx.feedback.list_for(...)`, `ctx.feedback.page_for(...)` |
-| `GET /v1/feedback/pending` | the review queue (tenant admin key): verdicts that change nothing until approved, newest first, each with `author_record` | `ctx.feedback.pending(limit=…, cursor=…)` |
+| `GET /v1/feedback?review=pending` | the review queue (tenant admin key): verdicts that change nothing until approved, newest first, each with `author_record` | `ctx.feedback.pending(limit=…, cursor=…)` |
+| `GET /v1/feedback/pending` | **deprecated** alias of the queue, answered with `Deprecation: true` and `Link: rel="successor-version"` | — |
 | `POST /v1/feedback/{feedback_id}/approve` | apply a pending verdict as if it had just arrived; optional `{"note": …}`; 409 when it is not pending | `ctx.feedback.approve(id, note=…)` |
 | `POST /v1/feedback/{feedback_id}/dismiss` | keep a pending verdict for statistics, never apply it; optional `{"note": …}`; 409 when it is not pending | `ctx.feedback.dismiss(id, note=…)` |
 

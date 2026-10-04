@@ -7,11 +7,10 @@ tuples are written with the rows and the membership revision is bumped in the sa
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request, Response
-from fastapi.responses import JSONResponse
 
 from memory_service.api.deps import (
     AdministeredTenantDep,
@@ -21,8 +20,9 @@ from memory_service.api.deps import (
     request_context,
 )
 from memory_service.api.errors import error_responses
-from memory_service.api.idempotent import run_idempotent
+from memory_service.api.idempotent import NO_CONTENT, resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, encode_cursor, link_next, page
+from memory_service.api.params import KeyIdPath, PrincipalRefPath, WorkspaceIdPath, limit_query
 from memory_service.api.schemas.tenancy import (
     ApiKeyResponse,
     CreateWorkspaceRequest,
@@ -35,9 +35,12 @@ from memory_service.api.schemas.tenancy import (
     WorkspaceMemberResponse,
     WorkspaceResponse,
 )
+from memory_service.domain.instants import UtcDateTime
 
 router = APIRouter(tags=["tenancy"])
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
+#: reads never conflict
+_READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
@@ -68,7 +71,7 @@ async def issue_key(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     principal: ServicePrincipalDep,
-) -> JSONResponse:
+) -> Response:
     ctx = request_context(request, tenant_id)
     payload = body.model_dump(mode="json")
 
@@ -99,6 +102,7 @@ async def issue_key(
         payload=payload,
         handler=handler,
         stored_body=_without_token,
+        location=resource_at("/v1/keys/{}", "key_id"),
     )
 
 
@@ -117,7 +121,7 @@ async def key_self(principal: ServicePrincipalDep, container: ContainerDep) -> K
 @router.get(
     "/keys",
     response_model=list[ApiKeyResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List keys, oldest first (cursor paged)",
 )
 async def list_keys(
@@ -126,7 +130,7 @@ async def list_keys(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "keys")] = 100,
 ) -> list[ApiKeyResponse]:
     position = decode_cursor(cursor, fields={"created_at": datetime, "key_id": str})
     after = (position["created_at"], position["key_id"]) if position else None
@@ -148,17 +152,33 @@ async def list_keys(
     summary="Change whom a key may act for; it applies on the key's next request",
 )
 async def update_key(
-    key_id: str, body: UpdateKeyRequest, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> ApiKeyResponse:
+    request: Request,
+    key_id: KeyIdPath,
+    body: UpdateKeyRequest,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         key = await _service(container).set_may_act_as(uow, tenant_id, key_id, body.may_act_as)
         # the same order a revocation takes: tombstone first, so no instance keeps serving
         # the old grant from its cache
         await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    await verifier.invalidate(key_id)
-    return ApiKeyResponse.of(key)
+
+        async def after_commit() -> None:
+            await verifier.invalidate(key_id)
+
+        return 200, ApiKeyResponse.of(key).model_dump(mode="json"), after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"key_id": key_id, **body.model_dump(mode="json")},
+        handler=handler,
+    )
 
 
 @router.delete(
@@ -168,21 +188,34 @@ async def update_key(
     summary="Revoke a key; it fails on its next request from any instance",
 )
 async def revoke_key(
-    key_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
+    request: Request, key_id: KeyIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).revoke_key(uow, tenant_id, key_id)
         if revoked:
             # Tombstone before the commit, strictly: a reader between the two steps re-reads,
             # and a cache that is away turns this into a 503 to retry rather than a 204
             # while the key still serves from cache.
             await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    if revoked:
-        # only a key of this tenant: another tenant's key id must not be touched from here
-        await verifier.invalidate(key_id)
-        container.services["tenant_registry"].forget_key(key_id)
+
+        async def after_commit() -> None:
+            if revoked:
+                # only a key of this tenant: another tenant's key id must not be touched here
+                await verifier.invalidate(key_id)
+                container.services["tenant_registry"].forget_key(key_id)
+
+        return NO_CONTENT, {}, after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "revoke", "key_id": key_id},
+        handler=handler,
+    )
 
 
 # -- workspaces -----------------------------------------------------------------------
@@ -200,7 +233,7 @@ async def create_workspace(
     body: CreateWorkspaceRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-) -> JSONResponse:
+) -> Response:
     ctx = request_context(request, tenant_id)
     payload = body.model_dump(mode="json")
 
@@ -211,14 +244,20 @@ async def create_workspace(
         return 201, WorkspaceResponse.of(workspace).model_dump(mode="json"), None
 
     return await run_idempotent(
-        request, container, ctx, key=request.state.idempotency_key, payload=payload, handler=handler
+        request,
+        container,
+        ctx,
+        key=request.state.idempotency_key,
+        payload=payload,
+        handler=handler,
+        location=resource_at("/v1/workspaces/{}", "workspace_id"),
     )
 
 
 @router.get(
     "/workspaces",
     response_model=list[WorkspaceResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="List workspaces",
 )
 async def list_workspaces(
@@ -227,7 +266,7 @@ async def list_workspaces(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, limit_query(500, "workspaces")] = 100,
 ) -> list[WorkspaceResponse]:
     position = decode_cursor(cursor, fields=("workspace_id",))
     async with container.services["uow_factory"]() as uow:
@@ -244,11 +283,11 @@ async def list_workspaces(
 @router.get(
     "/workspaces/{workspace_id}",
     response_model=WorkspaceResponse,
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Get a workspace",
 )
 async def get_workspace(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    workspace_id: WorkspaceIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> WorkspaceResponse:
     async with container.services["uow_factory"]() as uow:
         return WorkspaceResponse.of(
@@ -264,32 +303,63 @@ async def get_workspace(
     "is revoked at once",
 )
 async def delete_workspace(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
+    request: Request,
+    workspace_id: WorkspaceIdPath,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
     verifier = container.services["api_keys"]
-    async with container.services["uow_factory"]() as uow:
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).delete_workspace(uow, tenant_id, workspace_id)
         for key_id in revoked:
             # as in revoke_key: strictly and before the commit
             await verifier.invalidate(key_id, strict=True)
-        await uow.commit()
-    for key_id in revoked:
-        await verifier.invalidate(key_id)
-        container.services["tenant_registry"].forget_key(key_id)
+
+        async def after_commit() -> None:
+            for key_id in revoked:
+                await verifier.invalidate(key_id)
+                container.services["tenant_registry"].forget_key(key_id)
+
+        return NO_CONTENT, {}, after_commit
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "delete", "workspace_id": workspace_id},
+        handler=handler,
+    )
 
 
 @router.get(
     "/workspaces/{workspace_id}/members",
     response_model=list[WorkspaceMemberResponse],
-    responses=_ERRORS,
-    summary="List a workspace's members",
+    responses=_READ_ERRORS,
+    summary="List a workspace's members by principal (cursor paged)",
 )
 async def list_members(
-    workspace_id: str, container: ContainerDep, tenant_id: AdministeredTenantDep
+    request: Request,
+    response: Response,
+    workspace_id: WorkspaceIdPath,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[int, limit_query(500, "members")] = 100,
 ) -> list[WorkspaceMemberResponse]:
+    position = decode_cursor(cursor, fields=("principal",))
     async with container.services["uow_factory"]() as uow:
-        members = await _service(container).members(uow, tenant_id, workspace_id)
-    return [WorkspaceMemberResponse.of(m) for m in members]
+        members = await _service(container).members(
+            uow,
+            tenant_id,
+            workspace_id,
+            after=position["principal"] if position else "",
+            limit=limit + 1,
+        )
+    items, next_cursor = page(members, limit=limit, position=lambda m: {"principal": m.principal})
+    link_next(request, response, next_cursor)
+    return [WorkspaceMemberResponse.of(m) for m in items]
 
 
 @router.put(
@@ -299,14 +369,15 @@ async def list_members(
     summary="Admit a user or agent (user:<id> | agent:<id>) with one role",
 )
 async def set_member(
-    workspace_id: str,
-    principal_ref: str,
+    request: Request,
+    workspace_id: WorkspaceIdPath,
+    principal_ref: PrincipalRefPath,
     body: SetMemberRequest,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
     principal: ServicePrincipalDep,
-) -> WorkspaceMemberResponse:
-    async with container.services["uow_factory"]() as uow:
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         member = await _service(container).set_member(
             uow,
             tenant_id,
@@ -315,8 +386,20 @@ async def set_member(
             role=body.role,
             added_by=principal.service_id,
         )
-        await uow.commit()
-    return WorkspaceMemberResponse.of(member)
+        return 200, WorkspaceMemberResponse.of(member).model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={
+            "workspace_id": workspace_id,
+            "principal": principal_ref,
+            **body.model_dump(mode="json"),
+        },
+        handler=handler,
+    )
 
 
 @router.delete(
@@ -326,11 +409,24 @@ async def set_member(
     summary="Remove a member; its next request no longer reads the workspace",
 )
 async def remove_member(
-    workspace_id: str, principal_ref: str, container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> None:
-    async with container.services["uow_factory"]() as uow:
+    request: Request,
+    workspace_id: WorkspaceIdPath,
+    principal_ref: PrincipalRefPath,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
+    async def handler(uow):  # type: ignore[no-untyped-def]
         await _service(container).remove_member(uow, tenant_id, workspace_id, principal_ref)
-        await uow.commit()
+        return NO_CONTENT, {}, None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"action": "remove", "workspace_id": workspace_id, "principal": principal_ref},
+        handler=handler,
+    )
 
 
 # -- read audit -----------------------------------------------------------------------
@@ -339,7 +435,7 @@ async def remove_member(
 @router.get(
     "/reads",
     response_model=list[ReadAuditResponse],
-    responses=_ERRORS,
+    responses=_READ_ERRORS,
     summary="Who read which records, newest first (cursor paged; the keyset is the instant, so "
     "entries sharing one instant across a page boundary need a larger page)",
 )
@@ -348,34 +444,32 @@ async def list_reads(
     response: Response,
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
-    after: Annotated[
-        datetime | None, Query(description="only entries newer than this instant (a since-filter)")
+    since: Annotated[
+        UtcDateTime | None,
+        Query(
+            description="Only entries newer than this instant (ISO 8601; a naive value is UTC): "
+            "a filter that stays the same across pages."
+        ),
     ] = None,
     before: Annotated[
-        datetime | None,
-        Query(description="only entries older than this instant: the cursor for the next page"),
+        UtcDateTime | None,
+        Query(
+            description="Only entries older than this instant (ISO 8601; a naive value is "
+            "UTC). The cursor sets it for the next page; a cursor wins over it."
+        ),
     ] = None,
     cursor: CursorQuery = None,
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    limit: Annotated[int, limit_query(1000, "entries")] = 100,
 ) -> list[ReadAuditResponse]:
     position = decode_cursor(cursor, fields={"before": datetime})
     if position is not None:
         before = position["before"]
     await container.services["read_audit"].flush()
     async with container.services["uow_factory"]() as uow:
-        entries = await uow.read_audit.list(
-            tenant_id, after=_aware(after), before=_aware(before), limit=limit + 1
-        )
+        entries = await uow.read_audit.list(tenant_id, after=since, before=before, limit=limit + 1)
     items = entries[:limit]
     next_cursor = (
         encode_cursor({"before": items[-1].at.isoformat()}) if len(entries) > limit else None
     )
     link_next(request, response, next_cursor)
     return [ReadAuditResponse.model_validate(e.model_dump()) for e in items]
-
-
-def _aware(instant: datetime | None) -> datetime | None:
-    """A naive instant means UTC; the store compares against timestamptz."""
-    if instant is not None and instant.tzinfo is None:
-        return instant.replace(tzinfo=UTC)
-    return instant
