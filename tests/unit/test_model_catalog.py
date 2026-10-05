@@ -97,10 +97,11 @@ async def test_registered_key_auto_discovers_then_calls_with_no_mcp():
         paths.append(request.url.path)
         assert request.headers["x-bf-vk"] == "vk-owner"
         assert request.headers["authorization"] == "Bearer vk-owner"
-        assert request.headers["x-bf-mcp-include-clients"] == ""
-        assert request.headers["x-bf-mcp-include-tools"] == ""
         if request.url.path.endswith("/models"):
             return httpx.Response(200, json={"data": [{"id": "openai/gpt-4.1-mini"}]})
+        # a completion never inherits the key's MCP tools (bifrost-sdk's deny-all scope)
+        assert request.headers["x-bf-mcp-include-clients"] == ""
+        assert request.headers["x-bf-mcp-include-tools"] == ""
         import json
 
         body = json.loads(request.content)
