@@ -72,9 +72,9 @@ def _catalog_key(
 #: The only status for which falling back to a prompt-shaped schema is correct.
 _BAD_REQUEST = 400
 
-# Empty MCP scopes are sent as empty headers, the gateway's deny-all: a memory call never
-# inherits the virtual key's tools.
-MEMORY_CALL_OPTIONS = Options(content_logging=False, mcp_clients=(), mcp_tools=())
+# A memory call never inherits the virtual key's MCP tools: bifrost-sdk sends the gateway's
+# deny-all scope on every completion (no injected tools, no Agent Mode).
+MEMORY_CALL_OPTIONS = Options(content_logging=False)
 
 
 class LLMCallFailed(DependencyUnavailable):
