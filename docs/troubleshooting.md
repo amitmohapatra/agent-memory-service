@@ -38,13 +38,6 @@ document's own status. If jobs never leave `PENDING`, the worker is not running
 (`docker compose ps memory-worker`, or `uv run memory-worker`); the outbox sweep re-dispatches
 anything the fast path missed every minute.
 
-**I uploaded a document, it is `READY`, and nothing retrieves it.**
-A document lands in the thread it was uploaded to, and is retrievable by that thread's
-audience. Upload into a thread that exists: send the user's message first, or create the
-thread with `ctx.history.update(title=...)`, as examples
-[04](../examples/04_documents.py) and [06](../examples/06_verify_grounding.py) do. A
-`FAILED` document says why in `last_error`.
-
 **The same message sent twice became two messages.**
 Without a `turn_id`, every `USER` message opens the thread's next turn, so the second one is a
 new turn saying the same thing, which is what a user who repeats themselves did. Name the

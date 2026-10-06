@@ -88,3 +88,46 @@ async def test_sdk_attachments(app, client) -> None:
     )
     assert handle.document_id and handle.size_bytes == len(b"# Two\n\nAnother.")
     await memory.aclose()
+
+
+def test_upload_into_a_new_thread_creates_it_and_is_retrievable(client) -> None:
+    """A document uploaded into a thread nobody has written to yet is retrievable from it.
+
+    Messages create their thread on demand, and so does an upload: the uploader owns the new
+    thread, so the document's THREAD audience is one the uploader can read. Before, the
+    upload stored a THREAD key for a thread that did not exist, nobody was granted it, and the
+    document reached READY while recall and context never returned it.
+    """
+    scope = {"thread_id": new_id("thread")}
+    r = client.post(
+        "/v1/documents",
+        headers=H,
+        files={"file": ("acme_fy26_annual_report.md", FIXTURE.read_bytes(), "text/markdown")},
+        data={"scope": json.dumps(scope), "title": "ACME FY26"},
+    )
+    assert r.status_code == 202, r.text
+    doc_id = r.json()["document_id"]
+    doc = client.get(f"/v1/documents/{doc_id}", headers=H).json()
+    assert doc["status"] == "READY" and doc["thread_id"] == scope["thread_id"]
+
+    query = "Why did Adjusted EBITDA increase despite lower revenue?"
+    recall = client.post("/v1/recall", headers=H, json={"scope": scope, "query": query})
+    assert recall.status_code == 200, recall.text
+    assert any(i.get("document_id") == doc_id for i in recall.json()["items"])
+    bundle = client.post(
+        "/v1/context", headers=H, json={"scope": scope, "query": query, "format": "full"}
+    )
+    assert bundle.status_code == 200, bundle.text
+    assert any(k.get("document_id") == doc_id for k in bundle.json()["knowledge"])
+
+    # the thread exists now, and is the uploader's
+    thread = client.get(f"/v1/threads/{scope['thread_id']}", headers=H)
+    assert thread.status_code == 200, thread.text
+
+    # still the thread's: another user of the tenant reads neither the thread nor the document
+    u2 = {**H, "X-Trellis-User": "u2"}
+    assert client.get(f"/v1/threads/{scope['thread_id']}", headers=u2).status_code == 403
+    assert client.get(f"/v1/documents/{doc_id}", headers=u2).status_code == 403
+    other = client.post("/v1/recall", headers=u2, json={"scope": scope, "query": query})
+    assert other.status_code == 200, other.text
+    assert all(i.get("document_id") != doc_id for i in other.json()["items"])

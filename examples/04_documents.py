@@ -21,9 +21,6 @@ async def main() -> None:
     async with service() as svc, svc.client() as memory:
         ctx = memory.bind(user_id=f"u-{run_id()}", thread_id=f"thr-{run_id()}")
 
-        # A document lands in the thread it was uploaded to, so the thread must exist first:
-        # here the user's message creates it (``history.update`` would too).
-        await ctx.history.add([("USER", "Here is the ACME FY26 report.")])
         report = FIXTURES / "acme_fy26_annual_report.md"
         handle = await ctx.advanced.documents.add(report, title="ACME FY26 Annual Report")
         doc = await ctx.advanced.documents.wait_ready(handle.document_id)

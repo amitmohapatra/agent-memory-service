@@ -137,7 +137,8 @@ class DocumentResponse(BaseModel):
 _FILE = "The file's bytes (at most the ingestion limit, and 25 MB per request)."
 _FORM_SCOPE = (
     "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the "
-    "document's lineage. Omitted: the headers' scope alone."
+    "document's lineage. A thread_id nobody has written to yet is created for the caller, as "
+    "a message creates it. Omitted: the headers' scope alone."
 )
 _MESSAGE = "The message (msg_...) the file was attached to; the document joins its thread."
 _TITLE = "The document's title (shown in citations); omitted: the filename."

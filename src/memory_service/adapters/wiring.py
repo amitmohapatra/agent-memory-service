@@ -285,6 +285,7 @@ def _wire_ingestion(container: Container) -> None:
         container.services["authz"],
         parser,
         container.blob,
+        conversation=container.services["conversation"],
         settings=cfg,
         file_bucket=container.settings.blob.file_bucket,
         tenant_shards=container.tuning.archive.tenant_shards,

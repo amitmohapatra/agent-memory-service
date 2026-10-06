@@ -80,12 +80,12 @@
   },
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
+    "git_commit": "ac1c8ba170b7e0349c4854b12ceec678ec5ff161",
     "host_load": {
-      "load_per_core": 1.57,
-      "loadavg_15m": 4.66,
-      "loadavg_1m": 6.3,
-      "loadavg_5m": 5.5
+      "load_per_core": 0.28,
+      "loadavg_15m": 1.96,
+      "loadavg_1m": 1.13,
+      "loadavg_5m": 1.44
     },
     "llm": {
       "enabled": false,
@@ -104,20 +104,20 @@
       }
     },
     "packages": {
-      "docling": "not-installed",
+      "docling": "2.127.0",
       "fastapi": "0.141.1",
       "onnxruntime": "1.30.0",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
-      "sentence-transformers": "5.3.0",
+      "sentence-transformers": "6.0.1",
       "sqlalchemy": "2.0.53",
-      "torch": "2.11.0",
-      "transformers": "5.3.0",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
       "zstandard": "0.25.0"
     },
-    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
     "python": "3.13.14",
-    "timestamp": "2026-10-02T09:01:13.454161+00:00"
+    "timestamp": "2026-10-06T07:03:33.765951+00:00"
   },
   "representative": false,
   "rows": [

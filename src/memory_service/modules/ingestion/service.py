@@ -1,7 +1,8 @@
 """IngestionService: durable file acceptance -> async parse -> hierarchy/chunks/context graph.
 
 Accept path (synchronous, one transaction):
-    checksum -> dedup by (tenant, checksum) -> document row + staged bytes + FILE observation
+    thread created on demand, as a message creates it -> checksum -> dedup by (tenant,
+    checksum) -> document row + staged bytes + FILE observation
     -> outbox job document.parse -> COMMIT -> 202 FileHandle
 
 Parse job (async): parser -> nodes/chunks/edges persisted (replacing older versions)
@@ -31,6 +32,7 @@ from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
+from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
@@ -69,6 +71,7 @@ class IngestionService:
         parser: DocumentParser,
         blob: BlobStore | None,
         *,
+        conversation: ConversationService,
         settings: DocumentSettings,
         file_bucket: str,
         tenant_shards: int = 64,
@@ -78,6 +81,7 @@ class IngestionService:
         self.uow_factory = uow_factory
         self.authz = authz
         self.parser = parser
+        self.conversation = conversation
         self.fallback = fallback_parser
         self.blob = blob
         self.cfg = settings
@@ -124,6 +128,24 @@ class IngestionService:
         shared = team.workspace_id if team is not None and vis is Visibility.WORKSPACE else None
         return vis, keys, shared
 
+    async def _thread_for_upload(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str
+    ) -> None:
+        """The thread an upload lands in: written to by the caller, or created for it now.
+
+        A thread is created on demand by its first write, and an upload is a write like a
+        message: the uploader owns the new thread. Without it, the document carried a THREAD
+        audience for a thread nobody had been granted, so it reached READY and no recall or
+        context ever returned it.
+        """
+        if await uow.threads.get(ctx.tenant_id, thread_id) is None:
+            # a concurrent first write (message or upload) must not create it twice
+            await uow.serialize(f"thread:{ctx.tenant_id}/{thread_id}")
+            if await uow.threads.get(ctx.tenant_id, thread_id) is None:
+                await self.conversation.create_thread(uow, ctx, thread_id=thread_id)
+                return
+        await self.authz.require(ctx, "can_write", "thread", thread_id)
+
     async def accept_file(
         self,
         uow: UnitOfWork,
@@ -151,9 +173,7 @@ class IngestionService:
                 details={"supported": sorted(self.parser.supported_media_types)},
             )
         if ctx.thread_id:
-            thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
-            if thread is not None:
-                await self.authz.require(ctx, "can_write", "thread", ctx.thread_id)
+            await self._thread_for_upload(uow, ctx, ctx.thread_id)
         checksum = content_hash(data)
         existing = await uow.documents.find_by_checksum(ctx.tenant_id, checksum)
         if existing is not None and await self.authz.allowed(
