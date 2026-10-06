@@ -5400,7 +5400,7 @@
             "title": "Document Ids"
           },
           "kinds": {
-            "description": "What to search: memory (what was learned or stated), chunk (document passages), summary (document summaries), episode (earlier conversations of this user, one per thread), message (this thread's history; every conversation of this user with threads=all).",
+            "description": "What to search: memory (what was learned or stated), chunk (document passages), summary (document summaries), episode (earlier conversations of this user, one per thread), message (the messages of this conversation, then of this user's earlier ones).",
             "examples": [
               [
                 "chunk",
@@ -5466,16 +5466,6 @@
                 "turn_id": "trn_01J8ZK7Q9V3W2X1Y0ZABCDEFGH"
               }
             ]
-          },
-          "threads": {
-            "default": "current",
-            "description": "Which conversations kind message searches: current (this thread) or all (every thread this user owns, newest messages first; never another user's, and none without a user).",
-            "enum": [
-              "current",
-              "all"
-            ],
-            "title": "Threads",
-            "type": "string"
           },
           "time_from": {
             "anyOf": [
@@ -6125,7 +6115,7 @@
             "type": "string"
           },
           "kind": {
-            "description": "What the item is: memory (something learned or stated), chunk (a document passage), summary (a document summary), episode (an earlier conversation of this user) or message (this thread's history).",
+            "description": "What the item is: memory (something learned or stated), chunk (a document passage), summary (a document summary), episode (an earlier conversation of this user) or message (what was said, here or in an earlier conversation).",
             "enum": [
               "memory",
               "chunk",

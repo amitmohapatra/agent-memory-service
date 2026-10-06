@@ -289,7 +289,7 @@ async def test_search_returns_items_and_sends_the_time_window(ctx) -> None:
     assert items[0].id == "mem_1" and items[0].observed_on == "2026-09-01"
     body = _body(route)
     assert body["kinds"] == ["memory", "message"] and body["time_from"].startswith("2026-09-01")
-    assert "threads" not in body  # the current thread: the service's default, not sent
+    assert "threads" not in body
 
     route.respond(
         200,
@@ -299,9 +299,8 @@ async def test_search_returns_items_and_sends_the_time_window(ctx) -> None:
             ]
         },
     )
-    items = await ctx.search("order 4471", kinds=["message"], threads="all")
+    items = await ctx.search("order 4471", kinds=["message"])
     assert items[0].thread_id == "thr_june"
-    assert _body(route)["threads"] == "all"
 
 
 class _ContractsFeedback(BaseModel):

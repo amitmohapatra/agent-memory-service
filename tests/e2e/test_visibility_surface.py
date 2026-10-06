@@ -197,9 +197,9 @@ def test_run_hands_off_down_reports_up_and_never_sideways(client) -> None:
 
 
 # ---------------------------------------------------- past conversations
-def test_message_search_across_threads_reads_only_the_users_own_conversations(client) -> None:
-    """``threads=all``: what the user said in any earlier chat, by message, with its thread;
-    another person's chats are never searched, and the default is still this thread."""
+def test_message_search_reads_the_users_earlier_conversations_and_no_one_elses(client) -> None:
+    """What the user said in an earlier chat is found by message, with its thread; another
+    person's chats are never searched."""
     alice_old, bob_old = _scope(), _scope()
     said = (
         (_h("alice"), alice_old, "My locker code is 3141."),
@@ -209,27 +209,17 @@ def test_message_search_across_threads_reads_only_the_users_own_conversations(cl
         r = post_message(client, headers, {"scope": scope, "role": "USER", "content": text})
         assert r.status_code in (200, 201, 202), r.text
 
-    def recall(headers: dict[str, str], **extra: str) -> list[dict[str, str]]:
-        body = {"scope": _scope(), "query": "locker code", "kinds": ["message"], **extra}
+    def recall(headers: dict[str, str]) -> list[dict[str, str]]:
+        body = {"scope": _scope(), "query": "locker code", "kinds": ["message"]}
         r = client.post("/v1/recall", headers=headers, json=body)
         assert r.status_code == 200, r.text
         return r.json()["items"]
 
-    assert recall(_h("alice")) == [], "a new chat's own messages by default"
-    mine = recall(_h("alice"), threads="all")
-    assert [(i["text"], i["thread_id"]) for i in mine] == [
+    assert [(i["text"], i["thread_id"]) for i in recall(_h("alice"))] == [
         ("USER: My locker code is 3141.", alice_old["thread_id"])
     ], "alice's earlier chat, and not bob's"
-    assert [i["text"] for i in recall(_h("bob"), threads="all")] == [
-        "USER: My locker code is 2718."
-    ]
-    assert recall(_h(), threads="all") == [], "no user: no one's conversations"
-    r = client.post(
-        "/v1/recall",
-        headers=_h("alice"),
-        json={"scope": _scope(), "query": "x", "kinds": ["message"], "threads": "everyone"},
-    )
-    assert r.status_code == 422
+    assert [i["text"] for i in recall(_h("bob"))] == ["USER: My locker code is 2718."]
+    assert recall(_h()) == [], "no user: no one's earlier conversations"
 
 
 # ------------------------------------------------- the four that are gone

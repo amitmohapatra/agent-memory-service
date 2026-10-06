@@ -16,7 +16,7 @@ framework lists them with `ctx.agent_tools()` and offers them to its model (Way 
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `memory_search` | `query`, `kinds?` (memory, chunk, summary, episode, message — this conversation), `threads?` (`current`, or `all`: every conversation of this user), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, …}]` (the `/v1/recall` item) |
+| `memory_search` | `query`, `kinds?` (memory, chunk, summary, episode, message — what was said here, then in this user's earlier conversations), `time_from?`, `time_to?` (applied before ranking), `k?` (≤ 20) | `[{id, kind, text, observed_on, …}]` (the `/v1/recall` item) |
 | `memory_remember` | `content`, `kind` (the 8 primary kinds), `scope` (user, agent, run, thread, group, workspace) | `{id, deduplicated}` |
 | `memory_update` | `id` (or its bundle handle, `m3`), `content` | `{id, supersedes}` |
 | `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}`; memories derived from it are retracted too ([memory.md](memory.md#forgetting-takes-what-was-derived-from-it)) |

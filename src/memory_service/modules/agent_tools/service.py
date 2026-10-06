@@ -32,7 +32,7 @@ from memory_service.domain.pulls import (
 )
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
-from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind, ThreadScope
+from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
 from memory_service.modules.tools.patterns import task_pattern
 from memory_service.observability.logging import get_logger
 
@@ -74,12 +74,8 @@ class MemorySearchArgs(_Args):
     kinds: list[SearchKind] | None = Field(
         default=None,
         description="memory, chunk (document passages), summary, episode (earlier "
-        "conversations), message (this conversation's messages); default memory and chunk",
-    )
-    threads: ThreadScope = Field(
-        default="current",
-        description="where message looks: current (this conversation) or all (every earlier "
-        "conversation of this user)",
+        "conversations), message (what was said, here and in earlier conversations); default "
+        "memory and chunk",
     )
     time_from: UtcDateTime | None = Field(default=None, description="observed since")
     time_to: UtcDateTime | None = Field(default=None, description="observed until")
@@ -297,7 +293,6 @@ class AgentTools:
             args.query,
             kinds=args.kinds or DEFAULT_KINDS,
             limit=args.k,
-            threads=args.threads,
             observed=observed,
             at=PointInTime(as_of=args.as_of, known_at=args.known_at),
             text_chars=TEXT_CHARS,
