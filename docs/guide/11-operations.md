@@ -76,38 +76,31 @@ authorization store.
 
 ## Configuration: deployment facts only
 
-`config/settings.py` is "the operator's surface, and nothing else". Sources, highest first:
-environment variables (`MEMORY__SECTION__KEY`), then `.env`, then `secrets.env` (git-ignored),
-then defaults. Every credential is a `SecretStr`, and `/version` shows a redacted snapshot.
+`config/settings.py` is "the operator's surface, and nothing else": where the stores and the
+gateway are, the secrets, ports and worker counts. Sources, highest first: environment
+variables (`MEMORY__SECTION__KEY`), then `.env`, then `secrets.env` (git-ignored), then
+defaults. Every credential is a `SecretStr`, and `/version` shows a redacted snapshot.
 
-| Variable | Default | What |
-|---|---|---|
-| `MEMORY__SERVICE__ENVIRONMENT` | `dev` | `dev`, `test`, `staging`, `prod`; the last two enable the production guards |
-| `MEMORY__SERVICE__PORT`, `__LOG_LEVEL`, `__LOG_JSON` | `8080`, `INFO`, `true` | |
-| `WEB_CONCURRENCY` / `MEMORY__SERVICE__WORKERS` | CPUs, 1–8 (the image sets 3) | API worker processes, 1–8; the second wins when both are set; unset, one per CPU the container may use (cgroup quota and affinity, not the host's count) |
-| `MEMORY__DATABASE__URL` | localhost | the request path's connection; may be a transaction-mode PgBouncer ([deploy/database.md](../deploy/database.md)) |
-| `MEMORY__DATABASE__DIRECT_URL`, `__TRANSACTION_POOLER` | `URL`, `false` | PostgreSQL itself, for the job queue, the graph traversal and migrations; `true` when `URL` is a transaction pooler |
-| `MEMORY__DATABASE__CONNECTION_BUDGET` | 28 × processes | connections one **pod** may open; each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue |
-| `MEMORY__CACHE__URL` | `redis://localhost:6379/0` | any Redis-protocol cache |
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | CPUs, 1–8 | jobs a worker runs at once, 1–8; unset, one per CPU |
-| `MEMORY__TASKS__METRICS_PORT` | 9464 | the job worker's Prometheus series and healthcheck |
-| `MEMORY__SEARCH__QDRANT_URL`, `__QDRANT_GRPC_PORT`, `__QDRANT_API_KEY` | localhost:6333, 6334 | |
-| `MEMORY__SEARCH__SHARD_NUMBER`, `__REPLICATION_FACTOR`, `__WRITE_CONSISTENCY_FACTOR` | 1, 1, 1 | the Qdrant cluster's layout for **new** collections ([deploy/search.md](../deploy/search.md)) |
-| `MEMORY__AUTHORIZATION__OPENFGA_API_URL`, `__OPENFGA_STORE_ID`, `__OPENFGA_MODEL_ID`, `__OPENFGA_API_TOKEN` | localhost:8081 | a pinned model id that is not this build's model stops the service at start (ADR 0021) |
-| `MEMORY__BLOB__PROVIDER`, `__CHAT_BUCKET`, `__FILE_BUCKET`, `__FILESYSTEM_ROOT`, `__GCS_PROJECT` | `filesystem` | `gcs` in deployed environments |
-| `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` | unset | the platform operator (chapter 7); unset = nobody can onboard |
-| `MEMORY__AUTHENTICATION__JWT_ISSUER`, `__JWT_AUDIENCE`, `__JWT_JWKS_URL`, `__TENANT_CLAIM` | unset | `jwt` mode when the JWKS URL is set |
-| `MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS` | `[]` | development only |
-| `MEMORY__AUTHENTICATION__TRUSTED_DEV_TENANT` | `default` | the tenant a development key acts in (and `GET /v1/keys/self` reports) when a request names none |
-| `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID`, `__ENCRYPTION_KEYS` | unset | envelope keys that encrypt registered model keys; required in staging and prod, where registration is refused without them; `dev`/`test` derive an unprotected development key with a warning |
-| `MEMORY__HINDSIGHT__BASE_URL`, `__API_KEY` | unset | the optional extraction service (chapter 8) |
-| `MEMORY__RETAIL_CALENDAR` | unset | a fiscal calendar such as `454`; resolves fiscal phrases and expands planning shorthand (chapter 3) |
-| `BIFROST_URL`, `BIFROST_VIRTUAL_KEY` | unset | the model gateway and the operator's key on it; no `MEMORY__` prefix |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | tracing is on exactly when it is set |
+**Every setting** (42 under `MEMORY__`, plus `WEB_CONCURRENCY`, `BIFROST_URL`,
+`BIFROST_VIRTUAL_KEY` and `OTEL_EXPORTER_OTLP_ENDPOINT`), with its default, a working example
+and whether the service works it out for itself, is in the
+[configuration reference](../configuration.md); a test keeps that page, `.env.example` and the
+code in step. The ones a deployment always sets:
+
+| Variable | Why |
+|---|---|
+| `MEMORY__SERVICE__ENVIRONMENT=prod` | turns on the production guards (no development keys, no filesystem blob store, a long bootstrap key) |
+| `MEMORY__DATABASE__URL`, `__DIRECT_URL`, `__CONNECTION_BUDGET` | PostgreSQL, behind PgBouncer when there is one ([deploy/database.md](../deploy/database.md)) |
+| `MEMORY__SEARCH__QDRANT_URL`, `MEMORY__CACHE__URL`, `MEMORY__AUTHORIZATION__OPENFGA_API_URL` | the other stores |
+| `MEMORY__BLOB__PROVIDER=gcs` and the buckets | the archive |
+| `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` (then unset), or `__JWT_JWKS_URL` | how callers authenticate |
+| `MEMORY__AGENT_CREDENTIALS__*` | before any model key is registered |
+| `BIFROST_URL` (optional) | the model gateway; unset, no model call is made |
 
 What is **derived** is derived: the model is available when the gateway is configured, the
-authentication mode follows from the credentials configured, tracing follows from its endpoint.
-Domain code never reads environment variables.
+authentication mode follows from the credentials configured, tracing follows from its
+endpoint, worker counts follow the CPUs the container may use. Domain code never reads
+environment variables.
 
 ### What is deliberately a constant
 
@@ -300,9 +293,9 @@ returned on every response with `X-Trace-ID` (ADR 0022). The worker reports as
 and trace fields. Source text — prompts, model output, message bodies — is never logged
 (`LOG_SOURCE_TEXT = False`).
 
-**Not built:** `docs/ARCHITECTURE.md` lists OpenLineage events for processing lineage; nothing
-under `src/` emits them (the name appears only in a docstring of `domain/evidence.py`). Claim
-provenance is `EvidenceRef` and execution is traced; processing lineage is not exported.
+**Not built:** OpenLineage events for processing lineage. Nothing under `src/` emits them
+(the name appears only in a docstring of `domain/evidence.py`). Claim provenance is
+`EvidenceRef` and execution is traced; processing lineage is not exported.
 
 ---
 
