@@ -1,7 +1,7 @@
-"""A guided tour of every SDK method and every API route, run against a live server.
+"""99 · The full tour: every SDK method and every API route, one checklist.
 
-    uv run python examples/serve.py &   # http://localhost:8080, API key "dev-key"
-    uv run python examples/sdk_tour.py  # MEMORY_URL / MEMORY_API_KEY override the defaults
+    uv run python examples/99_full_tour.py           # offline, in-process (see _support.py)
+    EXAMPLES_LIVE=1 uv run python examples/99_full_tour.py   # against MEMORY_URL
 
 Each step is a check with an assertion; the script prints a checklist and exits non-zero if
 anything failed. It doubles as living documentation of what the service guarantees:
@@ -12,13 +12,13 @@ agent-run visibility, evidence-gated context, and the knowledge graph.
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import time
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
+
+from _support import FIXTURES, service
 
 from trellis.memory import (
     AuthorizationError,
@@ -27,9 +27,6 @@ from trellis.memory import (
     current_context,
 )
 
-URL = os.environ.get("MEMORY_URL", "http://localhost:8080")
-API_KEY = os.environ.get("MEMORY_API_KEY", "dev-key")
-FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures"
 RUN = uuid.uuid4().hex[:8]  # unique ids so the tour can be re-run against the same server
 
 
@@ -61,8 +58,12 @@ class Checklist:
 
 
 async def tour() -> int:
+    async with service() as svc:
+        return await _tour(svc.client())
+
+
+async def _tour(memory: MemoryClient) -> int:
     c = Checklist()
-    memory = MemoryClient(URL, api_key=API_KEY)
     tenant = f"tour-{RUN}"
     user = memory.bind(
         tenant_id=tenant,
@@ -364,20 +365,22 @@ async def tour() -> int:
         assert alias[0].canonical_name == "recurring revenue", alias
         _, free = await around("Who approved the restructuring programme?")
         approved = [(f.predicate, f.object) for f in free if f.predicate == "approved_by"]
-        assert ("approved_by", "The Board") in approved, approved
+        assert ("approved_by", "The Board") in approved, ("approved", approved)
         _, deal = await around("How much did GLOBEX pay for Initech?", depth=2)
         prices = [(f.predicate, f.object) for f in deal if f.predicate == "consideration"]
-        assert ("consideration", "USD 210 million") in prices, prices
+        assert ("consideration", "USD 210 million") in prices, ("prices", prices)
         # memory-derived facts are temporal (valid time): the current view has only the
-        # corrected timezone; a view dated before the correction returns the old value
-        me = (await kg.entities("user:amit"))[0]
-        now = await kg.entity(me.entity_id)
+        # corrected timezone; a view dated before the correction returns the old value.
+        # The user's facts may sit on more than one ``user:amit`` entity, and the order of
+        # entities is not part of the contract: read the one that carries the timezone.
+        views = [await kg.entity(e.entity_id) for e in await kg.entities("user:amit")]
+        now = next(v for v in views if any(f.predicate == "timezone" for f in v.current))
         tz = [(v.predicate, v.value) for v in now.current if v.predicate == "timezone"]
-        assert tz == [("timezone", "america/new_york")], tz
-        past = await kg.entity(me.entity_id, depth=1, as_of=before_correction)
+        assert tz == [("timezone", "america/new_york")], ("tz", tz)
+        past = await kg.entity(now.entity.entity_id, depth=1, as_of=before_correction)
         hood = past.neighborhood.facts if past.neighborhood else []
         old = [(f.object, f.status) for f in hood if f.predicate == "timezone"]
-        assert old == [("europe/berlin", "SUPERSEDED")], old
+        assert old == [("europe/berlin", "SUPERSEDED")], ("old", old)
         return (
             f"{len(answer)} facts around Adjusted EBITDA (value, change, exclusions, "
             f"counterfactual); ARR -> Recurring Revenue; 2-hop deal price; temporal as_of"

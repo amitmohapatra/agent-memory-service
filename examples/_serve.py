@@ -1,4 +1,5 @@
-"""Start a single-process trellis-memory service for the examples: the API with its jobs run inline.
+"""Start a single-process trellis-memory service, for the examples run live: the API with its jobs
+run inline.
 
 Needs PostgreSQL (migrated here before the server starts) and a Redis/Dragonfly, both at the
 ``MEMORY__*`` defaults unless the environment says otherwise. Without a Qdrant server the
@@ -17,8 +18,8 @@ encoder and NLI head, so the examples exercise retrieval quality and not only th
 Without them it runs the deterministic stand-ins and says so: the tour still passes, and any
 retrieval quality it shows is meaningless.
 
-    uv run python examples/serve.py              # http://localhost:8080/docs, API key "dev-key"
-    uv run python examples/serve.py --port 9000
+    uv run python examples/_serve.py             # http://localhost:8080/docs, API key "dev-key"
+    uv run python examples/_serve.py --port 9000
 """
 
 from __future__ import annotations
@@ -39,7 +40,6 @@ DEFAULT_ENV = {
     "MEMORY__SERVICE__ENVIRONMENT": "dev",
     "MEMORY__SERVICE__LOG_JSON": "false",
     "MEMORY__SERVICE__LOG_LEVEL": "WARNING",
-    "MEMORY__AUTHENTICATION__MODE": "trusted_dev",
     "MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS": '["dev-key"]',
 }
 

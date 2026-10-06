@@ -1,8 +1,10 @@
-"""The READMEs' examples (this one's and sdk/python/README.md's), executed.
+"""The walkthroughs the READMEs and the usage guide teach, executed.
 
-A README that drifts from the API is worse than no README, so every snippet a reader is
-invited to copy runs here against the real service. If you change the SDK surface and this
-fails, fix the README in the same commit.
+A README that drifts from the API is worse than no README, so every walkthrough a reader is
+invited to copy runs here against the real service: the Way 2 turn in README.md and
+sdk/python/README.md, and the single-agent, multi-agent and tool-memory walkthroughs that
+docs/USAGE.md and examples/03, 05 and 07 teach. If you change the SDK surface and this fails,
+fix the docs and the examples in the same commit (``make docs-check`` and ``make examples``).
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ def _bind(memory, **over):
 
 
 async def test_readme_single_agent_walkthrough(app, client) -> None:
-    """README: Use it in one agent — chat, facts, context bundle, evidence gating."""
+    """One agent (USAGE, examples/03): chat, facts, context bundle, evidence gating."""
     memory = sdk_client(app)
     ctx = _bind(memory)
 
@@ -69,8 +71,8 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
 
 
 async def test_readme_multi_agent_visibility(app, client) -> None:
-    """README: Use it with multiple agents — a RUN note reaches the owner and the run it
-    spawns, and nobody else. This is the claim the section is built on."""
+    """Several agents (USAGE, examples/05): a RUN note reaches the owner and the run it
+    spawns, and nobody else. This is the claim the walkthrough is built on."""
     memory = sdk_client(app)
     ctx = _bind(memory)
     researcher = ctx.agent("researcher", agent_group_id="analysis-crew")
@@ -98,7 +100,7 @@ async def test_readme_multi_agent_visibility(app, client) -> None:
 
 
 async def test_readme_tool_memory_walkthrough(app, client) -> None:
-    """README: Tool memory — publish the catalog, record what ran, label the run, and the
+    """Tool memory (USAGE, examples/07): publish the catalog, record what ran, label the run, and the
     service learns the procedure; tool hints read it back as a plan with the next step and
     its arguments."""
     memory = sdk_client(app)
@@ -146,7 +148,7 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
 
 
 async def test_sdk_readme_one_turn_on_its_own(app, client) -> None:
-    """README: Where this fits, Way 2 — context into the prompt, the turn recorded, feedback
+    """README: Where this fits, Way 2: context into the prompt, the turn recorded, feedback
     on the run, with no framework and no harness."""
     memory = sdk_client(app)
     run = memory.bind(tenant_id="acme", user_id="u1", thread_id="thr_1").agent("support")
