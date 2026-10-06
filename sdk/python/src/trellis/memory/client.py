@@ -367,9 +367,11 @@ class MemoryContext:
         timeout: float | None = None,  # noqa: ASYNC109 - the request's own timeout
     ) -> list[SearchItem]:
         """Ranked items for ``query``: memories and document passages by default; ``kinds``
-        also reads document summaries, earlier conversations (``episode``) and this
-        thread's messages. ``time_from``/``time_to`` keep what was observed within the range
-        (before anything is ranked). ``as_of`` reads memories as they were true then and
+        also reads document summaries, earlier conversations (``episode``) and what was said
+        (``message``: this thread's messages, then this user's earlier conversations', never
+        another user's, each with its ``thread_id``).
+        ``time_from``/``time_to`` keep what was observed within the range (before anything
+        is ranked). ``as_of`` reads memories as they were true then and
         ``known_at`` as they were known then, including ones replaced since. ``timeout``
         replaces the client's for this call."""
         payload: dict[str, Any] = {

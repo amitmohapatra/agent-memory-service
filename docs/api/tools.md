@@ -45,6 +45,9 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
+| `GET /v1/tools/skill-drafts` | the tenant's active procedures as draft Agent Skills, the 100 best supported (administrator) | `ctx.advanced.tools.skill_drafts()` |
+| `POST /v1/tools/skill-drafts/{draft_id}/publish` | publish one where agents load skills from (administrator) | `ctx.advanced.tools.publish_skill(id, name=…, description=…)` |
+| `POST /v1/tools/skill-drafts/{draft_id}/dismiss` | not a skill: not offered again until its steps change (administrator) | `ctx.advanced.tools.dismiss_skill(id)` |
 
 `POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's
 `ctx.context(query, tools=[...names])`), and
@@ -192,6 +195,49 @@ rules of the route:
   tool);
 * accepting one already part of `approve_when` returns the entry unchanged.
 
+## Learned skills
+
+An **active** procedure is something the agents have done successfully, again and again. A
+skill draft offers it to the tenant's administrator as an [Agent Skill](https://agentskills.io):
+a `SKILL.md` built from the procedure alone (its title, the tasks it is for, the strategy and
+the steps in order, with what to do on the errors that happened), nothing invented. A person
+decides; nothing is published on its own.
+
+```python
+admin = admin_client.bind(tenant_id="acme")  # the tenant's administrator key
+for d in await admin.advanced.tools.skill_drafts():  # new, or changed since published
+    print(d.id, d.state, d.name, d.support, d.success_rate)
+    print(d.body)
+decision = await admin.advanced.tools.publish_skill(d.id, name="refund-order")
+print(decision.name, decision.version, decision.destination)  # refund-order 1.0.0 bifrost
+await admin.advanced.tools.dismiss_skill(other.id)  # not a skill
+```
+
+**Where it goes.** Where the agents already load skills from, so nothing else changes for
+them: the folder `SKILLS_DIR` names when it is set (`<name>/SKILL.md`, the Agent Skills layout
+the harness's `skills_dir`, the Claude Agent SDK and Deep Agents read), else the Bifrost
+gateway's skills repository (`BIFROST_URL`; `BIFROST_ADMIN_TOKEN` when its management API
+needs a credential). Neither configured: `503`. An agent picks the skill up by name, for
+example `h.wrap(agent, skills=["refund-order"])`.
+
+**Versions and rollback.** The first publication is `1.0.0`, each later one the next minor
+(`1.1.0`). On the gateway every version is kept and a rollback is its own
+`shift_version`; a folder is replaced whole (atomically), and its rollback is the folder's own
+history (git, a volume snapshot). A run pins the version it loaded, so a new version never
+changes a run under way.
+
+**Decisions are kept with the steps.** Publishing or dismissing records the decision on the
+procedure, with the steps it was about (`GET /v1/tools/skill-drafts` no longer lists it); a
+retry sent with the same `Idempotency-Key` gets that decision back instead of a `409`. When
+the learning job finds different steps, the draft comes back: `new`, or `changed` naming what
+was published so it is published again under the same name. A re-mine never overwrites a
+decision.
+
+**Ownership.** A published skill's metadata names the tenant and the procedure
+(`trellis_tenant`, `trellis_procedure`). Publishing over a skill of the same name that this
+tenant did not publish — a person's, another tenant's — is refused (`409`); choose another
+`name`.
+
 ## Tools in context: what is sent, what comes back
 
 The same tool information reaches the service three ways and comes back two ways. This is the
@@ -249,6 +295,7 @@ are still recorded and still teach procedures for later runs.
 ## What this area does not do
 
 * it does not execute anything, ever;
+* it does not publish a skill on its own: a person publishes each draft;
 * it does not invent a plan: a task nobody has completed successfully has none;
 * it does not learn from a run you never labelled until a day has passed;
 * it does not make tool outputs searchable knowledge: `PRIVATE` keeps them to the agent.

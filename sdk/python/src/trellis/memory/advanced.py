@@ -30,6 +30,8 @@ from trellis.memory.models import (
     MemoryResult,
     MemoryType,
     Page,
+    SkillDecision,
+    SkillDraft,
     Visibility,
 )
 
@@ -249,6 +251,44 @@ class ToolCatalogAPI:
             "POST", f"/v1/tools/approval-suggestions/{suggestion_id}/accept"
         )
         return CatalogTool.model_validate(data)
+
+    async def skill_drafts(self) -> list[SkillDraft]:
+        """The tenant's learned procedures as draft Agent Skills (an administrator's key):
+        each ``new`` or ``changed`` since it was published."""
+        data = await self._ctx._request("GET", "/v1/tools/skill-drafts")
+        return [SkillDraft.model_validate(d) for d in data.get("drafts", [])]
+
+    async def publish_skill(
+        self,
+        draft_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> SkillDecision:
+        """Publish a draft where the agents load skills from (the service's ``SKILLS_DIR``,
+        else the Bifrost gateway's skills repository), under ``name`` / with
+        ``description`` when given. Its version: ``1.0.0``, then the next minor. With
+        ``idempotency_key``, a retry gets the same decision back."""
+        body = {k: v for k, v in (("name", name), ("description", description)) if v}
+        data = await self._ctx._request(
+            "POST",
+            f"/v1/tools/skill-drafts/{draft_id}/publish",
+            json=body,
+            idempotency_key=idempotency_key,
+        )
+        return SkillDecision.model_validate(data)
+
+    async def dismiss_skill(
+        self, draft_id: str, *, idempotency_key: str | None = None
+    ) -> SkillDecision:
+        """Not a skill: the draft is not offered again until the procedure's steps change."""
+        data = await self._ctx._request(
+            "POST",
+            f"/v1/tools/skill-drafts/{draft_id}/dismiss",
+            idempotency_key=idempotency_key,
+        )
+        return SkillDecision.model_validate(data)
 
 
 class ModelKeysAPI:

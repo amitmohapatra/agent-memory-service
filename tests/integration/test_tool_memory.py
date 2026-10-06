@@ -354,3 +354,61 @@ def _pattern() -> str:
     from memory_service.modules.tools.patterns import task_pattern
 
     return task_pattern(TASK)
+
+
+async def test_a_skill_decision_outlives_a_re_mine_and_new_steps_bring_the_draft_back(
+    uow_factory, tmp_path
+) -> None:
+    """The reviewer's decision is written only by ``decide``: the learning job saving the same
+    procedure again (as it does on every re-mine) keeps it; new steps make a changed draft."""
+    from memory_service.adapters.skills import FolderSkills
+    from memory_service.domain.tools import StoredProcedure
+    from memory_service.modules.tools.skills import SkillDrafts
+
+    procedure = StoredProcedure(
+        tenant_id="acme",
+        scope_key="user:acme/u1",
+        pattern="refund order {id}",
+        title="Refund an order",
+        steps=[{"ordinal": 0, "tool": "find_order"}, {"ordinal": 1, "tool": "refund"}],
+        support=3,
+        success_rate=1.0,
+        status="active",
+        steps_hash="s1",
+    )
+    weaker = procedure.model_copy(
+        update={"procedure_id": "procedure_weaker", "pattern": "x {id}", "support": 2}
+    )
+    async with uow_factory() as uow:
+        await uow.procedures.save(procedure)
+        await uow.procedures.save(weaker)
+        await uow.procedures.save(
+            weaker.model_copy(update={"procedure_id": "p_c", "pattern": "y", "status": "candidate"})
+        )
+        await uow.commit()
+    drafts = SkillDrafts(uow_factory, FolderSkills(tmp_path))
+    assert [d.id for d in await drafts.list("acme")] == [procedure.procedure_id, "procedure_weaker"]
+    assert await drafts.list("globex") == []
+
+    decision = await drafts.publish("acme", procedure.procedure_id, by="key:ops")
+    assert (decision.name, decision.version, decision.decided_by) == (
+        "refund-an-order",
+        "1.0.0",
+        "key:ops",
+    )
+    async with uow_factory() as uow:  # a re-mine saves the procedure it read before
+        await uow.procedures.save(procedure.model_copy(update={"support": 4}))
+        await uow.commit()
+    async with uow_factory() as uow:
+        stored = await uow.procedures.get("acme", procedure.procedure_id)
+    assert stored is not None and stored.skill == decision and stored.support == 4
+    assert [d.id for d in await drafts.list("acme")] == ["procedure_weaker"]
+
+    async with uow_factory() as uow:
+        await uow.procedures.save(stored.model_copy(update={"steps_hash": "s2"}))
+        await uow.commit()
+    back = {d.id: d for d in await drafts.list("acme")}[procedure.procedure_id]
+    assert back.state == "changed" and back.published == decision
+    assert (await drafts.publish("acme", procedure.procedure_id, by=None)).version == "1.1.0"
+    async with uow_factory() as uow:
+        assert not await uow.procedures.decide("acme", "procedure_missing", decision)

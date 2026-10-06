@@ -400,6 +400,48 @@ class SqlMessageRepository:
         ).scalars()
         return [_row_to_message(r) for r in rows]
 
+    async def owned_recent(
+        self,
+        tenant_id: str,
+        owner_user_id: str,
+        *,
+        limit: int,
+        threads: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[Message]:
+        # the user's most recently active threads first (ix_threads_tenant_owner_updated),
+        # then their messages (ix_messages_tenant_thread_seq): the work is bounded by
+        # ``threads``, not by everything the user ever said
+        recent = (
+            select(ThreadRow.thread_id)
+            .where(
+                ThreadRow.tenant_id == tenant_id,
+                ThreadRow.owner_user_id == owner_user_id,
+                ThreadRow.deleted_at.is_(None),
+            )
+            .order_by(ThreadRow.updated_at.desc())
+            .limit(threads)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id.in_(recent),
+                MessageRow.deleted_at.is_(None),
+                MessageRow.kind == MessageKind.VISIBLE.value,
+                MessageRow.content.is_not(None),
+            )
+            .order_by(MessageRow.occurred_at.desc(), MessageRow.message_id)
+            .limit(limit)
+        )
+        if since is not None:
+            stmt = stmt.where(MessageRow.occurred_at >= since)
+        if until is not None:
+            stmt = stmt.where(MessageRow.occurred_at <= until)
+        return [_row_to_message(r) for r in (await self.s.execute(stmt)).scalars()]
+
     async def find_by_source(
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None:

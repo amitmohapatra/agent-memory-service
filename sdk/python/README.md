@@ -141,7 +141,8 @@ in your editor and a 422 from the service naming the allowed values; it is never
 dropped. The service keeps the SDK's Literals equal to its own enums with a test.
 
 `search(kinds=...)` accepts `memory`, `chunk` (document passages), `summary`, `episode`
-(earlier conversations) and `message` (this thread's messages).
+(earlier conversations) and `message` (what was said: this thread's messages, then this
+user's earlier conversations', each with its `thread_id`).
 
 ## Headers, tracing and errors
 

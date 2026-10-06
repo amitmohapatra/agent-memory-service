@@ -109,7 +109,8 @@ class RecallRequest(BaseModel):
         max_length=5,
         description="What to search: memory (what was learned or stated), chunk (document "
         "passages), summary (document summaries), episode (earlier conversations of this "
-        "user, one per thread), message (this thread's history).",
+        "user, one per thread), message (the messages of this conversation, then of this "
+        "user's earlier ones).",
         examples=[["chunk", "memory"]],
     )
     time_from: UtcDateTime | None = Field(

@@ -289,6 +289,18 @@ async def test_search_returns_items_and_sends_the_time_window(ctx) -> None:
     assert items[0].id == "mem_1" and items[0].observed_on == "2026-09-01"
     body = _body(route)
     assert body["kinds"] == ["memory", "message"] and body["time_from"].startswith("2026-09-01")
+    assert "threads" not in body
+
+    route.respond(
+        200,
+        json={
+            "items": [
+                {"id": "msg_1", "kind": "message", "text": "USER: 4471", "thread_id": "thr_june"}
+            ]
+        },
+    )
+    items = await ctx.search("order 4471", kinds=["message"])
+    assert items[0].thread_id == "thr_june"
 
 
 class _ContractsFeedback(BaseModel):
@@ -360,6 +372,49 @@ async def test_the_catalog_and_the_agent_s_model_key_are_advanced(ctx) -> None:
     assert await ctx.advanced.tools.approval_suggestions() == [] and suggestions.called
     assert (await ctx.advanced.tools.accept_suggestion("s1")).approve_when == "amount > 1"
     assert accepted.called
+
+
+@respx.mock
+async def test_skill_drafts_are_listed_published_and_dismissed(ctx) -> None:
+    decision = {
+        "state": "published",
+        "steps_hash": "h1",
+        "name": "refund-order",
+        "version": "1.0.0",
+        "destination": "bifrost",
+        "decided_at": "2026-10-06T10:00:00+00:00",
+    }
+    respx.get(f"{BASE}/v1/tools/skill-drafts").respond(
+        200,
+        json={
+            "drafts": [
+                {
+                    "id": "procedure_1",
+                    "state": "new",
+                    "name": "refund-order",
+                    "description": "Refund an order.",
+                    "body": "# Refund an order",
+                    "pattern": "refund order {id}",
+                    "support": 3,
+                    "success_rate": 1.0,
+                }
+            ]
+        },
+    )
+    publish = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/publish").respond(
+        200, json=decision
+    )
+    dismiss = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/dismiss").respond(
+        200, json={**decision, "state": "dismissed"}
+    )
+    drafts = await ctx.advanced.tools.skill_drafts()
+    assert [(d.id, d.state, d.published) for d in drafts] == [("procedure_1", "new", None)]
+    published = await ctx.advanced.tools.publish_skill("procedure_1", name="refund-order")
+    assert published.version == "1.0.0" and _body(publish) == {"name": "refund-order"}
+    await ctx.advanced.tools.publish_skill("procedure_1")
+    assert _body(publish) == {}
+    assert (await ctx.advanced.tools.dismiss_skill("procedure_1")).state == "dismissed"
+    assert dismiss.called
 
 
 @respx.mock

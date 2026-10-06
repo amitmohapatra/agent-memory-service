@@ -101,6 +101,70 @@ async def test_message_search_profile_and_tool_search_tools(container, uow_facto
     assert set(hints) == {"tools"}
 
 
+async def test_message_search_reads_this_conversation_then_the_users_earlier_ones(
+    container, uow_factory
+) -> None:
+    """What was said: this thread's messages first, then the user's earlier conversations
+    (newest first among equals), each with its thread; another user's thread, a deleted one
+    and a time outside the range are never read; without a user, this thread's only."""
+    conversation = container.services["conversation"]
+
+    def at(user: str | None, thread: str) -> MemoryExecutionContext:
+        return MemoryExecutionContext(
+            tenant_id="acme", user_id=user, agent_id="buyer", agent_run_id="run_1", thread_id=thread
+        )
+
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    said = [
+        (at("ann", "thr_june"), "My order number is 4471.", week_ago),
+        (at("ann", "thr_july"), "Did order 4471 ship yet?", None),
+        (at("ann", "thr_gone"), "Order 4471 was a gift.", None),
+        (at("bob", "thr_bob"), "Bob's order number is 9002.", None),
+        (at("ann", "thr_now"), "Which order was that?", None),
+        (at(None, "thr_anon"), "An order with no user.", None),
+    ]
+    async with uow_factory() as uow:
+        for ctx, text, when in said:
+            await conversation.append_message(
+                uow, ctx, role=MessageRole.USER, content=text, occurred_at=when
+            )
+        await uow.commit()
+    async with uow_factory() as uow:
+        await conversation.delete_thread(uow, at("ann", "thr_gone"), "thr_gone")
+        await uow.commit()
+    search = container.services["search"]
+
+    found = await search.search(at("ann", "thr_now"), "order", kinds=["message"], limit=5)
+    assert [(i.text, i.thread_id) for i in found.items] == [
+        ("USER: Which order was that?", "thr_now"),  # this conversation first
+        ("USER: Did order 4471 ship yet?", "thr_july"),  # then the newest earlier one
+        ("USER: My order number is 4471.", "thr_june"),
+    ], "never bob's, never the deleted thread"
+    number = await search.search(at("ann", "thr_now"), "order number", kinds=["message"], limit=5)
+    assert number.items[0].thread_id == "thr_june", "most words shared first, wherever said"
+    recent = await search.search(
+        at("ann", "thr_now"),
+        "order",
+        kinds=["message"],
+        limit=5,
+        observed=(datetime.now(UTC) - timedelta(days=1), None),
+    )
+    assert [i.thread_id for i in recent.items] == ["thr_now", "thr_july"]
+    alone = await search.search(at(None, "thr_anon"), "order", kinds=["message"], limit=5)
+    assert [i.thread_id for i in alone.items] == ["thr_anon"], "no user: this thread only"
+
+    tool = await container.services["agent_tools"].call(
+        at("ann", "thr_now"), "memory_search", {"query": "order number", "kinds": ["message"]}
+    )
+    assert tool[0]["thread_id"] == "thr_june"
+    assert "bob" not in str(tool).casefold()
+
+    # bounded by the user's most recently active threads, not by all they ever said
+    async with uow_factory() as uow:
+        newest = await uow.messages.owned_recent("acme", "ann", limit=10, threads=1)
+    assert {m.thread_id for m in newest} == {"thr_now"}
+
+
 async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
     container, uow_factory
 ) -> None:

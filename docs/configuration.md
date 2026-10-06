@@ -140,6 +140,8 @@ the tenant's policy, set through the API, not a setting.
 |---|---|---|---|---|
 | `BIFROST_URL` | unset | `http://bifrost:8080/v1` | n/a | the gateway's OpenAI-compatible endpoint. Set, the model is available; unset, no model call is ever made |
 | `BIFROST_VIRTUAL_KEY` | unset | `<operator-virtual-key>` | no | the operator's virtual key: pays for tenants and agents that registered none. Unset, only registered keys pay |
+| `BIFROST_ADMIN_TOKEN` | unset | `<gateway-admin-token>` | no | the gateway's management credential, used only to publish [learned skills](api/tools.md#learned-skills) to its skills repository. Unset, the management API is called without one (a gateway with no admin authentication) |
+| `SKILLS_DIR` | unset | `/srv/skills` | no | a folder of Agent Skills (`<name>/SKILL.md`): [learned skills](api/tools.md#learned-skills) are published there instead of to the gateway. The same folder the agents' `skills_dir` reads. Unset, they go to the gateway when `BIFROST_URL` is set; neither, publishing answers 503 |
 | `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` | unset | `v1` | yes in `dev`/`test`: a development key | the envelope key that encrypts newly registered model keys |
 | `MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS` | `{}` | `{"v1":"<base64 of 32 random bytes>"}` | yes in `dev`/`test`: a development key | the keyring, by version (keep old versions while rotating). Required in `staging` and `prod`, where registration is refused without it |
 | `MEMORY__HINDSIGHT__BASE_URL` | unset | `http://hindsight:8888` | no | an optional Hindsight extraction service (install the `[hindsight]` extra): non-agent contextual extraction goes through it |

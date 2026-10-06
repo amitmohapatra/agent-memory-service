@@ -8,7 +8,8 @@ attributes) is attached only when asked for (``debug``).
 Kinds: ``memory`` (what was learned or stated), ``chunk`` (document passages), ``summary``
 (document summaries), ``episode`` (earlier conversations, one per thread: its summary and a
 digest of what followed, across every thread the caller's user owns) and ``message`` (this
-thread's history). A time range keeps only what was
+messages of this conversation and of the user's earlier ones, this conversation's first;
+another user's are never read). A time range keeps only what was
 observed within it, and it filters before anything is ranked: the store applies it to
 memories, and a message outside it is never scored.
 """
@@ -45,6 +46,11 @@ SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
+#: The newest messages of the user's earlier conversations one search scores (a time range
+#: moves the window: the bound applies within it), read from the user's most recently active
+#: threads (every message appended makes its thread active).
+OWNED_SCAN: Final = 1000
+OWNED_THREADS: Final = 100
 _WORD: Final = re.compile(r"\w+")
 
 
@@ -60,7 +66,7 @@ class SearchItem(BaseModel):
     kind: SearchKind = Field(
         description="What the item is: memory (something learned or stated), chunk (a "
         "document passage), summary (a document summary), episode (an earlier conversation "
-        "of this user) or message (this thread's history)."
+        "of this user) or message (what was said, here or in an earlier conversation)."
     )
     text: str = Field(description="The item's text (clipped for long passages).")
     observed_on: str | None = Field(
@@ -74,7 +80,9 @@ class SearchItem(BaseModel):
         description="The 1-based page of the document it is on, when the document has pages.",
     )
     thread_id: str | None = Field(
-        default=None, description="the conversation an episode is (its messages: /v1/threads)"
+        default=None,
+        description="the conversation an episode is, or a message is in (its messages: "
+        "/v1/threads)",
     )
     superseded: bool | None = Field(
         default=None,
@@ -140,6 +148,7 @@ def _message_item(m: Message, overlap: int, *, debug: bool, text_chars: int | No
         kind="message",
         text=_clip(f"{m.role.value}: {m.content}", text_chars),
         observed_on=m.occurred_at.date().isoformat(),
+        thread_id=m.thread_id,
         debug={"overlap": overlap, "sequence": m.sequence} if debug else None,
     )
 
@@ -200,7 +209,7 @@ class Searcher:
                 return []
             return await self._messages(ctx, query, observed, debug=debug, text_chars=text_chars)
 
-        # independent reads (the index and this thread's history): neither waits on the other
+        # independent reads (the index and the messages): neither waits on the other
         retrieved, messages = await asyncio.gather(ranked_search(), history())
         if retrieved is not None:
             items = [
@@ -230,23 +239,54 @@ class Searcher:
         debug: bool,
         text_chars: int | None,
     ) -> list[SearchItem]:
-        """The thread's visible messages sharing words with the query, most shared first,
-        newest first among equals; every message when the query shares nothing with any."""
-        if not ctx.thread_id:
-            return []
-        async with self.uow_factory() as uow:
-            thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
-            if thread is None:
-                return []
-            recent = await self.conversation.list_messages(
-                uow, ctx, ctx.thread_id, limit=HISTORY_SCAN
-            )
+        """The visible messages sharing words with the query, most shared first: this
+        thread's newest, then the newest of the user's earlier conversations (newest first
+        among equals); every message when the query shares nothing with any. Without a user,
+        this thread's only."""
+        here = await self._thread(ctx)
+        earlier = [m for m in await self._owned(ctx, observed) if m.thread_id != ctx.thread_id]
         wanted = _words(query)
         scored = [
             (len(wanted & _words(m.content)), m)
-            for m in recent
+            for m in (*here, *earlier)
             if m.kind is MessageKind.VISIBLE and _within(m.occurred_at, observed)
         ]
         hits = [(n, m) for n, m in scored if n] or scored
-        hits.sort(key=lambda nm: (-nm[0], -nm[1].sequence))
+
+        def order(nm: tuple[int, Message]) -> tuple[int, bool, float]:
+            shared, m = nm
+            other = m.thread_id != ctx.thread_id
+            # a thread's own order is its sequence; across threads, when it was said
+            return (-shared, other, -(m.occurred_at.timestamp() if other else m.sequence))
+
+        hits.sort(key=order)
         return [_message_item(m, n, debug=debug, text_chars=text_chars) for n, m in hits]
+
+    async def _thread(self, ctx: MemoryExecutionContext) -> list[Message]:
+        if not ctx.thread_id:
+            return []
+        async with self.uow_factory() as uow:
+            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                return []
+            return await self.conversation.list_messages(
+                uow, ctx, ctx.thread_id, limit=HISTORY_SCAN
+            )
+
+    async def _owned(
+        self, ctx: MemoryExecutionContext, observed: ObservedRange | None
+    ) -> list[Message]:
+        """The newest messages of the threads the caller's user owns: the user's own
+        conversations, which only that user (and the agents acting for them) reads. No user,
+        none."""
+        if not ctx.user_id:
+            return []
+        since, until = observed or (None, None)
+        async with self.uow_factory() as uow:
+            return await uow.messages.owned_recent(
+                ctx.tenant_id,
+                ctx.user_id,
+                limit=OWNED_SCAN,
+                threads=OWNED_THREADS,
+                since=since,
+                until=until,
+            )

@@ -879,6 +879,8 @@ class ProcedureRow(Base):
     owner_principal: Mapped[str | None] = mapped_column(String(512))
     workspace_id: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+    #: the reviewer's decision about its skill draft (``SkillDecision``), or null
+    skill: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "scope_key", "pattern", name="uq_procedures_pattern"),

@@ -7,6 +7,20 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- Learned skills: the tenant's active procedures are offered to its administrator as draft
+  Agent Skills (`GET /v1/tools/skill-drafts`); publishing one writes a `SKILL.md` where agents
+  load skills from (`SKILLS_DIR`, else the Bifrost gateway's skills repository) as its next
+  version, and dismissing one stops it being offered until its steps change. Migration
+  `0025_procedure_skill`; settings `SKILLS_DIR`, `BIFROST_ADMIN_TOKEN`
+  ([learned skills](docs/api/tools.md#learned-skills), ADR 0033). SDK:
+  `ctx.advanced.tools.skill_drafts()`, `publish_skill()`, `dismiss_skill()`.
+- Search past conversations by message: `kinds=["message"]` (`POST /v1/recall`, the
+  `memory_search` agent tool, `ctx.search`) reads this conversation's messages and then the
+  user's earlier conversations', this conversation's first among equal matches; each item
+  carries its `thread_id`. Another user's threads are never read; without a user, this thread
+  only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
+
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been

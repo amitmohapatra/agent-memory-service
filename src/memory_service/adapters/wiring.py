@@ -19,6 +19,7 @@ from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
+    from memory_service.ports.skills import SkillStore
 
 log = get_logger(__name__)
 
@@ -580,6 +581,7 @@ def _wire_tools(container: Container) -> None:
     from memory_service.modules.tools.index import ToolIndex
     from memory_service.modules.tools.learning import ToolLearning
     from memory_service.modules.tools.service import ToolMemoryService
+    from memory_service.modules.tools.skills import SkillDrafts
 
     uow_factory = container.services["uow_factory"]
     container.services["tool_memory"] = ToolMemoryService(
@@ -594,6 +596,23 @@ def _wire_tools(container: Container) -> None:
         uow_factory, container.services["llm_assist"], container.graph_store
     )
     container.services["agent_tools"] = AgentTools(uow_factory, container.services)
+    container.services["skill_drafts"] = SkillDrafts(uow_factory, _skill_store(container))
+
+
+def _skill_store(container: Container) -> SkillStore | None:
+    """Where approved skill drafts go: ``SKILLS_DIR`` when set (the folder the agents read),
+    else the gateway's skills repository when ``BIFROST_URL`` is set, else nowhere."""
+    from memory_service.adapters.skills import BifrostSkills, FolderSkills
+
+    settings = container.settings
+    if settings.skills_dir:
+        return FolderSkills(settings.skills_dir)
+    if settings.bifrost_url:
+        token = settings.bifrost_admin_token
+        return BifrostSkills(
+            settings.bifrost_url, token=(token.get_secret_value() or None) if token else None
+        )
+    return None
 
 
 def _wire_graph(container: Container) -> None:

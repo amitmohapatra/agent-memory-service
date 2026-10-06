@@ -259,6 +259,30 @@ sequenceDiagram
 counts as a weak success a day later if none of its calls failed. Details:
 [api/tools.md](api/tools.md).
 
+An active procedure becomes a skill only when a person publishes it
+([learned skills](api/tools.md#learned-skills)):
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Tenant administrator
+  participant API as API
+  participant S as SkillDrafts
+  participant PG as PostgreSQL
+  participant D as SKILLS_DIR or the gateway's skills repository
+  participant H as Harness run
+  A->>API: GET /v1/tools/skill-drafts
+  API->>S: list(tenant)
+  S->>PG: active procedures not decided for their current steps
+  API-->>A: [{id, state: new or changed, name, description, body, support, success_rate}]
+  A->>API: POST /v1/tools/skill-drafts/{id}/publish {name?}
+  API->>S: publish
+  S->>D: SKILL.md as its next version (refused when another tenant or a person owns the name)
+  S->>PG: the decision, with the steps it was about
+  API-->>A: {state: published, name, version, destination}
+  H->>D: load the skill by name at run start (pinned for the run)
+```
+
 ## 7. Compaction and background jobs
 
 What keeps memory small and current runs off the request path, in the job worker
