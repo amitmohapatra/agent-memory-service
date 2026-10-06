@@ -56,8 +56,9 @@ for item in bundle.knowledge:
 ```
 
 `visibility` decides who can retrieve it, and the prerequisite bites here more than anywhere else:
-a THREAD-visible document is readable by thread participants, so the thread must exist (the
-service creates it from the scope); a WORKSPACE-visible document needs a workspace row and
+a THREAD-visible document is readable by thread participants. An upload into a thread nobody
+has written to yet creates it for the uploader, exactly as a first message does; into someone
+else's thread it needs write access (`403` otherwise). A WORKSPACE-visible document needs a workspace row and
 membership ([tenancy.md](tenancy.md)). Attaching a document to a message is one call —
 `ctx.history.add([{"role": "USER", "content": "see attached", "attachments": [...]}])` — and the document inherits that message's
 thread.

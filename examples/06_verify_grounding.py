@@ -24,7 +24,6 @@ BAD = "Adjusted EBITDA increased to EUR 150 million from EUR 81 million."
 async def main() -> None:
     async with service() as svc, svc.client() as memory:
         user = memory.bind(user_id=f"u-{run_id()}", thread_id=f"thr-{run_id()}")
-        await user.history.add([("USER", "Here is the ACME FY26 report.")])
         handle = await user.advanced.documents.add(FIXTURES / "acme_fy26_annual_report.md")
         await user.advanced.documents.wait_ready(handle.document_id)
 

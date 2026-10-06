@@ -7,6 +7,12 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed
+- A document uploaded into a thread that did not exist yet reached `READY` but was never
+  returned by `search` or `context`: its THREAD audience named a thread nobody had been
+  granted. The upload now creates the thread for the uploader, as a first message does
+  ([documents](docs/api/documents.md)); examples 04 and 06 no longer send a message first.
+
 ### Changed
 - The service requires `bifrost-sdk>=0.3`: model calls send the gateway's deny-all MCP scope,
   which 0.3.0 introduced.

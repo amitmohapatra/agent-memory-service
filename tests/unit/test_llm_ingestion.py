@@ -157,6 +157,7 @@ async def test_parse_job_persists_situated_chunks(container, uow_factory) -> Non
             container.services["authz"],
             container.document_parser,
             container.blob,
+            conversation=container.services["conversation"],
             settings=container.tuning.documents,
             file_bucket=container.settings.blob.file_bucket,
             assist=gw.assist(uses=["chunk_context"]),

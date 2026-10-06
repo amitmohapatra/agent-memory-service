@@ -527,7 +527,7 @@
                 "type": "null"
               }
             ],
-            "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. Omitted: the headers' scope alone.",
+            "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. A thread_id nobody has written to yet is created for the caller, as a message creates it. Omitted: the headers' scope alone.",
             "title": "Scope"
           },
           "title": {
@@ -12652,7 +12652,7 @@
                     "type": "string"
                   },
                   "scope": {
-                    "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. Omitted: the headers' scope alone.",
+                    "description": "The scope as a JSON object, the same shape as a message's (thread_id, agent_id, ...): the document's lineage. A thread_id nobody has written to yet is created for the caller, as a message creates it. Omitted: the headers' scope alone.",
                     "example": "{\"thread_id\":\"thr_01J8ZK7Q9V3W2X1Y0ZABCDEFGH\"}",
                     "type": "string"
                   },
