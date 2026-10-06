@@ -183,6 +183,22 @@ at the median on the measuring box.
 
 ---
 
+## Past conversations
+
+Two kinds reach earlier chats, and both stay inside the user's own:
+
+| Ask for | You get | Reads |
+|---|---|---|
+| `kinds=["episode"]` | one ranked item per earlier conversation: its summary and a digest of what followed | the episode index (semantic) |
+| `kinds=["message"], threads="all"` | the exact messages that share words with the query, each with its `thread_id` | the newest 1,000 visible messages across the threads the user owns (`OWNED_SCAN`); a time range moves the window |
+
+`threads` defaults to `current`, this thread only, as before. `all` reads the threads whose
+owner is the caller's user (the user who started them); another user's threads are never read,
+a deleted thread is not read, and a call without a user reads nothing across threads. An agent
+asks the same through `memory_search` (`threads: "all"`). Use `episode` to find *which*
+conversation, and `message` with `threads="all"` to quote *what was said* ("the order number I
+gave you last week").
+
 ## Documents, summaries and episodes
 
 Chunks, document summaries and thread episodes are ranked by the store's own reciprocal-rank

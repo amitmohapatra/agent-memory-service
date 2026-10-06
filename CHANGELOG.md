@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- Search past conversations by message: `POST /v1/recall` and the `memory_search` agent tool
+  take `threads` (`current`, the default, or `all`); with `all`, `kinds=["message"]` searches
+  every thread the caller's user owns and each item carries its `thread_id`. Another user's
+  threads are never read ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
+  SDK: `ctx.search(..., threads="all")`.
+
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been

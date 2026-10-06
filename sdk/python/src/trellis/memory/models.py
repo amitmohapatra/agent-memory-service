@@ -321,7 +321,7 @@ class SearchItem(BaseModel):
     observed_on: str | None = None
     document_id: str | None = None
     page: int | None = None
-    #: the conversation an ``episode`` item is
+    #: the conversation an ``episode`` item is, or a ``message`` item is in
     thread_id: str | None = None
     #: true when a later memory replaced this one (only ``as_of``/``known_at`` return those)
     superseded: bool | None = None

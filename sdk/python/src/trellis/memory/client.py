@@ -363,13 +363,16 @@ class MemoryContext:
         as_of: datetime | None = None,
         known_at: datetime | None = None,
         document_ids: Sequence[str] | None = None,
+        threads: Literal["current", "all"] = "current",
         debug: bool = False,
         timeout: float | None = None,  # noqa: ASYNC109 - the request's own timeout
     ) -> list[SearchItem]:
         """Ranked items for ``query``: memories and document passages by default; ``kinds``
         also reads document summaries, earlier conversations (``episode``) and this
-        thread's messages. ``time_from``/``time_to`` keep what was observed within the range
-        (before anything is ranked). ``as_of`` reads memories as they were true then and
+        thread's messages (``message``; with ``threads="all"``, the messages of every thread
+        this user owns, never another user's, each with its ``thread_id``).
+        ``time_from``/``time_to`` keep what was observed within the range (before anything
+        is ranked). ``as_of`` reads memories as they were true then and
         ``known_at`` as they were known then, including ones replaced since. ``timeout``
         replaces the client's for this call."""
         payload: dict[str, Any] = {
@@ -390,6 +393,8 @@ class MemoryContext:
                 payload[name] = when.isoformat()
         if document_ids is not None:
             payload["document_ids"] = list(document_ids)
+        if threads != "current":
+            payload["threads"] = threads
         data = await self._request("POST", "/v1/recall", json=payload, timeout=timeout)
         return [SearchItem.model_validate(i) for i in data.get("items", [])]
 

@@ -101,6 +101,68 @@ async def test_message_search_profile_and_tool_search_tools(container, uow_facto
     assert set(hints) == {"tools"}
 
 
+async def test_message_search_reads_every_conversation_of_the_user_and_no_one_elses(
+    container, uow_factory
+) -> None:
+    """``threads="all"``: the messages of every thread the user owns, each with its thread,
+    newest first among equals; another user's thread, a deleted one and a time outside the
+    range are never read; without a user there is nothing to read across."""
+    conversation = container.services["conversation"]
+
+    def at(user: str | None, thread: str) -> MemoryExecutionContext:
+        return MemoryExecutionContext(
+            tenant_id="acme", user_id=user, agent_id="buyer", agent_run_id="run_1", thread_id=thread
+        )
+
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    said = [
+        (at("ann", "thr_june"), "My order number is 4471.", week_ago),
+        (at("ann", "thr_july"), "Did order 4471 ship yet?", None),
+        (at("ann", "thr_gone"), "Order 4471 was a gift.", None),
+        (at("bob", "thr_bob"), "Bob's order number is 9002.", None),
+    ]
+    async with uow_factory() as uow:
+        for ctx, text, when in said:
+            await conversation.append_message(
+                uow, ctx, role=MessageRole.USER, content=text, occurred_at=when
+            )
+        await uow.commit()
+    async with uow_factory() as uow:
+        await conversation.delete_thread(uow, at("ann", "thr_gone"), "thr_gone")
+        await uow.commit()
+    search = container.services["search"]
+
+    here = await search.search(at("ann", "thr_now"), "order number", kinds=["message"], limit=5)
+    assert here.items == [], "the current thread only, by default: this one is empty"
+    found = await search.search(
+        at("ann", "thr_now"), "order number", kinds=["message"], limit=5, threads="all"
+    )
+    assert [(i.text, i.thread_id) for i in found.items] == [
+        ("USER: My order number is 4471.", "thr_june"),  # shares two words
+        ("USER: Did order 4471 ship yet?", "thr_july"),
+    ]
+    recent = await search.search(
+        at("ann", "thr_now"),
+        "order",
+        kinds=["message"],
+        limit=5,
+        threads="all",
+        observed=(datetime.now(UTC) - timedelta(days=1), None),
+    )
+    assert [i.thread_id for i in recent.items] == ["thr_july"]
+    nobody = await search.search(
+        at(None, "thr_now"), "order", kinds=["message"], limit=5, threads="all"
+    )
+    assert nobody.items == []
+
+    tool = await container.services["agent_tools"].call(
+        at("ann", "thr_now"),
+        "memory_search",
+        {"query": "order number", "kinds": ["message"], "threads": "all"},
+    )
+    assert [h["thread_id"] for h in tool] == ["thr_june", "thr_july"]
+
+
 async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
     container, uow_factory
 ) -> None:

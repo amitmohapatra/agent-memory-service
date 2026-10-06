@@ -8,7 +8,8 @@ attributes) is attached only when asked for (``debug``).
 Kinds: ``memory`` (what was learned or stated), ``chunk`` (document passages), ``summary``
 (document summaries), ``episode`` (earlier conversations, one per thread: its summary and a
 digest of what followed, across every thread the caller's user owns) and ``message`` (this
-thread's history). A time range keeps only what was
+thread's history; with ``threads="all"``, the history of every thread the caller's user owns,
+never another user's). A time range keeps only what was
 observed within it, and it filters before anything is ranked: the store applies it to
 memories, and a message outside it is never scored.
 """
@@ -40,11 +41,17 @@ from memory_service.modules.retrieval.engine import (
 from memory_service.ports.uow import UnitOfWorkFactory
 
 SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
+#: Which conversations a ``message`` search reads: this thread, or every thread the caller's
+#: user owns (another user's threads are never read).
+ThreadScope = Literal["current", "all"]
 #: What a search reads when the caller names no kinds. The order is the order the engine
 #: interleaves the per-kind rankings in, so document passages lead (as /v1/recall always did).
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
+#: The newest messages across the user's own threads one ``threads="all"`` search scores (a
+#: time range moves the window: the bound applies within it).
+OWNED_SCAN: Final = 1000
 _WORD: Final = re.compile(r"\w+")
 
 
@@ -74,7 +81,9 @@ class SearchItem(BaseModel):
         description="The 1-based page of the document it is on, when the document has pages.",
     )
     thread_id: str | None = Field(
-        default=None, description="the conversation an episode is (its messages: /v1/threads)"
+        default=None,
+        description="the conversation an episode is, or a message is in (its messages: "
+        "/v1/threads)",
     )
     superseded: bool | None = Field(
         default=None,
@@ -140,6 +149,7 @@ def _message_item(m: Message, overlap: int, *, debug: bool, text_chars: int | No
         kind="message",
         text=_clip(f"{m.role.value}: {m.content}", text_chars),
         observed_on=m.occurred_at.date().isoformat(),
+        thread_id=m.thread_id,
         debug={"overlap": overlap, "sequence": m.sequence} if debug else None,
     )
 
@@ -174,6 +184,7 @@ class Searcher:
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
         document_ids: Sequence[str] | None = None,
+        threads: ThreadScope = "current",
         debug: bool = False,
         text_chars: int | None = None,
     ) -> SearchResult:
@@ -198,7 +209,9 @@ class Searcher:
         async def history() -> list[SearchItem]:
             if "message" not in wanted:
                 return []
-            return await self._messages(ctx, query, observed, debug=debug, text_chars=text_chars)
+            return await self._messages(
+                ctx, query, observed, threads=threads, debug=debug, text_chars=text_chars
+            )
 
         # independent reads (the index and this thread's history): neither waits on the other
         retrieved, messages = await asyncio.gather(ranked_search(), history())
@@ -227,20 +240,15 @@ class Searcher:
         query: str,
         observed: ObservedRange | None,
         *,
+        threads: ThreadScope,
         debug: bool,
         text_chars: int | None,
     ) -> list[SearchItem]:
-        """The thread's visible messages sharing words with the query, most shared first,
-        newest first among equals; every message when the query shares nothing with any."""
-        if not ctx.thread_id:
-            return []
-        async with self.uow_factory() as uow:
-            thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
-            if thread is None:
-                return []
-            recent = await self.conversation.list_messages(
-                uow, ctx, ctx.thread_id, limit=HISTORY_SCAN
-            )
+        """The visible messages sharing words with the query, most shared first, newest first
+        among equals; every message when the query shares nothing with any. ``current``: the
+        thread's newest; ``all``: the newest across every thread the caller's user owns (no
+        user, none)."""
+        recent = await (self._owned(ctx, observed) if threads == "all" else self._thread(ctx))
         wanted = _words(query)
         scored = [
             (len(wanted & _words(m.content)), m)
@@ -248,5 +256,31 @@ class Searcher:
             if m.kind is MessageKind.VISIBLE and _within(m.occurred_at, observed)
         ]
         hits = [(n, m) for n, m in scored if n] or scored
-        hits.sort(key=lambda nm: (-nm[0], -nm[1].sequence))
+        if threads == "all":  # newest first across threads: their sequences do not compare
+            hits.sort(key=lambda nm: (-nm[0], -nm[1].occurred_at.timestamp()))
+        else:
+            hits.sort(key=lambda nm: (-nm[0], -nm[1].sequence))
         return [_message_item(m, n, debug=debug, text_chars=text_chars) for n, m in hits]
+
+    async def _thread(self, ctx: MemoryExecutionContext) -> list[Message]:
+        if not ctx.thread_id:
+            return []
+        async with self.uow_factory() as uow:
+            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                return []
+            return await self.conversation.list_messages(
+                uow, ctx, ctx.thread_id, limit=HISTORY_SCAN
+            )
+
+    async def _owned(
+        self, ctx: MemoryExecutionContext, observed: ObservedRange | None
+    ) -> list[Message]:
+        """The newest messages of the threads the caller's user owns: the user's own
+        conversations, which only that user (and the agents acting for them) reads."""
+        if not ctx.user_id:
+            return []
+        since, until = observed or (None, None)
+        async with self.uow_factory() as uow:
+            return await uow.messages.owned_recent(
+                ctx.tenant_id, ctx.user_id, limit=OWNED_SCAN, since=since, until=until
+            )

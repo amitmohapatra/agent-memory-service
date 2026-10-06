@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.ids import new_id
+from tests.e2e.conftest import post_message
 
 pytestmark = pytest.mark.e2e
 
@@ -193,6 +194,42 @@ def test_run_hands_off_down_reports_up_and_never_sideways(client) -> None:
     )
 
     assert not _has(_read(client, _h("alice"), "plan or finding"), finding), "the user sees none"
+
+
+# ---------------------------------------------------- past conversations
+def test_message_search_across_threads_reads_only_the_users_own_conversations(client) -> None:
+    """``threads=all``: what the user said in any earlier chat, by message, with its thread;
+    another person's chats are never searched, and the default is still this thread."""
+    alice_old, bob_old = _scope(), _scope()
+    said = (
+        (_h("alice"), alice_old, "My locker code is 3141."),
+        (_h("bob"), bob_old, "My locker code is 2718."),
+    )
+    for headers, scope, text in said:
+        r = post_message(client, headers, {"scope": scope, "role": "USER", "content": text})
+        assert r.status_code in (200, 201, 202), r.text
+
+    def recall(headers: dict[str, str], **extra: str) -> list[dict[str, str]]:
+        body = {"scope": _scope(), "query": "locker code", "kinds": ["message"], **extra}
+        r = client.post("/v1/recall", headers=headers, json=body)
+        assert r.status_code == 200, r.text
+        return r.json()["items"]
+
+    assert recall(_h("alice")) == [], "a new chat's own messages by default"
+    mine = recall(_h("alice"), threads="all")
+    assert [(i["text"], i["thread_id"]) for i in mine] == [
+        ("USER: My locker code is 3141.", alice_old["thread_id"])
+    ], "alice's earlier chat, and not bob's"
+    assert [i["text"] for i in recall(_h("bob"), threads="all")] == [
+        "USER: My locker code is 2718."
+    ]
+    assert recall(_h(), threads="all") == [], "no user: no one's conversations"
+    r = client.post(
+        "/v1/recall",
+        headers=_h("alice"),
+        json={"scope": _scope(), "query": "x", "kinds": ["message"], "threads": "everyone"},
+    )
+    assert r.status_code == 422
 
 
 # ------------------------------------------------- the four that are gone

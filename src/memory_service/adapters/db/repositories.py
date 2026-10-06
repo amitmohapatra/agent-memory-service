@@ -400,6 +400,39 @@ class SqlMessageRepository:
         ).scalars()
         return [_row_to_message(r) for r in rows]
 
+    async def owned_recent(
+        self,
+        tenant_id: str,
+        owner_user_id: str,
+        *,
+        limit: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[Message]:
+        stmt = (
+            select(MessageRow)
+            .join(
+                ThreadRow,
+                (ThreadRow.thread_id == MessageRow.thread_id)
+                & (ThreadRow.tenant_id == MessageRow.tenant_id),
+            )
+            .where(
+                ThreadRow.tenant_id == tenant_id,
+                ThreadRow.owner_user_id == owner_user_id,
+                ThreadRow.deleted_at.is_(None),
+                MessageRow.deleted_at.is_(None),
+                MessageRow.kind == MessageKind.VISIBLE.value,
+                MessageRow.content.is_not(None),
+            )
+            .order_by(MessageRow.occurred_at.desc(), MessageRow.message_id)
+            .limit(limit)
+        )
+        if since is not None:
+            stmt = stmt.where(MessageRow.occurred_at >= since)
+        if until is not None:
+            stmt = stmt.where(MessageRow.occurred_at <= until)
+        return [_row_to_message(r) for r in (await self.s.execute(stmt)).scalars()]
+
     async def find_by_source(
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None:

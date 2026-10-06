@@ -111,6 +111,19 @@ class MessageRepository(Protocol):
         """Visible messages after ``after_sequence``, oldest first, at most ``limit``."""
         ...
 
+    async def owned_recent(
+        self,
+        tenant_id: str,
+        owner_user_id: str,
+        *,
+        limit: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[Message]:
+        """Visible messages of the threads ``owner_user_id`` owns (none deleted), newest
+        first, at most ``limit``, observed within ``since``..``until`` when given."""
+        ...
+
     async def find_by_source(
         self, tenant_id: str, source_system: str, source_message_id: str
     ) -> Message | None: ...

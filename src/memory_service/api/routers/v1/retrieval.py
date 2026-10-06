@@ -18,7 +18,12 @@ from memory_service.domain.enums import QueryType
 from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
-from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchItem, SearchKind
+from memory_service.modules.retrieval.search import (
+    DEFAULT_KINDS,
+    SearchItem,
+    SearchKind,
+    ThreadScope,
+)
 
 
 def _audit(
@@ -109,7 +114,8 @@ class RecallRequest(BaseModel):
         max_length=5,
         description="What to search: memory (what was learned or stated), chunk (document "
         "passages), summary (document summaries), episode (earlier conversations of this "
-        "user, one per thread), message (this thread's history).",
+        "user, one per thread), message (this thread's history; every conversation of this "
+        "user with threads=all).",
         examples=[["chunk", "memory"]],
     )
     time_from: UtcDateTime | None = Field(
@@ -135,6 +141,12 @@ class RecallRequest(BaseModel):
         max_length=100,
         description="Restrict knowledge retrieval to these documents",
         examples=[None],
+    )
+    threads: ThreadScope = Field(
+        default="current",
+        description="Which conversations kind message searches: current (this thread) or all "
+        "(every thread this user owns, newest messages first; never another user's, and none "
+        "without a user).",
     )
     debug: bool = Field(default=False, description="add each item's ranking detail")
 
@@ -220,6 +232,7 @@ async def recall(
         observed=(body.time_from, body.time_to) if body.time_from or body.time_to else None,
         at=PointInTime(as_of=body.as_of, known_at=body.known_at),
         document_ids=body.document_ids,
+        threads=body.threads,
         debug=body.debug,
     )
     _audit(request, container, ctx, "recall", body.query, (i.id for i in found.items))
