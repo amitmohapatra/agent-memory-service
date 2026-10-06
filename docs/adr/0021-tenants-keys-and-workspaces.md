@@ -1,13 +1,17 @@
 # ADR 0021: Tenants, API keys and workspaces are the service's own
 
-**Status:** accepted · **Date:** 2026-09-28 · **Amends:** ADR 0005 (reinstates `WORKSPACE`) · **Amended by:** ADR 0022 (header names)
+**Status:** accepted; amended · **Date:** 2026-09-28 · **Amends:** ADR 0005 (reinstates `WORKSPACE`) · **Amended by:** ADR 0022 (header names; the `X-Memory-*` aliases it kept were removed in 0.3.0), ADR 0031 (the tenant registry's channel), ADR 0032 (`may_act_as` checks agents too)
+
+> **Amended (2026-10).** User groups were removed with their routes (migration
+> `0021_final_surface`; a migration, not this ADR). The text below still describes them as
+> the record of the decision.
 
 ## Context
 Several teams in one company will run agents against one deployment, each for its own
 customers. The service authenticated the *calling service* (a static development key or an
 external JWT) and then trusted `X-Memory-Tenant`; a credential reached every tenant by
 changing a header unless a JWT issuer stamped a tenant claim. Nothing onboarded a tenant,
-nothing issued a key, and no grant was ever revoked (`PRODUCT_DECISIONS.md`, §4). The
+nothing issued a key, and no grant was ever revoked (`design/PRODUCT_DECISIONS.md`, §4). The
 OpenFGA model already had `workspace` and `group` types, withdrawn from the visibility
 ladder only because nothing wrote their membership.
 

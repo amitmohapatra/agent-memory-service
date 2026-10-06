@@ -1,11 +1,32 @@
 # Architecture
 
+The high-level design of the memory service: where it sits among the five Trellis
+repositories, what is inside it, where data lives, and how a write and a read move through
+it. The flows, one sequence diagram each, are in [flows.md](flows.md); the explained version of
+this page is [chapter 10](guide/10-architecture.md).
+
 ## Shape
 
 Hexagonal architecture (ports and adapters), one microservice, horizontally scalable API
 and worker processes sharing PostgreSQL.
 
-### In the platform
+### In the platform: the five Trellis repositories
+
+Trellis is five repositories. Each owns one concern and ships its own package; they meet at
+HTTP APIs and at the shared record types, never at each other's databases.
+
+| Repository | Ships | Owns | How it meets the memory service |
+|---|---|---|---|
+| [agent-harness](https://github.com/amitmohapatra/agent-harness) | `trellis-harness` (`trellis.harness`) | running an agent of any framework: the two ways (wrapped, or pluggable blocks), governance, evals, the AG-UI and A2A surfaces | the main caller: through `trellis.memory`, it pushes `/v1/context` into each run, adds the pull tools, records the transcript and tool calls, and sends feedback ([USAGE §14](USAGE.md#14-through-the-harness)) |
+| **agent-memory-service** (this one) | the service, and the SDK `trellis-memory` (`trellis.memory`, in [`sdk/python`](../sdk/python/README.md)) | what agents and people said, stated and uploaded; the context a turn needs; what tools worked | — |
+| [agent-runs](https://github.com/amitmohapatra/agent-runs) | the runs service and `trellis-runs` (`trellis.runs`) | durable runs, the inbox, schedules, workers, and the webhooks that notify people | none directly: the harness calls both. Run notifications (paused, escalated, finished) are agent-runs' webhooks; the memory service sends none |
+| [agent-contracts](https://github.com/amitmohapatra/agent-contracts) | `trellis-contracts` (`trellis.contracts`) | the shared record types (runs, interrupts, feedback, agent cards) | `POST /v1/feedback` takes the `trellis.contracts` `Feedback` shape; the service does not import the package |
+| [bifrost-sdk](https://github.com/amitmohapatra/bifrost-sdk) | `bifrost-sdk` (`bifrost_sdk`) | the client for the Bifrost model gateway: retries, rate limits, the circuit breaker | every model call the service makes goes through it (`>=0.3`, vendored by `make vendor`), so the service and the harness share one transport |
+
+What the memory service deliberately does **not** do: run an agent or a tool (the harness
+does), hold a provider key (the gateway does), drive a framework (no LangGraph or other
+adapter lives here, ADR 0020), or notify anyone (agent-runs does). Which versions work
+together: [versioning.md](versioning.md).
 
 ```mermaid
 flowchart LR
@@ -201,7 +222,26 @@ flowchart LR
   md["memory / document"] --> ge["inside memory.index / document.index:<br/>graph enrichment, native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
-Where each model use runs, its tier and its fallback: [LLM-USES.md](LLM-USES.md).
+Where each model use runs, its tier and its fallback: [guide chapter 8, the twelve uses](guide/08-models.md#the-twelve-uses).
+
+What each job learns, with the thresholds in the code:
+
+- **Feedback.** Verdicts on memories, runs, tool calls and procedures adjust the confidence of
+  the memories an answer cited, label run outcomes and feed tool statistics; a memory's
+  standing moves its ranking within a bounded ±15%. A vote from a person or an agent counts
+  only once the tenant admin approves it (ADR 0028).
+- **Procedures.** Tool runs with outcomes are mined into one procedure per task pattern,
+  admitted at 2 or more supporting runs and 60% success, updated by delta; hints and the push
+  offer it as a plan with the next step's arguments filled from earlier outputs.
+- **Approval suggestions.** Approve, reject and edit decisions per tool and argument shape
+  become suggested rules after 5 decisions; the service never applies one itself.
+- **Prefetch.** A memory the agent pulled for a kind of request at least 3 times and used at
+  least half the time is included in the next push for that kind (at most 5).
+- **Thread summaries and the profile.** Every 20 messages a thread's durable summary rolls
+  forward, so the summary plus the 20-message window always cover the thread; the `user`
+  profile block is kept from USER and PREFERENCE memories.
+- **Reflection and connections.** Periodic, cited insights over a principal's memories and
+  typed links between memories (supersedes, contradicts, relates), only with a gateway.
 
 The request path reads only what these jobs precompute (indexed, bounded).
 
@@ -237,12 +277,12 @@ is then consulted only when the gateway is configured, the resolved tenant polic
 (no policy row: every use except the opt-in `memory_restatement`) and a key can pay
 (contextual_extraction, relation_extraction, entity_resolution, conflict_adjudication,
 summaries, reflection, memory_connections, query_expansion, chunk_context,
-memory_restatement, grounding_judge, procedure_abstraction; see `docs/LLM-USES.md`).
+memory_restatement, grounding_judge, procedure_abstraction; see [the twelve uses](guide/08-models.md#the-twelve-uses)).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong
 in benchmark code. The production wiring does not enable every implemented memory feature;
-see [the capability audit](history/RESEARCH-RAG-2026-09-25.md).
+`tests/eval/test_capability_coverage.py` holds which capability provides what.
 
 ## Caching
 
@@ -312,5 +352,5 @@ flowchart TB
 
 OpenTelemetry spans per stage, Prometheus metrics (`/metrics`, summed over the API's worker
 processes; the job worker on its own port), structured JSON logs with
-tenant/thread/session/turn/agent-run/job/trace fields, OpenLineage events for processing
-lineage, `EvidenceRef` for claim provenance. Source text is never logged by default.
+tenant/thread/session/turn/agent-run/job/trace fields, and `EvidenceRef` for claim provenance.
+OpenLineage events are **not built** (chapter 11 says the same). Source text is never logged by default.

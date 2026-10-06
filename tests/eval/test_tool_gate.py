@@ -1,4 +1,4 @@
-"""Tool memory gate (TOOL_MEMORY.md §30.7).
+"""Tool memory gate (design/TOOL_MEMORY.md §30.7).
 
 Replays ``tests/fixtures/tool_trajectories.json`` through the real service and measures what
 the advice is actually worth. The held-out runs of each pattern are never replayed, so the

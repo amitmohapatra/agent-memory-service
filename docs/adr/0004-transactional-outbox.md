@@ -1,6 +1,6 @@
 # ADR 0004: Transactional outbox in front of Procrastinate
 
-**Status:** accepted · **Date:** 2026-09-14
+**Status:** accepted; amended · **Date:** 2026-09-14 · **Amended by:** ADR 0031 (the job worker's lifecycle: it stops fetching on SIGTERM, gives running jobs 30 s, then releases them for a retry)
 
 ## Context
 The acknowledgement rule is: a `2xx/202` is returned only after the source record **and** a

@@ -1,4 +1,4 @@
-"""Public benchmark harness (TARGET_STACK change 18/19).
+"""Public benchmark harness (the pre-overhaul target stack, changes 18/19; ADRs 0024-0026 hold the current stack).
 
     uv run python -m benchmark.public --suite all
     uv run python -m benchmark.public --suite beir --datasets nfcorpus --strategies baseline,colbert --max-docs 500 --max-queries 50

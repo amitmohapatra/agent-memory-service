@@ -130,7 +130,7 @@ def test_every_enum_field_tells_the_caller_which_value_to_use(client: TestClient
 def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestClient) -> None:
     """Documentation that outlives its endpoint is worse than none.
 
-    ``docs/TOOL_MEMORY.md`` carried a status note saying four endpoints were removed and then
+    ``design/TOOL_MEMORY.md`` carried a status note saying four endpoints were removed and then
     documented three of them in full eighty lines further down, request bodies and all. A
     reader reaching §30.2 first has no way to know.
 
@@ -145,7 +145,7 @@ def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestCli
         return re.sub(r"\{[^}]*\}", "{}", path.rstrip("/"))
 
     live = {normalise(path) for path in spec.get("paths", {})}
-    docs = Path(__file__).resolve().parents[2] / "docs"
+    repo = Path(__file__).resolve().parents[2]
     instruction = re.compile(r"`(?:POST|GET|PUT|PATCH|DELETE)\s+(/v1/[A-Za-z0-9/_{}-]+)")
     # A doc may legitimately describe an endpoint that does not exist — explaining why one
     # was removed, or specifying one not built yet — as long as it says so. The marker can be
@@ -156,8 +156,11 @@ def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestCli
     # then; they are not instructions for the API as it is now.
     dated = re.compile(r"\d{4}-\d{2}-\d{2}")
     offenders: list[str] = []
-    for page in sorted(docs.rglob("*.md")):
-        relative = page.relative_to(docs)
+    # the user docs, and the design records beside them (design/TOOL_MEMORY.md is the page
+    # this test was written for)
+    pages = [*(repo / "docs").rglob("*.md"), *(repo / "design").rglob("*.md")]
+    for page in sorted(pages):
+        relative = page.relative_to(repo / page.relative_to(repo).parts[0])
         if relative.parts[0] == "adr" or dated.search(page.name):
             continue
         section_exempt = False
@@ -169,7 +172,7 @@ def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestCli
             for match in instruction.finditer(line):
                 path = normalise(match.group(1))
                 if path not in live:
-                    offenders.append(f"{page.relative_to(docs)}:{number}: {match.group(1)}")
+                    offenders.append(f"{page.relative_to(repo)}:{number}: {match.group(1)}")
     assert not offenders, (
         "docs give instructions for endpoints the API does not serve:\n  " + "\n  ".join(offenders)
     )

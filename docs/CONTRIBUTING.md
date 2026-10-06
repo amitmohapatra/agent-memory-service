@@ -1,19 +1,27 @@
 # Contributing
 
-## Workflow per milestone
+## Workflow per change
 
-A. Inspect the repository and existing implementation.
-B. Read the specification section for the milestone.
-C. Validate third-party assumptions against official docs (record versions).
-D. Write an ADR in `docs/adr/` when changing an architectural default.
-E. List files/components to add or change.
-F. Implement the smallest complete vertical slice.
-G–K. Add unit, integration, contract, E2E and security/failure tests.
-L–M. Run everything; fix every failure. Never weaken a gate to make a test pass.
-N–O. Run the milestone benchmark/eval; save outputs under `benchmark/results/` with provenance.
-P. Update OpenAPI (`make openapi`) and docs.
-Q. `make lint typecheck`.
-R. Do not proceed if a release gate fails.
+The milestone plan (M0 to M13) is finished; a change now follows this loop.
+
+1. **Read first.** The code you are changing, its tests, the ADR that decided it
+   ([index](adr/README.md)) and the page that documents it. Check a third-party assumption
+   against the library's own documentation, and record the version.
+2. **Decide in an ADR** when the change alters an architectural default, the API surface or a
+   guarantee. Amend an older ADR's header rather than rewriting its text.
+3. **Make the smallest complete vertical slice**: the code, its unit test, and the
+   integration, contract, end-to-end and security or failure tests the change touches.
+4. **Measure before claiming.** A retrieval or latency change runs its benchmark and saves the
+   output under `benchmark/results/` with provenance; a dated write-up goes to
+   `benchmark/reports/`, never into the user docs.
+5. **Update what describes it, in the same change**: `make openapi` for the HTTP contract, the
+   page in `docs/` that explains it, the [configuration reference](configuration.md) for a
+   setting, an example in `examples/` when the change is something a reader would copy, and
+   the [CHANGELOG](../CHANGELOG.md).
+6. **Run the gates**: `make lint typecheck`, the suites (`make unit integration e2e`, or the
+   CI list in [chapter 12](guide/12-testing-and-gates.md#what-ci-runs)), `make examples` and
+   `make docs-check`. Fix every failure; never weaken a gate to make a test pass, and do not
+   merge when a release gate fails.
 
 ## Conventions
 
@@ -33,7 +41,7 @@ R. Do not proceed if a release gate fails.
   fixture take the *models / search / cache / authorization / documents / retrieval*
   sections from the environment instead, so the same suites run against real weights and
   servers; the fixtures then reset the Qdrant collections and the cache between tests.
-- Commit messages: `M<n>: <what>`; no tool or AI attribution trailers.
+- Commit messages: a first line that says what changed, then why in the body.
 - **Migrations are online** ([deploy/database.md](deploy/database.md#online-migrations),
   ADR 0031). `migrations/env.py` sets `lock_timeout` (5 s) and `statement_timeout` (15 min)
   for every migration, so a revision that cannot get its lock fails instead of queueing the

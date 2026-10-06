@@ -1,7 +1,7 @@
 # The multilingual runtime
 
 How a query in any of twelve scripts is retrieved, how a record is indexed, and how an
-existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `history/PHASE7-RESULTS-2026-09-28.md`.
+existing tenant is moved onto it. Decisions: ADR 0024. Numbers: `benchmark/reports/PHASE7-RESULTS-2026-09-28.md`.
 
 ## The models
 
@@ -94,7 +94,7 @@ stores it as `lang` (migration 0018). It decides three things:
 
 The verbatim turn is kept in every language either way. Every prompt ends with the rule that
 text is returned in its source's language, never translated. Details:
-[LLM-USES.md](LLM-USES.md).
+[the twelve uses](guide/08-models.md#the-twelve-uses).
 
 ## Moving an existing tenant: the reindex path
 

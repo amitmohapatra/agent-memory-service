@@ -118,7 +118,7 @@ Being clear about this early saves disappointment later.
 
 - **It is not an LLM wrapper.** Every one of its twelve optional model uses has a
   deterministic fallback, and the service ships with the LLM **off**. A full install with no
-  model gateway at all is a working install. [`LLM-USES.md`](../LLM-USES.md) lists each use and its fallback.
+  model gateway at all is a working install. [Chapter 8](08-models.md#the-twelve-uses) lists each use and its fallback.
 - **It is not an agent framework.** It has no opinion about how your agent loops, which
   model you call, or what a tool is. It is a service your agent talks to.
 - **It is not finished.** Several seams are built and deliberately not wired — thread

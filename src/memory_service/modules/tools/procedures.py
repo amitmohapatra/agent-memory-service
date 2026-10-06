@@ -1,4 +1,4 @@
-"""Procedures: what worked, in what order, and what to do next (TOOL_MEMORY.md §30.3, §30.6).
+"""Procedures: what worked, in what order, and what to do next (design/TOOL_MEMORY.md §30.3, §30.6).
 
 Successful trajectories for one task pattern are folded into a prefix tree. The
 highest-support path through it is the procedure: an ordered list of steps, each with the

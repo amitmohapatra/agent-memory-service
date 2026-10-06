@@ -13,18 +13,10 @@
 
 The service is hexagonal (ADR 0001). The core says what it needs as a `typing.Protocol` in
 `ports/`; an adapter in `adapters/` implements it with a real system; `adapters/wiring.py`
-attaches the configured adapters to the composition root, `application/container.py`.
-
-```mermaid
-flowchart TB
-  api["api/<br/>routers, schemas, problem details, middleware"] --> app["application/<br/>Container (composition root)"]
-  app --> mods["modules/*<br/>feature slices: memory, retrieval, context,<br/>graph, grounding, feedback, tenancy, tools ..."]
-  mods --> ports["ports/<br/>Protocols"]
-  mods --> dom["domain/<br/>the contracts the service owns"]
-  ports --> dom
-  ad["adapters/<br/>the only place SDKs are imported"] -. implements .-> ports
-  wire["adapters/wiring.py"] -->|"attaches through a ProviderRegistry"| app
-```
+attaches the configured adapters to the composition root, `application/container.py`. The
+layer diagram and the rules the tests enforce (`tests/unit/test_architecture.py`, Ruff
+`banned-api`) are in [ARCHITECTURE.md](../ARCHITECTURE.md#inside-the-service); this is what each
+port is bound to:
 
 | Port (`ports/`) | Shipped adapter (`adapters/`) | Test stand-in (`Overrides`) |
 |---|---|---|
@@ -41,18 +33,6 @@ flowchart TB
 | `DocumentParser` | `DoclingParser` | `BuiltinParser` (also the fallback) |
 | repositories, `UnitOfWork` | `adapters/db/*` (SQLAlchemy, psycopg 3) | the same, against a test database |
 
-The rules are enforced by tests, not convention (`tests/unit/test_architecture.py`, Ruff
-`banned-api`):
-
-- `domain/`, `application/`, `modules/`, `ports/` and `api/` never import a provider SDK, and
-  no LLM provider SDK is importable anywhere under `src/`;
-- the domain imports no application, adapter or framework code; ports are Protocols, not
-  implementations; the SDK does not depend on the service's internals;
-- wiring selects providers through the registry, not a switch; every declared stand-in has a
-  wiring branch;
-- no module reads another module's tables directly; every persistent write is idempotent;
-  every derived memory keeps its `EvidenceRef` provenance.
-
 **Stand-ins are code, not configuration.** The in-process stand-ins live on
 `application.container.Overrides`, which nothing in the environment can reach: "the shipped
 service has exactly one implementation per port". They used to be provider values in the
@@ -67,8 +47,8 @@ the agent harness that consumes the service (ADR 0020).
 
 | Process | Entry point | Does |
 |---|---|---|
-| API | `memory-api` → `__main__.py:run_api`: `service.workers` uvicorn processes (default 3) | every HTTP route; each process builds its own container, model set and pools |
-| Worker | `memory-worker` → `worker.py`: Procrastinate, `tasks.worker_concurrency` (default 4) | every background job (chapter 11) |
+| API | `memory-api` → `__main__.py:run_api`: `service.workers` uvicorn processes (default: one per available CPU, 1-8) | every HTTP route; each process builds its own container, model set and pools |
+| Worker | `memory-worker` → `worker.py`: Procrastinate, `tasks.worker_concurrency` jobs at once (default: one per available CPU, 1-8) | every background job (chapter 11) |
 
 | Store | Holds | If lost |
 |---|---|---|
@@ -84,6 +64,9 @@ model or graph file is a new collection, never a mixed one (ADR 0024 decision 1,
 ---
 
 ## The path a write takes
+
+The sequence diagrams of every flow, side by side, are in [flows.md](../flows.md); this section
+walks one write step by step with the file each step lives in.
 
 Follow one message: `POST /v1/messages` with `{"role": "USER", "content": "My timezone is
 Europe/Berlin"}`.

@@ -35,6 +35,10 @@ either direction. The SDK sends both halves from `MemoryClient.bind(**scope)`.
 | `X-Request-ID` | the caller's request id, echoed back and joined to traces and logs |
 | `traceparent` | W3C trace context; the service continues the caller's trace |
 | `X-Trellis-LLM-Tokens` | **response** header: what this request spent on model calls, if any |
+| `X-Correlation-ID` | an opaque id of yours (a letter or digit, then letters, digits and `._:-`, at most 200 characters), echoed; `bind(trace_id=...)` with a value that is not a 32-hex W3C id lands here |
+| `X-Trace-ID` | **response** header: the 32-hex trace id the request ran under, the one `traceparent` carries |
+| `Idempotency-Key` | makes a write safe to retry (below); `Idempotent-Replayed: true` marks a replayed response |
+| `Location` | **response** header: on a `201` the created resource, on a `202` that queued a job its status (`/v1/jobs/{id}`) |
 
 **Writes are acknowledged, then processed.** A `2xx` on a write means the record *and* its
 processing job are committed in one transaction — not that the result is retrievable yet. Poll
@@ -60,6 +64,17 @@ unreachable or its pool exhausted, Qdrant or OpenFGA away), `504 TIMEOUT` a data
 stopped at its budget. A body or file over the limit is `413 PAYLOAD_TOO_LARGE`
 (`PayloadTooLargeError`, a `ValidationError`), as in agent-runs. A `detail` never quotes a driver's or a server's message. Insufficient
 evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
+
+A problem document, as the service sends it:
+
+```json
+{"type": "urn:trellis:problem:scope-denied", "title": "Outside the caller's scope",
+ "status": 403, "detail": "thread thr_01J... is outside the caller's scope",
+ "instance": "/v1/recall", "code": "SCOPE_DENIED", "retryable": false,
+ "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "request_id": "req_01J...", "details": {}}
+```
+
+What to do about each status: [troubleshooting.md](../troubleshooting.md).
 
 **Pagination is a cursor**, not an offset: every list route takes `cursor` and `limit` and sends
 `Link: <…>; rel="next"` exactly when a next page exists; an envelope body (`{"…": [...]}`) also

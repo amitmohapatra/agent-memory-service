@@ -1,4 +1,4 @@
-"""Tool memory contracts (TOOL_MEMORY.md §30.0-§30.1).
+"""Tool memory contracts (design/TOOL_MEMORY.md §30.0-§30.1).
 
 The service never executes a tool. The catalog keeps a :class:`ToolDescriptor` per tool
 (what it is, which arguments name which kinds of entity, and what calling it does), one

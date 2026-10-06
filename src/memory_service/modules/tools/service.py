@@ -1,4 +1,4 @@
-"""Tool memory service (TOOL_MEMORY.md): the catalog and call records.
+"""Tool memory service (design/TOOL_MEMORY.md): the catalog and call records.
 
 The service never runs a tool. The catalog says what each tool is and does (side effects,
 the entity types its arguments name); ``record`` stores what an agent called and counts it;

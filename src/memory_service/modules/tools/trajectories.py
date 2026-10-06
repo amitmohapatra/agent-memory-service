@@ -1,4 +1,4 @@
-"""Trajectory and chain mining (TOOL_MEMORY.md §30.9 steps 2 and 4).
+"""Trajectory and chain mining (design/TOOL_MEMORY.md §30.9 steps 2 and 4).
 
 A run's invocation records, in step order, are a trajectory. Two kinds of edge are derived
 from it, both deterministically and both with evidence:

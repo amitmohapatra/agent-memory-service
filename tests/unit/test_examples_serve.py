@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from examples import serve
+from examples import _serve as serve
 
 from memory_service.config import constants
 

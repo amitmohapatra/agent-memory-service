@@ -1,11 +1,17 @@
 # ADR 0017: Real-component validation — what proved itself, what was cut
 
-**Status:** in progress · **Date:** 2026-09-15
+**Status:** superseded (closed 2026-10) · **Date:** 2026-09-15 · **Superseded by:** ADRs 0024, 0025 and 0026, with the numbers in [`MEASUREMENTS.md`](../MEASUREMENTS.md)
+
+> **Closed.** The validation this record planned was carried out as the Phase 7-11 programme:
+> ADR 0024 (multilingual runtime), ADR 0025 (late interaction, two keys) and ADR 0026 (the
+> general memory ranking) record what was kept and cut, and `MEASUREMENTS.md` holds the
+> numbers. The gate and keep/cut tables at the end of this record were never filled; they
+> stay as the record of the plan, not as open work.
 
 ## Context
 Every number produced up to commit `465375f` came from a sandbox without model weights,
 without Qdrant/Dragonfly/OpenFGA servers and without any LLM (ADR 0003, ADR 0015). The
-target stack (`docs/TARGET_STACK.md`), the integrations plan and the tool-memory design
+target stack (a design document since removed; ADRs 0024-0026 hold the current stack), the integrations plan and the tool-memory design
 add 30 numbered changes, each of which must be measured with real components against the
 baseline it replaces. This ADR records the environment, the decisions that do not depend on
 measurement, and — as the runs complete — one row per keep/cut decision with numbers.
@@ -93,7 +99,7 @@ The tables below stay empty until each step is run with real weights and real se
    Procrastinate workers, Dragonfly and a Qdrant server; `make load-test` against a
    deployed api and worker, compared with the in-process figures; `make examples`.
 3. **Advanced retrieval.** Measure before deciding — seven flags have already been removed
-   this way (see `docs/CAPABILITY_COVERAGE.md` and ADR 0012).
+   this way (see `tests/eval/test_capability_coverage.py` and ADR 0012).
 4. **Providers, native versus third-party, all through Bifrost.** Memory intelligence
    (native / Mem0 / LangMem / Cognee), graph enrichment (native / Graphiti / Docling Graph /
    Cognee), and each `models.llm.uses` flag measured as a lift over the deterministic path
@@ -104,7 +110,7 @@ removed from code, configuration, extras, lock file, compose and docs.
 
 ## Gate table (real run)
 
-_Filled by the validation run; see `docs/FINAL_REPORT.md`._
+_Never filled (see the status note); the M13 gate account is `benchmark/reports/FINAL_REPORT.md`._
 
 | Gate | Threshold | Sandbox value | Real value | Result |
 |---|---|---|---|---|
