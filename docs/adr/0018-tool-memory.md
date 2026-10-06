@@ -4,7 +4,7 @@
 
 ## Context
 Agents forget which tool worked for which task, call the same expensive endpoint twice inside
-one run, and rediscover the same failure on every retry. `docs/TOOL_MEMORY.md` specifies the
+one run, and rediscover the same failure on every retry. `design/TOOL_MEMORY.md` specifies the
 memory for that. The open questions were where the boundary sits, what may be replayed from a
 cache, how a chain is learned without a model inventing it, and how any of it is ranked.
 

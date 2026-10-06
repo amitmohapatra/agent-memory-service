@@ -38,7 +38,7 @@ TARGET one package / no open-ended configuration: reachable - settings.py expose
 
 ## Amendments from the gap analysis (2026-09-23)
 
-[GAPS-2026-09.md](GAPS-2026-09.md) ranked the borrowable techniques against a measured failure
+GAPS-2026-09.md (a dated note since removed; see git history) ranked the borrowable techniques against a measured failure
 shape and changed this plan in the following places. Where an amendment contradicts a phase step
 below, the amendment wins.
 
@@ -340,7 +340,7 @@ and the gold turns' rank in the dense-only, sparse-only and fused lists before t
    - Verify: contract tests for X-Request-Id and 429 behaviour green; load run unchanged or better.
 
 
-> **Superseded in part by [FREEZE-multilingual.md](FREEZE-multilingual.md) (2026-09-23).** An
+> **Superseded in part by FREEZE-multilingual.md (a dated note since removed; see git history) (2026-09-23).** An
 > eleven-agent pass over primary sources corrected this phase in four places: the shipping graph is
 > **ONNX fp32, not int8** (int8 measured slower and lossier here, and the graph file is inside the
 > collection fingerprint, so the choice must be made on the VM *before* the one reindex); the

@@ -28,7 +28,7 @@ claim. That is a different product from "a vector database with an LLM on top", 
 one worth building.
 
 > **Evidence.** Measured results, and the numbers this harness got wrong before it got them
-> right, are in [MEASUREMENTS.md](MEASUREMENTS.md). Nothing below is decided on a number that
+> right, are in [MEASUREMENTS.md](../docs/MEASUREMENTS.md). Nothing below is decided on a number that
 > file does not contain.
 
 ## 2. Keep — this is the product
@@ -56,7 +56,7 @@ not raise confidence.
 
 **Hybrid retrieval: dense + BM25 + RRF + cross-encoder rerank.** Commodity, and necessary.
 Keep exactly this. *(Superseded, note added 2026-10-03: the cross-encoder rerank was measured
-worse than the fused order and removed; memories are now ranked by [ADR 0026](adr/0026-general-memory-ranking.md) -
+worse than the fused order and removed; memories are now ranked by [ADR 0026](../docs/adr/0026-general-memory-ranking.md) -
 weighted reciprocal-rank fusion of BM25, two dense spaces and ColBERT late-interaction arms,
 then session / speaker / time / period rules, with no reranker.)* One measured observation from this repository: recall on an external
 corpus stayed high with a *random* embedding, meaning the lexical path was carrying the
@@ -95,7 +95,7 @@ fixture now asserts none of the seven names has reappeared in `RetrievalSettings
 **Reranking was removed**, on measurement rather than redundancy: significantly *worse* on
 BeIR/SciFact (p = 0.012) at 21x the latency, and no cross-encoder beat the fused order on
 LoCoMo (PHASE9-RESULTS). The offline scorer stays under `benchmark/` for a future challenger.
-See [MEASUREMENTS.md](MEASUREMENTS.md) §3e.
+See [MEASUREMENTS.md](../docs/MEASUREMENTS.md) §3e.
 
 **Three of four memory-intelligence providers.** `mem0`, `cognee`, `langmem` were alternatives
 to `native`, which is what runs. Each was an import, a wiring branch, a contract test that

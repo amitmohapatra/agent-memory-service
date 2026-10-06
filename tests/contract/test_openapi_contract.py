@@ -130,7 +130,7 @@ def test_every_enum_field_tells_the_caller_which_value_to_use(client: TestClient
 def test_the_docs_do_not_describe_endpoints_that_no_longer_exist(client: TestClient) -> None:
     """Documentation that outlives its endpoint is worse than none.
 
-    ``docs/TOOL_MEMORY.md`` carried a status note saying four endpoints were removed and then
+    ``design/TOOL_MEMORY.md`` carried a status note saying four endpoints were removed and then
     documented three of them in full eighty lines further down, request bodies and all. A
     reader reaching §30.2 first has no way to know.
 

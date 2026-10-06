@@ -1,5 +1,5 @@
 """Public /v1/tools routes: the catalog, call records, tool hints and approval suggestions
-(TOOL_MEMORY.md).
+(design/TOOL_MEMORY.md).
 
 The service never executes a tool. ``record`` is what an adapter calls after it ran one;
 ``hints`` answers which tool, which plan, which next step and which arguments, from what

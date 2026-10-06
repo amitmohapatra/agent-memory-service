@@ -49,7 +49,7 @@ LANGUAGES = ("en", "hi", "ar", "zh", "de", "el", "es", "ro", "ru", "th", "tr", "
 #: the depth the offline screens fused at, and the cut they scored
 PREFETCH = 50
 CUT = 10
-#: the M2 gates (docs/history/PLAN-MULTILINGUAL-PLATFORM-2026-09-28.md, section 4)
+#: the M2 gates (benchmark/reports/PLAN-MULTILINGUAL-PLATFORM-2026-09-28.md, section 4)
 SCIFACT_GATE = {"ndcg@10": 0.7557, "recall@10": 0.8926}
 XQUAD_GATE = {"mean_recall@10": 0.98}
 INDEX_BATCH = 64

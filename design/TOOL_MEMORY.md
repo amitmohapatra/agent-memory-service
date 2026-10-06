@@ -1,7 +1,7 @@
 # Tool memory — remembering tool calls, outcomes and procedures (change 30)
 
 > **Status (overhaul, September 2026).** This document is the design history of change 30.
-> What exists now is described in [api/tools.md](api/tools.md): a catalog (`PUT
+> What exists now is described in [api/tools.md](../docs/api/tools.md): a catalog (`PUT
 > /v1/tools/catalog`, `GET /v1/tools`) with side effects and argument entity types, call records
 > (`POST /v1/tools/invocations`) counted into per-tool statistics, run outcomes, a background
 > learning job that stores one procedure per task pattern and audience (distilled by the
@@ -12,7 +12,7 @@
 > endpoints are kept as history, not as current API. The framework-side wrappers (§30.5, §30.8)
 > live in the harness, not here.
 
-Companion to `TARGET_STACK.md`.
+Companion to the pre-overhaul target-stack design (since removed; ADRs 0024-0026 hold the current stack).
 
 ## What the service does today
 
@@ -153,7 +153,7 @@ another agent's unshared invocations). Thresholds are hard gates like the rest.
 
 Cache precision was gated here too until 2026-09-22. There is no output cache any more —
 `/v1/tools/lookup` was its read path and commit `0035987` removed it — so the measurement was
-retired; see the amendment in [ADR 0018](adr/0018-tool-memory.md).
+retired; see the amendment in [ADR 0018](../docs/adr/0018-tool-memory.md).
 
 ### 30.8 Tools through Bifrost's MCP gateway — design only, not implemented
 

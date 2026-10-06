@@ -309,7 +309,7 @@ class AuthorizationService:
     # Every grant below has a revoke, and both bump the membership revision, so a change is
     # seen on the caller's next request rather than at the scope cache's expiry. This is the
     # first place a tuple is ever deleted: until workspaces existed, nothing in the service
-    # removed a grant, so a removed user kept live access (PRODUCT_DECISIONS.md, §4).
+    # removed a grant, so a removed user kept live access (design/PRODUCT_DECISIONS.md, §4).
 
     @staticmethod
     def _member_subject(tenant_id: str, principal: str) -> tuple[str, str]:

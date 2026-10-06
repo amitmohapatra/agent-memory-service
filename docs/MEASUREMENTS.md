@@ -479,7 +479,7 @@ are not committed.)
   arm and an indexed payload field on every memory and chunk; both are gone.
 - **`memory_entity_search`: on.** +2.5 / +2.8 points of complete multi-hop coverage at @50 /
   @100, +0.6 / +0.6 / +0.4 recall at @10 / @50 / @100, no depth worse - consistent with the
-  earlier paired validation on conversations 3-9 (docs/history/ENTITY-TOPIC-RETRIEVAL-2026-09-26.md).
+  earlier paired validation on conversations 3-9 (benchmark/reports/ENTITY-TOPIC-RETRIEVAL-2026-09-26.md).
   Its cost, paired per question against the arm run just before it: the 250 questions with
   an English multi-hop cue pay +122 ms at the median (p95 484 → 699 ms on this box), the
   all-question p95 moves 503 → 547 ms. That is a judgment against the 300 ms target, taken

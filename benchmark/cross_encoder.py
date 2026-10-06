@@ -2,7 +2,7 @@
 
 The service ships no reranker: SciFact-1000 nDCG@10 fell from 84.51 to 79.33 with one (paired
 sign test p = 0.012) at 21x the latency, and LoCoMo source ranking was worse than the fused
-order (``docs/history/PHASE9-RESULTS-2026-09-29.md``). The model spec and the adapter live here, beside
+order (``benchmark/reports/PHASE9-RESULTS-2026-09-29.md``). The model spec and the adapter live here, beside
 the benchmarks that measure them, and nowhere in ``src/``.
 """
 

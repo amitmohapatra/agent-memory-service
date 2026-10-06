@@ -1,4 +1,4 @@
-"""Task patterns (TOOL_MEMORY.md §30.9 step 4).
+"""Task patterns (design/TOOL_MEMORY.md §30.9 step 4).
 
 "update quote Q-1183 with EMEA price for SKU-22" and "update quote Q-9006 with APAC price for
 SKU-7" are the same task with different values. Replacing the values with typed placeholders

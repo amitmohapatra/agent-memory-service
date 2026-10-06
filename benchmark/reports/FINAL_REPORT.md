@@ -2,7 +2,7 @@
 
 > **Status: the gate account as of milestone M13.** Work has continued since (tool memory,
 > the Bifrost LLM path, the validation harness); those gates are recorded in
-> `benchmark/results/` and in [adr/0017](adr/0017-real-component-validation.md). The verdict
+> `benchmark/results/` and in [adr/0017](../../docs/adr/0017-real-component-validation.md). The verdict
 > below still holds: retrieval-quality and latency numbers are **not** representative until
 > the gates are re-run with real model weights and real servers.
 
@@ -32,7 +32,7 @@ graph, hybrid retrieval (dense + BM25, RRF, bounded rerank) with graph, expansio
 verification stages, native rule-based memory intelligence with temporal consolidation,
 a PostgreSQL knowledge graph, multi-agent visibility semantics, a Python SDK
 (`trellis-memory`) and a LangGraph adapter. Fifteen ADRs record the decisions
-(`docs/adr/`); `docs/MILESTONES.md` lists what each milestone delivered.
+(`docs/adr/`); the milestone build log (since removed; see git history) listed what each milestone delivered.
 
 ## Gate evidence (from `benchmark/results/`)
 

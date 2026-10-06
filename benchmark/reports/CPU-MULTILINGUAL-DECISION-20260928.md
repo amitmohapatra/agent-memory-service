@@ -68,7 +68,7 @@ not unbounded ingestion-time generation or training weights on every conversatio
 
 Hindsight's retain path uses LLM extraction. A model-free recall request over that corpus
 is different from fully model-free ingestion plus retrieval. Compare equivalent modes.
-See [the capability inventory](HINDSIGHT-CAPABILITY-STATUS-20260927.md) for implemented,
+See the capability inventory (a dated note since removed; see git history) for implemented,
 partial and missing product features; the repository does not have complete Hindsight API
 parity, a full reflect agent, webhooks, or an evaluated multi-run agent-task score.
 
@@ -83,4 +83,4 @@ parity, a full reflect agent, webhooks, or an evaluated multi-run agent-task sco
   screen, and an uninterrupted full test run are queued; check completion artifacts before
   asserting success. No fresh reader answer-accuracy measurement exists.
 
-Operational details and failed-run history: [implementation handoff](MULTILINGUAL-IMPLEMENTATION-20260927.md).
+Operational details and failed-run history: implementation handoff (a dated note since removed; see git history).
