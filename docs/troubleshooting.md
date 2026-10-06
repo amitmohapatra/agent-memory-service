@@ -25,7 +25,7 @@ for help: it names the trace and the log lines of that request.
 **I get `Workspace not found` when I write a WORKSPACE-visible memory.**
 A workspace is a team the tenant's administrator created, not a label: onboard the tenant
 (`POST /v1/admin/tenants`), create the workspace (`POST /v1/workspaces`) and admit the member
-(`PUT /v1/workspaces/{id}/members/user:u1`) first. Example
+(`PUT /v1/workspaces/{id}/members/{principal_ref}` with `user:u1`) first. Example
 [09](../examples/09_admin_onboarding_and_keys.py) does all three;
 [api/tenancy.md](api/tenancy.md#onboarding-a-team-in-full) has the full sequence. A workspace
 id that names no team grants nothing.
