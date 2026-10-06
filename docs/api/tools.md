@@ -204,13 +204,13 @@ the steps in order, with what to do on the errors that happened), nothing invent
 decides; nothing is published on its own.
 
 ```python
-admin = admin_client.bind(tenant_id="acme")          # the tenant's administrator key
+admin = admin_client.bind(tenant_id="acme")  # the tenant's administrator key
 for d in await admin.advanced.tools.skill_drafts():  # new, or changed since published
     print(d.id, d.state, d.name, d.support, d.success_rate)
     print(d.body)
 decision = await admin.advanced.tools.publish_skill(d.id, name="refund-order")
 print(decision.name, decision.version, decision.destination)  # refund-order 1.0.0 bifrost
-await admin.advanced.tools.dismiss_skill(other.id)            # not a skill
+await admin.advanced.tools.dismiss_skill(other.id)  # not a skill
 ```
 
 **Where it goes.** Where the agents already load skills from, so nothing else changes for
