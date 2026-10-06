@@ -1,6 +1,6 @@
 # ADR 0009: Memory intelligence — native rules first, LLM providers as benchmarkable adapters
 
-**Status:** accepted · **Date:** 2026-09-15
+**Status:** accepted; amended · **Date:** 2026-09-15 · **Amended by:** ADR 0032 (admission: the gate sits behind a tenant switch)
 
 ## Decision
 - **Observations in, canonical memories out.** Every chat message, file, agent/tool result,

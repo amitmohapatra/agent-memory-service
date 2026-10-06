@@ -1,6 +1,11 @@
 # ADR 0022: Trellis names and API conventions
 
-**Status:** accepted · **Date:** 2026-09-28 · **Amends:** ADR 0005 and ADR 0021 (header names)
+**Status:** accepted; amended · **Date:** 2026-09-28 · **Amends:** ADR 0005 and ADR 0021 (header names) · **Amended by:** ADR 0030 (problem details, OpenAPI conventions), ADR 0032 (SDK errors)
+
+> **Amended (0.3.0).** The aliases this record kept "for one release" are gone: 0.3.0 removed
+> `POST /v1/files`, `POST /v1/tools/record`, the `X-Memory-*` header spellings (and
+> `DEPRECATED_HEADER_ALIASES`) and the SDK's `ctx.files` / `FilesAPI`. Each operation has one
+> route and each header one spelling (`api/openapi.py`, `tests/e2e/test_removed_aliases.py`).
 
 ## Context
 The memory service is the first package of the trellis platform; `trellis-harness`,
@@ -104,7 +109,7 @@ envelope.
   then letters, digits and `._:-`, at most 200 characters) and replaced otherwise, as `X-Request-
   ID` is.
 - Historical documents keep the old names as the record of what they were: ADR 0020, the
-  dated measurement notes (`docs/history/LATENCY-LAYERS-2026-09.md`, `docs/history/AUDIT-2026-09-23.md`) and
+  dated measurement notes (`benchmark/reports/LATENCY-LAYERS-2026-09.md`, `benchmark/reports/AUDIT-2026-09-23.md`) and
   the dated benchmark artifacts under `benchmark/results/`.
 - OpenAPI documents the response headers (`components.headers`), the 413 and 429 every
   operation can answer, and a per-operation problem example.
