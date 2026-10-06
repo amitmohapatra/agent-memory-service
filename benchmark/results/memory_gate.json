@@ -434,16 +434,16 @@
     }
   ],
   "provenance": {
-    "timestamp": "2026-10-06T07:03:36.111983+00:00",
-    "git_commit": "ac1c8ba170b7e0349c4854b12ceec678ec5ff161",
+    "timestamp": "2026-10-02T09:01:15.848130+00:00",
+    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
     "host_load": {
-      "loadavg_1m": 1.12,
-      "loadavg_5m": 1.43,
-      "loadavg_15m": 1.95,
-      "load_per_core": 0.28
+      "loadavg_1m": 6.3,
+      "loadavg_5m": 5.5,
+      "loadavg_15m": 4.66,
+      "load_per_core": 1.57
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,
@@ -453,11 +453,11 @@
       "qdrant-client": "1.19.0",
       "procrastinate": "3.9.0",
       "zstandard": "0.25.0",
-      "sentence-transformers": "6.0.1",
-      "torch": "2.14.0+cpu",
-      "transformers": "5.17.0",
+      "sentence-transformers": "5.3.0",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
       "onnxruntime": "1.30.0",
-      "docling": "2.127.0"
+      "docling": "not-installed"
     },
     "models": {
       "bekko-embedding-v1-a8m": {
