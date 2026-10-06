@@ -43,6 +43,7 @@ is not finished).
 | [0030](0030-api-surface-errors-idempotency-pagination-descriptions.md) | API surface: retryable database errors with `Retry-After`, `PAYLOAD_TOO_LARGE`, `Idempotency-Key` on every write, `Location`, one cursor convention, conditional GETs, every field described | accepted; amends 0022 and 0023 |
 | [0031](0031-runtime-freshness-overload-pools-readiness-workers.md) | Runtime: freshness by audience, overload bounds, one connection budget and PgBouncer, readiness, worker lifecycle and metrics, Qdrant scale-out, the tenant registry's channel | accepted; amends 0004, 0021 |
 | [0032](0032-sdk-resilience-act-for-admission-forget-dev-defaults.md) | SDK resilience (Retry-After, full-jitter backoff, read-only POST retries, status-classed errors, circuit breaker, env defaults), `may_act_as` checks agents too, the admission gate behind a tenant switch, the forget cascade moves readers' revisions, and dev defaults (development tenant, development envelope key) | accepted; amends 0009, 0021, 0022 |
+| [0033](0033-learned-skills.md) | A learned procedure becomes an Agent Skill only when the tenant's administrator publishes it, to `SKILLS_DIR` or the gateway's skills repository | accepted; builds on 0018 |
 
 ## Where the numbers behind these decisions are
 

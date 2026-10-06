@@ -288,6 +288,37 @@ class ToolStats(BaseModel):
 ProcedureStatus = Literal["candidate", "active", "retired", "rejected"]
 
 
+class SkillDecision(BaseModel):
+    """What a reviewer decided about a procedure's skill draft, for the steps it had then:
+    published (as ``name`` at ``version``) or dismissed. New steps make a new draft."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: Literal["published", "dismissed"] = Field(
+        description="published: written to the skills store as name at version; dismissed: "
+        "not a skill (a skill published earlier stays where it is)"
+    )
+    steps_hash: str = Field(
+        description="The procedure's steps the decision was about: new steps make a new draft."
+    )
+    name: str | None = Field(
+        default=None, description="The skill's name in the store (null: never published)."
+    )
+    version: str | None = Field(
+        default=None, description="The version published last (major.minor.patch)."
+    )
+    destination: str | None = Field(
+        default=None, description="Where it was published: skills_dir or bifrost."
+    )
+    decided_by: str | None = Field(
+        default=None, description="The credential that decided (key:<id>)."
+    )
+    decided_at: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+        description="When it was decided (ISO 8601, UTC).",
+    )
+
+
 class StoredProcedure(BaseModel):
     """A procedure the learning job keeps for one task pattern and one audience.
 
@@ -316,6 +347,8 @@ class StoredProcedure(BaseModel):
     owner_principal: str | None = None
     workspace_id: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    #: the reviewer's last decision about it as a skill (only that decision writes it)
+    skill: SkillDecision | None = None
 
     @property
     def tools(self) -> list[str]:

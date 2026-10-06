@@ -8,6 +8,13 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Learned skills: the tenant's active procedures are offered to its administrator as draft
+  Agent Skills (`GET /v1/tools/skill-drafts`); publishing one writes a `SKILL.md` where agents
+  load skills from (`SKILLS_DIR`, else the Bifrost gateway's skills repository) as its next
+  version, and dismissing one stops it being offered until its steps change. Migration
+  `0025_procedure_skill`; settings `SKILLS_DIR`, `BIFROST_ADMIN_TOKEN`
+  ([learned skills](docs/api/tools.md#learned-skills), ADR 0033). SDK:
+  `ctx.advanced.tools.skill_drafts()`, `publish_skill()`, `dismiss_skill()`.
 - Search past conversations by message: `POST /v1/recall` and the `memory_search` agent tool
   take `threads` (`current`, the default, or `all`); with `all`, `kinds=["message"]` searches
   every thread the caller's user owns and each item carries its `thread_id`. Another user's

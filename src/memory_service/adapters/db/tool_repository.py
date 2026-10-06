@@ -30,6 +30,7 @@ from memory_service.domain.ids import new_id
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
+    SkillDecision,
     StoredProcedure,
     SubCall,
     ToolAnnotations,
@@ -539,6 +540,7 @@ def _to_procedure(row: ProcedureRow) -> StoredProcedure:
         owner_principal=row.owner_principal,
         workspace_id=row.workspace_id,
         updated_at=row.updated_at,
+        skill=SkillDecision.model_validate(row.skill) if row.skill else None,
     )
 
 
@@ -566,8 +568,11 @@ class SqlProcedureRepository:
 
     async def save(self, procedure: StoredProcedure) -> None:
         values = procedure.model_dump()
+        values["skill"] = procedure.skill.model_dump() if procedure.skill else None
         stmt = insert(ProcedureRow).values(**values)
-        mutable = {k: stmt.excluded[k] for k in values if k not in ("tenant_id", "procedure_id")}
+        # the skill decision is the reviewer's (``decide``): a re-mine never writes it back
+        fixed = ("tenant_id", "procedure_id", "skill")
+        mutable = {k: stmt.excluded[k] for k in values if k not in fixed}
         await self.s.execute(
             stmt.on_conflict_do_update(constraint="uq_procedures_pattern", set_=mutable)
         )
@@ -590,6 +595,25 @@ class SqlProcedureRepository:
             )
         ).scalars()
         return [_to_procedure(r) for r in rows]
+
+    async def active(self, tenant_id: str, *, limit: int) -> list[StoredProcedure]:
+        rows = (
+            await self.s.execute(
+                select(ProcedureRow)
+                .where(ProcedureRow.tenant_id == tenant_id, ProcedureRow.status == "active")
+                .order_by(ProcedureRow.support.desc(), ProcedureRow.procedure_id)
+                .limit(limit)
+            )
+        ).scalars()
+        return [_to_procedure(r) for r in rows]
+
+    async def decide(self, tenant_id: str, procedure_id: str, decision: SkillDecision) -> bool:
+        result = await self.s.execute(
+            update(ProcedureRow)
+            .where(ProcedureRow.tenant_id == tenant_id, ProcedureRow.procedure_id == procedure_id)
+            .values(skill=decision.model_dump())
+        )
+        return bool(getattr(result, "rowcount", 0))
 
     async def reject(self, tenant_id: str, procedure_id: str) -> bool:
         result = await self.s.execute(

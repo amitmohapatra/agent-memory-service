@@ -727,6 +727,40 @@ class ApprovalSuggestion(BaseModel):
     agent_id: str | None = None
 
 
+class SkillDecision(BaseModel):
+    """What an administrator decided about a skill draft: ``published`` (as ``name`` at
+    ``version``, to ``destination``: ``skills_dir`` or ``bifrost``) or ``dismissed``."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    state: Literal["published", "dismissed"]
+    steps_hash: str
+    name: str | None = None
+    version: str | None = None
+    destination: str | None = None
+    decided_by: str | None = None
+    decided_at: str
+
+
+class SkillDraft(BaseModel):
+    """A learned procedure as the Agent Skill it would publish (``tools.publish_skill``)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    #: the procedure's id: what ``publish_skill`` and ``dismiss_skill`` take
+    id: str
+    #: ``new`` (never published) or ``changed`` (published, and its steps changed since)
+    state: Literal["new", "changed"]
+    name: str
+    description: str
+    #: the ``SKILL.md`` body
+    body: str
+    pattern: str
+    support: int
+    success_rate: float
+    published: SkillDecision | None = None
+
+
 class MissingArgument(BaseModel):
     """A required argument nothing could fill: ask the user ``question``."""
 

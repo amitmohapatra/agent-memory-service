@@ -14,6 +14,7 @@ from typing import Protocol, runtime_checkable
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
+    SkillDecision,
     StoredProcedure,
     ToolDescriptor,
     ToolInvocation,
@@ -144,4 +145,13 @@ class ProcedureRepository(Protocol):
 
     async def reject(self, tenant_id: str, procedure_id: str) -> bool:
         """A reviewer rejected it: never offered again until its steps change."""
+        ...
+
+    async def active(self, tenant_id: str, *, limit: int) -> list[StoredProcedure]:
+        """The tenant's active procedures, best supported first: the skill drafts' source."""
+        ...
+
+    async def decide(self, tenant_id: str, procedure_id: str, decision: SkillDecision) -> bool:
+        """Record the reviewer's decision about its skill draft; False when there is no such
+        procedure."""
         ...

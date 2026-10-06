@@ -376,6 +376,49 @@ async def test_the_catalog_and_the_agent_s_model_key_are_advanced(ctx) -> None:
 
 
 @respx.mock
+async def test_skill_drafts_are_listed_published_and_dismissed(ctx) -> None:
+    decision = {
+        "state": "published",
+        "steps_hash": "h1",
+        "name": "refund-order",
+        "version": "1.0.0",
+        "destination": "bifrost",
+        "decided_at": "2026-10-06T10:00:00+00:00",
+    }
+    respx.get(f"{BASE}/v1/tools/skill-drafts").respond(
+        200,
+        json={
+            "drafts": [
+                {
+                    "id": "procedure_1",
+                    "state": "new",
+                    "name": "refund-order",
+                    "description": "Refund an order.",
+                    "body": "# Refund an order",
+                    "pattern": "refund order {id}",
+                    "support": 3,
+                    "success_rate": 1.0,
+                }
+            ]
+        },
+    )
+    publish = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/publish").respond(
+        200, json=decision
+    )
+    dismiss = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/dismiss").respond(
+        200, json={**decision, "state": "dismissed"}
+    )
+    drafts = await ctx.advanced.tools.skill_drafts()
+    assert [(d.id, d.state, d.published) for d in drafts] == [("procedure_1", "new", None)]
+    published = await ctx.advanced.tools.publish_skill("procedure_1", name="refund-order")
+    assert published.version == "1.0.0" and _body(publish) == {"name": "refund-order"}
+    await ctx.advanced.tools.publish_skill("procedure_1")
+    assert _body(publish) == {}
+    assert (await ctx.advanced.tools.dismiss_skill("procedure_1")).state == "dismissed"
+    assert dismiss.called
+
+
+@respx.mock
 async def test_the_catalog_is_read_again_only_when_it_changed(ctx) -> None:
     """``catalog_if_changed``: the first read keeps the ETag; asked with it, a 304 answers
     ``None`` (nothing changed) and the ETag to keep; a changed catalog answers in full."""
