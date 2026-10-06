@@ -159,10 +159,25 @@ async def test_message_search_reads_this_conversation_then_the_users_earlier_one
     assert tool[0]["thread_id"] == "thr_june"
     assert "bob" not in str(tool).casefold()
 
-    # bounded by the user's most recently active threads, not by all they ever said
+    # earlier conversations give only what shares a word with the query, never filler
+    unrelated = await search.search(at("ann", "thr_now"), "weather", kinds=["message"], limit=5)
+    assert [i.thread_id for i in unrelated.items] == ["thr_now"], "this thread's fallback only"
+
+    # bounded by the user's most recently active threads, filtered in the database
     async with uow_factory() as uow:
-        newest = await uow.messages.owned_recent("acme", "ann", limit=10, threads=1)
-    assert {m.thread_id for m in newest} == {"thr_now"}
+        newest = await uow.messages.owned_recent(
+            "acme", "ann", limit=10, threads=1, words=["order"]
+        )
+        assert {m.thread_id for m in newest} == {"thr_now"}
+        assert await uow.messages.owned_recent("acme", "ann", limit=10, threads=5, words=[]) == []
+        assert (
+            await uow.messages.owned_recent("acme", "nobody", limit=10, threads=5, words=["x"])
+            == []
+        )
+        literal = await uow.messages.owned_recent(
+            "acme", "ann", limit=10, threads=5, words=["4_71", "44%"]
+        )
+        assert literal == [], "LIKE wildcards in a word are matched literally"
 
 
 async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(

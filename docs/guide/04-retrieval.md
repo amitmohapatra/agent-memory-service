@@ -190,14 +190,30 @@ Two kinds reach earlier chats, and both stay inside the user's own:
 | Ask for | You get | Reads |
 |---|---|---|
 | `kinds=["episode"]` | one ranked item per earlier conversation: its summary and a digest of what followed | the episode index (semantic) |
-| `kinds=["message"]` | the exact messages that share words with the query, each with its `thread_id`: this conversation's first, then the user's earlier ones | this thread's newest 200 (`HISTORY_SCAN`), then the newest 1,000 visible messages (`OWNED_SCAN`) of the user's 100 most recently active threads (`OWNED_THREADS`); a time range moves the window |
+| `kinds=["message"]` | the exact messages that share words with the query, each with its `thread_id`: this conversation's first, then the user's earlier ones | this thread's newest 200 (`HISTORY_SCAN`); in parallel, the newest 200 visible messages (`OWNED_SCAN`) that contain one of the query's words, from the user's 100 most recently active threads (`OWNED_THREADS`), filtered in the database; a time range moves the window |
 
 There is no option to set: a message search always reads this conversation and the user's
 earlier ones. Among messages sharing as many words with the query, this conversation's come
 first (in its own order), then the earlier conversations', newest first. "Earlier ones" are the
 threads whose owner is the caller's user (the user who started them): another user's threads
 are never read, a deleted thread is not read, and a call without a user reads this thread only.
-An agent asks the same through `memory_search` (`kinds: ["message"]`). Use `episode` to find
+An earlier conversation contributes only messages that share a word with the query (this
+conversation's newest still come back when nothing matches). An agent asks the same through
+`memory_search` (`kinds: ["message"]`).
+
+**Cost.** Measured in-process on PostgreSQL 16, 4 vCPU (`benchmark/bench_message_search.py`), a
+query whose words appear in every message (the worst case), p50 / p95:
+
+| The user's conversations | Messages | This conversation only | With earlier ones |
+|---|---|---|---|
+| 1 | 50 | 3.8 / 4.3 ms | 6.8 / 7.2 ms |
+| 10 | 500 | 3.6 / 4.1 ms | 12.7 / 14.6 ms |
+| 100 | 5,000 | 3.7 / 4.0 ms | 22.4 / 27.4 ms |
+| 300 | 15,000 | 3.7 / 4.1 ms | 22.4 / 23.8 ms |
+
+It stops growing at 100 conversations (`OWNED_THREADS`) and never depends on other users'
+messages: the user's thread ids are read first, then their messages through the per-thread
+index. Use `episode` to find
 *which* conversation, and `message` to quote *what was said* ("the order number I gave you
 last week").
 

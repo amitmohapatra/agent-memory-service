@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -274,6 +274,11 @@ def _row_to_message(r: MessageRow, attachments: Sequence[MessageAttachmentRow] =
     )
 
 
+def _like(word: str) -> str:
+    """``word`` as a literal inside a LIKE pattern."""
+    return word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class SqlMessageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
@@ -407,23 +412,32 @@ class SqlMessageRepository:
         *,
         limit: int,
         threads: int,
+        words: Sequence[str],
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[Message]:
+        if not words:
+            return []
         # the user's most recently active threads first (ix_threads_tenant_owner_updated),
-        # then their messages (ix_messages_tenant_thread_seq): the work is bounded by
-        # ``threads``, not by everything the user ever said
-        recent = (
-            select(ThreadRow.thread_id)
-            .where(
-                ThreadRow.tenant_id == tenant_id,
-                ThreadRow.owner_user_id == owner_user_id,
-                ThreadRow.deleted_at.is_(None),
-            )
-            .order_by(ThreadRow.updated_at.desc())
-            .limit(threads)
-            .scalar_subquery()
+        # then their messages by those ids (the per-thread index): the work is bounded by
+        # ``threads``, never by every message of the tenant, which a subquery let the planner
+        # scan instead
+        recent = list(
+            (
+                await self.s.execute(
+                    select(ThreadRow.thread_id)
+                    .where(
+                        ThreadRow.tenant_id == tenant_id,
+                        ThreadRow.owner_user_id == owner_user_id,
+                        ThreadRow.deleted_at.is_(None),
+                    )
+                    .order_by(ThreadRow.updated_at.desc())
+                    .limit(threads)
+                )
+            ).scalars()
         )
+        if not recent:
+            return []
         stmt = (
             select(MessageRow)
             .where(
@@ -432,6 +446,8 @@ class SqlMessageRepository:
                 MessageRow.deleted_at.is_(None),
                 MessageRow.kind == MessageKind.VISIBLE.value,
                 MessageRow.content.is_not(None),
+                # only what can match: the database filters, the caller ranks what is left
+                or_(*(MessageRow.content.ilike(f"%{_like(w)}%", escape="\\") for w in words)),
             )
             .order_by(MessageRow.occurred_at.desc(), MessageRow.message_id)
             .limit(limit)
