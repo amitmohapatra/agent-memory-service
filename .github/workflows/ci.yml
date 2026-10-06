@@ -71,3 +71,8 @@ jobs:
         run: |
           uv run python -m memory_service.tools.export_openapi /tmp/openapi.json
           diff -q docs/openapi.json /tmp/openapi.json
+      # Every relative link and anchor in the repository's Markdown resolves, and every
+      # snippet in the docs calls SDK methods and keywords that exist (scripts/check_docs.py).
+      - run: make docs-check
+      # The numbered examples, offline: an in-process service on this job's PostgreSQL.
+      - run: make examples
