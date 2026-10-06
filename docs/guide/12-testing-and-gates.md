@@ -57,6 +57,8 @@ flowchart TB
   I --> J["pytest tests/eval -m 'not models'"]
   J --> K["pytest tests/failure"]
   K --> L["export OpenAPI and diff against docs/openapi.json"]
+  L --> M["make docs-check: links and snippets in every Markdown file"]
+  M --> N["make examples: every example, offline, in-process"]
 ```
 
 Every step must pass. The migration round trip catches a downgrade that does not undo its
@@ -90,10 +92,13 @@ Some tests exist only so that a description cannot drift from what it describes:
 | `tests/unit/test_model_provenance.py` | the provenance rule on every surface that names a model (chapter 8) |
 | `tests/unit/test_job_registration.py` | every enqueued task has a handler and the outbox has a scheduled repair path — both were broken on a running service, silently |
 | `tests/unit/test_disabled_features_cost_nothing.py` | a feature that is off is not built, loaded or advertised |
+| `make docs-check` (`scripts/check_docs.py`) | every relative link and anchor in the repository's Markdown resolves; every `python` snippet in the docs parses and calls only SDK methods and keywords that exist; a snippet marked `# example:` is an excerpt of an example that calls the same methods; every `make` target a `bash` snippet names exists |
+| `make examples` | the numbered examples in [`examples/`](../../examples/README.md) run offline against an in-process service and assert what they show |
+| `tests/unit/test_configuration_doc.py` | every setting has a row in [the configuration reference](../configuration.md) and a line in `.env.example`, every default there is the code's, and the examples column is a valid production configuration |
 | `tests/e2e/test_readme_examples.py` | every README snippet a reader is invited to copy runs against the real service: "if you change the SDK surface and this fails, fix the README in the same commit" |
 | `tests/contract/test_openapi_contract.py`, `test_openapi_conventions.py` + the CI diff | every public route documents its examples and errors; operation ids, headers and problem details follow ADR 0022 |
 | `tests/contract/test_deployment_profiles.py` | the deployment shapes that actually exist — and the degraded ones promised to survive: no cache, graph enrichment off, no LLM — each wired and made to do real work |
-| `tests/eval/test_capability_coverage.py` | removing seven retrieval flags removed no capability: each test runs with the candidate flags off on an adversarial corpus ([CAPABILITY_COVERAGE.md](../CAPABILITY_COVERAGE.md), ADR 0012) |
+| `tests/eval/test_capability_coverage.py` | removing seven retrieval flags removed no capability: each test runs with the candidate flags off on an adversarial corpus (ADR 0012; the test is the maintained record of which capability provides what) |
 | `tests/unit/test_benchmark_locomo_scoring.py`, `test_benchmark_store_guard.py` | the benchmark scorers, and the refusal to reset a store a benchmark does not own |
 
 ---
@@ -156,11 +161,14 @@ runs, only their timestamps.
   in this repository "is a statement about the service logic, not about a deployment"
   (ADR 0015).
 
-**Planned, not done.** ADR 0017 (status: in progress) defines the real-component validation:
-the same gates with real weights, real OpenFGA, Qdrant and Dragonfly servers and real workers
-over a network hop, and a keep/cut row per component. Its gate table's "real value" column and
-its keep/cut table are still empty. [FINAL_REPORT.md](../FINAL_REPORT.md) is explicit that the
-service is not declared production-ready until those gates pass with representative providers.
+**Planned, not done.** ADR 0017 (now closed and superseded by ADRs 0024-0026) defined the
+real-component validation: the same gates with real weights, real OpenFGA, Qdrant and
+Dragonfly servers and real workers over a network hop, and a keep/cut row per component. The
+retrieval part was carried out as the Phase 7-11 programme; its gate table's "real value"
+column and its keep/cut table were never filled, so the release gates have still not run end
+to end with representative providers. The dated M13 gate account,
+[FINAL_REPORT.md](../../benchmark/reports/FINAL_REPORT.md), is explicit that the service is not
+declared production-ready until they do.
 
 ---
 
@@ -172,7 +180,7 @@ benchmarks run with the real encoders, PostgreSQL and Qdrant:
 | Question | Target | Recorded in |
 |---|---|---|
 | Does the right evidence reach a conversational context? (no LLM, per-arm rank dumps) | `make bench-locomo-source` | `benchmark/results/phase12/`, `overhaul/`; ADR 0026 |
-| Do answers come out right? (generate, then grade with a model) | `make bench-locomo-judged`, `make bench-longmemeval` | ADR 0027 evidence; `docs/history/` |
+| Do answers come out right? (generate, then grade with a model) | `make bench-locomo-judged`, `make bench-longmemeval` | ADR 0027 evidence; `benchmark/reports/` |
 | Document retrieval quality, and twelve languages | `make bench-runtime-retrieval` (SciFact, XQuAD), `make bench-external` | `phase7/`; ADR 0024, ADR 0025 |
 | `/v1/context` and `/v1/recall` latency, model off | `make bench-context-latency` | `overhaul/context_latency_*.json`; `docs/MEASUREMENTS.md` §8 |
 | Empty, garbage and hostile input | `make bench-degenerate` | `degenerate*.json`; `docs/MEASUREMENTS.md` §4 |
@@ -180,7 +188,7 @@ benchmarks run with the real encoders, PostgreSQL and Qdrant:
 | A deployed instance under load | `make load-test`, `make gates-network` | `load_test.json`, `*_network.json` |
 
 `docs/MEASUREMENTS.md` is the account of each run — what was measured, on which box, and
-what is not trustworthy — and [FINAL_REPORT.md](../FINAL_REPORT.md) the per-gate account.
+what is not trustworthy — and [FINAL_REPORT.md](../../benchmark/reports/FINAL_REPORT.md) the dated per-gate account.
 
 ### Guards against a benchmark lying
 
@@ -236,5 +244,5 @@ The rules every document here follows, and where each is enforced:
 ## What to read next
 
 - The measurements themselves, with their caveats → [MEASUREMENTS.md](../MEASUREMENTS.md)
-- The per-gate account and the production-readiness verdict → [FINAL_REPORT.md](../FINAL_REPORT.md)
+- The per-gate account and the production-readiness verdict → [FINAL_REPORT.md](../../benchmark/reports/FINAL_REPORT.md) (dated 2026-09-15)
 - How to work on the service → [CONTRIBUTING.md](../CONTRIBUTING.md)

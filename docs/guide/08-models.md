@@ -18,7 +18,7 @@ vector collections and vectors from two encoders can never share one.
 
 | Role | Model | Runtime | Used for | Why this one |
 |---|---|---|---|---|
-| English dense (`dense_en`) | `ibm-granite/granite-embedding-small-english-r2`, 384-d, Apache-2.0 | ONNX, FP32 | Latin-script queries, every record | lowest query p95 of the candidates benchmarked at the smallest useful dimension ([README](../../README.md#what-actually-runs)) |
+| English dense (`dense_en`) | `ibm-granite/granite-embedding-small-english-r2`, 384-d, Apache-2.0 | ONNX, FP32 | Latin-script queries, every record | lowest query p95 of the candidates benchmarked at the smallest useful dimension ([below](#how-the-english-encoder-was-chosen)) |
 | Multilingual dense (`dense_ml`) | `hotchpotch/bekko-embedding-v1-a8m`, 384-d, MIT | ONNX | every query and record; the relevance floor (0.20) is its cosine | XQuAD paragraph R@10 over 12 languages: 98.83% against 65.96% for the English encoder (ADR 0024) |
 | Sparse (`bm25`) | client-side BM25 term frequencies, Qdrant applies IDF | no weights | every query and record | exact terms, identifiers, numbers |
 | Late interaction (`colbert`) | `mixedbread-ai/mxbai-edge-colbert-v0-32m`, 64-d per token, Apache-2.0 | publisher's ONNX export, FP32 | rescoring the other arms' candidates | SciFact nDCG@10 0.746 → 0.759 offline at weight 2.0 (ADR 0025) |
@@ -30,6 +30,26 @@ graphs were measured and rejected**: the NLI's int8 graph lost eleven points (AD
 ColBERT int8 graph changed every top-10 checked (ADR 0025), and on the measuring box the
 English encoder's int8 graph was slower than FP32 and its worst vector sat at cosine 0.9667
 from the reference (`docs/MEASUREMENTS.md` §7).
+
+### How the English encoder was chosen
+
+`make bench-embedding` runs every candidate through the real pipeline and the golden set
+(`benchmark/results/embedding.json`, p95 over 18 golden queries in a 4-core container). The
+384-dimension encoder answered at a query p95 of 204 ms and indexed the set in 59 s; its
+768-dimension sibling took 2,020 ms and 369 s. Both scored Recall@20 and evidence-group recall
+of 1.00. Three things that tells you:
+
+- **Quality is undiscriminated, not equal.** Every candidate scoring a perfect 1.00 means the
+  golden set (18 questions over 2 documents) is too easy to rank encoders; it needs harder
+  questions before it can.
+- **Bigger is not better under a latency budget.** The larger encoders bought no measurable
+  recall here and cost 10 to 26 times their smaller siblings.
+- **The early recall budget did not survive real models.** End-to-end recall p95 in that run
+  was 3.5-4.1 s for every candidate; the budgets had been set against the deterministic
+  stand-in. Today's read-path figures are in `docs/MEASUREMENTS.md` §8.
+
+Rows for models since excluded by provenance remain in `embedding.json` as evidence, not as
+candidates.
 
 **Provenance rule.** No Chinese-developed checkpoint or derivative runs anywhere in the stack
 — not as a default, a benchmark challenger, an operator's choice or a model discovered through
@@ -93,8 +113,8 @@ inside the application's own deployment, which is the coupling the gateway exist
 
 ### When a call is allowed
 
-A use runs only when all four hold (`LLMAssist.wants`, `modules/llm/assist.py`;
-[LLM-USES.md](../LLM-USES.md)):
+A use runs only when all four hold (`LLMAssist.wants`, `modules/llm/assist.py`; each use is
+in [the twelve uses](#the-twelve-uses)):
 
 ```mermaid
 flowchart TB
@@ -163,23 +183,35 @@ reads, because which uses are active is part of the context cache key (chapter 4
 ## The twelve uses
 
 `LLMUse` in `config/settings.py` names twelve. Each is optional work layered on a
-deterministic path; the full table, with exactly when each runs, is
-[LLM-USES.md](../LLM-USES.md).
+deterministic path, and any model failure (no key, gateway error, rate limit, invalid output)
+falls back to that path. The tier is the model the call goes to: `fast`
+(`LLMTuning.fast_model`) for `contextual_extraction`, `query_expansion`, `chunk_context` and
+`memory_restatement`, `strong` (`LLMTuning.model`) for the rest; a tenant's policy may name a
+gateway model per use instead (`models: {"memory_restatement": "<gateway model id>"}`).
+`/v1/context` and `/v1/recall` make no model call unless the read is assisted (the policy's
+`read_assist`), and then only `query_expansion`.
 
-| Use | Tier | Where | Without it |
+### Ingestion (background jobs; never on the request that wrote the data)
+
+| use | when it runs | tier | what it produces | without it |
+|---|---|---|---|---|
+| `contextual_extraction` | a user message the rules cannot fully read. **English**: two or more sentences no rule parsed → the model selects source spans (narrative units, `modules/memory/narrative.py`), never new wording. **Any other language** (`Observation.lang`, `domain/language.py`): every message with a sentence that is not a question or an acknowledgement → typed facts in the message's language, each citing its sentences (`modules/memory/source_facts.py`); a slot (`lives_in`, `works_at`, `name`, ...) only when its value is copied from the cited text, so a German message can supersede an English fact | fast | OBSERVATION spans (English); PREFERENCE / USER / SEMANTIC / EPISODIC / TASK facts (other languages) | English rules only; the verbatim turn is kept in every language, so the text stays retrievable through the multilingual dense space |
+| `relation_extraction` | graph enrichment of a memory. English: ≥ 2 entities found by the rules and only `mentions` edges between them → typed relations among those entities. Other languages: the model names both ends and the relation (`graph/native.py:open_relations`), and both names must occur verbatim in the text. Documents: the top co-occurring entity pairs (English), and up to `LLM_MAX_OPEN_CHUNKS_PER_DOCUMENT` = 6 chunks not in English | strong | typed edges (`extraction: llm`, confidence ≤ 0.8) | `mentions` / `co_occurs_with` / structural edges |
+| `chunk_context` | document ingestion: parts of a split node, tables, and chunks not in English, at most 48 per document | fast | a 1-2 sentence situating context indexed with the chunk (`text` never changes) | the deterministic header (title, section path, salient entities) |
+| `conflict_adjudication` | a new fact in the grey band of lexical similarity to an existing one (same numbers, same negation) | strong | supersede / keep-both decision | the deterministic lexical/dense thresholds |
+| `summaries` | document node summaries (bounded number per document), thread summaries (`summary.refresh`, every `SUMMARY_EVERY` messages), the `user` profile block, graph entity summaries (≤ 4 model calls per enrichment job) | strong | abstractive text | the extractive / template text, stored the same way |
+| `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
+| `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
+| `memory_restatement` | **opt-in** (ADR 0027): a conversation message, at ingest, when the tenant's policy names this use. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
+| `procedure_abstraction` | the tool-learning job, for a procedure that clears support and success-rate gates | strong | title and strategy text distilled from successes and failures | the miner's own rendering |
+
+### Reads (only when the read is assisted)
+
+| use | when it runs | tier | fallback |
 |---|---|---|---|
-| `contextual_extraction` | fast | ingest: English sentences no rule parsed; every message not in English | English rules only; the verbatim turn stays retrievable in every language |
-| `relation_extraction` | strong | graph enrichment of memories and documents | `mentions`, `co_occurs_with` and structural edges |
-| `chunk_context` | fast | document ingestion: split nodes, tables, non-English chunks | the deterministic header |
-| `conflict_adjudication` | strong | consolidation's grey band of lexical similarity | the lexical and dense thresholds |
-| `summaries` | strong | document node, thread, profile and entity summaries | extractive or template text |
-| `reflection` | strong | periodic, every six hours: cited insights over recent memories | none |
-| `memory_connections` | strong | periodic, every six hours: typed edges between memories | none |
-| `memory_restatement` | fast | **opt-in**: each conversation message at ingest (ADR 0027) | the turn indexed as said |
-| `procedure_abstraction` | strong | tool learning: titles and strategies for procedures that clear the gates | the miner's own rendering |
-| `query_expansion` | fast | reads: a question no rule classified, under a 250 ms deadline | the unexpanded hybrid search |
-| `entity_resolution` | strong | `GET /v1/graph/entities?q=` names with no lexical match | lexical match only |
-| `grounding_judge` | strong | `/v1/verify`: claims in the borderline band | the claim stays `borderline` |
+| `query_expansion` | `/v1/context` or `/v1/recall` whose question no rule classified - which includes every question not in English, since the router's cue patterns are English and never route another language (`modules/retrieval/router.py`) | fast | the unexpanded hybrid search (every dense space, BM25, the graph by entity name) |
+| `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
+| `grounding_judge` | `/v1/verify`: claims the NLI cascade could not decide | strong | the claim stays undecided |
 
 Reflection and connections are only registered as jobs when a gateway is configured
 (`modules/jobs/registry.py`, crons `53 */6 * * *` and `19 */6 * * *`). The read path makes no
@@ -191,7 +223,8 @@ budget (`docs/MEASUREMENTS.md` §8.4).
 An optional **Hindsight** extraction service can take non-agent contextual extraction when a
 deployment runs one (`MEMORY__HINDSIGHT__BASE_URL` and the `[hindsight]` extra;
 `adapters/models/hindsight.py`); agent extraction stays on the Bifrost path because that SDK
-cannot carry a per-request virtual key ([README](../../README.md#about-the-llm)).
+cannot carry a per-request virtual key. The Hindsight server owns its own model configuration;
+source storage and authorization stay in this service.
 
 ---
 

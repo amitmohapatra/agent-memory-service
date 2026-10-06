@@ -290,7 +290,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 - There is no workspace-level key or policy, no per-request `use_llm`, and no
   `MEMORY__MODELS__*` variable; model defaults are code constants (`auto` via the gateway).
 - Changing a policy or key invalidates cached model-assisted reads.
-- Each use, its tier and its fallback: [`LLM-USES.md`](LLM-USES.md).
+- Each use, its tier and its fallback: [the twelve uses](guide/08-models.md#the-twelve-uses).
 
 ## 12. Tenancy operations
 
