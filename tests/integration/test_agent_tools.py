@@ -162,6 +162,11 @@ async def test_message_search_reads_every_conversation_of_the_user_and_no_one_el
     )
     assert [h["thread_id"] for h in tool] == ["thr_june", "thr_july"]
 
+    # bounded by the user's most recently active threads, not by all they ever said
+    async with uow_factory() as uow:
+        newest = await uow.messages.owned_recent("acme", "ann", limit=10, threads=1)
+    assert {m.thread_id for m in newest} == {"thr_july"}
+
 
 async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
     container, uow_factory

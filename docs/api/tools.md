@@ -45,7 +45,7 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
-| `GET /v1/tools/skill-drafts` | the tenant's active procedures as draft Agent Skills (administrator) | `ctx.advanced.tools.skill_drafts()` |
+| `GET /v1/tools/skill-drafts` | the tenant's active procedures as draft Agent Skills, the 100 best supported (administrator) | `ctx.advanced.tools.skill_drafts()` |
 | `POST /v1/tools/skill-drafts/{draft_id}/publish` | publish one where agents load skills from (administrator) | `ctx.advanced.tools.publish_skill(id, name=…, description=…)` |
 | `POST /v1/tools/skill-drafts/{draft_id}/dismiss` | not a skill: not offered again until its steps change (administrator) | `ctx.advanced.tools.dismiss_skill(id)` |
 

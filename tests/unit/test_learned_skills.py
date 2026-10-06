@@ -15,7 +15,12 @@ from memory_service.adapters.skills import (
     front_matter_metadata,
     skill_md,
 )
-from memory_service.domain.errors import Conflict, NotFound, ProviderNotConfigured
+from memory_service.domain.errors import (
+    Conflict,
+    DependencyUnavailable,
+    NotFound,
+    ProviderNotConfigured,
+)
 from memory_service.domain.tools import SkillDecision, StoredProcedure
 from memory_service.modules.tools.skills import (
     SkillDrafts,
@@ -168,7 +173,7 @@ async def test_a_failed_write_leaves_no_half_file(tmp_path, monkeypatch) -> None
         raise OSError("disk full")
 
     monkeypatch.setattr("memory_service.adapters.skills.os.replace", boom)
-    with pytest.raises(OSError):
+    with pytest.raises(DependencyUnavailable, match="disk full"):
         await store.publish(_content(), tenant_id="acme")
     assert list((tmp_path / "quote-price").iterdir()) == []
 
@@ -292,3 +297,28 @@ def test_the_store_is_the_folder_when_set_else_the_gateway_else_none(tmp_path) -
     assert isinstance(gateway, BifrostSkills) and gateway.token == "t"
     assert store(bifrost_url=GATEWAY, bifrost_admin_token="").token is None
     assert store(bifrost_url=GATEWAY).token is None
+
+
+@respx.mock
+async def test_a_gateway_that_fails_is_unavailable_and_one_that_refuses_a_version_conflicts() -> (
+    None
+):
+    respx.get(f"{GATEWAY}/api/skills").mock(side_effect=httpx.ConnectError("refused"))
+    with pytest.raises(DependencyUnavailable):
+        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
+    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(401, json={}))
+    with pytest.raises(DependencyUnavailable):
+        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
+    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(200, json=_listing()))
+    respx.post(f"{GATEWAY}/api/skills").mock(
+        return_value=httpx.Response(409, json={"error": "version exists"})
+    )
+    with pytest.raises(Conflict):
+        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
+
+
+async def test_a_folder_that_cannot_be_written_is_unavailable(tmp_path) -> None:
+    blocked = tmp_path / "blocked"
+    blocked.write_text("a file where the folder should be")
+    with pytest.raises(DependencyUnavailable):
+        await FolderSkills(blocked).publish(_content(), tenant_id="acme")

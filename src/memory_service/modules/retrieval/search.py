@@ -50,8 +50,10 @@ DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
 #: The newest messages across the user's own threads one ``threads="all"`` search scores (a
-#: time range moves the window: the bound applies within it).
+#: time range moves the window: the bound applies within it), read from the user's most
+#: recently active threads (every message appended makes its thread active).
 OWNED_SCAN: Final = 1000
+OWNED_THREADS: Final = 100
 _WORD: Final = re.compile(r"\w+")
 
 
@@ -282,5 +284,10 @@ class Searcher:
         since, until = observed or (None, None)
         async with self.uow_factory() as uow:
             return await uow.messages.owned_recent(
-                ctx.tenant_id, ctx.user_id, limit=OWNED_SCAN, since=since, until=until
+                ctx.tenant_id,
+                ctx.user_id,
+                limit=OWNED_SCAN,
+                threads=OWNED_THREADS,
+                since=since,
+                until=until,
             )

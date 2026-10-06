@@ -190,7 +190,7 @@ Two kinds reach earlier chats, and both stay inside the user's own:
 | Ask for | You get | Reads |
 |---|---|---|
 | `kinds=["episode"]` | one ranked item per earlier conversation: its summary and a digest of what followed | the episode index (semantic) |
-| `kinds=["message"], threads="all"` | the exact messages that share words with the query, each with its `thread_id` | the newest 1,000 visible messages across the threads the user owns (`OWNED_SCAN`); a time range moves the window |
+| `kinds=["message"], threads="all"` | the exact messages that share words with the query, each with its `thread_id` | the newest 1,000 visible messages (`OWNED_SCAN`) of the user's 100 most recently active threads (`OWNED_THREADS`); a time range moves the window |
 
 `threads` defaults to `current`, this thread only, as before. `all` reads the threads whose
 owner is the caller's user (the user who started them); another user's threads are never read,

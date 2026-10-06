@@ -22,9 +22,11 @@ import re
 import tempfile
 from pathlib import Path
 
+import httpx
+from bifrost_sdk import BifrostError, ConflictError
 from bifrost_sdk.admin import Admin
 
-from memory_service.domain.errors import Conflict
+from memory_service.domain.errors import Conflict, DependencyUnavailable
 from memory_service.ports.skills import (
     TENANT_KEY,
     SkillContent,
@@ -104,7 +106,10 @@ class FolderSkills:
         self.root = Path(root)
 
     async def publish(self, skill: SkillContent, *, tenant_id: str) -> str:
-        return await asyncio.to_thread(self._publish, skill, tenant_id)
+        try:
+            return await asyncio.to_thread(self._publish, skill, tenant_id)
+        except OSError as exc:  # a read-only volume, a file where the folder should be
+            raise DependencyUnavailable(f"the skills folder cannot be written: {exc}") from exc
 
     def _publish(self, skill: SkillContent, tenant_id: str) -> str:
         folder = self.root / _checked(skill.name)
@@ -137,6 +142,14 @@ class BifrostSkills:
 
     async def publish(self, skill: SkillContent, *, tenant_id: str) -> str:
         name = _checked(skill.name)
+        try:
+            return await self._publish(name, skill, tenant_id)
+        except ConflictError as exc:  # another publication took the version first
+            raise Conflict(f"the gateway refused {name}: {exc}") from exc
+        except (BifrostError, httpx.HTTPError) as exc:
+            raise DependencyUnavailable(f"the gateway's skills repository: {exc}") from exc
+
+    async def _publish(self, name: str, skill: SkillContent, tenant_id: str) -> str:
         async with Admin(self.base_url, token=self.token) as admin:
             existing = await admin.skills.find(name)
             if existing is None:
