@@ -118,12 +118,14 @@ class MessageRepository(Protocol):
         *,
         limit: int,
         threads: int,
+        words: Sequence[str],
         since: datetime | None = None,
         until: datetime | None = None,
     ) -> list[Message]:
         """Visible messages of the ``threads`` most recently active threads ``owner_user_id``
-        owns (none deleted), newest first, at most ``limit``, observed within
-        ``since``..``until`` when given."""
+        owns (none deleted) that contain one of ``words`` (case-insensitive; none: no
+        message), newest first, at most ``limit``, observed within ``since``..``until`` when
+        given."""
         ...
 
     async def find_by_source(

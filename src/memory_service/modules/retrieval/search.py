@@ -46,11 +46,13 @@ SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
-#: The newest messages of the user's earlier conversations one search scores (a time range
-#: moves the window: the bound applies within it), read from the user's most recently active
-#: threads (every message appended makes its thread active).
-OWNED_SCAN: Final = 1000
+#: The newest messages of the user's earlier conversations that share a word with the query
+#: one search scores (a time range moves the window: the bound applies within it), read from
+#: the user's most recently active threads (every message appended makes its thread active).
+OWNED_SCAN: Final = 200
 OWNED_THREADS: Final = 100
+#: The query's longest words the database filters earlier conversations by.
+OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
 
 
@@ -243,9 +245,10 @@ class Searcher:
         thread's newest, then the newest of the user's earlier conversations (newest first
         among equals); every message when the query shares nothing with any. Without a user,
         this thread's only."""
-        here = await self._thread(ctx)
-        earlier = [m for m in await self._owned(ctx, observed) if m.thread_id != ctx.thread_id]
         wanted = _words(query)
+        # independent reads: this thread and the user's earlier ones
+        here, owned = await asyncio.gather(self._thread(ctx), self._owned(ctx, wanted, observed))
+        earlier = [m for m in owned if m.thread_id != ctx.thread_id]
         scored = [
             (len(wanted & _words(m.content)), m)
             for m in (*here, *earlier)
@@ -273,7 +276,7 @@ class Searcher:
             )
 
     async def _owned(
-        self, ctx: MemoryExecutionContext, observed: ObservedRange | None
+        self, ctx: MemoryExecutionContext, wanted: set[str], observed: ObservedRange | None
     ) -> list[Message]:
         """The newest messages of the threads the caller's user owns: the user's own
         conversations, which only that user (and the agents acting for them) reads. No user,
@@ -287,6 +290,7 @@ class Searcher:
                 ctx.user_id,
                 limit=OWNED_SCAN,
                 threads=OWNED_THREADS,
+                words=sorted(wanted, key=lambda w: (-len(w), w))[:OWNED_WORDS],
                 since=since,
                 until=until,
             )
