@@ -91,6 +91,7 @@ def test_a_summary_over_its_share_is_truncated_not_dropped() -> None:
 def test_a_tools_request_is_part_of_the_cache_identity() -> None:
     assert ToolsRequest().fingerprint() == "tools:8:*"
     assert ToolsRequest(available=["b", "a"], k=3).fingerprint() == "tools:3:a,b"
+    assert ToolsRequest(hints=False).fingerprint() == "tools:8:*:nohints"
 
 
 def _bundle(**extra) -> ContextBundle:
