@@ -20,11 +20,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextItem,
-    ProcedureView,
     ProfileBlockView,
+    SkillView,
     ThreadSummaryView,
-    procedures_section,
     profile_section,
+    skills_section,
     summary_section,
     tools_section,
 )
@@ -33,10 +33,15 @@ from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.retrieval.engine import Candidate, QueryVectors, memory_candidate
+from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.uow import UnitOfWorkFactory
 
-#: Procedures a context carries.
+#: Learned skills a context carries.
 CONTEXT_PROCEDURES: Final = 3
+#: The smallest toolbox the context hints tools for: below it the model already sees every
+#: tool, and the hints (read after retrieval) would only add latency. The learned skills are
+#: offered to any agent with tools.
+TOOL_HINTS_MIN: Final = 5
 #: The share of the token budget the pinned sections may take, all together.
 PINNED_SHARE: Final = 0.5
 #: A summary truncated below this many tokens says too little to keep.
@@ -47,7 +52,8 @@ CHARS_PER_TOKEN: Final = 4
 
 class ToolsRequest(BaseModel):
     """``tools`` of a context request: the agent's callable tools (None: any catalog tool).
-    An agent with tools gets the procedures learned for the task and the tool hints."""
+    An agent with tools gets the skills it learned for the task; with five or more (or the
+    catalog), the tool hints too."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -58,38 +64,40 @@ class ToolsRequest(BaseModel):
         "empty: none.",
     )
     k: int = Field(default=8, ge=1, le=20, description="The most tools to hint (1-20).")
+    hints: bool = Field(
+        default=True,
+        description="false: only the skills the agent learned, no tool hints (which are read "
+        "after retrieval): for a caller that offers the model every tool anyway.",
+    )
 
     @property
     def any(self) -> bool:
         """Whether the agent has any tool (an empty list: none)."""
         return self.available is None or bool(self.available)
 
+    @property
+    def hinted(self) -> bool:
+        """Whether the tools are hinted: asked for, and any catalog tool or a toolbox of
+        ``TOOL_HINTS_MIN`` or more."""
+        return self.hints and (self.available is None or len(self.available) >= TOOL_HINTS_MIN)
+
     def fingerprint(self) -> str:
         names = ",".join(sorted(self.available)) if self.available is not None else "*"
-        return f"tools:{self.k}:{names}"
+        # the default request keeps its key; only an opt-out of hints is a different bundle
+        return f"tools:{self.k}:{names}" + ("" if self.hints else ":nohints")
 
 
 @dataclass
 class Pinned:
     profile: list[ProfileBlockView] = field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
-    procedures: list[ProcedureView] = field(default_factory=list)
+    procedures: list[SkillView] = field(default_factory=list)
     prefetched: list[Candidate] = field(default_factory=list)
     tools: ToolHints | None = None
 
     @property
     def covered_to(self) -> int:
         return self.thread_summary.covers_to_sequence if self.thread_summary else 0
-
-
-def _procedure_view(p: StoredProcedure) -> ProcedureView:
-    return ProcedureView(
-        id=p.procedure_id,
-        title=p.title,
-        steps=p.steps,
-        success_rate=p.success_rate,
-        support=p.support,
-    )
 
 
 def _truncated(summary: ThreadSummaryView, tokens: int) -> ThreadSummaryView | None:
@@ -122,7 +130,7 @@ def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
         elif (cut := _truncated(pinned.thread_summary, allowed - used)) is not None:
             kept.thread_summary = cut
             used += estimate_tokens(summary_section(cut) or "")
-    if (text := procedures_section(pinned.procedures)) and used + estimate_tokens(text) <= allowed:
+    if (text := skills_section(pinned.procedures)) and used + estimate_tokens(text) <= allowed:
         kept.procedures, used = pinned.procedures, used + estimate_tokens(text)
     if (text := tools_section(pinned.tools)) and used + estimate_tokens(text) <= allowed:
         kept.tools, used = pinned.tools, used + estimate_tokens(text)
@@ -161,7 +169,7 @@ class ContextSections:
         return Pinned(
             profile=found_profile,
             thread_summary=found_summary,
-            procedures=[_procedure_view(p) for p in found_procedures],
+            procedures=[skill_view(p) for p in found_procedures],
             prefetched=prefetched,
         )
 

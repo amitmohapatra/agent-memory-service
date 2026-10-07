@@ -548,7 +548,7 @@ class ContextBuilder:
         result.candidates[:0] = fresh
         if fresh:
             result.diagnostics["prefetched"] = [c.record_id for c in fresh]
-        if tools is not None and tools.any and self.sections is not None:
+        if tools is not None and tools.hinted and self.sections is not None:
             with timings.stage("tools"):
                 pinned.tools = await self.sections.tools(
                     ctx,

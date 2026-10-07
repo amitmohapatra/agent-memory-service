@@ -272,7 +272,7 @@ sequenceDiagram
     B-->>A: served as stored
   else miss
     par read under retrieval
-      B->>S: profile, thread summary, procedures, tool hints
+      B->>S: profile, thread summary, learned skills, tool hints
       B->>B: recent messages for the window
     and
       B->>E: retrieve(query, audience)
@@ -295,10 +295,11 @@ separate **semantic cache** reuses a bundle only for a deliberately narrow equiv
 the same question minus polite framing and punctuation — and refuses any question that names
 "now", "today", "latest" or quotes (`modules/context/semantic_cache.py`).
 
-**Pinned sections first.** The profile blocks, the thread summary, the procedures learned for
-the task and the tool hints open the prompt, in that priority, and together take at most half
-the budget (`PINNED_SHARE = 0.5`, `modules/context/sections.py`). Each is one indexed read,
-run concurrently with retrieval, and none calls a model.
+**Pinned sections first.** The profile blocks, the thread summary, the skills the agent
+learned for the task ([api/skills.md](../api/skills.md)) and the tool hints open the prompt, in
+that priority, and together take at most half the budget (`PINNED_SHARE = 0.5`,
+`modules/context/sections.py`). Each but the hints is one indexed read run concurrently with
+retrieval; the hints follow it, only for five or more tools; none calls a model.
 
 **The relevance floor.** A fusion score only orders. Without a floor, a question the store
 cannot answer fills its budget with whatever ranked next. Each ranked memory, chunk and

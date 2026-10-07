@@ -45,9 +45,6 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
-| `GET /v1/tools/skill-drafts` | the tenant's active procedures as draft Agent Skills, the 100 best supported (administrator) | `ctx.advanced.tools.skill_drafts()` |
-| `POST /v1/tools/skill-drafts/{draft_id}/publish` | publish one where agents load skills from (administrator) | `ctx.advanced.tools.publish_skill(id, name=…, description=…)` |
-| `POST /v1/tools/skill-drafts/{draft_id}/dismiss` | not a skill: not offered again until its steps change (administrator) | `ctx.advanced.tools.dismiss_skill(id)` |
 
 `POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's
 `ctx.context(query, tools=[...names])`), and
@@ -101,9 +98,10 @@ result = await ctx.record_tool(
 `task` is the question, in words: it is normalised into a typed-placeholder **pattern**
 (`order {num} sheets of {id} paper from {entity}`) that procedures are keyed on, so two phrasings
 of the same request pool their runs. `step` makes a chain a chain. `visibility` defaults to
-`PRIVATE` (this agent, across its runs); a procedure is readable by exactly the audience of the
-calls it was learned from, so share with `AGENT_GROUP`, `WORKSPACE` or `TENANT` to learn across
-agents or users. Every new call is counted on the tool (calls, successes, latency).
+`PRIVATE`: the agent's own records, which are learned **per agent, across all of its users**
+(the agent's [learned skills](skills.md)). Calls shared with `AGENT_GROUP`, `WORKSPACE` or
+`TENANT` are learned for that audience instead, to learn across agents. Every new call is
+counted on the tool (calls, successes, latency).
 
 ## Tool hints
 
@@ -157,7 +155,9 @@ calls (the prefix-tree miner: coverage first, then length; retries collapse; fai
 as the step's failure modes) and updates that pattern's one stored procedure — a delta, never a
 rewrite of the others. A procedure is **active** (offered) once at least 2 runs support it and
 at least 60% succeeded; it is **retired** when that stops holding and **rejected** by a
-`reject` verdict on it (`target_kind: procedure`) until its steps change.
+`reject` verdict on it (`target_kind: procedure`) or a [dismissal](skills.md) until its steps
+change. An active procedure is the agent's **learned skill** for that kind of task: the
+context offers it in full ([skills.md](skills.md)).
 
 With the tenant's model (use `procedure_abstraction`, the recording principal's key), an active
 procedure whose steps changed is distilled into a title and a strategy from the runs that
@@ -197,46 +197,9 @@ rules of the route:
 
 ## Learned skills
 
-An **active** procedure is something the agents have done successfully, again and again. A
-skill draft offers it to the tenant's administrator as an [Agent Skill](https://agentskills.io):
-a `SKILL.md` built from the procedure alone (its title, the tasks it is for, the strategy and
-the steps in order, with what to do on the errors that happened), nothing invented. A person
-decides; nothing is published on its own.
-
-```python
-admin = admin_client.bind(tenant_id="acme")  # the tenant's administrator key
-for d in await admin.advanced.tools.skill_drafts():  # new, or changed since published
-    print(d.id, d.state, d.name, d.support, d.success_rate)
-    print(d.body)
-decision = await admin.advanced.tools.publish_skill(d.id, name="refund-order")
-print(decision.name, decision.version, decision.destination)  # refund-order 1.0.0 bifrost
-await admin.advanced.tools.dismiss_skill(other.id)  # not a skill
-```
-
-**Where it goes.** Where the agents already load skills from, so nothing else changes for
-them: the folder `SKILLS_DIR` names when it is set (`<name>/SKILL.md`, the Agent Skills layout
-the harness's `skills_dir`, the Claude Agent SDK and Deep Agents read), else the Bifrost
-gateway's skills repository (`BIFROST_URL`; `BIFROST_ADMIN_TOKEN` when its management API
-needs a credential). Neither configured: `503`. An agent picks the skill up by name, for
-example `h.wrap(agent, skills=["refund-order"])`.
-
-**Versions and rollback.** The first publication is `1.0.0`, each later one the next minor
-(`1.1.0`). On the gateway every version is kept and a rollback is its own
-`shift_version`; a folder is replaced whole (atomically), and its rollback is the folder's own
-history (git, a volume snapshot). A run pins the version it loaded, so a new version never
-changes a run under way.
-
-**Decisions are kept with the steps.** Publishing or dismissing records the decision on the
-procedure, with the steps it was about (`GET /v1/tools/skill-drafts` no longer lists it); a
-retry sent with the same `Idempotency-Key` gets that decision back instead of a `409`. When
-the learning job finds different steps, the draft comes back: `new`, or `changed` naming what
-was published so it is published again under the same name. A re-mine never overwrites a
-decision.
-
-**Ownership.** A published skill's metadata names the tenant and the procedure
-(`trellis_tenant`, `trellis_procedure`). Publishing over a skill of the same name that this
-tenant did not publish — a person's, another tenant's — is refused (`409`); choose another
-`name`.
+What an agent's successful runs proved is offered back to that agent on its own, in its
+context, with nobody publishing or approving it: see [skills.md](skills.md) (`GET /v1/skills`
+to see them, `POST /v1/skills/{skill_id}/dismiss` to stop one).
 
 ## Tools in context: what is sent, what comes back
 
@@ -253,13 +216,13 @@ sequenceDiagram
   H->>S: PUT /v1/tools/catalog {tools: [name, description, input_schema, source, server, side_effects or annotations]}
   Note over H,S: only entries not published before (digest), in the background
   H->>S: POST /v1/context {query: task, tools: {available: [names]}, window}
-  Note over H,S: tools are sent only when the run has at least 5 of its own (TOOL_HINTS_MIN)
+  Note over H,S: the run's own tools, always; hints only for 5 or more (TOOL_HINTS_MIN)
   S-->>H: {bundle_id, rendered, token_estimate, evidence_status, tools: [{name, confidence}]}
-  Note over H: tools narrow the tools the model is offered
+  Note over H: learned skills in rendered; tools narrow the tools the model is offered
   H->>S: POST /v1/tools/invocations {tool, args, output, status, error_class, latency_ms, task, step}
   Note over H,S: one per call the agent makes, idempotent on (run, step, tool, args)
   S->>W: tools.learn, tools.index
-  W->>S: procedures per (audience, task pattern), tool statistics
+  W->>S: procedures per (agent or audience, task pattern), tool statistics
   Note over H,S: the next run's context carries what was learned
 ```
 
@@ -268,7 +231,7 @@ sequenceDiagram
 | When | Request | Tool fields | Where in the harness |
 |---|---|---|---|
 | a run's toolbox is resolved | `PUT /v1/tools/catalog` | `name`, `description`, `input_schema`, `source` (`local`, `mcp`, `openapi`, `a2a`), `server`; `side_effects` where the harness knows them (local and OpenAPI tools), the server's `annotations` for MCP tools (the service derives the tier) | `tools/toolbox.py`, `governance/catalog.py` (`entry`, `MemoryCatalog.publish`) |
-| before the model runs | `POST /v1/context` | `tools.available`: the run's own tool names (not the memory tools), only when there are at least 5; `tools.k` defaults to 8 | `agent.py::push` |
+| before the model runs | `POST /v1/context` | `tools.available`: the run's own tool names (not the memory tools), always; `tools.k` defaults to 8 | `agent.py::remembered` |
 | each tool call | `POST /v1/tools/invocations` | `tool`, `args`, `output`, `status` (ok, error, timeout, rejected, cancelled), `error_class`, `latency_ms`, `task`, `step` | `clients/memory.py::record_tool` |
 | on demand, mid-run | `POST /v1/tools/hints` | `task`, `available` (the run's tool names) | the `tool_search` memory tool |
 
@@ -280,22 +243,25 @@ Arguments are redacted per the catalog entry's `redact` list before they are sto
 
 | Field | What it holds | Who uses it |
 |---|---|---|
-| `rendered` | the prompt text. With tools it starts with `## Procedures that worked for this task` (each as `title: tool -> tool (worked N% of M runs)`) and `## Tools`: the best three tools and the next step, each as `- <tool> (confidence 0.74, next step): <arg> = <value>, …; missing <arg>: <question>`; then the profile, summary, conversation, memories and the rest | the model reads it |
-| `tools` | the tools that fit the task, best first (at most `k`), each `{name, confidence}`, only when `tools` was sent | the harness offers only these to the model |
+| `rendered` | the prompt text. With tools it has `## Learned skills for this task` (each as `- name: tool -> tool (worked N% of M runs)`, what fixed a failing step under it, and `- adds to your skill <name>: …` when the runs opened one of the agent's own skills) and, for five or more tools, `## Tools`: the best three tools and the next step, each as `- <tool> (confidence 0.74, next step): <arg> = <value>, …; missing <arg>: <question>`; with the profile, summary, conversation, memories and the rest | the model reads it |
+| `tools` | the tools that fit the task, best first (at most `k`), each `{name, confidence}`, only when five or more tools (or the catalog) were sent | the harness offers only these to the model |
 | `bundle_id`, `token_estimate`, `evidence_status` | as for any context | `/v1/verify`, budgeting, abstaining |
 
-`format=full` returns the same content as data instead: `procedures` (`id`, `title`, `steps` as
-tool names, `success_rate`, `runs`) and `tools`, each with `confidence`, `success_rate`, `next`,
-`args` and `missing`, exactly as `POST /v1/tools/hints` returns them.
+`format=full` returns the same content as data instead: `skills` (`id`, `name`, `steps` as
+tool names, `with_skill`, `fixes`, `success_rate`, `runs`) and `tools`, each with `confidence`,
+`success_rate`, `next`, `args` and `missing`, exactly as `POST /v1/tools/hints` returns them.
 
-Nothing tool-related is in the context when `tools` is not sent: no procedures, no hints, no
-tools. A run with fewer than five tools therefore gets plain memory context, and its calls
-are still recorded and still teach procedures for later runs.
+Nothing tool-related is in the context when `tools` is not sent: no learned skills, no hints, no
+tools. Fewer than five tools get the learned skills and no hints: the model already sees every
+tool, and the hints are read after retrieval, so they would only add latency.
+`tools: {available, hints: false}` (`ctx.context(q, tools=[...], hints=False)`) keeps the
+learned skills and leaves the hints out, for a caller that offers the model every tool anyway
+(the harness's `without={"hints"}`).
 
 ## What this area does not do
 
 * it does not execute anything, ever;
-* it does not publish a skill on its own: a person publishes each draft;
+* it does not write skills anywhere: a learned skill lives in the context of its agent;
 * it does not invent a plan: a task nobody has completed successfully has none;
 * it does not learn from a run you never labelled until a day has passed;
 * it does not make tool outputs searchable knowledge: `PRIVATE` keeps them to the agent.

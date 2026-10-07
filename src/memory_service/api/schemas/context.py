@@ -138,20 +138,25 @@ class ToolChoiceBody(BaseModel):
     )
 
 
-class ProcedureBody(BaseModel):
-    """A procedure learned for the task: its tool sequence and how often it worked."""
+class SkillBody(BaseModel):
+    """A skill the agent learned for this kind of task: what its successful runs did."""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(description="The procedure's id (prc_...).")
-    title: str | None = Field(
-        default=None, description="What the procedure does, in words, when one was distilled."
+    id: str = Field(description="The learned skill's id (prc_...), as GET /v1/skills lists it.")
+    name: str = Field(description="Its name: the task, in a few words.")
+    steps: list[str] = Field(description="The tools it calls, in order.")
+    with_skill: str | None = Field(
+        default=None,
+        description="The agent's own skill its runs opened: this one is what they added to it.",
     )
-    steps: list[str] = Field(description="tool names, in order")
+    fixes: list[str] | None = Field(
+        default=None, description="What worked when a step failed: tool on error: fix."
+    )
     success_rate: float = Field(
         ..., ge=0.0, le=1.0, description="0..1, the share of runs that followed it and succeeded."
     )
-    runs: int = Field(description="the successful runs it was learned from")
+    runs: int = Field(description="The runs it was learned from.")
 
 
 class ToolHintsResponse(BaseModel):
@@ -160,8 +165,8 @@ class ToolHintsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tools: list[ToolChoiceBody] = Field(description="The tools that fit, best first.")
-    plan: ProcedureBody | None = Field(
-        default=None, description="The procedure learned for this kind of task, when there is one."
+    plan: SkillBody | None = Field(
+        default=None, description="The skill learned for this kind of task, when there is one."
     )
 
 
@@ -332,8 +337,8 @@ class ContextResponse(BaseModel):
     profile: list[ProfileBlockBody] | None = Field(
         default=None, description="The pinned profile blocks (user, agent, workspace)."
     )
-    procedures: list[ProcedureBody] | None = Field(
-        default=None, description="procedures learned for the task (only with tools)"
+    skills: list[SkillBody] | None = Field(
+        default=None, description="the skills the agent learned for the task (only with tools)"
     )
     tools: list[ToolChoiceBody] | None = Field(
         default=None, description="the tools that fit, best first (only with tools)"

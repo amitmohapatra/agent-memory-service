@@ -7,8 +7,8 @@ from memory_service.domain.context_bundle import (
     ContextItem,
     ConversationWindow,
     EvidenceReport,
-    ProcedureView,
     ProfileBlockView,
+    SkillView,
     ThreadSummaryView,
 )
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
@@ -28,13 +28,10 @@ def _pinned() -> Pinned:
             text="Ann ordered paper.", covers_to_sequence=20, version=1
         ),
         procedures=[
-            ProcedureView(
+            SkillView(
                 id="prc_1",
-                title="Order paper",
-                steps=[
-                    {"ordinal": 0, "tool": "erp-get_stock"},
-                    {"ordinal": 1, "tool": "erp-create_po"},
-                ],
+                name="order-paper",
+                steps=["erp-get_stock", "erp-create_po"],
                 success_rate=0.9,
                 support=10,
             )
@@ -94,6 +91,7 @@ def test_a_summary_over_its_share_is_truncated_not_dropped() -> None:
 def test_a_tools_request_is_part_of_the_cache_identity() -> None:
     assert ToolsRequest().fingerprint() == "tools:8:*"
     assert ToolsRequest(available=["b", "a"], k=3).fingerprint() == "tools:3:a,b"
+    assert ToolsRequest(hints=False).fingerprint() == "tools:8:*:nohints"
 
 
 def _bundle(**extra) -> ContextBundle:
@@ -124,10 +122,10 @@ def test_the_prompt_starts_from_the_pinned_sections() -> None:
         procedures=pinned.procedures,
         tools=pinned.tools,
     ).render()
-    order = ["## Profile", "## Conversation summary", "## Procedures", "## Tools", "## Recent"]
+    order = ["## Profile", "## Conversation summary", "## Learned skills", "## Tools", "## Recent"]
     positions = [rendered.index(heading) for heading in order]
     assert positions == sorted(positions)
-    assert "erp-get_stock -> erp-create_po (worked 90% of 10 runs)" in rendered
+    assert "- order-paper: erp-get_stock -> erp-create_po (worked 90% of 10 runs)" in rendered
     assert (
         "- erp-create_po (confidence 0.00, next step): supplier = 'Acme'; "
         "missing qty: How many?" in rendered

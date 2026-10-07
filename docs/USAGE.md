@@ -200,13 +200,16 @@ print(
 | Which tool, plan, arguments | `POST /v1/tools/hints` (or inline: `context(q, tools=[…])`) | `hints = await ctx.tool_hints(task, available=names)` |
 | Approval rules the decisions support | `GET /v1/tools/approval-suggestions` | `await ctx.advanced.tools.approval_suggestions(tool=…)` |
 | Adopt one | `POST /v1/tools/approval-suggestions/{id}/accept` | `await ctx.advanced.tools.accept_suggestion(s.id)` |
+| What each agent learned; stop one | `GET /v1/skills?agent=…`, `POST /v1/skills/{id}/dismiss` (administrator) | `await admin.advanced.skills.list(agent="support")`, `.dismiss(s.id)` |
 
 - The service never executes a tool. `task` is the question in words (it becomes the pattern
   procedures are keyed on), not an id.
 - A procedure needs ≥ 2 supporting runs and ≥ 60 % success; an unlabelled run counts as a weak
-  success only after a day without failed calls.
+  success only after a day without failed calls. An active one is the agent's learned skill,
+  offered in its context on its own ([api/skills.md](api/skills.md)).
 - Recording is idempotent on run + step + tool + arguments; `visibility` defaults to
-  `PRIVATE` (share with `AGENT_GROUP`/`WORKSPACE`/`TENANT` to learn across agents).
+  `PRIVATE`: learned per agent across all its users (share with `AGENT_GROUP`/`WORKSPACE`/
+  `TENANT` to learn across agents).
 - A suggestion can be accepted only by the agent it was learned from (else `404`); `409` when
   the decisions no longer support it, or when it would auto-approve an `irreversible` tool.
 

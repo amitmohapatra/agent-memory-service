@@ -1,6 +1,6 @@
 # ADR 0033: A learned procedure becomes a skill only when a person publishes it
 
-Date: 2026-10-06. Status: accepted.
+Date: 2026-10-06. Status: superseded by [ADR 0034](0034-learned-skills-in-context.md).
 
 ## Context
 

@@ -17,7 +17,7 @@ from memory_service.domain.feedback import (
 )
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY
 from memory_service.domain.tools import ToolDescriptor
-from memory_service.modules.tools.learning import ToolLearning
+from memory_service.modules.tools.learning import ToolLearning, audience_of
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
@@ -44,11 +44,13 @@ async def _keys(container, ctx: MemoryExecutionContext) -> list[str]:
     return list((await container.services["authz"].visibility(ctx)).keys)
 
 
-async def _run_once(container, *, run: str, quote: str, sku: str, success: bool = True) -> None:
-    """One two-step run: look the price up, then write it onto the quote. The quote id flows
-    from the first output into the second call's arguments."""
+async def _run_once(
+    container, *, run: str, quote: str, sku: str, success: bool = True, user: str = "u1"
+) -> None:
+    """One two-step run for ``user``: look the price up, then write it onto the quote. The
+    quote id flows from the first output into the second call's arguments."""
     service = container.services["tool_memory"]
-    ctx = _ctx(run)
+    ctx = _ctx(run, user_id=user)
     async with container.services["uow_factory"]() as uow:
         await service.record(
             uow,
@@ -162,8 +164,9 @@ async def test_the_learning_job_stores_a_procedure_only_once_enough_runs_support
     await learning.learn()
     assert await _procedures(container, ctx) == [], "one run is not a procedure"
     async with uow_factory() as uow:
-        audience = (await uow.tools.invocations_for_run("acme", "run_0"))[0].visibility_keys[0]
+        audience, agent = audience_of((await uow.tools.invocations_for_run("acme", "run_0"))[0])
         candidate = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert agent == "pricing-agent", "the agent's own calls are learned for the agent"
     assert candidate is not None and candidate.status == "candidate"
 
     await _run_once(container, run="run_1", quote="Q-2", sku="S-2")
@@ -356,59 +359,53 @@ def _pattern() -> str:
     return task_pattern(TASK)
 
 
-async def test_a_skill_decision_outlives_a_re_mine_and_new_steps_bring_the_draft_back(
-    uow_factory, tmp_path
+async def test_an_agent_learns_from_all_its_users_and_shares_once_two_produced_it(
+    container,
 ) -> None:
-    """The reviewer's decision is written only by ``decide``: the learning job saving the same
-    procedure again (as it does on every re-mine) keeps it; new steps make a changed draft."""
-    from memory_service.adapters.skills import FolderSkills
-    from memory_service.domain.tools import StoredProcedure
-    from memory_service.modules.tools.skills import SkillDrafts
+    """The agent's runs for u1 become its learned skill, which u1 is offered at once and
+    nobody else is: the task's wording is u1's. Once u2's run follows the same steps the
+    skill is the agent's, offered to any of its users (u3) but never to another agent."""
+    from memory_service.domain.tools import agent_audience
+    from memory_service.modules.tools.skills import LearnedSkills
 
-    procedure = StoredProcedure(
-        tenant_id="acme",
-        scope_key="user:acme/u1",
-        pattern="refund order {id}",
-        title="Refund an order",
-        steps=[{"ordinal": 0, "tool": "find_order"}, {"ordinal": 1, "tool": "refund"}],
-        support=3,
-        success_rate=1.0,
-        status="active",
-        steps_hash="s1",
+    learning = ToolLearning(
+        container.services["uow_factory"], container.services["llm_assist"], None
     )
-    weaker = procedure.model_copy(
-        update={"procedure_id": "procedure_weaker", "pattern": "x {id}", "support": 2}
-    )
-    async with uow_factory() as uow:
-        await uow.procedures.save(procedure)
-        await uow.procedures.save(weaker)
-        await uow.procedures.save(
-            weaker.model_copy(update={"procedure_id": "p_c", "pattern": "y", "status": "candidate"})
-        )
-        await uow.commit()
-    drafts = SkillDrafts(uow_factory, FolderSkills(tmp_path))
-    assert [d.id for d in await drafts.list("acme")] == [procedure.procedure_id, "procedure_weaker"]
-    assert await drafts.list("globex") == []
+    await _run_once(container, run="run_a1", quote="Q-1", sku="SKU-1")
+    await _run_once(container, run="run_a2", quote="Q-2", sku="SKU-2")
+    await learning.learn("acme")
 
-    decision = await drafts.publish("acme", procedure.procedure_id, by="key:ops")
-    assert (decision.name, decision.version, decision.decided_by) == (
-        "refund-an-order",
-        "1.0.0",
-        "key:ops",
-    )
-    async with uow_factory() as uow:  # a re-mine saves the procedure it read before
-        await uow.procedures.save(procedure.model_copy(update={"support": 4}))
-        await uow.commit()
-    async with uow_factory() as uow:
-        stored = await uow.procedures.get("acme", procedure.procedure_id)
-    assert stored is not None and stored.skill == decision and stored.support == 4
-    assert [d.id for d in await drafts.list("acme")] == ["procedure_weaker"]
+    [mine] = await _procedures(container, _ctx("run_x"))
+    assert mine.scope_key == agent_audience("acme", "pricing-agent")
+    assert (mine.agent_id, mine.users, mine.sole_user) == ("pricing-agent", 1, "u1")
+    assert await _procedures(container, _ctx("run_x", user_id="u2")) == [], "u1's wording"
 
-    async with uow_factory() as uow:
-        await uow.procedures.save(stored.model_copy(update={"steps_hash": "s2"}))
-        await uow.commit()
-    back = {d.id: d for d in await drafts.list("acme")}[procedure.procedure_id]
-    assert back.state == "changed" and back.published == decision
-    assert (await drafts.publish("acme", procedure.procedure_id, by=None)).version == "1.1.0"
-    async with uow_factory() as uow:
-        assert not await uow.procedures.decide("acme", "procedure_missing", decision)
+    await _run_once(container, run="run_b1", quote="Q-3", sku="SKU-3", user="u2")
+    await learning.learn("acme")
+    [shared] = await _procedures(container, _ctx("run_x", user_id="u3"))
+    assert shared.procedure_id == mine.procedure_id and (shared.users, shared.sole_user) == (
+        2,
+        None,
+    )
+    assert shared.support == 3
+    assert await _procedures(container, _ctx("run_x", user_id="u3", agent_id="other")) == []
+
+    skills = LearnedSkills(container.services["uow_factory"])
+    [listed] = await skills.list("acme", agent_id="pricing-agent")
+    assert (listed.id, listed.status, listed.users, listed.steps) == (
+        mine.procedure_id,
+        "active",
+        2,
+        [PRICING, CRM],
+    )
+    assert await skills.list("acme", agent_id="other") == []
+    assert await skills.list("globex") == []
+
+    dismissed = await skills.dismiss("acme", mine.procedure_id)
+    assert dismissed.status == "dismissed"
+    assert await _procedures(container, _ctx("run_x")) == []
+    await _run_once(container, run="run_a3", quote="Q-4", sku="SKU-4")
+    await learning.learn("acme")  # the same steps again: still dismissed
+    assert await _procedures(container, _ctx("run_x")) == []
+    [still] = await skills.list("acme", agent_id="pricing-agent")
+    assert still.status == "dismissed" and still.runs == 4

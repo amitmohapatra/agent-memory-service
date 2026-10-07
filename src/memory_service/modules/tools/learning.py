@@ -6,6 +6,11 @@ pattern) they touch it re-mines that pattern from its newest calls with the pref
 never a rewrite of the others. A procedure is ``active`` (offered) only when enough runs
 support it and enough of them succeeded.
 
+An agent's own calls (its PRIVATE records, for whichever user it ran) share one audience,
+``agent_audience``: the agent learns from all of its users, and the procedure says how many
+users produced it, so it reaches the agent's other users only once two of them did
+(``StoredProcedure``). Calls shared wider keep their own audience key.
+
 With the tenant's model (use ``procedure_abstraction``), an active procedure whose steps
 changed is distilled into a title and a strategy from what succeeded AND what failed
 (ReasoningBank / AWM style). Without one, the title is the pattern and the strategy the
@@ -20,7 +25,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from memory_service.domain.revisions import RevisionKind, audience_revision_keys
-from memory_service.domain.tools import RunOutcome, StoredProcedure, ToolInvocation, stable_hash
+from memory_service.domain.tools import (
+    RunOutcome,
+    StoredProcedure,
+    ToolInvocation,
+    agent_audience,
+    stable_hash,
+)
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.procedures import Procedure, decayed, mine_procedure
@@ -102,6 +113,31 @@ def _status(mined: Procedure, steps_hash: str, existing: StoredProcedure | None)
     return "retired" if existing is not None and existing.status != "candidate" else "candidate"
 
 
+def audience_of(call: ToolInvocation) -> tuple[str, str | None]:
+    """Where a call is learned: an agent's own (PRIVATE) record under the agent's audience,
+    whichever user it ran for, with that agent's id; any other under its first visibility
+    key."""
+    key = call.visibility_keys[0]
+    if call.agent_id and key == _agent_private_key(call):
+        return agent_audience(call.tenant_id, call.agent_id), call.agent_id
+    return key, None
+
+
+def _agent_private_key(call: ToolInvocation) -> str:
+    principal = (
+        f"agent:{call.user_id}/{call.agent_id}" if call.user_id else f"agent:{call.agent_id}"
+    )
+    return f"principal:{call.tenant_id}/{principal}"
+
+
+def contributors(calls: Sequence[ToolInvocation]) -> tuple[int, str | None]:
+    """How many distinct users the calls ran for (no user counts as one), and that user when
+    there is exactly one."""
+    users = {c.user_id for c in calls}
+    sole = next(iter(users)) if len(users) == 1 else None
+    return len(users), sole
+
+
 def merge(
     existing: StoredProcedure | None,
     mined: Procedure | None,
@@ -109,6 +145,9 @@ def merge(
     tenant_id: str,
     audience: str,
     owner: ToolInvocation,
+    agent_id: str | None = None,
+    users: int = 0,
+    sole_user: str | None = None,
 ) -> StoredProcedure | None:
     """The stored procedure after a re-mine: only its own row changes, and its distilled
     title and strategy are kept for as long as its steps are."""
@@ -119,7 +158,7 @@ def merge(
     steps, bindings = _steps(mined)
     steps_hash = stable_hash({"tools": mined.tools, "bindings": bindings})
     base = existing or StoredProcedure(
-        tenant_id=tenant_id, scope_key=audience, pattern=mined.task_pattern
+        tenant_id=tenant_id, scope_key=audience, pattern=mined.task_pattern, agent_id=agent_id
     )
     return base.model_copy(
         update={
@@ -133,6 +172,8 @@ def merge(
             "workspace_id": owner.workspace_id,
             "strategy": base.strategy if base.steps_hash == steps_hash else mined.render(),
             "title": base.title or mined.task_pattern[:TITLE_MAX_CHARS],
+            "users": users,
+            "sole_user": sole_user,
             "updated_at": datetime.now(UTC),
         }
     )
@@ -200,13 +241,14 @@ class ToolLearning:
             return 0
         groups = sorted(
             {
-                (c.tenant_id, c.visibility_keys[0], c.task_pattern)
+                (c.tenant_id, *audience_of(c), c.task_pattern)
                 for c in calls
                 if c.task_pattern and c.visibility_keys
-            }
+            },
+            key=lambda g: (g[0], g[1], g[2] or "", g[3]),
         )
-        for tenant, audience, pattern in groups:
-            await self._mine(tenant, audience, str(pattern))
+        for tenant, audience, agent_id, pattern in groups:
+            await self._mine(tenant, audience, agent_id, str(pattern))
         await self._edges(calls)
         by_tenant: dict[str, list[str]] = defaultdict(list)
         for call in calls:
@@ -218,18 +260,39 @@ class ToolLearning:
         log.info("tools.learned", calls=len(calls), patterns=len(groups))
         return len(calls)
 
-    async def _mine(self, tenant_id: str, audience: str, pattern: str) -> None:
+    async def _mine(
+        self, tenant_id: str, audience: str, agent_id: str | None, pattern: str
+    ) -> None:
         async with self.uow_factory() as uow:
-            calls = await uow.tools.for_pattern(
-                tenant_id, audience, pattern, limit=PATTERN_CALLS_MAX
-            )
+            if agent_id is None:
+                calls = await uow.tools.for_pattern(
+                    tenant_id, audience, pattern, limit=PATTERN_CALLS_MAX
+                )
+            else:
+                calls = [
+                    c
+                    for c in await uow.tools.for_agent_pattern(
+                        tenant_id, agent_id, pattern, limit=PATTERN_CALLS_MAX
+                    )
+                    if audience_of(c)[0] == audience
+                ]
             trajectories = await self._trajectories(uow, tenant_id, calls)
             existing = await uow.procedures.by_pattern(tenant_id, audience, pattern)
             owner = next((c for c in calls if c.succeeded), calls[0]) if calls else None
             if owner is None:
                 return
             mined = mine_procedure(pattern, trajectories)
-            merged = merge(existing, mined, tenant_id=tenant_id, audience=audience, owner=owner)
+            users, sole_user = contributors(calls)
+            merged = merge(
+                existing,
+                mined,
+                tenant_id=tenant_id,
+                audience=audience,
+                owner=owner,
+                agent_id=agent_id,
+                users=users,
+                sole_user=sole_user,
+            )
             if merged is None or _unchanged(merged, existing):
                 return
             await uow.procedures.save(merged)
