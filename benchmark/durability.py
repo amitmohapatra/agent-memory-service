@@ -129,7 +129,7 @@ async def run(threads: int, messages: int, files: int, seed: int) -> dict[str, A
     settings = _settings()
     root = Path(".bench_blob")
     data = settings.model_dump()
-    data["blob"] = {"provider": "filesystem", "filesystem_root": str(root)}
+    data["blob"] = {"filesystem_root": str(root)}
     settings = type(settings)(**data)
     container = await build_container(settings, __version__, overrides=bench_overrides())
     register_handlers(container)

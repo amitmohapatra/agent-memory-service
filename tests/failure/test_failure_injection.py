@@ -86,7 +86,7 @@ async def test_worker_kill_requeues_the_job_and_processes_once(
     settings = integration_settings(
         make_settings,
         database={"url": isolated_app_database},
-        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
+        blob={"filesystem_root": str(tmp_path / "blob")},
     )
     # the real queue: this is the one scenario that kills a worker mid-job
     container = await build_container(

@@ -163,4 +163,4 @@ async def test_a_restricted_key_naming_nobody_reads_no_user_s_memories(app, runn
     nobody = sdk(app, narrow.token).bind()
     found = await nobody.search("salary review", limit=50)
     assert found == []
-    assert await nobody.advanced.memories.list() == []
+    assert (await nobody.advanced.memories.page()).items == []

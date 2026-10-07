@@ -229,7 +229,7 @@ async def test_the_sdk_body_is_what_the_service_accepts(app_client: TestClient) 
         )
         assert record.comment == "looked right" and record.agent_id == "ref"
         assert record.evidence_refs[0].source_id == "msg_1"
-        assert [f.feedback_id for f in await ctx.feedback.list_for("run", "run_sdk")]
+        assert [f.feedback_id for f in (await ctx.feedback.page_for("run", "run_sdk")).items]
         page = await ctx.feedback.page_for("run", "run_sdk", limit=1)
         assert page.items[0].feedback_id == record.feedback_id
 

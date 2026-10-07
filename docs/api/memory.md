@@ -53,7 +53,7 @@ kept: on LoCoMo, keeping the verbatim turn is what lifted the retrieval ceiling 
 | `POST /v1/messages` | append messages; `role: "EVENT"` is something that happened (durably acknowledged, processed asynchronously) | `ctx.history.add([...])` |
 | `POST /v1/memories` | remember a statement verbatim, as one memory, now (deduplicated per owner and scope) | `ctx.remember(...)` |
 | `POST /v1/memories/{memory_id}/supersede` | replace a memory with a new version; the old one is closed, not deleted | `ctx.update(id, content, reason=...)` |
-| `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.list()`, `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
+| `GET /v1/memories` | the inventory: current memories anchored to the caller's scopes, newest first (cursor paged) | `ctx.advanced.memories.page()`, `ctx.advanced.memories.iter()` |
 | `GET /v1/memories/{memory_id}` | one memory, with its evidence and temporal state | `ctx.advanced.memories.get(id)` |
 | `DELETE /v1/memories/{memory_id}` | forget: soft delete plus index removal, and what was derived from it is retracted | `ctx.forget(id)` |
 | `POST /v1/memories/{memory_id}/restore` | bring back a memory **automatic forgetting archived**: `CURRENT` and searchable again | `ctx.advanced.memories.restore(id)` |

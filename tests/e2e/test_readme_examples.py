@@ -64,7 +64,7 @@ async def test_readme_single_agent_walkthrough(app, client) -> None:
     assert bundle.evidence_status in {"COMPLETE", "INCOMPLETE", "INSUFFICIENT"}
 
     assert await ctx.search("revenue") != []
-    assert await ctx.advanced.memories.list() != []
+    assert (await ctx.advanced.memories.page()).items != []
 
     gated = await ctx.context("what were FY26 restructuring savings?", format="full")
     assert gated.evidence_status  # the README branches on this value

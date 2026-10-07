@@ -41,8 +41,6 @@ names another (`bind(tenant_id=...)`).
 |---|---|---|
 | `timeout` | `10.0` | seconds per attempt; connecting is bounded by 5 s of it. `context(..., timeout=)` and `search(..., timeout=)` take a per-call one |
 | `max_retries` | `3` | how many times a retryable failure is sent again |
-| `circuit_failure_threshold` | `5` | failed calls in a row that open the circuit; `0` disables the breaker |
-| `circuit_open_seconds` | `30.0` | how long an open circuit fails fast before one call probes |
 | `http_client` | a pooled `httpx.AsyncClient` | idle connections kept 30 s, at most 100 connections |
 
 `async with MemoryClient() as memory:` closes the pool on exit (`await memory.aclose()`
@@ -61,11 +59,10 @@ the service (a read timeout, a 503) is not retried, and no key is invented for i
 The wait is the service's `Retry-After` when it sent one (at most 30 s), otherwise full-jitter
 exponential backoff: a uniform draw from 0 up to 0.5 s, 1 s, 2 s ... capped at 8 s.
 
-After `circuit_failure_threshold` calls in a row fail for want of the service - no response,
-or a 5xx, counted once per call however many attempts it made - the client stops sending:
-every call raises `CircuitOpenError` at once for `circuit_open_seconds`. Then one call goes
-through as the probe while the others keep failing fast; its success closes the circuit, its
-failure opens it for another period. A 4xx is the service answering and a 429 is the service
+After 5 calls in a row fail for want of the service - no response, or a 5xx, counted once
+per call however many attempts it made - the client stops sending: every call raises
+`CircuitOpenError` at once for 30 s. Then one call goes through as the probe while the others
+keep failing fast; its success closes the circuit, its failure opens it for another period. A 4xx is the service answering and a 429 is the service
 asking for less: neither counts. The breaker is per client, so an agent's turn during an
 outage degrades in microseconds instead of paying the timeout and every retry on each call:
 
@@ -87,7 +84,7 @@ under `ctx.advanced`.
 | `remember(content, memory_type=, visibility=)` / `update(id, content, reason=)` / `forget(id)` | state, supersede or forget one memory |
 | `search(query, kinds=, limit=)` | ranked evidence without bundle assembly |
 | `history(limit=)` / `history.add([...])` / `history.thread()` | the transcript: read it, append to it (`EVENT`: something that happened), the thread with its durable summary |
-| `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.list_for(kind, id)` reads it back; `.pending()` / `.approve(id, note=)` / `.dismiss(id, note=)` work the review queue (tenant admin key) |
+| `feedback(record)` or `feedback(kind, id, verdict)` | a judgement; `.page_for(kind, id)` reads it back; `.pending()` / `.approve(id, note=)` / `.dismiss(id, note=)` work the review queue (tenant admin key) |
 | `record_tool(tool, args, output=, status=)` | what a run did; whether it worked is `feedback("run", run_id, verdict)` |
 | `tool_hints(task, available=, k=)` | the tools that fit, best first, with confidence, success rate, the arguments found and the missing ones; the learned plan |
 | `agent_tools()` / `call_agent_tool(name, args)` | the memory tools an agent calls itself (pull mode) |
@@ -135,7 +132,7 @@ Every closed vocabulary on the wire is a `Literal` in `trellis.memory.models`
 `JobStatus`, `DocumentStatus`, `ArchiveStatus`, `QueryType`, `Representation`,
 `TemporalStatus`, `EvidenceStatus`, `RecallKind`, `EvidenceKind`, `ToolStatus`,
 `SideEffects`, ...). Client parameters such as `remember(memory_type=...)`,
-`search(kinds=...)` and `advanced.memories.list(memory_types=...)` take them, and response models
+`search(kinds=...)` and `advanced.memories.page(memory_types=...)` take them, and response models
 (`MemoryResult.memory_type`, `MessageInfo.role`, `DocumentInfo.status`, `JobHandle.status`,
 `ContextBundle.query_type`, ...) carry them instead of `str`. A wrong value is a type error
 in your editor and a 422 from the service naming the allowed values; it is never silently

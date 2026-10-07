@@ -3,6 +3,10 @@
 Date: 2026-10-04. Status: accepted. Amends 0021 (`may_act_as`), 0022 (SDK errors), 0009
 (admission).
 
+> **Amended (Unreleased).** The breaker's two numbers are module constants
+> (`trellis.memory.breaker.FAILURE_THRESHOLD`, `OPEN_SECONDS`), no longer `MemoryClient`
+> arguments: nothing outside the tests set them.
+
 ## Context
 
 An audit of what an agent harness meets on its first day found seven gaps, each small, that

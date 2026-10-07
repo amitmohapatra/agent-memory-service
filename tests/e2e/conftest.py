@@ -65,7 +65,7 @@ def app(make_settings, tmp_path):
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings = make_settings(
-        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
+        blob={"filesystem_root": str(tmp_path / "blob")},
     )
     # The stand-ins are named in code, never in the environment: an in-process queue so
     # the flows drain inline, the hash encoder and lexical models so no weights are loaded,

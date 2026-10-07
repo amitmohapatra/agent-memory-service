@@ -23,7 +23,7 @@ def limited(make_settings, tmp_path, monkeypatch):
     monkeypatch.setattr(constants, "RATE_LIMIT_BURST", 0)
     monkeypatch.setattr(constants, "MAX_BODY_BYTES", 2048)
     settings = make_settings(
-        blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
+        blob={"filesystem_root": str(tmp_path / "blob")},
     )
     app = create_app(settings, overrides=_test_overrides(tasks="inline", blob=None))
     with TestClient(app, raise_server_exceptions=False) as c:

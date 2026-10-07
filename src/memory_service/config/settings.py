@@ -291,7 +291,8 @@ class AuthorizationSettings(BaseModel):
 
 
 class BlobSettings(BaseModel):
-    provider: Literal["gcs", "filesystem"] = "filesystem"
+    """Where blobs go. Which store is not a setting: see ``Settings.blob_provider``."""
+
     chat_bucket: str = "memory-chat-archive"
     file_bucket: str = "memory-file-archive"
     filesystem_root: str = "./.blob"
@@ -464,14 +465,20 @@ class Settings(BaseSettings):
     #: went green.
     DEPLOYED_ENVIRONMENTS: ClassVar[frozenset[str]] = frozenset({"staging", "prod"})
 
+    @property
+    def blob_provider(self) -> Literal["gcs", "filesystem"]:
+        """GCS where the service is deployed, or where a GCS emulator is configured
+        (``STORAGE_EMULATOR_HOST``, the client library's own switch, read where the library
+        reads it); the filesystem everywhere else."""
+        deployed = self.service.environment in self.DEPLOYED_ENVIRONMENTS
+        return "gcs" if deployed or os.environ.get("STORAGE_EMULATOR_HOST") else "filesystem"
+
     @model_validator(mode="after")
     def _production_guards(self) -> Settings:
         if self.service.environment in self.DEPLOYED_ENVIRONMENTS:
             where = self.service.environment
             if self.authentication.mode == "trusted_dev":
                 raise ValueError(f"authentication.mode=trusted_dev is not allowed in {where}")
-            if self.blob.provider == "filesystem":
-                raise ValueError(f"blob.provider must be gcs in {where}")
             bootstrap = self.authentication.bootstrap_admin_key
             if bootstrap is not None and len(bootstrap.get_secret_value()) < 32:
                 # The one credential that onboards tenants and can administer any of them;

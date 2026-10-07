@@ -62,7 +62,7 @@ Tesseract when Docling is included. `validation` adds the dev tooling and every 
 
 | In dev compose | In production |
 |---|---|
-| `MEMORY__BLOB__PROVIDER=filesystem` | `gcs` — the settings refuse `filesystem` when `service.environment` is `staging` or `prod` |
+| blobs on the filesystem (`/data/blob`) | GCS — chosen by itself when `service.environment` is `staging` or `prod`; set the buckets |
 | `.env.example`'s `TRUSTED_DEV_API_KEYS=["dev-key"]` (`trusted_dev` mode) | remove it; set `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` (at least 32 characters), onboard tenants, then unset it — refused otherwise (`_production_guards`) |
 | every store in the compose network | external PostgreSQL, Qdrant, Dragonfly and OpenFGA; the target is a single VM with external stores (ADR 0019 status) |
 | `.env.example`'s `BIFROST_URL` pointing at a local gateway | your gateway's URL, or unset to run with no model |
@@ -89,10 +89,10 @@ code in step. The ones a deployment always sets:
 
 | Variable | Why |
 |---|---|
-| `MEMORY__SERVICE__ENVIRONMENT=prod` | turns on the production guards (no development keys, no filesystem blob store, a long bootstrap key) |
+| `MEMORY__SERVICE__ENVIRONMENT=prod` | turns on the production guards (no development keys, a long bootstrap key) and stores blobs in GCS |
 | `MEMORY__DATABASE__URL`, `__DIRECT_URL`, `__CONNECTION_BUDGET` | PostgreSQL, behind PgBouncer when there is one ([deploy/database.md](../deploy/database.md)) |
 | `MEMORY__SEARCH__QDRANT_URL`, `MEMORY__CACHE__URL`, `MEMORY__AUTHORIZATION__OPENFGA_API_URL` | the other stores |
-| `MEMORY__BLOB__PROVIDER=gcs` and the buckets | the archive |
+| `MEMORY__BLOB__CHAT_BUCKET`, `__FILE_BUCKET` | the archive (GCS) |
 | `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` (then unset), or `__JWT_JWKS_URL` | how callers authenticate |
 | `MEMORY__AGENT_CREDENTIALS__*` | before any model key is registered |
 | `BIFROST_URL` (optional) | the model gateway; unset, no model call is made |

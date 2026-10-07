@@ -88,7 +88,7 @@ async def test_the_profile_wires_and_can_answer(profile, make_settings, tmp_path
     name, profile_sections, stand_ins = profile
     sections: dict = {
         "database": {"url": DB_URL},
-        "blob": {"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")},
+        "blob": {"filesystem_root": str(tmp_path / "blob")},
     }
     for key, value in profile_sections.items():  # the profile wins over the defaults above
         sections[key] = {**sections.get(key, {}), **value} if isinstance(value, dict) else value

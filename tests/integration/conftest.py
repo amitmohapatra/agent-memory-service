@@ -111,7 +111,7 @@ async def container(make_settings, tmp_path, request) -> AsyncIterator[Container
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     settings: Settings = integration_settings(
-        make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path / "blob")}
+        make_settings, blob={"filesystem_root": str(tmp_path / "blob")}
     )
     # blob=None: the filesystem store the settings point at tmp_path, which the archive
     # tests read from disk and corrupt on purpose; the memory stand-in has no files

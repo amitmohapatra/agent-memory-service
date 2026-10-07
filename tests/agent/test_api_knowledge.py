@@ -63,7 +63,7 @@ async def test_a_verdict_on_a_memory_is_stored_and_projected(app, running) -> No
     harness = await _harness(app)
     user = harness.bind(user_id="u1")
     await user.remember(FACT, visibility="USER")
-    memory = next(m for m in await user.advanced.memories.list() if FACT in m.content)
+    memory = next(m for m in (await user.advanced.memories.page()).items if FACT in m.content)
 
     confirmed = await user.feedback(
         "memory", memory.memory_id, "confirm", comment="checked with the team", reviewer="u1"
@@ -96,7 +96,7 @@ async def test_a_verdict_on_a_memory_is_stored_and_projected(app, running) -> No
         "correct",
         correction="The review moved to Wednesdays at 15:00.",
     )
-    on_target = await user.feedback.list_for("memory", memory.memory_id)
+    on_target = (await user.feedback.page_for("memory", memory.memory_id)).items
     assert {f.feedback_id for f in on_target} == {confirmed.feedback_id, corrected.feedback_id}
     assert [f.created_at for f in on_target] == sorted(
         (f.created_at for f in on_target), reverse=True
@@ -147,7 +147,7 @@ async def test_votes_wait_in_a_queue_only_the_tenant_administrator_reviews(app, 
     admin = _reviewer(harness)
     user = harness.bind(user_id="u1")
     await user.remember(FACT, visibility="USER")
-    memory = next(m for m in await user.advanced.memories.list() if FACT in m.content)
+    memory = next(m for m in (await user.advanced.memories.page()).items if FACT in m.content)
     up = await user.feedback("memory", memory.memory_id, "confirm")
     down = await user.feedback("run", "run_voted", "reject", comment="wrong answer")
 
@@ -198,7 +198,7 @@ async def test_verdicts_do_not_cross_a_tenant(app, running) -> None:
     globex = await _harness(app, "globex")
     mine = acme.bind(user_id="u1")
     await mine.remember(FACT, visibility="USER")
-    memory = next(m for m in await mine.advanced.memories.list() if FACT in m.content)
+    memory = next(m for m in (await mine.advanced.memories.page()).items if FACT in m.content)
     verdict = await mine.feedback("memory", memory.memory_id, "confirm")
 
     theirs = globex.bind(user_id="u1")
@@ -210,13 +210,13 @@ async def test_verdicts_do_not_cross_a_tenant(app, running) -> None:
     # tenant first: the answer is "no such memory", never an empty page that would confirm
     # the id exists somewhere.
     with pytest.raises(MemoryError) as unknown_target:
-        await theirs.feedback.list_for("memory", memory.memory_id)
+        await theirs.feedback.page_for("memory", memory.memory_id)
     assert unknown_target.value.status == 404
 
     claiming = globex.bind(tenant_id="acme", user_id="u1")
     for call in (
         claiming.feedback("memory", memory.memory_id, "reject"),
-        claiming.feedback.list_for("memory", memory.memory_id),
+        claiming.feedback.page_for("memory", memory.memory_id),
         claiming.profile.edit("user", "x"),
     ):
         with pytest.raises(MemoryError) as crossed:

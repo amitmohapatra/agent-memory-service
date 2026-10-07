@@ -95,7 +95,7 @@ async def run(copies: int, requests: int) -> dict[str, Any]:
                     "embedding": container.embedding.fingerprint(),
                     "search": BENCH.search,
                     "cache": "memory",
-                    "blob": settings.blob.provider,
+                    "blob": settings.blob_provider,
                     "tasks": "memory",
                     "representative": not container.embedding.fingerprint().startswith("hash-")
                     and BENCH.search != "memory",

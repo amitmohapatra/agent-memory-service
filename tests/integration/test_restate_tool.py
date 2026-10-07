@@ -248,9 +248,7 @@ async def test_a_tenant_with_nothing_stored_restates_nothing(container) -> None:
 def _command(monkeypatch, make_settings, tmp_path, *argv: str) -> list[Any]:
     """Run the module's ``main`` against the suite's database, recording the container."""
     built: list[Any] = []
-    settings = integration_settings(
-        make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path)}
-    )
+    settings = integration_settings(make_settings, blob={"filesystem_root": str(tmp_path)})
 
     async def build(_settings: Any, version: str) -> Any:
         container = await build_container(

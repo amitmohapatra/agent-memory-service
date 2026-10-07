@@ -109,8 +109,7 @@ async def test_feedback_pages_follow_next_cursor(client: MemoryClient) -> None:
         assert [f.feedback_id for f in page.items] == ["fb_a"]
         last = await ctx.feedback.page_for("run", "r", limit=1, cursor="c1")
         assert not last.has_more and last.items == []
-        assert [f.feedback_id for f in await ctx.feedback.list_for("run", "r", limit=1)] == ["fb_a"]
-        assert listing.call_count == 3
+        assert listing.call_count == 2
         one = respx.get(f"{BASE}/v1/feedback/fb_a").respond(200, json=_feedback(feedback_id="fb_a"))
         assert (await ctx.feedback.get("fb_a")).feedback_id == "fb_a" and one.called
 
@@ -145,10 +144,6 @@ async def test_memories_iterate_every_page(client: MemoryClient) -> None:
             "mem_3",
         ]
         assert all(isinstance(m, MemoryResult) for m in page.items)
-        assert [m.memory_id for m in await ctx.advanced.memories.list(limit=2)] == [
-            "mem_1",
-            "mem_2",
-        ]
 
 
 @respx.mock

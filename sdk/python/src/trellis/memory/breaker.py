@@ -26,9 +26,9 @@ from typing import Final, Literal
 from trellis.memory.errors import CircuitOpenError
 
 #: Consecutive failed calls that open the circuit; 0 disables the breaker.
-DEFAULT_FAILURE_THRESHOLD: Final = 5
+FAILURE_THRESHOLD: Final = 5
 #: How long an open circuit refuses calls before it lets one probe through.
-DEFAULT_OPEN_SECONDS: Final = 30.0
+OPEN_SECONDS: Final = 30.0
 
 CircuitState = Literal["closed", "open", "half_open"]
 
@@ -47,8 +47,8 @@ class CircuitBreaker:
 
     def __init__(
         self,
-        threshold: int = DEFAULT_FAILURE_THRESHOLD,
-        open_seconds: float = DEFAULT_OPEN_SECONDS,
+        threshold: int = FAILURE_THRESHOLD,
+        open_seconds: float = OPEN_SECONDS,
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:

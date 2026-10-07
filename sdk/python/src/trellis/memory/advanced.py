@@ -326,23 +326,6 @@ class MemoriesAPI:
             )
         )
 
-    async def list(
-        self,
-        *,
-        memory_types: Sequence[MemoryType] | None = None,
-        include_superseded: bool = False,
-        limit: int = 100,
-        cursor: str | None = None,
-    ) -> list[MemoryResult]:
-        """One page; :meth:`page` also returns the cursor, :meth:`iter` walks every page."""
-        page = await self.page(
-            memory_types=memory_types,
-            include_superseded=include_superseded,
-            limit=limit,
-            cursor=cursor,
-        )
-        return page.items
-
     async def page(
         self,
         *,
@@ -351,6 +334,7 @@ class MemoriesAPI:
         limit: int = 100,
         cursor: str | None = None,
     ) -> Page[MemoryResult]:
+        """One page and the cursor of the next; :meth:`iter` walks every page."""
         params: dict[str, Any] = {"limit": limit, "include_superseded": include_superseded}
         if memory_types:
             params["memory_type"] = list(memory_types)
