@@ -83,7 +83,7 @@ under `ctx.advanced`.
 
 | Verb | What it does |
 |---|---|
-| `context(query, token_budget=, tools=, window=)` | the pushed context: memories, knowledge, profile, thread summary, procedures, tool hints; `rendered` is prompt-ready, memories cited by bundle handle (`[m1]`) |
+| `context(query, token_budget=, tools=, window=)` | the pushed context: memories, knowledge, profile, thread summary, learned skills, tool hints; `rendered` is prompt-ready, memories cited by bundle handle (`[m1]`) |
 | `remember(content, memory_type=, visibility=)` / `update(id, content, reason=)` / `forget(id)` | state, supersede or forget one memory |
 | `search(query, kinds=, limit=)` | ranked evidence without bundle assembly |
 | `history(limit=)` / `history.add([...])` / `history.thread()` | the transcript: read it, append to it (`EVENT`: something that happened), the thread with its durable summary |
@@ -95,7 +95,8 @@ under `ctx.advanced`.
 | `verify(answer, bundle_id=, run_id=)` | per-claim grounding of an answer against the context it was given (`bundle_id` from `context()`) |
 
 `ctx.advanced` holds `documents`, `graph`, `tools` (the catalog and approval
-suggestions), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the
+suggestions), `skills` (what each agent learned: `list(agent=)`, `dismiss(id)`, an
+administrator's key), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the
 client's `tenant` and `admin` administration objects.
 
 ## Agent credentials and model-free reads

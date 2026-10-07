@@ -19,7 +19,7 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import aggregate_statement, unverified_representation
 from memory_service.domain.predicates import is_multi_valued
-from memory_service.domain.tools import ToolCandidate, ToolHints
+from memory_service.domain.tools import SkillView, ToolCandidate, ToolHints
 
 #: The native graph's link between a memory's speaker and an entity it names.
 MENTIONS = "mentions"
@@ -115,18 +115,6 @@ class ThreadSummaryView(BaseModel):
     text: str
     covers_to_sequence: int
     version: int
-
-
-class ProcedureView(BaseModel):
-    """A procedure learned for the task."""
-
-    model_config = ConfigDict(frozen=True)
-
-    id: str
-    title: str = ""
-    steps: list[dict[str, Any]] = Field(default_factory=list)
-    success_rate: float = 0.0
-    support: int = 0
 
 
 class UnusedEvidence(BaseModel):
@@ -445,7 +433,7 @@ class ContextBundle(BaseModel):
     diagnostics: dict[str, Any] = Field(default_factory=dict)
     profile: list[ProfileBlockView] = Field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
-    procedures: list[ProcedureView] = Field(default_factory=list)
+    procedures: list[SkillView] = Field(default_factory=list)
     tools: ToolHints | None = None
 
     def handles(self) -> dict[str, str]:
@@ -541,15 +529,18 @@ def summary_section(summary: ThreadSummaryView | None) -> str | None:
     return f"## Conversation summary\n{summary.text}" if summary else None
 
 
-def procedures_section(procedures: Sequence[ProcedureView]) -> str | None:
-    if not procedures:
+def skills_section(skills: Sequence[SkillView]) -> str | None:
+    """The learned skills that match the task, in full: their steps, what fixed a failing
+    step and their track record. One the agent's own skill was opened for says so."""
+    if not skills:
         return None
     lines = []
-    for p in procedures:
-        steps = " -> ".join(str(step.get("tool")) for step in p.steps)
-        title = f"{p.title}: " if p.title else ""
-        lines.append(f"- {title}{steps} (worked {p.success_rate:.0%} of {p.support} runs)")
-    return "## Procedures that worked for this task\n" + "\n".join(lines)
+    for skill in skills:
+        steps = " -> ".join(skill.steps)
+        what = f"adds to your skill {skill.with_skill}" if skill.with_skill else skill.name
+        lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
+        lines.extend(f"  - if {fix}" for fix in skill.fixes)
+    return "## Learned skills for this task\n" + "\n".join(lines)
 
 
 def tools_section(hints: ToolHints | None) -> str | None:
@@ -579,15 +570,15 @@ def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str:
 def pinned_sections(
     profile: Sequence[ProfileBlockView],
     summary: ThreadSummaryView | None,
-    procedures: Sequence[ProcedureView],
+    procedures: Sequence[SkillView],
     tools: ToolHints | None,
 ) -> list[str]:
-    """What every prompt starts from: the profile, the thread summary, the procedures and
+    """What every prompt starts from: the profile, the thread summary, the learned skills and
     the tool hints, in that order."""
     sections = (
         profile_section(profile),
         summary_section(summary),
-        procedures_section(procedures),
+        skills_section(procedures),
         tools_section(tools),
     )
     return [s for s in sections if s]

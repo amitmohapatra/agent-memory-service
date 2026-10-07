@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from memory_service.domain.context_bundle import ContextBundle, ContextItem, ProcedureView
+from memory_service.domain.context_bundle import ContextBundle, ContextItem
 from memory_service.domain.enums import Representation
-from memory_service.domain.tools import PlanHint, ToolHints
+from memory_service.domain.tools import SkillView, ToolHints
 
 #: Decimal places of every 0..1 number on the wire.
 PLACES = 2
@@ -63,7 +63,7 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
     if bundle.thread_summary is not None:
         body["thread_summary"] = bundle.thread_summary.text
     _put(body, "profile", [{"block": b.block, "text": b.text} for b in bundle.profile])
-    _put(body, "procedures", [procedure_view(p) for p in bundle.procedures])
+    _put(body, "skills", [skill_body(p) for p in bundle.procedures])
     if bundle.tools is not None:
         _put(body, "tools", tool_choices(bundle.tools))
     _put(body, "memories", [_memory(m) for m in bundle.memories if m.item_id not in repeated])
@@ -105,19 +105,18 @@ def hints_view(hints: ToolHints) -> dict[str, Any]:
     """``/v1/tools/hints`` and the ``tool_search`` memory tool: the choices and the plan."""
     body: dict[str, Any] = {"tools": tool_choices(hints)}
     if hints.plan is not None:
-        body["plan"] = procedure_view(hints.plan)
+        body["plan"] = skill_body(hints.plan)
     return body
 
 
-def procedure_view(procedure: ProcedureView | PlanHint) -> dict[str, Any]:
-    """A learned procedure as its tool sequence and how often it worked."""
-    procedure_id = getattr(procedure, "id", None) or getattr(procedure, "procedure_id", "")
-    body: dict[str, Any] = {"id": procedure_id}
-    if procedure.title:
-        body["title"] = procedure.title
-    body["steps"] = [str(step.get("tool")) for step in procedure.steps]
-    body["success_rate"] = round(procedure.success_rate, PLACES)
-    body["runs"] = procedure.support
+def skill_body(skill: SkillView) -> dict[str, Any]:
+    """A learned skill: its name, its steps, the agent's own skill it adds to, what fixed a
+    failing step, and how often it worked."""
+    body: dict[str, Any] = {"id": skill.id, "name": skill.name, "steps": skill.steps}
+    _put(body, "with_skill", skill.with_skill)
+    _put(body, "fixes", skill.fixes)
+    body["success_rate"] = round(skill.success_rate, PLACES)
+    body["runs"] = skill.support
     return body
 
 
@@ -169,7 +168,7 @@ def _item(item: ContextItem) -> dict[str, Any]:
     return {"id": item.item_id, "text": item.text, "relevance": round(item.relevance, PLACES)}
 
 
-def _put(body: dict[str, Any], key: str, value: list[Any] | dict[str, Any]) -> None:
+def _put(body: dict[str, Any], key: str, value: list[Any] | dict[str, Any] | str | None) -> None:
     """Set ``key`` only when there is something in it: an absent key means none."""
     if value:
         body[key] = value

@@ -18,6 +18,7 @@ def routers() -> list[APIRouter]:
         model_keys,
         profile,
         retrieval,
+        skills,
         tenancy,
         tools,
     )
@@ -34,6 +35,7 @@ def routers() -> list[APIRouter]:
         profile.router,
         graph.router,
         tools.router,
+        skills.router,
         agent_tools.router,
         feedback.router,
     ]

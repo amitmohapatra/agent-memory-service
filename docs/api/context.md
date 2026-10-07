@@ -79,7 +79,7 @@ has no `rendered`: that would be the same content twice.
   "conversation": {"thread_id": "thread-po", "messages": [{"id": "msg_…", "role": "USER", "text": "…"}]},
   "thread_summary": "Priya runs procurement for the Berlin office.",
   "profile": [{"block": "user", "text": "name: Priya"}],
-  "procedures": [{"id": "prc_…", "title": "Order supplies", "steps": ["erp-search_supplier", "erp-create_po"], "success_rate": 1.0, "runs": 3}],
+  "skills": [{"id": "prc_…", "name": "order-supplies", "steps": ["erp-search_supplier", "erp-create_po"], "success_rate": 1.0, "runs": 3}],
   "tools": [{"name": "erp-create_po", "confidence": 0.74, "success_rate": 1.0, "next": true, "args": {"amount": 700, "cost_centre": "CC-7"}, "missing": [{"arg": "supplier_id", "question": "erp-create_po needs 'supplier id': what should it be?"}]}],
   "memories": [{"id": "mem_…", "text": "…", "relevance": 0.32, "observed_at": "2026-10-04T11:17:47Z", "subject": "user:u-priya", "dates": [{"text": "Last week", "date": "2026-09-21..2026-09-27"}], "sources": ["msg_…"]}],
   "knowledge": [{"id": "chk_…", "text": "…", "relevance": 0.61, "document_id": "doc_…", "page": 11, "section": "Results > Revenue"}],
@@ -95,7 +95,7 @@ prompt.tools, prompt.tool_names  # the tools that fit, with confidence (only wit
 
 bundle = await ctx.context("how did revenue develop?", tools=tool_names, format="full")
 bundle.memories, bundle.knowledge, bundle.graph_facts, bundle.summaries
-bundle.conversation, bundle.thread_summary, bundle.profile, bundle.procedures, bundle.tools
+bundle.conversation, bundle.thread_summary, bundle.profile, bundle.skills, bundle.tools
 bundle.missing_evidence, bundle.insufficient  # evidence_status == "INSUFFICIENT"
 ```
 
@@ -104,7 +104,7 @@ already shows, and a `mentions` fact whose object the shown text already names, 
 of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and
 the handles still see them.
 
-The pinned sections — profile, thread summary, procedures, tool hints, in that order — open
+The pinned sections — profile, thread summary, learned skills ([skills.md](skills.md)), tool hints, in that order — open
 `rendered` and may take at most half of `token_budget` (in that priority); ranked evidence fills
 the rest - but only evidence that clears the encoder's relevance floor: every ranked memory,
 chunk and summary carries its dense similarity to the question as `relevance` (0..1), and one
@@ -129,7 +129,7 @@ question no rule classified, `entity_resolution` on the graph route, `grounding_
 borderline claims in `/v1/verify`), and only when a model key can pay
 ([tenancy.md](tenancy.md)); the response header `X-Trellis-LLM-Tokens` says what the request
 spent. Query decomposition was removed in 0.3.0. The pinned sections never call a
-model: summaries, profiles and procedure titles are written in the background. With no key,
+model: summaries, profiles and learned-skill titles are written in the background. With no key,
 the deterministic path answers.
 
 ## Verifying an answer

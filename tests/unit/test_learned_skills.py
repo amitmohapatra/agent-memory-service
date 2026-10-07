@@ -1,47 +1,46 @@
-"""Learned skills, piece by piece: a procedure's draft, its name and body, the version rule,
-and the two stores it is published to (a skills folder, the gateway's repository)."""
+"""Learned skills, piece by piece: where a call is learned (per agent, across its users), who
+may read the result, how a skill is named and shown (in any script, with what fixed a failing
+step, as an addition to the agent's own skill), the toolbox size that earns tool hints, and
+dismissing one."""
 
 from __future__ import annotations
 
-import json
+from datetime import UTC, datetime
 
-import httpx
 import pytest
-import respx
 
-from memory_service.adapters.skills import (
-    BifrostSkills,
-    FolderSkills,
-    front_matter_metadata,
-    skill_md,
+from memory_service.domain.context_bundle import skills_section
+from memory_service.domain.errors import NotFound
+from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.tools import (
+    SkillView,
+    StoredProcedure,
+    ToolInvocation,
+    agent_audience,
 )
-from memory_service.domain.errors import (
-    Conflict,
-    DependencyUnavailable,
-    NotFound,
-    ProviderNotConfigured,
-)
-from memory_service.domain.tools import SkillDecision, StoredProcedure
+from memory_service.modules.context.sections import TOOL_HINTS_MIN, ToolsRequest
+from memory_service.modules.tools.learning import audience_of, contributors, merge
+from memory_service.modules.tools.procedures import Procedure, ProcedureStep
 from memory_service.modules.tools.skills import (
-    SkillDrafts,
-    draft,
-    skill_body,
+    LearnedSkills,
+    fixes,
+    learned_skill,
     skill_name,
+    skill_view,
+    task_steps,
+    with_skill,
 )
-from memory_service.ports.skills import SkillContent, next_version, valid_name
 
 pytestmark = pytest.mark.unit
-
-GATEWAY = "http://gateway.test"
 
 
 def _procedure(**kw) -> StoredProcedure:
     base = {
+        "procedure_id": "prc_1",
         "tenant_id": "acme",
-        "scope_key": "user:acme/u1",
+        "scope_key": agent_audience("acme", "support"),
         "pattern": "update quote {id} with {entity} price for {id}",
         "title": "Update a quote's regional price",
-        "strategy": "Look the price up first.\nAvoid: guessing the region.",
         "steps": [
             {"ordinal": 0, "tool": "lookup_price", "expected_output": ["price", "quote"]},
             {
@@ -54,271 +53,283 @@ def _procedure(**kw) -> StoredProcedure:
         "success_rate": 0.75,
         "status": "active",
         "steps_hash": "h1",
+        "agent_id": "support",
+        "users": 2,
     }
     return StoredProcedure(**{**base, **kw})
 
 
-def _content(name: str = "quote-price", tenant: str = "acme") -> SkillContent:
-    return SkillContent(
-        name=name,
-        description='Update a quote\'s price: "EMEA" first.',
-        body="# Body\n\nSteps.",
-        metadata={"source": "trellis-memory", "trellis_tenant": tenant},
+def _with_skill_steps() -> dict:
+    return {
+        "steps": [
+            {"ordinal": 0, "tool": "load_skill"},
+            {"ordinal": 1, "tool": "find_order"},
+            {"ordinal": 2, "tool": "read_skill_file"},
+            {"ordinal": 3, "tool": "refund"},
+        ],
+        "bindings": [
+            {"step": 0, "argument": "name", "literal": "refund-policy"},
+            {"step": 3, "argument": "payment", "source_step": 1, "source_field": "payment"},
+        ],
+    }
+
+
+def _call(**kw) -> ToolInvocation:
+    base = {
+        "tenant_id": "acme",
+        "tool_id": "tool_1",
+        "tool_name": "refund",
+        "agent_id": "support",
+        "user_id": "ann",
+        "visibility_keys": ["principal:acme/agent:ann/support"],
+        "task_pattern": "refund order {id}",
+    }
+    return ToolInvocation(**{**base, **kw})
+
+
+# --- where a call is learned -------------------------------------------------------------
+
+
+def test_an_agents_own_calls_are_learned_together_whichever_user_it_ran_for() -> None:
+    ann = _call()
+    bob = _call(user_id="bob", visibility_keys=["principal:acme/agent:bob/support"])
+    assert audience_of(ann) == audience_of(bob) == (agent_audience("acme", "support"), "support")
+
+
+def test_an_agent_with_no_user_is_learned_with_the_agent() -> None:
+    unattended = _call(user_id=None, visibility_keys=["principal:acme/agent:support"])
+    assert audience_of(unattended) == (agent_audience("acme", "support"), "support")
+
+
+def test_calls_shared_wider_and_calls_of_no_agent_keep_their_own_audience() -> None:
+    shared = _call(visibility_keys=["workspace:acme/ops", "principal:acme/agent:ann/support"])
+    assert audience_of(shared) == ("workspace:acme/ops", None)
+    by_user = _call(agent_id=None, visibility_keys=["principal:acme/user:ann"])
+    assert audience_of(by_user) == ("principal:acme/user:ann", None)
+
+
+def test_another_agents_name_in_the_key_is_not_the_agents_own_record() -> None:
+    # a record written as "support" but keyed to another principal stays where it was keyed
+    forged = _call(visibility_keys=["principal:acme/agent:ann/other"])
+    assert audience_of(forged) == ("principal:acme/agent:ann/other", None)
+
+
+def test_contributors_count_distinct_users_and_name_the_only_one() -> None:
+    assert contributors([_call(), _call()]) == (1, "ann")
+    assert contributors([_call(), _call(user_id="bob")]) == (2, None)
+    assert contributors([_call(user_id=None)]) == (1, None)
+    assert contributors([_call(), _call(user_id=None)]) == (2, None)
+
+
+def _mined(support: int = 3, rate: float = 1.0) -> Procedure:
+    return Procedure(
+        task_pattern="refund order {id}",
+        steps=[
+            ProcedureStep(ordinal=0, tool="find_order"),
+            ProcedureStep(ordinal=1, tool="refund"),
+        ],
+        support=support,
+        success_rate=rate,
     )
 
 
-# ------------------------------------------------------------------ the draft
+def test_a_merge_records_the_agent_and_who_produced_it() -> None:
+    merged = merge(
+        None,
+        _mined(),
+        tenant_id="acme",
+        audience=agent_audience("acme", "support"),
+        owner=_call(),
+        agent_id="support",
+        users=1,
+        sole_user="ann",
+    )
+    assert merged is not None
+    assert (merged.agent_id, merged.users, merged.sole_user) == ("support", 1, "ann")
+    assert merged.status == "active"
 
 
-def test_a_name_is_the_title_in_hyphenated_words_cut_at_a_word() -> None:
+def test_a_dismissed_skill_stays_dismissed_until_its_steps_change() -> None:
+    first = merge(None, _mined(), tenant_id="acme", audience="a", owner=_call(), agent_id="support")
+    assert first is not None
+    dismissed = first.model_copy(update={"status": "rejected"})
+    again = merge(
+        dismissed, _mined(), tenant_id="acme", audience="a", owner=_call(), agent_id="support"
+    )
+    assert again is not None and again.status == "rejected"
+    changed = Procedure(
+        task_pattern="refund order {id}",
+        steps=[ProcedureStep(ordinal=0, tool="refund")],
+        support=3,
+        success_rate=1.0,
+    )
+    offered = merge(
+        dismissed, changed, tenant_id="acme", audience="a", owner=_call(), agent_id="support"
+    )
+    assert offered is not None and offered.status == "active"
+
+
+# --- how a skill is named and shown ------------------------------------------------------
+
+
+def test_a_skill_is_named_from_its_title_in_lowercase_words() -> None:
     assert skill_name(_procedure()) == "update-a-quote-s-regional-price"
     assert skill_name(_procedure(title="")) == "update-quote-with-price-for"
-    long = _procedure(title=" ".join(["procurement"] * 10))
-    assert len(skill_name(long)) <= 64 and not skill_name(long).endswith("-")
+
+
+@pytest.mark.parametrize(
+    ("title", "name"),
+    [
+        ("Rückerstattung einer Bestellung", "rückerstattung-einer-bestellung"),
+        ("استرداد الطلب", "استرداد-الطلب"),
+        ("ऑर्डर का रिफंड", "ऑर्डर-का-रिफंड"),
+        ("退款", "退款"),
+    ],
+)
+def test_a_skill_is_named_in_the_script_its_task_is_in(title: str, name: str) -> None:
+    assert skill_name(_procedure(title=title)) == name
+
+
+def test_a_name_is_cut_at_a_word_and_never_empty() -> None:
+    long = skill_name(_procedure(title=" ".join(["refund"] * 30)))
+    assert len(long) <= 64 and not long.endswith("-")
     assert skill_name(_procedure(title="", pattern="{id} {id}")) == "procedure"
-    assert all(valid_name(skill_name(_procedure(title=t))) for t in ("Ünïcode & co", "a--b"))
 
 
-def test_the_body_has_the_title_the_strategy_and_the_steps_in_order() -> None:
-    body = skill_body(_procedure())
-    assert body.startswith("# Update a quote's regional price\n")
-    assert "Tasks like: `update quote {id} with {entity} price for {id}`" in body
-    assert "Avoid: guessing the region." in body
-    assert body.index("1. `lookup_price` - returns price, quote") < body.index("2. `update_quote`")
-    assert "   - on Locked: ask the owner to unlock it" in body and "on Other" not in body
-    assert "Look the price" not in skill_body(_procedure(strategy=""))
+def test_the_steps_shown_leave_out_the_skill_machinery() -> None:
+    procedure = _procedure(**_with_skill_steps())
+    assert task_steps(procedure) == ["find_order", "refund"]
 
 
-def test_only_an_active_undecided_procedure_is_a_draft_and_new_steps_bring_it_back() -> None:
-    assert draft(_procedure(status="candidate")) is None
-    new = draft(_procedure())
-    assert new is not None and new.state == "new" and new.published is None
-    assert new.description.startswith("Update a quote's regional price. Use for tasks like")
-    assert new.description.endswith("Worked in 75% of 4 runs.")
+def test_a_skill_opened_by_every_run_is_what_the_learned_one_adds_to() -> None:
+    assert with_skill(_procedure(**_with_skill_steps())) == "refund-policy"
+    assert with_skill(_procedure()) is None
+    varied = _with_skill_steps()
+    varied["bindings"][0] = {"step": 0, "argument": "name", "literal": None}
+    assert with_skill(_procedure(**varied)) is None, "runs opened different skills"
 
-    published = SkillDecision(
-        state="published", steps_hash="h1", name="quote-price", version="1.0.0"
+
+def test_fixes_are_what_worked_when_a_step_failed() -> None:
+    assert fixes(_procedure()) == ["update_quote on Locked: ask the owner to unlock it"]
+
+
+def test_the_view_and_the_listing_carry_the_same_skill() -> None:
+    procedure = _procedure(**_with_skill_steps())
+    view = skill_view(procedure)
+    assert (view.name, view.steps, view.with_skill) == (
+        "update-a-quote-s-regional-price",
+        ["find_order", "refund"],
+        "refund-policy",
     )
-    assert draft(_procedure(skill=published)) is None, "decided for these steps"
-    changed = draft(_procedure(skill=published, steps_hash="h2"))
-    assert changed is not None and changed.state == "changed"
-    assert changed.name == "quote-price" and changed.published == published
-
-    dismissed = SkillDecision(state="dismissed", steps_hash="h1")
-    assert draft(_procedure(skill=dismissed)) is None
-    again = draft(_procedure(skill=dismissed, steps_hash="h2"))
-    assert again is not None and again.state == "new"
-    # dismissing a changed draft keeps naming what is out there
-    after = SkillDecision(state="dismissed", steps_hash="h2", name="quote-price", version="1.0.0")
-    later = draft(_procedure(skill=after, steps_hash="h3"))
-    assert later is not None and later.state == "changed" and later.name == "quote-price"
+    listed = learned_skill(procedure.model_copy(update={"status": "rejected"}))
+    assert listed.status == "dismissed" and listed.steps == view.steps
+    assert learned_skill(procedure.model_copy(update={"status": "retired"})).status == "retired"
 
 
-def test_versions_start_at_one_and_move_by_minor() -> None:
-    assert next_version(None) == "1.0.0"
-    assert next_version("1.0.0") == "1.1.0"
-    assert next_version("2.9.4") == "2.10.0"
-    for bad in ("1.0", "v1.0.0", "1.x.0"):
-        with pytest.raises(Conflict):
-            next_version(bad)
-    assert valid_name("quote-price") and not valid_name("Quote") and not valid_name("a" * 65)
-    assert not valid_name("../etc") and not valid_name("a--b") and not valid_name("-a")
-
-
-# ------------------------------------------------------------------ the folder
-
-
-def test_skill_md_is_front_matter_any_reader_parses_and_the_metadata_reads_back() -> None:
-    text = skill_md(_content(), "1.2.0")
-    head, body = text.split("\n---\n", 1)
-    assert head.startswith("---\nname: quote-price\n")
-    assert body.strip() == "# Body\n\nSteps."
-    assert json.loads(head.splitlines()[2].removeprefix("description: ")) == (
-        'Update a quote\'s price: "EMEA" first.'
+def test_the_context_shows_each_skill_in_full_and_an_addition_as_one() -> None:
+    plain = skill_view(_procedure())
+    added = skill_view(_procedure(procedure_id="prc_2", **_with_skill_steps()))
+    text = skills_section([plain, added])
+    assert text is not None
+    assert text.startswith("## Learned skills for this task\n")
+    assert (
+        "- update-a-quote-s-regional-price: lookup_price -> update_quote (worked 75% of 4 runs)"
+        in text
     )
-    meta = front_matter_metadata(text)
-    assert meta == {"source": "trellis-memory", "trellis_tenant": "acme", "version": "1.2.0"}
-    assert front_matter_metadata("no front matter") == {}
-    assert front_matter_metadata("---\nname: x\nmetadata:\n  version: 2.0.0\n---\n") == {
-        "version": "2.0.0"
-    }
-    assert front_matter_metadata('---\nmetadata:\n  v: "unclosed\n---\n') == {"v": '"unclosed'}
+    assert "  - if update_quote on Locked: ask the owner to unlock it" in text
+    assert "- adds to your skill refund-policy: find_order -> refund" in text
+    assert skills_section([]) is None
 
 
-async def test_the_folder_gets_a_new_skill_then_its_next_version_and_keeps_others(
-    tmp_path,
-) -> None:
-    store = FolderSkills(tmp_path)
-    assert await store.publish(_content(), tenant_id="acme") == "1.0.0"
-    assert await store.publish(_content(), tenant_id="acme") == "1.1.0"
-    written = (tmp_path / "quote-price" / "SKILL.md").read_text()
-    assert front_matter_metadata(written)["version"] == "1.1.0"
-    assert [p.name for p in (tmp_path / "quote-price").iterdir()] == ["SKILL.md"]
-
-    with pytest.raises(Conflict):
-        await store.publish(_content(tenant="globex"), tenant_id="globex")
-    (tmp_path / "house").mkdir()
-    (tmp_path / "house" / "SKILL.md").write_text("---\nname: house\n---\nOurs.")
-    with pytest.raises(Conflict):
-        await store.publish(_content("house"), tenant_id="acme")
-    with pytest.raises(Conflict):
-        await store.publish(_content("../escape"), tenant_id="acme")
-    assert not (tmp_path.parent / "escape").exists()
+# --- which toolbox earns tool hints ------------------------------------------------------
 
 
-async def test_a_failed_write_leaves_no_half_file(tmp_path, monkeypatch) -> None:
-    store = FolderSkills(tmp_path)
-
-    def boom(*_: object) -> None:
-        raise OSError("disk full")
-
-    monkeypatch.setattr("memory_service.adapters.skills.os.replace", boom)
-    with pytest.raises(DependencyUnavailable, match="disk full"):
-        await store.publish(_content(), tenant_id="acme")
-    assert list((tmp_path / "quote-price").iterdir()) == []
-
-
-# ------------------------------------------------------------------ the gateway
-
-
-def _listing(*skills: dict) -> dict:
-    return {"skills": list(skills), "total_count": len(skills)}
-
-
-def _skill(metadata: dict, highest: str = "1.0.0") -> dict:
-    return {
-        "id": "sk_1",
-        "name": "quote-price",
-        "description": "d",
-        "latest_version": "1.0.0",
-        "highest_version": highest,
-        "metadata": metadata,
-    }
-
-
-@respx.mock
-async def test_the_gateway_creates_a_new_skill_at_one_and_publishes_the_next_minor() -> None:
-    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(200, json=_listing()))
-    created = respx.post(f"{GATEWAY}/api/skills").mock(
-        return_value=httpx.Response(200, json={"skill": _skill({"trellis_tenant": "acme"})})
+def test_tool_hints_need_a_toolbox_of_five_or_the_catalog_skills_need_any_tool() -> None:
+    small = ToolsRequest(available=["a", "b"])
+    assert small.any and not small.hinted
+    assert ToolsRequest(available=[str(i) for i in range(TOOL_HINTS_MIN)]).hinted
+    assert ToolsRequest(available=None).hinted
+    none = ToolsRequest(available=[])
+    assert not none.any and not none.hinted
+    unhinted = ToolsRequest(available=[str(i) for i in range(8)], hints=False)
+    assert unhinted.any and not unhinted.hinted, "learned skills only"
+    assert (
+        unhinted.fingerprint() != ToolsRequest(available=[str(i) for i in range(8)]).fingerprint()
     )
-    store = BifrostSkills(f"{GATEWAY}/v1", token="admin-token")
-    assert await store.publish(_content(), tenant_id="acme") == "1.0.0"
-    sent = json.loads(created.calls[0].request.content)
-    assert sent["name"] == "quote-price" and sent["version"] == "1.0.0"
-    assert sent["skill_md_body"] == "# Body\n\nSteps."
-    assert sent["metadata"]["trellis_tenant"] == "acme"
-    assert created.calls[0].request.headers["authorization"] == "Bearer admin-token"
-
-    owned = _skill({"trellis_tenant": "acme"}, highest="1.3.0")
-    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(200, json=_listing(owned)))
-    respx.get(f"{GATEWAY}/api/skills/sk_1").mock(
-        return_value=httpx.Response(200, json={"skill": owned})
-    )
-    put = respx.put(f"{GATEWAY}/api/skills/sk_1").mock(
-        return_value=httpx.Response(200, json={"skill": owned})
-    )
-    assert await store.publish(_content(), tenant_id="acme") == "1.4.0"
-    assert json.loads(put.calls[0].request.content)["version"] == "1.4.0"
 
 
-@respx.mock
-async def test_the_gateway_refuses_a_skill_another_tenant_or_a_person_published() -> None:
-    for metadata in ({"trellis_tenant": "globex"}, {}):
-        foreign = _skill(metadata)
-        respx.get(f"{GATEWAY}/api/skills").mock(
-            return_value=httpx.Response(200, json=_listing(foreign))
-        )
-        respx.get(f"{GATEWAY}/api/skills/sk_1").mock(
-            return_value=httpx.Response(200, json={"skill": foreign})
-        )
-        with pytest.raises(Conflict):
-            await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
+# --- dismissing --------------------------------------------------------------------------
 
 
-# ------------------------------------------------------------------ the service's refusals
+class _Procedures:
+    def __init__(self, found: StoredProcedure | None) -> None:
+        self.found = found
+        self.rejected: list[str] = []
+
+    async def get(self, tenant_id: str, procedure_id: str) -> StoredProcedure | None:
+        return self.found
+
+    async def reject(self, tenant_id: str, procedure_id: str) -> bool:
+        self.rejected.append(procedure_id)
+        assert self.found is not None
+        self.found = self.found.model_copy(update={"status": "rejected"})
+        return True
+
+    async def learned(self, tenant_id: str, *, agent_id: str | None, limit: int) -> list:
+        return [self.found] if self.found and (agent_id in (None, self.found.agent_id)) else []
 
 
-class _NoUow:
-    async def __aenter__(self) -> _NoUow:
-        raise AssertionError("no store: nothing is read")
+class _Revisions:
+    def __init__(self) -> None:
+        self.bumped: list[tuple] = []
 
-    async def __aexit__(self, *_: object) -> None:
+    async def bump(self, tenant_id: str, kind: RevisionKind, identifier: str) -> None:
+        self.bumped.append((tenant_id, kind, identifier))
+
+
+class _Uow:
+    def __init__(self, found: StoredProcedure | None) -> None:
+        self.procedures = _Procedures(found)
+        self.revisions = _Revisions()
+        self.commits = 0
+
+    async def __aenter__(self) -> _Uow:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
         return None
 
+    async def commit(self) -> None:
+        self.commits += 1
 
-async def test_publishing_without_a_store_or_without_a_draft_is_refused(tmp_path) -> None:
-    with pytest.raises(ProviderNotConfigured):
-        await SkillDrafts(_NoUow, None).publish("acme", "p1", by=None)  # type: ignore[arg-type,return-value]
 
-    class _Procedures:
-        def __init__(self, found: StoredProcedure | None) -> None:
-            self.found = found
+async def test_dismissing_rejects_it_once_and_rereads_the_contexts_that_offered_it() -> None:
+    uow = _Uow(_procedure())
+    skills = LearnedSkills(lambda: uow)  # type: ignore[arg-type,return-value]
+    dismissed = await skills.dismiss("acme", "prc_1")
+    assert dismissed.status == "dismissed"
+    assert uow.procedures.rejected == ["prc_1"]
+    assert uow.revisions.bumped == [("acme", RevisionKind.TENANT, "")]
+    again = await skills.dismiss("acme", "prc_1")
+    assert again.status == "dismissed" and uow.procedures.rejected == ["prc_1"], "no-op"
 
-        async def get(self, tenant_id: str, procedure_id: str) -> StoredProcedure | None:
-            return self.found
 
-    class _Uow:
-        def __init__(self, found: StoredProcedure | None) -> None:
-            self.procedures = _Procedures(found)
-
-        async def __aenter__(self) -> _Uow:
-            return self
-
-        async def __aexit__(self, *_: object) -> None:
-            return None
-
-    store = FolderSkills(tmp_path)
+@pytest.mark.parametrize("found", [None, _procedure(status="candidate")])
+async def test_there_is_nothing_to_dismiss_before_it_was_learned(found) -> None:
     with pytest.raises(NotFound):
-        await SkillDrafts(lambda: _Uow(None), store).publish("acme", "p1", by=None)  # type: ignore[arg-type,return-value]
-    with pytest.raises(Conflict):
-        await SkillDrafts(lambda: _Uow(_procedure(status="retired")), store).dismiss(  # type: ignore[arg-type,return-value]
-            "acme", "p1", by=None
-        )
-    with pytest.raises(Conflict):
-        await SkillDrafts(lambda: _Uow(_procedure()), store).publish(  # type: ignore[arg-type,return-value]
-            "acme", "p1", by=None, name="Not A Name"
-        )
+        await LearnedSkills(lambda: _Uow(found)).dismiss("acme", "prc_1")  # type: ignore[arg-type,return-value]
 
 
-def test_the_store_is_the_folder_when_set_else_the_gateway_else_none(tmp_path) -> None:
-    from types import SimpleNamespace
-
-    from memory_service.adapters.wiring import _skill_store
-    from memory_service.config.settings import Settings
-
-    def store(**env: str):  # type: ignore[no-untyped-def]
-        return _skill_store(SimpleNamespace(settings=Settings(_env_file=None, **env)))  # type: ignore[arg-type]
-
-    assert store() is None
-    folder = store(skills_dir=str(tmp_path), bifrost_url=GATEWAY)
-    assert isinstance(folder, FolderSkills) and folder.root == tmp_path
-    gateway = store(bifrost_url=GATEWAY, bifrost_admin_token="t")
-    assert isinstance(gateway, BifrostSkills) and gateway.token == "t"
-    assert store(bifrost_url=GATEWAY, bifrost_admin_token="").token is None
-    assert store(bifrost_url=GATEWAY).token is None
+async def test_the_listing_is_one_agents_when_asked() -> None:
+    uow = _Uow(_procedure(updated_at=datetime(2026, 10, 1, tzinfo=UTC)))
+    skills = LearnedSkills(lambda: uow)  # type: ignore[arg-type,return-value]
+    assert [s.name for s in await skills.list("acme", agent_id="support")] == [
+        "update-a-quote-s-regional-price"
+    ]
+    assert await skills.list("acme", agent_id="billing") == []
 
 
-@respx.mock
-async def test_a_gateway_that_fails_is_unavailable_and_one_that_refuses_a_version_conflicts() -> (
-    None
-):
-    respx.get(f"{GATEWAY}/api/skills").mock(side_effect=httpx.ConnectError("refused"))
-    with pytest.raises(DependencyUnavailable):
-        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
-    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(401, json={}))
-    with pytest.raises(DependencyUnavailable):
-        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
-    respx.get(f"{GATEWAY}/api/skills").mock(return_value=httpx.Response(200, json=_listing()))
-    respx.post(f"{GATEWAY}/api/skills").mock(
-        return_value=httpx.Response(409, json={"error": "version exists"})
-    )
-    with pytest.raises(Conflict):
-        await BifrostSkills(GATEWAY).publish(_content(), tenant_id="acme")
-
-
-async def test_a_folder_that_cannot_be_written_is_unavailable(tmp_path) -> None:
-    blocked = tmp_path / "blocked"
-    blocked.write_text("a file where the folder should be")
-    with pytest.raises(DependencyUnavailable):
-        await FolderSkills(blocked).publish(_content(), tenant_id="acme")
+def test_a_skill_view_is_frozen() -> None:
+    view = SkillView(id="prc_1", name="x")
+    with pytest.raises(Exception):  # noqa: B017 - pydantic's frozen error
+        view.name = "y"  # type: ignore[misc]

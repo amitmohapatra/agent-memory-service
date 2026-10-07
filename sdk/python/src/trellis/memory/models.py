@@ -510,7 +510,8 @@ class ContextBundle(BaseModel):
     conversation: Conversation | None = None
     thread_summary: str | None = None
     profile: list[PinnedBlock] = Field(default_factory=list)
-    procedures: list[ProcedureView] = Field(default_factory=list)
+    #: the skills the agent learned for the task (only when ``tools`` were given)
+    skills: list[SkillView] = Field(default_factory=list)
     #: the tools that fit, best first (only when ``tools`` were given)
     tools: list[ToolChoice] = Field(default_factory=list)
     memories: list[ContextMemory] = Field(default_factory=list)
@@ -727,38 +728,28 @@ class ApprovalSuggestion(BaseModel):
     agent_id: str | None = None
 
 
-class SkillDecision(BaseModel):
-    """What an administrator decided about a skill draft: ``published`` (as ``name`` at
-    ``version``, to ``destination``: ``skills_dir`` or ``bifrost``) or ``dismissed``."""
+class LearnedSkill(BaseModel):
+    """What one agent learned for one kind of task (``advanced.skills.list``): its steps, what
+    fixed a failing step, its track record and its state."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
-    state: Literal["published", "dismissed"]
-    steps_hash: str
-    name: str | None = None
-    version: str | None = None
-    destination: str | None = None
-    decided_by: str | None = None
-    decided_at: str
-
-
-class SkillDraft(BaseModel):
-    """A learned procedure as the Agent Skill it would publish (``tools.publish_skill``)."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    #: the procedure's id: what ``publish_skill`` and ``dismiss_skill`` take
+    #: what ``advanced.skills.dismiss`` takes
     id: str
-    #: ``new`` (never published) or ``changed`` (published, and its steps changed since)
-    state: Literal["new", "changed"]
+    agent_id: str | None = None
     name: str
-    description: str
-    #: the ``SKILL.md`` body
-    body: str
+    #: active (offered to the agent), retired (stopped working) or dismissed
+    status: Literal["active", "retired", "dismissed"]
     pattern: str
-    support: int
-    success_rate: float
-    published: SkillDecision | None = None
+    steps: list[str] = Field(default_factory=list)
+    #: the agent's own skill these runs opened: this one is what they added to it
+    with_skill: str | None = None
+    fixes: list[str] = Field(default_factory=list)
+    success_rate: float = 0.0
+    runs: int = 0
+    #: how many users' runs it was learned from (offered to other users from two on)
+    users: int = 0
+    updated_at: datetime | None = None
 
 
 class MissingArgument(BaseModel):
@@ -796,7 +787,7 @@ class ToolHints(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
 
     tools: list[ToolChoice] = Field(default_factory=list)
-    plan: ProcedureView | None = None
+    plan: SkillView | None = None
 
     @property
     def next(self) -> ToolChoice | None:
@@ -843,17 +834,21 @@ class ThreadSummary(BaseModel):
     created_at: datetime | None = None
 
 
-class ProcedureView(BaseModel):
-    """A procedure learned for the task: its tool sequence and how often it worked."""
+class SkillView(BaseModel):
+    """A skill the agent learned for the task: what its successful runs did."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
     id: str
-    title: str | None = None
+    name: str = ""
     #: tool names, in order
     steps: list[str] = Field(default_factory=list)
+    #: the agent's own skill its runs opened: this one is what they added to it
+    with_skill: str | None = None
+    #: what worked when a step failed: "tool on error: fix"
+    fixes: list[str] = Field(default_factory=list)
     success_rate: float = 0.0
-    #: the successful runs it was learned from
+    #: the runs it was learned from
     runs: int = 0
 
 

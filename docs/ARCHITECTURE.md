@@ -180,7 +180,7 @@ flowchart TB
   gfx --> comp["document companion expansion,<br/>request-local evidence verification"]
   comp --> sim["dense similarity of each item to the question"]
   sim --> pack["ContextBuilder: provenance + evidence groups<br/>under the token budget, relevance floor"]
-  side["profile blocks, thread summary, procedures,<br/>prefetched memories, recent messages, tool hints<br/>(one indexed read each, in parallel)"] --> pack
+  side["profile blocks, thread summary, learned skills,<br/>prefetched memories, recent messages, tool hints<br/>(one indexed read each, in parallel)"] --> pack
   pack --> bundle[ContextBundle]
 ```
 
@@ -212,7 +212,7 @@ superseding, so no memory is set to it today.
 
 ```mermaid
 flowchart LR
-  rt["record_tool / outcome"] --> tl["tools.learn<br/>procedures per (audience, task pattern),<br/>procedural graph edges"]
+  rt["record_tool / outcome"] --> tl["tools.learn<br/>procedures per (agent or audience, task pattern),<br/>procedural graph edges"]
   fb[feedback] --> rv["review (ADR 0028):<br/>a vote waits for the tenant admin"] --> fp["feedback.project<br/>memory standing, run outcomes, tool statistics,<br/>approval patterns, procedure rejection"]
   msg["every 20 messages"] --> sr["summary.refresh<br/>the thread's rolling summary"]
   up["USER / PREFERENCE memory"] --> pr["profile.refresh<br/>the user's pinned block"]
@@ -230,9 +230,12 @@ What each job learns, with the thresholds in the code:
   the memories an answer cited, label run outcomes and feed tool statistics; a memory's
   standing moves its ranking within a bounded ±15%. A vote from a person or an agent counts
   only once the tenant admin approves it (ADR 0028).
-- **Procedures.** Tool runs with outcomes are mined into one procedure per task pattern,
-  admitted at 2 or more supporting runs and 60% success, updated by delta; hints and the push
-  offer it as a plan with the next step's arguments filled from earlier outputs.
+- **Procedures and learned skills.** Tool runs with outcomes are mined into one procedure per
+  task pattern - an agent's own runs per agent, across all of its users - admitted at 2 or
+  more supporting runs and 60% success, updated by delta. An active one is the agent's learned
+  skill: the push offers it in full ("Learned skills for this task", to another user once two
+  users produced it) and hints offer it as a plan with the next step's arguments filled from
+  earlier outputs ([api/skills.md](api/skills.md), ADR 0034).
 - **Approval suggestions.** Approve, reject and edit decisions per tool and argument shape
   become suggested rules after 5 decisions; the service never applies one itself.
 - **Prefetch.** A memory the agent pulled for a kind of request at least 3 times and used at

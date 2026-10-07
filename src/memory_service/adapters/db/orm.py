@@ -879,12 +879,16 @@ class ProcedureRow(Base):
     owner_principal: Mapped[str | None] = mapped_column(String(512))
     workspace_id: Mapped[str | None] = mapped_column(String(200))
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
-    #: the reviewer's decision about its skill draft (``SkillDecision``), or null
-    skill: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #: the agent it was learned for (an agent-audience procedure), else null
+    agent_id: Mapped[str | None] = mapped_column(String(200))
+    #: distinct users its runs were for, and the one user while there is only one
+    users: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    sole_user: Mapped[str | None] = mapped_column(String(200))
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "scope_key", "pattern", name="uq_procedures_pattern"),
         Index("ix_procedures_scope", "tenant_id", "scope_key", "status", "updated_at"),
+        Index("ix_procedures_agent", "tenant_id", "agent_id", "support"),
     )
 
 

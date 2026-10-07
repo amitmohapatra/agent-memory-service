@@ -259,28 +259,25 @@ sequenceDiagram
 counts as a weak success a day later if none of its calls failed. Details:
 [api/tools.md](api/tools.md).
 
-An active procedure becomes a skill only when a person publishes it
-([learned skills](api/tools.md#learned-skills)):
+An active procedure is the agent's learned skill: it is offered in the agent's context on its
+own, learned across all of the agent's users ([learned skills](api/skills.md)):
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant A as Tenant administrator
+  participant H as Harness run (agent support, user Ann)
   participant API as API
-  participant S as SkillDrafts
+  participant W as Worker (tools.learn)
   participant PG as PostgreSQL
-  participant D as SKILLS_DIR or the gateway's skills repository
-  participant H as Harness run
-  A->>API: GET /v1/tools/skill-drafts
-  API->>S: list(tenant)
-  S->>PG: active procedures not decided for their current steps
-  API-->>A: [{id, state: new or changed, name, description, body, support, success_rate}]
-  A->>API: POST /v1/tools/skill-drafts/{id}/publish {name?}
-  API->>S: publish
-  S->>D: SKILL.md as its next version (refused when another tenant or a person owns the name)
-  S->>PG: the decision, with the steps it was about
-  API-->>A: {state: published, name, version, destination}
-  H->>D: load the skill by name at run start (pinned for the run)
+  participant A as Tenant administrator
+  H->>API: POST /v1/tools/invocations (each call), POST /v1/feedback (the outcome)
+  API->>W: tools.learn
+  W->>PG: one procedure per (agent support, kind of task): steps, fixes, runs, users
+  H->>API: POST /v1/context {query, tools: {available: [names]}}
+  API->>PG: active procedures of agent support matching the task (Ann's own, or two users')
+  API-->>H: rendered with "## Learned skills for this task"
+  A->>API: GET /v1/skills?agent=support, POST /v1/skills/{id}/dismiss
+  API->>PG: status rejected (not offered until its steps change)
 ```
 
 ## 7. Compaction and background jobs

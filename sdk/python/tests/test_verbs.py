@@ -36,11 +36,12 @@ _BUNDLE = {
     },
     "thread_summary": "Asked for a PO.",
     "profile": [{"block": "user", "text": "Prefers email."}],
-    "procedures": [
+    "skills": [
         {
             "id": "prc_1",
-            "title": "Order",
+            "name": "order",
             "steps": ["erp-create_po"],
+            "fixes": ["erp-create_po on Locked: ask the owner"],
             "success_rate": 1.0,
             "runs": 4,
         }
@@ -90,6 +91,8 @@ async def test_context_is_the_prompt_by_default(ctx) -> None:
     assert isinstance(pushed, PromptContext)
     assert pushed.bundle_id == "b1" and pushed.tool_names == ["erp-create_po"]
     assert pushed.tools is not None and pushed.tools[0].confidence == 0.74
+    await ctx.context("order paper", tools=["erp-create_po"], hints=False)
+    assert _body(route)["tools"] == {"available": ["erp-create_po"], "k": 8, "hints": False}
 
 
 @respx.mock
@@ -100,7 +103,8 @@ async def test_the_full_bundle_reads_every_section(ctx) -> None:
     assert isinstance(bundle, ContextBundle) and not bundle.insufficient
     assert bundle.conversation is not None and bundle.conversation.messages[0].id == "msg_1"
     assert bundle.thread_summary == "Asked for a PO." and bundle.profile[0].block == "user"
-    assert bundle.procedures[0].steps == ["erp-create_po"] and bundle.procedures[0].runs == 4
+    assert bundle.skills[0].steps == ["erp-create_po"] and bundle.skills[0].runs == 4
+    assert bundle.skills[0].fixes == ["erp-create_po on Locked: ask the owner"]
     tool = bundle.tools[0]
     assert tool.next and tool.args == {"amount": 700} and tool.missing[0].arg == "supplier_id"
     assert bundle.memories[0].relevance == 0.4 and bundle.graph_facts[0].object == "Acme"
@@ -375,46 +379,33 @@ async def test_the_catalog_and_the_agent_s_model_key_are_advanced(ctx) -> None:
 
 
 @respx.mock
-async def test_skill_drafts_are_listed_published_and_dismissed(ctx) -> None:
-    decision = {
-        "state": "published",
-        "steps_hash": "h1",
-        "name": "refund-order",
-        "version": "1.0.0",
-        "destination": "bifrost",
-        "decided_at": "2026-10-06T10:00:00+00:00",
+async def test_learned_skills_are_listed_and_dismissed(ctx) -> None:
+    skill = {
+        "id": "prc_1",
+        "agent_id": "support",
+        "name": "refund-an-order",
+        "status": "active",
+        "pattern": "refund order {id}",
+        "steps": ["find_order", "refund"],
+        "with_skill": "refund-policy",
+        "fixes": [],
+        "success_rate": 1.0,
+        "runs": 3,
+        "users": 2,
+        "updated_at": "2026-10-07T10:00:00+00:00",
     }
-    respx.get(f"{BASE}/v1/tools/skill-drafts").respond(
-        200,
-        json={
-            "drafts": [
-                {
-                    "id": "procedure_1",
-                    "state": "new",
-                    "name": "refund-order",
-                    "description": "Refund an order.",
-                    "body": "# Refund an order",
-                    "pattern": "refund order {id}",
-                    "support": 3,
-                    "success_rate": 1.0,
-                }
-            ]
-        },
+    listing = respx.get(f"{BASE}/v1/skills").respond(200, json={"skills": [skill]})
+    dismiss = respx.post(f"{BASE}/v1/skills/prc_1/dismiss").respond(
+        200, json={**skill, "status": "dismissed"}
     )
-    publish = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/publish").respond(
-        200, json=decision
-    )
-    dismiss = respx.post(f"{BASE}/v1/tools/skill-drafts/procedure_1/dismiss").respond(
-        200, json={**decision, "state": "dismissed"}
-    )
-    drafts = await ctx.advanced.tools.skill_drafts()
-    assert [(d.id, d.state, d.published) for d in drafts] == [("procedure_1", "new", None)]
-    published = await ctx.advanced.tools.publish_skill("procedure_1", name="refund-order")
-    assert published.version == "1.0.0" and _body(publish) == {"name": "refund-order"}
-    await ctx.advanced.tools.publish_skill("procedure_1")
-    assert _body(publish) == {}
-    assert (await ctx.advanced.tools.dismiss_skill("procedure_1")).state == "dismissed"
-    assert dismiss.called
+    [listed] = await ctx.advanced.skills.list(agent="support")
+    assert (listed.id, listed.with_skill, listed.users) == ("prc_1", "refund-policy", 2)
+    assert listing.calls.last.request.url.params["agent"] == "support"
+    await ctx.advanced.skills.list()
+    assert "agent" not in listing.calls.last.request.url.params
+    dismissed = await ctx.advanced.skills.dismiss("prc_1", idempotency_key="d-1")
+    assert dismissed.status == "dismissed"
+    assert dismiss.calls.last.request.headers["Idempotency-Key"] == "d-1"
 
 
 @respx.mock

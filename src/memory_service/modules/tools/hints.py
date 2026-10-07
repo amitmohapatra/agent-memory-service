@@ -32,8 +32,8 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.graph import IDENTIFIED_BY
 from memory_service.domain.tools import (
     MissingArgument,
-    PlanHint,
     Prefill,
+    SkillView,
     StoredProcedure,
     ToolCandidate,
     ToolDescriptor,
@@ -45,6 +45,7 @@ from memory_service.modules.ingestion.context_graph import canonical_entity, ext
 from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.index import ToolIndex
 from memory_service.modules.tools.patterns import similarity, task_pattern, task_slots
+from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.intelligence import GraphStore
 from memory_service.ports.uow import UnitOfWorkFactory
 
@@ -173,19 +174,8 @@ def _candidate(
     )
 
 
-def _plan_hint(plan: StoredProcedure | None) -> PlanHint | None:
-    if plan is None:
-        return None
-    return PlanHint(
-        procedure_id=plan.procedure_id,
-        title=plan.title,
-        steps=[
-            {**step, "bindings": [b for b in plan.bindings if b.get("step") == step["ordinal"]]}
-            for step in plan.steps
-        ],
-        success_rate=plan.success_rate,
-        support=plan.support,
-    )
+def _plan_hint(plan: StoredProcedure | None) -> SkillView | None:
+    return skill_view(plan) if plan is not None else None
 
 
 def _arguments(entry: ToolDescriptor, plan: StoredProcedure | None) -> list[str]:
@@ -228,10 +218,15 @@ class ToolHintsService:
     async def procedures(
         self, ctx: MemoryExecutionContext, task: str, scope_keys: Sequence[str], *, k: int
     ) -> list[StoredProcedure]:
-        """Active procedures the caller may read, about this task, best first."""
+        """Active procedures the caller may read, about this task, best first: its audience's,
+        and its agent's learned skills (``ProcedureRepository.visible``)."""
         async with self.uow_factory() as uow:
             visible = await uow.procedures.visible(
-                ctx.tenant_id, scope_keys, limit=VISIBLE_PROCEDURES_MAX
+                ctx.tenant_id,
+                scope_keys,
+                agent_id=ctx.agent_id,
+                user_id=ctx.user_id,
+                limit=VISIBLE_PROCEDURES_MAX,
             )
         return rank_procedures(task, visible, k)
 

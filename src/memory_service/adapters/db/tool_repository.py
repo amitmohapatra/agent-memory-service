@@ -30,13 +30,13 @@ from memory_service.domain.ids import new_id
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
-    SkillDecision,
     StoredProcedure,
     SubCall,
     ToolAnnotations,
     ToolDescriptor,
     ToolInvocation,
     ToolStats,
+    agent_audience,
 )
 
 _TENANT_WIDE = ""
@@ -307,6 +307,23 @@ class SqlToolRepository:
         )
         return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
 
+    async def for_agent_pattern(
+        self, tenant_id: str, agent_id: str, pattern: str, *, limit: int
+    ) -> list[ToolInvocation]:
+        """One agent's newest calls of a task pattern, for every user it ran for (the
+        caller keeps the agent's own records: ``learning.audience_of``)."""
+        stmt = (
+            select(ToolInvocationRow)
+            .where(
+                ToolInvocationRow.tenant_id == tenant_id,
+                ToolInvocationRow.task_pattern == pattern,
+                ToolInvocationRow.agent_id == agent_id,
+            )
+            .order_by(ToolInvocationRow.occurred_at.desc())
+            .limit(limit)
+        )
+        return [_to_invocation(r) for r in (await self.s.execute(stmt)).scalars()]
+
     async def unlearned(self, *, tenant_id: str | None, limit: int) -> list[ToolInvocation]:
         stmt = select(ToolInvocationRow).where(ToolInvocationRow.learned_at.is_(None))
         if tenant_id is not None:
@@ -540,7 +557,9 @@ def _to_procedure(row: ProcedureRow) -> StoredProcedure:
         owner_principal=row.owner_principal,
         workspace_id=row.workspace_id,
         updated_at=row.updated_at,
-        skill=SkillDecision.model_validate(row.skill) if row.skill else None,
+        agent_id=row.agent_id,
+        users=row.users,
+        sole_user=row.sole_user,
     )
 
 
@@ -568,27 +587,44 @@ class SqlProcedureRepository:
 
     async def save(self, procedure: StoredProcedure) -> None:
         values = procedure.model_dump()
-        values["skill"] = procedure.skill.model_dump() if procedure.skill else None
         stmt = insert(ProcedureRow).values(**values)
-        # the skill decision is the reviewer's (``decide``): a re-mine never writes it back
-        fixed = ("tenant_id", "procedure_id", "skill")
+        fixed = ("tenant_id", "procedure_id")
         mutable = {k: stmt.excluded[k] for k in values if k not in fixed}
         await self.s.execute(
             stmt.on_conflict_do_update(constraint="uq_procedures_pattern", set_=mutable)
         )
 
     async def visible(
-        self, tenant_id: str, scope_keys: Sequence[str], *, limit: int
+        self,
+        tenant_id: str,
+        scope_keys: Sequence[str],
+        *,
+        agent_id: str | None = None,
+        user_id: str | None = None,
+        limit: int,
     ) -> list[StoredProcedure]:
-        if not scope_keys:
-            return []
+        """Active procedures the reader may read: those of its audience keys, and the agent's
+        own learned procedures once two users produced them, or the reader produced them."""
+        readable = ProcedureRow.scope_key.in_(list(scope_keys)) if scope_keys else sa_false()
+        if agent_id is not None:
+            readable = or_(
+                readable,
+                and_(
+                    ProcedureRow.scope_key == agent_audience(tenant_id, agent_id),
+                    or_(
+                        ProcedureRow.users >= 2,
+                        ProcedureRow.sole_user.is_(None),
+                        ProcedureRow.sole_user == user_id,
+                    ),
+                ),
+            )
         rows = (
             await self.s.execute(
                 select(ProcedureRow)
                 .where(
                     ProcedureRow.tenant_id == tenant_id,
-                    ProcedureRow.scope_key.in_(list(scope_keys)),
                     ProcedureRow.status == "active",
+                    readable,
                 )
                 .order_by(ProcedureRow.updated_at.desc(), ProcedureRow.procedure_id)
                 .limit(limit)
@@ -596,24 +632,22 @@ class SqlProcedureRepository:
         ).scalars()
         return [_to_procedure(r) for r in rows]
 
-    async def active(self, tenant_id: str, *, limit: int) -> list[StoredProcedure]:
+    async def learned(
+        self, tenant_id: str, *, agent_id: str | None = None, limit: int
+    ) -> list[StoredProcedure]:
+        """The tenant's learned procedures that are or were offered (active, retired,
+        rejected), best supported first; one agent's when ``agent_id`` is given."""
+        stmt = select(ProcedureRow).where(
+            ProcedureRow.tenant_id == tenant_id, ProcedureRow.status != "candidate"
+        )
+        if agent_id is not None:
+            stmt = stmt.where(ProcedureRow.agent_id == agent_id)
         rows = (
             await self.s.execute(
-                select(ProcedureRow)
-                .where(ProcedureRow.tenant_id == tenant_id, ProcedureRow.status == "active")
-                .order_by(ProcedureRow.support.desc(), ProcedureRow.procedure_id)
-                .limit(limit)
+                stmt.order_by(ProcedureRow.support.desc(), ProcedureRow.procedure_id).limit(limit)
             )
         ).scalars()
         return [_to_procedure(r) for r in rows]
-
-    async def decide(self, tenant_id: str, procedure_id: str, decision: SkillDecision) -> bool:
-        result = await self.s.execute(
-            update(ProcedureRow)
-            .where(ProcedureRow.tenant_id == tenant_id, ProcedureRow.procedure_id == procedure_id)
-            .values(skill=decision.model_dump())
-        )
-        return bool(getattr(result, "rowcount", 0))
 
     async def reject(self, tenant_id: str, procedure_id: str) -> bool:
         result = await self.s.execute(

@@ -14,7 +14,6 @@ from typing import Protocol, runtime_checkable
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
-    SkillDecision,
     StoredProcedure,
     ToolDescriptor,
     ToolInvocation,
@@ -73,6 +72,12 @@ class ToolRepository(Protocol):
         self, tenant_id: str, audience: str, pattern: str, *, limit: int
     ) -> list[ToolInvocation]:
         """The newest calls of one task pattern recorded for one audience."""
+        ...
+
+    async def for_agent_pattern(
+        self, tenant_id: str, agent_id: str, pattern: str, *, limit: int
+    ) -> list[ToolInvocation]:
+        """One agent's newest calls of one task pattern, whichever user it ran for."""
         ...
 
     async def unlearned(self, *, tenant_id: str | None, limit: int) -> list[ToolInvocation]:
@@ -138,20 +143,27 @@ class ProcedureRepository(Protocol):
         ...
 
     async def visible(
-        self, tenant_id: str, scope_keys: Sequence[str], *, limit: int
+        self,
+        tenant_id: str,
+        scope_keys: Sequence[str],
+        *,
+        agent_id: str | None = None,
+        user_id: str | None = None,
+        limit: int,
     ) -> list[StoredProcedure]:
-        """Active procedures whose audience the reader holds, most recently learned first."""
+        """Active procedures the reader may read, most recently learned first: those of its
+        audience keys, and the agent's own learned ones once two users produced them or the
+        reader produced them."""
         ...
 
     async def reject(self, tenant_id: str, procedure_id: str) -> bool:
-        """A reviewer rejected it: never offered again until its steps change."""
+        """Dismissed (an administrator) or rejected (a reviewer's verdict): never offered
+        again until its steps change."""
         ...
 
-    async def active(self, tenant_id: str, *, limit: int) -> list[StoredProcedure]:
-        """The tenant's active procedures, best supported first: the skill drafts' source."""
-        ...
-
-    async def decide(self, tenant_id: str, procedure_id: str, decision: SkillDecision) -> bool:
-        """Record the reviewer's decision about its skill draft; False when there is no such
-        procedure."""
+    async def learned(
+        self, tenant_id: str, *, agent_id: str | None = None, limit: int
+    ) -> list[StoredProcedure]:
+        """The procedures that are or were offered (active, retired, rejected), best
+        supported first; one agent's when ``agent_id`` is given."""
         ...

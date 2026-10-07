@@ -234,15 +234,13 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     assert other_agent.value.status == 404
 
 
-@pytest.mark.covers("tools.skill_drafts", "tools.publish_skill_draft", "tools.dismiss_skill_draft")
-@pytest.mark.covers_error("tools.skill_drafts", "tools.publish_skill_draft")
-async def test_a_learned_procedure_becomes_a_skill_an_administrator_publishes(
-    make_settings, tmp_path
-) -> None:
-    """Two labelled runs make an active procedure; the tenant's administrator sees it as a
-    draft Agent Skill, publishes it into the skills folder agents read (``SKILLS_DIR``), and
-    it stops being a draft. Only the administrator decides; a published name another tenant
-    owns is refused; a dismissed draft does not come back for the same steps."""
+@pytest.mark.covers("skills.learned_skills", "skills.dismiss_learned_skill")
+@pytest.mark.covers_error("skills.learned_skills", "skills.dismiss_learned_skill")
+async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_settings) -> None:
+    """Two successful runs of one agent for u1 become the agent's learned skill: u1's
+    context offers it in full, with no one approving anything; u2's does not (u1's wording)
+    until u2's own run follows the same steps, and then every user of the agent is offered it
+    - never another agent or tenant. The administrator lists it and can dismiss it."""
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     from fastapi.testclient import TestClient
@@ -250,10 +248,7 @@ async def test_a_learned_procedure_becomes_a_skill_an_administrator_publishes(
 
     from tests.e2e.conftest import TABLES
 
-    skills = tmp_path / "skills"
-    settings = make_settings(
-        authentication={"bootstrap_admin_key": BOOTSTRAP}, skills_dir=str(skills)
-    )
+    settings = make_settings(authentication={"bootstrap_admin_key": BOOTSTRAP})
     app = create_app(settings, overrides=_test_overrides(tasks="inline"))
     with TestClient(app, raise_server_exceptions=False) as client:
 
@@ -267,60 +262,54 @@ async def test_a_learned_procedure_becomes_a_skill_an_administrator_publishes(
         client.portal.call(_truncate)
         admin_key, harness = await _harness(app)
         admin = admin_key.bind(tenant_id="acme")
-        agent = harness.bind(user_id="u1").agent("quote-bot")
-        await agent.advanced.tools.put_catalog(CATALOG)
-        assert await admin.advanced.tools.skill_drafts() == [], "nothing learned yet"
-        for quote in ("Q-1183", "Q-2001"):
-            await _one_successful_run(harness.bind(user_id="u1").agent("quote-bot"), quote)
 
-        drafts = await admin.advanced.tools.skill_drafts()
-        assert len(drafts) == 1
-        draft = drafts[0]
-        assert draft.state == "new" and draft.support == 2 and draft.success_rate == 1.0
-        assert f"`{LOOKUP}`" in draft.body and f"`{UPDATE}`" in draft.body
-        assert draft.body.index(LOOKUP) < draft.body.index(UPDATE), "the steps in order"
+        def bot(user: str, agent: str = "quote-bot"):  # type: ignore[no-untyped-def]
+            return harness.bind(user_id=user).agent(agent)
+
+        async def offered(user: str, agent: str = "quote-bot") -> list:
+            found = await bot(user, agent).context(TASK, tools=[LOOKUP, UPDATE], format="full")
+            return found.skills
+
+        await bot("u1").advanced.tools.put_catalog(CATALOG)
+        assert await admin.advanced.skills.list() == [], "nothing learned yet"
+        for quote in ("Q-1183", "Q-2001"):
+            await _one_successful_run(bot("u1"), quote)
+
+        [mine] = await offered("u1")
+        assert (mine.steps, mine.runs, mine.success_rate) == ([LOOKUP, UPDATE], 2, 1.0)
+        prompt = await bot("u1").context(TASK, tools=[LOOKUP, UPDATE])
+        assert "## Learned skills for this task" in prompt.rendered
+        assert f"{LOOKUP} -> {UPDATE} (worked 100% of 2 runs)" in prompt.rendered
+        assert "## Tools" not in prompt.rendered, "two tools earn no tool hints"
+        assert await offered("u2") == [], "u1's wording reaches nobody else"
+
+        await _one_successful_run(bot("u2"), "Q-3000")
+        [shared] = await offered("u3")
+        assert shared.id == mine.id and shared.runs == 3
+        assert await offered("u3", "other-bot") == []
+
+        [listed] = await admin.advanced.skills.list(agent="quote-bot")
+        assert (listed.id, listed.status, listed.users, listed.agent_id) == (
+            mine.id,
+            "active",
+            2,
+            "quote-bot",
+        )
+        assert await admin.advanced.skills.list(agent="other-bot") == []
         with pytest.raises(MemoryError) as not_admin:
-            await harness.bind(user_id="u1").advanced.tools.skill_drafts()
+            await bot("u1").advanced.skills.list()
         assert not_admin.value.status == 403
 
-        published = await admin.advanced.tools.publish_skill(
-            draft.id, name="emea-quote-price", idempotency_key="publish-emea"
-        )
-        again = await admin.advanced.tools.publish_skill(
-            draft.id, name="emea-quote-price", idempotency_key="publish-emea"
-        )
-        assert again == published, "a retried publication gets its decision back"
-        assert (published.state, published.name, published.version) == (
-            "published",
-            "emea-quote-price",
-            "1.0.0",
-        )
-        assert published.destination == "skills_dir"
-        written = (skills / "emea-quote-price" / "SKILL.md").read_text()
-        assert written.startswith("---\nname: emea-quote-price\n")
-        assert '  trellis_tenant: "acme"' in written and '  version: "1.0.0"' in written
-        assert await admin.advanced.tools.skill_drafts() == [], "published for these steps"
-        with pytest.raises(MemoryError) as decided:
-            await admin.advanced.tools.publish_skill(draft.id)
-        assert decided.value.status == 409
+        dismissed = await admin.advanced.skills.dismiss(mine.id, idempotency_key="dismiss-1")
+        again = await admin.advanced.skills.dismiss(mine.id, idempotency_key="dismiss-1")
+        assert dismissed == again and dismissed.status == "dismissed"
+        assert await offered("u1") == [] and await offered("u3") == []
+        with pytest.raises(MemoryError) as missing:
+            await admin.advanced.skills.dismiss("prc_missing")
+        assert missing.value.status == 404
 
-        # a skill the tenant did not publish is never taken over
-        (skills / "house-style").mkdir()
-        (skills / "house-style" / "SKILL.md").write_text("---\nname: house-style\n---\nOurs.")
-        other_key, other = await _harness(app, "globex")
-        other_admin = other_key.bind(tenant_id="globex")
-        await other.bind(user_id="u2").agent("bot").advanced.tools.put_catalog(CATALOG)
-        for quote in ("Q-1", "Q-2"):
-            await _one_successful_run(other.bind(user_id="u2").agent("bot"), quote)
-        theirs = (await other_admin.advanced.tools.skill_drafts())[0]
-        for taken in ("house-style", "emea-quote-price"):
-            with pytest.raises(MemoryError) as refused:
-                await other_admin.advanced.tools.publish_skill(theirs.id, name=taken)
-            assert refused.value.status == 409
-        dismissed = await other_admin.advanced.tools.dismiss_skill(theirs.id)
-        assert dismissed.state == "dismissed" and dismissed.name is None
-        assert await other_admin.advanced.tools.skill_drafts() == []
-        assert (skills / "house-style" / "SKILL.md").read_text().endswith("Ours.")
+        other_key, _ = await _harness(app, "globex")
+        assert await other_key.bind(tenant_id="globex").advanced.skills.list() == []
 
 
 @pytest.mark.covers("agents.set_key", "agents.key_status", "agents.revoke_key")

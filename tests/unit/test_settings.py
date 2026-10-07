@@ -122,11 +122,7 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # 41 -> 42 for ``authentication.trusted_dev_tenant``: which tenant a laptop's development
     # key acts in is a credential fact (it is what ``GET /v1/keys/self`` reports for the key),
     # and it must equal the harness's local tenant, which is configured on the other side.
-    # 42 -> 44 for learned skills (ADR 0033): ``skills_dir`` is where a deployment mounts the
-    # folder of Agent Skills its agents read (topology, like ``blob.filesystem_root``) and
-    # ``bifrost_admin_token`` the gateway's management credential (a credential, like
-    # ``bifrost_virtual_key``). Where skills go follows from them; nothing else is a setting.
-    assert len(leaves) <= 44, f"{len(leaves)} env fields: {leaves}"
+    assert len(leaves) <= 42, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",

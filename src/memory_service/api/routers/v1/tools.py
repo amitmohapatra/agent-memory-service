@@ -12,24 +12,22 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memory_service.api.caching import conditional_model
 from memory_service.api.deps import (
-    AdministeredTenantDep,
     ContainerDep,
     HeaderContextDep,
     ScopeBody,
     ServicePrincipalDep,
     build_context,
-    request_context,
 )
 from memory_service.api.errors import error_responses
 from memory_service.api.headers import LINK_HEADER
 from memory_service.api.idempotent import run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, next_link, page
-from memory_service.api.params import SkillDraftIdPath, SuggestionIdPath, limit_query
+from memory_service.api.params import SuggestionIdPath, limit_query
 from memory_service.api.schemas.context import ToolHintsResponse
 from memory_service.api.validation import ToolJson, ToolOutput
 from memory_service.domain.enums import Visibility
@@ -41,7 +39,6 @@ from memory_service.domain.learning import (
 from memory_service.domain.tools import (
     TOOL_SOURCE_DESCRIPTION,
     SideEffects,
-    SkillDecision,
     ToolAnnotations,
     ToolDescriptor,
     ToolSource,
@@ -52,7 +49,6 @@ from memory_service.modules.context.views import hints_view
 from memory_service.modules.tools import approvals
 from memory_service.modules.tools.hints import HINTS_K_MAX
 from memory_service.modules.tools.service import CATALOG_MAX
-from memory_service.modules.tools.skills import NAME_MAX, SkillDraft
 from trellis.memory.approval import MAX_EXPRESSION_CHARS, parse
 
 router = APIRouter()
@@ -716,130 +712,5 @@ async def accept_approval_suggestion(
         ctx,
         key=request.state.idempotency_key,
         payload={"action": "accept", "suggestion_id": suggestion_id},
-        handler=handler,
-    )
-
-
-# ------------------------------------------------------------------ learned skills
-
-
-class SkillDraftsResponse(BaseModel):
-    drafts: list[SkillDraft] = Field(description="The drafts, best supported first.")
-
-
-class PublishSkillBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = Field(
-        default=None,
-        max_length=NAME_MAX,
-        description="Publish under this name instead of the draft's (lowercase letters, "
-        "digits and hyphens).",
-    )
-    description: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=1024,
-        description="Publish with this description instead of the draft's.",
-    )
-
-
-_SKILL_ERRORS = error_responses(401, 403, 404, 409, 422, 503)
-PublishSkill = Annotated[
-    PublishSkillBody | None,
-    Body(
-        openapi_examples={
-            "under another name": {"value": {"name": "refund-order"}},
-            "as drafted": {"value": {}},
-        }
-    ),
-]
-
-
-def _reviewer(request: Request) -> str:
-    return f"key:{request.state.service_principal.service_id}"
-
-
-@router.get(
-    "/tools/skill-drafts",
-    response_model=SkillDraftsResponse,
-    tags=["tools"],
-    summary="Learned procedures as draft Agent Skills, for an administrator to publish",
-    description="The tenant's administrator credential. A draft is an active procedure no "
-    "one has published or dismissed for its current steps (new), or a published one whose "
-    "steps changed since (changed).",
-    responses=error_responses(401, 403, 422, 503),
-)
-async def skill_drafts(
-    container: ContainerDep, tenant_id: AdministeredTenantDep
-) -> SkillDraftsResponse:
-    return SkillDraftsResponse(drafts=await container.services["skill_drafts"].list(tenant_id))
-
-
-@router.post(
-    "/tools/skill-drafts/{draft_id}/publish",
-    response_model=SkillDecision,
-    tags=["tools"],
-    summary="Publish a skill draft where agents load skills from (SKILLS_DIR or the gateway)",
-    description="The tenant's administrator credential. Its next version: 1.0.0, then the "
-    "next minor. 409 when there is no draft for the procedure's current steps, or a skill of "
-    "that name exists that this tenant did not publish; 503 when the deployment has no "
-    "skills store.",
-    responses=_SKILL_ERRORS,
-)
-async def publish_skill_draft(
-    request: Request,
-    draft_id: SkillDraftIdPath,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-    body: PublishSkill = None,
-) -> Response:
-    """With ``Idempotency-Key``, a retried publication that succeeded gets the same decision
-    again rather than the 409 a decided draft would earn."""
-    name, description = (body.name, body.description) if body else (None, None)
-
-    async def handler(uow):  # type: ignore[no-untyped-def]
-        decision = await container.services["skill_drafts"].publish(
-            tenant_id, draft_id, by=_reviewer(request), name=name, description=description
-        )
-        return 200, decision.model_dump(mode="json"), None
-
-    return await run_idempotent(
-        request,
-        container,
-        request_context(request, tenant_id),
-        key=request.state.idempotency_key,
-        payload={"action": "publish", "draft": draft_id, "name": name, "description": description},
-        handler=handler,
-    )
-
-
-@router.post(
-    "/tools/skill-drafts/{draft_id}/dismiss",
-    response_model=SkillDecision,
-    tags=["tools"],
-    summary="Dismiss a skill draft: not offered again until the procedure's steps change",
-    description="The tenant's administrator credential. A published skill stays published. "
-    "409 when there is no draft for the procedure's current steps.",
-    responses=_SKILL_ERRORS,
-)
-async def dismiss_skill_draft(
-    request: Request,
-    draft_id: SkillDraftIdPath,
-    container: ContainerDep,
-    tenant_id: AdministeredTenantDep,
-) -> Response:
-    async def handler(uow):  # type: ignore[no-untyped-def]
-        decision = await container.services["skill_drafts"].dismiss(
-            tenant_id, draft_id, by=_reviewer(request)
-        )
-        return 200, decision.model_dump(mode="json"), None
-
-    return await run_idempotent(
-        request,
-        container,
-        request_context(request, tenant_id),
-        key=request.state.idempotency_key,
-        payload={"action": "dismiss", "draft": draft_id},
         handler=handler,
     )

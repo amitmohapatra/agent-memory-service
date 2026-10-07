@@ -419,17 +419,6 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("BIFROST_VIRTUAL_KEY", "bifrost_virtual_key"),
     )
-    #: the gateway's management credential, for publishing learned skills to its skills
-    #: repository (unset: the gateway's admin API is reached without one)
-    bifrost_admin_token: SecretStr | None = Field(
-        default=None,
-        validation_alias=AliasChoices("BIFROST_ADMIN_TOKEN", "bifrost_admin_token"),
-    )
-    #: a folder of Agent Skills (``<name>/SKILL.md``) learned skills are published to instead
-    #: of the gateway: the folder the agents' ``skills_dir`` reads
-    skills_dir: str | None = Field(
-        default=None, validation_alias=AliasChoices("SKILLS_DIR", "skills_dir")
-    )
     #: where traces go (OTLP over HTTP); tracing is on exactly when it is set
     otel_endpoint: str | None = Field(
         default=None,

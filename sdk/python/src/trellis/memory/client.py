@@ -220,6 +220,7 @@ class MemoryContext:
         *,
         token_budget: int | None = ...,
         tools: Sequence[str] | None = ...,
+        hints: bool = ...,
         window: bool = ...,
         document_ids: Sequence[str] | None = ...,
         format: Literal["prompt"] = ...,
@@ -234,6 +235,7 @@ class MemoryContext:
         *,
         token_budget: int | None = ...,
         tools: Sequence[str] | None = ...,
+        hints: bool = ...,
         window: bool = ...,
         document_ids: Sequence[str] | None = ...,
         format: Literal["full"],
@@ -247,6 +249,7 @@ class MemoryContext:
         *,
         token_budget: int | None = None,
         tools: Sequence[str] | None = None,
+        hints: bool = True,
         window: bool = True,
         document_ids: Sequence[str] | None = None,
         format: Literal["prompt", "full"] = "prompt",
@@ -259,9 +262,11 @@ class MemoryContext:
         ``token_budget``. Items are cited by handle ([m1], [d2]...), which ``update``,
         ``forget`` and ``verify`` accept within the bundle.
 
-        ``tools`` - the agent's own tools - adds the procedures learned for the task and the
-        tools that fit, each with its confidence (0..1), the argument values found and the
-        required ones missing; the prompt form returns the fitting tools in ``tools``.
+        ``tools`` - the agent's own tools - adds the skills the agent learned for the task
+        and, from five tools, the tools that fit, each with its confidence (0..1), the argument
+        values found and the required ones missing; the prompt form returns the fitting tools
+        in ``tools``. ``hints=False`` keeps the learned skills and leaves the hints out (for a
+        caller that offers the model every tool anyway).
         ``format="full"`` returns the same content as structured data, without the rendering.
         ``timeout`` replaces the client's for this call, e.g. a turn's own latency budget."""
         payload: dict[str, Any] = {
@@ -277,6 +282,8 @@ class MemoryContext:
             payload["document_ids"] = list(document_ids)
         if tools is not None:
             payload["tools"] = {"available": list(tools), "k": TOOL_HINTS_K}
+            if not hints:
+                payload["tools"]["hints"] = False
         data = await self._request("POST", "/v1/context", json=payload, timeout=timeout)
         if format == "full":
             return ContextBundle.model_validate(data)

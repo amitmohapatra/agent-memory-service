@@ -8,13 +8,15 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
-- Learned skills: the tenant's active procedures are offered to its administrator as draft
-  Agent Skills (`GET /v1/tools/skill-drafts`); publishing one writes a `SKILL.md` where agents
-  load skills from (`SKILLS_DIR`, else the Bifrost gateway's skills repository) as its next
-  version, and dismissing one stops it being offered until its steps change. Migration
-  `0025_procedure_skill`; settings `SKILLS_DIR`, `BIFROST_ADMIN_TOKEN`
-  ([learned skills](docs/api/tools.md#learned-skills), ADR 0033). SDK:
-  `ctx.advanced.tools.skill_drafts()`, `publish_skill()`, `dismiss_skill()`.
+- Learned skills: an agent learns from all of its users (its own tool records, whichever user it
+  ran for, under one audience) and is offered what it learned in its context on its own -
+  "Learned skills for this task", in full, matched to the task; nothing is published or
+  approved. A learned skill reaches the agent's other users once two users produced it, and
+  one whose runs opened the agent's own skill is shown as what it adds to it. Administrators
+  list them (`GET /v1/skills?agent=`) and dismiss one (`POST /v1/skills/{id}/dismiss`)
+  ([learned skills](docs/api/skills.md), ADR 0034, superseding 0033's drafts). Migration
+  `0026_procedure_agent`. SDK: `ctx.advanced.skills.list()`, `.dismiss()`; `LearnedSkill`,
+  `SkillView`.
 - Search past conversations by message: `kinds=["message"]` (`POST /v1/recall`, the
   `memory_search` agent tool, `ctx.search`) reads this conversation's messages and then the
   user's earlier conversations', this conversation's first among equal matches; each item
@@ -28,6 +30,10 @@ each entry says which one moved. Decisions behind each change are in the
   ([documents](docs/api/documents.md)); examples 04 and 06 no longer send a message first.
 
 ### Changed
+- The context's `procedures` (with `format=full`) is `skills` (`id`, `name`, `steps`,
+  `with_skill`, `fixes`, `success_rate`, `runs`), and `tool_search`'s and `POST /v1/tools/hints`'
+  `plan` has the same shape. Tool hints are computed for five or more tools (or the catalog);
+  any toolbox gets the learned skills. SDK: `PromptContext.skills` replaces `procedures`.
 - The service requires `bifrost-sdk>=0.3`: model calls send the gateway's deny-all MCP scope,
   which 0.3.0 introduced.
 

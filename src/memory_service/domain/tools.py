@@ -284,48 +284,32 @@ class ToolStats(BaseModel):
 
 
 #: candidate: not enough support yet; active: offered; retired: stopped working or aged
-#: out; rejected: a reviewer rejected it (kept until its steps change)
+#: out; rejected: dismissed by an administrator, or rejected by a reviewer's verdict (kept
+#: until its steps change)
 ProcedureStatus = Literal["candidate", "active", "retired", "rejected"]
 
+#: The audience key prefix of an agent's learned procedures (not a visibility key: who reads
+#: them is decided by ``agent_id``, ``users`` and ``sole_user``).
+AGENT_AUDIENCE_PREFIX: Final = "agent:"
 
-class SkillDecision(BaseModel):
-    """What a reviewer decided about a procedure's skill draft, for the steps it had then:
-    published (as ``name`` at ``version``) or dismissed. New steps make a new draft."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    state: Literal["published", "dismissed"] = Field(
-        description="published: written to the skills store as name at version; dismissed: "
-        "not a skill (a skill published earlier stays where it is)"
-    )
-    steps_hash: str = Field(
-        description="The procedure's steps the decision was about: new steps make a new draft."
-    )
-    name: str | None = Field(
-        default=None, description="The skill's name in the store (null: never published)."
-    )
-    version: str | None = Field(
-        default=None, description="The version published last (major.minor.patch)."
-    )
-    destination: str | None = Field(
-        default=None, description="Where it was published: skills_dir or bifrost."
-    )
-    decided_by: str | None = Field(
-        default=None, description="The credential that decided (key:<id>)."
-    )
-    decided_at: str = Field(
-        default_factory=lambda: datetime.now(UTC).isoformat(),
-        description="When it was decided (ISO 8601, UTC).",
-    )
+def agent_audience(tenant_id: str, agent_id: str) -> str:
+    """The audience every user's runs of one agent are learned under."""
+    return f"{AGENT_AUDIENCE_PREFIX}{tenant_id}/{agent_id}"
 
 
 class StoredProcedure(BaseModel):
-    """A procedure the learning job keeps for one task pattern and one audience.
+    """A procedure the learning job keeps for one task pattern and one audience: the agent's
+    learned skill for that kind of task.
 
-    ``scope_key`` is the audience of the records it was mined from (their first visibility
-    key), so it is read by exactly those who could read the records. Only an ``active``
-    procedure is offered; it is admitted when enough runs support it and enough of them
-    succeeded, retired when it stops working, and rejected by a reviewer's verdict."""
+    ``scope_key`` is the audience of the records it was mined from. An agent's own calls (its
+    PRIVATE records, whichever user it ran for) are learned together, under
+    ``agent_audience(tenant, agent)``: the agent learns from all its users. Such a procedure is
+    read by the agent's users once at least two of them produced it (``users``), and before
+    that only by the one who did (``sole_user``), so one person's wording of a task never
+    reaches another. Records shared wider (a group, a workspace) keep their own audience key.
+    Only an ``active`` procedure is offered; it is admitted when enough runs support it and
+    enough of them succeeded, retired when it stops working, and rejected when dismissed."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -347,8 +331,12 @@ class StoredProcedure(BaseModel):
     owner_principal: str | None = None
     workspace_id: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    #: the reviewer's last decision about it as a skill (only that decision writes it)
-    skill: SkillDecision | None = None
+    #: the agent it was learned for (an agent-audience procedure), else None
+    agent_id: str | None = None
+    #: how many distinct users' runs it was mined from (runs with no user count as one)
+    users: int = 0
+    #: the one user who produced it while ``users`` is 1 (None: no user, or several)
+    sole_user: str | None = None
 
     @property
     def tools(self) -> list[str]:
@@ -367,12 +355,20 @@ class ToolCandidate(BaseModel):
     why: str = ""
 
 
-class PlanHint(BaseModel):
+class SkillView(BaseModel):
+    """A learned skill as an agent is offered it: in the context and as ``tool_search``'s
+    plan (``modules.tools.skills.skill_view``)."""
+
     model_config = ConfigDict(frozen=True)
 
-    procedure_id: str
-    title: str = ""
-    steps: list[dict[str, Any]] = Field(default_factory=list)
+    id: str
+    name: str
+    #: the tools it calls, in order (without the skill machinery)
+    steps: list[str] = Field(default_factory=list)
+    #: the agent's own skill its runs opened: what it adds to that skill
+    with_skill: str | None = None
+    #: what worked when a step failed: "tool on error: fix"
+    fixes: list[str] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
 
@@ -412,7 +408,7 @@ class ToolHints(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     candidates: list[ToolCandidate] = Field(default_factory=list)
-    plan: PlanHint | None = None
+    plan: SkillView | None = None
     next: str | None = None
     prefill: dict[str, Prefill] = Field(
         default_factory=dict, description="argument values found, keyed tool.arg"

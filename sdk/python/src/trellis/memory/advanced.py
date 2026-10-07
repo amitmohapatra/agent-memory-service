@@ -27,11 +27,10 @@ from trellis.memory.models import (
     GraphEntity,
     GraphLayer,
     JobHandle,
+    LearnedSkill,
     MemoryResult,
     MemoryType,
     Page,
-    SkillDecision,
-    SkillDraft,
     Visibility,
 )
 
@@ -46,6 +45,7 @@ class AdvancedAPI:
         self.documents = DocumentsAPI(ctx)
         self.graph = GraphAPI(ctx)
         self.tools = ToolCatalogAPI(ctx)
+        self.skills = SkillsAPI(ctx)
         self.model_keys = ModelKeysAPI(ctx)
         self.memories = MemoriesAPI(ctx)
 
@@ -252,43 +252,27 @@ class ToolCatalogAPI:
         )
         return CatalogTool.model_validate(data)
 
-    async def skill_drafts(self) -> list[SkillDraft]:
-        """The tenant's learned procedures as draft Agent Skills (an administrator's key):
-        each ``new`` or ``changed`` since it was published."""
-        data = await self._ctx._request("GET", "/v1/tools/skill-drafts")
-        return [SkillDraft.model_validate(d) for d in data.get("drafts", [])]
 
-    async def publish_skill(
-        self,
-        draft_id: str,
-        *,
-        name: str | None = None,
-        description: str | None = None,
-        idempotency_key: str | None = None,
-    ) -> SkillDecision:
-        """Publish a draft where the agents load skills from (the service's ``SKILLS_DIR``,
-        else the Bifrost gateway's skills repository), under ``name`` / with
-        ``description`` when given. Its version: ``1.0.0``, then the next minor. With
-        ``idempotency_key``, a retry gets the same decision back."""
-        body = {k: v for k, v in (("name", name), ("description", description)) if v}
-        data = await self._ctx._request(
-            "POST",
-            f"/v1/tools/skill-drafts/{draft_id}/publish",
-            json=body,
-            idempotency_key=idempotency_key,
-        )
-        return SkillDecision.model_validate(data)
+class SkillsAPI:
+    """What the tenant's agents learned from their successful runs (an administrator's key).
+    Learned skills are offered to their agent on their own; these calls are to see them and
+    to dismiss one that should not be offered."""
 
-    async def dismiss_skill(
-        self, draft_id: str, *, idempotency_key: str | None = None
-    ) -> SkillDecision:
-        """Not a skill: the draft is not offered again until the procedure's steps change."""
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    async def list(self, *, agent: str | None = None) -> list[LearnedSkill]:
+        """The learned skills, best supported first; one agent's with ``agent``."""
+        params = {"agent": agent} if agent else {}
+        data = await self._ctx._request("GET", "/v1/skills", params=params)
+        return [LearnedSkill.model_validate(s) for s in data.get("skills", [])]
+
+    async def dismiss(self, skill_id: str, *, idempotency_key: str | None = None) -> LearnedSkill:
+        """Stop offering it until its steps change."""
         data = await self._ctx._request(
-            "POST",
-            f"/v1/tools/skill-drafts/{draft_id}/dismiss",
-            idempotency_key=idempotency_key,
+            "POST", f"/v1/skills/{skill_id}/dismiss", idempotency_key=idempotency_key
         )
-        return SkillDecision.model_validate(data)
+        return LearnedSkill.model_validate(data)
 
 
 class ModelKeysAPI:

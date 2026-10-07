@@ -1584,21 +1584,6 @@
             "description": "required companion evidence that is not there",
             "title": "Missing Evidence"
           },
-          "procedures": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/ProcedureBody"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "procedures learned for the task (only with tools)",
-            "title": "Procedures"
-          },
           "profile": {
             "anyOf": [
               {
@@ -1613,6 +1598,21 @@
             ],
             "description": "The pinned profile blocks (user, agent, workspace).",
             "title": "Profile"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the skills the agent learned for the task (only with tools)",
+            "title": "Skills"
           },
           "summaries": {
             "anyOf": [
@@ -3889,6 +3889,130 @@
         "title": "KeySelfResponse",
         "type": "object"
       },
+      "LearnedSkill": {
+        "description": "What an agent learned for one kind of task, as an administrator sees it.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The agent that learned it; null for a skill learned from records shared with a group or workspace.",
+            "title": "Agent Id"
+          },
+          "fixes": {
+            "description": "What worked when a step failed: tool on error: fix.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixes",
+            "type": "array"
+          },
+          "id": {
+            "description": "The skill's id (prc_...): what dismiss takes.",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Its name: the task, in a few words.",
+            "title": "Name",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "The kind of task it was learned for (values as {slots}).",
+            "title": "Pattern",
+            "type": "string"
+          },
+          "runs": {
+            "description": "The runs it was learned from.",
+            "title": "Runs",
+            "type": "integer"
+          },
+          "status": {
+            "description": "active: offered to the agent; retired: stopped working (offered again if it works again); dismissed: an administrator dismissed it (until its steps change).",
+            "enum": [
+              "active",
+              "retired",
+              "dismissed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "description": "The tools it calls, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "success_rate": {
+            "description": "The share of its runs that worked.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "updated_at": {
+            "description": "When it was last re-learned.",
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "users": {
+            "description": "How many users' runs it was learned from; another user of the agent is offered it from two on.",
+            "title": "Users",
+            "type": "integer"
+          },
+          "with_skill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The agent's own (written) skill these runs opened: this one is what they added to it.",
+            "title": "With Skill"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "name",
+          "status",
+          "pattern",
+          "steps",
+          "success_rate",
+          "runs",
+          "users",
+          "updated_at"
+        ],
+        "title": "LearnedSkill",
+        "type": "object"
+      },
+      "LearnedSkillsResponse": {
+        "properties": {
+          "skills": {
+            "description": "The learned skills, best supported first (at most 100).",
+            "items": {
+              "$ref": "#/components/schemas/LearnedSkill"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skills"
+        ],
+        "title": "LearnedSkillsResponse",
+        "type": "object"
+      },
       "Lifetime": {
         "description": "How long a memory is expected to matter.",
         "enum": [
@@ -5023,57 +5147,6 @@
         "title": "Problem",
         "type": "object"
       },
-      "ProcedureBody": {
-        "additionalProperties": false,
-        "description": "A procedure learned for the task: its tool sequence and how often it worked.",
-        "properties": {
-          "id": {
-            "description": "The procedure's id (prc_...).",
-            "title": "Id",
-            "type": "string"
-          },
-          "runs": {
-            "description": "the successful runs it was learned from",
-            "title": "Runs",
-            "type": "integer"
-          },
-          "steps": {
-            "description": "tool names, in order",
-            "items": {
-              "type": "string"
-            },
-            "title": "Steps",
-            "type": "array"
-          },
-          "success_rate": {
-            "description": "0..1, the share of runs that followed it and succeeded.",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Success Rate",
-            "type": "number"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "What the procedure does, in words, when one was distilled.",
-            "title": "Title"
-          }
-        },
-        "required": [
-          "id",
-          "steps",
-          "success_rate",
-          "runs"
-        ],
-        "title": "ProcedureBody",
-        "type": "object"
-      },
       "ProfileResponse": {
         "properties": {
           "blocks": {
@@ -5178,40 +5251,6 @@
           "evidence_status"
         ],
         "title": "PromptContextResponse",
-        "type": "object"
-      },
-      "PublishSkillBody": {
-        "additionalProperties": false,
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 1024,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Publish with this description instead of the draft's.",
-            "title": "Description"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Publish under this name instead of the draft's (lowercase letters, digits and hyphens).",
-            "title": "Name"
-          }
-        },
-        "title": "PublishSkillBody",
         "type": "object"
       },
       "QueryType": {
@@ -6211,172 +6250,76 @@
         "title": "SetMemberRequest",
         "type": "object"
       },
-      "SkillDecision": {
+      "SkillBody": {
         "additionalProperties": false,
-        "description": "What a reviewer decided about a procedure's skill draft, for the steps it had then:\npublished (as ``name`` at ``version``) or dismissed. New steps make a new draft.",
+        "description": "A skill the agent learned for this kind of task: what its successful runs did.",
         "properties": {
-          "decided_at": {
-            "description": "When it was decided (ISO 8601, UTC).",
-            "title": "Decided At",
-            "type": "string"
-          },
-          "decided_by": {
+          "fixes": {
             "anyOf": [
               {
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The credential that decided (key:<id>).",
-            "title": "Decided By"
-          },
-          "destination": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Where it was published: skills_dir or bifrost.",
-            "title": "Destination"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The skill's name in the store (null: never published).",
-            "title": "Name"
-          },
-          "state": {
-            "description": "published: written to the skills store as name at version; dismissed: not a skill (a skill published earlier stays where it is)",
-            "enum": [
-              "published",
-              "dismissed"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "steps_hash": {
-            "description": "The procedure's steps the decision was about: new steps make a new draft.",
-            "title": "Steps Hash",
-            "type": "string"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The version published last (major.minor.patch).",
-            "title": "Version"
-          }
-        },
-        "required": [
-          "state",
-          "steps_hash"
-        ],
-        "title": "SkillDecision",
-        "type": "object"
-      },
-      "SkillDraft": {
-        "description": "A skill as it would be published from one procedure.",
-        "properties": {
-          "body": {
-            "description": "The SKILL.md body.",
-            "title": "Body",
-            "type": "string"
-          },
-          "description": {
-            "description": "The SKILL.md description: what it does, when to use it, its track record.",
-            "title": "Description",
-            "type": "string"
+            "description": "What worked when a step failed: tool on error: fix.",
+            "title": "Fixes"
           },
           "id": {
-            "description": "The procedure's id: what publish and dismiss take.",
+            "description": "The learned skill's id (prc_...), as GET /v1/skills lists it.",
             "title": "Id",
             "type": "string"
           },
           "name": {
-            "description": "The skill name it would be published under.",
+            "description": "Its name: the task, in a few words.",
             "title": "Name",
             "type": "string"
           },
-          "pattern": {
-            "description": "The task pattern it was learned for.",
-            "title": "Pattern",
-            "type": "string"
+          "runs": {
+            "description": "The runs it was learned from.",
+            "title": "Runs",
+            "type": "integer"
           },
-          "published": {
+          "steps": {
+            "description": "The tools it calls, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "success_rate": {
+            "description": "0..1, the share of runs that followed it and succeeded.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "with_skill": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SkillDecision"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The last publication, for a changed draft."
-          },
-          "state": {
-            "description": "new: never published; changed: published, and its steps changed since",
-            "enum": [
-              "new",
-              "changed"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "success_rate": {
-            "description": "The share of them that succeeded (0-1).",
-            "title": "Success Rate",
-            "type": "number"
-          },
-          "support": {
-            "description": "Runs that followed it.",
-            "title": "Support",
-            "type": "integer"
+            "description": "The agent's own skill its runs opened: this one is what they added to it.",
+            "title": "With Skill"
           }
         },
         "required": [
           "id",
-          "state",
           "name",
-          "description",
-          "body",
-          "pattern",
-          "support",
-          "success_rate"
+          "steps",
+          "success_rate",
+          "runs"
         ],
-        "title": "SkillDraft",
-        "type": "object"
-      },
-      "SkillDraftsResponse": {
-        "properties": {
-          "drafts": {
-            "description": "The drafts, best supported first.",
-            "items": {
-              "$ref": "#/components/schemas/SkillDraft"
-            },
-            "title": "Drafts",
-            "type": "array"
-          }
-        },
-        "required": [
-          "drafts"
-        ],
-        "title": "SkillDraftsResponse",
+        "title": "SkillBody",
         "type": "object"
       },
       "SubCallIn": {
@@ -6883,13 +6826,13 @@
           "plan": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ProcedureBody"
+                "$ref": "#/components/schemas/SkillBody"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "The procedure learned for this kind of task, when there is one."
+            "description": "The skill learned for this kind of task, when there is one."
           },
           "tools": {
             "description": "The tools that fit, best first.",
@@ -6987,7 +6930,7 @@
       },
       "ToolsRequest": {
         "additionalProperties": false,
-        "description": "``tools`` of a context request: the agent's callable tools (None: any catalog tool).\nAn agent with tools gets the procedures learned for the task and the tool hints.",
+        "description": "``tools`` of a context request: the agent's callable tools (None: any catalog tool).\nAn agent with tools gets the skills it learned for the task; with five or more (or the\ncatalog), the tool hints too.",
         "properties": {
           "available": {
             "anyOf": [
@@ -7004,6 +6947,12 @@
             ],
             "description": "The tools the agent can call (at most 500); null: any catalog tool; empty: none.",
             "title": "Available"
+          },
+          "hints": {
+            "default": true,
+            "description": "false: only the skills the agent learned, no tool hints (which are read after retrieval): for a caller that offers the model every tool anyway.",
+            "title": "Hints",
+            "type": "boolean"
           },
           "k": {
             "default": 8,
@@ -30895,6 +30844,887 @@
         ]
       }
     },
+    "/v1/skills": {
+      "get": {
+        "description": "The tenant's administrator credential. Each skill is what one agent's runs of one kind of task proved: its steps, what fixed a failing step, its track record, and its state (active: offered to the agent; retired: stopped working; dismissed). A skill is offered to the agent's other users once two users produced it.",
+        "operationId": "skills.learned_skills",
+        "parameters": [
+          {
+            "description": "Only the skills this agent learned (e.g. support); every agent's when absent. (Not agent_id: that names the agent a call acts as.)",
+            "in": "query",
+            "name": "agent",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only the skills this agent learned (e.g. support); every agent's when absent. (Not agent_id: that names the agent a call acts as.)",
+              "title": "Agent"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Trellis-Tenant"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnedSkillsResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/skills",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "What the tenant's agents learned from their successful runs",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/v1/skills/{skill_id}/dismiss": {
+      "post": {
+        "description": "The tenant's administrator credential. The agent is no longer offered it; if its runs later settle on different steps, that is a new skill. Dismissing a dismissed skill returns it unchanged. 404 when there is no such skill.",
+        "operationId": "skills.dismiss_learned_skill",
+        "parameters": [
+          {
+            "description": "The learned skill's id (prc_...), as GET /v1/skills lists it.",
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "description": "The learned skill's id (prc_...), as GET /v1/skills lists it.",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Trellis-Tenant"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnedSkill"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/skills/{skill_id}/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "Stop offering a learned skill until its steps change",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
     "/v1/threads/{thread_id}": {
       "delete": {
         "description": "With ``Idempotency-Key``, a retry of a delete that succeeded is its 204 again, not\nthe 404 the deleted thread would now earn.",
@@ -36504,1465 +37334,6 @@
           }
         },
         "summary": "Record one tool call (idempotent on run + step + tool + arguments)",
-        "tags": [
-          "tools"
-        ]
-      }
-    },
-    "/v1/tools/skill-drafts": {
-      "get": {
-        "description": "The tenant's administrator credential. A draft is an active procedure no one has published or dismissed for its current steps (new), or a published one whose steps changed since (changed).",
-        "operationId": "tools.skill_drafts",
-        "parameters": [
-          {
-            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-            "in": "header",
-            "name": "X-Trellis-Tenant",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-              "title": "X-Trellis-Tenant"
-            }
-          },
-          {
-            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
-            "in": "header",
-            "name": "traceparent",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
-            "in": "header",
-            "name": "X-Request-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
-            "in": "header",
-            "name": "X-Correlation-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The workspace (team) acted in; membership is checked.",
-            "in": "header",
-            "name": "X-Trellis-Workspace",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The end user acted for.",
-            "in": "header",
-            "name": "X-Trellis-User",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillDraftsResponse"
-                }
-              }
-            },
-            "description": "Successful Response",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "AUTHENTICATION",
-                  "detail": "Missing or invalid credentials",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 401,
-                  "title": "Authentication required",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:authentication"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Missing or invalid credentials",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "SCOPE_DENIED",
-                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 403,
-                  "title": "Outside the caller's scope",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:scope-denied"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "413": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "PAYLOAD_TOO_LARGE",
-                  "detail": "Body exceeds 26214400 bytes",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 413,
-                  "title": "Payload too large",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:payload-too-large"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Body exceeds 26214400 bytes",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "VALIDATION",
-                  "detail": "Request validation failed",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 422,
-                  "title": "Invalid request",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Request validation failed",
-            "headers": {
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "429": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "RATE_LIMIT",
-                  "detail": "Too many requests",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 429,
-                  "title": "Too many requests",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:rate-limit"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Too many requests",
-            "headers": {
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "DEPENDENCY_UNAVAILABLE",
-                  "detail": "PostgreSQL unavailable",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 503,
-                  "title": "A dependency is unavailable",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:dependency-unavailable"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "PostgreSQL unavailable",
-            "headers": {
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          }
-        },
-        "summary": "Learned procedures as draft Agent Skills, for an administrator to publish",
-        "tags": [
-          "tools"
-        ]
-      }
-    },
-    "/v1/tools/skill-drafts/{draft_id}/dismiss": {
-      "post": {
-        "description": "The tenant's administrator credential. A published skill stays published. 409 when there is no draft for the procedure's current steps.",
-        "operationId": "tools.dismiss_skill_draft",
-        "parameters": [
-          {
-            "description": "The skill draft's id (its procedure's), as GET /v1/tools/skill-drafts lists it.",
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "description": "The skill draft's id (its procedure's), as GET /v1/tools/skill-drafts lists it.",
-              "title": "Draft Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-            "in": "header",
-            "name": "X-Trellis-Tenant",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-              "title": "X-Trellis-Tenant"
-            }
-          },
-          {
-            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
-            "in": "header",
-            "name": "traceparent",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
-            "in": "header",
-            "name": "X-Request-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
-            "in": "header",
-            "name": "X-Correlation-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The workspace (team) acted in; membership is checked.",
-            "in": "header",
-            "name": "X-Trellis-Workspace",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The end user acted for.",
-            "in": "header",
-            "name": "X-Trellis-User",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillDecision"
-                }
-              }
-            },
-            "description": "Successful Response",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "AUTHENTICATION",
-                  "detail": "Missing or invalid credentials",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 401,
-                  "title": "Authentication required",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:authentication"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Missing or invalid credentials",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "SCOPE_DENIED",
-                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 403,
-                  "title": "Outside the caller's scope",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:scope-denied"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "NOT_FOUND",
-                  "detail": "Thread not found",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 404,
-                  "title": "Not found",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:not-found"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Thread not found",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "413": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "PAYLOAD_TOO_LARGE",
-                  "detail": "Body exceeds 26214400 bytes",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 413,
-                  "title": "Payload too large",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:payload-too-large"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Body exceeds 26214400 bytes",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "VALIDATION",
-                  "detail": "Request validation failed",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 422,
-                  "title": "Invalid request",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Request validation failed",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "429": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "RATE_LIMIT",
-                  "detail": "Too many requests",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 429,
-                  "title": "Too many requests",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:rate-limit"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Too many requests",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "DEPENDENCY_UNAVAILABLE",
-                  "detail": "PostgreSQL unavailable",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/dismiss",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 503,
-                  "title": "A dependency is unavailable",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:dependency-unavailable"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "PostgreSQL unavailable",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          }
-        },
-        "summary": "Dismiss a skill draft: not offered again until the procedure's steps change",
-        "tags": [
-          "tools"
-        ]
-      }
-    },
-    "/v1/tools/skill-drafts/{draft_id}/publish": {
-      "post": {
-        "description": "The tenant's administrator credential. Its next version: 1.0.0, then the next minor. 409 when there is no draft for the procedure's current steps, or a skill of that name exists that this tenant did not publish; 503 when the deployment has no skills store.",
-        "operationId": "tools.publish_skill_draft",
-        "parameters": [
-          {
-            "description": "The skill draft's id (its procedure's), as GET /v1/tools/skill-drafts lists it.",
-            "in": "path",
-            "name": "draft_id",
-            "required": true,
-            "schema": {
-              "description": "The skill draft's id (its procedure's), as GET /v1/tools/skill-drafts lists it.",
-              "title": "Draft Id",
-              "type": "string"
-            }
-          },
-          {
-            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-            "in": "header",
-            "name": "X-Trellis-Tenant",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
-              "title": "X-Trellis-Tenant"
-            }
-          },
-          {
-            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
-            "in": "header",
-            "name": "traceparent",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
-            "in": "header",
-            "name": "X-Request-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
-            "in": "header",
-            "name": "X-Correlation-ID",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The workspace (team) acted in; membership is checked.",
-            "in": "header",
-            "name": "X-Trellis-Workspace",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "The end user acted for.",
-            "in": "header",
-            "name": "X-Trellis-User",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "examples": {
-                "as drafted": {
-                  "value": {}
-                },
-                "under another name": {
-                  "value": {
-                    "name": "refund-order"
-                  }
-                }
-              },
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/PublishSkillBody"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillDecision"
-                }
-              }
-            },
-            "description": "Successful Response",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "AUTHENTICATION",
-                  "detail": "Missing or invalid credentials",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 401,
-                  "title": "Authentication required",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:authentication"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Missing or invalid credentials",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "SCOPE_DENIED",
-                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 403,
-                  "title": "Outside the caller's scope",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:scope-denied"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "404": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "NOT_FOUND",
-                  "detail": "Thread not found",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 404,
-                  "title": "Not found",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:not-found"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Thread not found",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "CONFLICT",
-                  "detail": "Idempotency key reused with a different payload",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 409,
-                  "title": "Conflict",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:conflict"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Idempotency key reused with a different payload",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "413": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "PAYLOAD_TOO_LARGE",
-                  "detail": "Body exceeds 26214400 bytes",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 413,
-                  "title": "Payload too large",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:payload-too-large"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Body exceeds 26214400 bytes",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "422": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "VALIDATION",
-                  "detail": "Request validation failed",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": false,
-                  "status": 422,
-                  "title": "Invalid request",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:validation"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Request validation failed",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "429": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "RATE_LIMIT",
-                  "detail": "Too many requests",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 429,
-                  "title": "Too many requests",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:rate-limit"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Too many requests",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "example": {
-                  "code": "DEPENDENCY_UNAVAILABLE",
-                  "detail": "PostgreSQL unavailable",
-                  "details": {},
-                  "instance": "/v1/tools/skill-drafts/{draft_id}/publish",
-                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
-                  "retryable": true,
-                  "status": 503,
-                  "title": "A dependency is unavailable",
-                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-                  "type": "urn:trellis:problem:dependency-unavailable"
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "PostgreSQL unavailable",
-            "headers": {
-              "Idempotent-Replayed": {
-                "$ref": "#/components/headers/Idempotent-Replayed"
-              },
-              "Retry-After": {
-                "$ref": "#/components/headers/Retry-After"
-              },
-              "X-Correlation-ID": {
-                "$ref": "#/components/headers/X-Correlation-ID"
-              },
-              "X-RateLimit-Limit": {
-                "$ref": "#/components/headers/X-RateLimit-Limit"
-              },
-              "X-RateLimit-Remaining": {
-                "$ref": "#/components/headers/X-RateLimit-Remaining"
-              },
-              "X-Request-ID": {
-                "$ref": "#/components/headers/X-Request-ID"
-              },
-              "X-Trace-ID": {
-                "$ref": "#/components/headers/X-Trace-ID"
-              },
-              "X-Trellis-LLM-Tokens": {
-                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
-              },
-              "traceparent": {
-                "$ref": "#/components/headers/traceparent"
-              }
-            }
-          }
-        },
-        "summary": "Publish a skill draft where agents load skills from (SKILLS_DIR or the gateway)",
         "tags": [
           "tools"
         ]
