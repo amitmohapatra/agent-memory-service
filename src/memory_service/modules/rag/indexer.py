@@ -411,7 +411,7 @@ class Indexer:
         thread_id: str | None,
     ) -> int:
         texts = [c.contextual_text for c in chunks]
-        dense = await self._dense_for_chunks(chunks, texts)
+        dense = await self._dense_for_chunks(texts)
         sparse = self.sparse.encode_documents(texts)
         late = await self.embed_late(texts)
         records = [
@@ -668,9 +668,7 @@ class Indexer:
         observed_from = head[0].occurred_at if head else observed_to
         return thread, body, observed_from, observed_to
 
-    async def _dense_for_chunks(
-        self, chunks: Sequence[Chunk], texts: list[str]
-    ) -> dict[VectorName, list[list[float]]]:
+    async def _dense_for_chunks(self, texts: list[str]) -> dict[VectorName, list[list[float]]]:
         """Per-chunk embeddings.
 
         This used to branch into late chunking when the provider exposed ``embed_spans``. That
@@ -678,7 +676,10 @@ class Indexer:
         endpoint cannot give — it returns one pooled vector per input — so it was mutually
         exclusive with running the models as their own tier.
         """
-        return await self.embed_cached(texts, [c.text_hash + ":ctx" for c in chunks])
+        # The cache key names the string that was embedded — the contextual text, header and
+        # all. ``text_hash + ":ctx"`` keyed it by the body alone, so the same passage under
+        # another title, section or situating context reused a vector of a different string.
+        return await self.embed_cached(texts, [content_hash(t) + ":chunk" for t in texts])
 
     async def rebuild_document(self, tenant_id: str, document_id: str) -> int:
         return await self.index_document(tenant_id, document_id, force=True)

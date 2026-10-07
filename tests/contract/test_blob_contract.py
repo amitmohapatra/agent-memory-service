@@ -8,6 +8,7 @@ to keep all three, or ``blob.provider`` is not a free choice.
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 
 import pytest
@@ -19,6 +20,9 @@ pytestmark = pytest.mark.contract
 
 ADAPTERS = ("memory", "filesystem", "gcs")
 BUCKET = "contract"
+#: a fake GCS server (tests/integration/test_gcs_blob.py says how to start one); unset, the
+#: gcs case runs against real GCS with the machine's default credentials
+EMULATOR = os.environ.get("MEMORY_TEST_GCS_EMULATOR")
 
 
 def _build(name: str, tmp_path):
@@ -33,11 +37,22 @@ def _build(name: str, tmp_path):
     from memory_service.adapters.blob.gcs import GCSBlobStore
     from memory_service.config.settings import BlobSettings
 
-    return GCSBlobStore(BlobSettings(provider="gcs"))
+    if not EMULATOR:
+        return GCSBlobStore(BlobSettings(provider="gcs"))
+    from google.cloud import storage
+
+    # an emulator starts empty; real GCS would have the bucket provisioned
+    client = storage.Client(project="memory-tests")
+    if client.lookup_bucket(BUCKET) is None:
+        client.create_bucket(BUCKET)
+    return GCSBlobStore(BlobSettings(provider="gcs", gcs_project="memory-tests"))
 
 
 @pytest_asyncio.fixture(params=ADAPTERS, loop_scope="function")
-async def blob(request: pytest.FixtureRequest, tmp_path):
+async def blob(request: pytest.FixtureRequest, tmp_path, monkeypatch):
+    if request.param == "gcs" and EMULATOR:
+        # the client library's own switch: the emulator, with anonymous credentials
+        monkeypatch.setenv("STORAGE_EMULATOR_HOST", EMULATOR)
     try:
         store = _build(request.param, tmp_path)
     except Exception as exc:  # an adapter whose SDK or credentials are absent

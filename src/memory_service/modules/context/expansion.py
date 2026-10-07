@@ -121,6 +121,16 @@ class ExpansionStage:
     ) -> list[Candidate]:
         present = {c.record_id for c in existing}
         present_nodes = {c.payload.get("node_id") for c in existing if c.kind == "chunk"}
+        # A passage already in hand under another record (a copy of the same document, a
+        # repeated boilerplate paragraph) adds nothing a second time; ranking collapses such
+        # twins on ``text_hash`` too. Spending the budget on one crowded out a companion the
+        # reader did not have yet. Verification still fetches it when its *node* is the
+        # required companion, so provenance is not lost.
+        present_texts = {
+            c.payload.get("text_hash")
+            for c in existing
+            if c.kind == "chunk" and c.payload.get("text_hash")
+        }
         seeds_by_node = {c.payload.get("node_id"): c for c in reversed(seeds)}
         node_ids = [str(c.payload["node_id"]) for c in seeds if c.payload.get("node_id")]
         if not node_ids:
@@ -139,7 +149,12 @@ class ExpansionStage:
             for e in edges:
                 score, prio = _EDGE_PRIORITY.get(e.edge, (0.3, 9))
                 ordered.append((prio, score, e.edge.value, e.source_id, e.target_id))
-            ordered.sort(key=lambda t: (t[0], -t[1]))
+            # within an edge kind, the better-ranked seed's companions first: the budget is
+            # small, and the database's row order is no ranking at all
+            seed_rank: dict[str, int] = {}
+            for rank, node_id in enumerate(node_ids):
+                seed_rank.setdefault(node_id, rank)
+            ordered.sort(key=lambda t: (t[0], seed_rank.get(t[3], len(node_ids)), -t[1]))
             targets = list(dict.fromkeys([t[4] for t in ordered] + node_ids))
             chunks_by_node: dict[str, list[Chunk]] = {}
             for c in await uow.documents.chunks_for_nodes(ctx.tenant_id, targets):
@@ -159,7 +174,11 @@ class ExpansionStage:
                 if idx is None:
                     continue
                 for j, edge in ((idx - 1, "PREVIOUS"), (idx + 1, "NEXT")):
-                    if 0 <= j < len(siblings) and siblings[j].chunk_id not in present:
+                    if (
+                        0 <= j < len(siblings)
+                        and siblings[j].chunk_id not in present
+                        and siblings[j].text_hash not in present_texts
+                    ):
                         if len(added) >= budget:
                             break
                         cand = chunk_candidate(
@@ -167,6 +186,7 @@ class ExpansionStage:
                         )
                         added.append(cand)
                         present.add(cand.record_id)
+                        present_texts.add(siblings[j].text_hash)
         for _prio, score, edge, source, target in ordered:
             if len(added) >= budget:
                 break
@@ -195,10 +215,11 @@ class ExpansionStage:
             if target in present_nodes:
                 continue
             for c in chunks_by_node.get(target, [])[:1]:
-                if c.chunk_id in present:
+                if c.chunk_id in present or c.text_hash in present_texts:
                     continue
                 added.append(chunk_candidate(c, score=score, edge=edge, source=source_chunk))
                 present.add(c.chunk_id)
+                present_texts.add(c.text_hash)
                 present_nodes.add(target)
         return added[:budget]
 

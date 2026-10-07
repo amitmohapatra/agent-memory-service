@@ -264,7 +264,9 @@ def test_every_declared_stand_in_has_a_wiring_branch() -> None:
     )
 
 
-def test_the_suite_configures_itself_and_never_the_developers_shell() -> None:
+def test_the_suite_configures_itself_and_never_the_developers_shell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A test run must mean the same thing on every machine.
 
     Two doors let a local ``.env`` into the suite, and both had to be shut: a shell or a
@@ -276,7 +278,8 @@ def test_the_suite_configures_itself_and_never_the_developers_shell() -> None:
     import json
     import subprocess
     import sys
-    import tempfile
+
+    from memory_service.config.settings import Settings
 
     root = Path(__file__).resolve().parents[2]
     probe = (
@@ -303,10 +306,21 @@ def test_the_suite_configures_itself_and_never_the_developers_shell() -> None:
                 out[f"{prefix}{key}"] = value
         return out
 
-    if not (root / ".env").is_file():
-        pytest.skip("no local .env to leak from")
-    with_env = flat(settings_from(str(root)))
-    without_env = flat(settings_from(tempfile.mkdtemp()))
+    # A planted .env rather than the developer's own, so the door is tested on every machine
+    # (CI has none); the sanity check proves the file is one a plain Settings() would read.
+    leaky = tmp_path / "with_env"
+    leaky.mkdir()
+    (leaky / ".env").write_text(
+        "MEMORY__BLOB__FILESYSTEM_ROOT=/leaked/blob\n"
+        "MEMORY__SEARCH__QDRANT_URL=http://leaked.invalid:6333\n"
+        "BIFROST_URL=http://leaked.invalid:8080\n"
+    )
+    monkeypatch.chdir(leaky)
+    assert Settings().blob.filesystem_root == "/leaked/blob", "sanity: the .env is not read"
+    bare = tmp_path / "without_env"
+    bare.mkdir()
+    with_env = flat(settings_from(str(leaky)))
+    without_env = flat(settings_from(str(bare)))
     drift = sorted(k for k in with_env | without_env if with_env.get(k) != without_env.get(k))
     assert not drift, f"test settings inherited from the local .env: {drift}"
 

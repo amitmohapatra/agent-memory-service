@@ -21,11 +21,21 @@ from benchmark.evaluation.golden import (
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.jobs.registry import register_handlers
 
-pytestmark = [pytest.mark.eval, pytest.mark.models]
+# Docling lays out, OCRs and table-parses four PDFs on CPU: minutes, not the suite default
+pytestmark = [pytest.mark.eval, pytest.mark.models, pytest.mark.timeout(900)]
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 GOLDEN = Path(__file__).resolve().parent / "golden" / "public_pdfs.json"
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
+
+
+@pytest.fixture
+def container_overrides() -> dict:
+    """The configured parser (docling), encoders and NLI in place of the hermetic stand-ins,
+    so this runs wherever the ``models`` marker does, not only under
+    ``MEMORY_TEST_PROVIDERS=env``: a recall gate over the hash embedding measures nothing
+    (the report's ``representative`` says so)."""
+    return {"document_parser": None, "embedding": None, "nli": None}
 
 
 async def test_pdf_critical_recall_and_evidence_group_gates(container, uow_factory) -> None:
@@ -53,7 +63,7 @@ async def test_pdf_critical_recall_and_evidence_group_gates(container, uow_facto
     async with uow_factory() as uow:
         for document_id, alias in aliases.items():
             doc = await uow.documents.get(CTX.tenant_id, document_id)
-            assert doc is not None and doc.status.value == "READY", (alias, doc)
+            assert doc is not None and doc.system_metadata.get("status") == "READY", (alias, doc)
     engine = container.services["retrieval"]
     k = CRITICAL_RECALL_K
     results = []

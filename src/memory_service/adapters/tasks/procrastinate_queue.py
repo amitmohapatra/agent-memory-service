@@ -38,6 +38,23 @@ _STATUS_MAP = {
     "aborted": JobStatus.CANCELLED,
 }
 
+#: Procrastinate records that a job failed but not why, so ``get`` had nothing to put in
+#: ``last_error`` and a FAILED job's status never said what went wrong. The worker writes the
+#: last failure here. The ``procrastinate_`` prefix keeps it out of Alembic's autogenerate
+#: (migrations/env.py), like the rest of the queue's schema, and the cascade drops it with
+#: its job.
+_ERRORS_TABLE = """
+CREATE TABLE IF NOT EXISTS procrastinate_job_errors (
+    job_id bigint PRIMARY KEY REFERENCES procrastinate_jobs(id) ON DELETE CASCADE,
+    error text NOT NULL,
+    at timestamp with time zone NOT NULL DEFAULT NOW()
+)
+"""
+_RECORD_ERROR = """
+INSERT INTO procrastinate_job_errors (job_id, error) VALUES (%(job_id)s, %(error)s)
+ON CONFLICT (job_id) DO UPDATE SET error = EXCLUDED.error, at = NOW()
+"""
+
 
 def _retry_strategy(retries: int) -> procrastinate.RetryStrategy | bool:
     """``retries`` additional attempts after the first (Procrastinate's ``job.attempts`` is
@@ -108,9 +125,11 @@ class ProcrastinateTaskQueue:
             row = await (
                 await conn.execute("SELECT to_regclass('public.procrastinate_jobs') IS NOT NULL")
             ).fetchone()
-        if row and row[0]:
-            return
-        await self.app.schema_manager.apply_schema_async()
+        if not (row and row[0]):
+            await self.app.schema_manager.apply_schema_async()
+        # outside the check above: a database whose queue schema predates the table gets it
+        async with self.app.connector.pool.connection() as conn:  # type: ignore[attr-defined]
+            await conn.execute(_ERRORS_TABLE)
 
     async def ping(self) -> bool:
         try:
@@ -134,8 +153,10 @@ class ProcrastinateTaskQueue:
                 worker_running_jobs.inc()
                 try:
                     result = await asyncio.wait_for(handler(payload), timeout=timeout)
-                except Exception:
+                except Exception as exc:
                     jobs_total.labels(name, "failed").inc()
+                    if context.job and context.job.id is not None:
+                        await self._record_error(context.job.id, exc)
                     raise
                 finally:
                     worker_running_jobs.dec()
@@ -149,6 +170,15 @@ class ProcrastinateTaskQueue:
             retry=_retry_strategy(retries if retries is not None else self.default_retries),
             pass_context=True,
         )(_run)
+
+    async def _record_error(self, job_id: int, exc: BaseException) -> None:
+        """Best effort: failing to record why a job failed must not change how it fails."""
+        try:
+            await self.app.connector.execute_query_async(
+                _RECORD_ERROR, job_id=job_id, error=f"{type(exc).__name__}: {exc}"[:2000]
+            )
+        except Exception as record_exc:
+            log.warning("jobs.error_not_recorded", job_id=job_id, error=str(record_exc))
 
     def register_periodic(
         self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
@@ -201,12 +231,17 @@ class ProcrastinateTaskQueue:
         except (ValueError, TypeError):
             return None
         for job in jobs:
+            errors = await self.app.connector.execute_query_all_async(
+                "SELECT error FROM procrastinate_job_errors WHERE job_id = %(job_id)s",
+                job_id=job.id,
+            )
             return JobInfo(
                 job_id=str(job.id),
                 task_name=job.task_name,
                 queue=job.queue,
                 status=_STATUS_MAP.get(str(job.status), JobStatus.PENDING),
                 attempts=job.attempts,
+                last_error=errors[0]["error"] if errors else None,
                 scheduled_at=job.scheduled_at.isoformat() if job.scheduled_at else None,
             )
         return None

@@ -118,6 +118,51 @@ async def test_golden_definition_ablation_and_verification_recovery(container, u
     assert any(c.expansion_edge == "ESCALATION" and c.payload.get("page") == 1 for c in recovered)
 
 
+async def test_expansion_does_not_spend_its_budget_on_a_passage_already_in_hand(
+    container, uow_factory
+):
+    """Two copies of one report: a copy's definition, already ranked, is not added again
+    from the other copy (it would take a companion's place in the budget); a companion the
+    reader does not have yet still is, and verification fetches the other copy's own
+    definition node when that node is the required companion."""
+    first = await _ingest(container, uow_factory)
+    async with uow_factory() as uow:
+        ack = await container.services["ingestion"].accept_file(
+            uow,
+            U1,
+            filename="acme_copy.md",
+            media_type="text/markdown",
+            data=FIXTURE.read_bytes() + b"\n\nA second copy.\n",
+            title="ACME FY26 copy",
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    await container.tasks.drain()
+    engine = container.services["retrieval"]
+    async with uow_factory() as uow:
+        own = await uow.documents.list_chunks(U1.tenant_id, ack.document_id)
+        other = await uow.documents.list_chunks(U1.tenant_id, first)
+        visibility = await container.services["authz"].visibility(U1, revisions=uow.revisions)
+    seed_chunk = next(c for c in own if c.page == 11 and "Adjusted EBITDA" in c.text)
+    definition = next(c for c in other if c.page == 1 and "Adjusted EBITDA" in c.text)
+    seed = chunk_candidate(seed_chunk, score=1.0, edge="", source="")
+    in_hand = chunk_candidate(definition, score=0.9, edge="", source="")
+    seed.expansion_edge = in_hand.expansion_edge = None
+    cfg = engine.cfg.model_copy(update={"parent_expansion": False, "neighbor_expansion": False})
+    stage = ExpansionStage(uow_factory, settings=cfg)
+    alone = await stage.expand(U1, [seed], [seed], budget=8)
+    with_twin = await stage.expand(U1, [seed], [seed, in_hand], budget=8)
+    assert any(c.expansion_edge == "DEFINED_BY" for c in alone)
+    assert not any(c.payload["text_hash"] == definition.text_hash for c in with_twin)
+    assert {c.expansion_edge for c in with_twin} >= {"FOOTNOTE"}
+    routed = engine.router.routed(Q, QueryType.DOCUMENT_MULTI_HOP, identifiers=[], signals={})
+    diagnostics: dict = {}
+    await engine.post_stages["verify"](
+        U1, routed, [seed, in_hand, *with_twin], visibility, diagnostics
+    )
+    assert diagnostics["evidence"]["status"] == "COMPLETE", diagnostics["evidence"]
+
+
 async def test_abstention_and_no_evidence(container, uow_factory) -> None:
     await _ingest(container, uow_factory)
     engine = container.services["retrieval"]

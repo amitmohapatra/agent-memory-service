@@ -251,9 +251,11 @@ the **episode**, the same summary indexed so that earlier conversations can be s
 
 A **document** is a file parsed into a hierarchy — document, section, subsection,
 paragraph, table, code block — and cut into **chunks** of at most 400 estimated tokens
-(`DocumentSettings` in `config/constants.py`; ADR 0007). Chunks are indexed with a
-deterministic header (document, section path, page, entities) prepended, while the original
-text is kept for display. The structural links between parts of one document — parent, next,
+(`DocumentSettings` in `config/constants.py`; ADR 0007). A unit that fits is one chunk; a
+longer one is split between lines, then sentences, with overlap, and every chunk's text is an
+exact slice of the parsed text — nothing re-joined or re-spaced. Chunks are indexed with a
+deterministic header (document, section path, page, entities, and for a footnote the sentence
+that cites it) prepended, while the original text is kept for display. The structural links between parts of one document — parent, next,
 footnote, cross-reference, definition — form the **Document Context Graph**, which is not the
 same thing as the knowledge graph of chapter 5. A document is `STAGED` until its parse job
 indexes it (`READY`) or gives up (`FAILED`).

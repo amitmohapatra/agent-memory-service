@@ -14,9 +14,17 @@
   prose splits on sentences with overlap; tables split by rows with the header repeated; code
   splits on blank lines. Token estimate is deterministic (chars/4 + lines) so it never needs a
   tokenizer download; the embedding adapter enforces the model's true limit at index time.
+  *Amended 2026-10-07:* a chunk's `text` is an exact slice of its node's parsed text, overlap
+  included — split sentences used to be re-joined with one space, which erased the source's
+  whitespace (two spaces after a full stop in PDFs) so chunks no longer matched the document;
+  only a split table's parts, which repeat the header row, are not slices. An oversized
+  multi-line node (a list) splits between lines first, so a line that fits is never broken.
 - **Contextual Retrieval.** `contextual_text` = `Document / Section / Page / Table / Entities`
   header + original text. Only `contextual_text` is embedded/BM25-indexed; `text` is kept for
-  display and citations.
+  display and citations. *Amended 2026-10-07:* a footnote's header also carries
+  `Footnote to:` the sentence that cites it (the nearest sentence with its marker — `*`, `†`,
+  `‡`, `§`, `¶`, doubled, superscript digits, or `[^n]`), because a note such as "§§
+  Butenafine, butoconazole, …" names neither its subject nor the analysis it belongs to.
 - **Document Context Graph** (deterministic, no LLM): PARENT/CHILD, PREVIOUS/NEXT, ON_PAGE,
   IN_TABLE, FOOTNOTE (`[^n]`, `^n`, "(note n)"), CROSS_REFERENCE ("Section 8", "Table 2",
   "Appendix B"), MENTIONS (`entity:<canonical>`), DEFINED_BY/DEFINES (glossary and prose

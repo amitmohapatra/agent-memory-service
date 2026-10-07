@@ -71,6 +71,15 @@ def _defers(queue) -> bool:
     return not hasattr(queue, "drain")
 
 
+async def _work(queue) -> None:
+    """Run what is queued: the inline executor drains itself, a real queue needs its worker
+    (``run_until_idle`` is the loop ``memory-worker`` runs, stopping once the queue is empty)."""
+    if _defers(queue):
+        await queue.run_until_idle([Queue.MEMORY_EXTRACT], concurrency=1)
+    else:
+        await queue.drain()
+
+
 async def test_an_enqueued_job_is_findable_by_its_id(queue) -> None:
     queue.register("contract.noop", Queue.MEMORY_EXTRACT, _noop)
     job_id = await queue.enqueue(_spec())
@@ -96,8 +105,6 @@ async def test_a_registered_handler_receives_the_payload_it_was_enqueued_with(qu
     """Handlers are called with the payload as one dict — not as keyword arguments. Getting
     that wrong raises inside the worker, where it becomes a FAILED job and a log line rather
     than a test failure, so the shape is worth pinning."""
-    if _defers(queue):
-        pytest.skip("needs a worker to execute; the inline queue covers the handler contract")
     seen: list[dict] = []
 
     async def handler(payload: dict) -> None:
@@ -107,21 +114,19 @@ async def test_a_registered_handler_receives_the_payload_it_was_enqueued_with(qu
     queue.register(name, Queue.MEMORY_EXTRACT, handler)
     spec = _spec(task_name=name)
     await queue.enqueue(spec)
-    await queue.drain()
+    await _work(queue)
     assert seen == [spec.payload]
 
 
 async def test_a_handler_that_raises_marks_the_job_failed_rather_than_losing_it(queue) -> None:
-    if _defers(queue):
-        pytest.skip("needs a worker to execute")
-
     async def explode(payload: dict) -> None:
         raise RuntimeError("handler blew up")
 
     name = f"contract.boom.{uuid.uuid4().hex[:6]}"
-    queue.register(name, Queue.MEMORY_EXTRACT, explode)
+    # no retries: a real queue would otherwise reschedule it with backoff, still pending
+    queue.register(name, Queue.MEMORY_EXTRACT, explode, retries=0)
     job_id = await queue.enqueue(_spec(task_name=name))
-    await queue.drain()
+    await _work(queue)
     info = await queue.get(job_id)
     assert info is not None and info.status is JobStatus.FAILED
     assert "handler blew up" in (info.last_error or "")
