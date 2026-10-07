@@ -31,7 +31,6 @@ jobs:
     env:
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@localhost:5432/memory
       MEMORY__CACHE__URL: redis://localhost:6379/0
-      MEMORY__BLOB__PROVIDER: filesystem
       # the gcs blob contract and tests/integration/test_gcs_blob.py, against the fake GCS
       # server started below; without it both skipped (no credentials)
       MEMORY_TEST_GCS_EMULATOR: http://localhost:4443

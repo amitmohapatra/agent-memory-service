@@ -37,7 +37,7 @@ async def main() -> None:
             admin = admin_client.bind(tenant_id=tenant_id)
 
             await user.remember(FACT, visibility="USER")
-            memory = next(m for m in await user.advanced.memories.list() if m.content == FACT)
+            [memory] = [m async for m in user.advanced.memories.iter() if m.content == FACT]
 
             vote = await user.feedback("memory", memory.memory_id, "confirm")
             print("user's vote:", vote.review.state if vote.review else None)

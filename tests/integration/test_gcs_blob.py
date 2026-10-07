@@ -12,7 +12,8 @@ Opt in with a fake GCS server (``fsouza/fake-gcs-server``) and its address::
     MEMORY_TEST_GCS_EMULATOR=http://localhost:4443 uv run pytest tests/integration/test_gcs_blob.py
 
 ``STORAGE_EMULATOR_HOST`` is the client library's own switch: with it set the client talks
-to the emulator with anonymous credentials, so the adapter under test is unchanged.
+to the emulator with anonymous credentials, so the adapter under test is unchanged, and the
+service picks the GCS store for it (``Settings.blob_provider``).
 """
 
 from __future__ import annotations
@@ -60,7 +61,6 @@ async def gcs(make_settings, monkeypatch) -> AsyncIterator[Container]:
     settings = integration_settings(
         make_settings,
         blob={
-            "provider": "gcs",
             "chat_bucket": chat,
             "file_bucket": files,
             "gcs_project": "memory-tests",

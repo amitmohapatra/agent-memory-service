@@ -161,7 +161,7 @@ async def version(request: Request) -> VersionResponse:
             "search": "qdrant-local"
             if c.overrides.search or c.overrides.search_local_path
             else "qdrant",
-            "blob": _active(c.blob, s.blob.provider),
+            "blob": _active(c.blob, s.blob_provider),
             "tasks": _active(c.tasks, "procrastinate"),
             "authorization": _active(c.authorization, "openfga"),
             "embedding": _active(c.embedding, constants.FROZEN_MODELS.dense.id),

@@ -37,7 +37,7 @@ def settings() -> Settings:
         service={"environment": "test", "log_level": "WARNING", "log_json": False},
         authentication={"trusted_dev_api_keys": ["k"]},
         database={"url": DB},
-        blob={"provider": "filesystem", "filesystem_root": "/dev/shm/bench_blob"},
+        blob={"filesystem_root": "/dev/shm/bench_blob"},
     )
 
 

@@ -1,10 +1,9 @@
 name: memory-service
 
 # Everything here is a fact about *this compose topology* that a .env file cannot know:
-# service DNS names, container filesystem paths, and the provider that matches the container
-# actually running beside you. compose `environment:` overrides `env_file:`, which is exactly
-# right for these — an operator must not be able to point the service at a database that is
-# not the one compose started.
+# service DNS names and container filesystem paths. compose `environment:` overrides
+# `env_file:`, which is exactly right for these — an operator must not be able to point the
+# service at a database that is not the one compose started.
 #
 # Everything an operator *chooses* lives in .env instead (see .env.example): log level,
 # environment name, the LLM block, observability, authentication, tuning. Those reach the
@@ -21,7 +20,6 @@ x-common-env: &common-env
   MEMORY__CACHE__URL: redis://dragonfly:6379/0
   MEMORY__SEARCH__QDRANT_URL: http://qdrant:6333
   MEMORY__AUTHORIZATION__OPENFGA_API_URL: http://openfga:8080
-  MEMORY__BLOB__PROVIDER: filesystem
   MEMORY__BLOB__FILESYSTEM_ROOT: /data/blob
   # The models are not configuration: src/memory_service/config/constants.py names the
   # frozen set and the service reads each one from /models/<dir> (the ./models mount)

@@ -15,7 +15,7 @@ from typing import Any, Final
 import httpx
 
 from trellis.memory import errors as sdk_errors
-from trellis.memory.breaker import DEFAULT_FAILURE_THRESHOLD, DEFAULT_OPEN_SECONDS, CircuitBreaker
+from trellis.memory.breaker import CircuitBreaker
 from trellis.memory.errors import MemoryError, error_from_problem
 from trellis.memory.models import Scope
 
@@ -103,8 +103,6 @@ class Transport:
         max_retries: int = 3,
         client: httpx.AsyncClient | None = None,
         user_agent: str = "trellis-memory-python",
-        circuit_failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
-        circuit_open_seconds: float = DEFAULT_OPEN_SECONDS,
     ) -> None:
         headers = {"User-Agent": user_agent, "Accept": "application/json, application/problem+json"}
         if api_key:
@@ -130,8 +128,8 @@ class Transport:
         self._client = client
         self._owns_client = owns
         self.max_retries = max_retries
-        #: Per client: one service, one circuit. ``circuit_failure_threshold=0`` disables it.
-        self.breaker = CircuitBreaker(circuit_failure_threshold, circuit_open_seconds)
+        #: Per client: one service, one circuit (``breaker.FAILURE_THRESHOLD``, ``OPEN_SECONDS``).
+        self.breaker = CircuitBreaker()
 
     @staticmethod
     def scope_headers(scope: Scope) -> dict[str, str]:

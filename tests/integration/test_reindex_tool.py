@@ -249,9 +249,7 @@ async def test_what_fails_is_reported_and_the_rest_is_still_rebuilt(
 
 def _command(monkeypatch, make_settings, tmp_path, *argv: str) -> list[Any]:
     built: list[Any] = []
-    settings = integration_settings(
-        make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path)}
-    )
+    settings = integration_settings(make_settings, blob={"filesystem_root": str(tmp_path)})
 
     async def build(_settings: Any, version: str) -> Any:
         c = await build_container(settings, version, overrides=integration_overrides(blob=None))

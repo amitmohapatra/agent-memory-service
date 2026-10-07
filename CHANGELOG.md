@@ -62,6 +62,22 @@ each entry says which one moved. Decisions behind each change are in the
   check for torch/sentence-transformers themselves, so CI (without the `models` extra)
   deselects them instead of skipping the whole module; the pure fingerprint test still runs.
 
+### Removed
+- The `MEMORY__BLOB__PROVIDER` setting. The blob store follows from where the service runs:
+  GCS when `MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`, or when a GCS emulator is
+  configured (`STORAGE_EMULATOR_HOST`); the filesystem otherwise. A leftover
+  `MEMORY__BLOB__PROVIDER` is ignored ([configuration](docs/configuration.md#blob-storage-archives-documents-large-tool-outputs)).
+- **SDK, breaking:** `ctx.advanced.memories.list()`. It took a cursor but dropped the next
+  one, so it could not page: use `memories.iter()` for every memory, or `memories.page()` for
+  one page and its cursor.
+- **SDK, breaking:** `ctx.feedback.list_for()`, for the same reason: use
+  `ctx.feedback.page_for(kind, id)` (`.items`, `.next_cursor`).
+- **SDK, breaking:** `record_tool(output_summary=, sub_calls=)`. Nothing sent them: the
+  service derives the summary from `output`. `POST /v1/tools/invocations` still accepts both.
+- **SDK, breaking:** `MemoryClient(circuit_failure_threshold=, circuit_open_seconds=)`. The
+  breaker opens after 5 failed calls in a row for 30 s
+  (`trellis.memory.breaker.FAILURE_THRESHOLD`, `OPEN_SECONDS`).
+
 ### Documentation
 - A Start-here README; the high-level design with the five Trellis repositories
   ([ARCHITECTURE.md](docs/ARCHITECTURE.md)); a sequence diagram per key flow

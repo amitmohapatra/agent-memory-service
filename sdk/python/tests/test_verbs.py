@@ -335,7 +335,8 @@ async def test_feedback_takes_a_contracts_record_or_its_fields(ctx) -> None:
     await ctx.feedback("run", "run_1", "confirm", score=0.9, source="system")
     assert _body(route)["agent_run_id"] == "run_1" and _body(route)["score"] == 0.9
     assert _body(route)["source"] == "system"
-    assert [f.feedback_id for f in await ctx.feedback.list_for("tool_call", "call_1")] == ["fb_1"]
+    page = await ctx.feedback.page_for("tool_call", "call_1")
+    assert [f.feedback_id for f in page.items] == ["fb_1"]
     assert listed.calls.last.request.url.params["target_kind"] == "tool_call"
     with pytest.raises(ValueError):
         await ctx.feedback("run", "run_1")

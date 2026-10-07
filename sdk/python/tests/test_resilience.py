@@ -221,16 +221,11 @@ class Clock:
         return self.now
 
 
-def _breaking_client(threshold: int = 2, open_seconds: float = 30.0) -> tuple[MemoryClient, Clock]:
-    client = MemoryClient(
-        URL,
-        api_key="k",
-        max_retries=0,
-        circuit_failure_threshold=threshold,
-        circuit_open_seconds=open_seconds,
-    )
+def _breaking_client(threshold: int = 2) -> tuple[MemoryClient, Clock]:
+    client = MemoryClient(URL, api_key="k", max_retries=0)
     clock = Clock()
-    client.transport.breaker._clock = clock
+    breaker = client.transport.breaker
+    breaker.threshold, breaker._clock = threshold, clock
     return client, clock
 
 

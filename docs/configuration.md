@@ -111,12 +111,16 @@ Chapter 7 explains the modes; [api/admin.md](api/admin.md) onboarding.
 
 ## Blob storage (archives, documents, large tool outputs)
 
+Which store is not a setting: the service writes to GCS when it is deployed
+(`MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`) or when a GCS emulator is configured
+(`STORAGE_EMULATOR_HOST`), and to the filesystem otherwise. `GET /version` names the one
+running.
+
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `MEMORY__BLOB__PROVIDER` | `filesystem` | `gcs` | no | `gcs` or `filesystem`; `filesystem` is refused in `staging` and `prod` |
 | `MEMORY__BLOB__CHAT_BUCKET` | `memory-chat-archive` | `acme-memory-chat-archive` | no | where conversation archive segments go |
 | `MEMORY__BLOB__FILE_BUCKET` | `memory-file-archive` | `acme-memory-file-archive` | no | where uploaded files and large payloads go |
-| `MEMORY__BLOB__FILESYSTEM_ROOT` | `./.blob` | `/var/lib/memory/blob` | no | the directory the `filesystem` provider writes under |
+| `MEMORY__BLOB__FILESYSTEM_ROOT` | `./.blob` | `/var/lib/memory/blob` | no | the directory blobs are written under when the store is the filesystem |
 | `MEMORY__BLOB__GCS_PROJECT` | unset | `acme-prod` | yes: the credentials' project | the GCP project of the buckets |
 
 ## Search (Qdrant)
@@ -165,12 +169,11 @@ Metrics need no setting: the API serves `/metrics`, the job worker serves its ow
 When `MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`, the service refuses to start if:
 
 - the authentication mode is `trusted_dev` (development keys and no bootstrap key);
-- `MEMORY__BLOB__PROVIDER` is `filesystem`;
 - `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` is set and shorter than 32 characters.
 
-Registering a model key is refused there until the envelope keys are set. `test` is not
-deployed on purpose: the suite and the benchmarks run under it with development keys and a
-filesystem blob store.
+Registering a model key is refused there until the envelope keys are set, and blobs go to GCS.
+`test` is not deployed on purpose: the suite and the benchmarks run under it with development
+keys and a filesystem blob store.
 
 ## Other environment variables
 
@@ -181,6 +184,7 @@ These are read outside `Settings`, by a tool or a client rather than the service
 | `MEMORY_MIGRATION_LOCK_TIMEOUT` | `migrations/env.py` | `5s` | how long a migration waits for a lock before it fails, to be retried |
 | `MEMORY_MIGRATION_STATEMENT_TIMEOUT` | `migrations/env.py` | `15min` | the bound on one migration statement; raise it for a maintenance window |
 | `MEMORY_DOCLING_ARTIFACTS` | the Docling parser | `docling` under a model root (`/models`, then `./models`) | where Docling's layout and table models are |
+| `STORAGE_EMULATOR_HOST` | google-cloud-storage, and the service | unset | a GCS emulator's address (`fake-gcs-server`): the client talks to it with anonymous credentials, and the service stores blobs in GCS |
 | `PROMETHEUS_MULTIPROC_DIR` | `memory-api` | a temporary directory | where the API's worker processes write the metrics `/metrics` sums |
 | `MEMORY_URL` | the SDK (`MemoryClient()`) | `http://localhost:8080` | the service the SDK talks to |
 | `TRELLIS_API_KEY` | the SDK (`MemoryClient()`) | unset | the key the SDK sends |

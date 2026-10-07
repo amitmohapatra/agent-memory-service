@@ -75,7 +75,7 @@ def _documented(value: Any) -> str:
 
 
 def test_every_setting_has_a_row_and_a_line_in_the_env_example() -> None:
-    assert len(LEAVES) >= 42
+    assert len(LEAVES) >= 41
     missing_rows = [env for env, _, _ in LEAVES if env not in ROWS]
     missing_env = [env for env, _, _ in LEAVES if env not in ENV_EXAMPLE]
     assert not missing_rows, f"docs/configuration.md has no row for {missing_rows}"
@@ -108,5 +108,5 @@ def test_the_examples_together_are_a_valid_production_configuration(
     settings = Settings(_env_file=None)
     assert settings.service.environment == "prod"
     assert settings.authentication.mode == "jwt"
-    assert settings.blob.provider == "gcs" and settings.llm.enabled
+    assert settings.blob_provider == "gcs" and settings.llm.enabled
     assert settings.search.write_consistency_factor <= settings.search.replication_factor

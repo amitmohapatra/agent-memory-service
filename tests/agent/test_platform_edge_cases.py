@@ -584,9 +584,13 @@ async def test_listing_memories_inside_a_team_includes_the_team_s(app, running) 
     await harness.bind(user_id="u1", workspace_id="finance").remember(
         "The close calendar is published on the first Monday.", visibility="WORKSPACE"
     )
-    listed = await harness.bind(user_id="u2", workspace_id="finance").advanced.memories.list()
+    listed = (
+        await harness.bind(user_id="u2", workspace_id="finance").advanced.memories.page()
+    ).items
     assert any("close calendar" in m.content for m in listed), "a member lists the team's memory"
-    outside = await harness.bind(user_id="u3", workspace_id="finance").advanced.memories.list()
+    outside = (
+        await harness.bind(user_id="u3", workspace_id="finance").advanced.memories.page()
+    ).items
     assert not any("close calendar" in m.content for m in outside)
 
 

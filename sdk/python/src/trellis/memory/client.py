@@ -31,7 +31,6 @@ import httpx
 
 from trellis.memory.admin import AdminAPI, TenantAPI
 from trellis.memory.advanced import AdvancedAPI
-from trellis.memory.breaker import DEFAULT_FAILURE_THRESHOLD, DEFAULT_OPEN_SECONDS
 from trellis.memory.models import (
     AgentTool,
     ContextBundle,
@@ -86,10 +85,9 @@ class MemoryClient:
 
     ``timeout`` bounds each attempt (connecting within 5 s of it); ``max_retries`` is how
     many times a retryable failure is sent again, with full-jitter backoff or the
-    ``Retry-After`` the service asked for (at most 30 s). After
-    ``circuit_failure_threshold`` calls in a row fail for want of the service (no response,
-    or a 5xx) the client stops sending for ``circuit_open_seconds`` and raises
-    :class:`CircuitOpenError` at once, then lets one call through to probe; 0 disables it.
+    ``Retry-After`` the service asked for (at most 30 s). After 5 calls in a row fail for
+    want of the service (no response, or a 5xx) the client stops sending for 30 s and raises
+    :class:`CircuitOpenError` at once, then lets one call through to probe.
     """
 
     def __init__(
@@ -101,8 +99,6 @@ class MemoryClient:
         timeout: float | httpx.Timeout = 10.0,
         max_retries: int = 3,
         http_client: httpx.AsyncClient | None = None,
-        circuit_failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
-        circuit_open_seconds: float = DEFAULT_OPEN_SECONDS,
     ) -> None:
         if api_key is None and bearer_token is None:
             api_key = os.environ.get(ENV_API_KEY) or None
@@ -113,8 +109,6 @@ class MemoryClient:
             timeout=timeout,
             max_retries=max_retries,
             client=http_client,
-            circuit_failure_threshold=circuit_failure_threshold,
-            circuit_open_seconds=circuit_open_seconds,
         )
         #: Platform administration (the bootstrap key): onboarding tenants.
         self.admin = AdminAPI(self)
@@ -167,7 +161,7 @@ class MemoryContext:
         self.scope = scope
         #: ``await ctx.history()`` reads the thread; ``.add`` appends to it
         self.history = HistoryAPI(self)
-        #: ``await ctx.feedback(...)`` records a judgement; ``.get`` / ``.list_for`` read them
+        #: ``await ctx.feedback(...)`` records a judgement; ``.get`` / ``.page_for`` read them
         self.feedback = FeedbackAPI(self)
         #: ``await ctx.profile()`` lists the pinned blocks; ``.edit`` changes one
         self.profile = ProfileAPI(self)
@@ -424,14 +418,12 @@ class MemoryContext:
         args: dict[str, Any],
         *,
         output: Any = None,
-        output_summary: str | None = None,
         status: ToolStatus = "ok",
         error_class: str | None = None,
         latency_ms: float | None = None,
         cost: float | None = None,
         task: str | None = "",
         step: int | None = None,
-        sub_calls: list[dict[str, Any]] | None = None,
         visibility: Visibility = "PRIVATE",
     ) -> ToolResult:
         """Record one tool call this run made (idempotent on run + step + tool + arguments).
@@ -444,14 +436,12 @@ class MemoryContext:
                 "tool": tool,
                 "args": args,
                 "output": output,
-                "output_summary": output_summary,
                 "status": status,
                 "error_class": error_class,
                 "latency_ms": latency_ms,
                 "cost": cost,
                 "task": task or "",
                 "step": step,
-                "sub_calls": sub_calls or [],
                 "visibility": visibility,
             },
         )
@@ -571,18 +561,6 @@ class FeedbackAPI:
             await self._ctx._request("GET", f"/v1/feedback/{feedback_id}")
         )
 
-    async def list_for(
-        self,
-        target_kind: FeedbackTargetKind | str,
-        target_id: str,
-        *,
-        limit: int = 100,
-        cursor: str | None = None,
-    ) -> list[Feedback]:
-        """One page of the feedback on a target, newest first; ``page_for`` also returns the
-        cursor of the next page."""
-        return (await self.page_for(target_kind, target_id, limit=limit, cursor=cursor)).items
-
     async def page_for(
         self,
         target_kind: FeedbackTargetKind | str,
@@ -591,6 +569,7 @@ class FeedbackAPI:
         limit: int = 100,
         cursor: str | None = None,
     ) -> Page[Feedback]:
+        """One page of the feedback on a target, newest first, and the cursor of the next."""
         params: dict[str, Any] = {
             "target_kind": str(getattr(target_kind, "value", target_kind)),
             "target_id": target_id,

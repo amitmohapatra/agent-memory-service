@@ -147,13 +147,25 @@ def test_prod_guards_reject_dev_only_providers() -> None:
             service={"environment": "prod"},
             authentication={"trusted_dev_api_keys": ["dev-key"]},
         )
-    with pytest.raises(ValueError, match="blob.provider"):
-        Settings(
-            _env_file=None,
-            service={"environment": "prod"},
-            authentication={"jwt_jwks_url": "https://issuer/jwks"},
-            blob={"provider": "filesystem"},
+
+
+def test_the_blob_store_follows_from_where_the_service_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GCS when deployed or when a GCS emulator is configured, the filesystem otherwise. Not a
+    setting: a leftover ``MEMORY__BLOB__PROVIDER`` is ignored, whatever it says."""
+    monkeypatch.delenv("STORAGE_EMULATOR_HOST", raising=False)
+    monkeypatch.setenv("MEMORY__BLOB__PROVIDER", "gcs")
+    assert Settings(_env_file=None).blob_provider == "filesystem"
+    monkeypatch.setenv("MEMORY__BLOB__PROVIDER", "filesystem")
+    jwt = {"jwt_jwks_url": "https://issuer/jwks"}
+    for environment in ("staging", "prod"):
+        deployed = Settings(
+            _env_file=None, service={"environment": environment}, authentication=jwt
         )
+        assert deployed.blob_provider == "gcs"
+    monkeypatch.setenv("STORAGE_EMULATOR_HOST", "http://127.0.0.1:4443")
+    assert Settings(_env_file=None).blob_provider == "gcs"
 
 
 def test_the_authentication_mode_follows_from_the_credentials_configured() -> None:
@@ -223,7 +235,6 @@ def test_a_short_bootstrap_key_is_refused_in_deployed_environments() -> None:
     base = {
         "service": {"environment": "prod"},
         "authentication": {"bootstrap_admin_key": "short"},
-        "blob": {"provider": "gcs"},
     }
     with pytest.raises(ValidationError, match="at least 32 characters"):
         Settings(_env_file=None, **base)

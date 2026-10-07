@@ -28,7 +28,7 @@ async def wire_all(container: Container) -> None:
     log.info(
         "wiring.start",
         environment=settings.service.environment,
-        blob=settings.blob.provider,
+        blob=settings.blob_provider,
         llm_enabled=settings.llm.enabled,
         stand_ins=container.overrides.summary(),
     )
@@ -237,7 +237,7 @@ async def _wire_blob(container: Container) -> None:
         from memory_service.adapters.blob.memory import MemoryBlobStore
 
         store = MemoryBlobStore()
-    elif cfg.provider == "gcs":
+    elif container.settings.blob_provider == "gcs":
         from memory_service.adapters.blob.gcs import GCSBlobStore
 
         store = GCSBlobStore(cfg)

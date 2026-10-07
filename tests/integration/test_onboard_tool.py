@@ -74,9 +74,7 @@ def _command(monkeypatch, make_settings, tmp_path, *argv: str) -> list[Any]:
     container it builds (the authorization store is the in-process one, so the grant is read
     back from it)."""
     built: list[Any] = []
-    settings = integration_settings(
-        make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path)}
-    )
+    settings = integration_settings(make_settings, blob={"filesystem_root": str(tmp_path)})
 
     async def build(_settings: Any, version: str) -> Any:
         c = await build_container(settings, version, overrides=integration_overrides(blob=None))
@@ -90,9 +88,7 @@ def _command(monkeypatch, make_settings, tmp_path, *argv: str) -> list[Any]:
 
 def _membership_revision(make_settings, tmp_path, tenant_id: str, user_id: str) -> int:
     async def read() -> int:
-        settings = integration_settings(
-            make_settings, blob={"provider": "filesystem", "filesystem_root": str(tmp_path)}
-        )
+        settings = integration_settings(make_settings, blob={"filesystem_root": str(tmp_path)})
         c = await build_container(settings, __version__, overrides=integration_overrides())
         try:
             async with c.services["uow_factory"]() as uow:

@@ -54,7 +54,9 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     # The statement is the memory, stored before the call returned: nothing to wait for.
     one = await agent.advanced.memories.get(ack.memory_id)
     assert one.content == FACT and one.visibility == "USER"
-    stored = next(m for m in await agent.advanced.memories.list() if m.memory_id == ack.memory_id)
+    stored = next(
+        m for m in (await agent.advanced.memories.page()).items if m.memory_id == ack.memory_id
+    )
 
     # A correction is a new version; the old one is closed, not deleted.
     updated = await agent.update(ack.memory_id, SECOND, reason="the team moved its review")
@@ -70,14 +72,18 @@ async def test_an_agent_writes_reads_and_forgets_one_memory(app, running) -> Non
     with pytest.raises(MemoryError) as gone:
         await agent.advanced.memories.get(stored.memory_id)
     assert gone.value.status == 404
-    assert not any(m.memory_id == stored.memory_id for m in await agent.advanced.memories.list())
+    assert not any(
+        m.memory_id == stored.memory_id for m in (await agent.advanced.memories.page()).items
+    )
 
     # What a run keeps to itself (RUN) is listed for that run, and only for it.
     scratch = await agent.remember("Draft: welcome pack goes out on day one.", visibility="RUN")
-    assert any(m.memory_id == scratch.memory_id for m in await agent.advanced.memories.list())
+    assert any(
+        m.memory_id == scratch.memory_id for m in (await agent.advanced.memories.page()).items
+    )
     other_run = harness.bind(user_id="u1").agent("onboarding-bot")
     assert not any(
-        m.memory_id == scratch.memory_id for m in await other_run.advanced.memories.list()
+        m.memory_id == scratch.memory_id for m in (await other_run.advanced.memories.page()).items
     )
 
 
@@ -146,7 +152,7 @@ async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app
     _, globex = await _tenant(app, "globex")
     mine = acme.bind(user_id="u1")
     await mine.remember(FACT, visibility="USER")
-    stored = next(m for m in await mine.advanced.memories.list() if FACT in m.content)
+    stored = next(m for m in (await mine.advanced.memories.page()).items if FACT in m.content)
 
     # Another tenant's key cannot name this tenant, whatever it claims in the header.
     with pytest.raises(MemoryError) as cross:
@@ -162,7 +168,7 @@ async def test_a_foreign_tenant_is_refused_and_a_missing_memory_is_a_problem(app
     assert hidden.value.status == 404
 
     with pytest.raises(MemoryError) as listed:
-        await globex.bind(tenant_id="acme", user_id="u1").advanced.memories.list()
+        await globex.bind(tenant_id="acme", user_id="u1").advanced.memories.page()
     assert listed.value.status == 403
 
 

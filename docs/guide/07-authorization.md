@@ -47,8 +47,8 @@ follows from what is configured (`AuthenticationSettings.mode` in `config/settin
 | `trusted_dev` | development keys only, no bootstrap key | trusts the context headers as given; **refused** when `service.environment` is `staging` or `prod` |
 
 `gcp_iam` and `mtls`, named in ADR 0005, were never deployed and are gone. In deployed
-environments the settings also refuse a filesystem blob store and a bootstrap key shorter than
-32 characters (`_production_guards`).
+environments the settings also refuse a bootstrap key shorter than 32 characters
+(`_production_guards`).
 
 ### Keys and roles
 

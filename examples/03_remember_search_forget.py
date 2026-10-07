@@ -28,7 +28,7 @@ async def main() -> None:
         )
         task = await ctx.remember("The brief is due on Friday.", memory_type="TASK")
 
-        memories = await ctx.advanced.memories.list()
+        memories = [m async for m in ctx.advanced.memories.iter()]
         for m in memories:
             print(f"{m.memory_type:<11} {m.temporal_status:<10} {m.content}")
         assert any(m.predicate == "timezone" for m in memories)
@@ -45,7 +45,7 @@ async def main() -> None:
         assert not any(i.id == task.memory_id for i in items), "a superseded fact is not served"
 
         await ctx.forget(preference.memory_id)
-        left = {m.memory_id for m in await ctx.advanced.memories.list()}
+        left = {m.memory_id async for m in ctx.advanced.memories.iter()}
         assert preference.memory_id not in left
         print("forgotten:", preference.memory_id)
 

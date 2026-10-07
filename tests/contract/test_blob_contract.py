@@ -2,7 +2,8 @@
 
 The archive path depends on three promises: an upload is immutable, a checksum mismatch is
 detectable, and a missing object raises rather than returning empty bytes. Every adapter has
-to keep all three, or ``blob.provider`` is not a free choice.
+to keep all three, or the store the service picks (GCS deployed, the filesystem on a laptop)
+changes what the archive can rely on.
 """
 
 from __future__ import annotations
@@ -38,14 +39,14 @@ def _build(name: str, tmp_path):
     from memory_service.config.settings import BlobSettings
 
     if not EMULATOR:
-        return GCSBlobStore(BlobSettings(provider="gcs"))
+        return GCSBlobStore(BlobSettings())
     from google.cloud import storage
 
     # an emulator starts empty; real GCS would have the bucket provisioned
     client = storage.Client(project="memory-tests")
     if client.lookup_bucket(BUCKET) is None:
         client.create_bucket(BUCKET)
-    return GCSBlobStore(BlobSettings(provider="gcs", gcs_project="memory-tests"))
+    return GCSBlobStore(BlobSettings(gcs_project="memory-tests"))
 
 
 @pytest_asyncio.fixture(params=ADAPTERS, loop_scope="function")

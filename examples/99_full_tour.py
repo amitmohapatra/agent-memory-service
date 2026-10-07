@@ -235,7 +235,7 @@ async def _tour(memory: MemoryClient) -> int:
         moved = await user.update(stated.memory_id, "The brief is due on Monday.", reason="moved")
         assert (await user.advanced.memories.get(stated.memory_id)).superseded_by == moved.memory_id
         await asyncio.sleep(0.5)
-        mems = await user.advanced.memories.list()
+        mems = [m async for m in user.advanced.memories.iter()]
         preds = {m.predicate: m for m in mems if m.predicate}
         assert {"timezone", "prefers", "works_at", "favourite_editor", "decided"} <= set(preds), (
             set(preds)
@@ -260,11 +260,11 @@ async def _tour(memory: MemoryClient) -> int:
         # the same fact again -> reinforce
         await user.history.add([("USER", "My timezone is America/New_York.")])
         await asyncio.sleep(0.5)
-        mems = await user.advanced.memories.list()
+        mems = [m async for m in user.advanced.memories.iter()]
         tz = [m for m in mems if m.predicate == "timezone"]
         assert len(tz) == 1 and tz[0].object == "america/new_york", [m.content for m in tz]
         assert tz[0].reinforcement_count >= 2
-        history = await user.advanced.memories.list(include_superseded=True)
+        history = [m async for m in user.advanced.memories.iter(include_superseded=True)]
         old = next(m for m in history if m.memory_id == mem_ids["timezone"])
         assert old.temporal_status == "SUPERSEDED" and old.superseded_by == tz[0].memory_id
         items = await user.search("what is my timezone", kinds=["memory"])
@@ -280,7 +280,7 @@ async def _tour(memory: MemoryClient) -> int:
     async def forget() -> str:
         await user.forget(mem_ids["editor"])
         await user.forget(mem_ids["editor"])  # idempotent
-        mems = await user.advanced.memories.list()
+        mems = [m async for m in user.advanced.memories.iter()]
         assert not any(m.memory_id == mem_ids["editor"] for m in mems)
         items = await user.search("favourite editor", kinds=["memory"])
         # the fact is gone; the verbatim turn it was read from is not "unsaid" (forget it
@@ -318,7 +318,7 @@ async def _tour(memory: MemoryClient) -> int:
         assert any("Plan:" in i.text for i in seen_by_child)
         assert not any("Plan:" in i.text for i in seen_by_user)
         assert not any("Plan:" in i.text for i in seen_by_stranger)
-        planner_mems = await planner.advanced.memories.list()
+        planner_mems = [m async for m in planner.advanced.memories.iter()]
         assert planner_mems and planner_mems[0].visibility == "RUN"
         # explicit sharing with the agent group: every agent of the crew reads it
         fact = "Revenue was EUR 412 million in FY26."
