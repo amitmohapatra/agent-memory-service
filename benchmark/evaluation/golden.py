@@ -33,7 +33,10 @@ class Matcher:
             return False
         if self.page is not None and page != self.page:
             return False
-        return self.contains in text
+        # The words are the evidence, not their spacing: a PDF's text layer spaces with
+        # NBSP ("March\xa011,\xa02024") and docling keeps runs of spaces, so a literal
+        # substring missed evidence that was retrieved.
+        return " ".join(self.contains.split()) in " ".join(text.split())
 
 
 @dataclass(frozen=True)

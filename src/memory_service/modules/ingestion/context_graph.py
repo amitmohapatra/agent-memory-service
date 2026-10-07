@@ -20,6 +20,7 @@ from collections.abc import Iterable
 
 from memory_service.domain.documents import ContextEdge, DocumentNode
 from memory_service.domain.enums import ContextGraphEdge, Representation
+from memory_service.domain.text import SENTENCE_BREAK
 
 # --------------------------------------------------------------------------- entities
 
@@ -239,6 +240,112 @@ def extract_footnote_refs(text: str) -> list[str]:
         label = m.group(1) or m.group(2) or m.group(3)
         if label:
             out.append(label)
+    return out
+
+
+# --------------------------------------------------------------------------- footnote context
+
+#: The symbols print layouts mark footnotes with (``*``, ``†``, ``‡``, ``§``, ``¶``, ``‖``,
+#: doubled for later notes: ``**``, ``††``, ``§§``) and superscript digits. PDF extraction
+#: keeps them as plain characters: the footnote starts with its marker ("§§ Butenafine, ...")
+#: and the citing sentence carries the same marker ("drugs covered by Medicare Part D §§ were
+#: assessed").
+_MARK_SYMBOLS = "*\u2020\u2021\u00a7\u00b6\u2016#"
+_MARK_SUPERSCRIPTS = "\u00b9\u00b2\u00b3\u2070\u2074-\u2079"
+_LEADING_MARK = re.compile(rf"^\s*([{_MARK_SYMBOLS}]{{1,4}}|[{_MARK_SUPERSCRIPTS}]{{1,3}})(?=\s)")
+#: How far (in pages) from a symbol-marked footnote its citing sentence is looked for: the
+#: same page in almost every layout, the previous one when a note runs over. Symbols restart
+#: on every page, so further away a ``§`` is another note's. A labelled note (``[^3]``) is
+#: unique in its document and is matched wherever it is cited (endnotes).
+_CITATION_PAGES = 1
+_CITATION_MAX_CHARS = 320
+
+
+def footnote_label(node: DocumentNode) -> str | None:
+    """The marker a footnote node is cited by, or ``None`` when the node is no footnote: a
+    parser's footnote block (``[^n]: ...``, Docling's footnote label) carries its label; a
+    paragraph that *starts* with a footnote symbol is a symbol-marked note."""
+    if node.representation is not Representation.PARAGRAPH or not node.text:
+        return None
+    meta = node.system_metadata or {}
+    if meta.get("block_kind") == "footnote" and meta.get("label"):
+        return str(meta["label"])
+    if meta.get("block_kind") not in (None, "paragraph", "footnote"):
+        return None  # a list bullet ("* item") or a caption is not a footnote marker
+    m = _LEADING_MARK.match(node.text)
+    return m.group(1) if m else None
+
+
+def _citation(label: str) -> re.Pattern[str]:
+    """Where ``label`` is cited in running text: the marker on its own (``§`` must not match
+    inside ``§§``), or the ``[^n]`` / ``^n`` / ``(note n)`` forms of a labelled note."""
+    if _LEADING_MARK.match(label + " "):
+        chars = _MARK_SUPERSCRIPTS if label[0] not in _MARK_SYMBOLS else _MARK_SYMBOLS
+        return re.compile(rf"(?<![{chars}]){re.escape(label)}(?![{chars}])")
+    escaped = re.escape(label)
+    return re.compile(
+        rf"\[\^{escaped}\]|(?<=[A-Za-z0-9%)])\^{escaped}\b|\(\s*(?:note|footnote)\s+{escaped}\s*\)",
+        re.IGNORECASE,
+    )
+
+
+def _sentence_at(text: str, position: int) -> str:
+    """The sentence of ``text`` that the marker at ``position`` belongs to, bounded to
+    ``_CITATION_MAX_CHARS``. A marker that opens a sentence was set after the previous one's
+    full stop ("... the schedule. † In addition"), so it cites that previous sentence."""
+    bounds: list[tuple[int, int]] = []
+    start = 0
+    for match in SENTENCE_BREAK.finditer(text):
+        bounds.append((start, match.start()))
+        start = match.end()
+    bounds.append((start, len(text)))
+    index = next(i for i, (_, end) in enumerate(bounds) if position < end or i == len(bounds) - 1)
+    if index and not text[bounds[index][0] : position].strip():
+        index -= 1
+    sentence = " ".join(text[slice(*bounds[index])].split())
+    if len(sentence) > _CITATION_MAX_CHARS:
+        sentence = sentence[:_CITATION_MAX_CHARS].rsplit(" ", 1)[0] + " …"
+    return sentence
+
+
+def footnote_citations(nodes: Iterable[DocumentNode]) -> dict[str, str]:
+    """``{footnote node id: the sentence that cites it}``.
+
+    A footnote is text whose subject lives elsewhere: "§§ Butenafine, butoconazole, ...
+    and terconazole." names neither the drugs' class nor the analysis they were part of —
+    the sentence citing ``§§`` does. Indexed alone, the note matches no question about what
+    it lists. The citing sentence is the nearest one carrying the note's marker: same page
+    first, then the nearest pages (before ahead of after), then nearest in reading order;
+    symbols restart on every page, so "nearest" is what tells two ``§`` notes apart. A note
+    nothing cites is left out.
+    """
+    ordered = [n for n in nodes if n.text]
+    labels = {n.node_id: label for n in ordered if (label := footnote_label(n))}
+    out: dict[str, str] = {}
+    for index, note in enumerate(ordered):
+        label = labels.get(note.node_id)
+        if label is None:
+            continue
+        pattern = _citation(label)
+        pages = _CITATION_PAGES if _LEADING_MARK.match(label + " ") else None
+        best: tuple[tuple[int, int, int], str] | None = None
+        for other_index, other in enumerate(ordered):
+            if other.node_id in labels or other.representation not in (
+                Representation.PARAGRAPH,
+                Representation.TABLE,
+            ):
+                continue
+            distance = (note.page_start or 0) - (other.page_start or 0)
+            if pages is not None and abs(distance) > pages:
+                continue
+            # same page, then the pages before, then after; nearest in reading order
+            rank = (abs(distance), 0 if distance >= 0 else 1, abs(index - other_index))
+            if best is not None and rank >= best[0]:
+                continue
+            if m := pattern.search(other.text):
+                best = (rank, _sentence_at(other.text, m.start()))
+        if best is not None and best[1]:
+            out[note.node_id] = best[1]
     return out
 
 

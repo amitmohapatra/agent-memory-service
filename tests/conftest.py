@@ -20,6 +20,10 @@ from fastapi.testclient import TestClient
 #:
 #: ``MEMORY_TEST_*`` is the suite's own namespace and is deliberately kept, as is everything
 #: when ``MEMORY_TEST_PROVIDERS=env`` asks for the real components on purpose.
+#:
+#: The gateway is read before the strip for the opt-in live tests alone
+#: (``MEMORY_TEST_LIVE_LLM=1``, ``live_llm_settings``): stripped, they could never reach it.
+_LIVE_GATEWAY = {k: os.environ.get(k) for k in ("BIFROST_URL", "BIFROST_VIRTUAL_KEY")}
 if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
     for _leaked in [
         k
@@ -31,8 +35,29 @@ if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
 
 from memory_service.api.app import create_app  # noqa: E402 - after the environment is cleaned
 from memory_service.application.container import Overrides  # noqa: E402
-from memory_service.config.constants import DATABASE, GRAPH  # noqa: E402
-from memory_service.config.settings import Settings, reset_settings_cache  # noqa: E402
+from memory_service.config.constants import DATABASE, GRAPH, LLM, LLMTuning  # noqa: E402
+from memory_service.config.settings import (  # noqa: E402
+    LLMSettings,
+    Settings,
+    reset_settings_cache,
+)
+
+
+def live_llm_settings() -> LLMSettings:
+    """The gateway the shell named for the live tests, else the local ``.env``'s."""
+    return Settings(**{k: v for k, v in _LIVE_GATEWAY.items() if v}).llm  # type: ignore[arg-type]
+
+
+def live_llm_tuning(**changes: object) -> LLMTuning:
+    """``constants.LLM`` calling the model ``MEMORY_TEST_LIVE_LLM_MODEL`` names for every use;
+    unset, the one discovered through the gateway, which recognises only a few hosted
+    families - a local model has to be named."""
+    from dataclasses import replace
+
+    model = os.environ.get("MEMORY_TEST_LIVE_LLM_MODEL")
+    pinned = {"model": model, "fast_model": model} if model else {}
+    return replace(LLM, **pinned, **changes)  # type: ignore[arg-type]
+
 
 #: The suite gets a database of its own.
 #:

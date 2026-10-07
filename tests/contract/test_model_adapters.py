@@ -19,14 +19,12 @@ import pytest
 
 from memory_service.config.constants import DenseModel
 from memory_service.domain.errors import DependencyUnavailable
+from tests.support_models import NO_RUNTIME, requires_sentence_transformers
 
+# Only the tests that build or load a model carry ``models`` (and check for the runtime
+# themselves): CI, which does not install the heavy ``models`` extra, deselects those with
+# ``-m "not models"`` and still runs the pure ones here, instead of skipping the module.
 pytestmark = pytest.mark.contract
-
-from tests.support_models import NO_RUNTIME  # noqa: E402
-
-st = pytest.importorskip("sentence_transformers", reason=NO_RUNTIME)
-st_models = pytest.importorskip("sentence_transformers.models", reason=NO_RUNTIME)
-transformers = pytest.importorskip("transformers", reason=NO_RUNTIME)
 
 _WORDS = """
 adjusted ebitda increased to eur million despite lower revenue restructuring savings
@@ -42,6 +40,7 @@ VOCAB = (
 
 
 def _tokenizer(path: Path):
+    transformers = pytest.importorskip("transformers", reason=NO_RUNTIME)
     vocab = path / "vocab.txt"
     vocab.write_text("\n".join(VOCAB) + "\n", encoding="utf-8")
     tok = transformers.BertTokenizer(str(vocab), do_lower_case=True)
@@ -52,6 +51,9 @@ def _tokenizer(path: Path):
 @pytest.fixture(scope="module")
 def tiny_st_model(tmp_path_factory) -> Path:
     """A 2-layer, 32-dim BERT with random weights wrapped as a SentenceTransformer."""
+    st = pytest.importorskip("sentence_transformers", reason=NO_RUNTIME)
+    st_models = pytest.importorskip("sentence_transformers.models", reason=NO_RUNTIME)
+    transformers = pytest.importorskip("transformers", reason=NO_RUNTIME)
     import torch
 
     torch.manual_seed(0)
@@ -83,6 +85,7 @@ def tiny_st_model(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="module")
 def tiny_cross_encoder(tmp_path_factory) -> Path:
+    transformers = pytest.importorskip("transformers", reason=NO_RUNTIME)
     import torch
 
     torch.manual_seed(1)
@@ -121,6 +124,7 @@ async def _embedding_contract(emb, expected_dim: int | None = None) -> None:
     assert emb.info.locality == "local"
 
 
+@pytest.mark.models
 async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> None:
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
 
@@ -134,7 +138,10 @@ async def test_sentence_transformers_adapter_local_only(tiny_st_model: Path) -> 
     assert emb.info.locality == "local"
 
 
+@pytest.mark.models
 def test_missing_local_model_is_a_dependency_error(tmp_path: Path) -> None:
+    # without the runtime the adapter fails on the import, not on the missing directory
+    requires_sentence_transformers()
     from memory_service.adapters.models.embeddings import SentenceTransformersEmbedding
 
     spec = DenseModel(id="nope/none", model_path=str(tmp_path / "missing"))
@@ -158,6 +165,7 @@ def test_the_fingerprint_names_the_onnx_graph_when_one_is_frozen() -> None:
     )
 
 
+@pytest.mark.models
 async def test_cross_encoder_adapter_contract(tiny_cross_encoder: Path) -> None:
     from benchmark.cross_encoder import CrossEncoderModel, CrossEncoderReranker
 

@@ -32,6 +32,12 @@ jobs:
       MEMORY__DATABASE__URL: postgresql+psycopg://memory:memory@localhost:5432/memory
       MEMORY__CACHE__URL: redis://localhost:6379/0
       MEMORY__BLOB__PROVIDER: filesystem
+      # the gcs blob contract and tests/integration/test_gcs_blob.py, against the fake GCS
+      # server started below; without it both skipped (no credentials)
+      MEMORY_TEST_GCS_EMULATOR: http://localhost:4443
+      # tests/unit/test_vendored_sdk.py compares the vendored copy with this checkout; it
+      # looks beside this repository by default, where CI has nothing, and skipped
+      BIFROST_SDK: .bifrost-sdk
     steps:
       - uses: actions/checkout@v4
       # The gateway client is a path dependency on vendor/bifrost-sdk, and vendor/ is
@@ -48,12 +54,21 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - run: uv sync --dev
+      # the light extras whose tests otherwise skip here: gcp (the GCS blob store), hindsight
+      # (its SDK contract), eval (datasets, to fetch the SciFact distractor corpus below)
+      - run: uv sync --dev --extra gcp --extra hindsight --extra eval
+      # A step, not a service container: a service cannot be given the arguments that make
+      # the server speak plain HTTP from memory.
+      - run: >-
+          docker run -d --name fake-gcs -p 4443:4443 fsouza/fake-gcs-server:1.56.1
+          -scheme http -port 4443 -backend memory -external-url http://localhost:4443
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest tests/unit sdk/python/tests -m "not docker and not models" -q
-      - run: uv run pytest tests/contract -q
+      # ``bifrost``: the live-gateway tests, which need a running gateway and its key; models
+      # as on every other step (the runner has Docker, so the OpenFGA contract stays in)
+      - run: uv run pytest tests/contract -m "not bifrost and not models" -q
         env:
           # dedicated backends for the cache and search contracts (CI's own, so they may be
           # written freely); the cache contract uses its own database index
@@ -65,6 +80,8 @@ jobs:
       - run: uv run pytest tests/security -q
       - run: uv run pytest tests/e2e -m "not docker and not models" -q
       - run: uv run pytest tests/agent -m "not docker and not models" -q
+      # tests/eval/test_capability_coverage.py reads the corpus; it is git-ignored
+      - run: make bench-external-prepare
       - run: uv run pytest tests/eval -m "not models" -q
       - run: uv run pytest tests/failure -m "not docker and not models" -q
       - name: OpenAPI schema diff

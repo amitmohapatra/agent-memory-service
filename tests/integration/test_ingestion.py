@@ -143,10 +143,11 @@ async def test_blob_outage_keeps_staged_bytes_and_fails_job(
     )
 
 
-@pytest.mark.skipif(
-    not pytest.importorskip("docling", reason="docling not installed"), reason="docling"
-)
+# ``models``, like the PDF fidelity tests: it needs the docling extra. The importorskip used
+# to sit in a skipif here, where it ran at import and skipped this whole module without it.
+@pytest.mark.models
 async def test_docling_parses_docx(container, uow_factory) -> None:
+    pytest.importorskip("docling", reason="docling not installed")
     import docx  # python-docx (installed with docling)
 
     from memory_service.adapters.parsers.docling_parser import DoclingParser

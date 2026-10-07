@@ -59,7 +59,10 @@ def test_the_harness_mapped_its_results_back_to_the_corpus() -> None:
     that lives in the payload, so nothing mapped and the score was a confident 0.0. A
     benchmark that cannot find its own documents must not be reported as a low score."""
     result = _result()
-    mapped, _, returned = result.get("candidates_mapped_to_corpus", "0/0").partition("/")
+    # the harness's own names (benchmark/external_retrieval.py): this read a key it never
+    # wrote, so it skipped on every result
+    mapped, _, returned = result.get("distinct_documents_per_candidates", "0/0").partition("/")
     if int(returned or 0) == 0:
         pytest.skip("no candidates returned to map")
     assert int(mapped) > 0, "the benchmark mapped none of its hits back to corpus documents"
+    assert result["unmapped_candidates"] == 0, "hits the benchmark could not map to the corpus"

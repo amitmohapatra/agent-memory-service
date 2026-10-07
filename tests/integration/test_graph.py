@@ -124,6 +124,31 @@ async def test_document_graph_and_multi_hop_stage(container, uow_factory) -> Non
     assert not [c for c in plain.candidates if c.kind == "fact"]
 
 
+async def test_graph_evidence_adds_one_copy_of_a_passage(container, uow_factory) -> None:
+    """Facts from two copies of a report point at chunks with the same text: the evidence
+    expansion adds the passage once, in the facts' order, and not at all when it is already
+    among the candidates (ranking collapses such twins on ``text_hash`` too)."""
+    first = await _ingest(container, uow_factory, U1)
+    second = await _ingest(container, uow_factory, U1, salt="\n\nA second copy.\n")
+    async with uow_factory() as uow:
+        a = await uow.documents.list_chunks(U1.tenant_id, first)
+        b = await uow.documents.list_chunks(U1.tenant_id, second)
+        visibility = await container.services["authz"].visibility(U1, revisions=uow.revisions)
+    definition = next(c for c in a if c.page == 1 and "Adjusted EBITDA" in c.text)
+    twin = next(c for c in b if c.text_hash == definition.text_hash)
+    footnote = next(c for c in b if c.page == 20)
+    stage = container.services["retrieval"].post_stages["graph"]
+    added = await stage._expand(
+        U1, [twin.chunk_id, definition.chunk_id, footnote.chunk_id], visibility
+    )
+    assert [c.record_id for c in added] == [twin.chunk_id, footnote.chunk_id]
+    assert all(c.payload["text_hash"] for c in added)
+    held = await stage._expand(
+        U1, [twin.chunk_id, footnote.chunk_id], visibility, held={definition.text_hash}
+    )
+    assert [c.record_id for c in held] == [footnote.chunk_id]
+
+
 async def test_graph_visibility_and_isolation(container, uow_factory) -> None:
     await _ingest(container, uow_factory, U1)  # USER visibility (default without thread)
     graph = container.services["graph"]

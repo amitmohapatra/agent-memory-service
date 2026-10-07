@@ -22,6 +22,7 @@ from prometheus_client import Counter
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import QueryType, TemporalStatus
 from memory_service.domain.graph import BOOKKEEPING_LAYERS
+from memory_service.domain.ids import content_hash
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
@@ -242,7 +243,14 @@ class GraphStage:
                 if len(chunk_ids) >= self.max_expansion_chunks:
                     break
             if chunk_ids:
-                added = await self._expand(ctx, chunk_ids, visibility)
+                # a passage already in hand under another record (a copy of the document)
+                # is not added again: ranking collapses such twins on ``text_hash`` too
+                held = {
+                    c.payload.get("text_hash") or content_hash(c.text)
+                    for c in candidates
+                    if c.kind == "chunk"
+                }
+                added = await self._expand(ctx, chunk_ids, visibility, held=held)
                 # expansion chunks go right after the ranked evidence, before the facts, so a
                 # caller's ``limit`` on evidence keeps the best-ranked items first
                 first_fact = next(
@@ -321,18 +329,29 @@ class GraphStage:
         ctx: MemoryExecutionContext,
         chunk_ids: list[str],
         visibility: VisibilitySpecification,
+        *,
+        held: set[str] | None = None,
     ) -> list[Candidate]:
+        """The evidence chunks, visible ones only; one per distinct text, none whose text is
+        in ``held`` (the hashes of the passages already among the candidates)."""
         out: list[Candidate] = []
+        held = set(held or ())
         async with self.uow_factory() as uow:
             chunks = await uow.documents.get_chunks(ctx.tenant_id, chunk_ids)
+            # the facts' order, not the database's: the first facts are the best ones
+            order = {chunk_id: i for i, chunk_id in enumerate(chunk_ids)}
+            chunks = sorted(chunks, key=lambda c: order.get(c.chunk_id, len(order)))
             keys_cache: dict[str, list[str]] = {}
             for c in chunks:
+                if c.text_hash in held:
+                    continue
                 if c.document_id not in keys_cache:
                     keys_cache[c.document_id] = await uow.documents.visibility_keys(
                         ctx.tenant_id, c.document_id
                     )
                 if not visibility.allows(c.tenant_id, keys_cache[c.document_id]):
                     continue
+                held.add(c.text_hash)
                 out.append(
                     Candidate(
                         record_id=c.chunk_id,
@@ -346,6 +365,7 @@ class GraphStage:
                             "section_path": c.section_path,
                             "node_id": c.node_id,
                             "text": c.text,
+                            "text_hash": c.text_hash,
                         },
                         expanded_from="graph",
                         expansion_edge="GRAPH_EVIDENCE",

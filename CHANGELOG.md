@@ -28,6 +28,28 @@ each entry says which one moved. Decisions behind each change are in the
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does
   ([documents](docs/api/documents.md)); examples 04 and 06 no longer send a message first.
+- A document chunk's text is now an exact slice of the parsed document. A long paragraph's
+  sentences were re-joined with one space, which erased the source's own whitespace (two
+  spaces after a full stop in PDFs), so chunk text no longer matched the document; the overlap
+  between parts is a slice too. A long list is split between items first, so an item that
+  fits is never broken across two chunks. Only a split table's parts, which repeat the header
+  row, are not slices ([concepts](docs/guide/02-concepts.md#documents), ADR 0007).
+- A footnote is indexed with the sentence that cites it (`Footnote to:` in the chunk's
+  header): a note marked `*`, `†`, `‡`, `§`, `¶` (or doubled, superscript digits, `[^n]`)
+  such as "§§ Butenafine, butoconazole, …" names neither its subject nor the analysis it
+  belongs to, so no question about it found it. On the public PDF gate the CDC footnote moved
+  from rank 36 to rank 4 for "Which drugs were included in the topical antifungal analysis?".
+  Documents indexed before need a reindex to pick it up.
+- A chunk's embedding was cached under the hash of its body, but the string embedded is the
+  body with its header; the same passage under another title, section or situating context
+  reused a vector of a different string. The key is now the hash of the embedded text.
+- Context expansion and the graph's evidence chunks no longer add a passage that is already
+  among the candidates under another record (a copy of the same document): ranking collapses
+  such twins on `text_hash`, but these stages re-added them and spent their small budgets
+  on them, crowding out companions the reader did not have. Expansion now also follows the
+  best-ranked seed's edges first within an edge kind, and graph evidence keeps the facts'
+  order, instead of the database's row order. Verification still fetches a twin when its
+  own node is the required companion.
 
 ### Changed
 - The context's `procedures` (with `format=full`) is `skills` (`id`, `name`, `steps`,
@@ -36,6 +58,9 @@ each entry says which one moved. Decisions behind each change are in the
   any toolbox gets the learned skills. SDK: `PromptContext.skills` replaces `procedures`.
 - The service requires `bifrost-sdk>=0.3`: model calls send the gateway's deny-all MCP scope,
   which 0.3.0 introduced.
+- The model-adapter contract tests that build or load a model carry the `models` marker and
+  check for torch/sentence-transformers themselves, so CI (without the `models` extra)
+  deselects them instead of skipping the whole module; the pure fingerprint test still runs.
 
 ### Documentation
 - A Start-here README; the high-level design with the five Trellis repositories

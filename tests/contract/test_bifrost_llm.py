@@ -1,7 +1,7 @@
 """Contract tests for the Bifrost LLM adapter — the only LLM path.
 
 The gateway is mocked with respx; the ``bifrost``-marked test at the end hits a running
-Bifrost when ``MEMORY__MODELS__LLM__ENABLED=true`` and a model/virtual key are configured.
+Bifrost when ``MEMORY_TEST_LIVE_LLM=1`` and ``BIFROST_URL``/``BIFROST_VIRTUAL_KEY`` are set.
 """
 
 from __future__ import annotations
@@ -25,11 +25,12 @@ from memory_service.adapters.models.llm import (
     LLMOutputInvalid,
 )
 from memory_service.config.constants import LLMTransport, LLMTuning
-from memory_service.config.settings import LLMSettings, Settings
+from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.metrics import llm_requests_total
 from memory_service.ports.models import LLMMessage, LLMProvider
+from tests.conftest import live_llm_settings, live_llm_tuning
 
 pytestmark = pytest.mark.contract
 
@@ -404,13 +405,14 @@ async def test_source_logging_still_records_the_response_when_there_is_one() -> 
 @pytest.mark.bifrost
 async def test_live_bifrost_roundtrip() -> None:
     """Hits the running gateway: opt-in (``MEMORY_TEST_LIVE_LLM=1``, it spends tokens) and
-    needs BIFROST_URL plus a virtual key; the model is discovered through the gateway."""
+    needs BIFROST_URL plus a virtual key; the model is discovered through the gateway unless
+    ``MEMORY_TEST_LIVE_LLM_MODEL`` names one."""
     if os.environ.get("MEMORY_TEST_LIVE_LLM") != "1":
         pytest.skip("live LLM tests are opt-in: MEMORY_TEST_LIVE_LLM=1")
-    settings = Settings().llm
+    settings = live_llm_settings()
     if not settings.enabled or not settings.api_key:
         pytest.skip("Bifrost not configured (BIFROST_URL, BIFROST_VIRTUAL_KEY)")
-    llm = _BifrostLLM(settings)
+    llm = _BifrostLLM(settings, tuning=live_llm_tuning())
     if not await llm.ping():
         pytest.skip(f"Bifrost not reachable at {settings.base_url}")
     # max_tokens=8 was enough when every model emitted text immediately. A reasoning model

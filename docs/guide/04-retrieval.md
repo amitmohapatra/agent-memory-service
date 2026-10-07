@@ -248,7 +248,11 @@ Three stages run after the cut, in this order (`adapters/wiring.py`):
 2. **Expansion** over the Document Context Graph (ADR 0011, `modules/context/expansion.py`):
    for the best-ranked chunks, the definition of a term they use, the footnote they cite, the
    parent section's summary and the neighbouring chunks — never leaving the source document,
-   at most `expansion_budget_items` (8). Exact-id hits are never expanded.
+   at most `expansion_budget_items` (8), the better-ranked chunk's companions first within
+   each kind. Exact-id hits are never expanded. Neither this stage nor the graph's evidence
+   chunks add a passage whose text is already among the candidates (a copy of the same
+   document): ranking collapses such twins on `text_hash`, and the budget is for companions
+   the reader does not have yet.
 3. **Evidence verification** (chapter 6): the companions a chunk needs — its definition,
    footnote, referenced section — are checked, fetched directly when missing (up to two
    rounds), and the result becomes the bundle's evidence report.
