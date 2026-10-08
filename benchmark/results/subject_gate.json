@@ -2,94 +2,94 @@
   "gate": "subjects",
   "golden_set": "subject_pairs",
   "matcher": "words (no encoder)",
-  "pairs": 518,
-  "same": 248,
-  "different": 270,
+  "pairs": 576,
+  "same": 254,
+  "different": 322,
   "precision": 1.0,
-  "recall": 0.746,
-  "f1": 0.8545,
+  "recall": 0.7205,
+  "f1": 0.8375,
   "false_merges": 0,
   "false_merge_rate": 0.0,
-  "hard_negatives": 270,
+  "hard_negatives": 322,
   "hard_negative_false_merges": 0,
   "hard_negative_false_merge_rate": 0.0,
-  "routed_recall": 0.9355,
-  "routed_different_rate": 0.0778,
+  "routed_recall": 0.9291,
+  "routed_different_rate": 0.146,
   "by_lang": {
     "ar": {
-      "pairs": 51,
+      "pairs": 55,
       "same": 23,
-      "different": 28,
+      "different": 32,
       "precision": 1.0,
       "recall": 0.6522,
       "f1": 0.7895,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 28,
+      "hard_negatives": 32,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 0.8696,
-      "routed_different_rate": 0.0357
+      "routed_different_rate": 0.0938
     },
     "de": {
-      "pairs": 71,
-      "same": 33,
-      "different": 38,
+      "pairs": 83,
+      "same": 34,
+      "different": 49,
       "precision": 1.0,
-      "recall": 0.697,
-      "f1": 0.8214,
+      "recall": 0.7059,
+      "f1": 0.8276,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 38,
+      "hard_negatives": 49,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 0.8485,
-      "routed_different_rate": 0.0789
+      "routed_recall": 0.8529,
+      "routed_different_rate": 0.1837
     },
     "en": {
-      "pairs": 275,
-      "same": 138,
-      "different": 137,
+      "pairs": 302,
+      "same": 143,
+      "different": 159,
       "precision": 1.0,
-      "recall": 0.7899,
-      "f1": 0.8826,
+      "recall": 0.7762,
+      "f1": 0.874,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 137,
+      "hard_negatives": 159,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 1.0,
-      "routed_different_rate": 0.1095
+      "routed_recall": 0.986,
+      "routed_different_rate": 0.1509
     },
     "es": {
-      "pairs": 70,
+      "pairs": 81,
       "same": 32,
-      "different": 38,
+      "different": 49,
       "precision": 1.0,
-      "recall": 0.6875,
-      "f1": 0.8148,
+      "recall": 0.6562,
+      "f1": 0.7925,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 38,
+      "hard_negatives": 49,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 0.8438,
-      "routed_different_rate": 0.0526
+      "routed_different_rate": 0.1837
     },
     "hi": {
-      "pairs": 51,
+      "pairs": 55,
       "same": 22,
-      "different": 29,
+      "different": 33,
       "precision": 1.0,
-      "recall": 0.7273,
-      "f1": 0.8421,
+      "recall": 0.5455,
+      "f1": 0.7059,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 29,
+      "hard_negatives": 33,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 0.8636,
-      "routed_different_rate": 0.0
+      "routed_different_rate": 0.0606
     }
   },
   "by_kind": {
@@ -98,8 +98,8 @@
       "same": 52,
       "different": 0,
       "precision": 1.0,
-      "recall": 0.9808,
-      "f1": 0.9903,
+      "recall": 0.9615,
+      "f1": 0.9804,
       "false_merges": 0,
       "false_merge_rate": 0.0,
       "hard_negatives": 0,
@@ -107,6 +107,36 @@
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 1.0,
       "routed_different_rate": 0.0
+    },
+    "ambiguous_comma": {
+      "pairs": 4,
+      "same": 0,
+      "different": 4,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 4,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "article_name": {
+      "pairs": 6,
+      "same": 0,
+      "different": 6,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 6,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 1.0
     },
     "code": {
       "pairs": 22,
@@ -138,19 +168,34 @@
       "routed_recall": 0.0,
       "routed_different_rate": 0.0
     },
+    "direction": {
+      "pairs": 8,
+      "same": 0,
+      "different": 8,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 8,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.125
+    },
     "format": {
       "pairs": 74,
       "same": 74,
       "different": 0,
       "precision": 1.0,
-      "recall": 0.9865,
-      "f1": 0.9932,
+      "recall": 0.973,
+      "f1": 0.9863,
       "false_merges": 0,
       "false_merge_rate": 0.0,
       "hard_negatives": 0,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 1.0,
+      "routed_recall": 0.9865,
       "routed_different_rate": 0.0
     },
     "general": {
@@ -198,6 +243,51 @@
       "routed_recall": 1.0,
       "routed_different_rate": 0.3333
     },
+    "legal_code": {
+      "pairs": 15,
+      "same": 0,
+      "different": 15,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 15,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.9333
+    },
+    "lower_code": {
+      "pairs": 3,
+      "same": 0,
+      "different": 3,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 3,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "month_name": {
+      "pairs": 4,
+      "same": 0,
+      "different": 4,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 4,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 1.0
+    },
     "names": {
       "pairs": 61,
       "same": 0,
@@ -211,15 +301,15 @@
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 0.0,
-      "routed_different_rate": 0.0656
+      "routed_different_rate": 0.082
     },
     "normalisation": {
-      "pairs": 53,
-      "same": 53,
+      "pairs": 55,
+      "same": 55,
       "different": 0,
       "precision": 1.0,
-      "recall": 0.4717,
-      "f1": 0.641,
+      "recall": 0.4,
+      "f1": 0.5714,
       "false_merges": 0,
       "false_merge_rate": 0.0,
       "hard_negatives": 0,
@@ -229,18 +319,18 @@
       "routed_different_rate": 0.0
     },
     "number": {
-      "pairs": 24,
-      "same": 5,
+      "pairs": 26,
+      "same": 7,
       "different": 19,
       "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
+      "recall": 0.8571,
+      "f1": 0.9231,
       "false_merges": 0,
       "false_merge_rate": 0.0,
       "hard_negatives": 19,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 1.0,
+      "routed_recall": 0.8571,
       "routed_different_rate": 0.0
     },
     "order": {
@@ -303,6 +393,36 @@
       "routed_recall": 1.0,
       "routed_different_rate": 0.0
     },
+    "symbol": {
+      "pairs": 9,
+      "same": 0,
+      "different": 9,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 9,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "tenant_vs_pack": {
+      "pairs": 5,
+      "same": 2,
+      "different": 3,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 3,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
     "title": {
       "pairs": 11,
       "same": 0,
@@ -336,34 +456,34 @@
   },
   "by_split": {
     "dev": {
-      "pairs": 254,
-      "same": 120,
-      "different": 134,
+      "pairs": 285,
+      "same": 122,
+      "different": 163,
       "precision": 1.0,
-      "recall": 0.7583,
-      "f1": 0.8626,
+      "recall": 0.7377,
+      "f1": 0.8491,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 134,
+      "hard_negatives": 163,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 0.925,
-      "routed_different_rate": 0.0746
+      "routed_recall": 0.9262,
+      "routed_different_rate": 0.1534
     },
     "test": {
-      "pairs": 264,
-      "same": 128,
-      "different": 136,
+      "pairs": 291,
+      "same": 132,
+      "different": 159,
       "precision": 1.0,
-      "recall": 0.7344,
-      "f1": 0.8468,
+      "recall": 0.7045,
+      "f1": 0.8267,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 136,
+      "hard_negatives": 159,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 0.9453,
-      "routed_different_rate": 0.0809
+      "routed_recall": 0.9318,
+      "routed_different_rate": 0.1384
     }
   },
   "by_domain": {
@@ -383,19 +503,19 @@
       "routed_different_rate": 0.0
     },
     "mixed": {
-      "pairs": 63,
+      "pairs": 112,
       "same": 57,
-      "different": 6,
+      "different": 55,
       "precision": 1.0,
-      "recall": 0.4561,
-      "f1": 0.6265,
+      "recall": 0.3684,
+      "f1": 0.5385,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 6,
+      "hard_negatives": 55,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 1.0,
-      "routed_different_rate": 1.0
+      "routed_different_rate": 0.5636
     },
     "names": {
       "pairs": 91,
@@ -410,25 +530,33 @@
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
       "routed_recall": 1.0,
-      "routed_different_rate": 0.1605
+      "routed_different_rate": 0.1728
     },
     "retail": {
-      "pairs": 333,
-      "same": 159,
-      "different": 174,
+      "pairs": 342,
+      "same": 165,
+      "different": 177,
       "precision": 1.0,
-      "recall": 0.8805,
-      "f1": 0.9365,
+      "recall": 0.8667,
+      "f1": 0.9286,
       "false_merges": 0,
       "false_merge_rate": 0.0,
-      "hard_negatives": 174,
+      "hard_negatives": 177,
       "hard_negative_false_merges": 0,
       "hard_negative_false_merge_rate": 0.0,
-      "routed_recall": 0.8994,
-      "routed_different_rate": 0.0115
+      "routed_recall": 0.8909,
+      "routed_different_rate": 0.0113
     }
   },
   "errors": [
+    {
+      "id": "format-en-009",
+      "a": "PO#4471",
+      "b": "po 4471",
+      "label": "same",
+      "verdict": "different",
+      "reason": "identifiers differ: po# 4471 vs 4471"
+    },
     {
       "id": "format-en-010",
       "a": "Dock 7",
@@ -436,6 +564,14 @@
       "label": "same",
       "verdict": "possible",
       "reason": "one names more than the other"
+    },
+    {
+      "id": "alias-hi-242",
+      "a": "SKU 1001 का स्टॉक",
+      "b": "SKU-1001 स्टॉक",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
     },
     {
       "id": "alias-ar-245",
@@ -452,6 +588,14 @@
       "label": "same",
       "verdict": "possible",
       "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-249",
+      "a": "The Atlas project",
+      "b": "Atlas project",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other"
     },
     {
       "id": "normalisation-en-250",
@@ -555,7 +699,7 @@
       "b": "Batterie von Gabelstapler 4",
       "label": "same",
       "verdict": "possible",
-      "reason": "the same only once folded, reordered or without a title"
+      "reason": "one names more than the other"
     },
     {
       "id": "normalisation-de-273",
@@ -587,7 +731,15 @@
       "b": "montacargas 4 batería",
       "label": "same",
       "verdict": "possible",
-      "reason": "the same only once folded, reordered or without a title"
+      "reason": "one names more than the other"
+    },
+    {
+      "id": "normalisation-es-280",
+      "a": "Transportes García S.A.",
+      "b": "Transportes García",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one side names no identifier"
     },
     {
       "id": "normalisation-es-281",
@@ -611,7 +763,7 @@
       "b": "tienda 12 ventas",
       "label": "same",
       "verdict": "possible",
-      "reason": "the same only once folded, reordered or without a title"
+      "reason": "one names more than the other"
     },
     {
       "id": "normalisation-ar-287",
@@ -662,9 +814,33 @@
       "reason": "the same only once folded, reordered or without a title"
     },
     {
+      "id": "normalisation-hi-295",
+      "a": "स्टोर 12 की बिक्री",
+      "b": "स्टोर 12 बिक्री",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-hi-296",
+      "a": "फोर्कलिफ्ट 4 की बैटरी",
+      "b": "फोर्कलिफ्ट 4 बैटरी",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
       "id": "normalisation-hi-297",
       "a": "शर्मा जी",
       "b": "शर्मा",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-hi-298",
+      "a": "गोदाम 3 के पैलेट",
+      "b": "गोदाम 3 पैलेट",
       "label": "same",
       "verdict": "possible",
       "reason": "the same only once folded, reordered or without a title"
@@ -739,7 +915,7 @@
       "b": "GFS",
       "label": "same",
       "verdict": "possible",
-      "reason": "one names more than the other and no identifier"
+      "reason": "initialism"
     },
     {
       "id": "spelling-en-376",
@@ -747,7 +923,7 @@
       "b": "FPD",
       "label": "same",
       "verdict": "possible",
-      "reason": "one names more than the other and no identifier"
+      "reason": "initialism"
     },
     {
       "id": "spelling-en-377",
@@ -755,7 +931,7 @@
       "b": "PCS",
       "label": "same",
       "verdict": "possible",
-      "reason": "one names more than the other and no identifier"
+      "reason": "initialism"
     },
     {
       "id": "spelling-de-378",
@@ -883,7 +1059,7 @@
       "b": "orden de compra 4471",
       "label": "same",
       "verdict": "different",
-      "reason": "names differ: order purchase vs compra orden"
+      "reason": "names differ: order purchase vs compra de orden"
     },
     {
       "id": "crosslingual-de-394",
@@ -891,7 +1067,7 @@
       "b": "Oktober Umsatz",
       "label": "same",
       "verdict": "different",
-      "reason": "names differ: sale vs umsatz"
+      "reason": "names differ: sale vs oktober umsatz"
     },
     {
       "id": "crosslingual-es-395",
@@ -899,7 +1075,7 @@
       "b": "ventas de octubre",
       "label": "same",
       "verdict": "different",
-      "reason": "names differ: sale vs venta"
+      "reason": "names differ: sale vs de venta"
     },
     {
       "id": "learned-en-404",
@@ -932,16 +1108,24 @@
       "label": "same",
       "verdict": "possible",
       "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "number-en-497",
+      "a": "1,000 units order",
+      "b": "1000 units order",
+      "label": "same",
+      "verdict": "different",
+      "reason": "identifiers differ: 1,000pcs vs 1000pcs"
     }
   ],
   "provenance": {
-    "timestamp": "2026-10-08T14:12:53.379983+00:00",
-    "git_commit": "a932d433b7085b4014f1c80af6b329b3d26a429e",
+    "timestamp": "2026-10-08T16:36:01.268612+00:00",
+    "git_commit": "86a1ced3c25928e825b2b7ad1440b468b8f73f1a",
     "host_load": {
-      "loadavg_1m": 1.77,
-      "loadavg_5m": 1.96,
-      "loadavg_15m": 2.18,
-      "load_per_core": 0.44
+      "loadavg_1m": 4.09,
+      "loadavg_5m": 3.33,
+      "loadavg_15m": 2.5,
+      "load_per_core": 1.02
     },
     "python": "3.13.14",
     "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
