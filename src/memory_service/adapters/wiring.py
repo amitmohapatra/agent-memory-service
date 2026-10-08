@@ -543,7 +543,7 @@ def _wire_memory(container: Container) -> None:
         container.embedding,
         assist=container.services["llm_assist"],
         contextual_extractor=extractor,
-        # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0035)
+        # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0036)
         labeller=StatementLabeller(nli=container.nli, assist=container.services["llm_assist"]),
     )
     container.services["memory_provider"] = provider

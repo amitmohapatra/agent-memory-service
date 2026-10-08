@@ -1,4 +1,4 @@
-"""The statement labeller (ADR 0035): the lexicon path in every pack language, the NLI and
+"""The statement labeller (ADR 0036): the lexicon path in every pack language, the NLI and
 LLM tiers against a scripted head and a mocked gateway, and what the write path stores.
 
 The real head is exercised by ``tests/eval/test_statement_kinds_gate.py`` (``models``)."""
@@ -171,6 +171,42 @@ def test_chat_is_not_read_as_an_instruction_or_a_change(text: str) -> None:
     assert Lexicon.default().label(text).kind in (K.FACT, None), text
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        # a condition trailing a clause no instruction word opens: the sentence describes
+        "Life is so much more meaningful when we spend time together.",
+        "Seeing their faces light up when they hit the court was priceless.",
+        # a possessive opens a noun phrase, a negated copula a description
+        "Your determination never ceases to amaze me.",
+        "Writing isn't always easy but moments like these make me appreciate it.",
+        # a standing word before a third-person verb: a habit, not an instruction
+        "Nature always cheers me up and makes me feel grateful.",
+        # "new" alone says nothing began
+        "I'm playing this new RPG that has a really cool story and world.",
+    ],
+)
+def test_a_description_costs_no_model_pass(text: str) -> None:
+    """The sentence's shape settles these: a fact, decided, with no NLI pair."""
+    label = Lexicon.default().label(text)
+    assert (label.kind, label.decided, label.maybe) == (K.FACT, True, None), text
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        # the recipient written onto the verb, a feminine imperative ending
+        ("إذا تأخرت الشحنة، أبلغيني فورًا.", K.CONDITIONAL_RULE),
+        ("احرصي دائمًا على تحديث المخزون.", K.RULE),
+        # the personal "a": the recipient of a Spanish instruction
+        ("Si un envío se retrasa, avisa al cliente.", K.CONDITIONAL_RULE),
+    ],
+)
+def test_word_forms_are_read_as_families(text: str, kind: StatementKind) -> None:
+    label = Lexicon.default().label(text)
+    assert (label.kind, label.decided) == (kind, True), text
+
+
 def test_a_rule_keeps_its_trigger_and_its_exception() -> None:
     audit = Lexicon.default().label(CASE_8)
     assert audit.trigger == "Whenever I ask for a stock audit" and audit.exception is None
@@ -227,32 +263,37 @@ class ScriptedNLI:
         self.scores = scores
         self.pairs: list[tuple[str, str]] = []
         cfg = StatementLabellerSettings()
-        self.hypotheses: dict[str, str] = {v: k for k, v in cfg.hypotheses.items()}
-        self.hypotheses[cfg.screen_hypothesis] = "CHANGE"
+        # one hypothesis may serve several kinds (both rule kinds ask "an instruction?")
+        self.hypotheses: dict[str, list[str]] = {}
+        for kind, hypothesis in cfg.hypotheses.items():
+            self.hypotheses.setdefault(hypothesis, []).append(kind)
 
     async def entail_groups(
         self, groups: Sequence[tuple[Sequence[str], str]]
     ) -> list[list[NLIScore]]:
         out = []
         for premises, hypothesis in groups:
-            kind = self.hypotheses[hypothesis]
+            kinds = self.hypotheses[hypothesis]
             row = []
             for premise in premises:
                 self.pairs.append((premise, hypothesis))
-                e = self.scores.get((premise, kind), 0.01)
+                e = max(self.scores.get((premise, kind), 0.01) for kind in kinds)
                 row.append(NLIScore(entailment=e, neutral=1 - e, contradiction=0.0))
             out.append(row)
         return out
 
 
 AMBIGUOUS_RULE = "Formatiere Bestandsprüfungen immer als Markdown-Tabelle."
-#: a statement no German cue marks: the head screens it for a change, then checks the kinds
-PLAIN = "Der Kühler in Gang 5 macht seit heute ein mahlendes Geräusch."
-CHANGED = {(PLAIN, "CHANGE"): 0.9}
+#: a word that only suggests a status ("stopped"): the head confirms it with one pair
+PLAIN = "The cooler in aisle 5 stopped this morning."
+CFG = StatementLabellerSettings()
+SURE = CFG.thresholds[K.STATUS] + 0.05
+#: above the bar at which a model proposal is confirmed, below the one at which the head decides
+UNSURE = (CFG.llm_confirm_min + CFG.thresholds[K.STATUS]) / 2
 
 
 async def test_the_head_decides_only_what_the_lexicon_left_open() -> None:
-    nli = ScriptedNLI({(AMBIGUOUS_RULE, K.RULE): 0.97, (PLAIN, K.STATUS): 0.99, **CHANGED})
+    nli = ScriptedNLI({(AMBIGUOUS_RULE, K.RULE): 0.97, (PLAIN, K.STATUS): SURE})
     labeller = StatementLabeller(nli=nli)  # type: ignore[arg-type]
     labels = await labeller.label([CASE_11, AMBIGUOUS_RULE, PLAIN, "Thanks!"])
     assert [label.kind for label in labels] == [K.CONDITIONAL_RULE, K.RULE, K.STATUS, None]
@@ -260,14 +301,16 @@ async def test_the_head_decides_only_what_the_lexicon_left_open() -> None:
     assert {premise for premise, _ in nli.pairs} == {AMBIGUOUS_RULE, PLAIN}, "one batch, open only"
 
 
-async def test_a_statement_costs_one_pair_unless_something_changed() -> None:
-    """Outside English an open statement is screened with one pair; only a change is checked
-    against the kinds. An English statement no cue marks is a fact with no pair at all."""
+async def test_a_sentence_costs_at_most_one_pair() -> None:
+    """The head scores only the kind the lexicon suspects, once; a statement no cue marks
+    costs nothing, in any language."""
     nli = ScriptedNLI({})
     labeller = StatementLabeller(nli=nli)  # type: ignore[arg-type]
-    [german, english] = await labeller.label([PLAIN, "The cooler in aisle 5 is quite old."])
-    assert german.kind is K.FACT and english.kind is K.FACT
-    assert len(nli.pairs) == 1 and nli.pairs[0][0] == PLAIN
+    [suspected, plain, german] = await labeller.label(
+        [PLAIN, "The cooler in aisle 5 is quite old.", "Der Kühler in Gang 5 ist sehr alt."]
+    )
+    assert {suspected.kind, plain.kind, german.kind} == {K.FACT}
+    assert len(nli.pairs) == 1 and nli.pairs[0] == (PLAIN, CFG.hypotheses[K.STATUS])
 
 
 async def test_a_standing_word_the_head_rejects_is_a_fact() -> None:
@@ -287,7 +330,7 @@ async def test_a_stand_in_head_is_never_read_as_a_classifier() -> None:
 
 async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confirmed() -> None:
     # above the confirmation bar, below the decision bar
-    unsure = {(PLAIN, K.STATUS): 0.6, **CHANGED}
+    unsure = {(PLAIN, K.STATUS): UNSURE}
     with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
         labeller = StatementLabeller(
             nli=ScriptedNLI(unsure),  # type: ignore[arg-type]
@@ -304,7 +347,7 @@ async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confi
         [label] = await labeller.label([PLAIN])
         assert label.kind is K.FACT, "a proposal the head does not confirm is not taken"
     with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
-        sure = {(PLAIN, K.STATUS): 0.99, **CHANGED}
+        sure = {(PLAIN, K.STATUS): SURE}
         labeller = StatementLabeller(
             nli=ScriptedNLI(sure),  # type: ignore[arg-type]
             assist=gw.assist(uses=["contextual_extraction"]),
@@ -316,7 +359,7 @@ async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confi
 async def test_a_failing_gateway_keeps_the_head_s_answer() -> None:
     with mocked_gateway(failing=True) as gw:
         labeller = StatementLabeller(
-            nli=ScriptedNLI({(PLAIN, K.STATUS): 0.6, **CHANGED}),  # type: ignore[arg-type]
+            nli=ScriptedNLI({(PLAIN, K.STATUS): UNSURE}),  # type: ignore[arg-type]
             assist=gw.assist(uses=["contextual_extraction"]),
         )
         [label] = await labeller.label([PLAIN])
@@ -389,7 +432,7 @@ async def test_every_candidate_carries_its_kind_and_the_turn_its_most_telling_on
 
 
 async def test_the_head_reaches_extraction_for_user_messages_only() -> None:
-    nli = ScriptedNLI({(PLAIN, K.STATUS): 0.99, **CHANGED})
+    nli = ScriptedNLI({(PLAIN, K.STATUS): SURE})
     cands = await _extract(PLAIN, StatementLabeller(nli=nli))  # type: ignore[arg-type]
     assert {c.statement_kind for c in cands} == {K.STATUS}
     assert nli.pairs

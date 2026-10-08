@@ -1,6 +1,6 @@
 {
   "pack": "generic",
-  "description": "Domain-free cue words of the statement labeller (modules/memory/statements.py, ADR 0035), per language. Every entry is a case-insensitive regular expression matched as whole words; a space matches any run of whitespace. Field meanings: standing - says an instruction outlives the task (always, never, from now on); not_standing - a phrase that contains a standing word but is not one (for good, forever), masked first; obligation and universal - 'All X must ...'; policy_subject - a clause subject that makes 'we never ...' a policy; condition - opens a clause the rule depends on (if, when, whenever); exception - opens the clause a rule does not apply under (unless, except); requester - a word in a condition clause that makes it about the user's own requests or the assistant's work ('when I ask'), so the rule stays a RULE; correction - says something earlier was wrong, at the start of a sentence (correction_start) or anywhere (correction); replacement - the new way replaces an old one (we now use, instead of); lifecycle and status - generic change-of-existence and state words (a domain pack adds its own); filler - words that may open an instruction before its verb (please, also, then); only - restricts an instruction to its condition ('only escalate if ...'); addressee - who an instruction acts for (me, us, the manager); generic - an indefinite word that makes a condition any occurrence ('if a delivery is late', 'any change'); consequent - opens the clause after a condition (then, dann, to); subject_start - a word that starts a declarative clause (a pronoun, an article), so a standing word after it describes a habit rather than gives an instruction; imperative - a word that marks an instruction when it opens a clause (please, don't); imperative_inside - one that marks it anywhere in the clause (Hindi mat, Arabic la ta-); imperative_ending - (hi) the ending of an imperative or infinitive-as-imperative verb at the end of a clause, unless it is a declarative_ending; clitic - (ar) what may be written onto a word (wa-, al-, bi-); request - a verb that opens a one-off request at the start of a sentence; question_start - (en) opens a question even without a question mark, other languages are read by their question marks; auxiliary - (en) a verb that, right after a question word that also opens a condition, makes it a question ('when is', not 'when I ask'); chitchat - greetings, thanks and fillers.",
+  "description": "Domain-free cue words of the statement labeller (modules/memory/statements.py, ADR 0036), per language. Every entry is a case-insensitive regular expression matched as whole words; a space matches any run of whitespace. Field meanings: standing - says an instruction outlives the task (always, never, from now on); not_standing - a phrase that contains a standing word but is not one (for good, forever), masked first; obligation and universal - 'All X must ...'; policy_subject - a clause subject that makes 'we never ...' a policy; condition - opens a clause the rule depends on (if, when, whenever); exception - opens the clause a rule does not apply under (unless, except); requester - a word in a condition clause that makes it about the user's own requests or the assistant's work ('when I ask'), so the rule stays a RULE; correction - says something earlier was wrong, at the start of a sentence (correction_start) or anywhere (correction); replacement - the new way replaces an old one (we now use, instead of); lifecycle and status - generic change-of-existence and state words (a domain pack adds its own); status_weak, lifecycle_weak, correction_weak - words that only suggest the kind (closed, new, instead of): the NLI head confirms it with one pair; filler - words that may open an instruction before its verb (please, also, then); only - restricts an instruction to its condition ('only escalate if ...'); addressee - who an instruction acts for (me, us, the manager); generic - an indefinite word that makes a condition any occurrence ('if a delivery is late', 'any change'); consequent - opens the clause after a condition (then, dann, to); subject_start - a word that starts a declarative clause (a pronoun, an article), so a standing word after it describes a habit rather than gives an instruction; imperative - a word that marks an instruction when it opens a clause (please, don't); imperative_inside - one that marks it anywhere in the clause (Hindi mat, Arabic la ta-); imperative_ending - (hi) the ending of an imperative or infinitive-as-imperative verb at the end of a clause, unless it is a declarative_ending; clitic - (ar) what may be written onto the front of a word (wa-, al-, bi-); enclitic - (ar) what may be written onto its end (-ni 'me', the -i of a feminine imperative, the -u of a plural one); request - a verb that opens a one-off request at the start of a sentence; question_start - (en) opens a question even without a question mark, other languages are read by their question marks; auxiliary - (en) a verb that, right after a question word that also opens a condition, makes it a question ('when is', not 'when I ask'); chitchat - greetings, thanks and fillers.",
   "languages": {
     "en": {
       "standing": [
@@ -38,7 +38,9 @@
         "(always|never) (?!(bring|sing|ring|string|spring|swing|cling|fling|sting|wring)\\b)\\w+ing",
         "(always|never) (saw|did|went|came|said|told|made|took|gave|found|was|were|done|gone|seen|hear|see|know|love|loves|like|likes|enjoy|enjoys|hate|hates|appreciate|feel|feels|think|thinks|wanted|want|wants)",
         "(don't|do not) ever (give up|forget|quit|stop believing|lose sight)",
-        "never (give up|forget(?! to)|lose sight|quit|stop (believing|dreaming|learning|trying)|say never|too late)"
+        "never (give up|forget(?! to)|lose sight|quit|stop (believing|dreaming|learning|trying)|say never|too late)",
+        "(isn't|aren't|wasn't|weren't|ain't) (always|ever)",
+        "(always|never) (?!\\w*(ss|us|is)\\b)\\w+[^s's]s"
       ],
       "obligation": [
         "must(?! have)(?!'ve)( not| never| always)?",
@@ -277,7 +279,9 @@
         "we'll",
         "you",
         "you'll",
-        "you've"
+        "you've",
+        "your",
+        "our"
       ],
       "imperative": [
         "please",
@@ -584,14 +588,7 @@
       "addressee": [
         "me",
         "us",
-        "my team",
-        "the manager",
-        "the team",
-        "the store manager",
-        "our supplier",
-        "the supplier",
-        "the customer",
-        "the client"
+        "(my|our|the)( \\w+)? (manager|team|supplier|customer|client|staff|owner)"
       ],
       "generic": [
         "any",
@@ -602,14 +599,74 @@
         "anyone",
         "anything",
         "someone",
-        "something",
-        "a customer",
-        "a delivery",
-        "any order"
+        "something"
       ],
       "consequent": [
         "then"
-      ]
+      ],
+      "status_weak": [
+        "down",
+        "broken",
+        "stuck",
+        "stopped",
+        "delayed",
+        "fixed",
+        "repaired",
+        "offline",
+        "unavailable",
+        "available",
+        "ready",
+        "dead",
+        "frozen",
+        "crashed",
+        "failing",
+        "faulty",
+        "restored",
+        "closed",
+        "open",
+        "late",
+        "waiting",
+        "pending"
+      ],
+      "lifecycle_weak": [
+        "opened",
+        "opening",
+        "started",
+        "starting",
+        "launched",
+        "launching",
+        "ended",
+        "ending",
+        "closed",
+        "closing",
+        "hired",
+        "joined",
+        "left",
+        "retired",
+        "quit",
+        "cancell?ed",
+        "replaced",
+        "moved (in|out|to)",
+        "founded",
+        "acquired",
+        "onboarded",
+        "signed",
+        "expired",
+        "finished",
+        "completed"
+      ],
+      "correction_weak": [
+        "actually",
+        "in fact",
+        "instead of",
+        "rather than",
+        "wrong",
+        "mistake",
+        "incorrect",
+        "not .{1,30} but",
+        "i mean"
+      ],
+      "enclitic": []
     },
     "de": {
       "standing": [
@@ -827,7 +884,12 @@
         "diese",
         "dieses",
         "man",
-        "es ist"
+        "es ist",
+        "unser",
+        "unsere",
+        "unseren",
+        "deine",
+        "deinen"
       ],
       "imperative": [
         "bitte",
@@ -954,10 +1016,8 @@
         "mir",
         "mich",
         "uns",
-        "dem team",
-        "dem filialleiter",
-        "dem lieferanten",
-        "dem kunden"
+        "dem (team|filialleiter|lieferanten|kunden|manager|personal)",
+        "den (kunden|lieferanten)"
       ],
       "generic": [
         "ein",
@@ -971,7 +1031,45 @@
       ],
       "consequent": [
         "dann"
-      ]
+      ],
+      "status_weak": [
+        "kaputt",
+        "geschlossen",
+        "offen",
+        "bereit",
+        "verfügbar",
+        "still",
+        "steht",
+        "defekt",
+        "gestört",
+        "voll",
+        "leer",
+        "verspätet",
+        "fertig",
+        "wieder"
+      ],
+      "lifecycle_weak": [
+        "eröffnet",
+        "geschlossen",
+        "beendet",
+        "gestartet",
+        "eingeführt",
+        "gekündigt",
+        "eingestellt",
+        "angefangen",
+        "übernommen",
+        "abgeschlossen"
+      ],
+      "correction_weak": [
+        "eigentlich",
+        "statt",
+        "anstatt",
+        "falsch",
+        "fehler",
+        "sondern",
+        "doch"
+      ],
+      "enclitic": []
     },
     "es": {
       "standing": [
@@ -1199,7 +1297,12 @@
         "esto",
         "hay",
         "es",
-        "soy"
+        "soy",
+        "nuestro",
+        "nuestra",
+        "nuestros",
+        "nuestras",
+        "tus"
       ],
       "imperative": [
         "por favor",
@@ -1312,11 +1415,8 @@
         "me",
         "nos",
         "a mí",
-        "al equipo",
-        "al gerente",
-        "al proveedor",
-        "al cliente",
-        "a la farmacéutica"
+        "a (nosotros|mí)",
+        "(al|a (la|los|las)) \\w+"
       ],
       "generic": [
         "un",
@@ -1329,7 +1429,41 @@
       ],
       "consequent": [
         "entonces"
-      ]
+      ],
+      "status_weak": [
+        "cerrad[oa]s?",
+        "abiert[oa]s?",
+        "list[oa]s?",
+        "disponibles?",
+        "parad[oa]s?",
+        "lleno",
+        "vacío",
+        "pendiente",
+        "retrasad[oa]s?",
+        "funciona(ndo)?",
+        "fallando"
+      ],
+      "lifecycle_weak": [
+        "abri(ó|mos|eron)",
+        "cerr(ó|amos|aron)",
+        "lanz(ó|amos|aron)",
+        "termin(ó|amos|aron)",
+        "empez(ó|amos)",
+        "comenz(ó|amos)",
+        "contrat(ó|amos)",
+        "inaugur\\w+",
+        "finaliz\\w+"
+      ],
+      "correction_weak": [
+        "en lugar de",
+        "en vez de",
+        "incorrect[oa]",
+        "error",
+        "equivoc\\w+",
+        "sino",
+        "de hecho"
+      ],
+      "enclitic": []
     },
     "ar": {
       "standing": [
@@ -1391,7 +1525,8 @@
         "في حالة",
         "في كل مرة",
         "لو",
-        "طالما"
+        "طالما",
+        "عند"
       ],
       "exception": [
         "إلا إذا",
@@ -1561,7 +1696,8 @@
         "رجاءً",
         "تأكد من",
         "تذكر أن",
-        "لا تنس"
+        "لا تنس",
+        "لا ت\\w+"
       ],
       "request": [
         "أعطني",
@@ -1604,8 +1740,6 @@
         "احفظ",
         "حدث",
         "تجنب",
-        "لا تتجنب",
-        "لا تقلل",
         "أرسل لي",
         "اتصل",
         "ألغ",
@@ -1669,14 +1803,65 @@
         "المدير",
         "الفريق",
         "المورد",
-        "العميل"
+        "العميل",
+        "\\w{2,}(ني|نا)"
       ],
       "generic": [
         "أي",
         "أحد",
         "أية"
       ],
-      "consequent": []
+      "consequent": [],
+      "status_weak": [
+        "مغلق",
+        "مغلقة",
+        "متوقف",
+        "متوقفة",
+        "جاهز",
+        "جاهزة",
+        "متاح",
+        "متاحة",
+        "متأخر",
+        "يعمل",
+        "تعمل",
+        "معلق"
+      ],
+      "lifecycle_weak": [
+        "افتتاح",
+        "افتتح",
+        "إغلاق",
+        "أغلق",
+        "أطلق",
+        "إطلاق",
+        "انتهى",
+        "انتهت",
+        "بدأ",
+        "بدأنا",
+        "وقع",
+        "تعاقد"
+      ],
+      "correction_weak": [
+        "بدلا من",
+        "بدلًا من",
+        "بدلاً من",
+        "خطأ",
+        "خاطئ",
+        "غير صحيح",
+        "بل"
+      ],
+      "enclitic": [
+        "يني",
+        "وني",
+        "ني",
+        "نا",
+        "ي",
+        "وا",
+        "ه",
+        "ها",
+        "هم",
+        "ك",
+        "كم"
+      ]
     },
     "hi": {
       "standing": [
@@ -1994,7 +2179,37 @@
       ],
       "consequent": [
         "तो"
-      ]
+      ],
+      "status_weak": [
+        "बंद",
+        "चालू",
+        "खराब",
+        "तैयार",
+        "उपलब्ध",
+        "रुका",
+        "अटका",
+        "देरी",
+        "धीमा"
+      ],
+      "lifecycle_weak": [
+        "खोल",
+        "खोला",
+        "खोली",
+        "शुरू",
+        "समाप्त",
+        "खत्म",
+        "लॉन्च",
+        "जुड़",
+        "छोड़"
+      ],
+      "correction_weak": [
+        "की जगह",
+        "के बजाय",
+        "गलत",
+        "असल में",
+        "बल्कि"
+      ],
+      "enclitic": []
     }
   }
 }

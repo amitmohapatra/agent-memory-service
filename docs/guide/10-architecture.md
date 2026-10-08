@@ -140,7 +140,7 @@ Step by step:
    already processed is skipped, so a replayed job is a no-op. The work is bound to the
    observation's owner, so their model key and policy govern any model use. The native
    provider labels what each user sentence does (fact, rule, status, correction, lifecycle:
-   the statement labeller, ADR 0035), extracts candidates — here, a `timezone` attribute and
+   the statement labeller, ADR 0036), extracts candidates — here, a `timezone` attribute and
    the verbatim turn, both labelled `FACT` —
    classifies them (type, lifetime, visibility), optionally restates the turn (opt-in), and
    consolidates each against current memories in the same scope: create, reinforce, merge,

@@ -435,7 +435,7 @@ class NativeMemoryIntelligence:
         self.embedding = embedding
         self.assist = assist or LLMAssist.disabled()
         self.contextual_extractor = contextual_extractor
-        #: what each user sentence does (ADR 0035); the lexicon alone unless the wiring gives
+        #: what each user sentence does (ADR 0036); the lexicon alone unless the wiring gives
         #: it the NLI head
         self.labeller = labeller or StatementLabeller(assist=self.assist)
 

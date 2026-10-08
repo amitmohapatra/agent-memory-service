@@ -1,5 +1,6 @@
-"""Statement-labeller gate (ADR 0035): macro-F1 over the labelled sentences in
-``golden/statement_kinds.json``, per language and per kind. Writes
+"""Statement-labeller gate (ADR 0036): macro-F1 over the labelled sentences in
+``golden/statement_kinds.json``, per language and per kind, and over the two blind sets in
+``golden/statement_kinds_blind.json`` beside the extractor before it (reported). Writes
 ``benchmark/results/statement_kinds_gate.json`` for the release gate.
 
 Without the ``models`` marker it measures the lexicon alone (the file says
@@ -16,7 +17,7 @@ from typing import Any
 
 import pytest
 from benchmark.common import RESULTS, provenance
-from benchmark.evaluation.statement_kinds import evaluate, load
+from benchmark.evaluation.statement_kinds import BLIND, evaluate, evaluate_baseline, load
 
 from memory_service.config.constants import FROZEN_MODELS
 from memory_service.modules.memory.statements import StatementLabeller
@@ -27,7 +28,7 @@ ENGLISH_MACRO_F1_MIN = 0.85
 
 
 async def _run(labeller: StatementLabeller, *, representative: bool) -> dict[str, Any]:
-    golden = load()
+    golden, blind = load(), load(BLIND)
     report = {
         "gate": "statement_kinds",
         "golden_set": "statement_kinds_v1",
@@ -36,6 +37,18 @@ async def _run(labeller: StatementLabeller, *, representative: bool) -> dict[str
         "threshold": {"english_test_macro_f1": ENGLISH_MACRO_F1_MIN, "rules_on_none": 0},
         "dev": await evaluate(labeller, golden["dev"]),
         "test": await evaluate(labeller, golden["test"]),
+        # sentences a language model wrote to order, cleaned against the guidelines only, and
+        # what the extractor before the labeller made of them (a fact, a question, or a rule
+        # by its English standing-rule pattern)
+        "blind": {
+            name: {
+                "role": blind[name]["role"],
+                "noise_rate": blind[name]["cleaning"]["noise_rate"],
+                "labeller": await evaluate(labeller, blind[name]["items"]),
+                "baseline": evaluate_baseline(blind[name]["items"]),
+            }
+            for name in ("blind1", "blind2")
+        },
         "provenance": provenance(),
     }
     RESULTS.mkdir(parents=True, exist_ok=True)

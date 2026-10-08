@@ -164,7 +164,7 @@ class QueryType(StrEnum):
 
 class StatementKind(StrEnum):
     """What a user's statement does, decided at write by the statement labeller
-    (``modules.memory.statements``, ADR 0035). A sentence that is none of these - a question,
+    (``modules.memory.statements``, ADR 0036). A sentence that is none of these - a question,
     a greeting, a one-off request - gets no kind.
 
     Stored on the memory (``system_metadata["statement_kind"]``) for the stages that act on

@@ -557,44 +557,44 @@ NLI = NLISettings()
 
 
 class StatementLabellerSettings(BaseModel):
-    """The statement labeller (``modules.memory.statements``, ADR 0035): which lexicon packs
+    """The statement labeller (``modules.memory.statements``, ADR 0036): which lexicon packs
     it reads, and how the frozen NLI head (``FROZEN_MODELS.nli``) decides what the packs
-    leave open. The hypotheses are English for every language - the head is cross-lingual -
-    and the thresholds were calibrated on the dev half of
-    ``tests/eval/golden/statement_kinds.json`` (``benchmark/statement_labeller.py``)."""
+    leave open. The hypotheses are English for every language - the head is cross-lingual."""
 
     model_config = ConfigDict(frozen=True)
 
     #: generic cue words first, then the domain pack (``modules/memory/lexicon/*.json``)
     packs: tuple[str, ...] = ("generic", "retail")
-    #: Chosen on the dev half: of the hypotheses scored, "This is an instruction." separates
-    #: rules from statements best (AUC 0.83 over five languages, against 0.80 for "... that
-    #: should always be followed"); "The state of something changed." screens best (0.78).
+    #: One hypothesis per kind the lexicon may suspect; the head scores the suspected one
+    #: only (one pair a sentence). Chosen on the generalisation dev set (the cleaned first
+    #: blind set and the golden dev half) from cached head scores, preferring, among the
+    #: choices within one dev item of the best, the one that fires least on chat (LoCoMo): a
+    #: rule of either kind is "an instruction" - the lexicon has already found its
+    #: condition - and "The speaker is correcting an earlier mistake." was dropped because it
+    #: holds for 47% of chat sentences (ADR 0036).
     hypotheses: dict[StatementKind, str] = Field(
         default_factory=lambda: {
             StatementKind.RULE: "This is an instruction.",
-            StatementKind.STATUS: "This describes the current state of something.",
+            StatementKind.CONDITIONAL_RULE: "This is an instruction.",
+            StatementKind.STATUS: "Something is broken, not working, or unavailable.",
             StatementKind.LIFECYCLE: "Something has ended, been terminated, or newly started.",
-            StatementKind.CORRECTION: "The speaker is correcting an earlier mistake.",
+            StatementKind.CORRECTION: "Something said earlier was wrong.",
         }
     )
-    #: entailment at or above which the head's kind replaces the lexicon's fallback
+    #: entailment at or above which the head confirms the suspected kind: the rule kinds at
+    #: the top of the dev plateau (0.4-0.7 within one item), the weak-word kinds where they
+    #: lose nothing on dev and confirm nothing in a sample of 800 chat sentences
     thresholds: dict[StatementKind, float] = Field(
         default_factory=lambda: {
-            StatementKind.RULE: 0.5,
+            StatementKind.RULE: 0.7,
+            StatementKind.CONDITIONAL_RULE: 0.7,
             StatementKind.STATUS: 0.9,
             StatementKind.LIFECYCLE: 0.9,
             StatementKind.CORRECTION: 0.9,
         }
     )
-    #: A statement no cue word decided (outside English, whose packs are complete) is first
-    #: screened with one pair - did something change? - and only one that passes is checked
-    #: against each of ``open_kinds``: one pair a sentence, not one per kind.
-    screen_hypothesis: str = "The state of something changed."
-    screen_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
-    open_kinds: tuple[StatementKind, ...] = (StatementKind.STATUS, StatementKind.LIFECYCLE)
     #: entailment at or above which a kind the tenant's model proposed is accepted
-    llm_confirm_min: float = Field(default=0.5, ge=0.0, le=1.0)
+    llm_confirm_min: float = Field(default=0.4, ge=0.0, le=1.0)
     #: open sentences scored per observation (a pasted document is not labelled whole)
     nli_max_sentences: int = Field(default=12, ge=0)
     nli_max_chars: int = Field(default=400, ge=1)

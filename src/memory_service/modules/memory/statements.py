@@ -1,4 +1,4 @@
-"""The statement labeller: what each sentence a user says *does*, decided at write (ADR 0035).
+"""The statement labeller: what each sentence a user says *does*, decided at write (ADR 0036).
 
 A sentence is a FACT, a standing RULE, a CONDITIONAL_RULE (a rule with an exception or a
 trigger about the world), a STATUS of a thing, a CORRECTION of something said before, or a
@@ -13,11 +13,12 @@ Three tiers, cheapest first, and each only where the one before is unsure:
    domain pack (``retail.json``: out of stock, recalled, delisted, ...), both loaded by
    default. The code here holds only the *structure*: where in a clause a cue must sit to
    count, which cue wins, how a rule's trigger and exception are cut out of the sentence.
-2. **NLI** (the frozen mDeBERTa XNLI head the grounding cascade already loads). For what the
-   lexicon left open - a standing word with no sure sign of an instruction around it, or a
-   plain statement the packs have no word for - a few English hypotheses are scored against
-   the sentence in whatever language it is written, all sentences of an observation in one
-   batch, with calibrated per-kind thresholds (``StatementLabellerSettings``).
+2. **NLI** (the frozen NLI head the grounding cascade already loads). For what the lexicon
+   left open - a standing word or a condition before a clause that may or may not be an
+   instruction, or a word that only suggests a kind ("stopped", "started", "actually") - the
+   one hypothesis of the kind it suspects is scored against the sentence in whatever language
+   it is written: one pair a sentence, all sentences of an observation in one batch, with
+   per-kind thresholds (``StatementLabellerSettings``). A sentence no cue marks costs nothing.
 3. **LLM** (when the tenant's policy allows ``contextual_extraction``). The model proposes a
    kind for the sentences still open; a proposal is accepted only when the NLI head confirms
    that the sentence entails that kind's hypothesis. The model never decides alone.
@@ -44,8 +45,12 @@ from memory_service.ports.models import NLIProvider
 
 LEXICON_DIR: Final = Path(__file__).with_name("lexicon")
 RULE_KINDS: Final = frozenset({StatementKind.RULE, StatementKind.CONDITIONAL_RULE})
-#: The NLI check of an open statement before any kind: did something change at all?
-_SCREEN: Final = "CHANGE"
+#: Pack fields whose words only suggest a kind, in the order they are tried.
+_WEAK: Final = (
+    (StatementKind.CORRECTION, "correction_weak"),
+    (StatementKind.LIFECYCLE, "lifecycle_weak"),
+    (StatementKind.STATUS, "status_weak"),
+)
 #: The kind that wins when two apply to one sentence (and to a turn of several sentences).
 PRECEDENCE: Final = (
     StatementKind.CORRECTION,
@@ -72,6 +77,9 @@ _FIELDS: Final = (
     "replacement",
     "lifecycle",
     "status",
+    "status_weak",
+    "lifecycle_weak",
+    "correction_weak",
     "filler",
     "only",
     "addressee",
@@ -104,14 +112,19 @@ _WORD: Final = re.compile(rf"[{_LETTER}'\u2019#/.-]+")
 _LEAD_NOISE: Final = re.compile("^[\\s\"'\u201c\u2018\u00a1\u00bf(\\[*\u2022#-]+")
 
 
-def _compile_term(term: str, lang: str, clitics: Sequence[str]) -> str:
+def _compile_term(
+    term: str, lang: str, clitics: Sequence[str], enclitics: Sequence[str] = ()
+) -> str:
     """One pack entry as a pattern: a space matches any whitespace; in Arabic every letter
-    may carry a diacritic and the word may carry a clitic the pack names (wa-, al-, bi-)."""
+    may carry a diacritic and the word may carry a clitic the pack names before it (wa-,
+    al-, bi-) and an enclitic after it (-ni "me", -i of the feminine imperative, -u of the
+    plural)."""
     term = term.replace(" ", r"\s+")
     if lang == "ar":
         term = _AR_LETTER.sub(lambda m: m.group(1) + _AR_MARKS, _AR_STRIP.sub("", term))
     prefix = f"(?:{'|'.join(sorted(clitics, key=len, reverse=True))})?" if clitics else ""
-    return f"{prefix}(?:{term})"
+    suffix = f"(?:{'|'.join(sorted(enclitics, key=len, reverse=True))})?" if enclitics else ""
+    return f"{prefix}(?:{term}){suffix}"
 
 
 @dataclass(frozen=True)
@@ -134,12 +147,19 @@ class _Cue:
         return None if self.any is None else self.any.match(text, pos)
 
 
-def _cue(terms: dict[str, list[str]], clitics: dict[str, list[str]]) -> _Cue:
+def _cue(
+    terms: dict[str, list[str]],
+    clitics: dict[str, list[str]],
+    enclitics: dict[str, list[str]] | None = None,
+) -> _Cue:
+    after = enclitics or {}
     by_lang = {
         lang: re.compile(
             _BEFORE
             + "(?:"
-            + "|".join(_compile_term(t, lang, clitics.get(lang, ())) for t in words)
+            + "|".join(
+                _compile_term(t, lang, clitics.get(lang, ()), after.get(lang, ())) for t in words
+            )
             + ")"
             + _AFTER,
             re.IGNORECASE,
@@ -154,7 +174,7 @@ def _cue(terms: dict[str, list[str]], clitics: dict[str, list[str]]) -> _Cue:
 
 
 #: Pack fields that are not cue patterns: word endings and clitics (see generic.json).
-_MORPHOLOGY: Final = ("clitic", "imperative_ending", "declarative_ending")
+_MORPHOLOGY: Final = ("clitic", "enclitic", "imperative_ending", "declarative_ending")
 
 
 def load_packs(names: Sequence[str]) -> dict[str, dict[str, list[str]]]:
@@ -237,7 +257,9 @@ class Lexicon:
             return _Reader(
                 {
                     name: _cue(
-                        {k: v for k, v in terms[name].items() if k in langs}, terms["clitic"]
+                        {k: v for k, v in terms[name].items() if k in langs},
+                        terms["clitic"],
+                        terms["enclitic"],
                     )
                     for name in _FIELDS
                 },
@@ -263,14 +285,7 @@ class Lexicon:
         return self.reader(sentence).is_question(sentence)
 
     def label(self, sentence: str) -> LexicalLabel:
-        reader = self.reader(sentence)
-        label = reader.label(sentence)
-        if reader is self._readers.get(ENGLISH) and label.maybe is None and not label.decided:
-            # The English packs are the complete reader: a statement none of their cues
-            # marks is a fact, with no model pass (which would cost two NLI pairs a sentence
-            # for the most common sentence there is).
-            return replace(label, decided=True)
-        return label
+        return self.reader(sentence).label(sentence)
 
 
 class _Reader:
@@ -322,7 +337,13 @@ class _Reader:
             return LexicalLabel(StatementKind.STATUS)
         if self._request(s):
             return LexicalLabel(None)
-        return LexicalLabel(StatementKind.FACT, decided=False)
+        for kind, cue in _WEAK:
+            if self.cues[cue].search(s):
+                # a word that only suggests the kind ("closed", "new", "instead of"): the
+                # head confirms it with one pair, or the statement stays a fact
+                return LexicalLabel(StatementKind.FACT, decided=False, maybe=kind)
+        # no cue at all: a fact, with no model pass (the most common sentence there is)
+        return LexicalLabel(StatementKind.FACT)
 
     # -- structure ------------------------------------------------------------------
     def _mask(self, s: str) -> str:
@@ -525,30 +546,42 @@ class _Reader:
             return False
         return None
 
-    def _conditional_certainty(self, s: str, work: str, shape: _Shape, evidence: str) -> bool:
+    def _conditional_certainty(
+        self, s: str, work: str, shape: _Shape, evidence: str
+    ) -> bool | None:
         """An instruction under a condition. Sure when it is plainly addressed to the
         assistant on the user's behalf - the condition is the user's own request ("each time
         I upload a log"), the instruction names its recipient ("please alert the manager",
         "notify me") after a leading condition, or the condition is any occurrence ("if
         there's any change", "if a delivery is late") - or it is restricted to the condition
         ("only escalate if"). Otherwise - "If SF is your thing, check out The Expanse",
-        "Tell me when it arrives" - perhaps."""
+        "Tell me when it arrives" - perhaps.
+
+        A clause the packs cannot read as an instruction is perhaps one only when the shape
+        of the sentence says so: the condition comes first ("Si el pedido llega tarde,
+        ..."), or a standing word or a recipient marks it. With the condition trailing a
+        clause like that, the sentence describes ("Life is better when we're together",
+        "Started when I was young"): not a rule."""
         start, end = shape.main
         condition = shape.condition
         assert condition is not None
+        first = condition[0] == shape.opening
+        # the instruction's own words: not the condition when it trails in the same clause
+        own = condition[0] if start < condition[0] < end else end
+        addressed = bool(
+            self.cues["addressee"].search(work, start, own)
+            or self.cues["imperative_inside"].search(work, start, own)
+        )
         if evidence != "strong":
-            return False
+            marked = shape.marker is not None or shape.leads
+            return False if (first or marked or addressed) else None
         if self.cues["only"].search(work, start, end):
             return True
         lead = self.cues["condition"].at(work, condition[0])
         after_lead = lead.end() if lead is not None else condition[0]
         if self.cues["generic"].search(work, after_lead, condition[1]):
             return True
-        first = condition[0] == shape.opening
-        addressed = self.cues["addressee"].search(work, start, end) or self.cues[
-            "imperative_inside"
-        ].search(work, start, end)
-        return first and bool(self._requested(work, condition) or addressed)
+        return first and (self._requested(work, condition) or addressed)
 
     def _instruction(self, s: str) -> str:
         """The sentence without what opens it: "please", and a standing phrase set off by a
@@ -639,7 +672,7 @@ class _Open:
     index: int
     sentence: str
     lexical: LexicalLabel
-    candidates: tuple[str, ...] = field(default_factory=tuple)
+    candidates: tuple[StatementKind, ...] = field(default_factory=tuple)
 
 
 class StatementLabeller:
@@ -671,19 +704,10 @@ class StatementLabeller:
         open_ = self._open(sentences, lexical) if models and self.nli is not None else []
         if not open_:
             return labels
+        # one pair per open sentence - the kind it may be - in one batch for the observation
         seen = await self._entail(
             open_, [(n, k) for n, o in enumerate(open_) for k in o.candidates]
         )
-        changed = [
-            n
-            for n, o in enumerate(open_)
-            if seen.get(n, {}).get(_SCREEN, 0.0) >= self.cfg.screen_threshold
-        ]
-        if changed:
-            for n, scores in (
-                await self._entail(open_, [(n, k) for n in changed for k in self.cfg.open_kinds])
-            ).items():
-                seen[n].update(scores)
         proposals = await self._ask_model(open_, seen)
         for n, o in enumerate(open_):
             labels[o.index] = self._resolve(o, proposals.get(n), seen.get(n, {}), labels[o.index])
@@ -698,7 +722,7 @@ class StatementLabeller:
         ][: self.cfg.nli_max_sentences]
 
     async def _ask_model(
-        self, open_: list[_Open], seen: dict[int, dict[str, float]]
+        self, open_: list[_Open], seen: dict[int, dict[StatementKind, float]]
     ) -> dict[int, StatementKind]:
         """The tenant's model's kinds for what the head was unsure of - a score in the band
         between confirming a proposal and deciding alone - so a model call is the exception
@@ -713,14 +737,12 @@ class StatementLabeller:
                 seen.setdefault(n, {}).update(scores)
         return proposals
 
-    def _candidates(self, x: LexicalLabel) -> tuple[str, ...]:
-        """What the NLI head checks first for an open sentence: the rule it may be, or
-        whether anything changed at all (``screen_hypothesis``)."""
-        return (StatementKind.RULE,) if x.maybe in RULE_KINDS else (_SCREEN,)
+    def _candidates(self, x: LexicalLabel) -> tuple[StatementKind, ...]:
+        """What the NLI head checks for an open sentence: the kind the lexicon suspects."""
+        return (x.maybe,) if x.maybe is not None else ()
 
-    def _unsure(self, o: _Open, seen: dict[str, float]) -> bool:
-        kinds = [k for k in seen if k != _SCREEN]
-        decided = any(seen[k] >= self.cfg.thresholds[StatementKind(k)] for k in kinds)
+    def _unsure(self, o: _Open, seen: dict[StatementKind, float]) -> bool:
+        decided = any(seen[k] >= self.cfg.thresholds[k] for k in seen)
         return not decided and any(seen[k] >= self.cfg.llm_confirm_min for k in seen)
 
     async def _proposals(self, open_: list[_Open], unsure: list[int]) -> dict[int, StatementKind]:
@@ -746,58 +768,51 @@ class StatementLabeller:
         return proposals
 
     async def _entail(
-        self, open_: list[_Open], checks: Sequence[tuple[int, str]]
-    ) -> dict[int, dict[str, float]]:
-        """Entailment of each (sentence, kind) check: one NLI batch for the observation."""
-        by_kind: dict[str, list[int]] = {}
+        self, open_: list[_Open], checks: Sequence[tuple[int, StatementKind]]
+    ) -> dict[int, dict[StatementKind, float]]:
+        """Entailment of each (sentence, kind) check: one NLI batch for the observation, one
+        group per hypothesis (both rule kinds share theirs)."""
+        by_hypothesis: dict[str, list[tuple[int, StatementKind]]] = {}
         for n, kind in checks:
-            by_kind.setdefault(kind, []).append(n)
-        order = list(by_kind)
+            by_hypothesis.setdefault(self.cfg.hypotheses[kind], []).append((n, kind))
+        order = list(by_hypothesis)
         assert self.nli is not None
         scores = await self.nli.entail_groups(
-            [([open_[n].sentence for n in by_kind[k]], self._hypothesis(k)) for k in order]
+            [([open_[n].sentence for n, _ in by_hypothesis[h]], h) for h in order]
         )
-        seen: dict[int, dict[str, float]] = {}
-        for kind, rows in zip(order, scores, strict=True):
-            for n, score in zip(by_kind[kind], rows, strict=True):
+        seen: dict[int, dict[StatementKind, float]] = {}
+        for hypothesis, rows in zip(order, scores, strict=True):
+            for (n, kind), score in zip(by_hypothesis[hypothesis], rows, strict=True):
                 seen.setdefault(n, {})[kind] = score.entailment
         return seen
-
-    def _hypothesis(self, key: str) -> str:
-        if key == _SCREEN:
-            return self.cfg.screen_hypothesis
-        return self.cfg.hypotheses[StatementKind(key)]
 
     def _resolve(
         self,
         o: _Open,
         proposed: StatementKind | None,
-        seen: dict[str, float],
+        seen: dict[StatementKind, float],
         label: StatementLabel,
     ) -> StatementLabel:
         for checked in _checked(proposed):
             if seen.get(checked, 0.0) >= self.cfg.llm_confirm_min:
                 # a proposed rule keeps the lexicon's reading of its trigger and exception
-                kind = o.lexical.maybe if o.lexical.maybe in RULE_KINDS else proposed
+                kind = (
+                    o.lexical.maybe
+                    if proposed in RULE_KINDS and o.lexical.maybe in RULE_KINDS
+                    else proposed
+                )
                 return replace(label, kind=kind, source="llm", confidence=seen[checked])
-        if o.lexical.maybe in RULE_KINDS:
-            score = seen.get(StatementKind.RULE, 0.0)
-            if score >= self.cfg.thresholds[StatementKind.RULE]:
-                return replace(label, kind=o.lexical.maybe, source="nli", confidence=score)
-            return StatementLabel(StatementKind.FACT, source="nli", confidence=1.0 - score)
-        best = max(
-            (k for k in self.cfg.open_kinds if k in seen),
-            key=lambda k: seen[k] - self.cfg.thresholds[k],
-            default=None,
-        )
-        if best is not None and seen[best] >= self.cfg.thresholds[best]:
-            return StatementLabel(best, source="nli", confidence=seen[best])
-        return label
+        maybe = o.lexical.maybe
+        score = seen.get(maybe, 0.0) if maybe is not None else 0.0
+        if maybe is not None and score >= self.cfg.thresholds[maybe]:
+            return replace(label, kind=maybe, source="nli", confidence=score)
+        # not confirmed: the reading the sentence has without it (a fact, or a request)
+        return replace(label, source="nli", confidence=1.0 - score)
 
 
 def _checked(proposed: StatementKind | None) -> tuple[StatementKind, ...]:
-    """The hypothesis a model proposal is confirmed by (a rule of either kind as a rule);
-    nothing to confirm for no proposal or a fact, the fallback anyway."""
+    """The hypothesis a model proposal is confirmed by; nothing to confirm for no proposal
+    or a fact, the fallback anyway."""
     if proposed is None or proposed is StatementKind.FACT:
         return ()
-    return (StatementKind.RULE,) if proposed in RULE_KINDS else (proposed,)
+    return (proposed,)

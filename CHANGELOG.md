@@ -14,9 +14,13 @@ each entry says which one moved. Decisions behind each change are in the
   the memories it produced (`system_metadata["statement_kind"]`, with a rule's
   `rule_trigger` and `rule_exception` as said). Cue words are data: a generic pack and a
   retail pack (`modules/memory/lexicon/`) in English, German, Spanish, Arabic and Hindi; what
-  they leave open goes to the NLI head the service already loads, and to the tenant's model
-  only when the head is unsure and only if the head confirms it. Retrieval is unchanged
-  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0035). No migration.
+  they leave open goes to the NLI head the service already loads (one pair for a sentence
+  the packs are unsure of, none for one they settle), and to the tenant's model only when the
+  head is unsure and only if the head confirms it. Retrieval is unchanged
+  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0036). No migration.
+  Measured on sentences a language model wrote to order and no one tuned against
+  (`tests/eval/golden/statement_kinds_blind.json`, blind set 2): macro-F1 0.829 over the six
+  kinds, against 0.095 for the extractor before it, better in every kind and every language.
 - Learned skills: an agent learns from all of its users (its own tool records, whichever user it
   ran for, under one audience) and is offered what it learned in its context on its own -
   "Learned skills for this task", in full, matched to the task; nothing is published or
@@ -38,7 +42,7 @@ each entry says which one moved. Decisions behind each change are in the
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
   overviews, never include ..."), not only first in the sentence, and in German, Spanish,
   Arabic and Hindi as well; its exception clause ("unless I type 'include out of stock'") is
-  kept with it (ADR 0035).
+  kept with it (ADR 0036).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does

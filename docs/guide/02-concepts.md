@@ -109,7 +109,7 @@ searchable until it is forgotten too ([USAGE §4](../USAGE.md#4-correcting-super
 ### What a statement does
 
 Each sentence of a user's message is also labelled with what it **does**, a `StatementKind`
-(`domain/enums.py`, ADR 0035), stored on every memory it produced as
+(`domain/enums.py`, ADR 0036), stored on every memory it produced as
 `system_metadata["statement_kind"]` (read it with `domain.memory.statement_kind_of`):
 
 | Kind | The sentence | Example |

@@ -1,4 +1,4 @@
-"""Statement-labeller evaluation: macro-F1 per language and per kind (ADR 0035).
+"""Statement-labeller evaluation: macro-F1 per language and per kind (ADR 0036).
 
 Each labelled item is one user sentence and the ``StatementKind`` it should get, or ``NONE``
 for a question, a greeting or a one-off request. ``macro_f1`` is the mean F1 over the six
@@ -13,6 +13,7 @@ the batch of hypotheses a single open sentence costs.
 from __future__ import annotations
 
 import json
+import re
 import statistics
 import time
 from collections import Counter, defaultdict
@@ -27,10 +28,64 @@ NONE = "NONE"
 KINDS: tuple[str, ...] = tuple(k.value for k in StatementKind)
 CLASSES: tuple[str, ...] = (*KINDS, NONE)
 GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "eval" / "golden" / "statement_kinds.json"
+#: sentences a language model wrote to order, cleaned against the guidelines (``blind1`` the
+#: generalisation dev set, ``blind2`` held out and scored once)
+BLIND = GOLDEN.with_name("statement_kinds_blind.json")
+
+# What the extractor did before the labeller (``modules/memory/native.py`` up to ADR 0036):
+# a question or an acknowledgement stored nothing, its standing-rule pattern stored a rule,
+# anything else was stored as it always was - a fact. The baseline every set is scored against.
+_QUESTION = re.compile(
+    r"[?\uff1f\u061f]\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I
+)
+_ACKNOWLEDGEMENT = re.compile(
+    r"^(?:hi|hello|hey|thanks|thank you|ok|okay|sure|great|cool|yes|no|got it|sounds good)\b[.!]?$",
+    re.IGNORECASE,
+)
+_STANDING_RULE = re.compile(
+    r"^(?:please\s+)?(?:(?:always|never)\b|(?:don't|do not)\s+ever\b|"
+    r"(?:from now on|going forward|in (?:the )?future)\b[,:]?)\s*(.+)",
+    re.IGNORECASE,
+)
 
 
 def load(path: Path = GOLDEN) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def baseline_kind(sentence: str) -> str:
+    """The kind the extractor before the labeller effectively gave a sentence."""
+    s = sentence.strip()
+    if _QUESTION.search(s) or _ACKNOWLEDGEMENT.match(s):
+        return NONE
+    return StatementKind.RULE.value if _STANDING_RULE.match(s) else StatementKind.FACT.value
+
+
+def evaluate_baseline(items: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """``baseline_kind`` scored like the labeller: overall, per language and per kind."""
+    rows_by_lang: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for item in items:
+        rows_by_lang[item["lang"]].append((item["kind"], baseline_kind(item["text"])))
+    every = [row for rows in rows_by_lang.values() for row in rows]
+    return {
+        **_summary(every),
+        "per_language": {lang: _summary(rows) for lang, rows in sorted(rows_by_lang.items())},
+    }
+
+
+def not_below(labeller: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
+    """Where the labeller scores below the baseline: a kind's F1 (over every language) or a
+    language's macro-F1. Empty when it is nowhere worse."""
+    worse = [
+        f"{k}: {labeller['per_kind_f1'][k]} < {v}"
+        for k, v in baseline["per_kind_f1"].items()
+        if labeller["per_kind_f1"][k] < v
+    ]
+    return worse + [
+        f"{lang}: {labeller['per_language'][lang]['macro_f1']} < {v['macro_f1']}"
+        for lang, v in baseline["per_language"].items()
+        if labeller["per_language"][lang]["macro_f1"] < v["macro_f1"]
+    ]
 
 
 def f1_table(rows: Sequence[tuple[str, str]]) -> dict[str, float]:
