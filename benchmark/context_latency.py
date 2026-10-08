@@ -250,20 +250,26 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
             floor_rows: list[tuple[list[tuple[float, bool]], int]] = []
             for question, texts in zip(questions, evidence, strict=True):
                 _, body = await _timed(client, "/v1/context", _debug(scope, f"{question} [f]"))
+                # the full format carries no rendered copy; the prompt format is the one read
+                _, prompt = await _timed(client, "/v1/context", {"scope": scope, "query": question})
                 items = [
                     (
-                        float(item["relevance"]),
+                        # a lean response leaves out a default (relevance 0, score_kind fusion)
+                        float(item.get("relevance", 0.0)),
                         any(text[:60] in item["text"] for text in texts),
                     )
-                    for item in body["memories"]
-                    if item["score_kind"] == "fusion" and not item.get("expanded_from")
+                    for item in body.get("memories", [])
+                    if item.get("score_kind", "fusion") == "fusion"
+                    and not item.get("expanded_from")
                 ]
-                floor_rows.append((items, len(body["rendered"])))
+                floor_rows.append((items, len(prompt["rendered"])))
             off_topic: list[list[float]] = []
             off_bytes: list[float] = []
             for question in OFF_TOPIC:
                 _, body = await _timed(client, "/v1/context", _debug(scope, question))
-                off_topic.append([float(item["relevance"]) for item in body["memories"]])
+                off_topic.append(
+                    [float(item.get("relevance", 0.0)) for item in body.get("memories", [])]
+                )
                 off_bytes.append(float(len(json.dumps(body))))
         return {
             "series": {name: stats(values) for name, values in latencies.items()},
