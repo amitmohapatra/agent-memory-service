@@ -103,4 +103,19 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
 - The memory gate (`benchmark/results/memory_gate.json`) is unchanged: false-merge rate 0.00,
   dedup recall 1.00.
 
-RESULTS_TABLE
+## Results
+
+| matcher (SAME = merge) | precision | recall | F1 | false merges (all / hard negatives) | same / different pairs sent to the adjudicator |
+|---|---|---|---|---|---|
+| exact subject strings (before) | 1.00 | 0.07 | 0.13 | 0 / 0 | n/a |
+| words only (every write) | 1.00 | 0.872 | 0.932 (dev 0.938, test 0.926) | 0 / 0 | 0.930 / 0.062 |
+| words + encoder (adjudicator on) | 1.00 | 0.872 | 0.932 | 0 / 0 | 0.963 (dev 0.975, test 0.952) / 0.093 |
+
+F1 by language (words only): en 0.95, ar 0.93, hi 0.93, de 0.89, es 0.89. The rules were refined
+while reading errors on the whole set; only the encoder threshold was chosen on the dev half alone.
+
+Cost: one comparison p50 0.04 ms cold, 0.002 ms warm; consolidating a statement against 20 stored
+memories p50 0.19 ms / p95 0.33 ms (main: 0.067 / 0.10 ms). The encoder runs only on the 82 of
+4,360 pairs the words leave undecided, p50 5.0 ms / p95 6.6 ms each, and only with the model on.
+Every other eval gate (retrieval, grounding, graph, memory, tools) is identical to main's when
+both run in the same environment.
