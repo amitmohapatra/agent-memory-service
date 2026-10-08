@@ -249,16 +249,17 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
                 latencies["cached"].append(ms)
             floor_rows: list[tuple[list[tuple[float, bool]], int]] = []
             for question, texts in zip(questions, evidence, strict=True):
-                _, body = await _timed(client, "/v1/context", _debug(scope, f"{question} [f]"))
-                # the full format carries no rendered copy; the prompt format is the one read
-                _, prompt = await _timed(client, "/v1/context", {"scope": scope, "query": question})
+                asked = f"{question} [f]"
+                _, body = await _timed(client, "/v1/context", _debug(scope, asked))
+                # the full format carries no rendered copy: the same question in the prompt one
+                _, prompt = await _timed(client, "/v1/context", {"scope": scope, "query": asked})
                 items = [
                     (
                         # a lean response leaves out a default (relevance 0, score_kind fusion)
                         float(item.get("relevance", 0.0)),
                         any(text[:60] in item["text"] for text in texts),
                     )
-                    for item in body.get("memories", [])
+                    for item in body["memories"]
                     if item.get("score_kind", "fusion") == "fusion"
                     and not item.get("expanded_from")
                 ]
@@ -267,9 +268,7 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
             off_bytes: list[float] = []
             for question in OFF_TOPIC:
                 _, body = await _timed(client, "/v1/context", _debug(scope, question))
-                off_topic.append(
-                    [float(item.get("relevance", 0.0)) for item in body.get("memories", [])]
-                )
+                off_topic.append([float(item.get("relevance", 0.0)) for item in body["memories"]])
                 off_bytes.append(float(len(json.dumps(body))))
         return {
             "series": {name: stats(values) for name, values in latencies.items()},
