@@ -33,7 +33,7 @@ each entry says which one moved. Decisions behind each change are in the
   come from two vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on)
   and from a tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS
   stands for out of stock"); nothing to configure. 436 labelled pairs in five languages: no
-  false merge, F1 RESULT_F1.
+  false merge (0 of 193 hard negatives), merge F1 0.93.
 
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never

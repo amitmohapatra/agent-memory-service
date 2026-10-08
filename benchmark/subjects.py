@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import re
 import statistics
 import time
 from datetime import UTC, datetime
@@ -31,6 +32,7 @@ from benchmark.evaluation.subject_pairs import (
     evaluate_subject_pairs,
     judge,
     load_subject_pairs,
+    score,
 )
 from benchmark.retrieval import _pct
 from memory_service.config.constants import FROZEN_MODELS, MemoryIntelligenceSettings
@@ -118,6 +120,10 @@ async def _cosine_threshold(matcher: SubjectMatcher, dev: list[SubjectPairCase])
     }
 
 
+def _stored(subject: str) -> str:
+    return re.sub(r"^the\s+", "", subject.strip().lower())
+
+
 def _cos(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = sum(x * x for x in a) ** 0.5
@@ -126,38 +132,34 @@ def _cos(a: list[float], b: list[float]) -> float:
 
 
 def _rapidfuzz(cases: list[SubjectPairCase]) -> dict[str, Any] | None:
-    """The one-edit typo rule against rapidfuzz's normalised ratio on the same word sets."""
+    """The one-edit typo rule against rapidfuzz's normalised ratio, on the pairs whose
+    identifiers agree and whose sides each have words the other lacks: how many of them each
+    routes to the adjudicator, by label."""
     try:
         from rapidfuzz import fuzz  # type: ignore[import-not-found]
     except ImportError:
         return None
-    out: dict[str, Any] = {}
-    for threshold in (80, 85, 90, 95):
-        same_hit = same_n = diff_hit = diff_n = 0
-        for case in cases:
-            vocab = domain.vocabulary().with_aliases(domain.defined_aliases(case.context or ""))
-            a, b = domain.parse(case.a, vocab), domain.parse(case.b, vocab)
-            if a.ids != b.ids:
-                continue
-            only_a, only_b = a.tokens - b.tokens, b.tokens - a.tokens
-            if not only_a or not only_b:
-                continue
-            native = domain._spelling_variants(only_a, only_b)
-            fuzzy = fuzz.ratio(" ".join(sorted(only_a)), " ".join(sorted(only_b))) >= threshold
-            if case.label == "same":
-                same_n += 1
-                same_hit += fuzzy
-            else:
-                diff_n += 1
-                diff_hit += fuzzy
-            out.setdefault("native_edit1", {"same": 0, "different": 0})
-            out["native_edit1"]["same" if case.label == "same" else "different"] += native
-        out[f"ratio>={threshold}"] = {
-            "same_routed": same_hit,
-            "same_pairs": same_n,
-            "different_routed": diff_hit,
-            "different_pairs": diff_n,
+    rows: list[tuple[str, frozenset[str], frozenset[str]]] = []
+    for case in cases:
+        vocab = domain.vocabulary().with_aliases(domain.defined_aliases(case.context or ""))
+        a, b = domain.parse(case.a, vocab), domain.parse(case.b, vocab)
+        only_a, only_b = a.tokens - b.tokens, b.tokens - a.tokens
+        if a.ids == b.ids and only_a and only_b:
+            rows.append((case.label, only_a, only_b))
+
+    def tally(hit: Any) -> dict[str, int]:
+        return {
+            "same_pairs": sum(label == "same" for label, _, _ in rows),
+            "same_routed": sum(bool(hit(x, y)) for label, x, y in rows if label == "same"),
+            "different_pairs": sum(label != "same" for label, _, _ in rows),
+            "different_routed": sum(bool(hit(x, y)) for label, x, y in rows if label != "same"),
         }
+
+    out = {"native_edit1": tally(domain._spelling_variants)}
+    for threshold in (80, 85, 90, 95):
+        out[f"ratio>={threshold}"] = tally(
+            lambda x, y, t=threshold: fuzz.ratio(" ".join(sorted(x)), " ".join(sorted(y))) >= t
+        )
     return out
 
 
@@ -234,6 +236,12 @@ async def main(rounds: int, *, encoder: bool) -> dict[str, Any]:
     test = [c for c in cases if c.split == "test"]
     out: dict[str, Any] = {"pairs": len(cases), "dev": len(dev), "test": len(test)}
     words = SubjectMatcher()
+    #: what consolidation compared before: the stored subject strings (lower-cased, a
+    #: leading "the" dropped by the fact rule)
+    out["exact_strings"] = score(
+        (c, SubjectVerdict.SAME if _stored(c.a) == _stored(c.b) else SubjectVerdict.DIFFERENT)
+        for c in cases
+    )
     out["words"] = await evaluate_subject_pairs(words, cases)
     out["rapidfuzz"] = _rapidfuzz(cases)
     out["comparison_timing"] = _comparisons(cases, rounds)
@@ -254,13 +262,19 @@ async def main(rounds: int, *, encoder: bool) -> dict[str, Any]:
             "dev": (await evaluate_subject_pairs(matcher, dev, dense=True))["routed_recall"],
             "test": (await evaluate_subject_pairs(matcher, test, dense=True))["routed_recall"],
         }
+        # the pairs the encoder is actually asked about (the words call them different
+        # without a block), each with an empty vector cache: both subjects are encoded
+        soft = [
+            c for c in cases if (await judge(words, c, dense=False))[1].startswith("names differ")
+        ]
         timed: list[float] = []
         for _ in range(rounds):
-            fresh = SubjectMatcher(dense)  # an empty vector cache: every subject encoded
-            for case in cases[:50]:
+            for case in soft:
+                fresh = SubjectMatcher(dense)
                 t0 = time.perf_counter()
                 await judge(fresh, case, dense=True)
                 timed.append((time.perf_counter() - t0) * 1000)
+        out["comparison_timing"]["encoded_pairs"] = len(soft)
         out["comparison_timing"]["with_encoder_cold_ms"] = {
             "p50": _pct(timed, 50),
             "p95": _pct(timed, 95),
@@ -276,7 +290,7 @@ if __name__ == "__main__":
     result = asyncio.run(main(args.rounds, encoder=not args.no_encoder))
     path = write_result("subject_matching.json", {**result, "provenance": provenance()})
     print(path)
-    for name in ("words", "words+encoder"):
+    for name in ("exact_strings", "words", "words+encoder"):
         if name in result:
             r = result[name]
             print(

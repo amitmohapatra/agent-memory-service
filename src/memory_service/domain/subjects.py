@@ -72,9 +72,10 @@ def _different(reason: str) -> SubjectMatch:
 
 
 #: The least cosine (the multilingual encoder, subject against subject) that makes a pair
-#: whose words differ POSSIBLE. Measured on the dev half of the labelled pair set
-#: (``tests/eval/golden/subject_pairs.json``; ``benchmark/subjects.py``).
-DENSE_POSSIBLE = 0.80
+#: whose words differ POSSIBLE: the best separation (Youden's J) of the dev half of the
+#: labelled pair set (``tests/eval/golden/subject_pairs.json``; ``benchmark/subjects.py``).
+#: It decides only what the adjudicator is asked about; it never merges anything.
+DENSE_POSSIBLE = 0.77
 
 # --------------------------------------------------------------------------- vocabulary
 
