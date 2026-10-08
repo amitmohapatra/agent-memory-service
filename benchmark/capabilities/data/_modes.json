@@ -1,0 +1,86 @@
+{
+  "description": "The eval tenant's model policy per mode, and the named deterministic samples a slow mode runs. A sample narrows only by stable keys (the documented origin scenarios first, then scenario-id hash order), so the same sample is the same questions on every run.",
+  "modes": {
+    "nollm": {
+      "policy": {
+        "uses": [],
+        "read_assist": false
+      },
+      "note": "No model anywhere: extraction, consolidation and every read are deterministic."
+    },
+    "llm": {
+      "policy": {
+        "uses": [
+          "chunk_context",
+          "conflict_adjudication",
+          "contextual_extraction",
+          "entity_resolution",
+          "grounding_judge",
+          "memory_connections",
+          "procedure_abstraction",
+          "query_expansion",
+          "reflection",
+          "relation_extraction",
+          "summaries"
+        ],
+        "read_assist": true,
+        "model_env": "CAPEVAL_LLM_MODEL",
+        "model_default": "granite/granite-3.3-2b"
+      },
+      "note": "The tenant's model policy as the live stack runs it: every use but the opt-in memory_restatement, reads assisted, one gateway model."
+    },
+    "harness": {
+      "policy": {
+        "uses": [],
+        "read_assist": false
+      },
+      "note": "Memory deterministic (as nollm); the wrapped agent's model answers through the gateway."
+    }
+  },
+  "samples": {
+    "llm": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_domain": 1,
+      "kinds": [
+        "direct",
+        "paraphrase",
+        "implicit"
+      ],
+      "note": "Per capability the InventorySmart origin scenario plus the first scenario of every other domain (hash order); three phrasing kinds; English. Scale (capability 7) is left out: extracting its ~1,100-message tenant with a CPU model takes hours - it is measured in nollm and harness mode.",
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ]
+    },
+    "harness": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_domain": 1,
+      "kinds": [
+        "direct"
+      ],
+      "note": "Per capability the InventorySmart origin scenario plus the first scenario of every other domain; the direct phrasing; English."
+    },
+    "smoke": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_capability": 1,
+      "kinds": [
+        "direct"
+      ],
+      "note": "One scenario per capability, one phrasing: a minute, to see the pipeline work."
+    }
+  }
+}

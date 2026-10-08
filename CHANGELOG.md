@@ -8,6 +8,16 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- The capability eval suite (`benchmark/capabilities/`): eleven memory capabilities -
+  single-fact recall, multi-hop, recency, update, abstention, forgetting, scale, procedures,
+  corrections, implicit and explicit personalization - as 105 scenarios over five domains,
+  1,110 phrasings in each of English, German, Spanish, Arabic and Hindi plus code-switched
+  ones, with a deterministic dev/held-out split. It drives the running service through the SDK
+  (`nollm`, `llm` and agent-harness modes), waits on the service's own readiness signals,
+  scores the pushed context, the agent's search and the harness's answers, and records the
+  baseline in `benchmark/results/capability_gate.json`: any cell's drop, or a context p95
+  rise over 10 %, fails `make eval-capabilities-gate`
+  ([the capability eval suite](docs/eval/capabilities.md)). Measures; changes no behaviour.
 - Learned skills: an agent learns from all of its users (its own tool records, whichever user it
   ran for, under one audience) and is offered what it learned in its context on its own -
   "Learned skills for this task", in full, matched to the task; nothing is published or

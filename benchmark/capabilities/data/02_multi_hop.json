@@ -1,0 +1,1713 @@
+{
+ "capability": "multi_hop",
+ "number": 2,
+ "title": "Multi-hop across sessions",
+ "definition": "Connect two or more facts stated in different past conversations to answer a new question that neither fact answers alone.",
+ "scenarios": [
+  {
+   "id": "multihop-retail-holiday-trees",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -21,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "All seasonal holiday merchandise must be routed to Overflow Storage Facility B.",
+        "de": "Sämtliche saisonale Weihnachtsware muss ins Ausweichlager B geleitet werden – Overflow Storage Facility B.",
+        "es": "Toda la mercancía navideña de temporada debe enviarse al almacén auxiliar Overflow Storage Facility B.",
+        "ar": "يجب توجيه جميع بضائع الأعياد الموسمية إلى مستودع الفائض Overflow Storage Facility B.",
+        "hi": "सभी मौसमी त्योहारी सामान को Overflow Storage Facility B भेजा जाना चाहिए।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Overflow Storage Facility A only takes bulky furniture.",
+        "de": "Overflow Storage Facility A nimmt nur sperrige Möbel an.",
+        "es": "Overflow Storage Facility A solo acepta muebles voluminosos.",
+        "ar": "مستودع Overflow Storage Facility A يستقبل الأثاث الضخم فقط.",
+        "hi": "Overflow Storage Facility A में सिर्फ़ भारी फ़र्नीचर जाता है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -2,
+     "at": "15:20",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "We just received a shipment of 5,000 artificial Christmas trees from supplier Evergreen Imports.",
+        "de": "Wir haben gerade eine Lieferung von 5.000 künstlichen Weihnachtsbäumen vom Lieferanten Evergreen Imports bekommen.",
+        "es": "Acabamos de recibir un envío de 5.000 árboles de Navidad artificiales del proveedor Evergreen Imports.",
+        "ar": "استلمنا للتو شحنة من 5,000 شجرة عيد ميلاد صناعية من المورد Evergreen Imports.",
+        "hi": "हमें अभी सप्लायर Evergreen Imports से 5,000 नकली क्रिसमस ट्री की खेप मिली है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Where should the warehouse team put the new shipment of artificial trees?",
+        "de": "Wohin soll das Lagerteam die neue Lieferung künstlicher Bäume bringen?",
+        "es": "¿Dónde debe colocar el equipo del almacén el nuevo envío de árboles artificiales?",
+        "ar": "أين يجب أن يضع فريق المستودع شحنة الأشجار الصناعية الجديدة؟",
+        "hi": "वेयरहाउस टीम नकली पेड़ों की नई खेप कहाँ रखे?",
+        "mixed": "Naye artificial trees ka shipment kahan rakhna hai? Warehouse team wait kar rahi hai."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The receiving bay is full of boxed artificial trees and the crew is waiting for instructions.",
+        "de": "Die Warenannahme ist voll mit verpackten Kunstbäumen und das Team wartet auf Anweisungen.",
+        "es": "La zona de recepción está llena de árboles artificiales en caja y el equipo espera instrucciones.",
+        "ar": "منطقة الاستلام ممتلئة بالأشجار الصناعية المعبأة والفريق ينتظر التعليمات.",
+        "hi": "रिसीविंग बे डिब्बाबंद नकली पेड़ों से भरा है और टीम निर्देश का इंतज़ार कर रही है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where do the Evergreen Imports trees belong?",
+        "de": "Wo gehören die Bäume von Evergreen Imports hin?",
+        "es": "¿A dónde van los árboles de Evergreen Imports?",
+        "ar": "أين مكان أشجار Evergreen Imports؟",
+        "hi": "Evergreen Imports के पेड़ कहाँ जाने चाहिए?",
+        "mixed": "¿Dónde ponemos los artificial Christmas trees de Evergreen Imports?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "were do the artifical tres go",
+        "de": "wo komen die künstlichn bäume hin",
+        "es": "donde van los arboles artifiziales",
+        "ar": "وين تروح الاشجار الصناعيه",
+        "hi": "नकली पेडो को कहा रखना है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We've got pallets of artificial Christmas trees from this week's delivery stacked by dock 2, the forklift drivers want to move them before the afternoon trucks arrive, and I'm not sure which of our storage sites they should go to — where do they belong?",
+        "de": "Wir haben Paletten mit künstlichen Weihnachtsbäumen aus der Lieferung dieser Woche an Rampe 2 gestapelt, die Staplerfahrer wollen sie vor den Nachmittags-Lkw wegräumen, und ich weiß nicht, an welchen unserer Lagerstandorte sie gehören – wohin damit?",
+        "es": "Tenemos palés de árboles de Navidad artificiales de la entrega de esta semana apilados junto al muelle 2; los carretilleros quieren moverlos antes de los camiones de la tarde y no sé a cuál de nuestros almacenes van. ¿Dónde los ponemos?",
+        "ar": "لدينا منصات من أشجار عيد الميلاد الصناعية من شحنة هذا الأسبوع مكدسة قرب الرصيف 2، وسائقو الرافعات يريدون نقلها قبل وصول شاحنات بعد الظهر، ولست متأكدًا إلى أي موقع تخزين تذهب — أين مكانها؟",
+        "hi": "इस हफ़्ते की डिलीवरी के नकली क्रिसमस ट्री के पैलेट डॉक 2 के पास रखे हैं, फ़ोर्कलिफ़्ट वाले दोपहर के ट्रक आने से पहले उन्हें हटाना चाहते हैं, और मुझे पक्का नहीं पता कि वे हमारे किस स्टोरेज साइट पर जाएँ — कहाँ रखें?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Those Christmas trees can't stay on the dock.",
+        "de": "Die Weihnachtsbäume können nicht an der Rampe bleiben.",
+        "es": "Esos árboles de Navidad no pueden quedarse en el muelle.",
+        "ar": "لا يمكن أن تبقى أشجار عيد الميلاد تلك على الرصيف.",
+        "hi": "वे क्रिसमस ट्री डॉक पर नहीं रह सकते।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The artificial trees don't go to the furniture overflow site, do they? Where then?",
+        "de": "Die Kunstbäume kommen nicht ins Möbel-Ausweichlager, oder? Wohin dann?",
+        "es": "Los árboles artificiales no van al almacén de muebles, ¿verdad? ¿A dónde entonces?",
+        "ar": "الأشجار الصناعية لا تذهب إلى مستودع الأثاث، صحيح؟ إلى أين إذن؟",
+        "hi": "नकली पेड़ फ़र्नीचर वाले ओवरफ़्लो साइट पर नहीं जाते ना? फिर कहाँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Remember the big tree delivery from earlier this week? Where are we supposed to store it?",
+        "de": "Erinnerst du dich an die große Baumlieferung von Anfang der Woche? Wo sollen wir sie lagern?",
+        "es": "¿Recuerdas la gran entrega de árboles de principios de semana? ¿Dónde debemos guardarla?",
+        "ar": "هل تتذكر شحنة الأشجار الكبيرة من بداية الأسبوع؟ أين يجب أن نخزنها؟",
+        "hi": "इस हफ़्ते की शुरुआत वाली पेड़ों की बड़ी डिलीवरी याद है? उसे कहाँ रखना है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "artificial trees storage location",
+        "de": "Lagerort Kunstbäume",
+        "es": "ubicación árboles artificiales",
+        "ar": "موقع تخزين الأشجار الصناعية",
+        "hi": "नकली पेड़ स्टोरेज जगह",
+        "mixed": "Wohin mit den artificial trees vom new shipment?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell the team where to route the artificial Christmas trees.",
+        "de": "Sag dem Team, wohin die künstlichen Weihnachtsbäume sollen.",
+        "es": "Dile al equipo a dónde llevar los árboles de Navidad artificiales.",
+        "ar": "أخبر الفريق إلى أين يوجّه أشجار عيد الميلاد الصناعية.",
+        "hi": "टीम को बताओ कि नकली क्रिसमस ट्री कहाँ भेजने हैं।",
+        "mixed": "قول للـ team وين يحطوا الـ artificial trees الجديدة."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Overflow Storage Facility B",
+       "5000"
+      ],
+      "answer": {
+       "contains": [
+        "Overflow Storage Facility B"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-2"
+  },
+  {
+   "id": "multihop-retail-aerosol-cage",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -60,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Safety rule: every aerosol product is classed as hazmat and has to be stored in Cage H2.",
+        "de": "Sicherheitsregel: Jedes Aerosolprodukt gilt als Gefahrgut und muss in Käfig H2 gelagert werden.",
+        "es": "Norma de seguridad: todo producto en aerosol se clasifica como peligroso y debe guardarse en la Jaula H2.",
+        "ar": "قاعدة سلامة: كل منتج بخاخ يُصنف كمادة خطرة ويجب تخزينه في القفص H2.",
+        "hi": "सुरक्षा नियम: हर एरोसोल उत्पाद हैज़मैट माना जाता है और उसे केज H2 में रखना ज़रूरी है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Delivery received: 40 cases of spray paint from ColorMax.",
+        "de": "Wareneingang: 40 Kartons Sprühlack von ColorMax.",
+        "es": "Entrega recibida: 40 cajas de pintura en spray de ColorMax.",
+        "ar": "تم استلام شحنة: 40 صندوقًا من طلاء الرش من ColorMax.",
+        "hi": "डिलीवरी मिली: ColorMax से स्प्रे पेंट के 40 केस।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Where should the ColorMax delivery be stored?",
+        "de": "Wo soll die Lieferung von ColorMax gelagert werden?",
+        "es": "¿Dónde hay que almacenar la entrega de ColorMax?",
+        "ar": "أين يجب تخزين شحنة ColorMax؟",
+        "hi": "ColorMax की डिलीवरी कहाँ रखनी चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The spray paint is still sitting on a pallet in aisle 6.",
+        "de": "Der Sprühlack steht noch auf einer Palette in Gang 6.",
+        "es": "La pintura en spray sigue en un palé en el pasillo 6.",
+        "ar": "طلاء الرش لا يزال على منصة في الممر 6.",
+        "hi": "स्प्रे पेंट अभी भी गलियारा 6 में एक पैलेट पर पड़ा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where do we put the new spray paint cases?",
+        "de": "Wohin kommen die neuen Kartons mit Sprühlack?",
+        "es": "¿Dónde ponemos las cajas nuevas de pintura en spray?",
+        "ar": "أين نضع صناديق طلاء الرش الجديدة؟",
+        "hi": "स्प्रे पेंट के नए केस कहाँ रखें?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "where dose the colormax spray pant go",
+        "de": "wohin mit dem colormax sprülack",
+        "es": "donde va la pintura en esprai de colormax",
+        "ar": "وين نحط بخاخ الدهان من كلرماكس ColorMax",
+        "hi": "कलरमैक्स का स्प्रे पेन्ट कहा जायेगा"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Yesterday's ColorMax order came in — forty cases of spray paint for the seasonal craft display — and before anyone shelves it I want to be sure we store it the way our safety rules require. Where does it go?",
+        "de": "Gestern kam die ColorMax-Bestellung – vierzig Kartons Sprühlack für das saisonale Bastel-Display – und bevor jemand sie einräumt, will ich sicher sein, dass wir sie nach unseren Sicherheitsregeln lagern. Wohin gehört sie?",
+        "es": "Ayer llegó el pedido de ColorMax, cuarenta cajas de pintura en spray para la exposición de manualidades de temporada, y antes de que nadie lo coloque quiero asegurarme de guardarlo según nuestras normas de seguridad. ¿Dónde va?",
+        "ar": "وصل طلب ColorMax أمس — أربعون صندوقًا من طلاء الرش لعرض الحرف الموسمي — وقبل أن يرصّه أحد أريد التأكد من تخزينه وفق قواعد السلامة. أين يذهب؟",
+        "hi": "कल ColorMax का ऑर्डर आया — मौसमी क्राफ़्ट डिस्प्ले के लिए स्प्रे पेंट के चालीस केस — और किसी के शेल्फ़ पर लगाने से पहले मैं पक्का करना चाहता हूँ कि हम उसे सुरक्षा नियमों के हिसाब से रखें। वह कहाँ जाएगा?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Just about to shelve the ColorMax cans in aisle 6.",
+        "de": "Ich räume gleich die ColorMax-Dosen in Gang 6 ein.",
+        "es": "Estoy a punto de colocar las latas de ColorMax en el pasillo 6.",
+        "ar": "أنا على وشك رص علب ColorMax في الممر 6.",
+        "hi": "मैं ColorMax के डिब्बे गलियारा 6 में लगाने ही वाला हूँ।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The spray paint shouldn't go on the normal shelves, right? Where then?",
+        "de": "Der Sprühlack gehört nicht ins normale Regal, oder? Wohin dann?",
+        "es": "La pintura en spray no va en las estanterías normales, ¿no? ¿Dónde entonces?",
+        "ar": "طلاء الرش لا يوضع على الرفوف العادية، صحيح؟ أين إذن؟",
+        "hi": "स्प्रे पेंट सामान्य शेल्फ़ पर नहीं जाता ना? फिर कहाँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "We got some paint delivered recently — what's the storage rule for it?",
+        "de": "Wir haben neulich Farbe geliefert bekommen – welche Lagerregel gilt dafür?",
+        "es": "Hace poco nos entregaron pintura. ¿Qué norma de almacenamiento se aplica?",
+        "ar": "وصلتنا مؤخرًا شحنة دهان — ما قاعدة تخزينها؟",
+        "hi": "हाल में हमें कुछ पेंट मिला है — उसके रखने का नियम क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "ColorMax storage",
+        "de": "Lagerung ColorMax",
+        "es": "almacenaje ColorMax",
+        "ar": "تخزين ColorMax",
+        "hi": "ColorMax स्टोरेज"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me where to store the ColorMax spray paint.",
+        "de": "Sag mir, wo der Sprühlack von ColorMax gelagert wird.",
+        "es": "Dime dónde guardar la pintura en spray de ColorMax.",
+        "ar": "أخبرني أين أخزن طلاء الرش من ColorMax.",
+        "hi": "मुझे बताओ ColorMax का स्प्रे पेंट कहाँ रखना है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "H2",
+       "ColorMax"
+      ],
+      "answer": {
+       "contains": [
+        "H2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-retail-recall-lot",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -8,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Store 7 received 120 cups of Lakeside strawberry yogurt, lot L-2291, on Tuesday.",
+        "de": "Filiale 7 hat am Dienstag 120 Becher Lakeside-Erdbeerjoghurt erhalten, Charge L-2291.",
+        "es": "La Tienda 7 recibió el martes 120 vasos de yogur de fresa Lakeside, lote L-2291.",
+        "ar": "استلم المتجر 7 يوم الثلاثاء 120 كوبًا من زبادي الفراولة Lakeside، الدفعة L-2291.",
+        "hi": "स्टोर 7 को मंगलवार को Lakeside स्ट्रॉबेरी दही के 120 कप मिले, लॉट L-2291।"
+       }
+      },
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Store 9 received lot L-2304 of the same yogurt.",
+        "de": "Filiale 9 hat Charge L-2304 desselben Joghurts erhalten.",
+        "es": "La Tienda 9 recibió el lote L-2304 del mismo yogur.",
+        "ar": "استلم المتجر 9 الدفعة L-2304 من الزبادي نفسه.",
+        "hi": "स्टोर 9 को उसी दही का लॉट L-2304 मिला।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Heads up: Lakeside Dairy has recalled yogurt lot L-2291 for possible contamination.",
+        "de": "Achtung: Lakeside Dairy hat die Joghurt-Charge L-2291 wegen möglicher Verunreinigung zurückgerufen.",
+        "es": "Aviso: Lakeside Dairy ha retirado el lote de yogur L-2291 por posible contaminación.",
+        "ar": "تنبيه: سحبت Lakeside Dairy دفعة الزبادي L-2291 بسبب تلوث محتمل.",
+        "hi": "ध्यान दें: Lakeside Dairy ने संभावित संदूषण के कारण दही का लॉट L-2291 रिकॉल किया है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Does Store 7 need to pull anything because of the Lakeside recall?",
+        "de": "Muss Filiale 7 wegen des Lakeside-Rückrufs etwas aus dem Regal nehmen?",
+        "es": "¿Tiene la Tienda 7 que retirar algo por la retirada de Lakeside?",
+        "ar": "هل يحتاج المتجر 7 إلى سحب أي شيء بسبب سحب Lakeside؟",
+        "hi": "क्या Lakeside रिकॉल की वजह से स्टोर 7 को कुछ हटाना होगा?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The Store 7 manager is asking whether the Lakeside news affects her shelves.",
+        "de": "Die Leiterin von Filiale 7 fragt, ob die Lakeside-Meldung ihre Regale betrifft.",
+        "es": "La encargada de la Tienda 7 pregunta si la noticia de Lakeside afecta a sus lineales.",
+        "ar": "مديرة المتجر 7 تسأل إن كان خبر Lakeside يؤثر على رفوفها.",
+        "hi": "स्टोर 7 की मैनेजर पूछ रही है कि Lakeside वाली ख़बर का असर उसकी शेल्फ़ पर है क्या।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Is any of the recalled Lakeside yogurt sitting in Store 7?",
+        "de": "Liegt etwas vom zurückgerufenen Lakeside-Joghurt in Filiale 7?",
+        "es": "¿Hay en la Tienda 7 algo del yogur Lakeside retirado?",
+        "ar": "هل يوجد شيء من زبادي Lakeside المسحوب في المتجر 7؟",
+        "hi": "क्या रिकॉल हुआ Lakeside दही स्टोर 7 में पड़ा है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is stor 7 afected by the lakeside recal",
+        "de": "ist filale 7 vom lakeside rückruff betroffen",
+        "es": "le afecta a la tienda 7 la retirada de lakesid",
+        "ar": "هل المتجر 7 متاثر بسحب ليكسايد",
+        "hi": "क्या स्टोर 7 पर लेकसाइड रिकाल का असर है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I saw the note about a dairy recall come through yesterday, and I know we pushed a lot of yogurt out to the stores last week, so before the weekend rush I'd like to know whether Store 7 in particular has anything it needs to take off the shelf.",
+        "de": "Ich habe gestern die Meldung über einen Molkerei-Rückruf gesehen und weiß, dass wir letzte Woche viel Joghurt an die Filialen geliefert haben. Vor dem Wochenendansturm möchte ich wissen, ob speziell Filiale 7 etwas aus dem Regal nehmen muss.",
+        "es": "Ayer vi el aviso de una retirada de lácteos y sé que la semana pasada mandamos mucho yogur a las tiendas, así que antes del jaleo del fin de semana quiero saber si la Tienda 7 en concreto tiene que quitar algo del lineal.",
+        "ar": "رأيت أمس إشعارًا عن سحب منتجات ألبان، وأعرف أننا وزعنا الكثير من الزبادي على المتاجر الأسبوع الماضي، لذا قبل زحمة نهاية الأسبوع أريد أن أعرف إن كان على المتجر 7 تحديدًا سحب شيء من الرفوف.",
+        "hi": "कल मैंने डेयरी रिकॉल वाला नोट देखा, और मुझे पता है कि पिछले हफ़्ते हमने स्टोर्स को काफ़ी दही भेजा था, इसलिए वीकेंड की भीड़ से पहले जानना चाहता हूँ कि ख़ासकर स्टोर 7 को शेल्फ़ से कुछ हटाना है या नहीं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Store 7 yogurt shelf — safe?",
+        "de": "Joghurtregal in Filiale 7 – sicher?",
+        "es": "Lineal de yogures de la Tienda 7: ¿todo bien?",
+        "ar": "رف الزبادي في المتجر 7 — آمن؟",
+        "hi": "स्टोर 7 की दही वाली शेल्फ़ — सुरक्षित है?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Store 7 didn't get the recalled lot, did it?",
+        "de": "Filiale 7 hat die zurückgerufene Charge nicht bekommen, oder?",
+        "es": "La Tienda 7 no recibió el lote retirado, ¿verdad?",
+        "ar": "المتجر 7 لم يستلم الدفعة المسحوبة، صحيح؟",
+        "hi": "स्टोर 7 को रिकॉल वाला लॉट नहीं मिला था ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Following up on the recall from the other day: is Store 7 affected?",
+        "de": "Zum Rückruf neulich: Ist Filiale 7 betroffen?",
+        "es": "Sobre la retirada del otro día: ¿está afectada la Tienda 7?",
+        "ar": "متابعة للسحب الذي حدث قبل أيام: هل المتجر 7 متأثر؟",
+        "hi": "उस दिन वाले रिकॉल के बारे में: क्या स्टोर 7 प्रभावित है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 7 Lakeside recall",
+        "de": "Filiale 7 Lakeside Rückruf",
+        "es": "Tienda 7 retirada Lakeside",
+        "ar": "المتجر 7 سحب Lakeside",
+        "hi": "स्टोर 7 Lakeside रिकॉल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Check whether Store 7 has recalled Lakeside yogurt.",
+        "de": "Prüfe, ob Filiale 7 zurückgerufenen Lakeside-Joghurt hat.",
+        "es": "Comprueba si la Tienda 7 tiene yogur Lakeside retirado.",
+        "ar": "تحقق مما إذا كان لدى المتجر 7 زبادي Lakeside مسحوب.",
+        "hi": "जाँचो कि स्टोर 7 में रिकॉल वाला Lakeside दही है या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "Store 7",
+        "de": "Filiale 7",
+        "es": "Tienda 7",
+        "ar": "المتجر 7",
+        "hi": "स्टोर 7"
+       },
+       {
+        "en": "recalled",
+        "de": "zurückgerufen",
+        "es": "ha retirado",
+        "ar": "سحبت",
+        "hi": "रिकॉल किया"
+       }
+      ],
+      "answer": {
+       "contains": [
+        "L-2291"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-retail-po-supplier",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -35,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our new supplier for corrugated boxes is PackRight; the account rep is Mia Chen.",
+        "de": "Unser neuer Lieferant für Wellpappkartons ist PackRight; die Kundenbetreuerin heißt Mia Chen.",
+        "es": "Nuestro nuevo proveedor de cajas de cartón ondulado es PackRight; la comercial es Mia Chen.",
+        "ar": "مورّدنا الجديد للصناديق الكرتونية المموجة هو PackRight، ومندوبة الحساب هي Mia Chen.",
+        "hi": "कोरुगेटेड बॉक्स के लिए हमारा नया सप्लायर PackRight है; अकाउंट प्रतिनिधि Mia Chen हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -12,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I raised PO-77812 for 2,000 corrugated boxes; it's late.",
+        "de": "Ich habe PO-77812 über 2.000 Wellpappkartons angelegt; die Lieferung ist überfällig.",
+        "es": "Emití la PO-77812 por 2.000 cajas de cartón ondulado; va con retraso.",
+        "ar": "أصدرت أمر الشراء PO-77812 لـ 2,000 صندوق كرتون مموج؛ وهو متأخر.",
+        "hi": "मैंने 2,000 कोरुगेटेड बॉक्स के लिए PO-77812 बनाया था; वह देर से चल रहा है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "PO-77790 for shrink wrap arrived complete.",
+        "de": "PO-77790 für Schrumpffolie ist vollständig eingetroffen.",
+        "es": "La PO-77790 de film retráctil llegó completa.",
+        "ar": "وصل أمر الشراء PO-77790 لغلاف التقليص كاملًا.",
+        "hi": "श्रिंक रैप वाला PO-77790 पूरा आ गया।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who should I chase about PO-77812?",
+        "de": "Bei wem soll ich wegen PO-77812 nachhaken?",
+        "es": "¿A quién tengo que reclamar la PO-77812?",
+        "ar": "من يجب أن أتابع معه بخصوص PO-77812؟",
+        "hi": "PO-77812 के बारे में मुझे किससे पूछताछ करनी चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "PO-77812 still hasn't shown up and we're running out of shipping cartons.",
+        "de": "PO-77812 ist immer noch nicht da und uns gehen die Versandkartons aus.",
+        "es": "La PO-77812 sigue sin llegar y nos estamos quedando sin cajas de envío.",
+        "ar": "لم يصل PO-77812 بعد ونفدت لدينا كراتين الشحن تقريبًا.",
+        "hi": "PO-77812 अब तक नहीं आया और हमारे शिपिंग कार्टन ख़त्म हो रहे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which supplier and contact handle the overdue box order?",
+        "de": "Welcher Lieferant und welche Ansprechperson sind für die überfällige Kartonbestellung zuständig?",
+        "es": "¿Qué proveedor y qué contacto llevan el pedido de cajas atrasado?",
+        "ar": "أي مورّد وأي جهة اتصال مسؤولان عن طلب الصناديق المتأخر؟",
+        "hi": "देर से चल रहे बॉक्स ऑर्डर को कौन सा सप्लायर और कौन सा संपर्क देखता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "who do i chace for PO-77812",
+        "de": "wen muss ich wegn PO-77812 anrufn",
+        "es": "a quien le reclamo la PO-77812",
+        "ar": "مين اتابع معه بخصوص PO-77812",
+        "hi": "PO-77812 के लिये किसको फॉलो अप करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The order I placed a while back for two thousand corrugated boxes, PO-77812, is now almost two weeks overdue and the packing line is going to run dry by Friday, so I need to call someone today — who's the right supplier and person?",
+        "de": "Die Bestellung über zweitausend Wellpappkartons, PO-77812, ist jetzt fast zwei Wochen überfällig und der Packplatz läuft bis Freitag leer, also muss ich heute jemanden anrufen – welcher Lieferant und welche Person?",
+        "es": "El pedido que hice hace un tiempo de dos mil cajas de cartón, la PO-77812, lleva casi dos semanas de retraso y la línea de embalaje se quedará sin cajas el viernes, así que tengo que llamar hoy. ¿A qué proveedor y a quién?",
+        "ar": "الطلب الذي أصدرته منذ فترة لألفي صندوق كرتون مموج، PO-77812، متأخر الآن قرابة أسبوعين، وخط التعبئة سيتوقف بحلول الجمعة، لذا يجب أن أتصل بأحد اليوم — من المورّد ومن الشخص المناسب؟",
+        "hi": "कुछ समय पहले मैंने दो हज़ार कोरुगेटेड बॉक्स का ऑर्डर PO-77812 दिया था, वह अब लगभग दो हफ़्ते लेट है और शुक्रवार तक पैकिंग लाइन ख़ाली हो जाएगी, इसलिए आज ही किसी को फ़ोन करना है — सही सप्लायर और व्यक्ति कौन है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Still no boxes on PO-77812.",
+        "de": "Immer noch keine Kartons zu PO-77812.",
+        "es": "Siguen sin llegar las cajas de la PO-77812.",
+        "ar": "لا صناديق حتى الآن من PO-77812.",
+        "hi": "PO-77812 के बॉक्स अब भी नहीं आए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "PO-77812 isn't the shrink wrap order, right? Who supplies it?",
+        "de": "PO-77812 ist nicht die Folienbestellung, oder? Wer liefert das?",
+        "es": "La PO-77812 no es la del film, ¿verdad? ¿Quién la suministra?",
+        "ar": "PO-77812 ليس طلب غلاف التقليص، صحيح؟ من يورّده؟",
+        "hi": "PO-77812 श्रिंक रैप वाला ऑर्डर नहीं है ना? उसे कौन सप्लाई करता है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "That late box order I mentioned a while ago — who do I contact?",
+        "de": "Diese überfällige Kartonbestellung, die ich vor einer Weile erwähnt habe – wen kontaktiere ich?",
+        "es": "Ese pedido de cajas atrasado que mencioné hace un tiempo, ¿a quién contacto?",
+        "ar": "طلب الصناديق المتأخر الذي ذكرته قبل فترة — بمن أتصل؟",
+        "hi": "जो लेट बॉक्स ऑर्डर मैंने कुछ समय पहले बताया था — किससे संपर्क करूँ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "PO-77812 contact",
+        "de": "PO-77812 Ansprechpartner",
+        "es": "contacto PO-77812",
+        "ar": "جهة اتصال PO-77812",
+        "hi": "PO-77812 संपर्क"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Find me who to call about PO-77812.",
+        "de": "Finde heraus, wen ich wegen PO-77812 anrufe.",
+        "es": "Búscame a quién llamar por la PO-77812.",
+        "ar": "اعثر لي على من أتصل به بخصوص PO-77812.",
+        "hi": "पता करो कि PO-77812 के लिए किसे फ़ोन करूँ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "PackRight",
+       "2000"
+      ],
+      "answer": {
+       "contains": [
+        "Mia Chen"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-retail-promo-region",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -18,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The BOGO promotion on Sunny Crunch cereal runs only in Region North this month.",
+        "de": "Die BOGO-Aktion für Sunny-Crunch-Müsli läuft diesen Monat nur in Region Nord (Region North).",
+        "es": "La promoción BOGO de los cereales Sunny Crunch solo se aplica este mes en la Region North.",
+        "ar": "عرض BOGO على حبوب Sunny Crunch يسري هذا الشهر في Region North فقط.",
+        "hi": "इस महीने Sunny Crunch सीरियल पर BOGO प्रमोशन सिर्फ़ Region North में चलेगा।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 58 was moved into Region North after the reorganisation.",
+        "de": "Filiale 58 wurde nach der Umstrukturierung der Region North zugeordnet.",
+        "es": "La Tienda 58 pasó a la Region North tras la reorganización.",
+        "ar": "نُقل المتجر 58 إلى Region North بعد إعادة التنظيم.",
+        "hi": "पुनर्गठन के बाद स्टोर 58 को Region North में डाल दिया गया।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 61 stays in Region South.",
+        "de": "Filiale 61 bleibt in Region South.",
+        "es": "La Tienda 61 sigue en la Region South.",
+        "ar": "يبقى المتجر 61 في Region South.",
+        "hi": "स्टोर 61 Region South में ही रहेगा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Should Store 58 put up the Sunny Crunch BOGO signs?",
+        "de": "Soll Filiale 58 die BOGO-Schilder für Sunny Crunch aufhängen?",
+        "es": "¿Debe la Tienda 58 poner los carteles del BOGO de Sunny Crunch?",
+        "ar": "هل يجب على المتجر 58 تعليق لافتات عرض BOGO على Sunny Crunch؟",
+        "hi": "क्या स्टोर 58 को Sunny Crunch BOGO के साइन लगाने चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Store 58 got a box of cereal promo signage and isn't sure it's meant for them.",
+        "de": "Filiale 58 hat einen Karton Müsli-Aktionsschilder bekommen und weiß nicht, ob sie für sie bestimmt sind.",
+        "es": "La Tienda 58 recibió una caja de carteles de promoción de cereales y no sabe si son para ella.",
+        "ar": "استلم المتجر 58 صندوق لافتات ترويجية للحبوب وليس متأكدًا إن كانت مخصصة له.",
+        "hi": "स्टोर 58 को सीरियल प्रमोशन के साइन का एक डिब्बा मिला है और उन्हें पक्का नहीं कि वह उनके लिए है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Does the buy-one-get-one cereal deal apply at Store 58?",
+        "de": "Gilt das Kauf-eins-bekomm-eins-Müsliangebot in Filiale 58?",
+        "es": "¿Se aplica en la Tienda 58 la oferta de cereales de compra uno y llévate otro?",
+        "ar": "هل ينطبق عرض الحبوب اشترِ واحدًا واحصل على الآخر في المتجر 58؟",
+        "hi": "क्या एक के साथ एक मुफ़्त वाला सीरियल ऑफ़र स्टोर 58 पर लागू है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "does stor 58 run the sunny crunch bogo",
+        "de": "macht filale 58 die sunny crunch bogo aktion",
+        "es": "la tienda 58 tiene el bogo de sunny crunch",
+        "ar": "هل المتجر 58 عنده عرض بوجو سني كرنش",
+        "hi": "क्या स्टोर 58 में सनी क्रंच बोगो चलेगा"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The store manager at 58 called — they've had customers asking about a two-for-one on Sunny Crunch they saw advertised, and she doesn't know if her store is part of that promotion or not; can you check?",
+        "de": "Die Filialleiterin von 58 hat angerufen – Kunden fragen nach einem Zwei-für-eins-Angebot für Sunny Crunch aus der Werbung, und sie weiß nicht, ob ihre Filiale an der Aktion teilnimmt; kannst du das prüfen?",
+        "es": "Llamó la encargada de la 58: hay clientes preguntando por un dos por uno de Sunny Crunch que vieron anunciado y no sabe si su tienda entra en la promoción. ¿Puedes comprobarlo?",
+        "ar": "اتصلت مديرة المتجر 58 — زبائن يسألون عن عرض اثنين بسعر واحد على Sunny Crunch رأوه في الإعلانات، ولا تعرف إن كان متجرها مشمولًا بالعرض؛ هل يمكنك التحقق؟",
+        "hi": "स्टोर 58 की मैनेजर का फ़ोन आया — ग्राहक विज्ञापन में देखे Sunny Crunch के दो-के-बदले-एक ऑफ़र के बारे में पूछ रहे हैं, और उन्हें नहीं पता कि उनका स्टोर इस प्रमोशन में है या नहीं; जाँच सकते हो?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Store 58, cereal promo, yes or no?",
+        "de": "Filiale 58, Müsliaktion, ja oder nein?",
+        "es": "Tienda 58, promo de cereales, ¿sí o no?",
+        "ar": "المتجر 58، عرض الحبوب، نعم أم لا؟",
+        "hi": "स्टोर 58, सीरियल प्रमो, हाँ या ना?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Store 58 isn't excluded from the Sunny Crunch BOGO, is it?",
+        "de": "Filiale 58 ist doch nicht von der Sunny-Crunch-BOGO-Aktion ausgeschlossen, oder?",
+        "es": "La Tienda 58 no queda excluida del BOGO de Sunny Crunch, ¿verdad?",
+        "ar": "المتجر 58 غير مستثنى من عرض BOGO على Sunny Crunch، صحيح؟",
+        "hi": "स्टोर 58 Sunny Crunch BOGO से बाहर तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given the region changes we talked about, does Store 58 get the cereal BOGO?",
+        "de": "Nach den Regionsänderungen, über die wir gesprochen haben: Bekommt Filiale 58 die Müsli-BOGO-Aktion?",
+        "es": "Con los cambios de región que comentamos, ¿le toca a la Tienda 58 el BOGO de cereales?",
+        "ar": "بعد تغييرات المناطق التي تحدثنا عنها، هل يحصل المتجر 58 على عرض BOGO للحبوب؟",
+        "hi": "जिन रीजन बदलावों की हमने बात की थी, उनके बाद क्या स्टोर 58 को सीरियल BOGO मिलेगा?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 58 BOGO",
+        "de": "Filiale 58 BOGO",
+        "es": "Tienda 58 BOGO",
+        "ar": "المتجر 58 BOGO",
+        "hi": "स्टोर 58 BOGO"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell Store 58 whether to run the Sunny Crunch BOGO.",
+        "de": "Sag Filiale 58, ob sie die Sunny-Crunch-BOGO-Aktion fahren soll.",
+        "es": "Dile a la Tienda 58 si tiene que aplicar el BOGO de Sunny Crunch.",
+        "ar": "أخبر المتجر 58 إن كان عليه تطبيق عرض BOGO على Sunny Crunch.",
+        "hi": "स्टोर 58 को बताओ कि Sunny Crunch BOGO चलाना है या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "BOGO",
+       "Region North"
+      ],
+      "answer": {
+       "contains": [
+        "Region North"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-retail-frozen-dock",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -70,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Anything labelled keep-frozen must be in Freezer F2 within 15 minutes of arrival.",
+        "de": "Alles mit der Kennzeichnung tiefgekühlt muss innerhalb von 15 Minuten nach Ankunft in Tiefkühler F2.",
+        "es": "Todo lo etiquetado como mantener congelado debe estar en el Congelador F2 en los 15 minutos siguientes a su llegada.",
+        "ar": "كل ما يحمل ملصق يُحفظ مجمدًا يجب أن يكون في المجمّد F2 خلال 15 دقيقة من وصوله.",
+        "hi": "'फ़्रोज़न रखें' लेबल वाला हर सामान पहुँचने के 15 मिनट के अंदर फ़्रीज़र F2 में होना चाहिए।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "06:45",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "This morning's delivery from Polar Treats: 30 cases of keep-frozen ice cream bars.",
+        "de": "Die Lieferung von Polar Treats heute früh: 30 Kartons tiefgekühlte Eisriegel.",
+        "es": "La entrega de esta mañana de Polar Treats: 30 cajas de barritas de helado para mantener congeladas.",
+        "ar": "شحنة هذا الصباح من Polar Treats: 30 صندوقًا من ألواح الآيس كريم تُحفظ مجمدة.",
+        "hi": "आज सुबह Polar Treats की डिलीवरी: फ़्रोज़न रखने वाली आइसक्रीम बार के 30 केस।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What do we do with the Polar Treats delivery?",
+        "de": "Was machen wir mit der Lieferung von Polar Treats?",
+        "es": "¿Qué hacemos con la entrega de Polar Treats?",
+        "ar": "ماذا نفعل بشحنة Polar Treats؟",
+        "hi": "Polar Treats की डिलीवरी का क्या करें?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The ice cream bars are on the dock and it's getting warm.",
+        "de": "Die Eisriegel stehen an der Rampe und es wird warm.",
+        "es": "Las barritas de helado están en el muelle y empieza a hacer calor.",
+        "ar": "ألواح الآيس كريم على الرصيف والجو يزداد حرارة.",
+        "hi": "आइसक्रीम बार डॉक पर पड़े हैं और गर्मी बढ़ रही है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where must the Polar Treats cases go, and how fast?",
+        "de": "Wohin müssen die Kartons von Polar Treats, und wie schnell?",
+        "es": "¿A dónde tienen que ir las cajas de Polar Treats y en cuánto tiempo?",
+        "ar": "إلى أين يجب أن تذهب صناديق Polar Treats، وبأي سرعة؟",
+        "hi": "Polar Treats के केस कहाँ और कितनी जल्दी जाने चाहिए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "what to do wiht the polar treets ice cream",
+        "de": "was mache ich mit dem polar treats eis",
+        "es": "que hago con el elado de polar treats",
+        "ar": "ايش اسوي بايس كريم بولار تريتس",
+        "hi": "पोलर ट्रीट्स की आइसक्रीम का क्या करू"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The Polar Treats truck dropped off its load about ten minutes ago while everyone was on break, and now there are thirty cases of ice cream bars sitting by the door — what's the procedure and where exactly do they need to go?",
+        "de": "Der Polar-Treats-Lkw hat vor etwa zehn Minuten abgeladen, während alle Pause hatten, und jetzt stehen dreißig Kartons Eisriegel an der Tür – wie ist der Ablauf und wohin genau müssen sie?",
+        "es": "El camión de Polar Treats descargó hace unos diez minutos mientras todos estaban en el descanso y ahora hay treinta cajas de barritas de helado junto a la puerta. ¿Cuál es el procedimiento y a dónde tienen que ir exactamente?",
+        "ar": "أنزلت شاحنة Polar Treats حمولتها قبل نحو عشر دقائق بينما كان الجميع في الاستراحة، والآن هناك ثلاثون صندوقًا من ألواح الآيس كريم عند الباب — ما الإجراء وإلى أين يجب أن تذهب بالضبط؟",
+        "hi": "Polar Treats का ट्रक लगभग दस मिनट पहले माल उतार गया जब सब ब्रेक पर थे, और अब तीस केस आइसक्रीम बार दरवाज़े के पास पड़े हैं — प्रक्रिया क्या है और उन्हें ठीक कहाँ जाना है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Ice cream just landed.",
+        "de": "Das Eis ist gerade angekommen.",
+        "es": "Acaba de llegar el helado.",
+        "ar": "وصل الآيس كريم للتو.",
+        "hi": "आइसक्रीम अभी आई है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The ice cream doesn't go in the regular cooler, does it?",
+        "de": "Das Eis kommt nicht in die normale Kühlzelle, oder?",
+        "es": "El helado no va en la cámara normal, ¿verdad?",
+        "ar": "الآيس كريم لا يوضع في المبرّد العادي، صحيح؟",
+        "hi": "आइसक्रीम सामान्य कूलर में नहीं जाती ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "About this morning's frozen delivery — what's the rule again?",
+        "de": "Zur Tiefkühllieferung von heute früh – wie war die Regel noch mal?",
+        "es": "Sobre la entrega congelada de esta mañana, ¿cuál era la norma?",
+        "ar": "بخصوص الشحنة المجمدة هذا الصباح — ما القاعدة مرة أخرى؟",
+        "hi": "आज सुबह की फ़्रोज़न डिलीवरी के बारे में — नियम फिर से क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Polar Treats handling",
+        "de": "Polar Treats Handhabung",
+        "es": "manejo Polar Treats",
+        "ar": "التعامل مع Polar Treats",
+        "hi": "Polar Treats हैंडलिंग"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell the crew where the Polar Treats cases go.",
+        "de": "Sag der Mannschaft, wohin die Polar-Treats-Kartons kommen.",
+        "es": "Dile al equipo a dónde van las cajas de Polar Treats.",
+        "ar": "أخبر الطاقم إلى أين تذهب صناديق Polar Treats.",
+        "hi": "टीम को बताओ कि Polar Treats के केस कहाँ जाएँगे।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "F2",
+       "Polar Treats"
+      ],
+      "answer": {
+       "contains": [
+        "F2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-personal-london-art",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -9,
+     "at": "19:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I'm travelling to London next week for a conference, and I have Thursday afternoon free.",
+        "de": "Ich fliege nächste Woche zu einer Konferenz nach London und habe Donnerstagnachmittag frei.",
+        "es": "La semana que viene viajo a Londres por un congreso y tengo libre la tarde del jueves.",
+        "ar": "سأسافر إلى London الأسبوع المقبل لحضور مؤتمر، ولدي بعد ظهر الخميس فارغ.",
+        "hi": "अगले हफ़्ते मैं एक कॉन्फ़्रेंस के लिए London जा रहा हूँ, और गुरुवार दोपहर ख़ाली है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -30,
+     "at": "21:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I love contemporary art — installations especially.",
+        "de": "Ich liebe zeitgenössische Kunst – vor allem Installationen.",
+        "es": "Me encanta el arte contemporáneo, sobre todo las instalaciones.",
+        "ar": "أحب الفن المعاصر — خاصة الأعمال التركيبية.",
+        "hi": "मुझे समकालीन कला बहुत पसंद है — ख़ासकर इंस्टॉलेशन।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "I'm not into musicals.",
+        "de": "Musicals sind nichts für mich.",
+        "es": "Los musicales no me gustan.",
+        "ar": "لا أحب المسرحيات الغنائية.",
+        "hi": "मुझे म्यूज़िकल पसंद नहीं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Any ideas for my free afternoon on the trip?",
+        "de": "Hast du Ideen für meinen freien Nachmittag auf der Reise?",
+        "es": "¿Alguna idea para mi tarde libre del viaje?",
+        "ar": "هل لديك أفكار لفترة بعد الظهر الحرة في رحلتي؟",
+        "hi": "यात्रा में मेरी ख़ाली दोपहर के लिए कोई सुझाव?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'll have a few hours to kill on Thursday.",
+        "de": "Am Donnerstag habe ich ein paar Stunden totzuschlagen.",
+        "es": "El jueves tendré unas horas libres.",
+        "ar": "سيكون لدي بضع ساعات فراغ يوم الخميس.",
+        "hi": "गुरुवार को मेरे पास कुछ घंटे ख़ाली होंगे।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What should I do with my spare time next week?",
+        "de": "Was soll ich nächste Woche mit meiner freien Zeit anfangen?",
+        "es": "¿Qué hago con mi tiempo libre la semana que viene?",
+        "ar": "ماذا أفعل بوقت فراغي الأسبوع المقبل؟",
+        "hi": "अगले हफ़्ते अपने ख़ाली समय में क्या करूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat shoud i do on my free aftrnoon",
+        "de": "was sol ich am freien nachmitag machen",
+        "es": "que ago en mi tarde libre",
+        "ar": "شو اسوي بعد الظهر الفاضي",
+        "hi": "खाली दोपेहर में क्या करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The conference schedule just came out and it looks like my Thursday afternoon is completely open; I don't want to just sit in the hotel, so suggest something I'd actually enjoy doing in the city.",
+        "de": "Der Konferenzplan ist raus und mein Donnerstagnachmittag ist komplett frei; ich will nicht nur im Hotel sitzen, also schlag mir etwas vor, das mir in der Stadt wirklich Spaß machen würde.",
+        "es": "Ya salió el programa del congreso y parece que tengo la tarde del jueves totalmente libre; no quiero quedarme en el hotel, así que sugiéreme algo que de verdad me guste hacer en la ciudad.",
+        "ar": "صدر جدول المؤتمر للتو ويبدو أن بعد ظهر الخميس فارغ تمامًا؛ لا أريد البقاء في الفندق، فاقترح علي شيئًا سأستمتع به فعلًا في المدينة.",
+        "hi": "कॉन्फ़्रेंस का शेड्यूल आ गया है और लगता है गुरुवार दोपहर पूरी ख़ाली है; मैं होटल में बैठे नहीं रहना चाहता, तो शहर में कुछ ऐसा सुझाओ जो मुझे सच में पसंद आए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Thursday afternoon, nothing planned.",
+        "de": "Donnerstagnachmittag, nichts geplant.",
+        "es": "Jueves por la tarde, nada planeado.",
+        "ar": "بعد ظهر الخميس، لا خطط.",
+        "hi": "गुरुवार दोपहर, कुछ प्लान नहीं।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not a musical — what else could I do on my free afternoon?",
+        "de": "Kein Musical – was könnte ich sonst an meinem freien Nachmittag machen?",
+        "es": "Un musical no, ¿qué más podría hacer en mi tarde libre?",
+        "ar": "ليس مسرحية غنائية — ماذا يمكنني أن أفعل غير ذلك في فترة بعد الظهر الحرة؟",
+        "hi": "म्यूज़िकल नहीं — ख़ाली दोपहर में और क्या कर सकता हूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Remember my trip coming up? What would you suggest for the free time?",
+        "de": "Erinnerst du dich an meine anstehende Reise? Was würdest du für die freie Zeit vorschlagen?",
+        "es": "¿Te acuerdas de mi viaje? ¿Qué me sugieres para el tiempo libre?",
+        "ar": "هل تتذكر رحلتي القادمة؟ ماذا تقترح لوقت الفراغ؟",
+        "hi": "मेरी आने वाली यात्रा याद है? ख़ाली समय के लिए क्या सुझाओगे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "free afternoon suggestion",
+        "de": "Vorschlag freier Nachmittag",
+        "es": "sugerencia tarde libre",
+        "ar": "اقتراح لبعد الظهر الحر",
+        "hi": "ख़ाली दोपहर सुझाव"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Plan my free Thursday afternoon.",
+        "de": "Plan meinen freien Donnerstagnachmittag.",
+        "es": "Planea mi tarde libre del jueves.",
+        "ar": "خطط لي بعد ظهر الخميس الحر.",
+        "hi": "मेरी ख़ाली गुरुवार दोपहर प्लान करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "London",
+        "de": "London",
+        "es": "Londres",
+        "ar": "London",
+        "hi": "London"
+       },
+       {
+        "en": "contemporary art",
+        "de": "zeitgenössische Kunst",
+        "es": "arte contemporáneo",
+        "ar": "الفن المعاصر",
+        "hi": "समकालीन कला"
+       }
+      ],
+      "answer": {
+       "contains": [
+        [
+         "Tate",
+         "Saatchi",
+         "Serpentine",
+         "White Cube",
+         "Whitechapel"
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-it-payroll-reboot",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The payroll service runs on host app-07.",
+        "de": "Der Lohnabrechnungsdienst läuft auf Host app-07.",
+        "es": "El servicio de nóminas se ejecuta en el host app-07.",
+        "ar": "تعمل خدمة الرواتب على المضيف app-07.",
+        "hi": "पेरोल सर्विस होस्ट app-07 पर चलती है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The intranet wiki runs on app-03.",
+        "de": "Das Intranet-Wiki läuft auf app-03.",
+        "es": "La wiki de la intranet se ejecuta en app-03.",
+        "ar": "يعمل ويكي الشبكة الداخلية على app-03.",
+        "hi": "इंट्रानेट विकी app-03 पर चलती है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Change scheduled: host app-07 will be rebooted for kernel patching on Saturday at 02:00.",
+        "de": "Change geplant: Host app-07 wird am Samstag um 02:00 für Kernel-Patches neu gestartet.",
+        "es": "Cambio programado: el host app-07 se reiniciará el sábado a las 02:00 para parchear el kernel.",
+        "ar": "تغيير مجدول: سيُعاد تشغيل المضيف app-07 لتحديث النواة يوم السبت الساعة 02:00.",
+        "hi": "बदलाव तय: कर्नेल पैचिंग के लिए होस्ट app-07 शनिवार 02:00 बजे रीबूट होगा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Will payroll be down this weekend?",
+        "de": "Ist die Lohnabrechnung am Wochenende nicht erreichbar?",
+        "es": "¿Estará caído el sistema de nóminas este fin de semana?",
+        "ar": "هل ستتوقف خدمة الرواتب في عطلة نهاية الأسبوع؟",
+        "hi": "क्या इस वीकेंड पेरोल बंद रहेगा?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "HR wants to run the payroll export late Friday night into Saturday.",
+        "de": "HR will den Lohnexport Freitagnacht bis in den Samstag laufen lassen.",
+        "es": "RR. HH. quiere lanzar la exportación de nóminas el viernes por la noche hasta el sábado.",
+        "ar": "تريد الموارد البشرية تشغيل تصدير الرواتب ليلة الجمعة حتى السبت.",
+        "hi": "HR शुक्रवार देर रात से शनिवार तक पेरोल एक्सपोर्ट चलाना चाहता है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Is any maintenance going to affect the payroll system soon?",
+        "de": "Wird demnächst eine Wartung das Lohnsystem betreffen?",
+        "es": "¿Va a afectar pronto algún mantenimiento al sistema de nóminas?",
+        "ar": "هل ستؤثر أي صيانة على نظام الرواتب قريبًا؟",
+        "hi": "क्या जल्द कोई मेंटेनेंस पेरोल सिस्टम पर असर डालेगा?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is payrol going down this wekend",
+        "de": "ist die lohnabrechnug am wochenende down",
+        "es": "se cae nominas este finde",
+        "ar": "هل نظام الرواتب رح يوقف الويكند",
+        "hi": "क्या पेरोल इस वीकएंड डाउन होगा"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Finance is closing the month this weekend and they've asked me to confirm the payroll system will be up the whole time, especially overnight Friday to Saturday when they run the batch — is anything scheduled that would take it offline?",
+        "de": "Die Finanzabteilung macht dieses Wochenende den Monatsabschluss und hat mich gebeten zu bestätigen, dass das Lohnsystem die ganze Zeit läuft, besonders in der Nacht von Freitag auf Samstag, wenn der Batch läuft – ist etwas geplant, das es offline nimmt?",
+        "es": "Finanzas cierra el mes este fin de semana y me ha pedido confirmar que el sistema de nóminas estará disponible todo el tiempo, sobre todo la noche del viernes al sábado cuando lanzan el lote. ¿Hay algo programado que lo deje fuera de servicio?",
+        "ar": "تُغلق الإدارة المالية الشهر في عطلة نهاية هذا الأسبوع وطلبت مني تأكيد أن نظام الرواتب سيعمل طوال الوقت، خاصة ليلة الجمعة إلى السبت حين تشغّل الدفعة — هل هناك أي شيء مجدول قد يوقفه؟",
+        "hi": "फ़ाइनेंस इस वीकेंड महीने की क्लोज़िंग कर रहा है और उन्होंने मुझसे पक्का करने को कहा है कि पेरोल सिस्टम पूरे समय चालू रहे, ख़ासकर शुक्रवार से शनिवार की रात जब बैच चलता है — क्या कुछ ऐसा तय है जो उसे बंद कर दे?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Payroll batch Saturday night — any risk?",
+        "de": "Lohn-Batch Samstagnacht – irgendein Risiko?",
+        "es": "Lote de nóminas el sábado de madrugada: ¿algún riesgo?",
+        "ar": "دفعة الرواتب ليلة السبت — أي خطر؟",
+        "hi": "शनिवार रात पेरोल बैच — कोई जोखिम?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Payroll won't be affected by any reboot, right?",
+        "de": "Die Lohnabrechnung ist von keinem Neustart betroffen, oder?",
+        "es": "Las nóminas no se verán afectadas por ningún reinicio, ¿verdad?",
+        "ar": "لن تتأثر الرواتب بأي إعادة تشغيل، صحيح؟",
+        "hi": "पेरोल पर किसी रीबूट का असर नहीं पड़ेगा ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Earlier you got the change notice for the weekend — does it touch payroll?",
+        "de": "Du hast vorhin die Change-Meldung fürs Wochenende bekommen – betrifft sie die Lohnabrechnung?",
+        "es": "Antes recibiste el aviso de cambio del fin de semana, ¿afecta a nóminas?",
+        "ar": "تلقيت سابقًا إشعار التغيير لعطلة نهاية الأسبوع — هل يمس الرواتب؟",
+        "hi": "पहले तुम्हें वीकेंड का चेंज नोटिस मिला था — क्या उसका असर पेरोल पर है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "payroll downtime weekend",
+        "de": "Ausfall Lohnabrechnung Wochenende",
+        "es": "caída nóminas fin de semana",
+        "ar": "توقف الرواتب عطلة الأسبوع",
+        "hi": "पेरोल डाउनटाइम वीकेंड"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Check whether payroll has downtime this weekend.",
+        "de": "Prüf, ob die Lohnabrechnung am Wochenende ausfällt.",
+        "es": "Comprueba si nóminas tiene parada este fin de semana.",
+        "ar": "تحقق مما إذا كان للرواتب توقف في عطلة الأسبوع.",
+        "hi": "जाँचो कि इस वीकेंड पेरोल का डाउनटाइम है या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "payroll",
+        "de": "Lohnabrechnung",
+        "es": "nóminas",
+        "ar": "الرواتب",
+        "hi": "पेरोल"
+       },
+       "02:00"
+      ],
+      "answer": {
+       "contains": [
+        "02:00"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-finance-holiday-calendar",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -90,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Employees in the Berlin office follow the German public holiday calendar, not the US one.",
+        "de": "Mitarbeitende im Berliner Büro richten sich nach dem deutschen Feiertagskalender, nicht nach dem US-Kalender.",
+        "es": "Los empleados de la oficina de Berlín siguen el calendario de festivos alemán, no el de EE. UU.",
+        "ar": "يتبع موظفو مكتب برلين تقويم العطلات الرسمية الألمانية، لا الأمريكي.",
+        "hi": "बर्लिन ऑफ़िस के कर्मचारी जर्मन सार्वजनिक छुट्टियों का कैलेंडर मानते हैं, अमेरिकी नहीं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Lena Vogel joined the Berlin office this month as an accountant.",
+        "de": "Lena Vogel hat diesen Monat als Buchhalterin im Berliner Büro angefangen.",
+        "es": "Lena Vogel se incorporó este mes a la oficina de Berlín como contable.",
+        "ar": "انضمت Lena Vogel هذا الشهر إلى مكتب برلين كمحاسبة.",
+        "hi": "Lena Vogel इस महीने बर्लिन ऑफ़िस में अकाउंटेंट के रूप में शामिल हुईं।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Tom Reyes joined the Austin office.",
+        "de": "Tom Reyes hat im Büro in Austin angefangen.",
+        "es": "Tom Reyes se incorporó a la oficina de Austin.",
+        "ar": "انضم Tom Reyes إلى مكتب أوستن.",
+        "hi": "Tom Reyes ऑस्टिन ऑफ़िस में शामिल हुए।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which holiday calendar applies to Lena Vogel?",
+        "de": "Welcher Feiertagskalender gilt für Lena Vogel?",
+        "es": "¿Qué calendario de festivos se aplica a Lena Vogel?",
+        "ar": "أي تقويم عطلات ينطبق على Lena Vogel؟",
+        "hi": "Lena Vogel पर कौन सा छुट्टियों का कैलेंडर लागू होता है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm setting up Lena Vogel's leave profile.",
+        "de": "Ich richte das Urlaubsprofil von Lena Vogel ein.",
+        "es": "Estoy configurando el perfil de ausencias de Lena Vogel.",
+        "ar": "أجهز ملف إجازات Lena Vogel.",
+        "hi": "मैं Lena Vogel की छुट्टियों की प्रोफ़ाइल सेट कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Does Lena Vogel get US public holidays off?",
+        "de": "Hat Lena Vogel an US-Feiertagen frei?",
+        "es": "¿Libra Lena Vogel los festivos de EE. UU.?",
+        "ar": "هل تحصل Lena Vogel على عطلات الولايات المتحدة الرسمية؟",
+        "hi": "क्या Lena Vogel को अमेरिकी सार्वजनिक छुट्टियाँ मिलती हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wich holday calender for lena vogel",
+        "de": "welcher feiertagskalnder für lena vogel",
+        "es": "que calendario de festivo para lena vogel",
+        "ar": "اي تقويم عطل للينا فوغل",
+        "hi": "लीना वोगेल के लिये कौनसा छुट्टी कैलेंडर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Payroll needs to know which public holidays to load into the new accountant's calendar — that's Lena Vogel who just started — so her leave balance and holiday pay come out right; which calendar should I pick?",
+        "de": "Die Lohnbuchhaltung muss wissen, welche Feiertage in den Kalender der neuen Buchhalterin – Lena Vogel, die gerade angefangen hat – geladen werden, damit Urlaubskonto und Feiertagszuschläge stimmen; welchen Kalender soll ich wählen?",
+        "es": "Nóminas necesita saber qué festivos cargar en el calendario de la nueva contable, Lena Vogel, que acaba de empezar, para que su saldo de vacaciones y el pago de festivos salgan bien. ¿Qué calendario elijo?",
+        "ar": "تحتاج الرواتب إلى معرفة العطلات الرسمية التي يجب تحميلها في تقويم المحاسبة الجديدة — Lena Vogel التي بدأت للتو — حتى يُحسب رصيد إجازاتها وأجر العطلات بشكل صحيح؛ أي تقويم أختار؟",
+        "hi": "पेरोल को जानना है कि नई अकाउंटेंट — Lena Vogel, जिन्होंने अभी जॉइन किया है — के कैलेंडर में कौन सी सार्वजनिक छुट्टियाँ डालें ताकि उनका लीव बैलेंस और हॉलिडे पे सही आए; कौन सा कैलेंडर चुनूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Lena's holidays — which list?",
+        "de": "Lenas Feiertage – welche Liste?",
+        "es": "Festivos de Lena: ¿qué lista?",
+        "ar": "عطلات لينا — أي قائمة؟",
+        "hi": "लीना की छुट्टियाँ — कौन सी सूची?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Lena Vogel isn't on the US holiday calendar, is she?",
+        "de": "Lena Vogel ist nicht im US-Feiertagskalender, oder?",
+        "es": "Lena Vogel no va con el calendario de festivos de EE. UU., ¿verdad?",
+        "ar": "Lena Vogel ليست على تقويم العطلات الأمريكي، صحيح؟",
+        "hi": "Lena Vogel अमेरिकी छुट्टी कैलेंडर पर नहीं हैं ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "About the new hire I mentioned recently — which holidays does she observe?",
+        "de": "Zur neuen Mitarbeiterin, die ich neulich erwähnt habe – welche Feiertage gelten für sie?",
+        "es": "Sobre la nueva incorporación que mencioné hace poco, ¿qué festivos tiene?",
+        "ar": "بخصوص الموظفة الجديدة التي ذكرتها مؤخرًا — ما العطلات التي تلتزم بها؟",
+        "hi": "जिस नई कर्मचारी का मैंने हाल में ज़िक्र किया था — वह कौन सी छुट्टियाँ मानती हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Lena Vogel holiday calendar",
+        "de": "Lena Vogel Feiertagskalender",
+        "es": "calendario festivos Lena Vogel",
+        "ar": "تقويم عطلات Lena Vogel",
+        "hi": "Lena Vogel छुट्टी कैलेंडर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Assign the right holiday calendar to Lena Vogel.",
+        "de": "Weise Lena Vogel den richtigen Feiertagskalender zu.",
+        "es": "Asigna a Lena Vogel el calendario de festivos correcto.",
+        "ar": "عيّن تقويم العطلات الصحيح لـ Lena Vogel.",
+        "hi": "Lena Vogel को सही छुट्टी कैलेंडर दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "German public holiday",
+        "de": "deutschen Feiertagskalender",
+        "es": "festivos alemán",
+        "ar": "العطلات الرسمية الألمانية",
+        "hi": "जर्मन सार्वजनिक छुट्टियों"
+       },
+       "Lena Vogel"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "multihop-field-seal-kit",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -55,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Pump model PX-400 needs seal kit SK-19 at every service.",
+        "de": "Pumpenmodell PX-400 braucht bei jedem Service den Dichtungssatz SK-19.",
+        "es": "El modelo de bomba PX-400 necesita el kit de juntas SK-19 en cada revisión.",
+        "ar": "طراز المضخة PX-400 يحتاج إلى طقم الحشوات SK-19 في كل صيانة.",
+        "hi": "पंप मॉडल PX-400 को हर सर्विस में सील किट SK-19 चाहिए।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Pump model PX-250 uses seal kit SK-12.",
+        "de": "Pumpenmodell PX-250 nutzt Dichtungssatz SK-12.",
+        "es": "El modelo PX-250 usa el kit de juntas SK-12.",
+        "ar": "طراز المضخة PX-250 يستخدم طقم الحشوات SK-12.",
+        "hi": "पंप मॉडल PX-250 में सील किट SK-12 लगती है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -7,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183.",
+        "de": "Die Station Riverside betreibt zwei PX-400-Pumpen mit den Seriennummern R-1182 und R-1183.",
+        "es": "La estación Riverside tiene dos bombas PX-400, con números de serie R-1182 y R-1183.",
+        "ar": "تشغّل محطة Riverside مضختين PX-400 برقمي التسلسل R-1182 وR-1183.",
+        "hi": "Riverside स्टेशन पर दो PX-400 पंप चलते हैं, सीरियल नंबर R-1182 और R-1183।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What parts should I bring for the Riverside pump service?",
+        "de": "Welche Teile soll ich zum Pumpenservice in Riverside mitnehmen?",
+        "es": "¿Qué piezas llevo para la revisión de las bombas de Riverside?",
+        "ar": "ما القطع التي يجب أن أحضرها لصيانة مضخات Riverside؟",
+        "hi": "Riverside पंप सर्विस के लिए मुझे कौन से पार्ट्स ले जाने चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm loading the van for tomorrow's Riverside visit.",
+        "de": "Ich belade den Transporter für den Einsatz morgen in Riverside.",
+        "es": "Estoy cargando la furgoneta para la visita de mañana a Riverside.",
+        "ar": "أحمّل الشاحنة لزيارة Riverside غدًا.",
+        "hi": "मैं कल Riverside जाने के लिए वैन लोड कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which seal kits do the Riverside pumps take?",
+        "de": "Welche Dichtungssätze brauchen die Pumpen in Riverside?",
+        "es": "¿Qué kits de juntas llevan las bombas de Riverside?",
+        "ar": "ما أطقم الحشوات التي تحتاجها مضخات Riverside؟",
+        "hi": "Riverside के पंपों में कौन सी सील किट लगती है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat parts for riversid pump servise",
+        "de": "welche teile für riversid pumpn service",
+        "es": "que piesas para el servicio de bombas riversid",
+        "ar": "ايش القطع لصيانه مضخات ريفرسايد",
+        "hi": "रिवरसाइड पंप सर्विस के लिये कौनसे पार्ट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Tomorrow I'm doing the scheduled service on both pumps at Riverside, it's a two-hour drive and the stores counter closes at five, so I need to grab every part I'll need tonight — what should be in the van?",
+        "de": "Morgen mache ich den planmäßigen Service an beiden Pumpen in Riverside, es sind zwei Stunden Fahrt und die Teileausgabe schließt um fünf, also muss ich heute Abend alle nötigen Teile holen – was muss in den Transporter?",
+        "es": "Mañana hago la revisión programada de las dos bombas de Riverside; son dos horas de viaje y el almacén de piezas cierra a las cinco, así que tengo que recoger esta noche todo lo que necesite. ¿Qué meto en la furgoneta?",
+        "ar": "غدًا أجري الصيانة المجدولة لكلتا المضختين في Riverside، والطريق ساعتان ومخزن القطع يغلق في الخامسة، لذا يجب أن آخذ كل القطع الليلة — ماذا يجب أن يكون في الشاحنة؟",
+        "hi": "कल मैं Riverside के दोनों पंपों की तय सर्विस कर रहा हूँ, दो घंटे का रास्ता है और स्टोर काउंटर पाँच बजे बंद हो जाता है, इसलिए आज रात ही सारे ज़रूरी पार्ट्स लेने हैं — वैन में क्या होना चाहिए?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Riverside pumps tomorrow.",
+        "de": "Morgen die Pumpen in Riverside.",
+        "es": "Mañana las bombas de Riverside.",
+        "ar": "مضخات Riverside غدًا.",
+        "hi": "कल Riverside के पंप।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The Riverside pumps don't use the SK-12 kit, right? Which one?",
+        "de": "Die Pumpen in Riverside nehmen nicht den SK-12-Satz, oder? Welchen dann?",
+        "es": "Las bombas de Riverside no usan el kit SK-12, ¿verdad? ¿Cuál entonces?",
+        "ar": "مضخات Riverside لا تستخدم الطقم SK-12، صحيح؟ أي طقم إذن؟",
+        "hi": "Riverside के पंपों में SK-12 किट नहीं लगती ना? फिर कौन सी?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You know the pumps at Riverside I mentioned last week — what kit do they need?",
+        "de": "Du kennst die Pumpen in Riverside, die ich letzte Woche erwähnt habe – welchen Satz brauchen sie?",
+        "es": "Las bombas de Riverside que mencioné la semana pasada, ¿qué kit necesitan?",
+        "ar": "المضخات في Riverside التي ذكرتها الأسبوع الماضي — أي طقم تحتاج؟",
+        "hi": "Riverside के जिन पंपों का मैंने पिछले हफ़्ते ज़िक्र किया था — उन्हें कौन सी किट चाहिए?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Riverside pump parts",
+        "de": "Teile Pumpen Riverside",
+        "es": "piezas bombas Riverside",
+        "ar": "قطع مضخات Riverside",
+        "hi": "Riverside पंप पार्ट्स"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List the parts for servicing the Riverside pumps.",
+        "de": "Liste die Teile für den Service der Pumpen in Riverside auf.",
+        "es": "Enumera las piezas para revisar las bombas de Riverside.",
+        "ar": "اذكر القطع اللازمة لصيانة مضخات Riverside.",
+        "hi": "Riverside पंपों की सर्विस के पार्ट्स की सूची दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "SK-19",
+       "R-1182"
+      ],
+      "answer": {
+       "contains": [
+        "SK-19"
+       ],
+       "absent": [
+        "SK-12"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

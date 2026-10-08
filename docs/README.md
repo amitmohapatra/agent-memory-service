@@ -89,6 +89,9 @@ and [deploy/search.md](deploy/search.md) (Qdrant shards, replicas and the tenant
   traceable to a file in `benchmark/results/`.
 - [`MULTILINGUAL-RUNTIME.md`](MULTILINGUAL-RUNTIME.md): how a query and a record in any
   language are encoded, indexed and verified.
+- [`eval/capabilities.md`](eval/capabilities.md): the capability eval suite - eleven memory
+  capabilities over five domains and five languages, through the real service, its baseline
+  and the no-regression gate every capability change is held to.
 - [`benchmark/reports/`](../benchmark/reports/README.md): the dated measurement reports the
   ADRs cite as evidence. Each describes the code as it was on its date.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): how to make a change, and the rules that do not bend.

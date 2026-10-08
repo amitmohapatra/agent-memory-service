@@ -21,7 +21,7 @@
 | `tests/security` | 4 | `security` | PostgreSQL | isolation: the property-based oracle, retrieval and graph reader matrices, tenant binding (chapter 7) — release blocking |
 | `tests/e2e` | 10 | `e2e` | PostgreSQL and Redis | full API flows over HTTP and the SDK, including the README's examples |
 | `tests/agent` | 13 | (`e2e` target) | PostgreSQL and Redis | an agent's whole lifecycle through the SDK alone: onboarding, keys, workspaces, revocation, edge cases |
-| `tests/eval` | 8 | `eval` | PostgreSQL and Redis | the quality gates: retrieval, memory, knowledge graph, grounding, tool memory, capability coverage |
+| `tests/eval` | 9 | `eval` | PostgreSQL and Redis | the quality gates: retrieval, memory, knowledge graph, grounding, tool memory, capability coverage, and the capability eval suite's fast slice |
 | `tests/failure` | 1 | `failure` | PostgreSQL and Redis | worker kill, cache flush, blob outage, index rebuild, authorization outage |
 
 Three more markers select tests that need what CI does not have: `docker` (a Docker daemon
@@ -183,6 +183,7 @@ benchmarks run with the real encoders, PostgreSQL and Qdrant:
 | Do answers come out right? (generate, then grade with a model) | `make bench-locomo-judged`, `make bench-longmemeval` | ADR 0027 evidence; `benchmark/reports/` |
 | Document retrieval quality, and twelve languages | `make bench-runtime-retrieval` (SciFact, XQuAD), `make bench-external` | `phase7/`; ADR 0024, ADR 0025 |
 | `/v1/context` and `/v1/recall` latency, model off | `make bench-context-latency` | `overhaul/context_latency_*.json`; `docs/MEASUREMENTS.md` §8 |
+| Do the eleven memory capabilities work, per language and domain, and does a change regress any? | `make eval-capabilities MODE=nollm\|llm\|harness`, `make eval-capabilities-gate` | `capabilities/`, `capability_gate.json`; [the capability eval suite](../eval/capabilities.md) |
 | Empty, garbage and hostile input | `make bench-degenerate` | `degenerate*.json`; `docs/MEASUREMENTS.md` §4 |
 | Throughput per model, for sizing | `make bench-model-throughput` (on the target VM) | `model_throughput.json` |
 | A deployed instance under load | `make load-test`, `make gates-network` | `load_test.json`, `*_network.json` |

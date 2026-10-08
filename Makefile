@@ -112,6 +112,41 @@ performance-test: ## Latency budgets (writes benchmark/results/performance.json)
 eval: ## Deterministic retrieval/memory evaluation gates
 	$(PY) pytest tests/eval -m "not models" -q
 
+.PHONY: eval-capabilities eval-capabilities-scale eval-capabilities-gate eval-capabilities-baseline eval-capabilities-validate
+
+#: The capability eval suite (docs/eval/capabilities.md) against the running service at
+#: MEMORY_URL, through the SDK. CAPEVAL_ADMIN_KEY creates the eval tenant (capeval-<mode>) and
+#: issues the run's service key; MEMORY_WORKER_METRICS_URL adds the worker's queue gauges to
+#: the readiness wait. HEAVY wraps the run in a machine-wide lock (e.g. HEAVY='flock /tmp/heavy.lock')
+#: so the latency it records is not shared with another heavy job.
+MODE ?= nollm
+CAPEVAL_ARGS ?=
+HEAVY ?=
+HARNESS_PY ?= ../agent-harness/.venv/bin/python
+
+eval-capabilities: ## Capability eval against MEMORY_URL (MODE=nollm|llm|harness) -> benchmark/results/capabilities/$(MODE).json
+	@case "$(MODE)" in \
+	  nollm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode nollm $(CAPEVAL_ARGS) ;; \
+	  llm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode llm --sample llm $(CAPEVAL_ARGS) ;; \
+	  harness) $(HEAVY) $(HARNESS_PY) -m benchmark.capabilities.harness_mode --sample harness $(CAPEVAL_ARGS) ;; \
+	  *) echo "MODE must be nollm, llm or harness" >&2; exit 2 ;; \
+	esac
+
+eval-capabilities-scale: ## Opt-in ~1M-token tenant for capability 7 (--scale large, English)
+	$(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode nollm --capabilities scale \
+	  --languages en --scale large --out benchmark/results/capabilities/scale_large.json $(CAPEVAL_ARGS)
+
+eval-capabilities-gate: ## Fail on any capability drop or a context p95 rise > 10% (benchmark/results/capability_gate.json)
+	$(PY) python -m benchmark.capabilities.gate check benchmark/results/capabilities/$(MODE).json
+
+eval-capabilities-baseline: ## Record the measured runs as the capability gate's thresholds
+	@# every run of a mode is merged: a cell's threshold is the lowest any repeat reached
+	@# a run the model failed (harness.failed.json) is kept for inspection, never a threshold
+	$(PY) python -m benchmark.capabilities.gate record $(filter-out %.failed.json,$(wildcard benchmark/results/capabilities/nollm*.json benchmark/results/capabilities/llm*.json benchmark/results/capabilities/harness*.json))
+
+eval-capabilities-validate: ## Every capability assertion is satisfiable in every language
+	$(PY) python -m benchmark.capabilities.validate
+
 bench-retrieval: ## Retrieval benchmark
 	$(PY) python -m benchmark.retrieval
 

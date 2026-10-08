@@ -1,0 +1,5328 @@
+{
+  "by_capability": {
+    "abstention": {
+      "accuracy": 1.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 1.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 1.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 1.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 1.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 1.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 1.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 1.0,
+          "n": 254
+        },
+        "heldout": {
+          "accuracy": 1.0,
+          "n": 250
+        }
+      },
+      "n": 504,
+      "origin_cases": 1.0,
+      "partial_credit": null,
+      "retail": 1.0
+    },
+    "explicit_personalization": {
+      "accuracy": 0.0542,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.2,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0565,
+          "n": 354
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0536,
+          "n": 56
+        },
+        "imperative": {
+          "accuracy": 0.0536,
+          "n": 56
+        },
+        "implicit": {
+          "accuracy": 0.0545,
+          "n": 55
+        },
+        "indirect": {
+          "accuracy": 0.0536,
+          "n": 56
+        },
+        "later": {
+          "accuracy": 0.0545,
+          "n": 55
+        },
+        "long_winded": {
+          "accuracy": 0.0545,
+          "n": 55
+        },
+        "negated": {
+          "accuracy": 0.0545,
+          "n": 55
+        },
+        "paraphrase": {
+          "accuracy": 0.0545,
+          "n": 55
+        },
+        "terse": {
+          "accuracy": 0.0536,
+          "n": 56
+        },
+        "typo": {
+          "accuracy": 0.0545,
+          "n": 55
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "en": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0329,
+          "n": 304
+        },
+        "heldout": {
+          "accuracy": 0.08,
+          "n": 250
+        }
+      },
+      "n": 554,
+      "origin_cases": 0.0,
+      "partial_credit": 0.1119,
+      "retail": 0.0565
+    },
+    "forgetting_decay": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 250
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 254
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0,
+      "retail": 0.0
+    },
+    "implicit_personalization": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 254
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 250
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0,
+      "retail": 0.0
+    },
+    "multi_hop": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 250
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 254
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0099,
+      "retail": 0.0
+    },
+    "procedural_skill": {
+      "accuracy": 0.0992,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 1.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.098,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.098,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.1,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.098,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.1,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.1,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.1,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.1,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.098,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.1,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 250
+        },
+        "heldout": {
+          "accuracy": 0.1969,
+          "n": 254
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.1091,
+      "retail": 0.0
+    },
+    "scale": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 254
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 250
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0,
+      "retail": 0.0
+    },
+    "single_fact_recall": {
+      "accuracy": 0.0198,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0329,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.02,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.04,
+          "n": 250
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 254
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0198,
+      "retail": 0.0329
+    },
+    "temporal_recency": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 250
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 254
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0,
+      "retail": 0.0
+    },
+    "test_time_learning": {
+      "accuracy": 0.0,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.0,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0,
+          "n": 254
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 250
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0,
+      "retail": 0.0
+    },
+    "update_contradiction": {
+      "accuracy": 0.0198,
+      "by_domain": {
+        "field_service": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "finance_hr": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "it_support": {
+          "accuracy": 0.0,
+          "n": 50
+        },
+        "personal": {
+          "accuracy": 0.2,
+          "n": 50
+        },
+        "retail": {
+          "accuracy": 0.0,
+          "n": 304
+        }
+      },
+      "by_kind": {
+        "direct": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "imperative": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "implicit": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "indirect": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "later": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "long_winded": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "negated": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "paraphrase": {
+          "accuracy": 0.02,
+          "n": 50
+        },
+        "terse": {
+          "accuracy": 0.0196,
+          "n": 51
+        },
+        "typo": {
+          "accuracy": 0.02,
+          "n": 50
+        }
+      },
+      "by_language": {
+        "ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "by_split": {
+        "dev": {
+          "accuracy": 0.0394,
+          "n": 254
+        },
+        "heldout": {
+          "accuracy": 0.0,
+          "n": 250
+        }
+      },
+      "n": 504,
+      "origin_cases": 0.0,
+      "partial_credit": 0.0198,
+      "retail": 0.0
+    }
+  },
+  "cells": [
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "ar",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "de",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "en",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "es",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "hi",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "abstention",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "ar",
+      "n": 110,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "de",
+      "n": 110,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "en",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "es",
+      "n": 110,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "hi",
+      "n": 110,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "implicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "procedural_skill",
+      "language": "ar",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "procedural_skill",
+      "language": "de",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "procedural_skill",
+      "language": "en",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "procedural_skill",
+      "language": "es",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "procedural_skill",
+      "language": "hi",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "procedural_skill",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "single_fact_recall",
+      "language": "en",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "update_contradiction",
+      "language": "en",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.21,
+      "capability": "abstention",
+      "language": "ar",
+      "n": 100,
+      "passed": 21,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.18,
+      "capability": "abstention",
+      "language": "de",
+      "n": 100,
+      "passed": 18,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "abstention",
+      "language": "en",
+      "n": 100,
+      "passed": 10,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.11,
+      "capability": "abstention",
+      "language": "es",
+      "n": 100,
+      "passed": 11,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.16,
+      "capability": "abstention",
+      "language": "hi",
+      "n": 100,
+      "passed": 16,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "abstention",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3273,
+      "capability": "explicit_personalization",
+      "language": "ar",
+      "n": 110,
+      "passed": 36,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.4364,
+      "capability": "explicit_personalization",
+      "language": "de",
+      "n": 110,
+      "passed": 48,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.9,
+      "capability": "explicit_personalization",
+      "language": "en",
+      "n": 110,
+      "passed": 99,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.4364,
+      "capability": "explicit_personalization",
+      "language": "es",
+      "n": 110,
+      "passed": 48,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3909,
+      "capability": "explicit_personalization",
+      "language": "hi",
+      "n": 110,
+      "passed": 43,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "explicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.19,
+      "capability": "forgetting_decay",
+      "language": "ar",
+      "n": 100,
+      "passed": 19,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2,
+      "capability": "forgetting_decay",
+      "language": "de",
+      "n": 100,
+      "passed": 20,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2,
+      "capability": "forgetting_decay",
+      "language": "en",
+      "n": 100,
+      "passed": 20,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2,
+      "capability": "forgetting_decay",
+      "language": "es",
+      "n": 100,
+      "passed": 20,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.19,
+      "capability": "forgetting_decay",
+      "language": "hi",
+      "n": 100,
+      "passed": 19,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.39,
+      "capability": "implicit_personalization",
+      "language": "ar",
+      "n": 100,
+      "passed": 39,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.47,
+      "capability": "implicit_personalization",
+      "language": "de",
+      "n": 100,
+      "passed": 47,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.45,
+      "capability": "implicit_personalization",
+      "language": "en",
+      "n": 100,
+      "passed": 45,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.55,
+      "capability": "implicit_personalization",
+      "language": "es",
+      "n": 100,
+      "passed": 55,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2,
+      "capability": "implicit_personalization",
+      "language": "hi",
+      "n": 100,
+      "passed": 20,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "multi_hop",
+      "language": "en",
+      "n": 100,
+      "passed": 10,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "multi_hop",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.14,
+      "capability": "procedural_skill",
+      "language": "ar",
+      "n": 100,
+      "passed": 14,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.29,
+      "capability": "procedural_skill",
+      "language": "de",
+      "n": 100,
+      "passed": 29,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.39,
+      "capability": "procedural_skill",
+      "language": "en",
+      "n": 100,
+      "passed": 39,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3,
+      "capability": "procedural_skill",
+      "language": "es",
+      "n": 100,
+      "passed": 30,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.16,
+      "capability": "procedural_skill",
+      "language": "hi",
+      "n": 100,
+      "passed": 16,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "procedural_skill",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3,
+      "capability": "single_fact_recall",
+      "language": "ar",
+      "n": 100,
+      "passed": 30,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3,
+      "capability": "single_fact_recall",
+      "language": "de",
+      "n": 100,
+      "passed": 30,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.4,
+      "capability": "single_fact_recall",
+      "language": "en",
+      "n": 100,
+      "passed": 40,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.3,
+      "capability": "single_fact_recall",
+      "language": "es",
+      "n": 100,
+      "passed": 30,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.28,
+      "capability": "single_fact_recall",
+      "language": "hi",
+      "n": 100,
+      "passed": 28,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "single_fact_recall",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.92,
+      "capability": "temporal_recency",
+      "language": "ar",
+      "n": 100,
+      "passed": 92,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.97,
+      "capability": "temporal_recency",
+      "language": "de",
+      "n": 100,
+      "passed": 97,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.96,
+      "capability": "temporal_recency",
+      "language": "en",
+      "n": 100,
+      "passed": 96,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.94,
+      "capability": "temporal_recency",
+      "language": "es",
+      "n": 100,
+      "passed": 94,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.95,
+      "capability": "temporal_recency",
+      "language": "hi",
+      "n": 100,
+      "passed": 95,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "temporal_recency",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.85,
+      "capability": "update_contradiction",
+      "language": "ar",
+      "n": 100,
+      "passed": 85,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.95,
+      "capability": "update_contradiction",
+      "language": "de",
+      "n": 100,
+      "passed": 95,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.94,
+      "capability": "update_contradiction",
+      "language": "en",
+      "n": 100,
+      "passed": 94,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.96,
+      "capability": "update_contradiction",
+      "language": "es",
+      "n": 100,
+      "passed": 96,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.86,
+      "capability": "update_contradiction",
+      "language": "hi",
+      "n": 100,
+      "passed": 86,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "update_contradiction",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "same_session",
+      "surface": "context"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "ar",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "de",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "en",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "es",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.2727,
+      "capability": "explicit_personalization",
+      "language": "hi",
+      "n": 110,
+      "passed": 30,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "explicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "forgetting_decay",
+      "language": "ar",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "forgetting_decay",
+      "language": "de",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "forgetting_decay",
+      "language": "en",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "forgetting_decay",
+      "language": "es",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "forgetting_decay",
+      "language": "hi",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "forgetting_decay",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "ar",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "de",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "en",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "es",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "hi",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "implicit_personalization",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.6,
+      "capability": "multi_hop",
+      "language": "ar",
+      "n": 100,
+      "passed": 60,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.6,
+      "capability": "multi_hop",
+      "language": "de",
+      "n": 100,
+      "passed": 60,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.6,
+      "capability": "multi_hop",
+      "language": "en",
+      "n": 100,
+      "passed": 60,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.6,
+      "capability": "multi_hop",
+      "language": "es",
+      "n": 100,
+      "passed": 60,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.6,
+      "capability": "multi_hop",
+      "language": "hi",
+      "n": 100,
+      "passed": 60,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "multi_hop",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "procedural_skill",
+      "language": "ar",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.48,
+      "capability": "procedural_skill",
+      "language": "de",
+      "n": 100,
+      "passed": 48,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "procedural_skill",
+      "language": "en",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "procedural_skill",
+      "language": "es",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.5,
+      "capability": "procedural_skill",
+      "language": "hi",
+      "n": 100,
+      "passed": 50,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "procedural_skill",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "de",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "scale",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "ar",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "de",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "en",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "es",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "hi",
+      "n": 100,
+      "passed": 100,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 1.0,
+      "capability": "single_fact_recall",
+      "language": "mixed",
+      "n": 4,
+      "passed": 4,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.1,
+      "capability": "temporal_recency",
+      "language": "ar",
+      "n": 100,
+      "passed": 10,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.01,
+      "capability": "temporal_recency",
+      "language": "de",
+      "n": 100,
+      "passed": 1,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "temporal_recency",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.27,
+      "capability": "test_time_learning",
+      "language": "ar",
+      "n": 100,
+      "passed": 27,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.32,
+      "capability": "test_time_learning",
+      "language": "de",
+      "n": 100,
+      "passed": 32,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.12,
+      "capability": "test_time_learning",
+      "language": "en",
+      "n": 100,
+      "passed": 12,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.19,
+      "capability": "test_time_learning",
+      "language": "es",
+      "n": 100,
+      "passed": 19,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.18,
+      "capability": "test_time_learning",
+      "language": "hi",
+      "n": 100,
+      "passed": 18,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "test_time_learning",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "ar",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.02,
+      "capability": "update_contradiction",
+      "language": "de",
+      "n": 100,
+      "passed": 2,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "en",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "es",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "hi",
+      "n": 100,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    },
+    {
+      "accuracy": 0.0,
+      "capability": "update_contradiction",
+      "language": "mixed",
+      "n": 4,
+      "passed": 0,
+      "placement": "new_session",
+      "surface": "search"
+    }
+  ],
+  "dataset": {
+    "code_switched_scenarios": 11,
+    "domains": [
+      "retail",
+      "personal",
+      "it_support",
+      "finance_hr",
+      "field_service"
+    ],
+    "languages": [
+      "en",
+      "de",
+      "es",
+      "ar",
+      "hi"
+    ],
+    "per_capability": {
+      "abstention": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "explicit_personalization": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 6,
+        "heldout_queries": 5,
+        "phrasings": 110,
+        "queries": 11,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "forgetting_decay": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "implicit_personalization": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "multi_hop": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "procedural_skill": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "scale": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 1,
+        "scenarios": 5
+      },
+      "single_fact_recall": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "temporal_recency": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "test_time_learning": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      },
+      "update_contradiction": {
+        "code_switched_scenarios": 1,
+        "dev_queries": 5,
+        "heldout_queries": 5,
+        "phrasings": 100,
+        "queries": 10,
+        "retail_scenarios": 6,
+        "scenarios": 10
+      }
+    },
+    "phrasings_per_language": 1110,
+    "queries": 111,
+    "scenarios": 105,
+    "sha256": "600b1e5d758fa3efc5e697265d37cbc92ac89ae5ee635321c8612642cd70ec03"
+  },
+  "failures": {
+    "abstention": {
+      "examples": [],
+      "failed": 0,
+      "of": 504,
+      "reasons": {}
+    },
+    "explicit_personalization": {
+      "examples": [
+        {
+          "evidence_status": "INCOMPLETE",
+          "got": [
+            "profile: - Never assign me jobs north of the river on Fridays — I pick up my kids at 3.",
+            "memory: Never assign me jobs north of the river on Fridays — I pick up my kids at 3."
+          ],
+          "key": "explicit-field-no-north-fridays/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "J-12"
+          ],
+          "question": "Which jobs can I take this Friday?",
+          "reason": "missing_evidence"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [
+            "profile: - Always report our figures in EUR, never in USD."
+          ],
+          "key": "explicit-finance-eur-only/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "4.2"
+          ],
+          "question": "What was our Q2 revenue?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "COMPLETE",
+          "got": [
+            "profile: - Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window.",
+            "memory: Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window."
+          ],
+          "key": "explicit-it-trading-window/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "KB-2291"
+          ],
+          "question": "When can we patch the trading servers this week?",
+          "reason": "missing_evidence"
+        }
+      ],
+      "failed": 524,
+      "of": 554,
+      "reasons": {
+        "false_abstain": 483,
+        "missing_evidence": 41
+      }
+    },
+    "forgetting_decay": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "forget-field-temp-generator/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "UPS-4"
+          ],
+          "question": "What's the status of the power equipment currently at Site 4?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "forget-finance-old-vendor/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "PaperPoint"
+          ],
+          "question": "Which office-supply vendors are we currently paying?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "forget-it-decommissioned-db/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "db-01",
+            "db-03"
+          ],
+          "question": "Give me a health summary of our active database servers.",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 504
+      }
+    },
+    "implicit_personalization": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "implicit-field-medical/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "infection-control | IEC 62353"
+          ],
+          "question": "Write the checklist for tomorrow's job.",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "implicit-finance-germany/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "EUR | HGB | German"
+          ],
+          "question": "Draft a payment reminder for an overdue invoice.",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "implicit-it-mac-team/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "MacBook | Homebrew"
+          ],
+          "question": "How do I install the VPN client?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 503,
+        "missing_evidence": 1
+      }
+    },
+    "multi_hop": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "multihop-field-seal-kit/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "SK-19",
+            "R-1182"
+          ],
+          "question": "What parts should I bring for the Riverside pump service?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "multihop-finance-holiday-calendar/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "German public holiday",
+            "Lena Vogel"
+          ],
+          "question": "Which holiday calendar applies to Lena Vogel?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "multihop-it-payroll-reboot/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "payroll",
+            "02:00"
+          ],
+          "question": "Will payroll be down this weekend?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 504
+      }
+    },
+    "procedural_skill": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "procedure-field-service-report/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "signature",
+            "WO-4120"
+          ],
+          "question": "Write the service report for WO-4120.",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "procedure-finance-variance/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "⚠",
+            "10%"
+          ],
+          "question": "Give me the September variance report.",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "procedure-personal-metric-recipes/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "metric"
+          ],
+          "question": "Give me a pancake recipe.",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 454,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 448,
+        "missing_evidence": 6
+      }
+    },
+    "scale": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "scale-field-failures/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "2025-W28",
+            "2025-W29",
+            "2025-W30",
+            "2025-W31"
+          ],
+          "question": "Which three assets had the most failures in Q3 last year?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "scale-finance-travel/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "2025-W28",
+            "2025-W29",
+            "2025-W30",
+            "2025-W31"
+          ],
+          "question": "Which three departments spent the most on travel in Q3 last year?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "scale-it-incidents/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "2025-W28",
+            "2025-W29",
+            "2025-W30",
+            "2025-W31"
+          ],
+          "question": "Which three services had the most P1 incidents in Q3 last year?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 504
+      }
+    },
+    "single_fact_recall": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "recall-field-gate-code/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "5512"
+          ],
+          "question": "What's the gate code at Riverside pumping station?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "recall-finance-cost-centre/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "CC-4471"
+          ],
+          "question": "Which cost centre does the Lisbon offsite go to?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "recall-it-backup-console/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "10.20.4.15"
+          ],
+          "question": "What's the address of the backup appliance's admin console?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 494,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 494
+      }
+    },
+    "temporal_recency": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "temporal-field-compressor/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "replaced"
+          ],
+          "question": "Is the compressor at Site 12 working?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "temporal-finance-leave/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "is back"
+          ],
+          "question": "Is Maria Lopez available for the audit kickoff?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "temporal-it-vpn-incident/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "resolved"
+          ],
+          "question": "Is the Madrid VPN still down?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 504
+      }
+    },
+    "test_time_learning": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "correction-field-flange-torque/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "55 Nm"
+          ],
+          "question": "What torque for the PX-400 flange bolts?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "correction-finance-mileage/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "0.67"
+          ],
+          "question": "What's the mileage reimbursement rate?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "correction-it-account-unlock/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "Entra"
+          ],
+          "question": "How do I unlock a user's account?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 504,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 504
+      }
+    },
+    "update_contradiction": {
+      "examples": [
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "update-field-van-assignment/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "Peter Brandt"
+          ],
+          "question": "Who drives van #7?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "update-finance-approval-limit/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "1000"
+          ],
+          "question": "What's the team lead approval limit for expenses?",
+          "reason": "false_abstain"
+        },
+        {
+          "evidence_status": "INSUFFICIENT",
+          "got": [],
+          "key": "update-it-ticketing/q1/direct/en",
+          "leaks": [],
+          "missing": [
+            "Freshservice"
+          ],
+          "question": "Where should users log IT tickets?",
+          "reason": "false_abstain"
+        }
+      ],
+      "failed": 494,
+      "of": 504,
+      "reasons": {
+        "false_abstain": 494
+      }
+    }
+  },
+  "failures_by_surface": {
+    "context/same_session": {
+      "abstention": {
+        "examples": [
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183.",
+              "memory: Hilltop station has one older PX-250 pump.",
+              "fact: hilltop station has one older px-250 pump"
+            ],
+            "key": "abstain-field-hilltop-serial/q1/direct/en",
+            "leaks": [],
+            "missing": [],
+            "question": "What's the serial number of the pump at Hilltop?",
+            "reason": "no_abstain"
+          },
+          {
+            "evidence_status": "INCOMPLETE",
+            "got": [
+              "memory: Our CFO is Helen Park; she joined in January.",
+              "memory: Executive compensation is handled by the board's remuneration committee.",
+              "fact: our cfo is helen park; she joined in january"
+            ],
+            "key": "abstain-finance-cfo-salary/q1/direct/en",
+            "leaks": [],
+            "missing": [],
+            "question": "What is Helen Park's salary?",
+            "reason": "no_abstain"
+          },
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Admin credentials live in the team password vault, not in chat.",
+              "memory: The core router is a Cisco ISR 4331 in rack B2 of the server room.",
+              "fact: core router is a cisco isr 4331 in rack b2 of the server room"
+            ],
+            "key": "abstain-it-router-password/q1/direct/en",
+            "leaks": [],
+            "missing": [],
+            "question": "What's the admin password for the core router?",
+            "reason": "no_abstain"
+          }
+        ],
+        "failed": 428,
+        "of": 504,
+        "reasons": {
+          "no_abstain": 428
+        }
+      },
+      "explicit_personalization": {
+        "examples": [
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Store 12 sales last week: $48,730."
+            ],
+            "key": "explicit-retail-sales-rounding/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "nearest thousand"
+            ],
+            "question": "What were Store 12's sales last week?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "profile: - Never include items with a stock level of zero in my weekly category overviews unless I specifically type 'include out of stock'."
+            ],
+            "key": "explicit-retail-zero-stock/q1/indirect/en",
+            "leaks": [],
+            "missing": [
+              "AA-01"
+            ],
+            "question": "I'm walking Aisle 12 with the district manager in an hour.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: إيرادات الربع الثاني: EUR 4.2 مليون (USD 4.5 مليون بسعر يونيو)."
+            ],
+            "key": "explicit-finance-eur-only/q1/direct/ar",
+            "leaks": [],
+            "missing": [
+              "ولا تستخدم USD"
+            ],
+            "question": "كم كانت إيراداتنا في الربع الثاني؟",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 276,
+        "of": 554,
+        "reasons": {
+          "false_abstain": 43,
+          "missing_evidence": 233
+        }
+      },
+      "forgetting_decay": {
+        "examples": [
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed."
+            ],
+            "key": "forget-field-temp-generator/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "UPS-4"
+            ],
+            "question": "What's the status of the power equipment currently at Site 4?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: legacy-db-02 has been decommissioned and wiped; remove it from all reports."
+            ],
+            "key": "forget-it-decommissioned-db/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "db-01",
+              "db-03"
+            ],
+            "question": "Give me a health summary of our active database servers.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: The recall of lot L-2291 is closed; all units were destroyed."
+            ],
+            "key": "forget-retail-closed-recall/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "L-3307"
+            ],
+            "question": "Which recalls are still open?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 406,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 243,
+          "missing_evidence": 163
+        }
+      },
+      "implicit_personalization": {
+        "examples": [
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "implicit-field-medical/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "infection-control | IEC 62353"
+            ],
+            "question": "Write the checklist for tomorrow's job.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "implicit-finance-germany/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "EUR | HGB | German"
+            ],
+            "question": "Draft a payment reminder for an overdue invoice.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "implicit-it-mac-team/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "MacBook | Homebrew"
+            ],
+            "question": "How do I install the VPN client?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 294,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 294
+        }
+      },
+      "multi_hop": {
+        "examples": [
+          {
+            "evidence_status": "INCOMPLETE",
+            "got": [
+              "memory: Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183."
+            ],
+            "key": "multihop-field-seal-kit/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "SK-19"
+            ],
+            "question": "What parts should I bring for the Riverside pump service?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INCOMPLETE",
+            "got": [
+              "memory: Lena Vogel joined the Berlin office this month as an accountant.",
+              "fact: user:ceddcd2d84-013-en mentions Tom Reyes",
+              "fact: user:ceddcd2d84-013-en mentions Austin"
+            ],
+            "key": "multihop-finance-holiday-calendar/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "German public holiday"
+            ],
+            "question": "Which holiday calendar applies to Lena Vogel?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: Change scheduled: host app-07 will be rebooted for kernel patching on Saturday at 02:00."
+            ],
+            "key": "multihop-it-payroll-reboot/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "payroll"
+            ],
+            "question": "Will payroll be down this weekend?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 494,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 79,
+          "missing_evidence": 415
+        }
+      },
+      "procedural_skill": {
+        "examples": [
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Job WO-4120 at Hilltop: replaced the PX-250 impeller and seal kit SK-12; pump tested OK."
+            ],
+            "key": "procedure-field-service-report/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "signature"
+            ],
+            "question": "Write the service report for WO-4120.",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INCOMPLETE",
+            "got": [
+              "memory: September actuals: travel $18,400 vs budget $15,000; software $9,100 vs budget $9,500."
+            ],
+            "key": "procedure-finance-variance/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "⚠",
+              "10%"
+            ],
+            "question": "Give me the September variance report.",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "procedure-personal-metric-recipes/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "metric"
+            ],
+            "question": "Give me a pancake recipe.",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 376,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 143,
+          "missing_evidence": 233
+        }
+      },
+      "scale": {
+        "examples": [
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: AST-V401 (valve bank V401): 2 failures",
+              "memory: AST-C202 (compressor C202): 2 failures",
+              "memory: AST-B701 (boiler B701): 2 failures"
+            ],
+            "key": "scale-field-failures/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three assets had the most failures in Q3 last year?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: Weekly travel expense claims 2026-W41:",
+              "memory: DEP-ENG (Engineering): $2133"
+            ],
+            "key": "scale-finance-travel/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three departments spent the most on travel in Q3 last year?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": "COMPLETE",
+            "got": [
+              "memory: SVC-MAIL (email): 1 P1 incidents",
+              "memory: SVC-PAY (payroll): 1 P1 incidents",
+              "memory: SVC-CRM (CRM): 1 P1 incidents"
+            ],
+            "key": "scale-it-incidents/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three services had the most P1 incidents in Q3 last year?",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 504,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 161,
+          "missing_evidence": 343
+        }
+      },
+      "single_fact_recall": {
+        "examples": [
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: Log 2.5 hours on the Hilltop valve inspection."
+            ],
+            "key": "recall-field-gate-code/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "5512"
+            ],
+            "question": "What's the gate code at Riverside pumping station?",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "recall-it-backup-console/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "10.20.4.15"
+            ],
+            "question": "What's the address of the backup appliance's admin console?",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: My bike lock code is 6-6-1-9, by the way."
+            ],
+            "key": "recall-personal-locker/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "22-08-41"
+            ],
+            "question": "What's the combination for my gym locker?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 346,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 225,
+          "missing_evidence": 121
+        }
+      },
+      "temporal_recency": {
+        "examples": [
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "temporal-finance-leave/q1/indirect/en",
+            "leaks": [],
+            "missing": [
+              "is back"
+            ],
+            "question": "I want accounts payable represented at Thursday's audit meeting.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "temporal-personal-reading/q1/implicit/en",
+            "leaks": [],
+            "missing": [
+              "finished Dune"
+            ],
+            "question": "Book club wants my current read.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "temporal-retail-po-status/q1/implicit/en",
+            "leaks": [],
+            "missing": [
+              "DC-2"
+            ],
+            "question": "Still waiting on those tomatoes?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 26,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 26
+        }
+      },
+      "test_time_learning": {
+        "examples": [
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "correction-field-flange-torque/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "55 Nm"
+            ],
+            "question": "What torque for the PX-400 flange bolts?",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "correction-finance-mileage/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "0.67"
+            ],
+            "question": "What's the mileage reimbursement rate?",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "correction-it-account-unlock/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "Entra"
+            ],
+            "question": "How do I unlock a user's account?",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 504,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 504
+        }
+      },
+      "update_contradiction": {
+        "examples": [
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "update-it-ticketing/q1/imperative/en",
+            "leaks": [],
+            "missing": [
+              "Freshservice"
+            ],
+            "question": "Tell users where to raise IT tickets.",
+            "reason": "false_abstain"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [
+              "memory: Dave Morris has left the company. The spill response lead is now Kenji Ito, extension 233.",
+              "memory: Dave Morris has left the company."
+            ],
+            "key": "update-retail-spill-contact/q1/indirect/en",
+            "leaks": [
+              "Dave Morris"
+            ],
+            "missing": [],
+            "question": "A bottle of bleach just broke in the stockroom.",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": "INSUFFICIENT",
+            "got": [],
+            "key": "update-personal-moved/q1/imperative/ar",
+            "leaks": [],
+            "missing": [
+              "Austin"
+            ],
+            "question": "اقترح مكانًا جيدًا للفطور المتأخر قرب منزلي.",
+            "reason": "false_abstain"
+          }
+        ],
+        "failed": 44,
+        "of": 504,
+        "reasons": {
+          "false_abstain": 42,
+          "stale_leak": 2
+        }
+      }
+    },
+    "search/new_session": {
+      "explicit_personalization": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "memory: Never assign me jobs north of the river on Fridays — I pick up my kids at 3.",
+              "message: USER: Never assign me jobs north of the river on Fridays — I pick up my kids at 3.",
+              "episode: [2026-08-19] conversation user: Never assign me jobs north of the river on Fridays — I pick up my kids at 3."
+            ],
+            "key": "explicit-field-no-north-fridays/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "J-12"
+            ],
+            "question": "Which jobs can I take this Friday?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "memory: Always report our figures in EUR, never in USD.",
+              "message: USER: Always report our figures in EUR, never in USD.",
+              "episode: [2026-07-30] conversation user: Always report our figures in EUR, never in USD."
+            ],
+            "key": "explicit-finance-eur-only/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "4.2"
+            ],
+            "question": "What was our Q2 revenue?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "memory: Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window.",
+              "message: USER: Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window.",
+              "episode: [2026-08-24] conversation user: Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window."
+            ],
+            "key": "explicit-it-trading-window/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "KB-2291"
+            ],
+            "question": "When can we patch the trading servers this week?",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 404,
+        "of": 554,
+        "reasons": {
+          "missing_evidence": 404
+        }
+      },
+      "forgetting_decay": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-10-06] conversation user: Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed.",
+              "message: USER: Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed."
+            ],
+            "key": "forget-field-temp-generator/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "UPS-4"
+            ],
+            "question": "What's the status of the power equipment currently at Site 4?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-10-06] conversation user: legacy-db-02 has been decommissioned and wiped; remove it from all reports."
+            ],
+            "key": "forget-it-decommissioned-db/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "db-01",
+              "db-03"
+            ],
+            "question": "Give me a health summary of our active database servers.",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-10-04] conversation user: Store 140 has closed permanently; it can't receive transfers anymore.",
+              "message: USER: Store 140 has closed permanently; it can't receive transfers anymore."
+            ],
+            "key": "forget-retail-closed-store/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "Store 112"
+            ],
+            "question": "Which stores can we send transfers to?",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 254,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 254
+        }
+      },
+      "implicit_personalization": {
+        "examples": [],
+        "failed": 0,
+        "of": 504,
+        "reasons": {}
+      },
+      "multi_hop": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-08-29] conversation user: The payroll service runs on host app-07. user: The intranet wiki runs on app-03.",
+              "message: USER: The payroll service runs on host app-07."
+            ],
+            "key": "multihop-it-payroll-reboot/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "02:00"
+            ],
+            "question": "Will payroll be down this weekend?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-08-09] conversation user: Safety rule: every aerosol product is classed as hazmat and has to be stored in Cage H2.",
+              "message: USER: Safety rule: every aerosol product is classed as hazmat and has to be stored in Cage H2."
+            ],
+            "key": "multihop-retail-aerosol-cage/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "ColorMax"
+            ],
+            "question": "Where should the ColorMax delivery be stored?",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-07-30] conversation user: Anything labelled keep-frozen must be in Freezer F2 within 15 minutes of arrival.",
+              "message: USER: Anything labelled keep-frozen must be in Freezer F2 within 15 minutes of arrival."
+            ],
+            "key": "multihop-retail-frozen-dock/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "Polar Treats"
+            ],
+            "question": "What do we do with the Polar Treats delivery?",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 200,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 200
+        }
+      },
+      "procedural_skill": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-03] conversation user: Every service report I ask for must end with a parts-used list and a customer signature line.",
+              "message: USER: Every service report I ask for must end with a parts-used list and a customer signature line."
+            ],
+            "key": "procedure-field-service-report/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "WO-4120"
+            ],
+            "question": "Write the service report for WO-4120.",
+            "reason": "missing_evidence"
+          },
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "procedure-it-mfa-skill/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "iam-reset_mfa",
+              "mail-send_notice"
+            ],
+            "question": "Reset multi-factor authentication for a locked-out user.",
+            "reason": "not_retrieved"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-08] conversation user: For any hazmat incident report, always start with the UN number and the SDS reference, then the location, th",
+              "message: USER: For any hazmat incident report, always start with the UN number and the SDS reference, then the location, then the action taken.",
+              "episode: [2026-10-02] conversation user: Draft a short note thanking the night crew for the inventory count. user: What time does the bank courier co"
+            ],
+            "key": "procedure-retail-hazmat-report/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "UN1791"
+            ],
+            "question": "Write up an incident report for the leaking bleach drum in aisle 3.",
+            "reason": "missing_evidence"
+          }
+        ],
+        "failed": 252,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 202,
+          "not_retrieved": 50
+        }
+      },
+      "scale": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "scale-field-failures/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three assets had the most failures in Q3 last year?",
+            "reason": "not_retrieved"
+          },
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "scale-finance-travel/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three departments spent the most on travel in Q3 last year?",
+            "reason": "not_retrieved"
+          },
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "scale-it-incidents/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "2025-W28",
+              "2025-W29",
+              "2025-W30",
+              "2025-W31"
+            ],
+            "question": "Which three services had the most P1 incidents in Q3 last year?",
+            "reason": "not_retrieved"
+          }
+        ],
+        "failed": 504,
+        "of": 504,
+        "reasons": {
+          "not_retrieved": 504
+        }
+      },
+      "single_fact_recall": {
+        "examples": [],
+        "failed": 0,
+        "of": 504,
+        "reasons": {}
+      },
+      "temporal_recency": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "temporal-field-compressor/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "replaced"
+            ],
+            "question": "Is the compressor at Site 12 working?",
+            "reason": "not_retrieved"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-08-19] conversation user: Maria Lopez from accounts payable is on parental leave until further notice.",
+              "message: USER: Maria Lopez is back from parental leave as of Monday and taking her old desk again.",
+              "episode: [2026-10-05] conversation user: Maria Lopez is back from parental leave as of Monday and taking her old desk again."
+            ],
+            "key": "temporal-finance-leave/q1/direct/en",
+            "leaks": [
+              "until further notice"
+            ],
+            "missing": [],
+            "question": "Is Maria Lopez available for the audit kickoff?",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": null,
+            "got": [],
+            "key": "temporal-it-vpn-incident/q1/direct/en",
+            "leaks": [],
+            "missing": [
+              "resolved"
+            ],
+            "question": "Is the Madrid VPN still down?",
+            "reason": "not_retrieved"
+          }
+        ],
+        "failed": 493,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 1,
+          "not_retrieved": 200,
+          "stale_leak": 292
+        }
+      },
+      "test_time_learning": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-20] conversation user: What torque do the flange bolts on the PX-400 take? assistant: Torque the PX-400 flange bolts to 40 Nm. user",
+              "message: USER: What torque do the flange bolts on the PX-400 take?",
+              "episode: [2026-10-05] conversation user: Can you list tomorrow's deliveries?"
+            ],
+            "key": "correction-field-flange-torque/q1/direct/en",
+            "leaks": [
+              "40 Nm"
+            ],
+            "missing": [],
+            "question": "What torque for the PX-400 flange bolts?",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-13] conversation user: What's our mileage reimbursement rate? assistant: Mileage is reimbursed at $0.58 per mile. user: Not anymore",
+              "message: USER: What's our mileage reimbursement rate?",
+              "episode: [2026-10-05] conversation user: Can you list tomorrow's deliveries?"
+            ],
+            "key": "correction-finance-mileage/q1/direct/en",
+            "leaks": [
+              "0.58"
+            ],
+            "missing": [],
+            "question": "What's the mileage reimbursement rate?",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-24] conversation user: How do I unlock a user's AD account? assistant: Unlock it in the old Helpdesk Tool under Accounts. user: We ",
+              "message: USER: How do I unlock a user's AD account?",
+              "episode: [2026-10-05] conversation user: Can you list tomorrow's deliveries?"
+            ],
+            "key": "correction-it-account-unlock/q1/direct/en",
+            "leaks": [
+              "Helpdesk Tool"
+            ],
+            "missing": [],
+            "question": "How do I unlock a user's account?",
+            "reason": "stale_leak"
+          }
+        ],
+        "failed": 396,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 17,
+          "stale_leak": 379
+        }
+      },
+      "update_contradiction": {
+        "examples": [
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-10-03] conversation user: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.",
+              "message: USER: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.",
+              "episode: [2026-07-10] conversation user: Service van #7 is assigned to Ana Silva."
+            ],
+            "key": "update-field-van-assignment/q1/direct/en",
+            "leaks": [
+              "Ana Silva"
+            ],
+            "missing": [],
+            "question": "Who drives van #7?",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-09-24] conversation user: Policy update: the team lead expense approval limit was raised to $1,000.",
+              "message: USER: Policy update: the team lead expense approval limit was raised to $1,000.",
+              "episode: [2026-05-11] conversation user: Team leads can approve expenses up to $500."
+            ],
+            "key": "update-finance-approval-limit/q1/direct/en",
+            "leaks": [
+              "$500"
+            ],
+            "missing": [],
+            "question": "What's the team lead approval limit for expenses?",
+            "reason": "stale_leak"
+          },
+          {
+            "evidence_status": null,
+            "got": [
+              "episode: [2026-06-10] conversation user: Users log IT tickets in Zendesk.",
+              "message: USER: Users log IT tickets in Zendesk.",
+              "episode: [2026-09-28] conversation user: We migrated the helpdesk from Zendesk to Freshservice; the old Zendesk queue is read-only."
+            ],
+            "key": "update-it-ticketing/q1/direct/en",
+            "leaks": [
+              "Zendesk"
+            ],
+            "missing": [],
+            "question": "Where should users log IT tickets?",
+            "reason": "stale_leak"
+          }
+        ],
+        "failed": 502,
+        "of": 504,
+        "reasons": {
+          "missing_evidence": 25,
+          "stale_leak": 477
+        }
+      }
+    }
+  },
+  "gate": "capability",
+  "meta": {
+    "ask_seconds": 612.4,
+    "host_load_during_asks": {
+      "cpu_count": 4,
+      "latency_trustworthy": false,
+      "loadavg_1m_max": 5.6,
+      "loadavg_1m_mean": 2.8,
+      "max_load_per_core": 1.4,
+      "samples": 123,
+      "threshold_load_per_core": 1.0
+    },
+    "ingestion": {
+      "corpus_tokens": {
+        "scale-field-failures/ar": 14812,
+        "scale-field-failures/de": 16511,
+        "scale-field-failures/en": 16195,
+        "scale-field-failures/es": 17024,
+        "scale-field-failures/hi": 16313,
+        "scale-finance-travel/ar": 9663,
+        "scale-finance-travel/de": 9821,
+        "scale-finance-travel/en": 9228,
+        "scale-finance-travel/es": 9386,
+        "scale-finance-travel/hi": 8952,
+        "scale-it-incidents/ar": 14575,
+        "scale-it-incidents/de": 15523,
+        "scale-it-incidents/en": 15089,
+        "scale-it-incidents/es": 17419,
+        "scale-it-incidents/hi": 14654,
+        "scale-personal-spending/ar": 11017,
+        "scale-personal-spending/de": 12321,
+        "scale-personal-spending/en": 11452,
+        "scale-personal-spending/es": 11965,
+        "scale-personal-spending/hi": 10978,
+        "scale-retail-three-years/ar": 58540,
+        "scale-retail-three-years/de": 67841,
+        "scale-retail-three-years/en": 62435,
+        "scale-retail-three-years/es": 69911,
+        "scale-retail-three-years/hi": 62039,
+        "scale-retail-three-years/mixed": 62435
+      },
+      "failed_jobs": 0,
+      "failed_writes": [],
+      "jobs": 10948,
+      "per_scenario_write_seconds": {
+        "max": 177.44,
+        "p50": 0.75,
+        "p95": 27.32
+      },
+      "settle": {
+        "outbox": 0.0,
+        "probes": 531,
+        "probes_found": 0,
+        "probes_missing": [
+          "recall-retail-hazmat-code/en",
+          "recall-retail-hazmat-code/de",
+          "recall-retail-hazmat-code/es",
+          "recall-retail-hazmat-code/ar",
+          "recall-retail-hazmat-code/hi",
+          "recall-retail-hazmat-code/mixed",
+          "recall-it-backup-console/en",
+          "recall-it-backup-console/de",
+          "recall-it-backup-console/es",
+          "recall-it-backup-console/ar",
+          "recall-it-backup-console/hi",
+          "recall-retail-upc/en",
+          "recall-retail-upc/de",
+          "recall-retail-upc/es",
+          "recall-retail-upc/ar",
+          "recall-retail-upc/hi",
+          "recall-retail-transfer-cutoff/en",
+          "recall-retail-transfer-cutoff/de",
+          "recall-retail-transfer-cutoff/es",
+          "recall-retail-transfer-cutoff/ar",
+          "recall-retail-transfer-cutoff/hi",
+          "recall-finance-cost-centre/en",
+          "recall-finance-cost-centre/de",
+          "recall-finance-cost-centre/es",
+          "recall-finance-cost-centre/ar",
+          "recall-finance-cost-centre/hi",
+          "recall-retail-supplier-account/en",
+          "recall-retail-supplier-account/de",
+          "recall-retail-supplier-account/es",
+          "recall-retail-supplier-account/ar",
+          "recall-retail-supplier-account/hi",
+          "recall-field-gate-code/en",
+          "recall-field-gate-code/de",
+          "recall-field-gate-code/es",
+          "recall-field-gate-code/ar",
+          "recall-field-gate-code/hi",
+          "recall-retail-recall-contact/en",
+          "recall-retail-recall-contact/de",
+          "recall-retail-recall-contact/es",
+          "recall-retail-recall-contact/ar",
+          "recall-retail-recall-contact/hi",
+          "recall-personal-locker/en",
+          "recall-personal-locker/de",
+          "recall-personal-locker/es",
+          "recall-personal-locker/ar",
+          "recall-personal-locker/hi",
+          "recall-retail-dock-door/en",
+          "recall-retail-dock-door/de",
+          "recall-retail-dock-door/es",
+          "recall-retail-dock-door/ar",
+          "recall-retail-dock-door/hi",
+          "multihop-retail-holiday-trees/en",
+          "multihop-retail-holiday-trees/de",
+          "multihop-retail-holiday-trees/es",
+          "multihop-retail-holiday-trees/ar",
+          "multihop-retail-holiday-trees/hi",
+          "multihop-retail-holiday-trees/mixed",
+          "multihop-retail-frozen-dock/en",
+          "multihop-retail-frozen-dock/de",
+          "multihop-retail-frozen-dock/es",
+          "multihop-retail-frozen-dock/ar",
+          "multihop-retail-frozen-dock/hi",
+          "multihop-retail-aerosol-cage/en",
+          "multihop-retail-aerosol-cage/de",
+          "multihop-retail-aerosol-cage/es",
+          "multihop-retail-aerosol-cage/ar",
+          "multihop-retail-aerosol-cage/hi",
+          "multihop-finance-holiday-calendar/en",
+          "multihop-finance-holiday-calendar/de",
+          "multihop-finance-holiday-calendar/es",
+          "multihop-finance-holiday-calendar/ar",
+          "multihop-finance-holiday-calendar/hi",
+          "multihop-personal-london-art/en",
+          "multihop-personal-london-art/de",
+          "multihop-personal-london-art/es",
+          "multihop-personal-london-art/ar",
+          "multihop-personal-london-art/hi",
+          "multihop-retail-promo-region/en",
+          "multihop-retail-promo-region/de",
+          "multihop-retail-promo-region/es",
+          "multihop-retail-promo-region/ar",
+          "multihop-retail-promo-region/hi",
+          "multihop-retail-po-supplier/en",
+          "multihop-retail-po-supplier/de",
+          "multihop-retail-po-supplier/es",
+          "multihop-retail-po-supplier/ar",
+          "multihop-retail-po-supplier/hi",
+          "multihop-it-payroll-reboot/en",
+          "multihop-it-payroll-reboot/de",
+          "multihop-it-payroll-reboot/es",
+          "multihop-it-payroll-reboot/ar",
+          "multihop-it-payroll-reboot/hi",
+          "multihop-retail-recall-lot/en",
+          "multihop-retail-recall-lot/de",
+          "multihop-retail-recall-lot/es",
+          "multihop-retail-recall-lot/ar",
+          "multihop-retail-recall-lot/hi",
+          "multihop-field-seal-kit/en",
+          "multihop-field-seal-kit/de",
+          "multihop-field-seal-kit/es",
+          "multihop-field-seal-kit/ar",
+          "multihop-field-seal-kit/hi",
+          "temporal-retail-forklift/en",
+          "temporal-retail-forklift/de",
+          "temporal-retail-forklift/es",
+          "temporal-retail-forklift/ar",
+          "temporal-retail-forklift/hi",
+          "temporal-retail-forklift/mixed",
+          "temporal-retail-aisle-reset/en",
+          "temporal-retail-aisle-reset/de",
+          "temporal-retail-aisle-reset/es",
+          "temporal-retail-aisle-reset/ar",
+          "temporal-retail-aisle-reset/hi",
+          "temporal-retail-store-manager/en",
+          "temporal-retail-store-manager/de",
+          "temporal-retail-store-manager/es",
+          "temporal-retail-store-manager/ar",
+          "temporal-retail-store-manager/hi",
+          "temporal-retail-po-status/en",
+          "temporal-retail-po-status/de",
+          "temporal-retail-po-status/es",
+          "temporal-retail-po-status/ar",
+          "temporal-retail-po-status/hi",
+          "temporal-retail-shelf-price/en",
+          "temporal-retail-shelf-price/de",
+          "temporal-retail-shelf-price/es",
+          "temporal-retail-shelf-price/ar",
+          "temporal-retail-shelf-price/hi",
+          "temporal-it-vpn-incident/en",
+          "temporal-it-vpn-incident/de",
+          "temporal-it-vpn-incident/es",
+          "temporal-it-vpn-incident/ar",
+          "temporal-it-vpn-incident/hi",
+          "temporal-field-compressor/en",
+          "temporal-field-compressor/de",
+          "temporal-field-compressor/es",
+          "temporal-field-compressor/ar",
+          "temporal-field-compressor/hi",
+          "temporal-retail-stock-count/en",
+          "temporal-retail-stock-count/de",
+          "temporal-retail-stock-count/es",
+          "temporal-retail-stock-count/ar",
+          "temporal-retail-stock-count/hi",
+          "temporal-finance-leave/en",
+          "temporal-finance-leave/de",
+          "temporal-finance-leave/es",
+          "temporal-finance-leave/ar",
+          "temporal-finance-leave/hi",
+          "temporal-personal-reading/en",
+          "temporal-personal-reading/de",
+          "temporal-personal-reading/es",
+          "temporal-personal-reading/ar",
+          "temporal-personal-reading/hi",
+          "update-retail-pallet-supplier/en",
+          "update-retail-pallet-supplier/de",
+          "update-retail-pallet-supplier/es",
+          "update-retail-pallet-supplier/ar",
+          "update-retail-pallet-supplier/hi",
+          "update-retail-pallet-supplier/mixed",
+          "update-retail-promo-discount/en",
+          "update-retail-promo-discount/de",
+          "update-retail-promo-discount/es",
+          "update-retail-promo-discount/ar",
+          "update-retail-promo-discount/hi",
+          "update-retail-reorder-point/en",
+          "update-retail-reorder-point/de",
+          "update-retail-reorder-point/es",
+          "update-retail-reorder-point/ar",
+          "update-retail-reorder-point/hi",
+          "update-finance-approval-limit/en",
+          "update-finance-approval-limit/de",
+          "update-finance-approval-limit/es",
+          "update-finance-approval-limit/ar",
+          "update-finance-approval-limit/hi",
+          "update-personal-moved/en",
+          "update-personal-moved/de",
+          "update-personal-moved/es",
+          "update-personal-moved/ar",
+          "update-personal-moved/hi",
+          "update-it-ticketing/en",
+          "update-it-ticketing/de",
+          "update-it-ticketing/es",
+          "update-it-ticketing/ar",
+          "update-it-ticketing/hi",
+          "update-retail-returns-depot/en",
+          "update-retail-returns-depot/de",
+          "update-retail-returns-depot/es",
+          "update-retail-returns-depot/ar",
+          "update-retail-returns-depot/hi",
+          "update-retail-bakery-day/en",
+          "update-retail-bakery-day/de",
+          "update-retail-bakery-day/es",
+          "update-retail-bakery-day/ar",
+          "update-retail-bakery-day/hi",
+          "update-field-van-assignment/en",
+          "update-field-van-assignment/de",
+          "update-field-van-assignment/es",
+          "update-field-van-assignment/ar",
+          "update-field-van-assignment/hi",
+          "update-retail-spill-contact/en",
+          "update-retail-spill-contact/de",
+          "update-retail-spill-contact/es",
+          "update-retail-spill-contact/ar",
+          "update-retail-spill-contact/hi",
+          "abstain-retail-inspector-phone/en",
+          "abstain-retail-inspector-phone/de",
+          "abstain-retail-inspector-phone/es",
+          "abstain-retail-inspector-phone/ar",
+          "abstain-retail-inspector-phone/hi",
+          "abstain-retail-inspector-phone/mixed",
+          "abstain-retail-lot-expiry/en",
+          "abstain-retail-lot-expiry/de",
+          "abstain-retail-lot-expiry/es",
+          "abstain-retail-lot-expiry/ar",
+          "abstain-retail-lot-expiry/hi",
+          "abstain-retail-rep-email/en",
+          "abstain-retail-rep-email/de",
+          "abstain-retail-rep-email/es",
+          "abstain-retail-rep-email/ar",
+          "abstain-retail-rep-email/hi",
+          "abstain-retail-april-shrink/en",
+          "abstain-retail-april-shrink/de",
+          "abstain-retail-april-shrink/es",
+          "abstain-retail-april-shrink/ar",
+          "abstain-retail-april-shrink/hi",
+          "abstain-personal-sister/en",
+          "abstain-personal-sister/de",
+          "abstain-personal-sister/es",
+          "abstain-personal-sister/ar",
+          "abstain-personal-sister/hi",
+          "abstain-field-hilltop-serial/en",
+          "abstain-field-hilltop-serial/de",
+          "abstain-field-hilltop-serial/es",
+          "abstain-field-hilltop-serial/ar",
+          "abstain-field-hilltop-serial/hi",
+          "abstain-retail-competitor-price/en",
+          "abstain-retail-competitor-price/de",
+          "abstain-retail-competitor-price/es",
+          "abstain-retail-competitor-price/ar",
+          "abstain-retail-competitor-price/hi",
+          "abstain-retail-alarm-code/en",
+          "abstain-retail-alarm-code/de",
+          "abstain-retail-alarm-code/es",
+          "abstain-retail-alarm-code/ar",
+          "abstain-retail-alarm-code/hi",
+          "abstain-finance-cfo-salary/en",
+          "abstain-finance-cfo-salary/de",
+          "abstain-finance-cfo-salary/es",
+          "abstain-finance-cfo-salary/ar",
+          "abstain-finance-cfo-salary/hi",
+          "abstain-it-router-password/en",
+          "abstain-it-router-password/de",
+          "abstain-it-router-password/es",
+          "abstain-it-router-password/ar",
+          "abstain-it-router-password/hi",
+          "forget-retail-temp-fridge/en",
+          "forget-retail-temp-fridge/de",
+          "forget-retail-temp-fridge/es",
+          "forget-retail-temp-fridge/ar",
+          "forget-retail-temp-fridge/hi",
+          "forget-retail-temp-fridge/mixed",
+          "forget-finance-old-vendor/en",
+          "forget-finance-old-vendor/de",
+          "forget-finance-old-vendor/es",
+          "forget-finance-old-vendor/ar",
+          "forget-finance-old-vendor/hi",
+          "forget-it-decommissioned-db/en",
+          "forget-it-decommissioned-db/de",
+          "forget-it-decommissioned-db/es",
+          "forget-it-decommissioned-db/ar",
+          "forget-it-decommissioned-db/hi",
+          "forget-retail-closed-store/en",
+          "forget-retail-closed-store/de",
+          "forget-retail-closed-store/es",
+          "forget-retail-closed-store/ar",
+          "forget-retail-closed-store/hi",
+          "forget-personal-training-plan/en",
+          "forget-personal-training-plan/de",
+          "forget-personal-training-plan/es",
+          "forget-personal-training-plan/ar",
+          "forget-personal-training-plan/hi",
+          "forget-retail-closed-recall/en",
+          "forget-retail-closed-recall/de",
+          "forget-retail-closed-recall/es",
+          "forget-retail-closed-recall/ar",
+          "forget-retail-closed-recall/hi",
+          "forget-retail-temp-staff/en",
+          "forget-retail-temp-staff/de",
+          "forget-retail-temp-staff/es",
+          "forget-retail-temp-staff/ar",
+          "forget-retail-temp-staff/hi",
+          "forget-retail-discontinued-sku/en",
+          "forget-retail-discontinued-sku/de",
+          "forget-retail-discontinued-sku/es",
+          "forget-retail-discontinued-sku/ar",
+          "forget-retail-discontinued-sku/hi",
+          "forget-field-temp-generator/en",
+          "forget-field-temp-generator/de",
+          "forget-field-temp-generator/es",
+          "forget-field-temp-generator/ar",
+          "forget-field-temp-generator/hi",
+          "forget-retail-ended-promo/en",
+          "forget-retail-ended-promo/de",
+          "forget-retail-ended-promo/es",
+          "forget-retail-ended-promo/ar",
+          "forget-retail-ended-promo/hi",
+          "scale-retail-three-years/en",
+          "scale-retail-three-years/de",
+          "scale-retail-three-years/es",
+          "scale-retail-three-years/ar",
+          "scale-retail-three-years/hi",
+          "scale-retail-three-years/mixed",
+          "scale-it-incidents/en",
+          "scale-it-incidents/de",
+          "scale-it-incidents/es",
+          "scale-it-incidents/ar",
+          "scale-it-incidents/hi",
+          "scale-personal-spending/en",
+          "scale-personal-spending/de",
+          "scale-personal-spending/es",
+          "scale-personal-spending/ar",
+          "scale-personal-spending/hi",
+          "scale-finance-travel/en",
+          "scale-finance-travel/de",
+          "scale-finance-travel/es",
+          "scale-finance-travel/ar",
+          "scale-finance-travel/hi",
+          "scale-field-failures/en",
+          "scale-field-failures/de",
+          "scale-field-failures/es",
+          "scale-field-failures/ar",
+          "scale-field-failures/hi",
+          "procedure-retail-audit-table/en",
+          "procedure-retail-audit-table/de",
+          "procedure-retail-audit-table/es",
+          "procedure-retail-audit-table/ar",
+          "procedure-retail-audit-table/hi",
+          "procedure-retail-audit-table/mixed",
+          "procedure-retail-shrink-units-dollars/en",
+          "procedure-retail-shrink-units-dollars/de",
+          "procedure-retail-shrink-units-dollars/es",
+          "procedure-retail-shrink-units-dollars/ar",
+          "procedure-retail-shrink-units-dollars/hi",
+          "procedure-retail-promo-brief/en",
+          "procedure-retail-promo-brief/de",
+          "procedure-retail-promo-brief/es",
+          "procedure-retail-promo-brief/ar",
+          "procedure-retail-promo-brief/hi",
+          "procedure-retail-case-packs/en",
+          "procedure-retail-case-packs/de",
+          "procedure-retail-case-packs/es",
+          "procedure-retail-case-packs/ar",
+          "procedure-retail-case-packs/hi",
+          "procedure-personal-metric-recipes/en",
+          "procedure-personal-metric-recipes/de",
+          "procedure-personal-metric-recipes/es",
+          "procedure-personal-metric-recipes/ar",
+          "procedure-personal-metric-recipes/hi",
+          "procedure-retail-transfer-format/en",
+          "procedure-retail-transfer-format/de",
+          "procedure-retail-transfer-format/es",
+          "procedure-retail-transfer-format/ar",
+          "procedure-retail-transfer-format/hi",
+          "procedure-field-service-report/en",
+          "procedure-field-service-report/de",
+          "procedure-field-service-report/es",
+          "procedure-field-service-report/ar",
+          "procedure-field-service-report/hi",
+          "procedure-finance-variance/en",
+          "procedure-finance-variance/de",
+          "procedure-finance-variance/es",
+          "procedure-finance-variance/ar",
+          "procedure-finance-variance/hi",
+          "procedure-retail-hazmat-report/en",
+          "procedure-retail-hazmat-report/de",
+          "procedure-retail-hazmat-report/es",
+          "procedure-retail-hazmat-report/ar",
+          "procedure-retail-hazmat-report/hi",
+          "correction-retail-shrinkage-command/en",
+          "correction-retail-shrinkage-command/de",
+          "correction-retail-shrinkage-command/es",
+          "correction-retail-shrinkage-command/ar",
+          "correction-retail-shrinkage-command/hi",
+          "correction-retail-shrinkage-command/mixed",
+          "correction-retail-blind-recount/en",
+          "correction-retail-blind-recount/de",
+          "correction-retail-blind-recount/es",
+          "correction-retail-blind-recount/ar",
+          "correction-retail-blind-recount/hi",
+          "correction-retail-price-override/en",
+          "correction-retail-price-override/de",
+          "correction-retail-price-override/es",
+          "correction-retail-price-override/ar",
+          "correction-retail-price-override/hi",
+          "correction-retail-opened-electronics/en",
+          "correction-retail-opened-electronics/de",
+          "correction-retail-opened-electronics/es",
+          "correction-retail-opened-electronics/ar",
+          "correction-retail-opened-electronics/hi",
+          "correction-it-account-unlock/en",
+          "correction-it-account-unlock/de",
+          "correction-it-account-unlock/es",
+          "correction-it-account-unlock/ar",
+          "correction-it-account-unlock/hi",
+          "correction-field-flange-torque/en",
+          "correction-field-flange-torque/de",
+          "correction-field-flange-torque/es",
+          "correction-field-flange-torque/ar",
+          "correction-field-flange-torque/hi",
+          "correction-personal-dentist-time/en",
+          "correction-personal-dentist-time/de",
+          "correction-personal-dentist-time/es",
+          "correction-personal-dentist-time/ar",
+          "correction-personal-dentist-time/hi",
+          "correction-retail-chilled-threshold/en",
+          "correction-retail-chilled-threshold/de",
+          "correction-retail-chilled-threshold/es",
+          "correction-retail-chilled-threshold/ar",
+          "correction-retail-chilled-threshold/hi",
+          "correction-finance-mileage/en",
+          "correction-finance-mileage/de",
+          "correction-finance-mileage/es",
+          "correction-finance-mileage/ar",
+          "correction-finance-mileage/hi",
+          "correction-retail-short-shipment/en",
+          "correction-retail-short-shipment/de",
+          "correction-retail-short-shipment/es",
+          "correction-retail-short-shipment/ar",
+          "correction-retail-short-shipment/hi",
+          "implicit-retail-perishables/en",
+          "implicit-retail-perishables/de",
+          "implicit-retail-perishables/es",
+          "implicit-retail-perishables/ar",
+          "implicit-retail-perishables/hi",
+          "implicit-retail-perishables/mixed",
+          "implicit-retail-small-backroom/en",
+          "implicit-retail-small-backroom/de",
+          "implicit-retail-small-backroom/es",
+          "implicit-retail-small-backroom/ar",
+          "implicit-retail-small-backroom/hi",
+          "implicit-field-medical/en",
+          "implicit-field-medical/de",
+          "implicit-field-medical/es",
+          "implicit-field-medical/ar",
+          "implicit-field-medical/hi",
+          "implicit-it-mac-team/en",
+          "implicit-it-mac-team/de",
+          "implicit-it-mac-team/es",
+          "implicit-it-mac-team/ar",
+          "implicit-it-mac-team/hi",
+          "implicit-personal-founder/en",
+          "implicit-personal-founder/de",
+          "implicit-personal-founder/es",
+          "implicit-personal-founder/ar",
+          "implicit-personal-founder/hi",
+          "implicit-retail-night-shift/en",
+          "implicit-retail-night-shift/de",
+          "implicit-retail-night-shift/es",
+          "implicit-retail-night-shift/ar",
+          "implicit-retail-night-shift/hi",
+          "implicit-finance-germany/en",
+          "implicit-finance-germany/de",
+          "implicit-finance-germany/es",
+          "implicit-finance-germany/ar",
+          "implicit-finance-germany/hi",
+          "implicit-retail-sustainability/en",
+          "implicit-retail-sustainability/de",
+          "implicit-retail-sustainability/es",
+          "implicit-retail-sustainability/ar",
+          "implicit-retail-sustainability/hi",
+          "implicit-retail-hot-climate/en",
+          "implicit-retail-hot-climate/de",
+          "implicit-retail-hot-climate/es",
+          "implicit-retail-hot-climate/ar",
+          "implicit-retail-hot-climate/hi",
+          "implicit-retail-loss-prevention/en",
+          "implicit-retail-loss-prevention/de",
+          "implicit-retail-loss-prevention/es",
+          "implicit-retail-loss-prevention/ar",
+          "implicit-retail-loss-prevention/hi",
+          "explicit-retail-zero-stock/en",
+          "explicit-retail-zero-stock/de",
+          "explicit-retail-zero-stock/es",
+          "explicit-retail-zero-stock/ar",
+          "explicit-retail-zero-stock/hi",
+          "explicit-retail-zero-stock/mixed",
+          "explicit-retail-sales-rounding/en",
+          "explicit-retail-sales-rounding/de",
+          "explicit-retail-sales-rounding/es",
+          "explicit-retail-sales-rounding/ar",
+          "explicit-retail-sales-rounding/hi",
+          "explicit-retail-no-sunday/en",
+          "explicit-retail-no-sunday/de",
+          "explicit-retail-no-sunday/es",
+          "explicit-retail-no-sunday/ar",
+          "explicit-retail-no-sunday/hi",
+          "explicit-it-trading-window/en",
+          "explicit-it-trading-window/de",
+          "explicit-it-trading-window/es",
+          "explicit-it-trading-window/ar",
+          "explicit-it-trading-window/hi",
+          "explicit-finance-eur-only/en",
+          "explicit-finance-eur-only/de",
+          "explicit-finance-eur-only/es",
+          "explicit-finance-eur-only/ar",
+          "explicit-finance-eur-only/hi",
+          "explicit-personal-no-cilantro/en",
+          "explicit-personal-no-cilantro/de",
+          "explicit-personal-no-cilantro/es",
+          "explicit-personal-no-cilantro/ar",
+          "explicit-personal-no-cilantro/hi",
+          "explicit-retail-competitor-supplier/en",
+          "explicit-retail-competitor-supplier/de",
+          "explicit-retail-competitor-supplier/es",
+          "explicit-retail-competitor-supplier/ar",
+          "explicit-retail-competitor-supplier/hi",
+          "explicit-retail-no-clearance/en",
+          "explicit-retail-no-clearance/de",
+          "explicit-retail-no-clearance/es",
+          "explicit-retail-no-clearance/ar",
+          "explicit-retail-no-clearance/hi",
+          "explicit-retail-store-line/en",
+          "explicit-retail-store-line/de",
+          "explicit-retail-store-line/es",
+          "explicit-retail-store-line/ar",
+          "explicit-retail-store-line/hi",
+          "explicit-field-no-north-fridays/en",
+          "explicit-field-no-north-fridays/de",
+          "explicit-field-no-north-fridays/es",
+          "explicit-field-no-north-fridays/ar",
+          "explicit-field-no-north-fridays/hi"
+        ],
+        "seconds": 1800.88,
+        "worker_samples": 120,
+        "worker_settled": false
+      },
+      "turns": 8938,
+      "write_seconds": 679.6
+    },
+    "memory_url": "http://localhost:8091",
+    "mode": "nollm",
+    "placements": [
+      "new_session",
+      "same_session"
+    ],
+    "policy": {
+      "models": {},
+      "read_assist": false,
+      "uses": []
+    },
+    "run_date": "2026-10-08",
+    "run_id": "ddcd2d84",
+    "sample": null,
+    "scale": "standard",
+    "selection": {
+      "capabilities": "all",
+      "domains": "all",
+      "kinds": "all",
+      "languages": [
+        "en",
+        "de",
+        "es",
+        "ar",
+        "hi",
+        "mixed"
+      ],
+      "scenario_ids": null,
+      "scenarios_per_capability": null,
+      "scenarios_per_domain": null,
+      "split": "all"
+    },
+    "service_version": {
+      "api_version": "v1",
+      "degraded": [],
+      "environment": "dev",
+      "providers": {
+        "authorization": "openfga",
+        "blob": "filesystem",
+        "cache": "redis-protocol",
+        "dense_spaces": {
+          "dense_en": "ibm-granite/granite-embedding-small-english-r2",
+          "dense_ml": "hotchpotch/bekko-embedding-v1-a8m"
+        },
+        "document_parser": "docling",
+        "embedding": "hotchpotch/bekko-embedding-v1-a8m",
+        "graph_enrichment": "native-graph",
+        "llm": "bifrost",
+        "memory_intelligence": "native",
+        "search": "qdrant",
+        "tasks": "procrastinate"
+      },
+      "service": "trellis-memory",
+      "version": "0.3.0"
+    },
+    "surfaces": [
+      "context",
+      "search"
+    ],
+    "tenant": "capeval-nollm",
+    "token_budget": 2000
+  },
+  "mode": "nollm",
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "a06c2c9b576ab8c93e964359d0169ca8067e50cd",
+    "host_load": {
+      "load_per_core": 1.17,
+      "loadavg_15m": 2.6,
+      "loadavg_1m": 4.66,
+      "loadavg_5m": 3.72
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "timestamp": "2026-10-08T11:08:28.194780+00:00"
+  },
+  "records_file": "nollm_repeat.raw.json.gz",
+  "scale": {
+    "context": {
+      "accuracy": 0.0,
+      "evidence_recall": 0.0,
+      "latency_max_ms": 407.86,
+      "latency_p50_ms": 44.1,
+      "latency_p95_ms": 58.72,
+      "within_10s": 1.0,
+      "within_5s": 1.0
+    },
+    "corpus_tokens_max": 69911,
+    "search": {
+      "accuracy": 0.0,
+      "evidence_recall": 0.0,
+      "latency_max_ms": 46.98,
+      "latency_p50_ms": 30.77,
+      "latency_p95_ms": 38.76,
+      "within_10s": 1.0,
+      "within_5s": 1.0
+    }
+  },
+  "summary": {
+    "abstention": {
+      "answerable": 10180,
+      "false_refusal_rate": 0.7083,
+      "precision": 0.0745,
+      "recall": 0.5754,
+      "said_insufficient": 7790,
+      "unknowable": 1008
+    },
+    "abstention_by_placement": {
+      "new_session": {
+        "answerable": 5090,
+        "false_refusal_rate": 0.9866,
+        "precision": 0.0912,
+        "recall": 1.0,
+        "said_insufficient": 5526,
+        "unknowable": 504
+      },
+      "same_session": {
+        "answerable": 5090,
+        "false_refusal_rate": 0.4299,
+        "precision": 0.0336,
+        "recall": 0.1508,
+        "said_insufficient": 2264,
+        "unknowable": 504
+      }
+    },
+    "by_domain": {
+      "field_service": 0.0909,
+      "finance_hr": 0.0909,
+      "it_support": 0.1818,
+      "personal": 0.1273,
+      "retail": 0.099
+    },
+    "by_language": {
+      "ar": 0.1,
+      "de": 0.1,
+      "en": 0.143,
+      "es": 0.1,
+      "hi": 0.1,
+      "mixed": 0.0909
+    },
+    "by_split": {
+      "dev": 0.1011,
+      "heldout": 0.1161
+    },
+    "latency_ms": {
+      "answer_max": null,
+      "answer_p50": null,
+      "answer_p95": null,
+      "by_capability_context_p95": {
+        "abstention": 51.75,
+        "explicit_personalization": 50.74,
+        "forgetting_decay": 48.97,
+        "implicit_personalization": 50.26,
+        "multi_hop": 56.98,
+        "procedural_skill": 58.02,
+        "scale": 58.72,
+        "single_fact_recall": 86.74,
+        "temporal_recency": 49.45,
+        "test_time_learning": 51.4,
+        "update_contradiction": 52.12
+      },
+      "context_max": 477.55,
+      "context_p50": 37.43,
+      "context_p95": 58.23,
+      "max_load_per_core": 1.4,
+      "search_p50": 29.72,
+      "search_p95": 44.45,
+      "trustworthy": false
+    },
+    "macro_accuracy": 0.1085,
+    "micro_accuracy": 0.108,
+    "origin_cases": 0.0604,
+    "partial_credit": 0.0279,
+    "primary": "context/new_session",
+    "retail_track": 0.099,
+    "stale_leak": {
+      "leaked": 0,
+      "phrasings_with_stale_values": 2016,
+      "rate": 0.0
+    },
+    "stale_leak_by_surface": {
+      "context/new_session": {
+        "leaked": 0,
+        "phrasings_with_stale_values": 2016,
+        "rate": 0.0
+      },
+      "context/same_session": {
+        "leaked": 2,
+        "phrasings_with_stale_values": 2016,
+        "rate": 0.001
+      },
+      "search/new_session": {
+        "leaked": 1190,
+        "phrasings_with_stale_values": 2016,
+        "rate": 0.5903
+      }
+    },
+    "surfaces": {
+      "context/new_session": {
+        "by_capability": {
+          "abstention": 1.0,
+          "explicit_personalization": 0.0542,
+          "forgetting_decay": 0.0,
+          "implicit_personalization": 0.0,
+          "multi_hop": 0.0,
+          "procedural_skill": 0.0992,
+          "scale": 0.0,
+          "single_fact_recall": 0.0198,
+          "temporal_recency": 0.0,
+          "test_time_learning": 0.0,
+          "update_contradiction": 0.0198
+        },
+        "macro_accuracy": 0.1085,
+        "n": 5594
+      },
+      "context/same_session": {
+        "by_capability": {
+          "abstention": 0.1508,
+          "explicit_personalization": 0.5018,
+          "forgetting_decay": 0.1944,
+          "implicit_personalization": 0.4167,
+          "multi_hop": 0.0198,
+          "procedural_skill": 0.254,
+          "scale": 0.0,
+          "single_fact_recall": 0.3135,
+          "temporal_recency": 0.9484,
+          "test_time_learning": 0.0,
+          "update_contradiction": 0.9127
+        },
+        "macro_accuracy": 0.3375,
+        "n": 5594
+      },
+      "search/new_session": {
+        "by_capability": {
+          "explicit_personalization": 0.2708,
+          "forgetting_decay": 0.496,
+          "implicit_personalization": 1.0,
+          "multi_hop": 0.6032,
+          "procedural_skill": 0.5,
+          "scale": 0.0,
+          "single_fact_recall": 1.0,
+          "temporal_recency": 0.0218,
+          "test_time_learning": 0.2143,
+          "update_contradiction": 0.004
+        },
+        "macro_accuracy": 0.411,
+        "n": 5090
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "description": "What an answer that declines looks like, per language: the answer surface's abstention signal (scoring.refused). Matched case-insensitively on normalised text.",
+  "refusal": {
+    "en": ["don't have", "do not have", "not on file", "no record", "no information", "don't know", "do not know", "not available", "isn't available", "not in my", "no details", "unable to find", "couldn't find", "could not find", "not aware", "haven't been given", "has not been provided", "hasn't been provided", "not been provided", "cannot find", "can't find", "no data"],
+    "de": ["habe keine", "keine informationen", "nicht hinterlegt", "nicht bekannt", "weiß nicht", "liegt mir nicht vor", "liegen mir nicht vor", "keine angaben", "nicht gefunden", "keine daten"],
+    "es": ["no tengo", "no dispongo", "no consta", "no hay información", "no sé", "no está disponible", "no encuentro", "no he encontrado", "sin información", "no tengo datos"],
+    "ar": ["ليس لدي", "لا تتوفر", "لا توجد معلومات", "لا أعرف", "غير متوفر", "غير متوفرة", "لم أجد", "لا يوجد لدي", "لا املك", "لا أملك"],
+    "hi": ["मेरे पास नहीं", "जानकारी नहीं", "उपलब्ध नहीं", "मुझे नहीं पता", "पता नहीं", "रिकॉर्ड में नहीं", "नहीं मिली", "नहीं मिला", "दर्ज नहीं"]
+  }
+}

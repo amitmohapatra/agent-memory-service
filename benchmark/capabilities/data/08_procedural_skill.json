@@ -1,0 +1,1864 @@
+{
+ "capability": "procedural_skill",
+ "number": 8,
+ "title": "Procedural / skill memory",
+ "definition": "Remember how the user wants things done - formats, workflows, standing instructions, learned tool procedures - and apply them to the matching request without a reminder.",
+ "scenarios": [
+  {
+   "id": "procedure-retail-audit-table",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -20,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Whenever I ask for a stock audit, always format the response as a markdown table with columns for: SKU, Item Name, Current Stock, Reorder Threshold, and Action Required.",
+        "de": "Wenn ich nach einem Bestandsaudit frage, formatiere die Antwort immer als Markdown-Tabelle mit den Spalten: SKU, Artikelname, Aktueller Bestand, Meldebestand und Erforderliche Maßnahme.",
+        "es": "Siempre que te pida una auditoría de stock, da la respuesta en una tabla markdown con las columnas: SKU, Nombre del artículo, Stock actual, Umbral de pedido y Acción requerida.",
+        "ar": "كلما طلبت تدقيقًا للمخزون، نسّق الرد دائمًا كجدول markdown بالأعمدة: SKU، اسم الصنف، المخزون الحالي، حد إعادة الطلب، الإجراء المطلوب.",
+        "hi": "जब भी मैं स्टॉक ऑडिट माँगूँ, जवाब हमेशा markdown टेबल में देना जिसमें ये कॉलम हों: SKU, आइटम का नाम, मौजूदा स्टॉक, रीऑर्डर सीमा, और ज़रूरी कार्रवाई।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -9,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Office supplies count: OS-101 copy paper 12 boxes (reorder at 20); OS-114 blue pens 340 (reorder at 100); OS-120 staples 8 packs (reorder at 10).",
+        "de": "Bestand Büromaterial: OS-101 Kopierpapier 12 Kartons (Meldebestand 20); OS-114 blaue Kugelschreiber 340 (Meldebestand 100); OS-120 Heftklammern 8 Packungen (Meldebestand 10).",
+        "es": "Recuento de material de oficina: OS-101 papel de copia 12 cajas (pedido a 20); OS-114 bolígrafos azules 340 (pedido a 100); OS-120 grapas 8 paquetes (pedido a 10).",
+        "ar": "جرد اللوازم المكتبية: OS-101 ورق نسخ 12 صندوقًا (إعادة الطلب عند 20)؛ OS-114 أقلام زرقاء 340 (إعادة الطلب عند 100)؛ OS-120 دبابيس 8 عبوات (إعادة الطلب عند 10).",
+        "hi": "ऑफ़िस सामान गिनती: OS-101 कॉपी पेपर 12 डिब्बे (रीऑर्डर 20 पर); OS-114 नीले पेन 340 (रीऑर्डर 100 पर); OS-120 स्टेपल 8 पैक (रीऑर्डर 10 पर)।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me a stock audit for the office supplies category.",
+        "de": "Gib mir ein Bestandsaudit für die Kategorie Büromaterial.",
+        "es": "Dame una auditoría de stock de la categoría de material de oficina.",
+        "ar": "أعطني تدقيق مخزون لفئة اللوازم المكتبية.",
+        "hi": "ऑफ़िस सामान श्रेणी का स्टॉक ऑडिट दो।",
+        "mixed": "Office supplies category ka stock audit do."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need to know where we stand on office supplies before the quarter closes.",
+        "de": "Ich muss vor Quartalsende wissen, wie es beim Büromaterial aussieht.",
+        "es": "Necesito saber cómo vamos de material de oficina antes del cierre del trimestre.",
+        "ar": "أحتاج إلى معرفة وضع اللوازم المكتبية قبل إغلاق الربع.",
+        "hi": "तिमाही बंद होने से पहले जानना है कि ऑफ़िस सामान की क्या स्थिति है।",
+        "mixed": "بدي أعرف وضع الـ office supplies قبل ما يسكر الـ quarter، اعمل stock audit."
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Run an inventory audit on office supplies.",
+        "de": "Führ ein Inventuraudit für Büromaterial durch.",
+        "es": "Haz una auditoría de inventario del material de oficina.",
+        "ar": "أجرِ تدقيق جرد للوازم المكتبية.",
+        "hi": "ऑफ़िस सामान का इन्वेंटरी ऑडिट चलाओ।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "stok audit ofice suplies",
+        "de": "bestandsadit büromaterial",
+        "es": "auditoria de stok material de ofisina",
+        "ar": "تدقيق مخزون اللوازم المكتبيه",
+        "hi": "ऑफिस सामान स्टॉक ओडिट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The regional office is asking every store for an audit of the office supplies category by end of day — what we have, what our reorder points are, and what we should do about each item — so please put that together for me.",
+        "de": "Das Regionalbüro will von jeder Filiale bis Tagesende ein Audit der Kategorie Büromaterial – was wir haben, wo unsere Meldebestände liegen und was wir bei jedem Artikel tun sollten –, also stell das bitte für mich zusammen.",
+        "es": "La oficina regional pide a cada tienda una auditoría del material de oficina antes de que acabe el día: qué tenemos, cuáles son nuestros puntos de pedido y qué hacer con cada artículo. Prepáramela, por favor.",
+        "ar": "يطلب المكتب الإقليمي من كل متجر تدقيقًا لفئة اللوازم المكتبية قبل نهاية اليوم — ما لدينا، ونقاط إعادة الطلب، وما يجب فعله لكل صنف — فجهّز ذلك لي من فضلك.",
+        "hi": "रीजनल ऑफ़िस हर स्टोर से दिन ख़त्म होने तक ऑफ़िस सामान श्रेणी का ऑडिट माँग रहा है — क्या है, रीऑर्डर पॉइंट क्या हैं, और हर आइटम के लिए क्या करना है — तो कृपया यह तैयार कर दो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Office supplies — audit time.",
+        "de": "Büromaterial – Zeit fürs Audit.",
+        "es": "Material de oficina: toca auditoría.",
+        "ar": "اللوازم المكتبية — وقت التدقيق.",
+        "hi": "ऑफ़िस सामान — ऑडिट का समय।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't give me a paragraph — I want the office supplies stock audit.",
+        "de": "Keinen Fließtext – ich will das Bestandsaudit für Büromaterial.",
+        "es": "No me des un párrafo: quiero la auditoría de stock del material de oficina.",
+        "ar": "لا تعطني فقرة — أريد تدقيق مخزون اللوازم المكتبية.",
+        "hi": "पैराग्राफ़ मत दो — मुझे ऑफ़िस सामान का स्टॉक ऑडिट चाहिए।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Same as usual, do the stock audit for office supplies.",
+        "de": "Wie immer: mach das Bestandsaudit für Büromaterial.",
+        "es": "Como siempre, haz la auditoría de stock del material de oficina.",
+        "ar": "كالمعتاد، أجرِ تدقيق المخزون للوازم المكتبية.",
+        "hi": "हमेशा की तरह, ऑफ़िस सामान का स्टॉक ऑडिट करो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "stock audit office supplies",
+        "de": "Bestandsaudit Büromaterial",
+        "es": "auditoría stock material oficina",
+        "ar": "تدقيق مخزون اللوازم المكتبية",
+        "hi": "स्टॉक ऑडिट ऑफ़िस सामान",
+        "mixed": "Stock audit de office supplies, porfa."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Audit the office supplies stock.",
+        "de": "Prüf den Bestand an Büromaterial.",
+        "es": "Audita el stock de material de oficina.",
+        "ar": "دقّق مخزون اللوازم المكتبية.",
+        "hi": "ऑफ़िस सामान के स्टॉक का ऑडिट करो।",
+        "mixed": "Mach mir einen stock audit für office supplies."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "Action Required",
+        "de": "Erforderliche Maßnahme",
+        "es": "Acción requerida",
+        "ar": "الإجراء المطلوب",
+        "hi": "ज़रूरी कार्रवाई"
+       },
+       {
+        "en": "Reorder Threshold",
+        "de": "Meldebestand",
+        "es": "Umbral de pedido",
+        "ar": "حد إعادة الطلب",
+        "hi": "रीऑर्डर सीमा"
+       }
+      ],
+      "answer": {
+       "contains": [
+        "OS-101"
+       ],
+       "table_columns": [
+        {
+         "en": "SKU",
+         "de": "SKU",
+         "es": "SKU",
+         "ar": "SKU",
+         "hi": "SKU"
+        },
+        {
+         "en": "Item Name",
+         "de": "Artikelname",
+         "es": "Nombre del artículo",
+         "ar": "اسم الصنف",
+         "hi": "आइटम का नाम"
+        },
+        {
+         "en": "Current Stock",
+         "de": "Aktueller Bestand",
+         "es": "Stock actual",
+         "ar": "المخزون الحالي",
+         "hi": "मौजूदा स्टॉक"
+        },
+        {
+         "en": "Reorder Threshold",
+         "de": "Meldebestand",
+         "es": "Umbral de pedido",
+         "ar": "حد إعادة الطلب",
+         "hi": "रीऑर्डर सीमा"
+        },
+        {
+         "en": "Action Required",
+         "de": "Erforderliche Maßnahme",
+         "es": "Acción requerida",
+         "ar": "الإجراء المطلوب",
+         "hi": "ज़रूरी कार्रवाई"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-8"
+  },
+  {
+   "id": "procedure-retail-transfer-format",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -25,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "When I ask for a transfer request, always include from-store, to-store, SKU, quantity and reason, and start the subject line with TRANSFER.",
+        "de": "Wenn ich eine Umlagerungsanfrage möchte, gib immer Absenderfiliale, Zielfiliale, SKU, Menge und Grund an und beginne die Betreffzeile mit TRANSFER.",
+        "es": "Cuando te pida una solicitud de traspaso, incluye siempre tienda de origen, tienda de destino, SKU, cantidad y motivo, y empieza el asunto con TRANSFER.",
+        "ar": "عندما أطلب طلب نقل، اذكر دائمًا متجر المصدر ومتجر الوجهة وSKU والكمية والسبب، وابدأ سطر الموضوع بكلمة TRANSFER.",
+        "hi": "जब मैं ट्रांसफ़र अनुरोध माँगूँ, हमेशा भेजने वाला स्टोर, पाने वाला स्टोर, SKU, मात्रा और कारण लिखना, और सब्जेक्ट लाइन TRANSFER से शुरू करना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Prepare a transfer request for 30 grills (SKU GR-450) from Store 12 to Store 112.",
+        "de": "Bereite eine Umlagerungsanfrage für 30 Grills (SKU GR-450) von Filiale 12 an Filiale 112 vor.",
+        "es": "Prepara una solicitud de traspaso de 30 barbacoas (SKU GR-450) de la Tienda 12 a la Tienda 112.",
+        "ar": "جهّز طلب نقل لـ 30 شواية (SKU GR-450) من المتجر 12 إلى المتجر 112.",
+        "hi": "स्टोर 12 से स्टोर 112 के लिए 30 ग्रिल (SKU GR-450) का ट्रांसफ़र अनुरोध तैयार करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Store 112 is short on grills and we have 30 extra GR-450s.",
+        "de": "Filiale 112 fehlen Grills und wir haben 30 GR-450 zu viel.",
+        "es": "A la Tienda 112 le faltan barbacoas y a nosotros nos sobran 30 GR-450.",
+        "ar": "المتجر 112 ينقصه شوايات ولدينا 30 شواية GR-450 زائدة.",
+        "hi": "स्टोर 112 में ग्रिल कम हैं और हमारे पास 30 GR-450 ज़्यादा हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Write up moving 30 GR-450 grills over to Store 112.",
+        "de": "Formuliere die Umlagerung von 30 GR-450-Grills an Filiale 112.",
+        "es": "Redacta el envío de 30 barbacoas GR-450 a la Tienda 112.",
+        "ar": "اكتب طلب نقل 30 شواية GR-450 إلى المتجر 112.",
+        "hi": "30 GR-450 ग्रिल स्टोर 112 भेजने का अनुरोध लिखो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "transfr request 30 grils to stor 112",
+        "de": "umlagerng 30 grils an filale 112",
+        "es": "traspaso 30 barbacoas a la tienda 112 porfa",
+        "ar": "طلب نقل 30 شوايه للمتجر 112",
+        "hi": "स्टोर 112 को 30 ग्रील ट्रांसफर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We over-ordered on the GR-450 grills this season and Store 112 has been selling out every weekend, so I'd like to send them 30 units from our stock here at Store 12 — can you write the transfer request?",
+        "de": "Wir haben diese Saison zu viele GR-450-Grills bestellt, und Filiale 112 ist jedes Wochenende ausverkauft, also möchte ich ihnen 30 Stück aus unserem Bestand hier in Filiale 12 schicken – kannst du die Umlagerungsanfrage schreiben?",
+        "es": "Esta temporada pedimos de más barbacoas GR-450 y la Tienda 112 las agota cada fin de semana, así que quiero mandarles 30 unidades de nuestro stock aquí en la Tienda 12. ¿Puedes redactar la solicitud de traspaso?",
+        "ar": "طلبنا كمية زائدة من شوايات GR-450 هذا الموسم، والمتجر 112 ينفد مخزونه كل عطلة أسبوع، لذا أود إرسال 30 وحدة من مخزوننا هنا في المتجر 12 — هل تكتب طلب النقل؟",
+        "hi": "इस सीज़न हमने GR-450 ग्रिल ज़्यादा मँगा लिए और स्टोर 112 हर वीकेंड बिक जाते हैं, तो मैं यहाँ स्टोर 12 के स्टॉक से उन्हें 30 यूनिट भेजना चाहता हूँ — ट्रांसफ़र अनुरोध लिख दोगे?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Grills to 112, please.",
+        "de": "Grills an die 112, bitte.",
+        "es": "Barbacoas a la 112, por favor.",
+        "ar": "شوايات إلى 112 من فضلك.",
+        "hi": "ग्रिल 112 को, प्लीज़।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't forget the usual format — transfer 30 GR-450 to Store 112.",
+        "de": "Vergiss das übliche Format nicht – 30 GR-450 an Filiale 112 umlagern.",
+        "es": "No olvides el formato de siempre: traspaso de 30 GR-450 a la Tienda 112.",
+        "ar": "لا تنسَ الصيغة المعتادة — نقل 30 GR-450 إلى المتجر 112.",
+        "hi": "हमेशा वाला फ़ॉर्मैट मत भूलना — 30 GR-450 स्टोर 112 को ट्रांसफ़र।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Like the other transfers I've asked for, do one for 30 GR-450 to Store 112.",
+        "de": "Wie bei den anderen Umlagerungen: eine für 30 GR-450 an Filiale 112.",
+        "es": "Como los otros traspasos que te he pedido, haz uno de 30 GR-450 a la Tienda 112.",
+        "ar": "مثل طلبات النقل الأخرى التي طلبتها، اعمل واحدًا لـ 30 GR-450 إلى المتجر 112.",
+        "hi": "जैसे बाक़ी ट्रांसफ़र माँगे थे, वैसे ही 30 GR-450 स्टोर 112 के लिए बनाओ।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "transfer GR-450 x30 Store 12 to 112",
+        "de": "Umlagerung GR-450 x30 Filiale 12 nach 112",
+        "es": "traspaso GR-450 x30 Tienda 12 a 112",
+        "ar": "نقل GR-450 ×30 من المتجر 12 إلى 112",
+        "hi": "ट्रांसफ़र GR-450 x30 स्टोर 12 से 112"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Create the transfer request for the 30 grills to Store 112.",
+        "de": "Erstelle die Umlagerungsanfrage für die 30 Grills an Filiale 112.",
+        "es": "Crea la solicitud de traspaso de las 30 barbacoas a la Tienda 112.",
+        "ar": "أنشئ طلب النقل لـ 30 شواية إلى المتجر 112.",
+        "hi": "स्टोर 112 के लिए 30 ग्रिल का ट्रांसफ़र अनुरोध बनाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "TRANSFER"
+      ],
+      "answer": {
+       "contains": [
+        "TRANSFER",
+        "GR-450"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-retail-hazmat-report",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -30,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "For any hazmat incident report, always start with the UN number and the SDS reference, then the location, then the action taken.",
+        "de": "Beginne jeden Gefahrstoff-Vorfallbericht immer mit der UN-Nummer und der SDB-Referenz (SDS), dann der Ort, dann die ergriffene Maßnahme.",
+        "es": "En todo informe de incidente con materiales peligrosos, empieza siempre por el número ONU y la referencia de la FDS (SDS), luego la ubicación y luego la medida tomada.",
+        "ar": "في أي تقرير حادثة مواد خطرة، ابدأ دائمًا برقم الأمم المتحدة UN ومرجع صحيفة SDS، ثم الموقع، ثم الإجراء المتخذ.",
+        "hi": "किसी भी हैज़मैट घटना रिपोर्ट में हमेशा पहले UN नंबर और SDS संदर्भ, फिर जगह, फिर की गई कार्रवाई लिखना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "facts",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Bleach (sodium hypochlorite) is UN1791; our SDS reference for it is SDS-0442.",
+        "de": "Bleiche (Natriumhypochlorit) ist UN1791; unsere SDB-Referenz dafür ist SDS-0442.",
+        "es": "La lejía (hipoclorito de sodio) es UN1791; nuestra referencia de FDS es SDS-0442.",
+        "ar": "المبيّض (هيبوكلوريت الصوديوم) رقمه UN1791؛ ومرجع SDS لدينا له هو SDS-0442.",
+        "hi": "ब्लीच (सोडियम हाइपोक्लोराइट) UN1791 है; उसका हमारा SDS संदर्भ SDS-0442 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Write up an incident report for the leaking bleach drum in aisle 3.",
+        "de": "Schreib einen Vorfallbericht für das undichte Bleichefass in Gang 3.",
+        "es": "Redacta un informe de incidente por el bidón de lejía que gotea en el pasillo 3.",
+        "ar": "اكتب تقرير حادثة عن برميل المبيّض المسرّب في الممر 3.",
+        "hi": "गलियारा 3 में रिसते ब्लीच ड्रम की घटना रिपोर्ट लिखो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A bleach drum in aisle 3 started leaking this morning; we contained it with absorbent.",
+        "de": "Heute früh ist in Gang 3 ein Bleichefass undicht geworden; wir haben es mit Bindemittel eingedämmt.",
+        "es": "Esta mañana empezó a gotear un bidón de lejía en el pasillo 3; lo contuvimos con absorbente.",
+        "ar": "بدأ برميل مبيّض يسرّب في الممر 3 هذا الصباح؛ احتويناه بمادة ماصة.",
+        "hi": "आज सुबह गलियारा 3 में ब्लीच का ड्रम रिसने लगा; हमने सोखने वाली सामग्री से उसे रोका।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Document the bleach leak in aisle 3 for the safety file.",
+        "de": "Dokumentiere das Bleiche-Leck in Gang 3 für die Sicherheitsakte.",
+        "es": "Documenta la fuga de lejía del pasillo 3 para el archivo de seguridad.",
+        "ar": "وثّق تسرب المبيّض في الممر 3 لملف السلامة.",
+        "hi": "सेफ़्टी फ़ाइल के लिए गलियारा 3 के ब्लीच रिसाव को दर्ज करो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "incidnt report bleech leak isle 3",
+        "de": "vorfalbericht bleiche leck gang 3",
+        "es": "informe incidente fuga de legia pasillo 3",
+        "ar": "تقرير حادثه تسرب مبيض ممر 3",
+        "hi": "गलियारा 3 ब्लिच लीक घटना रिपोट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The morning crew found a drum of bleach leaking in aisle 3 around 7:15, they roped off the area, put down absorbent and moved the drum to the spill bin, and now I need a proper hazmat incident report for the safety file.",
+        "de": "Die Frühschicht hat gegen 7:15 in Gang 3 ein undichtes Bleichefass gefunden, den Bereich abgesperrt, Bindemittel ausgebracht und das Fass in den Auffangbehälter gestellt; jetzt brauche ich einen ordentlichen Gefahrstoff-Vorfallbericht für die Sicherheitsakte.",
+        "es": "El turno de mañana encontró hacia las 7:15 un bidón de lejía goteando en el pasillo 3, acordonó la zona, echó absorbente y llevó el bidón al contenedor de derrames; ahora necesito un informe de incidente de peligrosos en condiciones para el archivo de seguridad.",
+        "ar": "وجد طاقم الصباح نحو الساعة 7:15 برميل مبيّض يسرّب في الممر 3، فطوّقوا المنطقة ووضعوا مادة ماصة ونقلوا البرميل إلى حاوية الانسكاب، والآن أحتاج تقرير حادثة مواد خطرة مناسبًا لملف السلامة.",
+        "hi": "सुबह की टीम को लगभग 7:15 पर गलियारा 3 में ब्लीच का रिसता ड्रम मिला, उन्होंने जगह घेर दी, सोखने वाली सामग्री डाली और ड्रम को स्पिल बिन में रखा, अब सेफ़्टी फ़ाइल के लिए ठीक से हैज़मैट घटना रिपोर्ट चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Bleach leak, aisle 3 — paperwork.",
+        "de": "Bleiche-Leck, Gang 3 – Papierkram.",
+        "es": "Fuga de lejía, pasillo 3: papeleo.",
+        "ar": "تسرب مبيّض، الممر 3 — الأوراق.",
+        "hi": "ब्लीच रिसाव, गलियारा 3 — काग़ज़ी काम।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Use our standard hazmat format — report the aisle 3 bleach leak.",
+        "de": "Nimm unser Standardformat für Gefahrstoffe – berichte über das Bleiche-Leck in Gang 3.",
+        "es": "Usa nuestro formato estándar de peligrosos: informa de la fuga de lejía del pasillo 3.",
+        "ar": "استخدم صيغتنا المعتادة للمواد الخطرة — أبلغ عن تسرب المبيّض في الممر 3.",
+        "hi": "हमारा सामान्य हैज़मैट फ़ॉर्मैट इस्तेमाल करो — गलियारा 3 के ब्लीच रिसाव की रिपोर्ट दो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Like the last hazmat report, write one for this morning's bleach leak.",
+        "de": "Wie beim letzten Gefahrstoffbericht: schreib einen für das Bleiche-Leck heute früh.",
+        "es": "Como el último informe de peligrosos, escribe uno para la fuga de lejía de esta mañana.",
+        "ar": "مثل تقرير المواد الخطرة السابق، اكتب واحدًا لتسرب المبيّض هذا الصباح.",
+        "hi": "पिछली हैज़मैट रिपोर्ट की तरह आज सुबह के ब्लीच रिसाव की रिपोर्ट लिखो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "hazmat report bleach aisle 3",
+        "de": "Gefahrstoffbericht Bleiche Gang 3",
+        "es": "informe peligrosos lejía pasillo 3",
+        "ar": "تقرير مواد خطرة مبيّض ممر 3",
+        "hi": "हैज़मैट रिपोर्ट ब्लीच गलियारा 3"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "File the hazmat incident report for the bleach leak.",
+        "de": "Leg den Gefahrstoff-Vorfallbericht für das Bleiche-Leck an.",
+        "es": "Registra el informe de incidente de peligrosos de la fuga de lejía.",
+        "ar": "قدّم تقرير حادثة المواد الخطرة لتسرب المبيّض.",
+        "hi": "ब्लीच रिसाव की हैज़मैट घटना रिपोर्ट दर्ज करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "SDS",
+       "UN1791"
+      ],
+      "answer": {
+       "contains": [
+        "UN1791",
+        "SDS-0442"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-retail-case-packs",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -15,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Whenever I ask for a reorder recommendation, round quantities up to full case packs and show the number of cases in brackets.",
+        "de": "Wenn ich nach einer Nachbestellempfehlung frage, runde die Mengen auf volle Kartoneinheiten auf und gib die Zahl der Kartons in Klammern an.",
+        "es": "Siempre que te pida una recomendación de pedido, redondea las cantidades a cajas completas y pon el número de cajas entre paréntesis.",
+        "ar": "كلما طلبت توصية بإعادة الطلب، قرّب الكميات إلى عبوات كرتونية كاملة واذكر عدد الكراتين بين قوسين.",
+        "hi": "जब भी मैं रीऑर्डर सुझाव माँगूँ, मात्रा को पूरे केस पैक तक ऊपर गोल करना और केस की संख्या कोष्ठक में दिखाना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "facts",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "SKU CN-330 (canned beans) comes in cases of 24; on hand 41, target 150.",
+        "de": "Artikel CN-330 (Dosenbohnen) kommt in Kartons zu 24; Bestand 41, Ziel 150.",
+        "es": "El SKU CN-330 (judías en conserva) viene en cajas de 24; hay 41, objetivo 150.",
+        "ar": "SKU CN-330 (فاصولياء معلبة) يأتي في كراتين من 24؛ المتوفر 41، والهدف 150.",
+        "hi": "SKU CN-330 (डिब्बाबंद बीन्स) 24 के केस में आता है; मौजूद 41, लक्ष्य 150।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What should I reorder for CN-330?",
+        "de": "Was soll ich bei CN-330 nachbestellen?",
+        "es": "¿Cuánto pido del CN-330?",
+        "ar": "كم أعيد طلب CN-330؟",
+        "hi": "CN-330 का कितना रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The canned beans are running low against target.",
+        "de": "Die Dosenbohnen liegen deutlich unter dem Ziel.",
+        "es": "Las judías en conserva están bajas respecto al objetivo.",
+        "ar": "الفاصولياء المعلبة منخفضة مقارنة بالهدف.",
+        "hi": "डिब्बाबंद बीन्स लक्ष्य से काफ़ी कम हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Recommend an order quantity for the canned beans.",
+        "de": "Empfiehl eine Bestellmenge für die Dosenbohnen.",
+        "es": "Recomienda una cantidad de pedido para las judías en conserva.",
+        "ar": "اقترح كمية طلب للفاصولياء المعلبة.",
+        "hi": "डिब्बाबंद बीन्स के लिए ऑर्डर मात्रा सुझाओ।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "reordr recomendation CN-330",
+        "de": "nachbestel empfelung CN-330",
+        "es": "recomendacion de pedio CN-330",
+        "ar": "توصيه اعاده طلب CN-330",
+        "hi": "CN-330 रिऑडर सुझाव"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm doing the grocery order this afternoon and the canned beans, CN-330, are well below where they should be — what would you recommend I order to get back to target?",
+        "de": "Ich mache heute Nachmittag die Lebensmittelbestellung, und die Dosenbohnen CN-330 liegen weit unter Soll – was empfiehlst du, um wieder aufs Ziel zu kommen?",
+        "es": "Esta tarde hago el pedido de alimentación y las judías en conserva, CN-330, están muy por debajo de lo que deberían. ¿Qué me recomiendas pedir para volver al objetivo?",
+        "ar": "أقوم بطلب البقالة بعد الظهر، والفاصولياء المعلبة CN-330 أقل بكثير مما يجب — ماذا تنصحني أن أطلب للعودة إلى الهدف؟",
+        "hi": "आज दोपहर मैं ग्रॉसरी ऑर्डर कर रहा हूँ और डिब्बाबंद बीन्स CN-330 जितने होने चाहिए उससे काफ़ी कम हैं — लक्ष्य तक पहुँचने के लिए कितना ऑर्डर करने की सलाह दोगे?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Beans order?",
+        "de": "Bohnenbestellung?",
+        "es": "¿Pedido de judías?",
+        "ar": "طلب الفاصولياء؟",
+        "hi": "बीन्स का ऑर्डर?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't give me a loose number — what's the CN-330 reorder?",
+        "de": "Keine krumme Zahl – wie lautet die Nachbestellung für CN-330?",
+        "es": "No me des un número suelto: ¿cuál es el pedido del CN-330?",
+        "ar": "لا تعطني رقمًا عشوائيًا — ما إعادة طلب CN-330؟",
+        "hi": "कोई भी संख्या मत दो — CN-330 का रीऑर्डर क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Same rules as always — reorder recommendation for CN-330.",
+        "de": "Gleiche Regeln wie immer – Nachbestellempfehlung für CN-330.",
+        "es": "Las reglas de siempre: recomendación de pedido para el CN-330.",
+        "ar": "القواعد نفسها كالعادة — توصية إعادة طلب CN-330.",
+        "hi": "हमेशा वाले नियम — CN-330 का रीऑर्डर सुझाव।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "CN-330 reorder qty",
+        "de": "CN-330 Bestellmenge",
+        "es": "CN-330 cantidad pedido",
+        "ar": "CN-330 كمية الطلب",
+        "hi": "CN-330 रीऑर्डर मात्रा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the reorder recommendation for CN-330.",
+        "de": "Gib mir die Nachbestellempfehlung für CN-330.",
+        "es": "Dame la recomendación de pedido del CN-330.",
+        "ar": "أعطني توصية إعادة الطلب لـ CN-330.",
+        "hi": "मुझे CN-330 का रीऑर्डर सुझाव दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "case packs",
+        "de": "Kartoneinheiten",
+        "es": "cajas completas",
+        "ar": "عبوات كرتونية كاملة",
+        "hi": "केस पैक"
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "re": "\\(\\s*5\\b"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-retail-shrink-units-dollars",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -18,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Always report shrink in both units and dollar value.",
+        "de": "Gib Inventurdifferenzen immer in Stück und in Dollarwert an.",
+        "es": "Informa siempre la merma en unidades y en valor en dólares.",
+        "ar": "أبلغ عن الفاقد دائمًا بالوحدات وبالقيمة بالدولار.",
+        "hi": "श्रिंक हमेशा यूनिट और डॉलर मूल्य दोनों में बताना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "facts",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Last week's shrink for SKU HB-77 (hair dryer): 14 units; unit cost $6.50.",
+        "de": "Inventurdifferenz letzte Woche für Artikel HB-77 (Föhn): 14 Stück; Stückkosten $6.50.",
+        "es": "Merma de la semana pasada del SKU HB-77 (secador): 14 unidades; coste unitario $6.50.",
+        "ar": "فاقد الأسبوع الماضي لـ SKU HB-77 (مجفف شعر): 14 وحدة؛ تكلفة الوحدة $6.50.",
+        "hi": "पिछले हफ़्ते SKU HB-77 (हेयर ड्रायर) का श्रिंक: 14 यूनिट; यूनिट लागत $6.50।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What was last week's shrink on HB-77?",
+        "de": "Wie hoch war die Inventurdifferenz bei HB-77 letzte Woche?",
+        "es": "¿Cuál fue la merma del HB-77 la semana pasada?",
+        "ar": "كم كان فاقد HB-77 الأسبوع الماضي؟",
+        "hi": "पिछले हफ़्ते HB-77 का श्रिंक कितना था?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The hair dryers keep disappearing.",
+        "de": "Die Föhns verschwinden ständig.",
+        "es": "Los secadores no paran de desaparecer.",
+        "ar": "مجففات الشعر تستمر في الاختفاء.",
+        "hi": "हेयर ड्रायर लगातार ग़ायब हो रहे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much did we lose on the hair dryers last week?",
+        "de": "Wie viel haben wir letzte Woche bei den Föhns verloren?",
+        "es": "¿Cuánto perdimos en secadores la semana pasada?",
+        "ar": "كم خسرنا في مجففات الشعر الأسبوع الماضي؟",
+        "hi": "पिछले हफ़्ते हेयर ड्रायर पर कितना नुक़सान हुआ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "shrnk HB-77 last wek",
+        "de": "differnz HB-77 letzte woch",
+        "es": "merma HB-77 semana pasda",
+        "ar": "فاقد HB-77 الاسبوع الماضي",
+        "hi": "HB-77 पिछले हफते श्रिंक"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Loss prevention is putting the hair dryers behind the counter if the numbers justify it, so I need last week's shrink figure for HB-77 for their review.",
+        "de": "Die Verlustprävention stellt die Föhns hinter die Theke, wenn die Zahlen das rechtfertigen, also brauche ich für ihre Prüfung die Inventurdifferenz von HB-77 aus der letzten Woche.",
+        "es": "Prevención de pérdidas pondrá los secadores detrás del mostrador si las cifras lo justifican, así que necesito la merma del HB-77 de la semana pasada para su revisión.",
+        "ar": "سيضع فريق منع الخسائر مجففات الشعر خلف المنضدة إن بررت الأرقام ذلك، لذا أحتاج رقم فاقد HB-77 للأسبوع الماضي لمراجعتهم.",
+        "hi": "अगर आँकड़े सही ठहराएँ तो लॉस प्रिवेंशन हेयर ड्रायर काउंटर के पीछे रख देगा, इसलिए उनकी समीक्षा के लिए पिछले हफ़्ते का HB-77 श्रिंक आँकड़ा चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "HB-77 losses for LP.",
+        "de": "HB-77-Verluste für die Verlustprävention.",
+        "es": "Pérdidas del HB-77 para prevención.",
+        "ar": "خسائر HB-77 لفريق منع الخسائر.",
+        "hi": "LP के लिए HB-77 का नुक़सान।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not just the count — what was HB-77's shrink last week?",
+        "de": "Nicht nur die Stückzahl – wie hoch war die Differenz bei HB-77 letzte Woche?",
+        "es": "No solo la cantidad: ¿cuál fue la merma del HB-77 la semana pasada?",
+        "ar": "ليس العدد فقط — كم كان فاقد HB-77 الأسبوع الماضي؟",
+        "hi": "सिर्फ़ गिनती नहीं — पिछले हफ़्ते HB-77 का श्रिंक क्या था?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Report last week's HB-77 shrink the way I like it.",
+        "de": "Berichte die Differenz von HB-77 letzte Woche so, wie ich es mag.",
+        "es": "Informa la merma del HB-77 de la semana pasada como me gusta.",
+        "ar": "أبلغ عن فاقد HB-77 الأسبوع الماضي بالطريقة التي أفضّلها.",
+        "hi": "पिछले हफ़्ते का HB-77 श्रिंक मेरे पसंद के तरीक़े से बताओ।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "HB-77 shrink",
+        "de": "HB-77 Differenz",
+        "es": "HB-77 merma",
+        "ar": "HB-77 فاقد",
+        "hi": "HB-77 श्रिंक"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Report HB-77's shrink for last week.",
+        "de": "Melde die Inventurdifferenz von HB-77 für letzte Woche.",
+        "es": "Informa la merma del HB-77 de la semana pasada.",
+        "ar": "أبلغ عن فاقد HB-77 للأسبوع الماضي.",
+        "hi": "पिछले हफ़्ते का HB-77 श्रिंक बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "dollar value",
+        "de": "Dollarwert",
+        "es": "valor en dólares",
+        "ar": "القيمة بالدولار",
+        "hi": "डॉलर मूल्य"
+       },
+       "HB-77"
+      ],
+      "answer": {
+       "contains": [
+        "14",
+        "91"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-retail-promo-brief",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -22,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "When I ask about a promotion, always state its end date and its margin impact.",
+        "de": "Wenn ich nach einer Aktion frage, nenne immer ihr Enddatum und ihre Margenwirkung.",
+        "es": "Cuando te pregunte por una promoción, indica siempre su fecha de fin y su impacto en margen.",
+        "ar": "عندما أسأل عن عرض ترويجي، اذكر دائمًا تاريخ انتهائه وأثره على الهامش.",
+        "hi": "जब मैं किसी प्रमोशन के बारे में पूछूँ, हमेशा उसकी अंतिम तारीख़ और मार्जिन पर असर बताना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "facts",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Back to School Saver: 25% off backpacks, runs to 2026-09-30, margin impact -3.2 points.",
+        "de": "Back to School Saver: 25% auf Rucksäcke, läuft bis 2026-09-30, Margenwirkung -3,2 Punkte (-3.2).",
+        "es": "Back to School Saver: 25% en mochilas, hasta 2026-09-30, impacto en margen -3.2 puntos.",
+        "ar": "Back to School Saver: خصم 25% على الحقائب، حتى 2026-09-30، الأثر على الهامش -3.2 نقطة.",
+        "hi": "Back to School Saver: बैग पर 25% छूट, 2026-09-30 तक, मार्जिन असर -3.2 अंक।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -6,
+     "at": "11:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Draft a short note thanking the night crew for the inventory count.",
+        "de": "Entwirf eine kurze Notiz, in der wir der Nachtschicht für die Inventur danken.",
+        "es": "Redacta una nota breve agradeciendo al turno de noche el recuento de inventario.",
+        "ar": "اكتب ملاحظة قصيرة تشكر فيها طاقم الليل على جرد المخزون.",
+        "hi": "इन्वेंटरी गिनती के लिए नाइट क्रू को धन्यवाद का छोटा नोट लिखो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "What time does the bank courier come on Fridays?",
+        "de": "Wann kommt freitags der Geldkurier?",
+        "es": "¿A qué hora viene el transporte de fondos los viernes?",
+        "ar": "متى يأتي مندوب البنك أيام الجمعة؟",
+        "hi": "शुक्रवार को बैंक कूरियर कितने बजे आता है?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Tell me about the Back to School Saver promo.",
+        "de": "Erzähl mir von der Aktion Back to School Saver.",
+        "es": "Háblame de la promoción Back to School Saver.",
+        "ar": "حدّثني عن عرض Back to School Saver.",
+        "hi": "Back to School Saver प्रोमो के बारे में बताओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The district manager is asking about our backpack promo.",
+        "de": "Der Bezirksleiter fragt nach unserer Rucksackaktion.",
+        "es": "El jefe de zona pregunta por nuestra promoción de mochilas.",
+        "ar": "مدير المنطقة يسأل عن عرض الحقائب لدينا.",
+        "hi": "ज़िला मैनेजर हमारे बैग प्रोमो के बारे में पूछ रहे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Give me a rundown of the backpack deal we're running.",
+        "de": "Gib mir einen Überblick über unser Rucksackangebot.",
+        "es": "Dame un resumen de la oferta de mochilas que tenemos.",
+        "ar": "أعطني ملخصًا عن عرض الحقائب الذي نقدمه.",
+        "hi": "हमारे बैग वाले ऑफ़र का सार दो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "back to scool saver promo detials",
+        "de": "back to school saver aktion detals",
+        "es": "detalles promo bak to school saver",
+        "ar": "تفاصيل عرض باك تو سكول سيفر",
+        "hi": "बैक टू स्कूल सेवर प्रोमो डिटेल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I've got a call with the district manager in ten minutes and she always asks about whatever promo we're running, so give me a quick brief on the Back to School Saver.",
+        "de": "Ich habe in zehn Minuten ein Telefonat mit der Bezirksleiterin, und sie fragt immer nach der laufenden Aktion, also gib mir eine kurze Zusammenfassung zu Back to School Saver.",
+        "es": "Tengo una llamada con la jefa de zona en diez minutos y siempre pregunta por la promoción que tengamos, así que dame un resumen rápido de Back to School Saver.",
+        "ar": "لدي مكالمة مع مديرة المنطقة بعد عشر دقائق، وهي تسأل دائمًا عن العرض الجاري، فأعطني ملخصًا سريعًا عن Back to School Saver.",
+        "hi": "दस मिनट में ज़िला मैनेजर के साथ कॉल है और वह हमेशा चल रहे प्रोमो के बारे में पूछती हैं, तो Back to School Saver का छोटा ब्रीफ़ दो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Promo brief before my call.",
+        "de": "Kurzinfo zur Aktion vor meinem Telefonat.",
+        "es": "Resumen de la promo antes de mi llamada.",
+        "ar": "ملخص العرض قبل مكالمتي.",
+        "hi": "कॉल से पहले प्रोमो ब्रीफ़।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not just the discount — what's the deal with Back to School Saver?",
+        "de": "Nicht nur der Rabatt – was ist mit Back to School Saver?",
+        "es": "No solo el descuento: ¿cómo es Back to School Saver?",
+        "ar": "ليس الخصم فقط — ما قصة Back to School Saver؟",
+        "hi": "सिर्फ़ छूट नहीं — Back to School Saver की पूरी बात क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "As usual for promos, brief me on Back to School Saver.",
+        "de": "Wie immer bei Aktionen: Brief mich zu Back to School Saver.",
+        "es": "Como siempre con las promos, ponme al día de Back to School Saver.",
+        "ar": "كالعادة مع العروض، أطلعني على Back to School Saver.",
+        "hi": "प्रोमो के लिए हमेशा की तरह, Back to School Saver का ब्रीफ़ दो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Back to School Saver",
+        "de": "Back to School Saver",
+        "es": "Back to School Saver",
+        "ar": "Back to School Saver",
+        "hi": "Back to School Saver"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Brief me on the Back to School Saver promotion.",
+        "de": "Informiere mich über die Aktion Back to School Saver.",
+        "es": "Infórmame de la promoción Back to School Saver.",
+        "ar": "أطلعني على عرض Back to School Saver.",
+        "hi": "मुझे Back to School Saver प्रमोशन के बारे में बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "margin impact",
+        "de": "Margenwirkung",
+        "es": "impacto en margen",
+        "ar": "أثره على الهامش",
+        "hi": "मार्जिन पर असर"
+       },
+       "2026-09-30"
+      ],
+      "answer": {
+       "contains": [
+        "2026-09-30",
+        "3.2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-personal-metric-recipes",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -40,
+     "at": "19:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "When I ask for a recipe, list the ingredients in metric units — grams and millilitres — never cups.",
+        "de": "Wenn ich nach einem Rezept frage, gib die Zutaten in metrischen Einheiten an – Gramm und Milliliter – niemals in Tassen.",
+        "es": "Cuando te pida una receta, pon los ingredientes en unidades métricas, gramos y mililitros, nunca en tazas.",
+        "ar": "عندما أطلب وصفة، اذكر المكونات بالوحدات المترية — غرامات ومليلترات — وليس بالأكواب أبدًا.",
+        "hi": "जब मैं कोई रेसिपी माँगूँ, सामग्री मीट्रिक इकाइयों — ग्राम और मिलीलीटर — में बताना, कप में कभी नहीं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -5,
+     "at": "08:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Remind me to water the plants on Thursday.",
+        "de": "Erinnere mich daran, am Donnerstag die Pflanzen zu gießen.",
+        "es": "Recuérdame regar las plantas el jueves.",
+        "ar": "ذكّرني بسقي النباتات يوم الخميس.",
+        "hi": "मुझे गुरुवार को पौधों में पानी देने की याद दिलाना।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me a pancake recipe.",
+        "de": "Gib mir ein Pfannkuchenrezept.",
+        "es": "Dame una receta de tortitas.",
+        "ar": "أعطني وصفة فطائر البان كيك.",
+        "hi": "मुझे पैनकेक की रेसिपी दो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The kids want pancakes for breakfast tomorrow.",
+        "de": "Die Kinder wollen morgen Pfannkuchen zum Frühstück.",
+        "es": "Los niños quieren tortitas para desayunar mañana.",
+        "ar": "الأطفال يريدون بان كيك على الفطور غدًا.",
+        "hi": "बच्चे कल नाश्ते में पैनकेक चाहते हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How do I make fluffy pancakes?",
+        "de": "Wie mache ich fluffige Pfannkuchen?",
+        "es": "¿Cómo hago tortitas esponjosas?",
+        "ar": "كيف أصنع بان كيك هشًا؟",
+        "hi": "फूले हुए पैनकेक कैसे बनाऊँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "pancake recipie pls",
+        "de": "pfankuchen rezpt bitte",
+        "es": "receta de tortitaz porfa",
+        "ar": "وصفه بان كيك لو سمحت",
+        "hi": "पैनकेक रेसपी प्लीज"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "It's my turn to make Sunday breakfast for six people and I promised everyone pancakes, so I need a reliable recipe with quantities that'll feed the whole table.",
+        "de": "Ich bin dran, das Sonntagsfrühstück für sechs Leute zu machen, und habe allen Pfannkuchen versprochen, also brauche ich ein verlässliches Rezept mit Mengen für die ganze Runde.",
+        "es": "Me toca hacer el desayuno del domingo para seis personas y prometí tortitas a todos, así que necesito una receta fiable con cantidades para toda la mesa.",
+        "ar": "دوري في إعداد فطور الأحد لستة أشخاص ووعدت الجميع بالبان كيك، فأحتاج وصفة موثوقة بكميات تكفي الجميع.",
+        "hi": "रविवार को छह लोगों का नाश्ता बनाने की मेरी बारी है और सबसे पैनकेक का वादा किया है, तो पूरे परिवार के लिए मात्राओं के साथ भरोसेमंद रेसिपी चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Pancakes for six.",
+        "de": "Pfannkuchen für sechs.",
+        "es": "Tortitas para seis.",
+        "ar": "بان كيك لستة.",
+        "hi": "छह लोगों के लिए पैनकेक।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "No cups, please — pancake recipe?",
+        "de": "Bitte keine Tassen – Pfannkuchenrezept?",
+        "es": "Sin tazas, por favor: ¿receta de tortitas?",
+        "ar": "بلا أكواب من فضلك — وصفة بان كيك؟",
+        "hi": "कप नहीं, प्लीज़ — पैनकेक रेसिपी?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You know how I like recipes written — pancakes, please.",
+        "de": "Du weißt, wie ich Rezepte mag – Pfannkuchen, bitte.",
+        "es": "Ya sabes cómo me gustan las recetas: tortitas, por favor.",
+        "ar": "تعرف كيف أحب كتابة الوصفات — بان كيك من فضلك.",
+        "hi": "तुम्हें पता है मुझे रेसिपी कैसे पसंद हैं — पैनकेक, प्लीज़।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "pancakes recipe",
+        "de": "Rezept Pfannkuchen",
+        "es": "receta tortitas",
+        "ar": "وصفة بان كيك",
+        "hi": "पैनकेक रेसिपी"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Write out a pancake recipe for me.",
+        "de": "Schreib mir ein Pfannkuchenrezept auf.",
+        "es": "Escríbeme una receta de tortitas.",
+        "ar": "اكتب لي وصفة بان كيك.",
+        "hi": "मेरे लिए पैनकेक की रेसिपी लिखो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "metric",
+        "de": "metrischen",
+        "es": "métricas",
+        "ar": "المترية",
+        "hi": "मीट्रिक"
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "re": "\\d+\\s?(g|ml|gramm|gramos|غ|ग्राम|مل)"
+        }
+       ],
+       "absent": [
+        {
+         "en": "cup",
+         "de": "Tasse",
+         "es": "taza",
+         "ar": "كوب",
+         "hi": "कप"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-it-mfa-skill",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "runs",
+     "day": -12,
+     "at": "09:00",
+     "turns": [],
+     "tool_runs": [
+      {
+       "agent": "ops-agent",
+       "task": {
+        "en": "reset multi-factor authentication for a locked-out user",
+        "de": "Multi-Faktor-Authentifizierung für einen gesperrten Nutzer zurücksetzen",
+        "es": "restablecer la autenticación multifactor de un usuario bloqueado",
+        "ar": "إعادة تعيين المصادقة متعددة العوامل لمستخدم محظور",
+        "hi": "लॉक हुए यूज़र का मल्टी-फ़ैक्टर ऑथेंटिकेशन रीसेट करना"
+       },
+       "calls": [
+        {
+         "tool": "iam-lookup_user",
+         "args": {
+          "user": "jdoe"
+         },
+         "output": {
+          "status": "locked"
+         }
+        },
+        {
+         "tool": "iam-reset_mfa",
+         "args": {
+          "user": "jdoe"
+         },
+         "output": {
+          "ok": true
+         }
+        },
+        {
+         "tool": "mail-send_notice",
+         "args": {
+          "user": "jdoe",
+          "template": "mfa-reset"
+         },
+         "output": {
+          "sent": true
+         }
+        }
+       ],
+       "count": 3
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Reset multi-factor authentication for a locked-out user.",
+        "de": "Setze die Multi-Faktor-Authentifizierung für einen gesperrten Nutzer zurück.",
+        "es": "Restablece la autenticación multifactor de un usuario bloqueado.",
+        "ar": "أعد تعيين المصادقة متعددة العوامل لمستخدم محظور.",
+        "hi": "लॉक हुए यूज़र का मल्टी-फ़ैक्टर ऑथेंटिकेशन रीसेट करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A user lost her phone and can't get past the MFA prompt.",
+        "de": "Eine Nutzerin hat ihr Handy verloren und kommt nicht an der MFA-Abfrage vorbei.",
+        "es": "Una usuaria perdió el móvil y no puede pasar la verificación MFA.",
+        "ar": "مستخدمة فقدت هاتفها ولا تستطيع تجاوز طلب MFA.",
+        "hi": "एक यूज़र का फ़ोन खो गया और वह MFA प्रॉम्प्ट पार नहीं कर पा रही।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Re-enrol two-factor for a user who is locked out.",
+        "de": "Registriere die Zwei-Faktor-Anmeldung für einen gesperrten Nutzer neu.",
+        "es": "Vuelve a registrar el doble factor de un usuario bloqueado.",
+        "ar": "أعد تسجيل التحقق بخطوتين لمستخدم محظور.",
+        "hi": "लॉक हुए यूज़र के लिए टू-फ़ैक्टर फिर से सेट करो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "reset mfa for lockd out usr",
+        "de": "mfa zurücksezen gesperter nutzer",
+        "es": "resetear mfa usuario bloqeado",
+        "ar": "اعادة تعيين mfa لمستخدم مقفل",
+        "hi": "लॉक यूजर का mfa रिसेट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Someone from accounts payable is locked out after getting a new phone, the authenticator app no longer works for her, and she needs access before the payment run at noon — please handle the MFA reset the way we normally do.",
+        "de": "Jemand aus der Kreditorenbuchhaltung ist nach einem Handywechsel gesperrt, die Authenticator-App funktioniert nicht mehr, und sie braucht vor dem Zahlungslauf um zwölf Zugang – bitte erledige den MFA-Reset wie üblich.",
+        "es": "Alguien de cuentas a pagar se ha quedado bloqueada tras cambiar de móvil, la app de autenticación ya no le funciona y necesita acceso antes del lote de pagos de mediodía: haz el reseteo de MFA como siempre.",
+        "ar": "موظفة من الحسابات الدائنة محظورة بعد تغيير هاتفها، وتطبيق المصادقة لم يعد يعمل لديها، وتحتاج للوصول قبل دفعة المدفوعات ظهرًا — من فضلك نفّذ إعادة تعيين MFA كما نفعل عادة.",
+        "hi": "अकाउंट्स पेएबल की एक कर्मचारी नया फ़ोन लेने के बाद लॉक हो गई हैं, ऑथेंटिकेटर ऐप अब काम नहीं करता, और उन्हें दोपहर के भुगतान रन से पहले एक्सेस चाहिए — कृपया MFA रीसेट वैसे ही करो जैसे आम तौर पर करते हैं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "MFA lockout again.",
+        "de": "Schon wieder eine MFA-Sperre.",
+        "es": "Otro bloqueo de MFA.",
+        "ar": "حظر MFA مرة أخرى.",
+        "hi": "फिर से MFA लॉकआउट।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just tell me to call the helpdesk — reset this user's MFA.",
+        "de": "Sag mir nicht nur, ich soll den Helpdesk anrufen – setz die MFA dieses Nutzers zurück.",
+        "es": "No me digas que llame al helpdesk: restablece el MFA de este usuario.",
+        "ar": "لا تقل لي اتصل بالدعم فقط — أعد تعيين MFA لهذا المستخدم.",
+        "hi": "सिर्फ़ हेल्पडेस्क को फ़ोन करने को मत कहो — इस यूज़र का MFA रीसेट करो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Same as the last few times — do the MFA reset for a locked-out user.",
+        "de": "Wie die letzten Male – mach den MFA-Reset für einen gesperrten Nutzer.",
+        "es": "Como las últimas veces: haz el reseteo de MFA de un usuario bloqueado.",
+        "ar": "كما في المرات الأخيرة — نفّذ إعادة تعيين MFA لمستخدم محظور.",
+        "hi": "पिछली कुछ बार की तरह — लॉक हुए यूज़र का MFA रीसेट करो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "mfa reset locked user",
+        "de": "MFA-Reset gesperrter Nutzer",
+        "es": "reseteo MFA usuario bloqueado",
+        "ar": "إعادة تعيين MFA مستخدم محظور",
+        "hi": "MFA रीसेट लॉक यूज़र"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Run the MFA reset for the locked-out user.",
+        "de": "Führ den MFA-Reset für den gesperrten Nutzer aus.",
+        "es": "Ejecuta el reseteo de MFA del usuario bloqueado.",
+        "ar": "نفّذ إعادة تعيين MFA للمستخدم المحظور.",
+        "hi": "लॉक हुए यूज़र का MFA रीसेट चलाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "iam-reset_mfa",
+       "mail-send_notice"
+      ],
+      "answer": {
+       "contains": [
+        "iam-reset_mfa"
+       ]
+      }
+     },
+     "tools": [
+      "iam-lookup_user",
+      "iam-reset_mfa",
+      "mail-send_notice",
+      "crm-read_ticket",
+      "wiki-search"
+     ]
+    }
+   ],
+   "agent": "ops-agent"
+  },
+  {
+   "id": "procedure-finance-variance",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -28,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Whenever I ask for a variance report, show actual vs budget with the variance percentage, and flag anything over 10% with a ⚠ sign.",
+        "de": "Wenn ich nach einem Abweichungsbericht frage, zeig Ist gegen Budget mit der Abweichung in Prozent und markiere alles über 10% mit einem ⚠.",
+        "es": "Siempre que te pida un informe de desviaciones, muestra real frente a presupuesto con el porcentaje de desviación y marca con ⚠ todo lo que supere el 10%.",
+        "ar": "كلما طلبت تقرير انحرافات، اعرض الفعلي مقابل الموازنة مع نسبة الانحراف، وضع علامة ⚠ على كل ما يتجاوز 10%.",
+        "hi": "जब भी मैं वैरिएंस रिपोर्ट माँगूँ, असल बनाम बजट वैरिएंस प्रतिशत के साथ दिखाना, और 10% से ज़्यादा वाले हर आइटम पर ⚠ लगाना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "facts",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "September actuals: travel $18,400 vs budget $15,000; software $9,100 vs budget $9,500.",
+        "de": "September-Istwerte: Reisen $18,400 gegenüber Budget $15,000; Software $9,100 gegenüber Budget $9,500.",
+        "es": "Datos reales de septiembre: viajes $18,400 frente a $15,000 presupuestados; software $9,100 frente a $9,500.",
+        "ar": "فعليات سبتمبر: السفر $18,400 مقابل موازنة $15,000؛ البرمجيات $9,100 مقابل موازنة $9,500.",
+        "hi": "सितंबर के असल आँकड़े: यात्रा $18,400 बनाम बजट $15,000; सॉफ़्टवेयर $9,100 बनाम बजट $9,500।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me the September variance report.",
+        "de": "Gib mir den Abweichungsbericht für September.",
+        "es": "Dame el informe de desviaciones de septiembre.",
+        "ar": "أعطني تقرير الانحرافات لشهر سبتمبر.",
+        "hi": "मुझे सितंबर की वैरिएंस रिपोर्ट दो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The controller wants to see how September tracked against budget.",
+        "de": "Der Controller will sehen, wie der September im Vergleich zum Budget lief.",
+        "es": "El controller quiere ver cómo fue septiembre frente al presupuesto.",
+        "ar": "يريد المراقب المالي رؤية أداء سبتمبر مقارنة بالموازنة.",
+        "hi": "कंट्रोलर देखना चाहते हैं कि सितंबर बजट के मुक़ाबले कैसा रहा।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How did September's spending compare with budget?",
+        "de": "Wie lagen die Ausgaben im September im Vergleich zum Budget?",
+        "es": "¿Cómo fue el gasto de septiembre frente al presupuesto?",
+        "ar": "كيف كان إنفاق سبتمبر مقارنة بالموازنة؟",
+        "hi": "सितंबर का ख़र्च बजट की तुलना में कैसा था?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "septmber varience report",
+        "de": "abweichungsbricht september",
+        "es": "informe de desviasiones septiembre",
+        "ar": "تقرير انحرافات سبتمبر",
+        "hi": "सितम्बर वेरियंस रिपोट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Month-end close is tomorrow and the controller asked me to circulate a variance report for September covering travel and software, so she can see where we're over before the leadership meeting.",
+        "de": "Morgen ist Monatsabschluss, und die Controllerin hat mich gebeten, einen Abweichungsbericht für September zu Reisen und Software zu verschicken, damit sie vor dem Leitungstreffen sieht, wo wir drüber liegen.",
+        "es": "Mañana es el cierre de mes y la controller me pidió enviar un informe de desviaciones de septiembre de viajes y software para ver dónde nos pasamos antes de la reunión de dirección.",
+        "ar": "الإغلاق الشهري غدًا، وطلبت مني المراقبة المالية تعميم تقرير انحرافات لشهر سبتمبر يشمل السفر والبرمجيات لترى أين تجاوزنا قبل اجتماع الإدارة.",
+        "hi": "कल महीने की क्लोज़िंग है और कंट्रोलर ने सितंबर की यात्रा और सॉफ़्टवेयर वाली वैरिएंस रिपोर्ट भेजने को कहा है, ताकि लीडरशिप मीटिंग से पहले वह देख सकें कि हम कहाँ ज़्यादा हैं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "September vs budget, please.",
+        "de": "September gegen Budget, bitte.",
+        "es": "Septiembre frente a presupuesto, por favor.",
+        "ar": "سبتمبر مقابل الموازنة من فضلك.",
+        "hi": "सितंबर बनाम बजट, प्लीज़।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not just totals — I want the September variance report.",
+        "de": "Nicht nur Summen – ich will den Abweichungsbericht für September.",
+        "es": "No solo totales: quiero el informe de desviaciones de septiembre.",
+        "ar": "ليس الإجماليات فقط — أريد تقرير انحرافات سبتمبر.",
+        "hi": "सिर्फ़ कुल नहीं — मुझे सितंबर की वैरिएंस रिपोर्ट चाहिए।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Do September's variance report the way I asked before.",
+        "de": "Mach den September-Abweichungsbericht so, wie ich es früher gesagt habe.",
+        "es": "Haz el informe de desviaciones de septiembre como te pedí antes.",
+        "ar": "اعمل تقرير انحرافات سبتمبر بالطريقة التي طلبتها سابقًا.",
+        "hi": "सितंबर की वैरिएंस रिपोर्ट वैसे बनाओ जैसे मैंने पहले कहा था।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "variance report September",
+        "de": "Abweichungsbericht September",
+        "es": "informe desviaciones septiembre",
+        "ar": "تقرير انحرافات سبتمبر",
+        "hi": "वैरिएंस रिपोर्ट सितंबर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Prepare the September variance report.",
+        "de": "Erstell den Abweichungsbericht für September.",
+        "es": "Prepara el informe de desviaciones de septiembre.",
+        "ar": "جهّز تقرير انحرافات سبتمبر.",
+        "hi": "सितंबर की वैरिएंस रिपोर्ट तैयार करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "⚠",
+       "10%"
+      ],
+      "answer": {
+       "contains": [
+        "⚠",
+        {
+         "re": "22\\.?\\d?\\s?%"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "procedure-field-service-report",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -35,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Every service report I ask for must end with a parts-used list and a customer signature line.",
+        "de": "Jeder Servicebericht, den ich anfordere, muss mit einer Liste der verbrauchten Teile und einer Unterschriftszeile für den Kunden enden.",
+        "es": "Todo informe de servicio que te pida debe terminar con una lista de piezas usadas y una línea para la firma del cliente.",
+        "ar": "كل تقرير خدمة أطلبه يجب أن ينتهي بقائمة القطع المستخدمة وسطر لتوقيع العميل.",
+        "hi": "मेरी माँगी हर सर्विस रिपोर्ट के अंत में इस्तेमाल हुए पार्ट्स की सूची और ग्राहक के हस्ताक्षर की पंक्ति होनी चाहिए।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "job",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Job WO-4120 at Hilltop: replaced the PX-250 impeller and seal kit SK-12; pump tested OK.",
+        "de": "Auftrag WO-4120 in Hilltop: Laufrad der PX-250 und Dichtungssatz SK-12 ersetzt; Pumpe getestet, in Ordnung.",
+        "es": "Trabajo WO-4120 en Hilltop: sustituidos el impulsor de la PX-250 y el kit de juntas SK-12; bomba probada, correcta.",
+        "ar": "العمل WO-4120 في Hilltop: استُبدل دافع PX-250 وطقم الحشوات SK-12؛ واختُبرت المضخة بنجاح.",
+        "hi": "काम WO-4120 Hilltop पर: PX-250 का इम्पेलर और सील किट SK-12 बदले; पंप जाँचा, ठीक है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Write the service report for WO-4120.",
+        "de": "Schreib den Servicebericht für WO-4120.",
+        "es": "Redacta el informe de servicio de la WO-4120.",
+        "ar": "اكتب تقرير الخدمة لـ WO-4120.",
+        "hi": "WO-4120 की सर्विस रिपोर्ट लिखो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I finished the Hilltop pump job yesterday and the customer wants the paperwork.",
+        "de": "Ich habe den Pumpenauftrag in Hilltop gestern abgeschlossen, und der Kunde will die Unterlagen.",
+        "es": "Ayer terminé el trabajo de la bomba de Hilltop y el cliente quiere el papeleo.",
+        "ar": "أنهيت عمل مضخة Hilltop أمس والعميل يريد الأوراق.",
+        "hi": "कल मैंने Hilltop पंप का काम ख़त्म किया और ग्राहक को काग़ज़ चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Draft the job report for the Hilltop impeller replacement.",
+        "de": "Entwirf den Einsatzbericht für den Laufradtausch in Hilltop.",
+        "es": "Redacta el parte del cambio de impulsor de Hilltop.",
+        "ar": "اكتب مسودة تقرير استبدال الدافع في Hilltop.",
+        "hi": "Hilltop इम्पेलर बदलने की जॉब रिपोर्ट का मसौदा बनाओ।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "servise report WO-4120",
+        "de": "servicebricht WO-4120",
+        "es": "informe de servisio WO-4120",
+        "ar": "تقرير خدمه WO-4120",
+        "hi": "WO-4120 सर्विस रिपोट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The Hilltop facility manager needs the service report for yesterday's job before she can sign off the invoice, so please write up WO-4120 — the impeller and seal replacement on their pump.",
+        "de": "Die Facility-Managerin in Hilltop braucht den Servicebericht von gestern, bevor sie die Rechnung freigibt, also schreib bitte WO-4120 – den Tausch von Laufrad und Dichtungen an ihrer Pumpe.",
+        "es": "La responsable de instalaciones de Hilltop necesita el informe de servicio del trabajo de ayer antes de aprobar la factura, así que redacta la WO-4120, el cambio de impulsor y juntas de su bomba.",
+        "ar": "تحتاج مديرة منشأة Hilltop تقرير خدمة عمل الأمس قبل أن تعتمد الفاتورة، فاكتب WO-4120 من فضلك — استبدال الدافع والحشوات في مضختهم.",
+        "hi": "Hilltop की फ़ैसिलिटी मैनेजर को बिल मंज़ूर करने से पहले कल के काम की सर्विस रिपोर्ट चाहिए, तो कृपया WO-4120 लिखो — उनके पंप का इम्पेलर और सील बदलना।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Paperwork for WO-4120.",
+        "de": "Unterlagen für WO-4120.",
+        "es": "Papeleo de la WO-4120.",
+        "ar": "أوراق WO-4120.",
+        "hi": "WO-4120 के काग़ज़।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't skip the usual ending — service report for WO-4120.",
+        "de": "Lass den üblichen Abschluss nicht weg – Servicebericht für WO-4120.",
+        "es": "No te saltes el final de siempre: informe de servicio de la WO-4120.",
+        "ar": "لا تتجاهل الخاتمة المعتادة — تقرير خدمة WO-4120.",
+        "hi": "हमेशा वाला अंत मत छोड़ना — WO-4120 की सर्विस रिपोर्ट।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Do the WO-4120 report the way I always want them.",
+        "de": "Mach den Bericht zu WO-4120 so, wie ich es immer will.",
+        "es": "Haz el informe de la WO-4120 como siempre lo quiero.",
+        "ar": "اعمل تقرير WO-4120 بالطريقة التي أريدها دائمًا.",
+        "hi": "WO-4120 की रिपोर्ट वैसे बनाओ जैसी मुझे हमेशा चाहिए।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "WO-4120 report",
+        "de": "WO-4120 Bericht",
+        "es": "informe WO-4120",
+        "ar": "تقرير WO-4120",
+        "hi": "WO-4120 रिपोर्ट"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Prepare the WO-4120 service report.",
+        "de": "Erstell den Servicebericht zu WO-4120.",
+        "es": "Prepara el informe de servicio de la WO-4120.",
+        "ar": "جهّز تقرير خدمة WO-4120.",
+        "hi": "WO-4120 की सर्विस रिपोर्ट तैयार करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "signature",
+        "de": "Unterschrift",
+        "es": "firma",
+        "ar": "توقيع",
+        "hi": "हस्ताक्षर"
+       },
+       "WO-4120"
+      ],
+      "answer": {
+       "contains": [
+        {
+         "en": "signature",
+         "de": "Unterschrift",
+         "es": "firma",
+         "ar": "توقيع",
+         "hi": "हस्ताक्षर"
+        },
+        "SK-12"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}
