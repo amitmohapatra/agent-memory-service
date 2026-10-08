@@ -216,10 +216,12 @@ class ScriptedNLI:
 
     representative = True
 
-    def __init__(self, scores: dict[tuple[str, StatementKind], float]) -> None:
+    def __init__(self, scores: dict[tuple[str, str], float]) -> None:
         self.scores = scores
         self.pairs: list[tuple[str, str]] = []
-        self.hypotheses = {v: k for k, v in StatementLabellerSettings().hypotheses.items()}
+        cfg = StatementLabellerSettings()
+        self.hypotheses: dict[str, str] = {v: k for k, v in cfg.hypotheses.items()}
+        self.hypotheses[cfg.screen_hypothesis] = "CHANGE"
 
     async def entail_groups(
         self, groups: Sequence[tuple[Sequence[str], str]]
@@ -237,16 +239,28 @@ class ScriptedNLI:
 
 
 AMBIGUOUS_RULE = "Formatiere Bestandsprüfungen immer als Markdown-Tabelle."
-PLAIN = "The cooler in aisle 5 makes a grinding noise."
+#: a statement no German cue marks: the head screens it for a change, then checks the kinds
+PLAIN = "Der Kühler in Gang 5 macht seit heute ein mahlendes Geräusch."
+CHANGED = {(PLAIN, "CHANGE"): 0.9}
 
 
 async def test_the_head_decides_only_what_the_lexicon_left_open() -> None:
-    nli = ScriptedNLI({(AMBIGUOUS_RULE, K.RULE): 0.97, (PLAIN, K.STATUS): 0.99})
+    nli = ScriptedNLI({(AMBIGUOUS_RULE, K.RULE): 0.97, (PLAIN, K.STATUS): 0.99, **CHANGED})
     labeller = StatementLabeller(nli=nli)  # type: ignore[arg-type]
     labels = await labeller.label([CASE_11, AMBIGUOUS_RULE, PLAIN, "Thanks!"])
     assert [label.kind for label in labels] == [K.CONDITIONAL_RULE, K.RULE, K.STATUS, None]
     assert [label.source for label in labels] == ["lexicon", "nli", "nli", "lexicon"]
     assert {premise for premise, _ in nli.pairs} == {AMBIGUOUS_RULE, PLAIN}, "one batch, open only"
+
+
+async def test_a_statement_costs_one_pair_unless_something_changed() -> None:
+    """Outside English an open statement is screened with one pair; only a change is checked
+    against the kinds. An English statement no cue marks is a fact with no pair at all."""
+    nli = ScriptedNLI({})
+    labeller = StatementLabeller(nli=nli)  # type: ignore[arg-type]
+    [german, english] = await labeller.label([PLAIN, "The cooler in aisle 5 is quite old."])
+    assert german.kind is K.FACT and english.kind is K.FACT
+    assert len(nli.pairs) == 1 and nli.pairs[0][0] == PLAIN
 
 
 async def test_a_standing_word_the_head_rejects_is_a_fact() -> None:
@@ -265,7 +279,8 @@ async def test_a_stand_in_head_is_never_read_as_a_classifier() -> None:
 
 
 async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confirmed() -> None:
-    unsure = {(PLAIN, K.STATUS): 0.6}  # above the confirmation bar, below the decision bar
+    # above the confirmation bar, below the decision bar
+    unsure = {(PLAIN, K.STATUS): 0.6, **CHANGED}
     with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
         labeller = StatementLabeller(
             nli=ScriptedNLI(unsure),  # type: ignore[arg-type]
@@ -282,7 +297,7 @@ async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confi
         [label] = await labeller.label([PLAIN])
         assert label.kind is K.FACT, "a proposal the head does not confirm is not taken"
     with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
-        sure = {(PLAIN, K.STATUS): 0.99}
+        sure = {(PLAIN, K.STATUS): 0.99, **CHANGED}
         labeller = StatementLabeller(
             nli=ScriptedNLI(sure),  # type: ignore[arg-type]
             assist=gw.assist(uses=["contextual_extraction"]),
@@ -294,7 +309,7 @@ async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confi
 async def test_a_failing_gateway_keeps_the_head_s_answer() -> None:
     with mocked_gateway(failing=True) as gw:
         labeller = StatementLabeller(
-            nli=ScriptedNLI({(PLAIN, K.STATUS): 0.6}),  # type: ignore[arg-type]
+            nli=ScriptedNLI({(PLAIN, K.STATUS): 0.6, **CHANGED}),  # type: ignore[arg-type]
             assist=gw.assist(uses=["contextual_extraction"]),
         )
         [label] = await labeller.label([PLAIN])
@@ -367,7 +382,7 @@ async def test_every_candidate_carries_its_kind_and_the_turn_its_most_telling_on
 
 
 async def test_the_head_reaches_extraction_for_user_messages_only() -> None:
-    nli = ScriptedNLI({(PLAIN, K.STATUS): 0.99})
+    nli = ScriptedNLI({(PLAIN, K.STATUS): 0.99, **CHANGED})
     cands = await _extract(PLAIN, StatementLabeller(nli=nli))  # type: ignore[arg-type]
     assert {c.statement_kind for c in cands} == {K.STATUS}
     assert nli.pairs

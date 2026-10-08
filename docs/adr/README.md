@@ -45,6 +45,7 @@ is not finished).
 | [0032](0032-sdk-resilience-act-for-admission-forget-dev-defaults.md) | SDK resilience (Retry-After, full-jitter backoff, read-only POST retries, status-classed errors, circuit breaker, env defaults), `may_act_as` checks agents too, the admission gate behind a tenant switch, the forget cascade moves readers' revisions, and dev defaults (development tenant, development envelope key) | accepted; amends 0009, 0021, 0022 |
 | [0033](0033-learned-skills.md) | A learned procedure becomes an Agent Skill only when the tenant's administrator publishes it, to `SKILLS_DIR` or the gateway's skills repository | superseded by 0034 |
 | [0034](0034-learned-skills-in-context.md) | An agent learns skills from all its users and is offered them in its context: no publishing, a skill reaches other users once two produced it, `GET /v1/skills` and dismiss | accepted; supersedes 0033, builds on 0018 |
+| [0035](0035-statement-labeller.md) | What a user's statement does (fact, rule, conditional rule, status, correction, lifecycle) labelled at write: lexicon packs as data, the existing NLI head for what they leave open, the tenant's model only when the head is unsure and only if it confirms; fixes "When I ask ..." read as a question, rules with text before "never", and lost exception clauses | accepted |
 
 ## Where the numbers behind these decisions are
 

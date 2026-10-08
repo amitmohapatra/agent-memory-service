@@ -44,6 +44,8 @@ from memory_service.ports.models import NLIProvider
 
 LEXICON_DIR: Final = Path(__file__).with_name("lexicon")
 RULE_KINDS: Final = frozenset({StatementKind.RULE, StatementKind.CONDITIONAL_RULE})
+#: The NLI check of an open statement before any kind: did something change at all?
+_SCREEN: Final = "CHANGE"
 #: The kind that wins when two apply to one sentence (and to a turn of several sentences).
 PRECEDENCE: Final = (
     StatementKind.CORRECTION,
@@ -258,7 +260,14 @@ class Lexicon:
         return self.reader(sentence).is_question(sentence)
 
     def label(self, sentence: str) -> LexicalLabel:
-        return self.reader(sentence).label(sentence)
+        reader = self.reader(sentence)
+        label = reader.label(sentence)
+        if reader is self._readers.get(ENGLISH) and label.maybe is None and not label.decided:
+            # The English packs are the complete reader: a statement none of their cues
+            # marks is a fact, with no model pass (which would cost two NLI pairs a sentence
+            # for the most common sentence there is).
+            return replace(label, decided=True)
+        return label
 
 
 class _Reader:
@@ -604,7 +613,7 @@ class _Open:
     index: int
     sentence: str
     lexical: LexicalLabel
-    candidates: tuple[StatementKind, ...] = field(default_factory=tuple)
+    candidates: tuple[str, ...] = field(default_factory=tuple)
 
 
 class StatementLabeller:
@@ -639,6 +648,16 @@ class StatementLabeller:
         seen = await self._entail(
             open_, [(n, k) for n, o in enumerate(open_) for k in o.candidates]
         )
+        changed = [
+            n
+            for n, o in enumerate(open_)
+            if seen.get(n, {}).get(_SCREEN, 0.0) >= self.cfg.screen_threshold
+        ]
+        if changed:
+            for n, scores in (
+                await self._entail(open_, [(n, k) for n in changed for k in self.cfg.open_kinds])
+            ).items():
+                seen[n].update(scores)
         proposals = await self._ask_model(open_, seen)
         for n, o in enumerate(open_):
             labels[o.index] = self._resolve(o, proposals.get(n), seen.get(n, {}), labels[o.index])
@@ -653,7 +672,7 @@ class StatementLabeller:
         ][: self.cfg.nli_max_sentences]
 
     async def _ask_model(
-        self, open_: list[_Open], seen: dict[int, dict[StatementKind, float]]
+        self, open_: list[_Open], seen: dict[int, dict[str, float]]
     ) -> dict[int, StatementKind]:
         """The tenant's model's kinds for what the head was unsure of - a score in the band
         between confirming a proposal and deciding alone - so a model call is the exception
@@ -668,15 +687,15 @@ class StatementLabeller:
                 seen.setdefault(n, {}).update(scores)
         return proposals
 
-    def _candidates(self, x: LexicalLabel) -> tuple[StatementKind, ...]:
-        """The kinds the NLI head checks for an open sentence."""
-        if x.maybe in RULE_KINDS:
-            return (StatementKind.RULE,)
-        return self.cfg.open_kinds
+    def _candidates(self, x: LexicalLabel) -> tuple[str, ...]:
+        """What the NLI head checks first for an open sentence: the rule it may be, or
+        whether anything changed at all (``screen_hypothesis``)."""
+        return (StatementKind.RULE,) if x.maybe in RULE_KINDS else (_SCREEN,)
 
-    def _unsure(self, o: _Open, seen: dict[StatementKind, float]) -> bool:
-        decided = any(seen.get(k, 0.0) >= self.cfg.thresholds[k] for k in o.candidates)
-        return not decided and any(seen.get(k, 0.0) >= self.cfg.llm_confirm_min for k in seen)
+    def _unsure(self, o: _Open, seen: dict[str, float]) -> bool:
+        kinds = [k for k in seen if k != _SCREEN]
+        decided = any(seen[k] >= self.cfg.thresholds[StatementKind(k)] for k in kinds)
+        return not decided and any(seen[k] >= self.cfg.llm_confirm_min for k in seen)
 
     async def _proposals(self, open_: list[_Open], unsure: list[int]) -> dict[int, StatementKind]:
         """The model's kind for each unsure sentence (by its index in ``open_``)."""
@@ -701,28 +720,33 @@ class StatementLabeller:
         return proposals
 
     async def _entail(
-        self, open_: list[_Open], checks: list[tuple[int, StatementKind]]
-    ) -> dict[int, dict[StatementKind, float]]:
+        self, open_: list[_Open], checks: Sequence[tuple[int, str]]
+    ) -> dict[int, dict[str, float]]:
         """Entailment of each (sentence, kind) check: one NLI batch for the observation."""
-        by_kind: dict[StatementKind, list[int]] = {}
+        by_kind: dict[str, list[int]] = {}
         for n, kind in checks:
             by_kind.setdefault(kind, []).append(n)
         order = list(by_kind)
         assert self.nli is not None
         scores = await self.nli.entail_groups(
-            [([open_[n].sentence for n in by_kind[k]], self.cfg.hypotheses[k]) for k in order]
+            [([open_[n].sentence for n in by_kind[k]], self._hypothesis(k)) for k in order]
         )
-        seen: dict[int, dict[StatementKind, float]] = {}
+        seen: dict[int, dict[str, float]] = {}
         for kind, rows in zip(order, scores, strict=True):
             for n, score in zip(by_kind[kind], rows, strict=True):
                 seen.setdefault(n, {})[kind] = score.entailment
         return seen
 
+    def _hypothesis(self, key: str) -> str:
+        if key == _SCREEN:
+            return self.cfg.screen_hypothesis
+        return self.cfg.hypotheses[StatementKind(key)]
+
     def _resolve(
         self,
         o: _Open,
         proposed: StatementKind | None,
-        seen: dict[StatementKind, float],
+        seen: dict[str, float],
         label: StatementLabel,
     ) -> StatementLabel:
         for checked in _checked(proposed):
@@ -736,7 +760,7 @@ class StatementLabeller:
                 return replace(label, kind=o.lexical.maybe, source="nli", confidence=score)
             return StatementLabel(StatementKind.FACT, source="nli", confidence=1.0 - score)
         best = max(
-            (k for k in o.candidates if k in seen),
+            (k for k in self.cfg.open_kinds if k in seen),
             key=lambda k: seen[k] - self.cfg.thresholds[k],
             default=None,
         )
