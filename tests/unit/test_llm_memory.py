@@ -232,7 +232,7 @@ class _Memories:
         ][:limit]
 
     async def candidates(
-        self, tenant_id, *, scope_key, normalized_hash=None, subject=None, limit=20
+        self, tenant_id, *, scope_key, normalized_hash=None, subjects=(), limit=20
     ):
         return [m for m in self.added if m.scope.key() == scope_key][:limit]
 
