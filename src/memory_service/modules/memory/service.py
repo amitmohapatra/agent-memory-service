@@ -110,7 +110,9 @@ class MemoryService:
             content=content,
             memory_type=memory_type,
             lifetime=lifetime,
-            visibility=visibility or default_visibility(memory_type, ctx),
+            # a user stating something is that user's own memory; an agent's keeps its rules
+            visibility=visibility
+            or default_visibility(memory_type, ctx, user_statement=not ctx.is_agent),
             subject=subject or (f"user:{ctx.user_id}" if about_user else None),
             valid_from=valid_from,
             valid_to=valid_to,

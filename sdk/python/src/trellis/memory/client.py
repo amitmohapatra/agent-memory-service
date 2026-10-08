@@ -299,7 +299,12 @@ class MemoryContext:
         **metadata: Any,
     ) -> RememberAck:
         """Store ``content`` verbatim as one memory, now. The same content in the same scope
-        returns the memory already stored, with ``deduplicated=True``."""
+        returns the memory already stored, with ``deduplicated=True``.
+
+        Without ``visibility``, what a user states is ``USER``: it follows them into every
+        conversation of theirs and reaches every agent acting for them, never another
+        person. Pass ``"THREAD"`` to keep it to this conversation or ``"WORKSPACE"`` to share
+        it with the team; a scope bound to an agent keeps its own audience."""
         payload: dict[str, Any] = {
             "scope": self.scope_payload(),
             "content": content,

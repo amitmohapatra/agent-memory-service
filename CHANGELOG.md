@@ -24,6 +24,22 @@ each entry says which one moved. Decisions behind each change are in the
   only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
 
 ### Fixed
+- Single-fact recall across conversations: "The master lock code for the hazardous materials
+  cage in Warehouse 3 is 8492." said in one chat is answered in the user's next one. What a
+  user says - their messages, decisions, feedback and their own `remember` - now defaults to
+  `USER` (every conversation of theirs and every agent acting for them, never another person)
+  instead of the thread it was said in; `visibility="THREAD"` keeps a statement to its
+  conversation and `"WORKSPACE"` shares it with a team, as before. A user's turn relayed by an
+  agent harness is the user's, no longer the agent's private note. Existing rows keep their
+  audience ([concepts](docs/guide/02-concepts.md#scope-and-visibility-are-separate-on-purpose),
+  ADR 0035).
+- A user's sentence is no longer lost when a rule reads all of it: the turn is kept verbatim
+  beside any reading that can lapse, merge or fade (a fact, a task, a procedure, an event, a
+  decision) - "All seasonal merchandise must go to Facility B" survived only as a seven-day
+  task - and the two take one slot in a bundle. A turn longer than 2000 characters is kept
+  whole in sentence-cut pieces instead of truncated. The fact rule reads subjects of up to
+  twelve words ("the master lock code for the hazardous materials cage in Warehouse 3"), not
+  five (ADR 0035).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does

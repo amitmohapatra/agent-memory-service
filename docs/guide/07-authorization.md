@@ -149,6 +149,11 @@ read; read means a non-empty intersection (`modules/authz/visibility.py`).
 | `WORKSPACE` | every member of the team (admin, member, viewer) | `workspace:<t>/<workspace>` |
 | `TENANT` | everyone in the tenant | `tenant:<t>` |
 
+A user's own words default to `USER` and everything else to the narrowest audience its writer
+has (the default table in [chapter 2](02-concepts.md#scope-and-visibility-are-separate-on-purpose)):
+what a person says reaches their other conversations and nobody else; `THREAD` and `WORKSPACE`
+are chosen, never assumed.
+
 Three rules refine the table:
 
 - **The author keeps access.** For `USER`, `AGENT_GROUP`, `WORKSPACE` and `TENANT`, the

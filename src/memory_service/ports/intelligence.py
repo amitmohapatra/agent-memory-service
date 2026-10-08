@@ -60,6 +60,11 @@ class MemoryCandidate(BaseModel):
     provider_ref: str | None = Field(
         default=None, description="the external provider's own id for this memory, if any"
     )
+    said_by_user: bool = Field(
+        default=False,
+        description="the text is a user's own words (their message, decision or feedback, "
+        "not an agent's): by default it then follows that user across their conversations",
+    )
     preceding_turn: dict[str, str] | None = Field(
         default=None,
         description="the message said just before this one in the same conversation: its "

@@ -148,7 +148,13 @@ async def test_a_standing_rule_does_not_expire(container, uow_factory) -> None:
     assert instruction.system_metadata.get("expires_at") is not None
 
 
-async def test_decisions_are_thread_scoped_and_shared_in_thread(container, uow_factory) -> None:
+async def test_a_decision_follows_its_author_and_is_shared_only_when_asked(
+    container, uow_factory
+) -> None:
+    """A decision the user records is theirs, like anything else they say: it reaches their
+    other conversations and not another person, even one granted the same thread. Sharing it
+    with the thread's participants is a choice, ``visibility=THREAD``, and then it stays in
+    that thread for its author too."""
     thread = new_id("thread")
     a = U1.model_copy(
         update={"thread_id": thread, "session_id": new_id("session"), "turn_id": new_id("turn")}
@@ -170,27 +176,38 @@ async def test_decisions_are_thread_scoped_and_shared_in_thread(container, uow_f
         "We decided to use PostgreSQL instead of MongoDB.",
         kind=ObservationKind.DECISION,
     )
+    await _observe(
+        container,
+        uow_factory,
+        a,
+        "We decided to ship the Kafka migration on Friday.",
+        kind=ObservationKind.DECISION,
+        hints=ProcessingHints(visibility=Visibility.THREAD),
+    )
     mems = await _memories(uow_factory, a, container)
-    decision = next(m for m in mems if m.predicate == "decided")
-    assert decision.visibility is Visibility.THREAD and decision.scope.thread_id == thread
-    assert decision.system_metadata["category"] == "decision"
-    # thread participant b can recall it; a stranger outside the thread cannot
+    decided = {m.object: m for m in mems if m.predicate == "decided"}
+    mine = decided["use postgresql instead of mongodb"]
+    shared = decided["ship the kafka migration on friday"]
+    assert mine.visibility is Visibility.USER and mine.scope.thread_id == thread
+    assert shared.visibility is Visibility.THREAD and shared.scope.thread_id == thread
+    assert mine.system_metadata["category"] == shared.system_metadata["category"] == "decision"
     engine = container.services["retrieval"]
-    got = await engine.retrieve(b, "why did we decide on PostgreSQL?", kinds=("memory",))
-    returned = {c.record_id for c in got.candidates if c.kind == "memory"}
-    # Short source statements are retained now, including the thread's "kick-off".
-    # This is an access test: require the decision and reject anything outside this thread,
-    # rather than assuming the setup message never became a canonical memory.
-    assert decision.memory_id in returned
-    assert returned <= {
-        m.memory_id
-        for m in mems
-        if m.visibility is Visibility.THREAD and m.scope.thread_id == thread
-    }
+
+    async def recalled(who, query: str) -> set[str]:
+        got = await engine.retrieve(who, query, kinds=("memory",))
+        return {c.record_id for c in got.candidates if c.kind == "memory"}
+
+    elsewhere = U1.model_copy(update={"thread_id": new_id("thread")})
+    assert mine.memory_id in await recalled(elsewhere, "why did we decide on PostgreSQL?")
+    assert shared.memory_id not in await recalled(elsewhere, "when does the Kafka migration ship?")
+    # the participant reads what was shared with the thread, and nothing that was a's own
+    assert shared.memory_id in await recalled(b, "when does the Kafka migration ship?")
+    readable_by_b = await recalled(b, "why did we decide on PostgreSQL?")
+    assert mine.memory_id not in readable_by_b
+    assert readable_by_b <= {m.memory_id for m in mems if m.visibility is Visibility.THREAD}
     stranger = U2.model_copy(update={"user_id": "u3"})
-    assert (
-        await engine.retrieve(stranger, "why did we decide on PostgreSQL?", kinds=("memory",))
-    ).candidates == []
+    for query in ("why did we decide on PostgreSQL?", "when does the Kafka migration ship?"):
+        assert await recalled(stranger, query) == set()
 
 
 async def test_agent_private_memories_stay_private(container, uow_factory) -> None:

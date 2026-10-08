@@ -91,8 +91,11 @@ for job_id in ack.job_ids:
   them (how the harness re-sends a transcript safely).
 - `history.*` needs a `thread_id` (or an agent run, whose id names the thread); `remember`,
   `search` and `context` need only a tenant.
-- `remember` with no `visibility` takes the scope's own; documents default to the thread, else
-  the user.
+- What a user says follows that user: `remember` with no `visibility`, and every memory made
+  from a user's own message, is `USER` (every conversation of theirs and their agents, nobody
+  else); pass `visibility="THREAD"` to keep it to one conversation, `"WORKSPACE"` to share it
+  with the team. An agent's own `remember` keeps the scope's audience. Documents default to
+  the thread, else the user.
 
 ## 4. Correcting: supersede, forget, restore
 

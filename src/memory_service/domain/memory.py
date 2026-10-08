@@ -32,6 +32,23 @@ def unverified_representation(metadata: Mapping[str, Any]) -> bool:
     )
 
 
+#: Categories kept for good: the turns every other memory is evidence from, and the rules a
+#: user said are standing.
+LASTING_CATEGORIES = frozenset({"verbatim_turn", "rule"})
+#: Kinds whose LONG_TERM memories are kept for good: what the user said about themselves.
+LASTING_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
+
+
+def lasting(category: str | None, memory_type: MemoryType, lifetime: Lifetime) -> bool:
+    """Whether a memory is kept for good: never lapsing, and left alone by automatic
+    forgetting however long it sits unused (``modules.memory.forgetting``). A user's turn
+    needs no verbatim copy beside a reading of it in the same words that is lasting
+    (``modules.memory.native``); any other reading can lapse, fade or be merged away."""
+    return category in LASTING_CATEGORIES or (
+        memory_type in LASTING_TYPES and lifetime is Lifetime.LONG_TERM
+    )
+
+
 class Scope(BaseModel):
     """Where a memory is anchored. Every identifier that is set narrows the scope."""
 

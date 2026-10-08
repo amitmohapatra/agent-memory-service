@@ -1178,6 +1178,30 @@ def _dedup_context(candidate: Candidate) -> tuple:
     )
 
 
+#: Subjects that name who spoke rather than what was spoken about.
+_SPEAKER_SUBJECTS = ("user:", "agent:")
+
+
+def _twin_context(context: tuple) -> tuple:
+    """The provenance under which equal words are one statement: a topic subject counts as
+    the writer, as a scope placeholder already does in ``_dedup_context``.
+
+    A turn is kept verbatim beside what a rule read from it (``native.extract``), and a rule
+    that parses the whole turn yields the same words twice: "The cage code is 8492" as a fact
+    about the cage and as the turn its speaker said. A subject like "cage code" names what was
+    said about, not a different speaker, so equal words from the same writer, instant and
+    source turns are one statement and take one slot. A speaker subject (``user:``,
+    ``agent:``) still keeps equal words apart, and containment (``COLLAPSE_SUBSUMED``) still
+    compares within the subject.
+    """
+    if len(context) != 5:  # not a memory with full provenance: its own context already
+        return context
+    kind, subject, owner, observed_at, sources = context
+    if not (isinstance(subject, str) and subject.startswith(_SPEAKER_SUBJECTS)):
+        subject = owner
+    return (kind, subject, owner, observed_at, sources)
+
+
 def _dedup(candidates: Sequence[Candidate]) -> list[Candidate]:
     """Collapse representations of the same evidence, preserving speaker and event.
 
@@ -1198,7 +1222,7 @@ def _dedup(candidates: Sequence[Candidate]) -> list[Candidate]:
             digest = candidate.payload.get("text_hash") or (
                 content_hash(candidate.text) if candidate.text else None
             )
-            hash_key = (context, digest)
+            hash_key = (_twin_context(context), digest)
             if twin is None and digest:
                 twin = by_hash.get(hash_key)
             norm = _normalised(candidate.text) if COLLAPSE_SUBSUMED else ""

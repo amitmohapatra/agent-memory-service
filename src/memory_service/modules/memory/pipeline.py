@@ -452,9 +452,10 @@ class ObservationPipeline:
         if said is None:
             return candidates
         update = {"restatement": said.text or None, "restatement_relations": said.relations}
-        return [
-            c.model_copy(update=update) if c.category == "verbatim_turn" else c for c in candidates
-        ]
+        # one restatement of the whole turn, carried by its first piece when a long turn was
+        # kept in several (``native.verbatim_windows``)
+        first = turns[0]
+        return [c.model_copy(update=update) if c is first else c for c in candidates]
 
     async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
         """The conversation's previous message, which the indexer puts beside a verbatim turn
