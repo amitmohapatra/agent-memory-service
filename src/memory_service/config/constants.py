@@ -557,7 +557,7 @@ NLI = NLISettings()
 
 
 class StatementLabellerSettings(BaseModel):
-    """The statement labeller (``modules.memory.statements``, ADR 0036): which lexicon packs
+    """The statement labeller (``modules.memory.statements``, ADR 0037): which lexicon packs
     it reads, and how the frozen NLI head (``FROZEN_MODELS.nli``) decides what the packs
     leave open. The hypotheses are English for every language - the head is cross-lingual."""
 
@@ -571,7 +571,7 @@ class StatementLabellerSettings(BaseModel):
     #: choices within one dev item of the best, the one that fires least on chat (LoCoMo): a
     #: rule of either kind is "an instruction" - the lexicon has already found its
     #: condition - and "The speaker is correcting an earlier mistake." was dropped because it
-    #: holds for 47% of chat sentences (ADR 0036).
+    #: holds for 47% of chat sentences (ADR 0037).
     hypotheses: dict[StatementKind, str] = Field(
         default_factory=lambda: {
             StatementKind.RULE: "This is an instruction.",

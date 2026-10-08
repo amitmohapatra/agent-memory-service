@@ -1,5 +1,5 @@
 {
- "description": "Labelled sentences for the statement labeller (ADR 0036). One user sentence per item; 'kind' is the StatementKind it should get, or NONE for a question, greeting, acknowledgement or one-off request. 'dev' tunes the lexicon packs and the NLI thresholds; 'test' is held out: written before the packs and never used to tune them.",
+ "description": "Labelled sentences for the statement labeller (ADR 0037). One user sentence per item; 'kind' is the StatementKind it should get, or NONE for a question, greeting, acknowledgement or one-off request. 'dev' tunes the lexicon packs and the NLI thresholds; 'test' is held out: written before the packs and never used to tune them.",
  "guidelines": {
   "RULE": "a standing instruction or policy meant for future occasions (always / never / from now on / every time / 'whenever I ask for X'; universal must: 'All X must ...'). A trigger that only scopes it to a kind of request ('when I ask for a stock audit') keeps it a RULE.",
   "CONDITIONAL_RULE": "a standing instruction with an exception (unless / except / other than / without) or one that applies only while a condition about the world holds (if / when + a state or event).",

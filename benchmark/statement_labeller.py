@@ -1,4 +1,4 @@
-"""Statement labeller benchmark (ADR 0036): accuracy and write-path cost on CPU.
+"""Statement labeller benchmark (ADR 0037): accuracy and write-path cost on CPU.
 
     python -m benchmark.statement_labeller [--lexicon-only] [--locomo benchmark/data/locomo10.json]
 

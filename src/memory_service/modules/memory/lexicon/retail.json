@@ -1,6 +1,6 @@
 {
   "pack": "retail",
-  "description": "Retail, store-operations and supply-chain words of the statement labeller, loaded by default beside the generic pack (ADR 0036). Same format as generic.json: case-insensitive regular expressions matched as whole words, a space matching any whitespace. Only the fields a domain changes are present: what a product, store, fixture or supplier relationship's state is (status) and how it begins or ends (lifecycle).",
+  "description": "Retail, store-operations and supply-chain words of the statement labeller, loaded by default beside the generic pack (ADR 0037). Same format as generic.json: case-insensitive regular expressions matched as whole words, a space matching any whitespace. Only the fields a domain changes are present: what a product, store, fixture or supplier relationship's state is (status) and how it begins or ends (lifecycle).",
   "languages": {
     "en": {
       "lifecycle": [

@@ -1,4 +1,4 @@
-# ADR 0036: What a user's statement does, labelled at write
+# ADR 0037: What a user's statement does, labelled at write
 
 Date: 2026-10-08. Status: accepted.
 

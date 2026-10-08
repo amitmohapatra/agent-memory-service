@@ -17,7 +17,7 @@ each entry says which one moved. Decisions behind each change are in the
   they leave open goes to the NLI head the service already loads (one pair for a sentence
   the packs are unsure of, none for one they settle), and to the tenant's model only when the
   head is unsure and only if the head confirms it. Retrieval is unchanged
-  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0036). No migration.
+  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0037). No migration.
   Measured on sentences a language model wrote to order and no one tuned against
   (`tests/eval/golden/statement_kinds_blind.json`, blind set 2): macro-F1 0.829 over the six
   kinds, against 0.095 for the extractor before it, better in every kind and every language.
@@ -36,13 +36,32 @@ each entry says which one moved. Decisions behind each change are in the
   carries its `thread_id`. Another user's threads are never read; without a user, this thread
   only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
 
+- Same-subject matching on the write path (ADR 0035, [concepts](docs/guide/02-concepts.md#when-two-statements-are-about-the-same-thing)):
+  a subject respelled ("FORKLIFT-4", "forklift #4"), abbreviated ("PO-4471", "purchase order
+  4471"; "DC 3", "Distribution Centre 3") or written in another script's digits ("المستودع
+  رقم ٣") reinforces the memory it names instead of duplicating it. Candidates are also looked
+  up by a few stored spellings of the subject (case, the first identifier's joins, pack
+  aliases), so some older rows are found beyond the newest ones consolidation reads.
+  Differing identifiers, short codes ("Store LA" / "Store AL", "C#" / "C++", "Sales SE" /
+  "Sales"), their order ("Dock 3 door 4" / "Dock 4 door 3"), units, signs and decimal commas
+  ("5 kg" / "5 lb", "1,5 kg" / "15 kg", "Level -1" / "Level 1"), dates, titles ("Mrs Patel" /
+  "Mr Patel"), directions ("to" / "from Berlin") and legal forms ("Acme Inc" / "Acme Ltd")
+  never merge, and a match that needs a plural folded, a title or connective dropped or the
+  words reordered ("John Roberts" / "John Robert") is never merged by the service itself; with
+  `conflict_adjudication` on, it is what the model is asked about. Abbreviations come from two
+  vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on) and from a
+  tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS stands for out
+  of stock"), the tenant's definition winning over a pack's; nothing to configure.
+  576 labelled pairs in five languages: no false merge (0 of 322 hard negatives, 0 in every
+  class), merge F1 0.84 (exact subject strings before: 0.13).
+
 ### Fixed
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
   overviews, never include ..."), not only first in the sentence, and in German, Spanish,
   Arabic and Hindi as well; its exception clause ("unless I type 'include out of stock'") is
-  kept with it (ADR 0036).
+  kept with it (ADR 0037).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does
@@ -71,6 +90,14 @@ each entry says which one moved. Decisions behind each change are in the
   own node is the required companion.
 
 ### Changed
+- The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
+  on the same - or possibly the same - subject, instead of the closest sharing half its words:
+  a fact restated in other words now reaches it, and a fact about another subject that merely
+  shares words ("billing service" / "shipping service") no longer does. A pair the words leave
+  undecided is scored by the multilingual encoder only when the model is enabled.
+- The retail glossary's acronyms are read from the retail vocabulary pack, which adds `ASN`,
+  `BOL`, `RTV`, `POG`, `BOPIS`, `WMS`, `3PL`, `FIFO`, `SOH`, `EDI`, `FC` and `LP` to its query
+  expansion.
 - The context's `procedures` (with `format=full`) is `skills` (`id`, `name`, `steps`,
   `with_skill`, `fixes`, `success_rate`, `runs`), and `tool_search`'s and `POST /v1/tools/hints`'
   `plan` has the same shape. Tool hints are computed for five or more tools (or the catalog);

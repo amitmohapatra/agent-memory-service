@@ -377,11 +377,12 @@ class MemoryRepository(Protocol):
         *,
         scope_key: str,
         normalized_hash: str | None = None,
-        subject: str | None = None,
+        subjects: Sequence[str] = (),
         limit: int = 20,
     ) -> list[CanonicalMemory]:
         """Existing CURRENT memories that could be duplicates of a new candidate: same scope
-        and (same hash OR same subject OR most recent)."""
+        and (same hash OR a subject stored as one of ``subjects`` - the spellings the
+        subject matcher allows - OR most recent)."""
         ...
 
     async def about_user(

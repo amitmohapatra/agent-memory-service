@@ -35,6 +35,7 @@ from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.memory.subjects import SubjectMatcher
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import memory_decisions_total, stage_seconds
@@ -242,6 +243,7 @@ class ObservationPipeline:
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
         assist: LLMAssist | None = None,
+        subjects: SubjectMatcher | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
@@ -250,6 +252,8 @@ class ObservationPipeline:
         self.gate = gate
         #: binds each observation's model work to its owner (key, policy, usage)
         self.assist = assist or LLMAssist.disabled()
+        #: the spellings a candidate's subject may be stored under (candidate generation)
+        self.subjects = subjects or SubjectMatcher()
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -415,7 +419,7 @@ class ObservationPipeline:
                 ctx.tenant_id,
                 scope_key=scope.key(),
                 normalized_hash=normalized_hash(cand.content),
-                subject=cand.subject,
+                subjects=self.subjects.spellings(cand.subject),
                 limit=self.cfg.dedup_candidate_k,
             )
             outcome = await self.provider.consolidate(cand, existing, ctx)

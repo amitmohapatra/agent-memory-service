@@ -1,4 +1,4 @@
-"""Statement-labeller gate (ADR 0036): macro-F1 over the labelled sentences in
+"""Statement-labeller gate (ADR 0037): macro-F1 over the labelled sentences in
 ``golden/statement_kinds.json``, per language and per kind, and over the two blind sets in
 ``golden/statement_kinds_blind.json`` beside the extractor before it (reported). Writes
 ``benchmark/results/statement_kinds_gate.json`` for the release gate.

@@ -1,4 +1,4 @@
-"""The statement labeller (ADR 0036): the lexicon path in every pack language, the NLI and
+"""The statement labeller (ADR 0037): the lexicon path in every pack language, the NLI and
 LLM tiers against a scripted head and a mocked gateway, and what the write path stores.
 
 The real head is exercised by ``tests/eval/test_statement_kinds_gate.py`` (``models``)."""

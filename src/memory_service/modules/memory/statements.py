@@ -1,4 +1,4 @@
-"""The statement labeller: what each sentence a user says *does*, decided at write (ADR 0036).
+"""The statement labeller: what each sentence a user says *does*, decided at write (ADR 0037).
 
 A sentence is a FACT, a standing RULE, a CONDITIONAL_RULE (a rule with an exception or a
 trigger about the world), a STATUS of a thing, a CORRECTION of something said before, or a

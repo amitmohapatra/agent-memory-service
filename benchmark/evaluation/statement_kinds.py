@@ -1,4 +1,4 @@
-"""Statement-labeller evaluation: macro-F1 per language and per kind (ADR 0036).
+"""Statement-labeller evaluation: macro-F1 per language and per kind (ADR 0037).
 
 Each labelled item is one user sentence and the ``StatementKind`` it should get, or ``NONE``
 for a question, a greeting or a one-off request. ``macro_f1`` is the mean F1 over the six
@@ -32,7 +32,7 @@ GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "eval" / "golden" / "st
 #: generalisation dev set, ``blind2`` held out and scored once)
 BLIND = GOLDEN.with_name("statement_kinds_blind.json")
 
-# What the extractor did before the labeller (``modules/memory/native.py`` up to ADR 0036):
+# What the extractor did before the labeller (``modules/memory/native.py`` up to ADR 0037):
 # a question or an acknowledgement stored nothing, its standing-rule pattern stored a rule,
 # anything else was stored as it always was - a fact. The baseline every set is scored against.
 _QUESTION = re.compile(
