@@ -1118,12 +1118,12 @@ class NativeMemoryIntelligence:
             #    numbers or negation (those are the classic false merges)
             m_tokens = tokens(mem.content)
             sim = jaccard(c_tokens, m_tokens)
-            if pairs[mem.memory_id].apart:
-                # "Dock 3 door 4" and "Dock 4 door 3", "Tower A" and "Tower": however alike
-                # the sentences (the words above ignore one-letter codes and digit order),
-                # two subjects are never merged
-                continue
-            if sim >= self.cfg.dedup_lexical_threshold:
+            # "Dock 3 door 4" and "Dock 4 door 3", "Tower A" and "Tower": however alike the
+            # sentences (the words above ignore one-letter codes and digit order), two subjects
+            # not known to be one are never merged by their wording - the adjudicator may
+            # still be asked about them below
+            apart = pairs[mem.memory_id].apart
+            if sim >= self.cfg.dedup_lexical_threshold and not apart:
                 if numbers(mem.content) != c_numbers or has_negation(mem.content) != c_neg:
                     continue
                 decision = DedupDecision.MERGE if c_tokens - m_tokens else DedupDecision.REINFORCE
@@ -1149,6 +1149,7 @@ class NativeMemoryIntelligence:
                 self.embedding is not None
                 and not self.embedding.fingerprint().startswith("hash-")
                 and sim >= 0.5
+                and not apart
             ):
                 dense_band.append(mem)
         # 3. dense similarity, in one pass (only with a real embedding provider; the hash

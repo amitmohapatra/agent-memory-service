@@ -29,16 +29,16 @@ each entry says which one moved. Decisions behind each change are in the
   رقم ٣") reinforces the memory it names instead of duplicating it. Candidates are also looked
   up by a few stored spellings of the subject (case, the first identifier's joins, pack
   aliases), so some older rows are found beyond the newest ones consolidation reads.
-  Differing identifiers, short codes, their order, units, signs, decimal commas, dates,
-  titles and legal forms ("Forklift #3" / "#4", "Store LA" / "Store AL", "Dock 3 door 4" /
-  "Dock 4 door 3", "5 kg" / "5 lb", "1,5 kg" / "15 kg", "Level -1" / "Level 1", "Mrs Patel" /
-  "Mr Patel", "Acme Inc" / "Acme Ltd") never merge, and a match that needs a plural folded, a
-  title dropped or the words reordered ("John Roberts" / "John Robert") is never merged by
-  the service itself. Abbreviations come from two vocabulary packs (data,
-  `domain/vocabulary/`: generic and retail, always on) and from a tenant's own text where it
-  defines one ("hazardous materials (hazmat)", "OOS stands for out of stock"); nothing to
-  configure. 518 labelled pairs in five languages: no false merge (0 of 270 hard negatives,
-  0 in every class), merge F1 0.85 (exact subject strings before: 0.13).
+  Differing identifiers, short codes ("Store LA" / "Store AL", "C#" / "C++", "Sales SE" /
+  "Sales"), their order ("Dock 3 door 4" / "Dock 4 door 3"), units, signs and decimal commas
+  ("5 kg" / "5 lb", "1,5 kg" / "15 kg", "Level -1" / "Level 1"), dates, titles ("Mrs Patel" /
+  "Mr Patel"), directions ("to" / "from Berlin") and legal forms ("Acme Inc" / "Acme Ltd")
+  never merge, and a match that needs a plural folded, a title or connective dropped or the
+  words reordered ("John Roberts" / "John Robert") is never merged by the service itself; with
+  `conflict_adjudication` on, it is what the model is asked about. Abbreviations come from two
+  vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on) and from a
+  tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS stands for out
+  of stock"), the tenant's definition winning over a pack's; nothing to configure. SUBJECT_RESULTS
 
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never

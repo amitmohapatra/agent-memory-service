@@ -64,15 +64,16 @@ def verdict(a: str, b: str, **kw) -> SubjectVerdict:
         ("the Berlin office", "Berlin office"),
         ("Forklift 4's battery", "forklift 4 battery"),
         ("la tienda 12", "tienda 12"),
-        ("ventas de la tienda 12", "ventas tienda 12"),
-        ("स्टोर 12 की बिक्री", "स्टोर 12 बिक्री"),
         ("Acme Logistics GmbH", "ACME logistics"),
         ("U.S. stores", "US stores"),
         ("Wal-Mart", "Walmart"),
         ("on-boarding checklist", "onboarding checklist"),
         ("شركة النور", "شركه النور"),  # ta marbuta written as heh
         ("1,5 kg Reis", "1.5 kg Reis"),  # a decimal comma
-        ("1,000 units", "1000 units"),  # a thousands comma
+        ("1,000,000 units", "1000000 units"),  # thousands commas
+        ("Aisles 3-5", "Aisles 3\u20135"),  # a range with an en dash
+        ("Freezer \u221218", "Freezer -18"),  # U+2212 is a minus
+        ("Acme Logistics GmbH", "Acme Logistics"),  # a legal form of three letters or more
         ("5 € coupon", "€5 coupon"),
     ],
 )
@@ -91,6 +92,15 @@ def test_spelling_that_does_not_change_the_subject_is_the_same_subject(a, b) -> 
         ("Forklift 4's battery", "battery of forklift 4"),  # another word order
         ("Bank of China", "China Bank"),
         ("Al Smith", "Smith"),  # a first word that is also a connective is kept
+        ("ventas de la tienda 12", "ventas tienda 12"),  # a connective is a word of it
+        ("स्टोर 12 की बिक्री", "स्टोर 12 बिक्री"),
+        ("Sales SE", "Sales"),  # a two-letter legal form is as likely a code
+        ("Store CO", "Store"),
+        ("Acme SE", "Acme"),
+        ("Shipment to Berlin", "Shipment Berlin"),
+        ("Global Freight Solutions", "GFS"),  # a code that is the name's initialism
+        ("April Jones", "Abril Jones"),  # a month followed by a name is a name
+        ("El Salvador office", "Salvador office"),  # an article inside a name is kept
     ],
 )
 def test_a_match_that_needs_folding_or_dropping_a_title_is_only_possible(a, b) -> None:
@@ -157,6 +167,21 @@ def test_a_parse_keeps_identifiers_apart_from_words() -> None:
         ("5 € coupon", "5 $ coupon"),
         ("Level -1", "Level 1"),
         ("Freezer -18C", "Freezer 18C"),
+        ("1,250 kg", "1250 kg"),  # a comma before three digits is ambiguous: as written
+        ("1,250 kg", "1.25 kg"),
+        # a two-letter legal form on both sides is a code
+        ("Acme SE", "Acme SA"),
+        # directions
+        ("Shipment to Berlin", "Shipment from Berlin"),
+        ("Lieferung zum Lager", "Lieferung vom Lager"),
+        ("شحنة إلى دبي", "شحنة من دبي"),
+        ("दिल्ली से मुंबई शिपमेंट", "दिल्ली को मुंबई शिपमेंट"),
+        # a lower-case one-letter code between words
+        ("block a north", "block y north"),
+        # signs written onto a code
+        ("C# team", "C++ team"),
+        ("C# team", "C team"),
+        ("Grade A+", "Grade A-"),
     ],
 )
 def test_differing_identifiers_units_dates_or_legal_forms_block_a_merge(a, b) -> None:
@@ -189,6 +214,12 @@ def test_uncertain_pairs_are_possible_never_same() -> None:
     assert verdict("Forklift 4", "Forklift 4 battery") is POSSIBLE  # part of it
     assert verdict("Forklift 4", "Gabelstapler 4") is DIFFERENT
     assert verdict("Forklift 4", "Gabelstapler 4", cosine=0.95) is POSSIBLE  # the encoder
+
+
+def test_a_code_alone_is_not_a_name() -> None:
+    for code in ("LA", "Q3", "4471", "SKU 1001"):
+        assert verdict(code, "Berlin Hub") is DIFFERENT, code
+    assert verdict("BH", "Berlin Hub") is POSSIBLE  # ...unless it is the name's initialism
 
 
 def test_a_short_form_two_known_names_extend_is_no_evidence() -> None:
@@ -285,6 +316,22 @@ def test_a_learned_abbreviation_makes_two_spellings_one_subject() -> None:
         ).verdict
         is not SAME
     )
+
+
+def test_the_tenants_definition_wins_over_the_packs() -> None:
+    mine = vocabulary().with_aliases(defined_aliases("Our Data Center (DC) is in Frankfurt."))
+    assert compare(parse("DC 3", mine), parse("Data Center 3", mine)).verdict is SAME
+    assert compare(parse("DC 3", mine), parse("Distribution Center 3", mine)).verdict is not SAME
+    assert compare(parse("DC 3"), parse("Distribution Center 3")).verdict is SAME  # the pack
+
+
+def test_only_subject_length_text_is_cached() -> None:
+    from memory_service.domain import subjects as module
+
+    module._parse.cache_clear()
+    parse("Forklift 4")
+    parse("x " * 100)
+    assert module._parse.cache_info().currsize == 1
 
 
 def test_a_short_form_defined_twice_is_not_learned() -> None:

@@ -4,6 +4,7 @@
   "number_markers": ["#", "no", "nr", "num", "number", "nummer", "numero", "núm", "número", "nro", "nº", "n°", "№", "رقم", "نمبر", "नंबर", "नं", "संख्या", "क्रमांक", "क्र"],
   "stopwords": ["the", "a", "an", "of", "for", "and", "&", "at", "in", "on", "to", "with", "our", "my", "your", "its", "their", "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines", "von", "vom", "für", "und", "im", "am", "zum", "zur", "unser", "unsere", "el", "la", "los", "las", "un", "una", "unos", "unas", "de", "del", "al", "y", "para", "en", "nuestro", "nuestra", "su", "في", "من", "على", "عن", "إلى", "و", "का", "की", "के", "में", "और", "से", "को", "पर", "हमारा", "हमारी"],
   "articles": ["the", "a", "an", "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines", "el", "la", "los", "las", "un", "una", "unos", "unas"],
+  "directions": ["to", "from", "into", "onto", "towards", "toward", "via", "nach", "zum", "zur", "vom", "von", "aus", "bis", "a", "al", "de", "del", "desde", "hacia", "hasta", "para", "إلى", "الى", "من", "से", "को", "तक"],
   "arabic_article": "ال",
   "honorifics": ["mr", "mrs", "ms", "miss", "mx", "dr", "prof", "sir", "madam", "herr", "frau", "fr", "sr", "sra", "srta", "don", "doña", "السيد", "السيدة", "الدكتور", "د", "श्री", "श्रीमती", "सुश्री", "डॉ", "जी"],
   "legal_forms": {
