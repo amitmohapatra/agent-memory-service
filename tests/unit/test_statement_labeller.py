@@ -98,6 +98,11 @@ def test_english_statements(text: str, kind: StatementKind | None) -> None:
 @pytest.mark.parametrize(
     ("text", "kind"),
     [
+        ("Wenn ich nach einer Bestandsprüfung frage, verwende immer eine Tabelle.", K.RULE),
+        (
+            "Benutze immer den Expressversand, außer die Bestellung liegt unter 50 Euro.",
+            K.CONDITIONAL_RULE,
+        ),
         ("Gabelstapler 4 ist wegen Wartung außer Betrieb.", K.STATUS),
         ("Eigentlich haben wir den Vertrag mit Uline gestern gekündigt.", K.CORRECTION),
         ("Nunca me sugieras recetas con cilantro.", K.RULE),
@@ -128,19 +133,21 @@ def test_other_languages(text: str, kind: StatementKind | None) -> None:
         # a standing rule, or advice ("If SF is your thing, check out The Expanse")?
         ("If the forklift is out of service, route heavy pallets to Dock 3.", K.CONDITIONAL_RULE),
         # verb-first languages: the standing word follows a verb the packs cannot list
-        ("Wenn ich nach einer Bestandsprüfung frage, verwende immer eine Tabelle.", K.RULE),
+        ("أجب دائمًا باللغة العربية.", K.RULE),
         (
-            "Benutze immer den Expressversand, außer die Bestellung liegt unter 50 Euro.",
+            "Send alerts if the client's location deviates from their usual routine.",
             K.CONDITIONAL_RULE,
         ),
-        ("أجب دائمًا باللغة العربية.", K.RULE),
     ],
 )
 def test_what_the_words_cannot_settle_is_left_to_the_model(text: str, maybe: StatementKind) -> None:
-    """Unsure, the lexicon answers FACT - a durable rule nobody gave is worse than a rule
-    kept only as the turn it was said in - and names the rule the head should check."""
+    """Unsure, the lexicon keeps the sentence's reading without the rule - a durable rule
+    nobody gave is worse than a rule kept only as the turn it was said in - and names the
+    rule the head should check."""
     label = Lexicon.default().label(text)
-    assert (label.kind, label.decided, label.maybe) == (K.FACT, False, maybe), text
+    assert (label.decided, label.maybe) == (False, maybe), text
+    # a request stays one ("Send alerts if ..." stores nothing new); anything else is a fact
+    assert label.kind in (K.FACT, None), text
 
 
 @pytest.mark.parametrize(
@@ -187,8 +194,8 @@ def test_when_opens_a_question_only_before_an_auxiliary() -> None:
 
 
 def test_domain_words_come_from_the_packs() -> None:
-    """Retail words are data: without the retail pack "out of stock" is a plain fact."""
-    text = "Blue hoodies in size M are out of stock at the downtown store."
+    """Retail words are data: without the retail pack "on backorder" is a plain fact."""
+    text = "SKU 10442 is on backorder until next month."
     assert Lexicon(("generic", "retail")).label(text).kind is K.STATUS
     assert Lexicon(("generic",)).label(text).kind is K.FACT
     assert load_packs(("generic", "retail"))["status"]["de"]

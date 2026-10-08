@@ -74,6 +74,9 @@ _FIELDS: Final = (
     "status",
     "filler",
     "only",
+    "addressee",
+    "generic",
+    "consequent",
     "subject_start",
     "imperative",
     "imperative_inside",
@@ -409,8 +412,11 @@ class _Reader:
             condition is not None and not self._requested(work, condition)
         )
         kind = StatementKind.CONDITIONAL_RULE if conditional else StatementKind.RULE
+        # unsure, the sentence keeps the reading it has without the rule: a request asks for
+        # nothing to be stored, anything else is a fact
+        fallback = None if self._request(s) else StatementKind.FACT
         return LexicalLabel(
-            kind if decided else StatementKind.FACT,
+            kind if decided else fallback,
             decided=decided,
             maybe=None if decided else kind,
             trigger=_clean_clause(s[condition[0] : condition[1]]) if condition else None,
@@ -437,8 +443,22 @@ class _Reader:
             or (obligation.at(s, opening) and universal.search(work, opening, end))
         )
 
+    def _clauses(self, s: str) -> list[Span]:
+        """Clauses end at punctuation and before a consequent ("if X then Y", Hindi "to")."""
+        cuts = sorted(
+            [(m.start(), m.end()) for m in _CLAUSE_BREAK.finditer(s)]
+            + [(m.start(), m.start()) for m in self.cues["consequent"].finditer(s)]
+        )
+        out, start = [], 0
+        for cut, resume in [*cuts, (len(s), len(s))]:
+            begin = start + len(s[start:cut]) - len(s[start:cut].lstrip())
+            if cut > begin:
+                out.append((begin, cut))
+            start = max(start, resume)
+        return out or [(0, len(s))]
+
     def _shape(self, s: str, work: str) -> _Shape:
-        clauses = _clauses(s)
+        clauses = self._clauses(s)
         exception = _span(self.cues["exception"].search(work), clauses, s)
         condition = next(
             (
@@ -464,11 +484,15 @@ class _Reader:
                 # the clause after it, which must still read as an instruction on its own
                 main, marker, leads = following[0], None, True
         else:
+            # the first clause with words of its own: not the condition, the exception, or a
+            # vocative ("AI, ...") or consequent ("... to AI, ...") on its own
             main = next(
                 (
                     c
                     for c in clauses
-                    if not _within(c[0], exception) and not _within(c[0], condition)
+                    if not _within(c[0], exception)
+                    and not _within(c[0], condition)
+                    and self._past_fillers(s, c[0], c[1]) < c[1]
                 ),
                 clauses[0],
             )
@@ -483,35 +507,48 @@ class _Reader:
         )
 
     def _rule_certainty(self, s: str, work: str, shape: _Shape) -> bool | None:
-        """True: surely a rule. False: perhaps - a standing word, a team's policy or a
-        condition before a clause that may be an instruction; the model tier decides.
-        None: not a rule."""
+        """True: surely a rule. False: perhaps - the model tier decides. None: not a rule."""
         start, end = shape.main
         evidence = self._imperative(s, start, end, at=shape.marker)
-        if self._surely_rule(s, work, shape, evidence):
-            return True
-        marked = shape.marker is not None or shape.leads
-        if marked and self.cues["policy_subject"].at(s, self._past_fillers(s, start, end)):
-            return False  # "We never ship hazardous goods on Fridays" / "We always look forward"
-        first = shape.condition is not None and shape.condition[0] == shape.opening
-        if (shape.marked or first) and evidence:
-            # "If the forklift is down, route pallets to Dock 3" is a standing rule; "If SF is
-            # your thing, check out The Expanse" is advice. The words cannot tell them apart.
-            return False
-        return None
-
-    def _surely_rule(self, s: str, work: str, shape: _Shape, evidence: str | None) -> bool:
-        start, end = shape.main
         marked = shape.marker is not None or shape.leads
         if (marked and evidence == "strong") or self._obligation(s, work, shape):
             return True
         if shape.exception and evidence == "strong":
             return True  # "Don't reorder seasonal items unless the buyer approves it"
-        first = shape.condition is not None and shape.condition[0] == shape.opening
-        if first and evidence == "strong" and self._requested(work, shape.condition):
-            return True  # "Each time you summarise a call, include the next steps"
-        # "Only escalate a ticket if ..."
-        return bool(shape.condition and evidence and self.cues["only"].search(work, start, end))
+        if shape.condition is not None and evidence:
+            return self._conditional_certainty(s, work, shape, evidence)
+        if marked and self.cues["policy_subject"].at(s, self._past_fillers(s, start, end)):
+            return False  # "We never ship hazardous goods on Fridays" / "We always look forward"
+        if marked and evidence:
+            # "We never ship hazardous goods on Fridays" / "We always look forward to ...";
+            # "Formatiere Berichte immer als Tabelle" after a verb the packs cannot list
+            return False
+        return None
+
+    def _conditional_certainty(self, s: str, work: str, shape: _Shape, evidence: str) -> bool:
+        """An instruction under a condition. Sure when it is plainly addressed to the
+        assistant on the user's behalf - the condition is the user's own request ("each time
+        I upload a log"), the instruction names its recipient ("please alert the manager",
+        "notify me") after a leading condition, or the condition is any occurrence ("if
+        there's any change", "if a delivery is late") - or it is restricted to the condition
+        ("only escalate if"). Otherwise - "If SF is your thing, check out The Expanse",
+        "Tell me when it arrives" - perhaps."""
+        start, end = shape.main
+        condition = shape.condition
+        assert condition is not None
+        if evidence != "strong":
+            return False
+        if self.cues["only"].search(work, start, end):
+            return True
+        lead = self.cues["condition"].at(work, condition[0])
+        after_lead = lead.end() if lead is not None else condition[0]
+        if self.cues["generic"].search(work, after_lead, condition[1]):
+            return True
+        first = condition[0] == shape.opening
+        addressed = self.cues["addressee"].search(work, start, end) or self.cues[
+            "imperative_inside"
+        ].search(work, start, end)
+        return first and bool(self._requested(work, condition) or addressed)
 
     def _instruction(self, s: str) -> str:
         """The sentence without what opens it: "please", and a standing phrase set off by a
@@ -552,17 +589,6 @@ def _within(pos: int, span: Span | None) -> bool:
 def _span(m: re.Match[str] | None, clauses: list[Span], s: str) -> Span | None:
     """From a cue to the end of its clause."""
     return None if m is None else (m.start(), _clause_of(clauses, m.start(), s)[1])
-
-
-def _clauses(s: str) -> list[tuple[int, int]]:
-    out, start = [], 0
-    for m in _CLAUSE_BREAK.finditer(s):
-        if m.start() > start:
-            out.append((start, m.start()))
-        start = m.end()
-    if start < len(s):
-        out.append((start, len(s)))
-    return out or [(0, len(s))]
 
 
 def _clause_of(clauses: list[tuple[int, int]], pos: int, s: str) -> tuple[int, int]:
