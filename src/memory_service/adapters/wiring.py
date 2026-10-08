@@ -523,6 +523,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
     from memory_service.modules.memory.service import MemoryService
+    from memory_service.modules.memory.subjects import SubjectMatcher
     from memory_service.ports.intelligence import MemoryIntelligenceProvider
 
     cfg = container.tuning.memory_intelligence
@@ -537,11 +538,14 @@ def _wire_memory(container: Container) -> None:
             log.warning("hindsight.unavailable", reason=str(exc))
         else:
             container.add_closer("hindsight_extractor", extractor.close)
+    # one subject matcher for the provider's slot rules and the pipeline's candidate lookup
+    subjects = SubjectMatcher(container.embedding)
     provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
         cfg,
         container.embedding,
         assist=container.services["llm_assist"],
         contextual_extractor=extractor,
+        subjects=subjects,
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
@@ -552,6 +556,7 @@ def _wire_memory(container: Container) -> None:
         # consulted only for tenants that turned it on (Tenant.admission_gate, off by default)
         gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
+        subjects=subjects,
     )
     container.services["memory"] = MemoryService(
         container.services["authz"], fiscal=container.tuning.memory_intelligence.fiscal_calendar

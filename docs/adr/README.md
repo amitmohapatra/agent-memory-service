@@ -19,7 +19,7 @@ is not finished).
 | [0006](0006-archive-protocol.md) | The chat archive protocol: staged → immutable verified segment → purge, with content-addressed segments and verified uploads | accepted |
 | [0007](0007-document-context-graph.md) | Docling parsing behind a port, natural chunking, and the Document Context Graph that expansion follows | accepted |
 | [0008](0008-baseline-retrieval.md) | Baseline retrieval: one index, two named vectors — client-encoded BM25 with server-side IDF, fused with dense in a single query | accepted |
-| [0009](0009-memory-intelligence.md) | Memory intelligence: native deterministic rules first (extract → classify → consolidate → persist → index), LLM providers as benchmarkable adapters | accepted; amended by 0032 (admission behind a tenant switch) |
+| [0009](0009-memory-intelligence.md) | Memory intelligence: native deterministic rules first (extract → classify → consolidate → persist → index), LLM providers as benchmarkable adapters | accepted; amended by 0032 (admission behind a tenant switch) and 0035 (same subject, the adjudicator's gate) |
 | [0010](0010-knowledge-graph.md) | The knowledge graph lives in PostgreSQL next to the canonical rows, carries evidence, and is traversed under bounds | accepted |
 | [0011](0011-context-preservation.md) | Context preservation: expansion follows the document graph rather than similarity, hierarchical summaries, and evidence verification | accepted |
 | [0012](0012-advanced-retrieval.md) | Advanced retrieval strategies are benchmark-gated extra retrievers | **superseded by measurement (2026-09-20)**: seven strategies removed, `rerank` defaulted off |
@@ -45,6 +45,7 @@ is not finished).
 | [0032](0032-sdk-resilience-act-for-admission-forget-dev-defaults.md) | SDK resilience (Retry-After, full-jitter backoff, read-only POST retries, status-classed errors, circuit breaker, env defaults), `may_act_as` checks agents too, the admission gate behind a tenant switch, the forget cascade moves readers' revisions, and dev defaults (development tenant, development envelope key) | accepted; amends 0009, 0021, 0022 |
 | [0033](0033-learned-skills.md) | A learned procedure becomes an Agent Skill only when the tenant's administrator publishes it, to `SKILLS_DIR` or the gateway's skills repository | superseded by 0034 |
 | [0034](0034-learned-skills-in-context.md) | An agent learns skills from all its users and is offered them in its context: no publishing, a skill reaches other users once two produced it, `GET /v1/skills` and dismiss | accepted; supersedes 0033, builds on 0018 |
+| [0035](0035-same-subject-matching.md) | Same-subject matching: identifiers, units and dates block a merge, vocabulary packs (data) and a tenant's own defined abbreviations allow one, the encoder only makes a pair possible; the conflict adjudicator is gated by it instead of word overlap | accepted; amends 0009 |
 
 ## Where the numbers behind these decisions are
 
