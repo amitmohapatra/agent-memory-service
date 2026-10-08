@@ -567,11 +567,13 @@ class StatementLabellerSettings(BaseModel):
 
     #: generic cue words first, then the domain pack (``modules/memory/lexicon/*.json``)
     packs: tuple[str, ...] = ("generic", "retail")
+    #: Chosen on the dev half: of the hypotheses scored, "This is an instruction." separates
+    #: rules from statements best (AUC 0.83 over five languages, against 0.80 for "... that
+    #: should always be followed"); "The state of something changed." screens best (0.78).
     hypotheses: dict[StatementKind, str] = Field(
         default_factory=lambda: {
-            StatementKind.RULE: "This is an instruction that should always be followed.",
-            StatementKind.STATUS: "Something is currently working, broken, available or "
-            "unavailable.",
+            StatementKind.RULE: "This is an instruction.",
+            StatementKind.STATUS: "This describes the current state of something.",
             StatementKind.LIFECYCLE: "Something has ended, been terminated, or newly started.",
             StatementKind.CORRECTION: "The speaker is correcting an earlier mistake.",
         }
@@ -588,10 +590,8 @@ class StatementLabellerSettings(BaseModel):
     #: A statement no cue word decided (outside English, whose packs are complete) is first
     #: screened with one pair - did something change? - and only one that passes is checked
     #: against each of ``open_kinds``: one pair a sentence, not one per kind.
-    screen_hypothesis: str = (
-        "Something started, ended, broke down, was repaired, or became available or unavailable."
-    )
-    screen_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    screen_hypothesis: str = "The state of something changed."
+    screen_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     open_kinds: tuple[StatementKind, ...] = (StatementKind.STATUS, StatementKind.LIFECYCLE)
     #: entailment at or above which a kind the tenant's model proposed is accepted
     llm_confirm_min: float = Field(default=0.5, ge=0.0, le=1.0)

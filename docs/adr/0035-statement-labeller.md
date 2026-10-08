@@ -79,7 +79,32 @@ false positives). Numbers: `benchmark/results/statement_kinds_gate.json` (gate),
 `benchmark/results/statement_labeller.json` and `statement_labeller_lexicon.json`
 (`python -m benchmark.statement_labeller`).
 
-ADR_EVIDENCE_TABLE
+Macro-F1 over the six kinds (NONE counted in the confusions), per language; dev / held-out:
+
+| | en | de | es | ar | hi | all |
+|---|---|---|---|---|---|---|
+| lexicon alone (measured) | 0.985 / 0.983 | 0.749 / 0.875 | 0.816 / 0.828 | 0.816 / 0.828 | 0.974 / 1.000 | 0.909 / 0.932 |
+| lexicon + NLI head (cached real-head scores, offline) | 0.993 / 1.000 | 0.974 / 1.000 | 1.000 / 1.000 | 0.951 / 1.000 | 0.976 / 1.000 | 0.983 / 1.000 |
+
+The second row replays the frozen head's entailment scores for every item and hypothesis
+(17 hypotheses scored once, 487 items) through the shipped decision rules and thresholds; the
+end-to-end frozen-head run is `tests/eval/test_statement_kinds_gate.py::test_frozen_head_statement_kinds`.
+On these sets the head earns its place on maybe-rules (German, Spanish and Arabic rules after
+a verb the packs cannot list): it lifts their macro-F1 by 0.13-0.22. The change screen for
+open statements added nothing here - the packs already hold this vocabulary - and is kept,
+at a high threshold, for statements in other languages the packs do not cover.
+
+No question, greeting or one-off request is stored as a rule in either half. On LoCoMo the
+lexicon labels 3 of 16,758 sentences RULE, 6 CORRECTION, 6 LIFECYCLE and 12 STATUS (the first
+draft of the packs: 136, 50, 68 and 44 - the precision fixes were made against this text,
+never against the held-out half).
+
+Cost on CPU (4 vCPU, the head at 2 threads): the lexicon 0.10 ms a sentence (p95 0.21). One
+NLI pair is 38 ms. A maybe-rule costs one pair; an open statement outside English one pair,
+and two more only when the screen fires. 18% of the labelled sentences and 11.5% of LoCoMo's
+reach the head at all, so the mean added write-path cost is about 7 ms and 5 ms a sentence;
+a sentence that reaches the head pays 38 ms (114 ms in the rare screened-and-classified case).
+The tenant's model is called only for the head's unsure band.
 
 ## Consequences
 
