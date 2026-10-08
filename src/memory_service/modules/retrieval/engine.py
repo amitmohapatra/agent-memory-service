@@ -519,7 +519,7 @@ class RetrievalEngine:
         diagnostics: dict[str, Any],
     ) -> list[Candidate]:
         """Bounded one-hop evidence fetch; no model, graph walk or per-source query."""
-        present = {c.record_id for c in candidates}
+        present = in_hand(candidates)
         wanted: dict[str, Candidate] = {}
         for candidate in candidates:
             if not is_derived(candidate):
@@ -1200,6 +1200,15 @@ def _twin_context(context: tuple) -> tuple:
     if not (isinstance(subject, str) and subject.startswith(_SPEAKER_SUBJECTS)):
         subject = owner
     return (kind, subject, owner, observed_at, sources)
+
+
+def in_hand(candidates: Sequence[Candidate]) -> set[str]:
+    """The record ids ``candidates`` already carry: their own, and every twin ranking
+    collapsed into them (``_dedup`` records those as ``duplicates``). An expansion that adds
+    records by id reads this, or a collapsed twin comes back as a second copy."""
+    return {c.record_id for c in candidates} | {
+        twin for c in candidates for twin in c.payload.get("duplicates") or ()
+    }
 
 
 def _dedup(candidates: Sequence[Candidate]) -> list[Candidate]:

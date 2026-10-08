@@ -26,7 +26,7 @@ from memory_service.domain.ids import content_hash
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
-from memory_service.modules.retrieval.engine import Candidate, memory_candidate
+from memory_service.modules.retrieval.engine import Candidate, in_hand, memory_candidate
 from memory_service.modules.retrieval.router import RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import REGISTRY, stage_seconds
@@ -262,7 +262,8 @@ class GraphStage:
             # the direct foreign key and explicit memory evidence, with a separate hard
             # bound so one high-degree entity cannot monopolise the context or database.
             memory_ids: list[str] = []
-            seen_memories = set(existing_ids)
+            # a memory ranking collapsed into a twin is in hand already, not new evidence
+            seen_memories = in_hand(candidates)
             for relation in ranked:
                 pointers = itertools.chain(
                     [relation.memory_id] if relation.memory_id else [],

@@ -35,15 +35,15 @@ ASK = "I need to get into the hazmat cage in Warehouse 3. What's the code?"
 
 def _chat(user: str = "u1", **extra) -> MemoryExecutionContext:
     """A new conversation of ``user``: its own thread, session and turn."""
-    return MemoryExecutionContext(
-        tenant_id="acme",
-        user_id=user,
-        workspace_id="ws1",
-        thread_id=new_id("thread"),
-        session_id=new_id("session"),
-        turn_id=new_id("turn"),
-        **extra,
-    )
+    fields = {
+        "tenant_id": "acme",
+        "user_id": user,
+        "workspace_id": "ws1",
+        "thread_id": new_id("thread"),
+        "session_id": new_id("session"),
+        "turn_id": new_id("turn"),
+    }
+    return MemoryExecutionContext(**{**fields, **extra})
 
 
 async def _say(container, uow_factory, ctx, content: str, role=MessageRole.USER) -> None:

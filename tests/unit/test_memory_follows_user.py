@@ -30,7 +30,7 @@ from memory_service.modules.memory.native import (
     verbatim_windows,
 )
 from memory_service.modules.memory.pipeline import build_memory
-from memory_service.modules.retrieval.engine import Candidate, _dedup
+from memory_service.modules.retrieval.engine import Candidate, _dedup, in_hand
 
 pytestmark = pytest.mark.unit
 
@@ -213,3 +213,11 @@ def test_a_fact_and_its_turn_take_one_slot() -> None:
 
 def test_equal_words_of_different_speakers_still_take_two() -> None:
     assert len(_dedup([_hit("a", "user:u1", 0.9), _hit("b", "user:u2", 0.8)])) == 2
+
+
+def test_a_collapsed_twin_counts_as_in_hand() -> None:
+    """Graph and derived-source expansion add memories by id; the twin ranking collapsed is
+    already in hand under its survivor and must not come back as a second copy."""
+    fact = _hit("fact", "master lock code for the hazardous materials cage in warehouse 3", 0.9)
+    kept = _dedup([fact, _hit("turn", "user:u1", 0.7)])
+    assert in_hand(kept) == {"fact", "turn"}

@@ -185,9 +185,9 @@ async def test_a_decision_follows_its_author_and_is_shared_only_when_asked(
         hints=ProcessingHints(visibility=Visibility.THREAD),
     )
     mems = await _memories(uow_factory, a, container)
-    decided = {m.object: m for m in mems if m.predicate == "decided"}
-    mine = decided["use postgresql instead of mongodb"]
-    shared = decided["ship the kafka migration on friday"]
+    decided = {m.content: m for m in mems if m.predicate == "decided"}
+    mine = decided["We decided to use PostgreSQL instead of MongoDB."]
+    shared = decided["We decided to ship the Kafka migration on Friday."]
     assert mine.visibility is Visibility.USER and mine.scope.thread_id == thread
     assert shared.visibility is Visibility.THREAD and shared.scope.thread_id == thread
     assert mine.system_metadata["category"] == shared.system_metadata["category"] == "decision"
@@ -345,8 +345,12 @@ async def test_forget_and_expiry(container, uow_factory) -> None:
     await container.tasks.drain()  # durable search and graph projection cleanup
     after_expiry = await graph.query(U1, entities=[task.subject], hops=1)
     assert not any(r.memory_id == task.memory_id for r in after_expiry.relations)
-    assert await _memories(uow_factory, U1, container) == []
-    assert (await engine.retrieve(U1, "follow up with legal", kinds=("memory",))).candidates == []
+    # the task lapsed; what the user said is still on record, as said and never as a task
+    [said] = await _memories(uow_factory, U1, container)
+    assert said.system_metadata["category"] == "verbatim_turn"
+    assert said.content == "Remind me to follow up with legal by Friday."
+    found = await engine.retrieve(U1, "follow up with legal", kinds=("memory",))
+    assert [c.record_id for c in found.candidates] == [said.memory_id]
     history = await _memories(uow_factory, U1, container, include_superseded=True)
     assert (
         next(m for m in history if m.memory_id == task.memory_id).temporal.status
