@@ -36,7 +36,8 @@ each entry says which one moved. Decisions behind each change are in the
 - A user's sentence is no longer lost when a rule reads all of it: the turn is kept verbatim
   beside any reading that can lapse, merge or fade (a fact, a task, a procedure, an event, a
   decision) - "All seasonal merchandise must go to Facility B" survived only as a seven-day
-  task - and the two take one slot in a bundle. A turn longer than 2000 characters is kept
+  task - and the two take one slot in a bundle; forgetting, updating, retracting or
+  correcting either one acts on both. A turn longer than 2000 characters is kept
   whole in sentence-cut pieces instead of truncated. The fact rule reads subjects of up to
   twelve words ("the master lock code for the hazardous materials cage in Warehouse 3"), not
   five (ADR 0035).

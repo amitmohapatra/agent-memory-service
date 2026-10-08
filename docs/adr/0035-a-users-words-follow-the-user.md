@@ -47,7 +47,11 @@ made such a user's `TASK` or `EPISODIC` statement the agent's `PRIVATE` note.
    same words is the turn not stored again (it would outlive the reading's supersession as a
    stale copy). A reading and its turn never reinforce or merge into each other, and retrieval
    gives equal words from the same writer, instant and source turn one slot whatever subject
-   each names (`engine._twin_context`; a `user:`/`agent:` subject still names a speaker).
+   each names (`engine._twin_context`; a `user:`/`agent:` subject still names a speaker);
+   graph and derived-source expansion do not bring a collapsed twin back (`engine.in_hand`).
+   The twins are one statement to every write that removes or replaces it: `forget`,
+   `update` (supersede) and a feedback retraction or correction act on both
+   (`MemoryRepository.twins`: same words, owner and source, an indexed lookup).
 4. **Long turns are kept whole.** A turn over `verbatim_max_chars` is stored as consecutive
    verbatim pieces cut at sentence ends (`verbatim_windows`), not truncated; the restatement
    (ADR 0027) is carried by the first piece.

@@ -192,13 +192,20 @@ class MemoryService:
             created_at=now,
             updated_at=now,
         )
+        # the same statement kept twice (a turn and a rule's reading in its words) is
+        # replaced once: both close at the new version
+        closed = [old, *await uow.memories.twins(ctx.tenant_id, old)]
         supersede(old, new, now=now)
-        old.system_metadata["supersede_reason"] = reason
+        for twin in closed[1:]:
+            supersede(twin, new.model_copy(), now=now)
+        for memory in closed:
+            memory.system_metadata["supersede_reason"] = reason
         # the new version keeps exactly the audience the old one had
         audience = await uow.memories.visibility_keys(ctx.tenant_id, memory_id)
         await uow.memories.add(new, visibility_keys=audience)
-        await uow.memories.update(old)
-        await self._index(uow, ctx, [new, old], key=f"memidx:supersede:{new.memory_id}")
+        for memory in closed:
+            await uow.memories.update(memory)
+        await self._index(uow, ctx, [new, *closed], key=f"memidx:supersede:{new.memory_id}")
         return new
 
     async def _index(
@@ -401,6 +408,10 @@ class MemoryService:
             return None
         memory = await self.get_memory(uow, ctx, memory_id)
         await self._require_owner(ctx, memory, "forget")
-        await uow.memories.forget(ctx.tenant_id, memory_id)
-        await self._index(uow, ctx, [memory], key=f"memidx:forget:{memory_id}")
+        # the same statement kept twice (a turn and a rule's reading in its words) is
+        # forgotten once: the twin left behind would still answer with the forgotten words
+        twins = await uow.memories.twins(ctx.tenant_id, memory)
+        for gone in (memory, *twins):
+            await uow.memories.forget(ctx.tenant_id, gone.memory_id)
+        await self._index(uow, ctx, [memory, *twins], key=f"memidx:forget:{memory_id}")
         return memory

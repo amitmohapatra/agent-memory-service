@@ -230,3 +230,34 @@ async def test_the_same_in_another_language(container, uow_factory, said, asked,
     assert code in await _recalled(container, tomorrow, asked)
     assert code in (await _context(container, tomorrow, asked)).render()
     assert code not in await _recalled(container, _chat("u2"), asked)
+
+
+async def test_forgetting_or_correcting_the_code_takes_every_copy(container, uow_factory) -> None:
+    """The fact and the turn are one statement: forgetting either forgets both, and a
+    correction closes both, so the old code is never answered again."""
+    said, later = _chat(), _chat()
+    await _say(container, uow_factory, said, CODE)
+    fact, turn = sorted(
+        (m for m in await _memories(uow_factory, said, container) if m.content == CODE),
+        key=lambda m: m.system_metadata["category"],
+    )
+    assert (fact.system_metadata["category"], turn.system_metadata["category"]) == (
+        "fact",
+        "verbatim_turn",
+    )
+    service = container.services["memory"]
+    async with uow_factory() as uow:
+        await service.supersede(
+            uow, said, turn.memory_id, content=CODE.replace("8492", "5170"), reason="rotated"
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    recalled = await _recalled(container, later, ASK)
+    assert "5170" in recalled and "8492" not in recalled
+    [current] = [m for m in await _memories(uow_factory, said, container) if "5170" in m.content]
+    async with uow_factory() as uow:
+        await service.forget(uow, said, current.memory_id)
+        await uow.commit()
+    await container.tasks.drain()
+    recalled = await _recalled(container, later, ASK)
+    assert "5170" not in recalled and "8492" not in recalled

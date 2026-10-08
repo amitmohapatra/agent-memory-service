@@ -362,6 +362,13 @@ class MemoryRepository(Protocol):
         """Indexed lookup of the unique live derived slot; caller serializes slot writes."""
         ...
 
+    async def twins(self, tenant_id: str, memory: CanonicalMemory) -> list[CanonicalMemory]:
+        """The live CURRENT memories that are the same statement as ``memory``: its words
+        (normalized hash), its owner and a source it was read from, in any scope - a turn kept
+        verbatim and a rule's reading of it in the same words. An indexed lookup (tenant,
+        normalized hash)."""
+        ...
+
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]
