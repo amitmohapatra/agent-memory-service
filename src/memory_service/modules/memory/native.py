@@ -1023,7 +1023,7 @@ class NativeMemoryIntelligence:
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
-        pairs = self.subjects.pairs(candidate, ordered)
+        pairs = self.subjects.pairs(candidate, ordered, statements=adjudicating)
         for mem in ordered:
             if (
                 mem.temporal.status.value != "CURRENT"

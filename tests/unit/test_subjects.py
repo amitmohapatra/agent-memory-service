@@ -325,13 +325,14 @@ def test_the_tenants_definition_wins_over_the_packs() -> None:
     assert compare(parse("DC 3"), parse("Distribution Center 3")).verdict is SAME  # the pack
 
 
-def test_only_subject_length_text_is_cached() -> None:
+def test_the_parse_cache_is_bounded_and_reads_a_bounded_text() -> None:
     from memory_service.domain import subjects as module
 
     module._parse.cache_clear()
-    parse("Forklift 4")
-    parse("x " * 100)
-    assert module._parse.cache_info().currsize == 1
+    for i in range(module._PARSE_CACHE + 100):
+        parse(f"Forklift {i}")
+    assert module._parse.cache_info().currsize == module._PARSE_CACHE
+    assert parse("x " * 1000).text == ("x " * 1000).strip()[: module.MAX_SUBJECT_CHARS]
 
 
 def test_a_short_form_defined_twice_is_not_learned() -> None:

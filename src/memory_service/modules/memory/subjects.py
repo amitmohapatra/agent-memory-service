@@ -115,14 +115,23 @@ class SubjectMatcher:
 
     # -- comparison -------------------------------------------------------------------
     def pairs(
-        self, candidate: MemoryCandidate, existing: Sequence[CanonicalMemory]
+        self,
+        candidate: MemoryCandidate,
+        existing: Sequence[CanonicalMemory],
+        *,
+        statements: bool = True,
     ) -> dict[str, SubjectPair]:
-        """Every memory of ``existing`` (by id) against ``candidate``, by their words."""
+        """Every memory of ``existing`` (by id) against ``candidate``, by their words.
+        ``statements=False`` skips comparing the slots and topics of an identity's
+        statements (only the adjudicator's gate reads them): their ``statement`` is then
+        the subject's verdict."""
         vocab = self._vocabulary(candidate, existing)
         names = self._names(candidate, existing, vocab)
         mine = parse(written(candidate.subject, candidate.entities), vocab)
         return {
-            mem.memory_id: self._pair(candidate, mine, mem, vocab, names, cosine=None)
+            mem.memory_id: self._pair(
+                candidate, mine, mem, vocab, names, cosine=None, statements=statements
+            )
             for mem in existing
         }
 
@@ -169,6 +178,7 @@ class SubjectMatcher:
         names: Sequence[Subject],
         *,
         cosine: float | None,
+        statements: bool = True,
     ) -> SubjectPair:
         theirs = parse(written(mem.subject, _entities(mem)), vocab)
         if mine.empty or theirs.empty:
@@ -180,7 +190,7 @@ class SubjectMatcher:
             # word, "Tower A" / "Tower" every word but a code
             apart = subject.verdict is not SubjectVerdict.SAME
             return SubjectPair(subject, subject, apart=apart)
-        if subject.verdict is SubjectVerdict.DIFFERENT:
+        if subject.verdict is SubjectVerdict.DIFFERENT or not statements:
             return SubjectPair(subject, subject)
         return SubjectPair(subject, self._slot(candidate, mem, vocab))
 

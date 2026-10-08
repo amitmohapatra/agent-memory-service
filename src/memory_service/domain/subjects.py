@@ -529,9 +529,10 @@ def is_identity(text: str) -> bool:
 MAX_SUBJECT_CHARS = 300
 
 
-#: Subjects up to this long are cached (names recur); a longer text - a topic - is not, so
-#: the cache holds a few thousand short strings, not sentences.
-CACHED_SUBJECT_CHARS = 64
+#: Subjects up to this long are cached (names and topics recur): at most
+#: ``_PARSE_CACHE`` of them, each the few tuples of words a subject reduces to.
+CACHED_SUBJECT_CHARS = MAX_SUBJECT_CHARS
+_PARSE_CACHE = 2048
 
 
 def parse(text: str, vocab: Vocabulary | None = None) -> Subject:
@@ -547,7 +548,7 @@ def parse(text: str, vocab: Vocabulary | None = None) -> Subject:
 _Item = tuple[str, str, "_Tok | None"]
 
 
-@lru_cache(maxsize=4096)
+@lru_cache(maxsize=_PARSE_CACHE)
 def _parse(text: str, learned: tuple[tuple[str, str], ...]) -> Subject:
     if is_identity(text):
         return Subject(text=text, identity=text)

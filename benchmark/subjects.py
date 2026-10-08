@@ -214,8 +214,7 @@ def _comparisons(cases: list[SubjectPairCase], rounds: int) -> dict[str, Any]:
     warm: list[float] = []
     vocab = domain.vocabulary()
     for _ in range(rounds):
-        domain._parse.cache_clear()
-        domain._scan.cache_clear()
+        domain._parse.cache_clear()  # the one parse cache (the scanner is not cached)
         for case in cases:
             t0 = time.perf_counter()
             domain.compare(domain.parse(case.a, vocab), domain.parse(case.b, vocab))
