@@ -1,0 +1,581 @@
+{
+  "benchmark": "statement_labeller",
+  "nli_provider": null,
+  "dev": {
+    "n": 333,
+    "macro_f1": 0.9094,
+    "macro_f1_with_none": 0.9223,
+    "accuracy": 0.9219,
+    "per_kind_f1": {
+      "FACT": 0.8,
+      "RULE": 0.8736,
+      "CONDITIONAL_RULE": 0.7826,
+      "STATUS": 1.0,
+      "CORRECTION": 1.0,
+      "LIFECYCLE": 1.0,
+      "NONE": 1.0
+    },
+    "per_language": {
+      "ar": {
+        "n": 47,
+        "macro_f1": 0.8157,
+        "macro_f1_with_none": 0.842,
+        "accuracy": 0.8511,
+        "per_kind_f1": {
+          "FACT": 0.6667,
+          "RULE": 0.7273,
+          "CONDITIONAL_RULE": 0.5,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "de": {
+        "n": 47,
+        "macro_f1": 0.7491,
+        "macro_f1_with_none": 0.7849,
+        "accuracy": 0.8085,
+        "per_kind_f1": {
+          "FACT": 0.6087,
+          "RULE": 0.6,
+          "CONDITIONAL_RULE": 0.2857,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "en": {
+        "n": 145,
+        "macro_f1": 0.9845,
+        "macro_f1_with_none": 0.9867,
+        "accuracy": 0.9862,
+        "per_kind_f1": {
+          "FACT": 0.96,
+          "RULE": 0.9756,
+          "CONDITIONAL_RULE": 0.9714,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "es": {
+        "n": 47,
+        "macro_f1": 0.8157,
+        "macro_f1_with_none": 0.842,
+        "accuracy": 0.8511,
+        "per_kind_f1": {
+          "FACT": 0.6667,
+          "RULE": 0.7273,
+          "CONDITIONAL_RULE": 0.5,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "hi": {
+        "n": 47,
+        "macro_f1": 0.9737,
+        "macro_f1_with_none": 0.9775,
+        "accuracy": 0.9787,
+        "per_kind_f1": {
+          "FACT": 0.9333,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9091,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      }
+    },
+    "rules_on_none": 0,
+    "sources": {
+      "lexicon": 333
+    },
+    "latency_ms_per_sentence": {
+      "p50": 0.09,
+      "p95": 0.193,
+      "mean": 0.095
+    },
+    "errors": [
+      {
+        "id": "dev-en-038",
+        "lang": "en",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "We never ship hazardous goods on Fridays."
+      },
+      {
+        "id": "dev-en-063",
+        "lang": "en",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "If the forklift is out of service, route heavy pallets to Dock 3."
+      },
+      {
+        "id": "dev-de-008",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Formatiere Bestandsprüfungen immer als Markdown-Tabelle."
+      },
+      {
+        "id": "dev-de-009",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Wenn ich nach einer Bestandsprüfung frage, verwende immer eine Tabelle."
+      },
+      {
+        "id": "dev-de-010",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Schlage mir niemals Rezepte mit Koriander vor."
+      },
+      {
+        "id": "dev-de-014",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Antworte mir künftig immer auf Deutsch."
+      },
+      {
+        "id": "dev-de-015",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Nimm niemals Artikel mit Bestand null in die Übersicht auf, es sei denn, ich schreibe 'mit Fehlbestand'."
+      },
+      {
+        "id": "dev-de-016",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Benutze immer den Expressversand, außer die Bestellung liegt unter 50 Euro."
+      },
+      {
+        "id": "dev-de-017",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Wenn eine Lieferung mehr als zwei Stunden zu spät ist, informiere immer den Filialleiter."
+      },
+      {
+        "id": "dev-de-018",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Falls die Temperatur im Kühlraum über 5 Grad steigt, alarmiere mich sofort."
+      },
+      {
+        "id": "dev-de-020",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Runde Preise immer auf ,99, außer bei Abverkaufsware."
+      },
+      {
+        "id": "dev-es-008",
+        "lang": "es",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Cuando te pida una auditoría de inventario, usa siempre una tabla en markdown."
+      },
+      {
+        "id": "dev-es-013",
+        "lang": "es",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Responde siempre en español."
+      },
+      {
+        "id": "dev-es-014",
+        "lang": "es",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "De ahora en adelante, redondea las cifras a dos decimales."
+      },
+      {
+        "id": "dev-es-016",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Usa siempre el envío exprés, salvo que el pedido sea inferior a 50 euros."
+      },
+      {
+        "id": "dev-es-017",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Si una entrega llega con más de dos horas de retraso, avisa siempre al gerente de la tienda."
+      },
+      {
+        "id": "dev-es-018",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Si la temperatura de la cámara frigorífica supera los 5 grados, avísame de inmediato."
+      },
+      {
+        "id": "dev-es-020",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Redondea siempre los precios a ,99 excepto en los artículos de liquidación."
+      },
+      {
+        "id": "dev-ar-008",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "عندما أطلب جرد المخزون، استخدم دائمًا جدولًا بصيغة ماركداون."
+      },
+      {
+        "id": "dev-ar-013",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "أجب دائمًا باللغة العربية."
+      },
+      {
+        "id": "dev-ar-014",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "في كل مرة أرفع فيها سجل استلام، ضع علامة على أرقام الفواتير الناقصة."
+      },
+      {
+        "id": "dev-ar-016",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "استخدم دائمًا الشحن السريع ما لم تكن قيمة الطلب أقل من 50 دولارًا."
+      },
+      {
+        "id": "dev-ar-017",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "إذا تأخرت الشحنة أكثر من ساعتين، أبلغ مدير المتجر دائمًا."
+      },
+      {
+        "id": "dev-ar-018",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "إذا تجاوزت درجة حرارة غرفة التبريد 5 درجات، نبهني فورًا."
+      },
+      {
+        "id": "dev-ar-020",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "قرّب الأسعار دائمًا إلى .99 باستثناء أصناف التصفية."
+      },
+      {
+        "id": "dev-hi-018",
+        "lang": "hi",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "अगर कोल्ड स्टोरेज का तापमान 5 डिग्री से ऊपर जाए, तो मुझे तुरंत अलर्ट करना।"
+      }
+    ]
+  },
+  "test": {
+    "n": 154,
+    "macro_f1": 0.9322,
+    "macro_f1_with_none": 0.9419,
+    "accuracy": 0.9416,
+    "per_kind_f1": {
+      "FACT": 0.8302,
+      "RULE": 0.9524,
+      "CONDITIONAL_RULE": 0.8108,
+      "STATUS": 1.0,
+      "CORRECTION": 1.0,
+      "LIFECYCLE": 1.0,
+      "NONE": 1.0
+    },
+    "per_language": {
+      "ar": {
+        "n": 21,
+        "macro_f1": 0.8278,
+        "macro_f1_with_none": 0.8524,
+        "accuracy": 0.8571,
+        "per_kind_f1": {
+          "FACT": 0.6667,
+          "RULE": 0.8,
+          "CONDITIONAL_RULE": 0.5,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "de": {
+        "n": 21,
+        "macro_f1": 0.875,
+        "macro_f1_with_none": 0.8929,
+        "accuracy": 0.9048,
+        "per_kind_f1": {
+          "FACT": 0.75,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.5,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "en": {
+        "n": 70,
+        "macro_f1": 0.9833,
+        "macro_f1_with_none": 0.9857,
+        "accuracy": 0.9857,
+        "per_kind_f1": {
+          "FACT": 0.9524,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9474,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "es": {
+        "n": 21,
+        "macro_f1": 0.8278,
+        "macro_f1_with_none": 0.8524,
+        "accuracy": 0.8571,
+        "per_kind_f1": {
+          "FACT": 0.6667,
+          "RULE": 0.8,
+          "CONDITIONAL_RULE": 0.5,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "hi": {
+        "n": 21,
+        "macro_f1": 1.0,
+        "macro_f1_with_none": 1.0,
+        "accuracy": 1.0,
+        "per_kind_f1": {
+          "FACT": 1.0,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      }
+    },
+    "rules_on_none": 0,
+    "sources": {
+      "lexicon": 154
+    },
+    "latency_ms_per_sentence": {
+      "p50": 0.108,
+      "p95": 0.269,
+      "mean": 0.125
+    },
+    "errors": [
+      {
+        "id": "test-en-030",
+        "lang": "en",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "If inventory of milk falls under 20 cartons, reorder it automatically."
+      },
+      {
+        "id": "test-de-007",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Verwende immer die Testdatenbank, außer ich sage 'prod'."
+      },
+      {
+        "id": "test-de-008",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Wenn die Fehlerrate über 5 % steigt, benachrichtige immer den Bereitschaftsdienst."
+      },
+      {
+        "id": "test-es-006",
+        "lang": "es",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "De ahora en adelante, guarda todos los recibos en la carpeta de finanzas."
+      },
+      {
+        "id": "test-es-007",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Usa siempre la base de datos de pruebas, a menos que diga 'prod'."
+      },
+      {
+        "id": "test-es-008",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Si la tasa de errores supera el 5 %, avisa siempre al ingeniero de guardia."
+      },
+      {
+        "id": "test-ar-006",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "من الآن فصاعدًا، احفظ جميع الإيصالات في مجلد المالية."
+      },
+      {
+        "id": "test-ar-007",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "استخدم دائمًا قاعدة بيانات الاختبار ما لم أقل 'prod'."
+      },
+      {
+        "id": "test-ar-008",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "إذا تجاوز معدل الأخطاء 5٪، نبّه المهندس المناوب دائمًا."
+      }
+    ]
+  },
+  "cost": [
+    {
+      "sentences_per_observation": 1,
+      "ms_per_sentence": {
+        "p50": 0.1,
+        "p95": 0.23,
+        "p99": 0.33,
+        "max": 0.52,
+        "samples": 487
+      },
+      "sources": {
+        "lexicon": 487
+      }
+    },
+    {
+      "sentences_per_observation": 3,
+      "ms_per_sentence": {
+        "p50": 0.1,
+        "p95": 0.19,
+        "p99": 0.26,
+        "max": 0.27,
+        "samples": 163
+      },
+      "sources": {
+        "lexicon": 487
+      }
+    }
+  ],
+  "locomo": {
+    "sentences": 16758,
+    "kinds": {
+      "NONE": 4371,
+      "FACT": 12360,
+      "CORRECTION": 6,
+      "LIFECYCLE": 6,
+      "STATUS": 12,
+      "RULE": 3
+    },
+    "sources": {
+      "lexicon": 16758
+    }
+  },
+  "provenance": {
+    "timestamp": "2026-10-08T01:47:30.838122+00:00",
+    "git_commit": "a06c2c9b576ab8c93e964359d0169ca8067e50cd",
+    "host_load": {
+      "loadavg_1m": 0.37,
+      "loadavg_5m": 0.53,
+      "loadavg_15m": 0.69,
+      "load_per_core": 0.09
+    },
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 15.7,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "onnxruntime": "1.30.0",
+      "docling": "2.127.0"
+    },
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  }
+}

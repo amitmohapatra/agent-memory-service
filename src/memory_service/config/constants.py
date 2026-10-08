@@ -25,6 +25,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memory_service.domain.enums import StatementKind
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.ports.search import VectorName
 
@@ -553,6 +554,47 @@ class NLISettings(BaseModel):
 
 
 NLI = NLISettings()
+
+
+class StatementLabellerSettings(BaseModel):
+    """The statement labeller (``modules.memory.statements``, ADR 0035): which lexicon packs
+    it reads, and how the frozen NLI head (``FROZEN_MODELS.nli``) decides what the packs
+    leave open. The hypotheses are English for every language - the head is cross-lingual -
+    and the thresholds were calibrated on the dev half of
+    ``tests/eval/golden/statement_kinds.json`` (``benchmark/statement_labeller.py``)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    #: generic cue words first, then the domain pack (``modules/memory/lexicon/*.json``)
+    packs: tuple[str, ...] = ("generic", "retail")
+    hypotheses: dict[StatementKind, str] = Field(
+        default_factory=lambda: {
+            StatementKind.RULE: "This is an instruction that should always be followed.",
+            StatementKind.STATUS: "Something is currently working, broken, available or "
+            "unavailable.",
+            StatementKind.LIFECYCLE: "Something has ended, been terminated, or newly started.",
+            StatementKind.CORRECTION: "The speaker is correcting an earlier mistake.",
+        }
+    )
+    #: entailment at or above which the head's kind replaces the lexicon's fallback
+    thresholds: dict[StatementKind, float] = Field(
+        default_factory=lambda: {
+            StatementKind.RULE: 0.5,
+            StatementKind.STATUS: 0.9,
+            StatementKind.LIFECYCLE: 0.9,
+            StatementKind.CORRECTION: 0.9,
+        }
+    )
+    #: the kinds checked for a statement no cue word decided (each one an NLI pair)
+    open_kinds: tuple[StatementKind, ...] = (StatementKind.STATUS, StatementKind.LIFECYCLE)
+    #: entailment at or above which a kind the tenant's model proposed is accepted
+    llm_confirm_min: float = Field(default=0.5, ge=0.0, le=1.0)
+    #: open sentences scored per observation (a pasted document is not labelled whole)
+    nli_max_sentences: int = Field(default=12, ge=0)
+    nli_max_chars: int = Field(default=400, ge=1)
+
+
+STATEMENT_LABELLER = StatementLabellerSettings()
 
 
 class MemoryIntelligenceSettings(BaseModel):

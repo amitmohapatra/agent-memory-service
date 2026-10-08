@@ -43,6 +43,13 @@ from memory_service.modules.memory.narrative import (
 )
 from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
 from memory_service.modules.memory.source_facts import extract_source_facts
+from memory_service.modules.memory.statements import (
+    RULE_KINDS,
+    Lexicon,
+    StatementLabel,
+    StatementLabeller,
+    most_salient,
+)
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
     ContextualExtractor,
@@ -236,14 +243,6 @@ _PREFERENCE = re.compile(
     r"can't stand|never use|always use|only use)\s+(.+)",
     re.IGNORECASE,
 )
-#: An imperative that says it is standing: "always ...", "never ...", "don't ever ...",
-#: "from now on ...". Unlike a bare imperative ("do not invent a sales number"), the
-#: sentence itself says it outlives the task, so it is kept as a lasting rule.
-_STANDING_RULE = re.compile(
-    r"^(?:please\s+)?(?:(?:always|never)\b|(?:don't|do not)\s+ever\b|"
-    r"(?:from now on|going forward|in (?:the )?future)\b[,:]?)\s*(.+)",
-    re.IGNORECASE,
-)
 _PREF_PLEASE = re.compile(
     r"^(?:please\s+)?(always|never|don't|do not|stop|keep)\s+(.+)", re.IGNORECASE
 )
@@ -277,9 +276,13 @@ _EVENT_HINT = re.compile(
     r"released|failed|outage|incident|rolled back|merged|launched|migrated|happened)\b",
     re.IGNORECASE,
 )
-_QUESTION = re.compile(
-    r"[?\uff1f\u061f]\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I
-)
+
+
+def is_question(sentence: str) -> bool:
+    """A question carries no fact to keep (``statements.Lexicon.is_question``): "When I ask
+    for a stock audit, always use a table" is not one."""
+    return Lexicon.default().is_question(sentence)
+
 
 _LIFETIME_BY_TYPE = {
     MemoryType.PREFERENCE: Lifetime.LONG_TERM,
@@ -426,11 +429,15 @@ class NativeMemoryIntelligence:
         *,
         assist: LLMAssist | None = None,
         contextual_extractor: ContextualExtractor | None = None,
+        labeller: StatementLabeller | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
         self.assist = assist or LLMAssist.disabled()
         self.contextual_extractor = contextual_extractor
+        #: what each user sentence does (ADR 0035); the lexicon alone unless the wiring gives
+        #: it the NLI head
+        self.labeller = labeller or StatementLabeller(assist=self.assist)
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
@@ -495,10 +502,16 @@ class NativeMemoryIntelligence:
         out: list[MemoryCandidate] = []
         seen: set[str] = set()
         sentences = split_sentences(text)
+        labels = await self.labeller.label(
+            sentences, models=kind is ObservationKind.MESSAGE and not observation.agent_authored
+        )
         contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
-        for sentence in sentences:
-            for clause in split_clauses(sentence):
-                cand = self._from_sentence(clause, ctx, evidence, kind=kind)
+        for sentence, label in zip(sentences, labels, strict=True):
+            clauses = split_clauses(sentence)
+            for clause in clauses:
+                cand = self._from_sentence(
+                    clause, ctx, evidence, kind=kind, label=label if len(clauses) == 1 else None
+                )
                 if cand is None:
                     continue
                 key = normalized_hash(cand.content)
@@ -515,7 +528,13 @@ class NativeMemoryIntelligence:
             out.append(cand)
         verbatim = self._verbatim(text, observation, ctx, evidence)
         if verbatim is not None and normalized_hash(verbatim.content) not in seen:
-            out.append(verbatim)
+            # the turn carries the kind of its most telling sentence ("No, our system was
+            # updated. We now use /shrinkage." is a correction as a whole)
+            out.append(
+                verbatim.model_copy(
+                    update={"statement_kind": most_salient(label.kind for label in labels)}
+                )
+            )
         return out
 
     async def _contextual_candidates(
@@ -541,7 +560,7 @@ class NativeMemoryIntelligence:
         eligible = {
             index
             for index, sentence in enumerate(sentences)
-            if not _QUESTION.search(sentence)
+            if not is_question(sentence)
             and not ACKNOWLEDGEMENT.match(sentence)
             and any(
                 self._from_sentence(clause, ctx, evidence, kind=observation.kind) is None
@@ -578,7 +597,7 @@ class NativeMemoryIntelligence:
         eligible = {
             index
             for index, sentence in enumerate(sentences)
-            if not _QUESTION.search(sentence) and not ACKNOWLEDGEMENT.match(sentence)
+            if not is_question(sentence) and not ACKNOWLEDGEMENT.match(sentence)
         }
         facts = await extract_source_facts(self.assist, sentences, eligible)
         return [
@@ -663,7 +682,7 @@ class NativeMemoryIntelligence:
         # ends in a question mark only in its first sentence. Judged whole, 199 of 788
         # LoCoMo turns were dropped and 21 of 79 wrong answers had their gold in that set.
         if not any(
-            not _QUESTION.search(s) and not ACKNOWLEDGEMENT.match(s) for s in split_sentences(body)
+            not is_question(s) and not ACKNOWLEDGEMENT.match(s) for s in split_sentences(body)
         ):
             return None
         return MemoryCandidate(
@@ -719,9 +738,25 @@ class NativeMemoryIntelligence:
         evidence: list[EvidenceRef],
         *,
         kind: ObservationKind = ObservationKind.MESSAGE,
+        label: StatementLabel | None = None,
     ) -> MemoryCandidate | None:
-        if _QUESTION.search(s) or ACKNOWLEDGEMENT.match(s):
+        if is_question(s) or ACKNOWLEDGEMENT.match(s):
             return None
+        label = label or self.labeller.lexical(s)
+        cand = self._candidate(s, ctx, evidence, kind=kind, label=label)
+        if cand is None:
+            return None
+        return cand.model_copy(update={"statement_kind": label.kind})
+
+    def _candidate(
+        self,
+        s: str,
+        ctx: MemoryExecutionContext,
+        evidence: list[EvidenceRef],
+        *,
+        kind: ObservationKind,
+        label: StatementLabel,
+    ) -> MemoryCandidate | None:
         negates = bool(_REPLACEMENT.search(s))
         vf_m, vt_m = _VALID_FROM.search(s), _VALID_TO.search(s)
         vf = parse_date(vf_m.group(1)) if vf_m else None
@@ -822,11 +857,13 @@ class NativeMemoryIntelligence:
                 category="preference",
                 **common,
             )
-        if rule := _STANDING_RULE.match(s):
-            # A standing rule ("Never suggest recipes with cilantro", "Always write Python
-            # with strict type hints") says so in its own words, so it is durable on sight:
-            # a lasting PREFERENCE the user profile is kept from, not a seven-day
-            # instruction that lapses unless restated.
+        if label.kind in RULE_KINDS:
+            # A standing rule ("Never suggest recipes with cilantro", "Whenever I ask for a
+            # stock audit, always use a table", "Nunca me sugieras recetas con cilantro")
+            # says so in its own words, so it is durable on sight: a lasting PREFERENCE the
+            # user profile is kept from, not a seven-day instruction that lapses unless
+            # restated. The labeller finds it wherever the standing word sits ("For weekly
+            # overviews, never ...") and keeps its trigger and its exception.
             return MemoryCandidate(
                 content=s,
                 memory_type=MemoryType.PREFERENCE,
@@ -837,11 +874,13 @@ class NativeMemoryIntelligence:
                 # drops as a time phrase ("from now on, reply in German")
                 object=(
                     _clean_object(re.sub(r"^please\s+", "", s, flags=re.IGNORECASE))
-                    or _clean_object(rule.group(1))
+                    or _clean_object(label.instruction or s)
                 )[:300],
                 importance=0.8,
                 confidence=0.85,
                 category="rule",
+                rule_trigger=label.trigger,
+                rule_exception=label.exception,
                 **common,
             )
         if m := _PREF_PLEASE.match(s):

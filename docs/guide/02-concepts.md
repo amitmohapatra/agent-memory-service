@@ -106,6 +106,35 @@ with real facts:
 Forgetting a fact therefore does not forget the sentence it came from; the turn stays
 searchable until it is forgotten too ([USAGE §4](../USAGE.md#4-correcting-supersede-forget-restore)).
 
+### What a statement does
+
+Each sentence of a user's message is also labelled with what it **does**, a `StatementKind`
+(`domain/enums.py`, ADR 0035), stored on every memory it produced as
+`system_metadata["statement_kind"]` (read it with `domain.memory.statement_kind_of`):
+
+| Kind | The sentence | Example |
+|---|---|---|
+| `FACT` | states something | "Our primary supplier for heavy-duty pallets is Uline." |
+| `RULE` | gives a standing instruction | "Whenever I ask for a stock audit, always format the response as a markdown table." |
+| `CONDITIONAL_RULE` | gives one with an exception or a condition about the world | "Never include zero-stock items unless I type 'include out of stock'." |
+| `STATUS` | reports the state of a thing | "Forklift #4 has been repaired and is back on the floor." |
+| `CORRECTION` | revises something said before | "No, our system was updated. We now use the /shrinkage command." |
+| `LIFECYCLE` | says a thing or a relationship began or ended | "The temporary refrigeration unit has been dismantled." |
+
+A question, a greeting or a one-off request gets no kind; a verbatim turn carries the most
+telling kind of its sentences (a correction outranks a rule, a rule a lifecycle change, then a
+status, then a fact). A rule keeps its trigger and its exception as said
+(`rule_trigger`, `rule_exception`) and is stored as a lasting rule wherever its standing word
+sits ("For weekly overviews, never ...") and in any of the labeller's languages.
+
+The labeller (`modules/memory/statements.py`) reads cue words from data packs
+(`modules/memory/lexicon/generic.json` and the default domain pack `retail.json`) and leaves
+what they cannot settle to the grounding model's NLI head and, when the tenant's policy
+allows `contextual_extraction`, to the model - whose proposal counts only if the NLI head
+confirms it. The kind changes nothing about what is retrieved; it is what later stages read
+to keep rules in every answer and to let a correction, a status or a lifecycle change replace
+what it revises.
+
 ---
 
 ## A memory is classified on several axes at once
@@ -135,7 +164,9 @@ When the writer gives no lifetime, the type decides (`_LIFETIME_BY_TYPE` in
 
 One sentence-level exception: an imperative ("do not invent a sales number") is a
 `PREFERENCE` by shape but is given `SHORT_TERM`, so a one-off instruction does not become
-permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`).
+permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`). A
+`RULE` or `CONDITIONAL_RULE` ("never suggest recipes with cilantro") says it is standing and is
+`LONG_TERM` on sight.
 
 ---
 

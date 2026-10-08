@@ -14,6 +14,7 @@ from memory_service.domain.enums import (
     MemoryType,
     Representation,
     ScopeLevel,
+    StatementKind,
     TemporalStatus,
     Visibility,
 )
@@ -23,6 +24,14 @@ from memory_service.domain.language import detect_language
 from memory_service.domain.predicates import predicate_label
 
 UNVERIFIED_MEMORY_CATEGORIES = ("contextual_fact", "assisted", "reflection")
+
+
+def statement_kind_of(metadata: Mapping[str, Any]) -> StatementKind | None:
+    """The kind the statement labeller gave a memory (``system_metadata["statement_kind"]``,
+    ADR 0035); None for a memory written before it, or not from a user statement. A rule's
+    trigger and exception, when it has them, are ``rule_trigger`` and ``rule_exception``."""
+    value = metadata.get("statement_kind")
+    return StatementKind(value) if value in StatementKind.__members__ else None
 
 
 def unverified_representation(metadata: Mapping[str, Any]) -> bool:

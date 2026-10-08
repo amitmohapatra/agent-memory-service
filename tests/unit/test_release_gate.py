@@ -52,6 +52,11 @@ GOOD = {
         "undeclared_tool_suggestions": 0,
     },
     "tests.json": {"failed": 0, "errors": 0, "total": 260},
+    "statement_kinds_gate.json": {
+        "threshold": {"english_test_macro_f1": 0.85, "rules_on_none": 0},
+        "dev": {"rules_on_none": 0},
+        "test": {"rules_on_none": 0, "per_language": {"en": {"macro_f1": 0.95}}},
+    },
 }
 NETWORK = {
     "durability_network.json": {
@@ -174,6 +179,16 @@ def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
         ("failure_injection.json", {"worker_kill": "fail"}, "worker_kill = fail"),
         ("tests.json", {"failed": 1}, "tests failed=1"),
         ("tests.json", {"total": 0}, "records no tests"),
+        (
+            "statement_kinds_gate.json",
+            {"test": {"rules_on_none": 0, "per_language": {"en": {"macro_f1": 0.8}}}},
+            "English macro-F1 = 0.8",
+        ),
+        (
+            "statement_kinds_gate.json",
+            {"dev": {"rules_on_none": 2}},
+            "2 questions or requests stored as standing rules (dev",
+        ),
     ],
 )
 def test_each_gate_blocks(results: Path, name: str, patch: dict, needle: str) -> None:

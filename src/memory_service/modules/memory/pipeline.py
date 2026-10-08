@@ -138,6 +138,19 @@ def _is_echo(candidate: MemoryCandidate) -> bool:
     return bool(evidence) and all(ev.source_type in _ECHO_SOURCES for ev in evidence)
 
 
+def statement_metadata(candidate: MemoryCandidate) -> dict[str, str]:
+    """What the statement labeller said about a candidate, as stored with its memory (read
+    back by ``domain.memory.statement_kind_of``)."""
+    out: dict[str, str] = {}
+    if candidate.statement_kind is not None:
+        out["statement_kind"] = candidate.statement_kind.value
+    if candidate.rule_trigger:
+        out["rule_trigger"] = candidate.rule_trigger
+    if candidate.rule_exception:
+        out["rule_exception"] = candidate.rule_exception
+    return out
+
+
 def build_memory(
     candidate: MemoryCandidate,
     ctx: MemoryExecutionContext,
@@ -186,6 +199,7 @@ def build_memory(
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": dated,
+            **statement_metadata(candidate),
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
             **({"restatement": candidate.restatement} if candidate.restatement else {}),
             **(

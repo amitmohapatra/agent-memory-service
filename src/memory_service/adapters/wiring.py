@@ -523,6 +523,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
     from memory_service.modules.memory.service import MemoryService
+    from memory_service.modules.memory.statements import StatementLabeller
     from memory_service.ports.intelligence import MemoryIntelligenceProvider
 
     cfg = container.tuning.memory_intelligence
@@ -542,6 +543,8 @@ def _wire_memory(container: Container) -> None:
         container.embedding,
         assist=container.services["llm_assist"],
         contextual_extractor=extractor,
+        # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0035)
+        labeller=StatementLabeller(nli=container.nli, assist=container.services["llm_assist"]),
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(

@@ -165,6 +165,25 @@ def evaluate_with_notes() -> tuple[bool, list[str], list[str]]:
         if kg.get("query_hit_rate", 0.0) < 1.0:
             failures.append(f"KG query hit rate = {kg.get('query_hit_rate')} (must be 1.00)")
 
+    kinds = _load("statement_kinds_gate.json")
+    if kinds is None:
+        failures.append(
+            "statement_kinds_gate.json missing (statement-labeller gate has no evidence)"
+        )
+    else:
+        floor = (kinds.get("threshold") or {}).get("english_test_macro_f1", 0.85)
+        english = ((kinds.get("test") or {}).get("per_language") or {}).get("en") or {}
+        if (english.get("macro_f1") or 0.0) < floor:
+            failures.append(
+                f"statement kinds: English macro-F1 = {english.get('macro_f1')} (must be >= {floor})"
+            )
+        for half in ("dev", "test"):
+            if (kinds.get(half) or {}).get("rules_on_none", 1) != 0:
+                failures.append(
+                    f"statement kinds: {kinds[half].get('rules_on_none')} questions or requests "
+                    f"stored as standing rules ({half}; must be 0)"
+                )
+
     budgets = {
         "chat_accept_p95_ms": BUDGETS.chat_accept_p95_ms,
         "cached_context_p95_ms": BUDGETS.cached_context_p95_ms,

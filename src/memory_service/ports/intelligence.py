@@ -16,7 +16,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, ContextEdge, DocumentNode, DocumentVersion
-from memory_service.domain.enums import DedupDecision, Lifetime, MemoryType, Visibility
+from memory_service.domain.enums import (
+    DedupDecision,
+    Lifetime,
+    MemoryType,
+    StatementKind,
+    Visibility,
+)
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import GraphLayer, layer_for
 from memory_service.domain.memory import CanonicalMemory
@@ -59,6 +65,19 @@ class MemoryCandidate(BaseModel):
     )
     provider_ref: str | None = Field(
         default=None, description="the external provider's own id for this memory, if any"
+    )
+    statement_kind: StatementKind | None = Field(
+        default=None,
+        description="what the statement does (fact, rule, status, ...), from the statement "
+        "labeller; None for what is not a user statement (a tool result, a question)",
+    )
+    rule_trigger: str | None = Field(
+        default=None,
+        description="a rule's trigger clause, as said: 'whenever I ask for a stock audit'",
+    )
+    rule_exception: str | None = Field(
+        default=None,
+        description="a rule's exception clause, as said: \"unless I type 'include out of stock'\"",
     )
     preceding_turn: dict[str, str] | None = Field(
         default=None,
