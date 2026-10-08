@@ -1,0 +1,986 @@
+{
+  "gate": "subjects",
+  "golden_set": "subject_pairs",
+  "matcher": "words (no encoder)",
+  "pairs": 518,
+  "same": 248,
+  "different": 270,
+  "precision": 1.0,
+  "recall": 0.746,
+  "f1": 0.8545,
+  "false_merges": 0,
+  "false_merge_rate": 0.0,
+  "hard_negatives": 270,
+  "hard_negative_false_merges": 0,
+  "hard_negative_false_merge_rate": 0.0,
+  "routed_recall": 0.9355,
+  "routed_different_rate": 0.0778,
+  "by_lang": {
+    "ar": {
+      "pairs": 51,
+      "same": 23,
+      "different": 28,
+      "precision": 1.0,
+      "recall": 0.6522,
+      "f1": 0.7895,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 28,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.8696,
+      "routed_different_rate": 0.0357
+    },
+    "de": {
+      "pairs": 71,
+      "same": 33,
+      "different": 38,
+      "precision": 1.0,
+      "recall": 0.697,
+      "f1": 0.8214,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 38,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.8485,
+      "routed_different_rate": 0.0789
+    },
+    "en": {
+      "pairs": 275,
+      "same": 138,
+      "different": 137,
+      "precision": 1.0,
+      "recall": 0.7899,
+      "f1": 0.8826,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 137,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.1095
+    },
+    "es": {
+      "pairs": 70,
+      "same": 32,
+      "different": 38,
+      "precision": 1.0,
+      "recall": 0.6875,
+      "f1": 0.8148,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 38,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.8438,
+      "routed_different_rate": 0.0526
+    },
+    "hi": {
+      "pairs": 51,
+      "same": 22,
+      "different": 29,
+      "precision": 1.0,
+      "recall": 0.7273,
+      "f1": 0.8421,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 29,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.8636,
+      "routed_different_rate": 0.0
+    }
+  },
+  "by_kind": {
+    "alias": {
+      "pairs": 52,
+      "same": 52,
+      "different": 0,
+      "precision": 1.0,
+      "recall": 0.9808,
+      "f1": 0.9903,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 0,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "code": {
+      "pairs": 22,
+      "same": 0,
+      "different": 22,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 22,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "crosslingual": {
+      "pairs": 24,
+      "same": 16,
+      "different": 8,
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 8,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "format": {
+      "pairs": 74,
+      "same": 74,
+      "different": 0,
+      "precision": 1.0,
+      "recall": 0.9865,
+      "f1": 0.9932,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 0,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "general": {
+      "pairs": 20,
+      "same": 11,
+      "different": 9,
+      "precision": 1.0,
+      "recall": 0.7273,
+      "f1": 0.8421,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 9,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "identifier": {
+      "pairs": 92,
+      "same": 0,
+      "different": 92,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 92,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "learned": {
+      "pairs": 15,
+      "same": 9,
+      "different": 6,
+      "precision": 1.0,
+      "recall": 0.8889,
+      "f1": 0.9412,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 6,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.3333
+    },
+    "names": {
+      "pairs": 61,
+      "same": 0,
+      "different": 61,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 61,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0656
+    },
+    "normalisation": {
+      "pairs": 53,
+      "same": 53,
+      "different": 0,
+      "precision": 1.0,
+      "recall": 0.4717,
+      "f1": 0.641,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 0,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "number": {
+      "pairs": 24,
+      "same": 5,
+      "different": 19,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 19,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "order": {
+      "pairs": 13,
+      "same": 0,
+      "different": 13,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 13,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "partial": {
+      "pairs": 10,
+      "same": 4,
+      "different": 6,
+      "precision": 1.0,
+      "recall": 0.25,
+      "f1": 0.4,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 6,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 1.0
+    },
+    "plural_name": {
+      "pairs": 9,
+      "same": 0,
+      "different": 9,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 9,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 1.0
+    },
+    "spelling": {
+      "pairs": 10,
+      "same": 10,
+      "different": 0,
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 0,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "title": {
+      "pairs": 11,
+      "same": 0,
+      "different": 11,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 11,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.0,
+      "routed_different_rate": 0.0
+    },
+    "unit": {
+      "pairs": 28,
+      "same": 14,
+      "different": 14,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 14,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    }
+  },
+  "by_split": {
+    "dev": {
+      "pairs": 254,
+      "same": 120,
+      "different": 134,
+      "precision": 1.0,
+      "recall": 0.7583,
+      "f1": 0.8626,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 134,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.925,
+      "routed_different_rate": 0.0746
+    },
+    "test": {
+      "pairs": 264,
+      "same": 128,
+      "different": 136,
+      "precision": 1.0,
+      "recall": 0.7344,
+      "f1": 0.8468,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 136,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.9453,
+      "routed_different_rate": 0.0809
+    }
+  },
+  "by_domain": {
+    "general": {
+      "pairs": 31,
+      "same": 22,
+      "different": 9,
+      "precision": 1.0,
+      "recall": 0.8636,
+      "f1": 0.9268,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 9,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.0
+    },
+    "mixed": {
+      "pairs": 63,
+      "same": 57,
+      "different": 6,
+      "precision": 1.0,
+      "recall": 0.4561,
+      "f1": 0.6265,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 6,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 1.0
+    },
+    "names": {
+      "pairs": 91,
+      "same": 10,
+      "different": 81,
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 81,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 1.0,
+      "routed_different_rate": 0.1605
+    },
+    "retail": {
+      "pairs": 333,
+      "same": 159,
+      "different": 174,
+      "precision": 1.0,
+      "recall": 0.8805,
+      "f1": 0.9365,
+      "false_merges": 0,
+      "false_merge_rate": 0.0,
+      "hard_negatives": 174,
+      "hard_negative_false_merges": 0,
+      "hard_negative_false_merge_rate": 0.0,
+      "routed_recall": 0.8994,
+      "routed_different_rate": 0.0115
+    }
+  },
+  "errors": [
+    {
+      "id": "format-en-010",
+      "a": "Dock 7",
+      "b": "dock door #7",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other"
+    },
+    {
+      "id": "alias-ar-245",
+      "a": "SKU 1001 سعر",
+      "b": "سعر SKU-1001",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-246",
+      "a": "Forklift 4 battery",
+      "b": "battery of forklift 4",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-250",
+      "a": "pallets in Warehouse 3",
+      "b": "Warehouse 3 pallets",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-255",
+      "a": "Dr. Priya Sharma",
+      "b": "Priya Sharma",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-256",
+      "a": "Ms. Ana García",
+      "b": "Ana García",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-257",
+      "a": "Mr John Smith",
+      "b": "John Smith",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-258",
+      "a": "batteries for Forklift 4",
+      "b": "Forklift 4 battery",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-259",
+      "a": "north warehouse",
+      "b": "warehouse north",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-260",
+      "a": "Store 12 weekly sales",
+      "b": "weekly sales of store 12",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-261",
+      "a": "SKU 1001 price",
+      "b": "price of SKU-1001",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-266",
+      "a": "Kubernetes cluster",
+      "b": "kubernetes clusters",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-267",
+      "a": "Q3 forecast",
+      "b": "forecast for Q3",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-268",
+      "a": "Acme's DC 3",
+      "b": "distribution center 3 of Acme",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-en-269",
+      "a": "Berlin store",
+      "b": "Berlin stores",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-de-270",
+      "a": "Gabelstapler 4 Batterie",
+      "b": "Batterie von Gabelstapler 4",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-de-273",
+      "a": "Herr Thomas Weber",
+      "b": "Thomas Weber",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-de-274",
+      "a": "Frau Dr. Anna Schmidt",
+      "b": "Anna Schmidt",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-de-275",
+      "a": "Lager Nord",
+      "b": "Nord Lager",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-es-278",
+      "a": "batería del montacargas 4",
+      "b": "montacargas 4 batería",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-es-281",
+      "a": "Sra. Ana García",
+      "b": "Ana García",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-es-283",
+      "a": "Don Luis Pérez",
+      "b": "Luis Pérez",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-es-285",
+      "a": "ventas de la tienda 12",
+      "b": "tienda 12 ventas",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-ar-287",
+      "a": "السيد أحمد علي",
+      "b": "أحمد علي",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-ar-288",
+      "a": "الدكتور خالد حسن",
+      "b": "خالد حسن",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-ar-289",
+      "a": "مبيعات المتجر 12",
+      "b": "المتجر 12 مبيعات",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-ar-290",
+      "a": "بطارية الرافعة الشوكية 4",
+      "b": "الرافعة الشوكية 4 بطارية",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-hi-293",
+      "a": "श्री राजेश कुमार",
+      "b": "राजेश कुमार",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-hi-294",
+      "a": "डॉ प्रिया शर्मा",
+      "b": "प्रिया शर्मा",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "normalisation-hi-297",
+      "a": "शर्मा जी",
+      "b": "शर्मा",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "partial-en-360",
+      "a": "Acme",
+      "b": "Acme Logistics",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other"
+    },
+    {
+      "id": "partial-en-362",
+      "a": "Priya",
+      "b": "Priya Sharma",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other"
+    },
+    {
+      "id": "partial-en-369",
+      "a": "Northwind",
+      "b": "Northwind Traders",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other"
+    },
+    {
+      "id": "spelling-en-370",
+      "a": "Jonathan Smith",
+      "b": "Jonathon Smith",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-en-371",
+      "a": "Kubernetes cluster",
+      "b": "Kubernets cluster",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-en-372",
+      "a": "Northwind Traders",
+      "b": "Nortwind Traders",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-en-373",
+      "a": "Margaret Thompson",
+      "b": "Margret Thompson",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-en-374",
+      "a": "Acme Logistics",
+      "b": "Acme Logisitcs",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-en-375",
+      "a": "Global Freight Solutions",
+      "b": "GFS",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other and no identifier"
+    },
+    {
+      "id": "spelling-en-376",
+      "a": "Fresh Produce Distributors",
+      "b": "FPD",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other and no identifier"
+    },
+    {
+      "id": "spelling-en-377",
+      "a": "Pacific Coast Supply",
+      "b": "PCS",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other and no identifier"
+    },
+    {
+      "id": "spelling-de-378",
+      "a": "Rossmann Drogerie",
+      "b": "Rosmann Drogerie",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "spelling-es-379",
+      "a": "Transportes García",
+      "b": "Transportes Garcia",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "spelling variant"
+    },
+    {
+      "id": "crosslingual-de-380",
+      "a": "Forklift 4",
+      "b": "Gabelstapler 4",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: forklift vs gabelstapler"
+    },
+    {
+      "id": "crosslingual-es-381",
+      "a": "Forklift 4",
+      "b": "montacargas 4",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: forklift vs montacarga"
+    },
+    {
+      "id": "crosslingual-ar-382",
+      "a": "Forklift 4",
+      "b": "الرافعة الشوكية 4",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: forklift vs رافعه شوكيه"
+    },
+    {
+      "id": "crosslingual-hi-383",
+      "a": "Forklift 4",
+      "b": "फोर्कलिफ्ट 4",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: forklift vs फोर्कलिफ्ट"
+    },
+    {
+      "id": "crosslingual-de-384",
+      "a": "Warehouse 3",
+      "b": "Lager 3",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: warehouse vs lager"
+    },
+    {
+      "id": "crosslingual-es-385",
+      "a": "Warehouse 3",
+      "b": "almacén 3",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: warehouse vs almacén"
+    },
+    {
+      "id": "crosslingual-ar-386",
+      "a": "Warehouse 3",
+      "b": "المستودع 3",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: warehouse vs مستودع"
+    },
+    {
+      "id": "crosslingual-hi-387",
+      "a": "Warehouse 3",
+      "b": "गोदाम 3",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: warehouse vs गोदाम"
+    },
+    {
+      "id": "crosslingual-de-388",
+      "a": "Store 12",
+      "b": "Filiale 12",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: store vs filiale"
+    },
+    {
+      "id": "crosslingual-es-389",
+      "a": "Store 12",
+      "b": "tienda 12",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: store vs tienda"
+    },
+    {
+      "id": "crosslingual-ar-390",
+      "a": "Store 12",
+      "b": "المتجر 12",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: store vs متجر"
+    },
+    {
+      "id": "crosslingual-hi-391",
+      "a": "Store 12",
+      "b": "स्टोर 12",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: store vs स्टोर"
+    },
+    {
+      "id": "crosslingual-de-392",
+      "a": "purchase order 4471",
+      "b": "Bestellung 4471",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: order purchase vs bestellung"
+    },
+    {
+      "id": "crosslingual-es-393",
+      "a": "purchase order 4471",
+      "b": "orden de compra 4471",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: order purchase vs compra orden"
+    },
+    {
+      "id": "crosslingual-de-394",
+      "a": "October sales",
+      "b": "Oktober Umsatz",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: sale vs umsatz"
+    },
+    {
+      "id": "crosslingual-es-395",
+      "a": "October sales",
+      "b": "ventas de octubre",
+      "label": "same",
+      "verdict": "different",
+      "reason": "names differ: sale vs venta"
+    },
+    {
+      "id": "learned-en-404",
+      "a": "XD lane",
+      "b": "cross-docking lane",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "one names more than the other and no identifier"
+    },
+    {
+      "id": "general-en-416",
+      "a": "Atlas project",
+      "b": "Project Atlas",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "general-en-423",
+      "a": "Q3 board meeting",
+      "b": "board meeting Q3",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    },
+    {
+      "id": "general-en-432",
+      "a": "Dr. Rao's clinic",
+      "b": "clinic of Dr Rao",
+      "label": "same",
+      "verdict": "possible",
+      "reason": "the same only once folded, reordered or without a title"
+    }
+  ],
+  "provenance": {
+    "timestamp": "2026-10-08T14:12:53.379983+00:00",
+    "git_commit": "a932d433b7085b4014f1c80af6b329b3d26a429e",
+    "host_load": {
+      "loadavg_1m": 1.77,
+      "loadavg_5m": 1.96,
+      "loadavg_15m": 2.18,
+      "load_per_core": 0.44
+    },
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 15.7,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "onnxruntime": "1.30.0",
+      "docling": "2.127.0"
+    },
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  }
+}

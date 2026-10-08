@@ -37,7 +37,8 @@ each entry says which one moved. Decisions behind each change are in the
   the service itself. Abbreviations come from two vocabulary packs (data,
   `domain/vocabulary/`: generic and retail, always on) and from a tenant's own text where it
   defines one ("hazardous materials (hazmat)", "OOS stands for out of stock"); nothing to
-  configure. SUBJECT_RESULTS
+  configure. 518 labelled pairs in five languages: no false merge (0 of 270 hard negatives,
+  0 in every class), merge F1 0.85 (exact subject strings before: 0.13).
 
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never

@@ -121,29 +121,46 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
 
 ## Evidence
 
-- `tests/eval/golden/subject_pairs.json`: 436 labelled pairs (en 245, es 55, de 54, ar 41,
-  hi 41; retail, logistics, people, suppliers, software, finance, healthcare), 193 of them hard
-  negatives (identifiers, units, dates, names and suppliers sharing words), halved into dev and
-  test by a hash of the pair. → `benchmark/results/subject_gate.json` (words only, the eval
-  gate) and `benchmark/results/subject_matching.json` (`benchmark/subjects.py`: the encoder,
-  rapidfuzz, timings).
-- `tests/unit/test_subjects.py`, `tests/integration/test_subject_matching.py`.
-- The memory gate (`benchmark/results/memory_gate.json`) is unchanged: false-merge rate 0.00,
-  dedup recall 1.00.
+- `tests/eval/golden/subject_pairs.json`: 518 labelled pairs (en 275, de 71, es 70, ar 51,
+  hi 51; retail, logistics, people, suppliers, software, finance, healthcare), 270 of them
+  hard negatives - identifiers, units, dates, names and suppliers sharing words, and the
+  classes a review found: short codes that look like connectives ("Store LA" / "Store AL"),
+  identifier order ("Dock 3 door 4" / "Dock 4 door 3"), titles ("Mrs Patel" / "Mr Patel"),
+  names a plural fold joins ("John Roberts" / "John Robert"), numbers as written ("1,5 kg" /
+  "15 kg", "5 €" / "5 $", "Level -1" / "Level 1") and short forms defined twice - in every
+  language they apply to; halved into dev and test by a hash of the pair.
+  → `benchmark/results/subject_gate.json` (words only, the eval gate) and
+  `benchmark/results/subject_matching.json` (`benchmark/subjects.py`: the encoder, rapidfuzz,
+  timings), both from commit a932d43.
+- `tests/unit/test_subjects.py`, `tests/integration/test_subject_matching.py` (including a
+  person fact under a mixed-case id past the recency window).
+- Every suite (unit and SDK, contract, integration, security, e2e, agent, failure, eval) passes
+  with nothing skipped, and every other eval gate (grounding, graph, memory, retrieval,
+  retrieval on PDFs, tools) has the same metrics as main's run in the same environment. The
+  memory gate's false-merge rate is 0.00, dedup recall 1.00.
 
 ## Results
 
-| matcher (SAME = merge) | precision | recall | F1 | false merges (all / hard negatives) | same / different pairs sent to the adjudicator |
+| matcher (SAME = merge) | precision | recall | F1 | false merges (all / 270 hard negatives) | same / different pairs sent to the adjudicator |
 |---|---|---|---|---|---|
 | exact subject strings (before) | 1.00 | 0.07 | 0.13 | 0 / 0 | n/a |
-| words only (every write) | 1.00 | 0.872 | 0.932 (dev 0.938, test 0.926) | 0 / 0 | 0.930 / 0.062 |
-| words + encoder (adjudicator on) | 1.00 | 0.872 | 0.932 | 0 / 0 | 0.963 (dev 0.975, test 0.952) / 0.093 |
+| words only (every write) | 1.00 | 0.746 | 0.855 (dev 0.863, test 0.847) | 0 / 0 | 0.936 / 0.078 |
+| words + encoder (adjudicator on) | 1.00 | 0.746 | 0.855 | 0 / 0 | 0.968 (dev 0.975, test 0.961) / 0.100 |
 
-F1 by language (words only): en 0.95, ar 0.93, hi 0.93, de 0.89, es 0.89. The rules were refined
-while reading errors on the whole set; only the encoder threshold was chosen on the dev half alone.
+No false merge in any class: identifiers 0 of 92, names 0 of 61, short codes 0 of 22, numbers
+0 of 19, units 0 of 14, order 0 of 13, titles 0 of 11, plural names 0 of 9, general 0 of 9,
+cross-lingual 0 of 8, learned 0 of 6, partial 0 of 6. F1 by language (words only): en 0.88,
+hi 0.84, de 0.82, es 0.81, ar 0.79. Recall is lower than a looser matcher's on purpose: a
+match that needs a plural folded, a title dropped or the words reordered is POSSIBLE, so the
+service never merges it on its own; with the adjudicator on it is asked about. The rules were
+refined while reading errors on the whole set; only the encoder threshold was chosen on the
+dev half alone.
 
-Cost: one comparison p50 0.04 ms cold, 0.002 ms warm; consolidating a statement against 20 stored
-memories p50 0.19 ms / p95 0.33 ms (main: 0.067 / 0.10 ms). The encoder runs only on the 82 of
-4,360 pairs the words leave undecided, p50 5.0 ms / p95 6.6 ms each, and only with the model on.
-Every other eval gate (retrieval, grounding, graph, memory, tools) is identical to main's when
-both run in the same environment.
+rapidfuzz against the one-edit rule, on the 90 pairs whose words each side alone has: the
+one-edit rule routes 7 of 25 same-subject pairs and 1 of 65 different ones; ratio >= 85 routes
+7 and 2, >= 90 routes 4 and 1. It never does better, so it is not a dependency.
+
+Cost: one comparison p50 0.05 ms / p95 0.11 ms cold, 0.005 ms warm; consolidating a statement
+against 20 stored memories p50 0.24 ms / p95 0.32-0.35 ms against main's 0.08 / 0.14-0.15 ms,
+with identical decisions. The encoder runs only on the 80 of 5,180 pairs the words leave
+undecided, p50 5.2 ms / p95 6.5 ms each, and only with the model on.
