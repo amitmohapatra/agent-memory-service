@@ -1,6 +1,6 @@
 # ADR 0009: Memory intelligence — native rules first, LLM providers as benchmarkable adapters
 
-**Status:** accepted; amended · **Date:** 2026-09-15 · **Amended by:** ADR 0032 (admission: the gate sits behind a tenant switch)
+**Status:** accepted; amended · **Date:** 2026-09-15 · **Amended by:** ADR 0032 (admission: the gate sits behind a tenant switch); ADR 0035 ("same subject" is the subject matcher's, not string equality; candidates are also looked up by every spelling of the subject; the conflict adjudicator is gated by the subject, not by word overlap)
 
 ## Decision
 - **Observations in, canonical memories out.** Every chat message, file, agent/tool result,

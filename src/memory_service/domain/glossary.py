@@ -8,7 +8,8 @@ other at all. So a query that names one side is searched with the other side too
 
 Only unambiguous shorthand is listed. An acronym matches as an upper-case word ("OH" is on
 hand, "oh" is not); a phrase matches in any case. Nothing is inferred - the expansion is a
-fixed table, the same for every retailer (``RetailSettings.glossary``).
+fixed table, the same for every retailer (``RetailSettings.glossary``), kept as data in the
+retail vocabulary pack.
 """
 
 from __future__ import annotations
@@ -16,45 +17,15 @@ from __future__ import annotations
 import re
 from functools import cache
 
-#: acronym -> the phrase it abbreviates
+from memory_service.domain.subjects import pack_aliases
+
+#: acronym -> the phrase it abbreviates: the upper-case forms of the retail vocabulary pack
+#: (``domain/vocabulary/retail.json``), which the subject matcher reads too
 RETAIL: dict[str, str] = {
-    "WOS": "weeks of supply",
-    "WOC": "weeks of cover",
-    "DOS": "days of supply",
-    "ST": "sell-through",
-    "GMROI": "gross margin return on investment",
-    "GM": "gross margin",
-    "AUR": "average unit retail",
-    "AUC": "average unit cost",
-    "ASP": "average selling price",
-    "OTB": "open to buy",
-    "MD": "markdown",
-    "IMU": "initial markup",
-    "MMU": "maintained markup",
-    "SKU": "stock keeping unit",
-    "UPC": "universal product code",
-    "PO": "purchase order",
-    "DC": "distribution center",
-    "OH": "on hand",
-    "OO": "on order",
-    "BOP": "beginning of period",
-    "EOP": "end of period",
-    "ROS": "rate of sale",
-    "OOS": "out of stock",
-    "MOQ": "minimum order quantity",
-    "UPT": "units per transaction",
-    "ATV": "average transaction value",
-    "LFL": "like for like",
-    "POS": "point of sale",
-    "BOGO": "buy one get one",
-    "BTS": "back to school",
-    "PLC": "product life cycle",
-    "LY": "last year",
-    "TY": "this year",
-    "LW": "last week",
-    "YTD": "year to date",
-    "QTD": "quarter to date",
-    "MTD": "month to date",
+    form: canonical
+    for canonical, forms in pack_aliases("retail").items()
+    for form in forms
+    if form.isupper() and form.isalnum()
 }
 #: additions kept per query, so a list of acronyms cannot double a query's length
 MAX_ADDED = 6

@@ -35,6 +35,7 @@ from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
+from memory_service.domain.subjects import SubjectVerdict
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.narrative import (
@@ -43,6 +44,7 @@ from memory_service.modules.memory.narrative import (
 )
 from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
 from memory_service.modules.memory.source_facts import extract_source_facts
+from memory_service.modules.memory.subjects import SubjectMatcher, SubjectPair
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
     ContextualExtractor,
@@ -314,7 +316,9 @@ _IMPORTANCE_BY_TYPE = {
 # --------------------------------------------------------------------------- llm assist
 
 _ASSIST_MAX_CHARS = 2000
-_ASSIST_MIN_SIMILARITY = 0.5
+#: a memory the adjudicator may be asked about: the memory, its lexical similarity, and the
+#: subject matcher's view of the pair
+_Uncertain = tuple[CanonicalMemory, float, SubjectPair]
 _ADJUDICATION_SYSTEM = (
     "Compare a NEW memory with an EXISTING one and answer with a verdict: 'same' when both "
     "state the same fact (paraphrase, no new information); 'update' when the new one gives a "
@@ -426,11 +430,14 @@ class NativeMemoryIntelligence:
         *,
         assist: LLMAssist | None = None,
         contextual_extractor: ContextualExtractor | None = None,
+        subjects: SubjectMatcher | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
         self.assist = assist or LLMAssist.disabled()
         self.contextual_extractor = contextual_extractor
+        #: whether two statements share a subject: the slot rules and the adjudicator's gate
+        self.subjects = subjects or SubjectMatcher(embedding)
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
@@ -996,7 +1003,11 @@ class NativeMemoryIntelligence:
             {"category": candidate.category, "provider": candidate.provider}
         )
         best: ConsolidationOutcome | None = None
-        grey: tuple[CanonicalMemory, float] | None = None
+        adjudicating = self.assist.wants("conflict_adjudication")
+        #: memories the conflict adjudicator may be asked about: neither a duplicate nor a
+        #: slot rule settled them and no hard block (numbers, negation) stands in the way.
+        #: Which one is asked is the subject matcher's call, after the loop.
+        askable: list[tuple[CanonicalMemory, float]] = []
         #: Memories whose lexical similarity puts them in the band where a dense comparison
         #: decides. They are collected rather than embedded here: each one used to cost its
         #: own single-text round trip through the encoder's one-caller gate - up to
@@ -1007,6 +1018,7 @@ class NativeMemoryIntelligence:
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
+        pairs = self.subjects.pairs(candidate, ordered)
         for mem in ordered:
             if (
                 mem.temporal.status.value != "CURRENT"
@@ -1036,11 +1048,12 @@ class NativeMemoryIntelligence:
                 or (mem.system_metadata.get("category") in {"verbatim_turn", "narrative_unit"})
             ):
                 continue
+            # the same subject however it is written ("Forklift 4", "forklift #4"), never
+            # across identifiers ("Forklift #3"): the subject matcher's SAME
             same_slot = (
-                candidate.subject
-                and candidate.predicate
-                and mem.subject == candidate.subject
+                candidate.predicate
                 and mem.predicate == candidate.predicate
+                and pairs[mem.memory_id].subject.verdict is SubjectVerdict.SAME
             )
             if same_slot:
                 m_obj = _clean_object(mem.object or "")
@@ -1115,13 +1128,11 @@ class NativeMemoryIntelligence:
                     best = outcome
                 continue
             if (
-                sim >= _ASSIST_MIN_SIMILARITY
-                and (grey is None or sim > grey[1])
-                and self.assist.wants("conflict_adjudication")
+                adjudicating
                 and numbers(mem.content) == c_numbers
                 and has_negation(mem.content) == c_neg
             ):
-                grey = (mem, sim)
+                askable.append((mem, sim))
             # 3. dense similarity (only with a real embedding provider; the hash stand-in is
             #    excluded because it would merge unrelated sentences sharing a few tokens)
             if (
@@ -1156,10 +1167,11 @@ class NativeMemoryIntelligence:
         create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
-        if best is None and grey is not None:
-            # similar wording but below the merge threshold: the native answer is "keep both";
+        grey = await self._uncertain(candidate, ordered, pairs, askable) if best is None else None
+        if grey is not None:
+            # about the same subject but not a duplicate: the native answer is "keep both";
             # the model may recognise a paraphrase, an update or a contradiction
-            mem, sim = grey
+            mem, sim, pair = grey
             same = ConsolidationOutcome(
                 decision=DedupDecision.MERGE
                 if c_tokens - tokens(mem.content)
@@ -1167,10 +1179,47 @@ class NativeMemoryIntelligence:
                 candidate=candidate,
                 target_memory_id=mem.memory_id,
                 score=sim,
-                reason=f"lexical similarity {sim:.2f}",
+                reason=f"subject {pair.statement.verdict.value}: {pair.statement.reason}; "
+                f"lexical similarity {sim:.2f}",
             )
             return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
         return best or create
+
+    async def _uncertain(
+        self,
+        candidate: MemoryCandidate,
+        existing: Sequence[CanonicalMemory],
+        pairs: dict[str, SubjectPair],
+        askable: list[tuple[CanonicalMemory, float]],
+    ) -> _Uncertain | None:
+        """The one memory worth asking the adjudicator about: the closest of ``askable``
+        whose statement the subject matcher does not call DIFFERENT (SAME before POSSIBLE,
+        then the matcher's score, then the wording). When the words leave every pair
+        undecided, the encoder is asked too - only here, so a write without the model never
+        pays for it."""
+        if not askable:
+            return None
+
+        def closest(by: dict[str, SubjectPair]) -> _Uncertain | None:
+            ranked = [
+                (mem, sim, by[mem.memory_id])
+                for mem, sim in askable
+                if by[mem.memory_id].statement.verdict is not SubjectVerdict.DIFFERENT
+            ]
+            return max(
+                ranked,
+                key=lambda r: (
+                    r[2].statement.verdict is SubjectVerdict.SAME,
+                    r[2].statement.score,
+                    r[1],
+                ),
+                default=None,
+            )
+
+        found = closest(pairs)
+        if found is None:
+            found = closest(await self.subjects.with_vectors(candidate, existing, pairs))
+        return found
 
     async def _adjudicate(
         self,

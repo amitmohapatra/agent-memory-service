@@ -368,7 +368,7 @@ class SqlMemoryRepository:
         *,
         scope_key: str,
         normalized_hash: str | None = None,
-        subject: str | None = None,
+        subjects: Sequence[str] = (),
         limit: int = 20,
     ) -> list[CanonicalMemory]:
         conds = [
@@ -380,8 +380,8 @@ class SqlMemoryRepository:
         any_of = []
         if normalized_hash:
             any_of.append(MemoryRow.normalized_hash == normalized_hash)
-        if subject:
-            any_of.append(MemoryRow.subject == subject)
+        if subjects:
+            any_of.append(MemoryRow.subject.in_(list(subjects)))
         exact = []
         if any_of:
             exact = list(

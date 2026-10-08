@@ -23,6 +23,18 @@ each entry says which one moved. Decisions behind each change are in the
   carries its `thread_id`. Another user's threads are never read; without a user, this thread
   only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
 
+- Same-subject matching on the write path (ADR 0035, [concepts](docs/guide/02-concepts.md#when-two-statements-are-about-the-same-thing)):
+  a subject respelled ("FORKLIFT-4", "forklift #4"), abbreviated ("PO-4471", "purchase order
+  4471"; "DC 3", "Distribution Centre 3"), titled or written in another script's digits
+  ("المستودع رقم ٣") reinforces the memory it names instead of duplicating it, and is found
+  even when that memory is older than the newest rows consolidation reads. Differing
+  identifiers, codes, units, dates and legal forms ("Forklift #3" / "#4", "Warehouse 3" / "13",
+  "SKU-1001" / "SKU-1010", "5 kg" / "5 lb", "Acme Inc" / "Acme Ltd") never merge. Abbreviations
+  come from two vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on)
+  and from a tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS
+  stands for out of stock"); nothing to configure. 436 labelled pairs in five languages: no
+  false merge, F1 RESULT_F1.
+
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
@@ -52,6 +64,14 @@ each entry says which one moved. Decisions behind each change are in the
   own node is the required companion.
 
 ### Changed
+- The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
+  on the same - or possibly the same - subject, instead of the closest sharing half its words:
+  a fact restated in other words now reaches it, and a fact about another subject that merely
+  shares words ("billing service" / "shipping service") no longer does. A pair the words leave
+  undecided is scored by the multilingual encoder only when the model is enabled.
+- The retail glossary's acronyms are read from the retail vocabulary pack, which adds `ASN`,
+  `BOL`, `RTV`, `POG`, `BOPIS`, `WMS`, `3PL`, `FIFO`, `SOH`, `EDI`, `FC` and `LP` to its query
+  expansion.
 - The context's `procedures` (with `format=full`) is `skills` (`id`, `name`, `steps`,
   `with_skill`, `fixes`, `success_rate`, `runs`), and `tool_search`'s and `POST /v1/tools/hints`'
   `plan` has the same shape. Tool hints are computed for five or more tools (or the catalog);
