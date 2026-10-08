@@ -268,7 +268,10 @@ async def run(copies: int, turns: int, requests: int) -> dict[str, Any]:
             off_bytes: list[float] = []
             for question in OFF_TOPIC:
                 _, body = await _timed(client, "/v1/context", _debug(scope, question))
-                off_topic.append([float(item.get("relevance", 0.0)) for item in body["memories"]])
+                # nothing may answer an off-topic question, and a lean response leaves out an
+                # empty list: no memories is a measured zero here, not a missing field
+                packed = body.get("memories", [])
+                off_topic.append([float(item.get("relevance", 0.0)) for item in packed])
                 off_bytes.append(float(len(json.dumps(body))))
         return {
             "series": {name: stats(values) for name, values in latencies.items()},
