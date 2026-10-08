@@ -112,23 +112,30 @@ Consolidation reinforces, replaces or links a memory only when the new statement
 same **subject** (ADR 0035, `domain/subjects.py`). A subject is compared by what decides its
 identity, not by how it is spelled:
 
-- **Identifiers block.** Every number, code, unit, date and month is an identifier. "Forklift
-  #3" and "Forklift #4", "Warehouse 3" and "Warehouse 13", "SKU-1001" and "SKU-1010", "5 kg"
-  and "5 lb", "Q3" and "Q4" are different subjects however alike the rest is, and nothing - no
-  vector, no model - joins them.
-- **Spelling and shorthand do not.** Case, punctuation, "#", "No.", "Nr.", "núm.", "رقم",
-  "नंबर", spacing, digits of any script, articles and titles are ignored: "Forklift 4" is
-  "forklift #4" is "FORKLIFT-4". Abbreviations and aliases from two vocabulary packs (data in
-  `domain/vocabulary/`, a generic one and a retail one, both always on) are read as what they
-  stand for: "OOS" is "out of stock", "PO 4471" is "purchase order 4471", "DC 3" is
-  "Distribution Centre 3", "hazmat" is "hazardous materials".
+- **Identifiers block.** Every number, code, unit, date and month is an identifier, and so is
+  a short code ("LA", "IN", "Block A") - never mistaken for the word it looks like.
+  "Forklift #3" and "Forklift #4", "Warehouse 3" and "Warehouse 13", "Store LA" and "Store
+  AL", "Dock 3 door 4" and "Dock 4 door 3", "5 kg" and "5 lb", "1,5 kg" and "15 kg", "Level
+  -1" and "Level 1", "Q3" and "Q4" are different subjects however alike the rest is, and
+  nothing - no vector, no model - joins them. Neither do two different titles ("Mrs Patel",
+  "Mr Patel") or legal forms ("Acme Inc", "Acme Ltd").
+- **Spelling and shorthand do not.** Letter case (of words; a short code keeps it),
+  punctuation, "#", "No.", "Nr.", "núm.", "رقم", "नंबर", spacing, digits of any script and a
+  leading article are ignored: "Forklift 4" is "forklift #4" is "FORKLIFT-4". Abbreviations
+  and aliases from two vocabulary packs (data in `domain/vocabulary/`, a generic one and a
+  retail one, both always on) are read as what they stand for: "OOS" is "out of stock", "PO
+  4471" is "purchase order 4471", "DC 3" is "Distribution Centre 3", "hazmat" is "hazardous
+  materials".
 - **A tenant's own shorthand is learned from its own text**, with nothing to configure: once a
   stored memory says "cross-dock facility (CDF)" or "WOS stands for weeks of supply", the two
-  forms name one subject in that memory's neighbourhood.
-- **Uncertain is not the same.** A short form ("Acme" for "Acme Logistics"), a likely typo
-  ("Jonathon"), an initialism ("GFS") or a translation ("Gabelstapler 4") is only *possible*:
-  the service never merges it on its own. With the `conflict_adjudication` model use enabled
-  (chapter 8), the closest such memory is what the model is asked about.
+  forms name one subject in that memory's neighbourhood. A short form defined as two things
+  is not learned.
+- **Uncertain is not the same.** What matches only with a plural folded, a title dropped or
+  the words reordered ("John Roberts" / "John Robert", "Dr. Priya Sharma" / "Priya Sharma",
+  "Bank of China" / "China Bank"), a short form ("Acme" for "Acme Logistics"), a likely typo
+  ("Jonathon"), an initialism ("GFS") or a translation ("Gabelstapler 4") is only
+  *possible*: the service never merges it on its own. With the `conflict_adjudication` model
+  use enabled (chapter 8), the closest such memory is what the model is asked about.
 
 A memory about a person or anchor (`user:…`, `thread:…`) is about that identity: two of them
 share a subject in the same single-valued slot (one city, one employer), or when their topics

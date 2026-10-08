@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 from importlib import resources
 
+import numpy as np
 import pytest
 
 from memory_service.config.constants import MemoryIntelligenceSettings
@@ -61,27 +62,53 @@ def verdict(a: str, b: str, **kw) -> SubjectVerdict:
         ("المستودع رقم ٣", "مستودع 3"),  # Arabic-Indic digit, article, number marker
         ("गोदाम नंबर ३", "गोदाम 3"),  # Devanagari digit and marker
         ("the Berlin office", "Berlin office"),
-        ("Forklift 4's battery", "battery of forklift 4"),
-        ("Dr. Priya Sharma", "Priya Sharma"),
+        ("Forklift 4's battery", "forklift 4 battery"),
+        ("la tienda 12", "tienda 12"),
+        ("ventas de la tienda 12", "ventas tienda 12"),
+        ("स्टोर 12 की बिक्री", "स्टोर 12 बिक्री"),
         ("Acme Logistics GmbH", "ACME logistics"),
         ("U.S. stores", "US stores"),
         ("Wal-Mart", "Walmart"),
         ("on-boarding checklist", "onboarding checklist"),
-        ("Berlin store", "Berlin stores"),
         ("شركة النور", "شركه النور"),  # ta marbuta written as heh
+        ("1,5 kg Reis", "1.5 kg Reis"),  # a decimal comma
+        ("1,000 units", "1000 units"),  # a thousands comma
+        ("5 € coupon", "€5 coupon"),
     ],
 )
 def test_spelling_that_does_not_change_the_subject_is_the_same_subject(a, b) -> None:
     assert verdict(a, b) is SAME
 
 
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Dr. Priya Sharma", "Priya Sharma"),  # a title on one side only
+        ("Berlin store", "Berlin stores"),  # a plural
+        ("John Roberts", "John Robert"),  # ...or a name: folding cannot tell
+        ("Marks & Spencer", "Mark Spencer"),
+        ("Q3 forecast", "forecast for Q3"),  # an identifier labelling another word
+        ("Forklift 4's battery", "battery of forklift 4"),  # another word order
+        ("Bank of China", "China Bank"),
+        ("Al Smith", "Smith"),  # a first word that is also a connective is kept
+    ],
+)
+def test_a_match_that_needs_folding_or_dropping_a_title_is_only_possible(a, b) -> None:
+    assert verdict(a, b) is POSSIBLE
+
+
 def test_a_parse_keeps_identifiers_apart_from_words() -> None:
     s = parse("Forklift No. 4's battery")
-    assert s.words == ("forklift", "battery") and s.ids == {"4"}
-    assert parse("Q3 2026 forecast").ids == {"q3", "2026"}
-    assert parse("5kg rice").ids == parse("5 kilogram rice").ids == {"5kg"}
-    assert parse("$5 coupon").ids == {"5usd"}
-    assert parse("October 3 delivery").ids == {"m10", "3"}
+    assert s.words == ("forklift", "battery") and s.labelled == (("forklift", "4"),)
+    assert parse("Aisle 3 Bay 4").labelled == (("aisle", "3"), ("bay", "4"))
+    assert parse("Q3 2026 forecast").ids == ("q3", "2026")
+    assert parse("5kg rice").ids == parse("5 kilogram rice").ids == ("5kg",)
+    assert parse("$5 coupon").ids == parse("5 $ coupon").ids == ("5usd",)
+    assert parse("4,99 € Angebot").ids == ("4.99eur",)
+    assert parse("1.234,56 EUR").ids == ("1234.56eur",)
+    assert parse("Level -1").ids == ("-1",) and parse("SKU-1001").ids == ("1001",)
+    assert parse("October 3 delivery").ids == ("m10", "3")
+    assert parse("Mrs Patel").titles == {"mrs"} and parse("Mrs Patel").loose == ("patel",)
     assert parse("user:u1").identity == "user:u1"
 
 
@@ -108,6 +135,28 @@ def test_a_parse_keeps_identifiers_apart_from_words() -> None:
         ("المستودع 3", "المستودع 13"),
         ("गोदाम 3", "गोदाम 13"),
         ("Acme Inc", "Acme Ltd"),
+        # a short code is not a connective, in capitals or as the last word
+        ("Store LA", "Store AL"),
+        ("store la", "store al"),
+        ("Block A", "Block Y"),
+        ("Sales DE", "Sales IN"),
+        ("sales de", "sales in"),
+        # identifiers in order, each with the word it labels
+        ("Dock 3 door 4", "Dock 4 door 3"),
+        ("Aisle 3 Bay 4", "Aisle 4 Bay 3"),
+        ("Line 3 3", "Line 3"),
+        # titles
+        ("Mrs Patel", "Mr Patel"),
+        ("Herr Weber", "Frau Weber"),
+        ("Sr. García", "Sra. García"),
+        ("السيد أحمد", "السيدة أحمد"),
+        ("श्री शर्मा", "श्रीमती शर्मा"),
+        # numbers as written
+        ("1,5 kg Reis", "15 kg Reis"),
+        ("4,99 € Angebot", "499 € Angebot"),
+        ("5 € coupon", "5 $ coupon"),
+        ("Level -1", "Level 1"),
+        ("Freezer -18C", "Freezer 18C"),
     ],
 )
 def test_differing_identifiers_units_dates_or_legal_forms_block_a_merge(a, b) -> None:
@@ -173,7 +222,7 @@ def test_an_acronym_that_is_a_word_counts_only_in_capitals_or_before_a_number() 
     assert parse("OH stock").words == ("hand", "stock")  # "on hand"; "on" is a connective
     assert parse("oh stock").words == ("oh", "stock")
     assert parse("po 4471").words == ("purchase", "order")  # before a number
-    assert parse("Oct 3").ids == {"m10", "3"} and "oct" in parse("oct team").words
+    assert parse("Oct 3").ids == ("m10", "3") and "oct" in parse("oct team").words
 
 
 def test_the_packs_are_data_and_the_glossary_reads_the_same_table() -> None:
@@ -220,7 +269,7 @@ def test_a_learned_abbreviation_makes_two_spellings_one_subject() -> None:
     )
     assert (
         compare(parse("SSC tickets", plain), parse("store support center tickets", plain)).verdict
-        is DIFFERENT
+        is not SAME
     )
     assert (
         compare(
@@ -229,6 +278,33 @@ def test_a_learned_abbreviation_makes_two_spellings_one_subject() -> None:
         is SAME
     )
     assert plain.with_aliases([]) is plain and learned.learned == (("SSC", "Store Support Center"),)
+    # two or three letters: only in capitals or before a number, like a packed acronym
+    assert (
+        compare(
+            parse("ssc tickets", learned), parse("store support center tickets", learned)
+        ).verdict
+        is not SAME
+    )
+
+
+def test_a_short_form_defined_twice_is_not_learned() -> None:
+    both = vocabulary().with_aliases(
+        defined_aliases("Trucks unload at the Berlin Hub (BH). The Bonn Hub (BH) takes returns.")
+    )
+    assert both.learned == ()
+    assert compare(parse("BH 2", both), parse("Berlin Hub 2", both)).verdict is not SAME
+
+
+def test_reading_definitions_and_subjects_is_linear_in_the_text() -> None:
+    import time
+
+    huge = "My favourite colour is " + "x" * 2_000_000
+    started = time.perf_counter()
+    defined_aliases(huge)
+    parse(huge)
+    spellings(huge)
+    SubjectMatcher().pairs(_cand(huge, "user:u1", "favourite_colour", huge), [])
+    assert time.perf_counter() - started < 0.05
 
 
 # --------------------------------------------------------------------------- spellings
@@ -236,17 +312,20 @@ def test_a_learned_abbreviation_makes_two_spellings_one_subject() -> None:
 
 def test_spellings_cover_identifier_joins_and_aliases() -> None:
     out = spellings("SKU-1001 hazmat")
-    assert out[0] == "sku-1001 hazmat"
-    assert {"sku 1001 hazmat", "sku1001 hazmat", "sku-1001 hazardous material"} <= set(out)
+    assert out[:2] == ["SKU-1001 hazmat", "sku-1001 hazmat"]  # as written first
+    assert {"sku 1001 hazmat", "sku1001 hazmat", "sku #1001 hazmat"} <= set(out)
+    assert "sku-1001 hazardous material" in out
     assert len(out) <= 12
-    assert spellings("user:u1") == ["user:u1"] and spellings("") == []
+    # an identity is looked up only as written: ids are case-sensitive
+    assert spellings("user:Alice") == ["user:Alice"] and spellings("") == []
 
 
 # --------------------------------------------------------------------------- the matcher
 
 
-def _cand(content: str, subject: str | None, predicate: str, obj: str | None = None):
+def _cand(content: str, subject: str | None, predicate: str, obj: str | None = None, entities=()):
     return MemoryCandidate(
+        entities=list(entities),
         content=content,
         memory_type=MemoryType.SEMANTIC,
         lifetime=Lifetime.LONG_TERM,
@@ -261,8 +340,10 @@ def _cand(content: str, subject: str | None, predicate: str, obj: str | None = N
     )
 
 
-def _stored(content: str, subject: str | None, predicate: str, obj: str | None = None):
-    return build_memory(_cand(content, subject, predicate, obj), CTX, now=datetime.now(UTC))
+def _stored(content: str, subject: str | None, predicate: str, obj: str | None = None, entities=()):
+    return build_memory(
+        _cand(content, subject, predicate, obj, entities), CTX, now=datetime.now(UTC)
+    )
 
 
 def test_an_identity_is_the_same_subject_only_in_the_same_slot_or_topic() -> None:
@@ -288,11 +369,19 @@ def test_an_identity_is_the_same_subject_only_in_the_same_slot_or_topic() -> Non
 def test_the_memories_at_hand_teach_vocabulary_and_names() -> None:
     matcher = SubjectMatcher()
     defining = _stored("Inbound goes to the cross-dock facility (CDF) first.", "user:u1", "said")
-    door = _stored("Cross-dock facility door 3 is blocked.", "cross-dock facility door 3", "is")
+    door = _stored(
+        "Cross-dock facility door 3 is blocked.",
+        "cross-dock facility door 3",
+        "is",
+        entities=["Cross-dock facility door 3"],
+    )
     smith = _stored("John Smith is the store manager.", "john smith", "is")
     miller = _stored("John Miller is the night lead.", "john miller", "is")
+    # the fact rule stores "cdf door 3"; the entity keeps "CDF door 3", and a learned
+    # three-letter form counts in capitals
     pairs = matcher.pairs(
-        _cand("CDF door 3 is open.", "cdf door 3", "is"), [defining, door, smith, miller]
+        _cand("CDF door 3 is open.", "cdf door 3", "is", entities=["CDF door 3"]),
+        [defining, door, smith, miller],
     )
     assert pairs[door.memory_id].subject.verdict is SAME
     pairs = matcher.pairs(_cand("John is on leave.", "john", "is"), [smith, miller])
@@ -319,8 +408,10 @@ class _Encoder:
     async def embed_query(self, text):
         return (await self.embed_documents([text]))[0]
 
+    fingerprint_value = "fake-encoder"
+
     def fingerprint(self) -> str:
-        return "fake-encoder"
+        return self.fingerprint_value
 
 
 async def test_the_encoder_only_reaches_pairs_the_words_left_open_and_caches() -> None:
@@ -336,7 +427,25 @@ async def test_the_encoder_only_reaches_pairs_the_words_left_open_and_caches() -
     assert refined[other.memory_id].subject.verdict is DIFFERENT  # blocked, never re-scored
     assert encoder.calls == [["forklift 4", "gabelstapler 4"]]
     await matcher.with_vectors(cand, [german, other], pairs)
-    assert len(encoder.calls) == 1  # both subjects were cached
+    assert len(encoder.calls) == 1  # both subjects were cached...
+    vectors = list(matcher._vectors.values())
+    assert all(v.dtype == np.float32 for v in vectors)  # ...as float32
+    encoder.fingerprint_value = "another-encoder"
+    await matcher.with_vectors(cand, [german, other], pairs)
+    assert len(encoder.calls) == 2  # ...per encoder: another model's vectors are not reused
+
+
+async def test_the_vector_cache_never_evicts_what_it_is_about_to_read(monkeypatch) -> None:
+    from memory_service.modules.memory import subjects as module
+
+    monkeypatch.setattr(module, "_VECTOR_CACHE", 2)
+    encoder = _Encoder()
+    matcher = SubjectMatcher(encoder)
+    await matcher._encode(["forklift 1", "forklift 2"])
+    out = await matcher._encode(["forklift 1", "forklift 3"])  # 1 is a hit, 3 is new
+    assert set(out) == {"forklift 1", "forklift 3"}
+    assert [t for _, t in matcher._vectors] == ["forklift 1", "forklift 3"]
+    assert encoder.calls[-1] == ["forklift 3"]
 
 
 async def test_the_hash_stand_in_is_never_asked() -> None:
@@ -380,11 +489,33 @@ async def test_a_respelled_subject_reinforces_the_same_fact() -> None:
     assert out.decision is DedupDecision.REINFORCE, out.reason
 
 
-async def test_another_identifier_never_merges_however_alike_the_sentences() -> None:
-    out = await _consolidate("Forklift 3 uses 48V batteries.", "Forklift 4 uses 48V batteries.")
-    assert out.decision is DedupDecision.CREATE
-    out = await _consolidate("Warehouse 3 is closed.", "Warehouse 13 is closed.")
-    assert out.decision is DedupDecision.CREATE
+@pytest.mark.parametrize(
+    ("existing", "incoming"),
+    [
+        ("Forklift 3 uses 48V batteries.", "Forklift 4 uses 48V batteries."),
+        ("Warehouse 3 is closed.", "Warehouse 13 is closed."),
+        (
+            "Store LA is open on Sundays.",
+            "Store AL is no longer open on Sundays, it is closed instead.",
+        ),
+        ("Mrs Patel reports to Anna.", "Mr Patel reports to Maria instead of Anna."),
+        ("Block A is reserved for returns.", "Block B is reserved for returns."),
+        (
+            "Block A is reserved for returns.",
+            "Block Y is reserved for returns now instead of overflow.",
+        ),
+        ("Sales DE is led by Anna.", "Sales IN is led by Anna."),
+        ("Dock 3 door 4 is open.", "Dock 4 door 3 is no longer open, it is closed instead."),
+        ("Dock 3 door 4 is blocked.", "Dock 4 door 3 is blocked."),
+        ("Tower A is closed.", "Tower is closed."),
+        ("John Roberts is on leave until Monday.", "John Robert is on leave until Monday."),
+        ("Bank of China is a supplier.", "China Bank is a supplier."),
+        ("Building 1 floor 2 is the server room.", "Building 2 floor 1 is the server room."),
+    ],
+)
+async def test_another_subject_never_merges_however_alike_the_sentences(existing, incoming) -> None:
+    out = await _consolidate(existing, incoming)
+    assert out.decision is DedupDecision.CREATE, out.reason
 
 
 async def test_the_adjudicator_is_asked_about_the_same_subject_not_about_shared_words() -> None:
@@ -405,3 +536,18 @@ async def test_the_adjudicator_is_asked_about_the_same_subject_not_about_shared_
             assist=gw.assist(uses=["conflict_adjudication"]),
         )
     assert gw.route.call_count == 0 and out.decision is DedupDecision.CREATE
+
+
+async def test_a_fact_without_a_subject_is_still_adjudicated_by_its_wording() -> None:
+    existing = [
+        build_memory(
+            _cand("The build server runs on Ubuntu.", None, "is"), CTX, now=datetime.now(UTC)
+        )
+    ]
+    near = _cand("The build server runs on Ubuntu in Berlin.", None, "is")
+    with mocked_gateway([{"verdict": "same"}]) as gw:
+        provider = NativeMemoryIntelligence(
+            MemoryIntelligenceSettings(), assist=gw.assist(uses=["conflict_adjudication"])
+        )
+        out = await provider.consolidate(near, existing, CTX)
+    assert gw.route.call_count == 1 and out.reason.startswith("model: same")

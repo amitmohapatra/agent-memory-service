@@ -19,20 +19,24 @@ already loaded: nothing is configured and nothing extra is read.
 
 With the conflict adjudicator enabled, a pair the words leave undecided can also be scored by
 the multilingual encoder (subject against subject), the encoder the service already runs;
-its vectors are kept in a bounded in-process cache, so a recurring subject is encoded once.
+its vectors are kept (float32, by encoder) in a bounded in-process cache, so a recurring
+subject is encoded once.
 """
 
 from __future__ import annotations
 
-import math
+import re
 from collections import OrderedDict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 
+import numpy as np
+
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.subjects import (
+    MAX_DEFINITION_CHARS,
     Subject,
     SubjectMatch,
     SubjectVerdict,
@@ -62,6 +66,10 @@ class SubjectPair:
     #: the two statements: the subject, and for an identity its slot and topic. What the
     #: conflict adjudicator is gated by.
     statement: SubjectMatch
+    #: two named subjects that are not known to be one ("Tower A" / "Tower B", "Tower A" /
+    #: "Tower", "Bank of China" / "China Bank"): no rule may merge the two statements,
+    #: however alike their wording
+    apart: bool = False
 
 
 @lru_cache(maxsize=4096)
@@ -73,6 +81,22 @@ def _different(reason: str) -> SubjectMatch:
     return SubjectMatch(SubjectVerdict.DIFFERENT, 0.0, reason)
 
 
+def written(subject: str | None, entities: Iterable[object] = ()) -> str:
+    """The subject as it was written. The fact rule stores it lower-cased ("store la") and
+    keeps the original among the entities ("Store LA"), and case is what tells a code from
+    a word ("LA", "la"), so the original is compared when there is one."""
+    if not subject:
+        return ""
+    for entity in entities:
+        text = str(entity).strip()
+        if _THE.sub("", text.lower()) == subject:
+            return text
+    return subject
+
+
+_THE = re.compile(r"^the\s+")
+
+
 class SubjectMatcher:
     """Same-subject decisions for consolidation (see the module docstring)."""
 
@@ -80,7 +104,8 @@ class SubjectMatcher:
         # the hash stand-in would call any two strings that share a few letters similar
         usable = embedding is not None and not embedding.fingerprint().startswith("hash-")
         self.embedding = embedding if usable else None
-        self._vectors: OrderedDict[str, list[float]] = OrderedDict()
+        #: (encoder fingerprint, subject) -> unit float32 vector, least recently used first
+        self._vectors: OrderedDict[tuple[str, str], np.ndarray] = OrderedDict()
 
     # -- candidate generation ---------------------------------------------------------
     @staticmethod
@@ -95,7 +120,7 @@ class SubjectMatcher:
         """Every memory of ``existing`` (by id) against ``candidate``, by their words."""
         vocab = self._vocabulary(candidate, existing)
         names = self._names(candidate, existing, vocab)
-        mine = parse(candidate.subject or "", vocab)
+        mine = parse(written(candidate.subject, candidate.entities), vocab)
         return {
             mem.memory_id: self._pair(candidate, mine, mem, vocab, names, cosine=None)
             for mem in existing
@@ -109,7 +134,8 @@ class SubjectMatcher:
     ) -> dict[str, SubjectPair]:
         """``pairs`` with the encoder's say on two named subjects whose words differ: a
         cosine of at least ``DENSE_POSSIBLE`` makes such a pair POSSIBLE. Unchanged without
-        an encoder; a pair the words decided (or blocked) is never re-scored."""
+        an encoder; a pair the words decided (or blocked) is never re-scored. ``existing``
+        should be only the memories the answer matters for: each is encoded."""
         if self.embedding is None or not candidate.subject or is_identity(candidate.subject):
             return pairs
         soft = [
@@ -122,13 +148,15 @@ class SubjectMatcher:
         ]
         if not soft:
             return pairs
-        vectors = await self._encode([candidate.subject, *(m.subject or "" for m in soft)])
+        mine_text = written(candidate.subject, candidate.entities)
+        theirs = {m.memory_id: written(m.subject, _entities(m)) for m in soft}
+        vectors = await self._encode([mine_text, *theirs.values()])
         vocab = self._vocabulary(candidate, existing)
         names = self._names(candidate, existing, vocab)
-        mine = parse(candidate.subject, vocab)
+        mine = parse(mine_text, vocab)
         out = dict(pairs)
         for mem in soft:
-            cosine = _cosine(vectors[candidate.subject], vectors[mem.subject or ""])
+            cosine = float(np.dot(vectors[mine_text], vectors[theirs[mem.memory_id]]))
             out[mem.memory_id] = self._pair(candidate, mine, mem, vocab, names, cosine=cosine)
         return out
 
@@ -142,12 +170,17 @@ class SubjectMatcher:
         *,
         cosine: float | None,
     ) -> SubjectPair:
-        theirs = parse(mem.subject or "", vocab)
+        theirs = parse(written(mem.subject, _entities(mem)), vocab)
         if mine.empty or theirs.empty:
-            nothing = _different("no subject")
+            nothing = _different(NO_SUBJECT)
             return SubjectPair(nothing, nothing)
         subject = compare(mine, theirs, cosine=cosine, names=names)
-        if subject.verdict is SubjectVerdict.DIFFERENT or mine.identity is None:
+        if mine.identity is None and theirs.identity is None:
+            # only SAME lets the wording decide: "Bank of China" / "China Bank" share every
+            # word, "Tower A" / "Tower" every word but a code
+            apart = subject.verdict is not SubjectVerdict.SAME
+            return SubjectPair(subject, subject, apart=apart)
+        if subject.verdict is SubjectVerdict.DIFFERENT:
             return SubjectPair(subject, subject)
         return SubjectPair(subject, self._slot(candidate, mem, vocab))
 
@@ -177,7 +210,11 @@ class SubjectMatcher:
     # -- what the memories at hand teach ----------------------------------------------
     @staticmethod
     def _vocabulary(candidate: MemoryCandidate, existing: Sequence[CanonicalMemory]) -> Vocabulary:
-        learned = [pair for text in _texts(candidate, existing) for pair in _defined(text)]
+        learned = [
+            pair
+            for text in _texts(candidate, existing)
+            for pair in _defined(text[:MAX_DEFINITION_CHARS])
+        ]
         return vocabulary().with_aliases(learned)
 
     @staticmethod
@@ -187,35 +224,44 @@ class SubjectMatcher:
         raw: set[str] = set(candidate.entities)
         for mem in existing:
             if mem.subject and not is_identity(mem.subject):
-                raw.add(mem.subject)
-            raw.update(str(e) for e in mem.system_metadata.get("entities") or ())
+                raw.add(written(mem.subject, _entities(mem)))
+            raw.update(str(e) for e in _entities(mem))
         parsed = (parse(name, vocab) for name in sorted(raw))
         return tuple(p for p in parsed if not p.empty and p.identity is None)
 
     # -- vectors ----------------------------------------------------------------------
-    async def _encode(self, texts: Iterable[str]) -> dict[str, list[float]]:
+    async def _encode(self, texts: Iterable[str]) -> dict[str, np.ndarray]:
+        """Unit float32 vectors of ``texts``; the cached ones are refreshed before any new
+        one is inserted, so a call never evicts what it is about to read."""
+        assert self.embedding is not None
+        model = self.embedding.fingerprint()
         wanted = list(dict.fromkeys(texts))
-        missing = [t for t in wanted if t not in self._vectors]
-        if missing and self.embedding is not None:
-            for text, vector in zip(
-                missing, await self.embedding.embed_documents(missing), strict=True
-            ):
-                self._vectors[text] = vector
-                if len(self._vectors) > _VECTOR_CACHE:
-                    self._vectors.popitem(last=False)
+        found: dict[str, np.ndarray] = {}
         for text in wanted:
-            if text in self._vectors:
-                self._vectors.move_to_end(text)
-        return {t: self._vectors.get(t, []) for t in wanted}
+            vector = self._vectors.get((model, text))
+            if vector is not None:
+                self._vectors.move_to_end((model, text))
+                found[text] = vector
+        missing = [t for t in wanted if t not in found]
+        if missing:
+            encoded = await self.embedding.embed_documents(missing)
+            for text, raw in zip(missing, encoded, strict=True):
+                vector = np.asarray(raw, dtype=np.float32)
+                norm = float(np.linalg.norm(vector))
+                found[text] = vector / norm if norm else vector
+                self._vectors[(model, text)] = found[text]
+            while len(self._vectors) > _VECTOR_CACHE:
+                self._vectors.popitem(last=False)
+        return found
+
+
+#: the reason a pair without a subject on one side carries
+NO_SUBJECT = "no subject"
+
+
+def _entities(mem: CanonicalMemory) -> list[object]:
+    return list(mem.system_metadata.get("entities") or ())
 
 
 def _texts(candidate: MemoryCandidate, existing: Sequence[CanonicalMemory]) -> list[str]:
     return [candidate.content, *(m.content for m in existing)]
-
-
-def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    if not a or not b:
-        return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return dot / norm if norm else 0.0

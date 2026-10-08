@@ -25,15 +25,19 @@ each entry says which one moved. Decisions behind each change are in the
 
 - Same-subject matching on the write path (ADR 0035, [concepts](docs/guide/02-concepts.md#when-two-statements-are-about-the-same-thing)):
   a subject respelled ("FORKLIFT-4", "forklift #4"), abbreviated ("PO-4471", "purchase order
-  4471"; "DC 3", "Distribution Centre 3"), titled or written in another script's digits
-  ("المستودع رقم ٣") reinforces the memory it names instead of duplicating it, and is found
-  even when that memory is older than the newest rows consolidation reads. Differing
-  identifiers, codes, units, dates and legal forms ("Forklift #3" / "#4", "Warehouse 3" / "13",
-  "SKU-1001" / "SKU-1010", "5 kg" / "5 lb", "Acme Inc" / "Acme Ltd") never merge. Abbreviations
-  come from two vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on)
-  and from a tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS
-  stands for out of stock"); nothing to configure. 436 labelled pairs in five languages: no
-  false merge (0 of 193 hard negatives), merge F1 0.93.
+  4471"; "DC 3", "Distribution Centre 3") or written in another script's digits ("المستودع
+  رقم ٣") reinforces the memory it names instead of duplicating it. Candidates are also looked
+  up by a few stored spellings of the subject (case, the first identifier's joins, pack
+  aliases), so some older rows are found beyond the newest ones consolidation reads.
+  Differing identifiers, short codes, their order, units, signs, decimal commas, dates,
+  titles and legal forms ("Forklift #3" / "#4", "Store LA" / "Store AL", "Dock 3 door 4" /
+  "Dock 4 door 3", "5 kg" / "5 lb", "1,5 kg" / "15 kg", "Level -1" / "Level 1", "Mrs Patel" /
+  "Mr Patel", "Acme Inc" / "Acme Ltd") never merge, and a match that needs a plural folded, a
+  title dropped or the words reordered ("John Roberts" / "John Robert") is never merged by
+  the service itself. Abbreviations come from two vocabulary packs (data,
+  `domain/vocabulary/`: generic and retail, always on) and from a tenant's own text where it
+  defines one ("hazardous materials (hazmat)", "OOS stands for out of stock"); nothing to
+  configure. SUBJECT_RESULTS
 
 ### Fixed
 - A document uploaded into a thread that did not exist yet reached `READY` but was never

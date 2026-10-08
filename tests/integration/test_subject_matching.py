@@ -87,3 +87,19 @@ async def test_person_facts_still_replace_their_value(container, uow_factory) ->
         mems = await container.services["memory"].list_memories(uow, OPS)
     tz = [m for m in mems if m.predicate == "timezone"]
     assert [m.object for m in tz] == ["america/new_york"]
+
+
+async def test_a_person_fact_past_the_window_is_found_by_its_mixed_case_id(
+    container, uow_factory
+) -> None:
+    """A principal id keeps its case ("user:Alice"): the subject lookup must ask for it as
+    written, or an old fact outside the newest rows is never found and never replaced."""
+    alice = MemoryExecutionContext(tenant_id="acme", user_id="Alice", workspace_id="ws1")
+    await _observe(container, uow_factory, alice, "My timezone is Europe/Berlin.")
+    k = container.tuning.memory_intelligence.dedup_candidate_k
+    for i in range(k // 2 + 1):
+        await _observe(container, uow_factory, alice, f"Cooler {i + 20} is set to minus {i + 2}C.")
+    await _observe(container, uow_factory, alice, "My timezone is America/New_York.")
+    async with uow_factory() as uow:
+        mems = await container.services["memory"].list_memories(uow, alice)
+    assert [m.object for m in mems if m.predicate == "timezone"] == ["america/new_york"]

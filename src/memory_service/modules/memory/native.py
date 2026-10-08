@@ -4,12 +4,14 @@ The rules are complete on their own and conservative on purpose: when the servic
 sure a sentence is memory-worthy it stores nothing (the raw message is still in the thread
 and the archive), and when it is not sure two memories are the same it keeps both. The
 release gate for this module is the *false-merge rate*, so every merge/supersede decision
-needs positive evidence (identical normalized text, identical subject+predicate, or an
-explicit replacement signal), and disagreeing numbers or negation always block a merge.
+needs positive evidence (identical normalized text, the same subject - the subject matcher's
+SAME, ``modules/memory/subjects.py`` - and predicate, or an explicit replacement signal), and
+disagreeing numbers or negation always block a merge.
 
 An optional ``LLMAssist`` extracts facts from the sentences no rule matched
-(``contextual_extraction``) and adjudicates the grey band of consolidation
-(``conflict_adjudication``); every consultation falls back to the native result, and with
+(``contextual_extraction``) and adjudicates what consolidation leaves open
+(``conflict_adjudication``): a stored memory on the same, or possibly the same, subject that
+no rule settled (ADR 0035). Every consultation falls back to the native result, and with
 assist disabled the module behaves exactly as without it.
 """
 
@@ -44,7 +46,7 @@ from memory_service.modules.memory.narrative import (
 )
 from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
 from memory_service.modules.memory.source_facts import extract_source_facts
-from memory_service.modules.memory.subjects import SubjectMatcher, SubjectPair
+from memory_service.modules.memory.subjects import NO_SUBJECT, SubjectMatcher, SubjectPair
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
     ContextualExtractor,
@@ -316,6 +318,9 @@ _IMPORTANCE_BY_TYPE = {
 # --------------------------------------------------------------------------- llm assist
 
 _ASSIST_MAX_CHARS = 2000
+#: A pair with no subject on one side has nothing for the subject matcher to compare: it is
+#: worth asking about when it shares this much of its wording, as before ADR 0035.
+_ASSIST_MIN_SIMILARITY = 0.5
 #: a memory the adjudicator may be asked about: the memory, its lexical similarity, and the
 #: subject matcher's view of the pair
 _Uncertain = tuple[CanonicalMemory, float, SubjectPair]
@@ -1113,6 +1118,11 @@ class NativeMemoryIntelligence:
             #    numbers or negation (those are the classic false merges)
             m_tokens = tokens(mem.content)
             sim = jaccard(c_tokens, m_tokens)
+            if pairs[mem.memory_id].apart:
+                # "Dock 3 door 4" and "Dock 4 door 3", "Tower A" and "Tower": however alike
+                # the sentences (the words above ignore one-letter codes and digit order),
+                # two subjects are never merged
+                continue
             if sim >= self.cfg.dedup_lexical_threshold:
                 if numbers(mem.content) != c_numbers or has_negation(mem.content) != c_neg:
                     continue
@@ -1167,7 +1177,7 @@ class NativeMemoryIntelligence:
         create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
-        grey = await self._uncertain(candidate, ordered, pairs, askable) if best is None else None
+        grey = await self._uncertain(candidate, pairs, askable) if best is None else None
         if grey is not None:
             # about the same subject but not a duplicate: the native answer is "keep both";
             # the model may recognise a paraphrase, an update or a contradiction
@@ -1188,7 +1198,6 @@ class NativeMemoryIntelligence:
     async def _uncertain(
         self,
         candidate: MemoryCandidate,
-        existing: Sequence[CanonicalMemory],
         pairs: dict[str, SubjectPair],
         askable: list[tuple[CanonicalMemory, float]],
     ) -> _Uncertain | None:
@@ -1205,6 +1214,10 @@ class NativeMemoryIntelligence:
                 (mem, sim, by[mem.memory_id])
                 for mem, sim in askable
                 if by[mem.memory_id].statement.verdict is not SubjectVerdict.DIFFERENT
+                or (
+                    by[mem.memory_id].statement.reason == NO_SUBJECT
+                    and sim >= _ASSIST_MIN_SIMILARITY
+                )
             ]
             return max(
                 ranked,
@@ -1218,7 +1231,9 @@ class NativeMemoryIntelligence:
 
         found = closest(pairs)
         if found is None:
-            found = closest(await self.subjects.with_vectors(candidate, existing, pairs))
+            # only the memories that could be asked about are encoded
+            asked = [mem for mem, _ in askable]
+            found = closest(await self.subjects.with_vectors(candidate, asked, pairs))
         return found
 
     async def _adjudicate(

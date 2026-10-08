@@ -25,24 +25,37 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
 ## Decision
 
 1. **A subject is parsed, then compared under rules that block or allow**
-   (`domain/subjects.py`). Parsing splits a subject into **identifiers** - every number, code
-   ("A12", "Q3", "SKU-1001"), number with its unit ("5 kg", "$5", "10%"), date and month name -
-   **canonical words** (NFKC, case-folded, digits of any script read as ASCII, "#", "No.",
-   "Nr.", "núm.", "رقم", "नंबर" before a number dropped, articles, connectives and titles
-   dropped, a light plural fold, the Arabic article and spelling variants folded, every
-   vocabulary alias replaced by its canonical phrase) and a **legal form** ("GmbH", "Inc").
+   (`domain/subjects.py`). Parsing reads at most `MAX_SUBJECT_CHARS` (300) characters and
+   splits a subject into:
+   * **identifiers, in order** - every number (a decimal comma read as one: "1,5 kg" is 1.5;
+     a minus kept: "Level -1"), code ("A12", "Q3", "SKU-1001"), number with its unit or
+     currency before or after it ("5 kg", "$5", "5 €", "10%"), date, month name, and every
+     **short code**: a word of at most three capitals ("LA", "IN", "DE") or at most two
+     letters not followed by another word ("Block a", "Store la") - such a word is a code,
+     never the connective it looks like. Each identifier remembers the word it labels
+     ("Aisle 3 Bay 4" -> aisle 3, bay 4);
+   * **words as written** - NFKC, case-folded, digits of any script read as ASCII, "#",
+     "No.", "Nr.", "núm.", "رقم", "नंबर" before a number dropped, a leading article dropped,
+     a connective between two words dropped, Arabic orthographic variants folded, every
+     vocabulary alias replaced by its canonical phrase; titles and plurals are kept;
+   * **loose words** - the same with plurals folded, titles and connectives dropped;
+   * **titles** ("Mrs", "Herr", "السيد", "श्री") and a **legal form** ("GmbH", "Inc").
+
    The verdict is one of:
-   * **DIFFERENT** when both sides carry identifiers and they differ, or both carry legal
-     forms that differ, or the two sides each have words the other lacks ("Acme Logistics" /
-     "Acme Foods", "John Smith" / "John Miller"). Nothing lifts an identifier block - not a
-     vector, not a model.
-   * **SAME** when the canonical words and the identifiers are equal, or the letters are the
+   * **DIFFERENT** when both sides carry identifiers and their sequences differ (value,
+     order or count: "Dock 3 door 4" / "Dock 4 door 3", "Line 3 3" / "Line 3"), a word labels
+     different identifiers, both carry different legal forms or different titles ("Mrs
+     Patel" / "Mr Patel"), or each side has words the other lacks ("Acme Logistics" / "Acme
+     Foods"). Nothing lifts such a block - not a vector, not a model.
+   * **SAME** only when the words and identifiers are equal *in order*, or the letters are the
      same split differently ("Wal-Mart" / "Walmart").
-   * **POSSIBLE** for what a reader would ask about: one side names more than the other
-     ("Acme" / "Acme Logistics", "Forklift" / "Forklift 4"), one edit apart in words of five
-     letters or more ("Jonathan" / "Jonathon"; "Jon" / "Joan" are two people), an initialism
-     ("GFS" / "Global Freight Solutions"), or - with the encoder - a cosine of at least
-     `DENSE_POSSIBLE` (0.80). A POSSIBLE pair is never merged by the service itself.
+   * **POSSIBLE** for what a reader would ask about: equal only once plurals are folded,
+     titles dropped or the words reordered ("John Roberts" / "John Robert", "Dr. Priya
+     Sharma" / "Priya Sharma", "Bank of China" / "China Bank"), one side naming more than
+     the other ("Acme" / "Acme Logistics", "Forklift" / "Forklift 4"), one edit apart in
+     words of five letters or more ("Jonathan" / "Jonathon"), an initialism ("GFS" /
+     "Global Freight Solutions"), or - with the encoder - a cosine of at least
+     `DENSE_POSSIBLE` (0.77). A POSSIBLE pair is never merged by the service itself.
 2. **The vocabulary is data** (`domain/vocabulary/generic.json`, `retail.json`), both packs
    always on, no option: number markers, connectives, titles and legal forms in English,
    German, Spanish, Arabic and Hindi; units and months in those languages; common
@@ -54,25 +67,40 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
    abbreviation defined in a stored memory - "hazardous materials (hazmat)", "OOS (out of
    stock)", "WOS stands for weeks of supply", a compound's capitals "Zentrallager (ZL)" - is
    learned when it is checked to be one (`abbreviates`: the short form is made of the long
-   form's word prefixes in order), so "Berlin (Germany)" teaches nothing. The names the stored
+   form's word prefixes in order), so "Berlin (Germany)" teaches nothing. A short form defined
+   as two things ("Berlin Hub (BH)", "Bonn Hub (BH)") is not learned, and a learned form of
+   two or three letters counts only in capitals or before a number, like a packed acronym.
+   Definitions are looked for in the first `MAX_DEFINITION_CHARS` (2,000) characters of a
+   text, with patterns anchored at word starts and bounded, so reading them is linear in the
+   text (2,000,000 characters: a few milliseconds). The names the stored
    memories mention are the tenant's known names: a short form two of them extend ("John"
    with "John Smith" and "John Miller") is DIFFERENT, not POSSIBLE. Both come from the rows
    consolidation has already loaded; nothing extra is read or stored.
 4. **One service on the write path** (`modules/memory/subjects.py`, `SubjectMatcher`), shared
    by the provider and the pipeline:
-   * *candidate generation* - the stored memories consolidation compares with are looked up by
-     every spelling the matcher allows for the candidate's subject (`spellings`: identifier
-     joins, alias forms), beside the normalized hash and the newest rows, on the existing
-     `(tenant_id, subject, predicate)` index;
+   * *candidate generation* - the stored memories consolidation compares with are also looked
+     up by a few stored spellings of the candidate's subject (`spellings`: as written first -
+     an identity such as "user:Alice" only as written, ids are case-sensitive - then
+     lower-cased, the first identifier joined five ways, alias forms; at most 12), beside the
+     normalized hash and the newest rows, on the existing `(tenant_id, subject, predicate)`
+     index. It is a lookup aid, not a guarantee that every older row is found;
    * *slot rules* - "same subject" in the reinforce / single-valued / replacement-signal rules
-     is the matcher's SAME, not string equality. A statement about a principal ("user:u1") is
+     is the matcher's SAME, not string equality. The subject compared is the one written in
+     the memory's entities when the stored one is its lower-cased copy ("Store LA", not "store
+     la"). Two named subjects that are not SAME are never merged by the wording rules either
+     (lexical and dense similarity), which used to join "Dock 3 door 4" and "Dock 4 door 3"
+     because their word sets are equal. A statement about a principal ("user:u1") is
      compared by identity, and then by slot: a single-valued predicate is the same subject;
      otherwise the two topics must share a third of their words;
    * *the adjudicator's gate* - with `conflict_adjudication` enabled, the one memory the model
      is asked about is the closest whose statement the matcher does not call DIFFERENT (SAME
      before POSSIBLE), instead of the closest by word overlap. Only when the words leave every
-     pair undecided does the encoder score the subjects; its vectors are cached in process, so
-     a recurring subject is encoded once. Without the model no vector is computed.
+     pair undecided does the encoder score the subjects of the askable memories; its vectors
+     are cached in process (float32, keyed by encoder), so a recurring subject is encoded once.
+     Without the model no vector is computed. A candidate or memory without a subject is
+     asked about when its wording overlaps by half, as before. Measured on the ten LoCoMo
+     conversations (5,882 turns, a counting stand-in for the model): 0.020 calls per turn
+     against 0.004 before (120 against 23), so no further floor was added.
    Replacement semantics are unchanged: which predicates are single-valued, and when a value
    supersedes another, is ADR 0009's (and its successor's).
 5. **No new dependency.** The typo rule is a one-edit check written here. rapidfuzz was

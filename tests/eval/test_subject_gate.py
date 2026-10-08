@@ -20,7 +20,7 @@ pytestmark = pytest.mark.eval
 PAIRS = Path(__file__).resolve().parent / "golden" / "subject_pairs.json"
 #: the measured F1 of the words-only matcher on this set, less a small margin: a change that
 #: costs recall below it must say so here
-F1_FLOOR = 0.80
+F1_FLOOR = 0.83
 
 
 async def test_no_subject_false_merges_and_f1_holds() -> None:

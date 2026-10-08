@@ -107,6 +107,8 @@ class Vocabulary:
     longest: int
     markers: frozenset[str]
     stopwords: frozenset[str]
+    #: the articles a subject may start with ("the Berlin office", "la tienda 12")
+    articles: frozenset[str]
     honorifics: frozenset[str]
     #: two-letter words that read as a word before a number, not as a code prefix
     #: ("PO4471" is purchase order 4471; "A12" is bin A12)
@@ -116,8 +118,21 @@ class Vocabulary:
     surface: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def with_aliases(self, pairs: Iterable[tuple[str, str]]) -> Vocabulary:
-        """This vocabulary with ``(short, long)`` aliases learned from a tenant's text."""
-        extra = tuple(sorted({(s, lng) for s, lng in pairs if (s, lng) not in self.learned}))
+        """This vocabulary with ``(short, long)`` aliases learned from a tenant's text. A
+        short form defined as two different things ("Berlin Hub (BH)", "Bonn Hub (BH)") is
+        evidence of neither and is not learned."""
+        meanings: dict[str, set[str]] = {}
+        for short, long in pairs:
+            meanings.setdefault(short.casefold(), set()).add(" ".join(long.casefold().split()))
+        extra = tuple(
+            sorted(
+                {
+                    (short, long)
+                    for short, long in pairs
+                    if len(meanings[short.casefold()]) == 1 and (short, long) not in self.learned
+                }
+            )
+        )
         return _extended(self, extra) if extra else self
 
 
@@ -161,6 +176,7 @@ class _Builder:
         self.surface: dict[str, tuple[str, ...]] = {}
         self.markers: set[str] = set()
         self.stop: set[str] = set()
+        self.articles: set[str] = set()
         self.honorifics: set[str] = set()
         self.count_units: set[str] = set()
 
@@ -172,6 +188,7 @@ class _Builder:
     def read(self, pack: dict[str, Any], name: str) -> None:
         self.markers |= {m.casefold() for m in _strings(pack, "number_markers")}
         self.stop |= {_fold(w) for w in _strings(pack, "stopwords")}
+        self.articles |= {_fold(w) for w in _strings(pack, "articles")}
         self.honorifics |= {_fold(w) for w in _strings(pack, "honorifics")}
         self.count_units |= set(_strings(pack, "count_units"))
         self._aliases(pack_aliases(name), {c.casefold() for c in _strings(pack, "cased")})
@@ -209,6 +226,7 @@ class _Builder:
             value = tuple(single.get(w, w) for w in term.value)
             if term.kind == "alias" and value != term.value:
                 self.phrases[key] = Term("alias", value, cased=term.cased, short=term.short)
+                self.phrases.setdefault(value, Term("alias", value))
 
     def build(self) -> Vocabulary:
         self.units.pop((), None)
@@ -225,6 +243,7 @@ class _Builder:
             longest=max(len(k) for k in [*self.phrases, *self.units]),
             markers=frozenset(self.markers),
             stopwords=frozenset(self.stop),
+            articles=frozenset(self.articles),
             honorifics=frozenset(self.honorifics),
             word_prefixes=frozenset(short_words | {m for m in self.markers if len(m) <= 2}),
             surface=self.surface,
@@ -238,7 +257,11 @@ def _extended(base: Vocabulary, extra: tuple[tuple[str, str], ...]) -> Vocabular
     for short, long in extra:
         value, key = _form_key(long), _form_key(short)
         if key and value and key not in phrases:
-            phrases[key] = Term("alias", value)
+            # a learned form of two or three letters is as ambiguous as a packed one: it
+            # counts in capitals or before a number ("BH", "BH 2"), not as the word "bh"
+            phrases[key] = Term("alias", value, cased=len(short) <= 3)
+            # and the long form reads as the same canonical words ("funds" as "fund")
+            phrases.setdefault(value, Term("alias", value))
             surface[long.casefold()] = (*surface.get(long.casefold(), ()), short.casefold())
     return Vocabulary(
         phrases=phrases,
@@ -247,6 +270,7 @@ def _extended(base: Vocabulary, extra: tuple[tuple[str, str], ...]) -> Vocabular
         longest=max(base.longest, *(len(k) for k in phrases)),
         markers=base.markers,
         stopwords=base.stopwords,
+        articles=base.articles,
         honorifics=base.honorifics,
         word_prefixes=base.word_prefixes,
         learned=(*base.learned, *extra),
@@ -274,17 +298,23 @@ _ARABIC_LETTERS = str.maketrans(
 _ARABIC = re.compile("[\u064b-\u0652\u0640]")
 
 
-def _fold(word: str) -> str:
-    """One word as both sides of a comparison see it: case-folded, the Arabic article
-    removed, an English-shaped plural folded ("batteries" -> "battery", "pallets" ->
-    "pallet"). Deliberately not a stemmer: Porter maps "organization" and "organ" to one
-    stem, which would merge two subjects."""
+def _orth(word: str) -> str:
+    """One word as written, compared without its case and its script's interchangeable
+    spellings: for Arabic, hamza on alef, ta marbuta, alef maqsura, short-vowel marks,
+    tatweel and the article."""
     w = word.casefold()
     if any("\u0600" <= c <= "\u06ff" for c in w):
-        # the spellings Arabic writers use interchangeably: hamza on alef, ta marbuta,
-        # alef maqsura, short-vowel marks and tatweel
         w = _ARABIC.sub("", w.translate(_ARABIC_LETTERS))
         return w[2:] if w.startswith("\u0627\u0644") and len(w) > 3 else w
+    return w
+
+
+def _fold(word: str) -> str:
+    """``_orth`` and an English-shaped plural folded ("batteries" -> "battery", "pallets" ->
+    "pallet"). Deliberately not a stemmer: Porter maps "organization" and "organ" to one
+    stem. Still lossy - "Roberts" is not "Robert" - so a match that needs it is only
+    POSSIBLE."""
+    w = _orth(word)
     if len(w) >= 4 and _is_latin(w) and w.isalpha():
         if w.endswith("ies") and len(w) > 4:
             return w[:-3] + "y"
@@ -353,10 +383,30 @@ def _run_end(text: str, i: int) -> int:
     return j
 
 
+_DECIMAL_COMMA = re.compile(r"^[\d.]*\d,\d{1,2}$")
+
+
 def _ascii_digits(raw: str) -> str:
-    return normalise_number(
-        "".join(str(unicodedata.decimal(ch)) if ch.isdecimal() else ch for ch in raw)
-    )
+    """ASCII digits, and the separators read the way they are written: a comma followed by
+    one or two final digits is a decimal comma ("1,5 kg", "4,99 €", "1.234,56"); any other
+    comma groups thousands ("1,000"). A leading minus is kept ("Level -1")."""
+    ascii_ = normalise_number(
+        "".join(
+            str(unicodedata.decimal(ch)) if ch.isdecimal() else ch
+            for ch in raw.replace(",", "\x00")
+        )
+    ).replace("\x00", ",")
+    sign, body = ("-", ascii_[1:]) if ascii_.startswith("-") else ("", ascii_)
+    if _DECIMAL_COMMA.match(body):
+        body = body.replace(".", "").replace(",", ".")
+    else:
+        body = body.replace(",", "")
+    return sign + body
+
+
+def _minus(text: str, i: int, gap: str) -> bool:
+    """A minus sign (or U+2212) starting a number: "-1", not the hyphen of "SKU-1001"."""
+    return text[i] in "-\u2212" and gap == "space" and i + 1 < len(text) and text[i + 1].isdecimal()
 
 
 @lru_cache(maxsize=8192)
@@ -369,8 +419,8 @@ def _scan(text: str) -> tuple[_Tok, ...]:
     i = 0
     while i < len(text):
         c = text[i]
-        if c.isdecimal():
-            j = _number_end(text, i)
+        if c.isdecimal() or _minus(text, i, gap):
+            j = _number_end(text, i + 1 if not c.isdecimal() else i)
             out.append(_Tok("num", _ascii_digits(text[i:j]), gap))
         elif _letter(c):
             j = _run_end(text, i)
@@ -399,18 +449,33 @@ class Subject:
     text: str
     #: a namespaced identity ("user:u1", "thread:thr_1"): compared by equality only
     identity: str | None = None
-    #: canonical words, in order
+    #: the words as written, compared without case: aliases read as what they stand for, a
+    #: leading article dropped, connectives, titles and plurals kept ("Bank of China",
+    #: "Mrs Patel", "Roberts")
     words: tuple[str, ...] = ()
-    ids: frozenset[str] = frozenset()
+    #: words and identifiers in their order: what SAME compares
+    sequence: tuple[str, ...] = ()
+    #: every identifier in order, with the word it labels ("Aisle 3 Bay 4" ->
+    #: ("aisle", "3"), ("bay", "4")); "" when no word stands right before it
+    labelled: tuple[tuple[str, str], ...] = ()
+    #: the words with plurals folded, connectives and titles dropped: a match on these alone
+    #: is POSSIBLE
+    loose: tuple[str, ...] = ()
+    #: the titles it carries ("mrs", "herr", "श्री"): two different ones name two people
+    titles: frozenset[str] = frozenset()
     legal: str | None = None
 
     @property
+    def ids(self) -> tuple[str, ...]:
+        return tuple(i for _, i in self.labelled)
+
+    @property
     def tokens(self) -> frozenset[str]:
-        return frozenset(self.words)
+        return frozenset(self.loose)
 
     @property
     def empty(self) -> bool:
-        return self.identity is None and not self.words and not self.ids
+        return self.identity is None and not self.words and not self.labelled
 
 
 _IDENTITY = re.compile(r"^[a-z][a-z_]*:\S+$")
@@ -421,9 +486,15 @@ def is_identity(text: str) -> bool:
     return bool(_IDENTITY.match(text))
 
 
+#: The longest text a subject is read from. A subject is a few words; a topic is cut here
+#: too, so no caller can make parsing (or its cache) grow with its input.
+MAX_SUBJECT_CHARS = 300
+
+
 def parse(text: str, vocab: Vocabulary | None = None) -> Subject:
     """``text`` reduced to identifiers, canonical words and legal form."""
-    return _parse(text.strip(), vocab or vocabulary())
+    learned = vocab.learned if vocab is not None else ()
+    return _parse(text.strip()[:MAX_SUBJECT_CHARS], learned)
 
 
 #: (kind, value, source token): "word", "sym" or "id"
@@ -431,19 +502,52 @@ _Item = tuple[str, str, "_Tok | None"]
 
 
 @lru_cache(maxsize=16384)
-def _parse(text: str, vocab: Vocabulary) -> Subject:
+def _parse(text: str, learned: tuple[tuple[str, str], ...]) -> Subject:
     if is_identity(text):
         return Subject(text=text, identity=text)
-    items, ids = _identifiers(_scan(text), vocab)
-    words, legal = _words_of(items, vocab, ids)
-    return Subject(text=text, words=tuple(words), ids=frozenset(ids), legal=legal)
+    vocab = vocabulary().with_aliases(learned)
+    items = _identifiers(_scan(text), vocab)
+    return _subject(text, _entries(items, vocab), vocab)
 
 
-def _identifiers(toks: Sequence[_Tok], vocab: Vocabulary) -> tuple[list[_Item], set[str]]:
+def _subject(text: str, entries: list[_Entry], vocab: Vocabulary) -> Subject:
+    words: list[str] = []
+    sequence: list[str] = []
+    loose: list[str] = []
+    labelled: list[tuple[str, str]] = []
+    titles: list[str] = []
+    legal: str | None = None
+    previous = ""
+    for kind, strict, folded in entries:
+        if kind == "legal":
+            legal = strict
+            continue
+        sequence.append(strict)
+        if kind == "id":
+            labelled.append((previous, strict))
+            previous = ""
+            continue
+        words.append(strict)
+        if kind == "title":
+            titles.append(folded)
+        elif kind == "word":
+            loose.append(folded)
+            previous = folded
+    return Subject(
+        text=text,
+        words=tuple(words),
+        sequence=tuple(sequence),
+        labelled=tuple(labelled),
+        loose=tuple(loose),
+        titles=frozenset(titles),
+        legal=legal,
+    )
+
+
+def _identifiers(toks: Sequence[_Tok], vocab: Vocabulary) -> list[_Item]:
     """The tokens with every number turned into one identifier item, together with the
     letters, marker, currency and unit around it."""
     items: list[_Item] = []
-    ids: set[str] = set()
     i = 0
     while i < len(toks):
         t = toks[i]
@@ -458,9 +562,8 @@ def _identifiers(toks: Sequence[_Tok], vocab: Vocabulary) -> tuple[list[_Item], 
         if term is not None and term.kind == "alias":
             items.append(("word", value, t))  # a code that is shorthand: "3PL"
         else:
-            ids.add(value + unit)
             items.append(("id", value + unit, None))
-    return items, ids
+    return items
 
 
 def _before_number(items: list[_Item], t: _Tok, vocab: Vocabulary) -> tuple[str, str]:
@@ -492,8 +595,8 @@ def _after_number(
     """What follows a number and belongs to it: a glued suffix ("3B") or ordinal ("4th"),
     a unit ("5kg", "5 kg", "10%"). Returns (suffix, unit, next index)."""
     nxt = toks[j] if j < len(toks) else None
-    if nxt is not None and nxt.kind == "sym" and nxt.text == "%":
-        return "", "%", j + 1
+    if nxt is not None and nxt.kind == "sym":
+        return _symbol_after(nxt, j, unit=unit)
     if nxt is None or nxt.kind != "word":
         return "", "", j
     if nxt.gap == "none":
@@ -505,6 +608,15 @@ def _after_number(
     if matched is None or (labels and matched[0] in vocab.count_units):
         return "", "", j
     return "", matched[0], j + matched[1]
+
+
+def _symbol_after(nxt: _Tok, j: int, *, unit: bool) -> tuple[str, str, int]:
+    """A sign after a number: "10%", a trailing currency ("5 €", "4,99€")."""
+    if nxt.text == "%":
+        return "", "%", j + 1
+    if nxt.text in _CURRENCY and not unit:
+        return "", _CURRENCY[nxt.text], j + 1
+    return "", "", j
 
 
 def _glued(nxt: _Tok, vocab: Vocabulary, j: int) -> tuple[str, str, int]:
@@ -520,39 +632,73 @@ def _glued(nxt: _Tok, vocab: Vocabulary, j: int) -> tuple[str, str, int]:
     return "", "", j
 
 
-def _words_of(items: list[_Item], vocab: Vocabulary, ids: set[str]) -> tuple[list[str], str | None]:
-    """The canonical words of ``items``: phrases of the vocabulary replaced (months and
-    weekdays become identifiers, a trailing legal form is set aside), connectives, titles
-    and stray markers dropped, every other word folded."""
-    words: list[str] = []
-    legal: str | None = None
+#: (kind, strict, folded): "word", "title", "id" or "legal"
+_Entry = tuple[str, str, str]
+
+
+def _entries(items: list[_Item], vocab: Vocabulary) -> list[_Entry]:
+    """``items`` in order as entries: vocabulary phrases replaced (an alias by its canonical
+    words, a month or weekday by an identifier, a trailing legal form set aside),
+    short codes made identifiers ("Store LA", "Block A", "Sales IN": never a connective),
+    connectives dropped, titles marked, every other word kept as written and folded."""
+    out: list[_Entry] = []
     k = 0
     while k < len(items):
         kind, value, tok = items[k]
-        term, width = _term_at(items, k, vocab) if kind == "word" and tok is not None else (None, 1)
-        if term is None or (term.kind == "legal" and not (words and _at_end(items, k + width))):
-            if kind == "word" and _kept(value, vocab):
-                words.append(_fold(value))
+        if kind == "id":
+            out.append(("id", value, value))
             k += 1
             continue
-        if term.kind == "alias":
-            words.extend(w for w in term.value if w not in vocab.stopwords)
-        elif term.kind == "legal":
-            legal = term.value[0]
-        else:  # a month or weekday
-            ids.add(term.value[0])
-        k += width
-    return words, legal
+        term, width = _term_at(items, k, vocab) if kind == "word" and tok is not None else (None, 1)
+        if term is not None and (term.kind != "legal" or (out and _at_end(items, k + width))):
+            out.extend(_from_term(term, vocab))
+            k += width
+            continue
+        if kind == "word":
+            out.extend(_word_entry(items, k, vocab, first=not out))
+        k += 1
+    return out
+
+
+def _from_term(term: Term, vocab: Vocabulary) -> list[_Entry]:
+    if term.kind == "alias":
+        return [("word", w, w) for w in term.value if w not in vocab.stopwords]
+    if term.kind == "legal":
+        return [("legal", term.value[0], term.value[0])]
+    return [("id", term.value[0], term.value[0])]  # a month or weekday
+
+
+def _word_entry(items: list[_Item], k: int, vocab: Vocabulary, *, first: bool) -> list[_Entry]:
+    _, value, tok = items[k]
+    strict, folded = _orth(value), _fold(value)
+    if _code(items, k, tok):
+        return [("id", strict, strict)]
+    following = items[k + 1][0] if k + 1 < len(items) else None
+    if first and folded in vocab.articles and following == "word":
+        return []  # "the Berlin office", "la tienda 12"
+    if folded in vocab.stopwords:
+        # between two words it connects them ("ventas de la tienda", "स्टोर 12 की बिक्री");
+        # first or last it may be a name or a code ("Al Smith"), so it is kept
+        if not first and following in ("word", "id"):
+            return []
+        return [("connective", strict, folded)]
+    return [("title" if folded in vocab.honorifics else "word", strict, folded)]
+
+
+def _code(items: list[_Item], k: int, tok: _Tok | None) -> bool:
+    """A word that is a short code - an identifier, never a connective: three capitals at
+    most ("LA", "IN", "DE", "API"), or two letters at most and not followed by another word
+    ("Block a", "Store la", "Sales in" as stored in lower case)."""
+    value = items[k][1]
+    if tok is not None and tok.upper and value.isalpha() and len(value) <= 3:
+        return True
+    following = items[k + 1][0] if k + 1 < len(items) else None
+    return len(value) <= 2 and _is_latin(value) and following != "word"
 
 
 def _term_at(items: list[_Item], k: int, vocab: Vocabulary) -> tuple[Term | None, int]:
     matched = _match_items(items, k, vocab)
     return matched if matched is not None else (None, 1)
-
-
-def _kept(value: str, vocab: Vocabulary) -> bool:
-    folded = _fold(value)
-    return not (folded in vocab.stopwords or folded in vocab.honorifics or value in vocab.markers)
 
 
 def _at_end(items: Sequence[tuple[str, str, _Tok | None]], k: int) -> bool:
@@ -642,26 +788,43 @@ def compare(
 
 
 def _blocked(a: Subject, b: Subject) -> SubjectMatch | None:
-    """The verdicts nothing can override: identities, identifiers, legal forms."""
+    """The verdicts nothing can override: identities, then ``_conflict``."""
     if a.identity is not None or b.identity is not None:
         if a.identity == b.identity:
             return _same(1.0, "same identity")
         return _different("different identities")
     if a.empty or b.empty:
         return _different("nothing to compare")
+    conflict = _conflict(a, b)
+    return _different(conflict) if conflict else None
+
+
+def _conflict(a: Subject, b: Subject) -> str | None:
+    """What makes two subjects two: identifiers (their values, order and count, and the
+    word each one labels), legal forms, titles."""
     if a.ids and b.ids and a.ids != b.ids:
-        return _different(f"identifiers differ: {', '.join(sorted(a.ids ^ b.ids))}")
+        return f"identifiers differ: {' '.join(a.ids)} vs {' '.join(b.ids)}"
+    labels_a = {word: i for word, i in a.labelled if word}
+    for word, i in b.labelled:
+        if word and labels_a.get(word, i) != i:
+            return f"{word} {labels_a[word]} vs {word} {i}"
     if a.legal and b.legal and a.legal != b.legal:
-        return _different(f"legal forms differ: {a.legal} vs {b.legal}")
+        return f"legal forms differ: {a.legal} vs {b.legal}"
+    if a.titles and b.titles and a.titles != b.titles:
+        return f"titles differ: {' '.join(sorted(a.titles ^ b.titles))}"
     return None
 
 
 def _overlap(a: Subject, b: Subject, names: Sequence[Subject]) -> SubjectMatch | None:
-    """The same words, or one side's words inside the other's."""
+    """The same words - as written, or only once folded - or one side's inside the other's."""
     same_ids = a.ids == b.ids
+    if a.sequence == b.sequence:
+        return _same(1.0, "same subject after normalisation")
+    if same_ids and a.labelled == b.labelled and _joined(a, b):
+        return _same(0.95, "same words, joined differently")
     if a.tokens == b.tokens:
         if same_ids:
-            return _same(1.0, "same subject after normalisation")
+            return _possible(0.7, "the same only once folded, reordered or without a title")
         return _possible(0.6, "one side names no identifier")
     if a.tokens < b.tokens or b.tokens < a.tokens:
         if _ambiguous(a if a.tokens < b.tokens else b, names):
@@ -669,8 +832,6 @@ def _overlap(a: Subject, b: Subject, names: Sequence[Subject]) -> SubjectMatch |
         if not same_ids:
             return _possible(0.4, "one names more than the other and no identifier")
         return _possible(0.5, "one names more than the other")
-    if same_ids and _joined(a, b):
-        return _same(0.95, "same words, joined differently")
     return None
 
 
@@ -783,15 +944,18 @@ def _covers(s: str, ws: tuple[str, ...], i: int, k: int) -> bool:
     return False
 
 
-_WORD = r"[^\W\d_][\w\-]*"
+#: A word of a definition. Anchored at a word start and bounded, so a scan of a long text
+#: is linear: unanchored and unbounded, a 20,000-letter word cost seconds.
+_WORD = r"(?<![\w-])[^\W\d_][\w\-]{0,30}(?![\w-])"
+_SHORT = r"(?<![\w-])[^\W_][\w\-]{1,11}"
+#: the longest text definitions are looked for in
+MAX_DEFINITION_CHARS = 2000
 _LONG_THEN_SHORT = re.compile(
     rf"((?:{_WORD}\s+){{0,5}}{_WORD})\s*\(\s*[\"'“]?([^\W_][\w\-]{{1,11}})[\"'”]?\s*\)"
 )
-_SHORT_THEN_LONG = re.compile(
-    rf"\b([^\W_][\w\-]{{1,11}})\s*\(\s*((?:{_WORD}\s+){{0,5}}{_WORD})\s*\)"
-)
+_SHORT_THEN_LONG = re.compile(rf"({_SHORT})\s*\(\s*((?:{_WORD}\s+){{0,5}}{_WORD})\s*\)")
 _SHORT_MEANS_LONG = re.compile(
-    rf"\b([^\W_][\w\-]{{1,11}})\s+(?:stands for|is short for|means|steht für|bedeutet|"
+    rf"({_SHORT})\s+(?:stands for|is short for|means|steht für|bedeutet|"
     rf"significa|quiere decir|=)\s+((?:{_WORD}\s+){{0,5}}{_WORD})",
     re.IGNORECASE,
 )
@@ -801,7 +965,9 @@ def defined_aliases(text: str) -> list[tuple[str, str]]:
     """``(short, long)`` pairs a text defines, checked by ``abbreviates`` so a parenthesis
     that is not an abbreviation ("Berlin (Germany)", "the meeting (Monday)") teaches
     nothing: "hazardous materials (hazmat)", "OOS (out of stock)", "OOS stands for out of
-    stock items" -> ("hazmat", "hazardous materials"), ("OOS", "out of stock") twice."""
+    stock items" -> ("hazmat", "hazardous materials"), ("OOS", "out of stock") twice. Only
+    the first ``MAX_DEFINITION_CHARS`` characters are read."""
+    text = text[:MAX_DEFINITION_CHARS]
     out: list[tuple[str, str]] = []
     for m in _LONG_THEN_SHORT.finditer(text):
         before, short = m.group(1).split(), m.group(2)
@@ -834,34 +1000,49 @@ def defined_aliases(text: str) -> list[tuple[str, str]]:
 _ID_SPLIT = re.compile(r"\b([^\W\d_]+)[\s\-]*(\d[\w.\-]*)")
 
 
+def _alias_variants(base: str, vocab: Vocabulary) -> list[str]:
+    """``base`` with each alias it contains swapped for the alias's other forms."""
+    out: list[str] = []
+    for canonical, forms in vocab.surface.items():
+        group = [canonical, *forms]
+        found = next((f for f in group if f in base and _form_pattern(f).search(base)), None)
+        if found is not None:
+            pattern = _form_pattern(found)
+            out.extend(pattern.sub(other, base) for other in group if other != found)
+    return out
+
+
+@lru_cache(maxsize=1024)
+def _form_pattern(form: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![\w-]){re.escape(form)}(?![\w-])")
+
+
 def spellings(text: str, vocab: Vocabulary | None = None, *, limit: int = 12) -> list[str]:
-    """Lower-cased ways the same subject may have been stored, ``text`` first: the
-    identifier joined by nothing, a space or a hyphen ("sku-1001", "sku 1001", "sku1001")
-    and every alias swapped for its other forms ("hazmat storage", "hazardous materials
-    storage"). For an exact-match lookup; the comparison itself is ``compare``."""
+    """Ways the same subject may have been stored, for an exact-match lookup: ``text`` as
+    written first (an identity such as "user:Alice" only as written - ids are
+    case-sensitive), then lower-cased, the first identifier joined by nothing, a space, a
+    hyphen, "#" or "no." ("sku-1001", "sku 1001", "sku1001"), and every alias swapped for
+    its other forms ("hazmat storage", "hazardous material storage"); at most ``limit``.
+    A lookup aid only: the comparison itself is ``compare``."""
     vocab = vocab or vocabulary()
-    base = " ".join(text.strip().casefold().split())
-    if not base or is_identity(base):
-        return [base] if base else []
-    out = [base]
+    written = " ".join(text.strip()[:MAX_SUBJECT_CHARS].split())
+    if not written or is_identity(written):
+        return [written] if written else []
+    base = written.casefold()
+    out = [written]
 
     def add(s: str) -> None:
         s = " ".join(s.split())
         if s and s not in out:
             out.append(s)
 
-    for canonical, forms in vocab.surface.items():
-        group = [canonical, *forms]
-        for form in group:
-            pattern = re.compile(rf"(?<![\w-]){re.escape(form)}(?![\w-])")
-            if pattern.search(base):
-                for other in group:
-                    if other != form:
-                        add(pattern.sub(other, base))
-                break
-    for variant in list(out):
+    add(base)
+
+    for variant in _alias_variants(base, vocab):
+        add(variant)
+    for variant in list(out[1:]):
         m = _ID_SPLIT.search(variant)
         if m:
-            for joiner in ("", " ", "-"):
+            for joiner in (" ", "", "-", " #", " no. "):
                 add(variant[: m.start()] + m.group(1) + joiner + m.group(2) + variant[m.end() :])
     return out[:limit]
