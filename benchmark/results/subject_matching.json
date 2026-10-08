@@ -4,15 +4,15 @@
       "p50": 0.05,
       "p95": 0.11
     },
-    "comparisons": 5180,
-    "encoded_pairs": 80,
+    "comparisons": 5760,
+    "encoded_pairs": 83,
     "warm_ms": {
-      "p50": 0.0049,
+      "p50": 0.0046,
       "p95": 0.02
     },
     "with_encoder_cold_ms": {
-      "p50": 5.16,
-      "p95": 6.53
+      "p50": 5.01,
+      "p95": 8.65
     }
   },
   "dense_threshold": {
@@ -65,32 +65,32 @@
     "soft_pairs": 40,
     "youden_j": 0.602
   },
-  "dev": 254,
+  "dev": 285,
   "encoder": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
   "exact_strings": {
-    "different": 270,
-    "f1": 0.1283,
-    "false_merge_rate": 0.0,
-    "false_merges": 0,
-    "hard_negative_false_merge_rate": 0.0,
-    "hard_negative_false_merges": 0,
-    "hard_negatives": 270,
-    "pairs": 518,
-    "precision": 1.0,
-    "recall": 0.0685,
-    "routed_different_rate": 0.0,
-    "routed_recall": 0.0685,
-    "same": 248
+    "different": 322,
+    "f1": 0.125,
+    "false_merge_rate": 0.0031,
+    "false_merges": 1,
+    "hard_negative_false_merge_rate": 0.0031,
+    "hard_negative_false_merges": 1,
+    "hard_negatives": 322,
+    "pairs": 576,
+    "precision": 0.9444,
+    "recall": 0.0669,
+    "routed_different_rate": 0.0031,
+    "routed_recall": 0.0669,
+    "same": 254
   },
-  "pairs": 518,
+  "pairs": 576,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "a932d433b7085b4014f1c80af6b329b3d26a429e",
+    "git_commit": "b1aa2aa87d09e207fd219d0bcaa51a399466e24a",
     "host_load": {
-      "load_per_core": 0.53,
-      "loadavg_15m": 2.17,
-      "loadavg_1m": 2.13,
-      "loadavg_5m": 2.18
+      "load_per_core": 0.92,
+      "loadavg_15m": 2.64,
+      "loadavg_1m": 3.68,
+      "loadavg_5m": 2.85
     },
     "llm": {
       "enabled": false,
@@ -130,45 +130,45 @@
     },
     "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
     "python": "3.13.14",
-    "timestamp": "2026-10-08T14:19:33.398123+00:00"
+    "timestamp": "2026-10-08T17:05:30.240161+00:00"
   },
   "rapidfuzz": {
     "native_edit1": {
-      "different_pairs": 65,
-      "different_routed": 1,
-      "same_pairs": 25,
+      "different_pairs": 79,
+      "different_routed": 5,
+      "same_pairs": 24,
       "same_routed": 7
     },
     "ratio>=80": {
-      "different_pairs": 65,
-      "different_routed": 2,
-      "same_pairs": 25,
+      "different_pairs": 79,
+      "different_routed": 6,
+      "same_pairs": 24,
       "same_routed": 8
     },
     "ratio>=85": {
-      "different_pairs": 65,
-      "different_routed": 2,
-      "same_pairs": 25,
+      "different_pairs": 79,
+      "different_routed": 4,
+      "same_pairs": 24,
       "same_routed": 7
     },
     "ratio>=90": {
-      "different_pairs": 65,
-      "different_routed": 1,
-      "same_pairs": 25,
+      "different_pairs": 79,
+      "different_routed": 3,
+      "same_pairs": 24,
       "same_routed": 4
     },
     "ratio>=95": {
-      "different_pairs": 65,
+      "different_pairs": 79,
       "different_routed": 0,
-      "same_pairs": 25,
+      "same_pairs": 24,
       "same_routed": 0
     }
   },
   "statement_timing": {
     "words": {
       "consolidate_ms": {
-        "p50": 0.25,
-        "p95": 0.38
+        "p50": 0.2,
+        "p95": 0.3
       },
       "decisions": {
         "CREATE": 130,
@@ -180,11 +180,11 @@
       "stored_memories": 20,
       "subject_matcher_ms": {
         "p50": 0.15,
-        "p95": 0.2
+        "p95": 0.24
       }
     }
   },
-  "test": 264,
+  "test": 291,
   "words": {
     "by_domain": {
       "general": {
@@ -203,17 +203,17 @@
         "same": 22
       },
       "mixed": {
-        "different": 6,
-        "f1": 0.6265,
+        "different": 55,
+        "f1": 0.5385,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 6,
-        "pairs": 63,
+        "hard_negatives": 55,
+        "pairs": 112,
         "precision": 1.0,
-        "recall": 0.4561,
-        "routed_different_rate": 1.0,
+        "recall": 0.3684,
+        "routed_different_rate": 0.5636,
         "routed_recall": 1.0,
         "same": 57
       },
@@ -228,30 +228,30 @@
         "pairs": 91,
         "precision": 1.0,
         "recall": 0.0,
-        "routed_different_rate": 0.1605,
+        "routed_different_rate": 0.1728,
         "routed_recall": 1.0,
         "same": 10
       },
       "retail": {
-        "different": 174,
-        "f1": 0.9365,
+        "different": 177,
+        "f1": 0.9286,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 174,
-        "pairs": 333,
+        "hard_negatives": 177,
+        "pairs": 342,
         "precision": 1.0,
-        "recall": 0.8805,
-        "routed_different_rate": 0.0115,
-        "routed_recall": 0.8994,
-        "same": 159
+        "recall": 0.8667,
+        "routed_different_rate": 0.0113,
+        "routed_recall": 0.8909,
+        "same": 165
       }
     },
     "by_kind": {
       "alias": {
         "different": 0,
-        "f1": 0.9903,
+        "f1": 0.9804,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
@@ -259,10 +259,40 @@
         "hard_negatives": 0,
         "pairs": 52,
         "precision": 1.0,
-        "recall": 0.9808,
+        "recall": 0.9615,
         "routed_different_rate": 0.0,
         "routed_recall": 1.0,
         "same": 52
+      },
+      "ambiguous_comma": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "article_name": {
+        "different": 6,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 6,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
       },
       "code": {
         "different": 22,
@@ -294,9 +324,24 @@
         "routed_recall": 0.0,
         "same": 16
       },
+      "direction": {
+        "different": 8,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 8,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.125,
+        "routed_recall": 0.0,
+        "same": 0
+      },
       "format": {
         "different": 0,
-        "f1": 0.9932,
+        "f1": 0.9863,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
@@ -304,9 +349,9 @@
         "hard_negatives": 0,
         "pairs": 74,
         "precision": 1.0,
-        "recall": 0.9865,
+        "recall": 0.973,
         "routed_different_rate": 0.0,
-        "routed_recall": 1.0,
+        "routed_recall": 0.9865,
         "same": 74
       },
       "general": {
@@ -354,6 +399,51 @@
         "routed_recall": 1.0,
         "same": 9
       },
+      "legal_code": {
+        "different": 15,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 15,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.9333,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "lower_code": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "month_name": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
       "names": {
         "different": 61,
         "f1": 1.0,
@@ -365,39 +455,39 @@
         "pairs": 61,
         "precision": 1.0,
         "recall": 1.0,
-        "routed_different_rate": 0.0656,
+        "routed_different_rate": 0.082,
         "routed_recall": 0.0,
         "same": 0
       },
       "normalisation": {
         "different": 0,
-        "f1": 0.641,
+        "f1": 0.5714,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
         "hard_negatives": 0,
-        "pairs": 53,
+        "pairs": 55,
         "precision": 1.0,
-        "recall": 0.4717,
+        "recall": 0.4,
         "routed_different_rate": 0.0,
         "routed_recall": 1.0,
-        "same": 53
+        "same": 55
       },
       "number": {
         "different": 19,
-        "f1": 1.0,
+        "f1": 0.9231,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
         "hard_negatives": 19,
-        "pairs": 24,
+        "pairs": 26,
         "precision": 1.0,
-        "recall": 1.0,
+        "recall": 0.8571,
         "routed_different_rate": 0.0,
-        "routed_recall": 1.0,
-        "same": 5
+        "routed_recall": 0.8571,
+        "same": 7
       },
       "order": {
         "different": 13,
@@ -459,6 +549,36 @@
         "routed_recall": 1.0,
         "same": 10
       },
+      "symbol": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "tenant_vs_pack": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 2
+      },
       "title": {
         "different": 11,
         "f1": 1.0,
@@ -492,121 +612,137 @@
     },
     "by_lang": {
       "ar": {
-        "different": 28,
+        "different": 32,
         "f1": 0.7895,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 28,
-        "pairs": 51,
+        "hard_negatives": 32,
+        "pairs": 55,
         "precision": 1.0,
         "recall": 0.6522,
-        "routed_different_rate": 0.0357,
+        "routed_different_rate": 0.0938,
         "routed_recall": 0.8696,
         "same": 23
       },
       "de": {
-        "different": 38,
-        "f1": 0.8214,
+        "different": 49,
+        "f1": 0.8276,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 38,
-        "pairs": 71,
+        "hard_negatives": 49,
+        "pairs": 83,
         "precision": 1.0,
-        "recall": 0.697,
-        "routed_different_rate": 0.0789,
-        "routed_recall": 0.8485,
-        "same": 33
+        "recall": 0.7059,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.8529,
+        "same": 34
       },
       "en": {
-        "different": 137,
-        "f1": 0.8826,
+        "different": 159,
+        "f1": 0.874,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 137,
-        "pairs": 275,
+        "hard_negatives": 159,
+        "pairs": 302,
         "precision": 1.0,
-        "recall": 0.7899,
-        "routed_different_rate": 0.1095,
-        "routed_recall": 1.0,
-        "same": 138
+        "recall": 0.7762,
+        "routed_different_rate": 0.1509,
+        "routed_recall": 0.986,
+        "same": 143
       },
       "es": {
-        "different": 38,
-        "f1": 0.8148,
+        "different": 49,
+        "f1": 0.7925,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 38,
-        "pairs": 70,
+        "hard_negatives": 49,
+        "pairs": 81,
         "precision": 1.0,
-        "recall": 0.6875,
-        "routed_different_rate": 0.0526,
+        "recall": 0.6562,
+        "routed_different_rate": 0.1837,
         "routed_recall": 0.8438,
         "same": 32
       },
       "hi": {
-        "different": 29,
-        "f1": 0.8421,
+        "different": 33,
+        "f1": 0.7059,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 29,
-        "pairs": 51,
+        "hard_negatives": 33,
+        "pairs": 55,
         "precision": 1.0,
-        "recall": 0.7273,
-        "routed_different_rate": 0.0,
+        "recall": 0.5455,
+        "routed_different_rate": 0.0606,
         "routed_recall": 0.8636,
         "same": 22
       }
     },
     "by_split": {
       "dev": {
-        "different": 134,
-        "f1": 0.8626,
+        "different": 163,
+        "f1": 0.8491,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 134,
-        "pairs": 254,
+        "hard_negatives": 163,
+        "pairs": 285,
         "precision": 1.0,
-        "recall": 0.7583,
-        "routed_different_rate": 0.0746,
-        "routed_recall": 0.925,
-        "same": 120
+        "recall": 0.7377,
+        "routed_different_rate": 0.1534,
+        "routed_recall": 0.9262,
+        "same": 122
       },
       "test": {
-        "different": 136,
-        "f1": 0.8468,
+        "different": 159,
+        "f1": 0.8267,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 136,
-        "pairs": 264,
+        "hard_negatives": 159,
+        "pairs": 291,
         "precision": 1.0,
-        "recall": 0.7344,
-        "routed_different_rate": 0.0809,
-        "routed_recall": 0.9453,
-        "same": 128
+        "recall": 0.7045,
+        "routed_different_rate": 0.1384,
+        "routed_recall": 0.9318,
+        "same": 132
       }
     },
-    "different": 270,
+    "different": 322,
     "errors": [
+      {
+        "a": "PO#4471",
+        "b": "po 4471",
+        "id": "format-en-009",
+        "label": "same",
+        "reason": "identifiers differ: po# 4471 vs 4471",
+        "verdict": "different"
+      },
       {
         "a": "Dock 7",
         "b": "dock door #7",
         "id": "format-en-010",
         "label": "same",
         "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0915\u093e \u0938\u094d\u091f\u0949\u0915",
+        "b": "SKU-1001 \u0938\u094d\u091f\u0949\u0915",
+        "id": "alias-hi-242",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
       },
       {
@@ -623,6 +759,14 @@
         "id": "normalisation-en-246",
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "The Atlas project",
+        "b": "Atlas project",
+        "id": "normalisation-en-249",
+        "label": "same",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -726,7 +870,7 @@
         "b": "Batterie von Gabelstapler 4",
         "id": "normalisation-de-270",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -758,7 +902,15 @@
         "b": "montacargas 4 bater\u00eda",
         "id": "normalisation-es-278",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda S.A.",
+        "b": "Transportes Garc\u00eda",
+        "id": "normalisation-es-280",
+        "label": "same",
+        "reason": "one side names no identifier",
         "verdict": "possible"
       },
       {
@@ -782,7 +934,7 @@
         "b": "tienda 12 ventas",
         "id": "normalisation-es-285",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -834,9 +986,33 @@
         "verdict": "possible"
       },
       {
+        "a": "\u0938\u094d\u091f\u094b\u0930 12 \u0915\u0940 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "id": "normalisation-hi-295",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u0915\u0940 \u092c\u0948\u091f\u0930\u0940",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u092c\u0948\u091f\u0930\u0940",
+        "id": "normalisation-hi-296",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
         "a": "\u0936\u0930\u094d\u092e\u093e \u091c\u0940",
         "b": "\u0936\u0930\u094d\u092e\u093e",
         "id": "normalisation-hi-297",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0917\u094b\u0926\u093e\u092e 3 \u0915\u0947 \u092a\u0948\u0932\u0947\u091f",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3 \u092a\u0948\u0932\u0947\u091f",
+        "id": "normalisation-hi-298",
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
@@ -910,7 +1086,7 @@
         "b": "GFS",
         "id": "spelling-en-375",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -918,7 +1094,7 @@
         "b": "FPD",
         "id": "spelling-en-376",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -926,7 +1102,7 @@
         "b": "PCS",
         "id": "spelling-en-377",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -1054,7 +1230,7 @@
         "b": "orden de compra 4471",
         "id": "crosslingual-es-393",
         "label": "same",
-        "reason": "names differ: order purchase vs compra orden",
+        "reason": "names differ: order purchase vs compra de orden",
         "verdict": "different"
       },
       {
@@ -1062,7 +1238,7 @@
         "b": "Oktober Umsatz",
         "id": "crosslingual-de-394",
         "label": "same",
-        "reason": "names differ: sale vs umsatz",
+        "reason": "names differ: sale vs oktober umsatz",
         "verdict": "different"
       },
       {
@@ -1070,7 +1246,7 @@
         "b": "ventas de octubre",
         "id": "crosslingual-es-395",
         "label": "same",
-        "reason": "names differ: sale vs venta",
+        "reason": "names differ: sale vs de venta",
         "verdict": "different"
       },
       {
@@ -1104,20 +1280,28 @@
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
+      },
+      {
+        "a": "1,000 units order",
+        "b": "1000 units order",
+        "id": "number-en-497",
+        "label": "same",
+        "reason": "identifiers differ: 1,000pcs vs 1000pcs",
+        "verdict": "different"
       }
     ],
-    "f1": 0.8545,
+    "f1": 0.8375,
     "false_merge_rate": 0.0,
     "false_merges": 0,
     "hard_negative_false_merge_rate": 0.0,
     "hard_negative_false_merges": 0,
-    "hard_negatives": 270,
-    "pairs": 518,
+    "hard_negatives": 322,
+    "pairs": 576,
     "precision": 1.0,
-    "recall": 0.746,
-    "routed_different_rate": 0.0778,
-    "routed_recall": 0.9355,
-    "same": 248
+    "recall": 0.7205,
+    "routed_different_rate": 0.146,
+    "routed_recall": 0.9291,
+    "same": 254
   },
   "words+encoder": {
     "by_domain": {
@@ -1137,17 +1321,17 @@
         "same": 22
       },
       "mixed": {
-        "different": 6,
-        "f1": 0.6265,
+        "different": 55,
+        "f1": 0.5385,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 6,
-        "pairs": 63,
+        "hard_negatives": 55,
+        "pairs": 112,
         "precision": 1.0,
-        "recall": 0.4561,
-        "routed_different_rate": 1.0,
+        "recall": 0.3684,
+        "routed_different_rate": 0.5636,
         "routed_recall": 1.0,
         "same": 57
       },
@@ -1162,30 +1346,30 @@
         "pairs": 91,
         "precision": 1.0,
         "recall": 0.0,
-        "routed_different_rate": 0.2346,
+        "routed_different_rate": 0.2469,
         "routed_recall": 1.0,
         "same": 10
       },
       "retail": {
-        "different": 174,
-        "f1": 0.9365,
+        "different": 177,
+        "f1": 0.9286,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 174,
-        "pairs": 333,
+        "hard_negatives": 177,
+        "pairs": 342,
         "precision": 1.0,
-        "recall": 0.8805,
-        "routed_different_rate": 0.0115,
-        "routed_recall": 0.9497,
-        "same": 159
+        "recall": 0.8667,
+        "routed_different_rate": 0.0113,
+        "routed_recall": 0.9394,
+        "same": 165
       }
     },
     "by_kind": {
       "alias": {
         "different": 0,
-        "f1": 0.9903,
+        "f1": 0.9804,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
@@ -1193,10 +1377,40 @@
         "hard_negatives": 0,
         "pairs": 52,
         "precision": 1.0,
-        "recall": 0.9808,
+        "recall": 0.9615,
         "routed_different_rate": 0.0,
         "routed_recall": 1.0,
         "same": 52
+      },
+      "ambiguous_comma": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "article_name": {
+        "different": 6,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 6,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
       },
       "code": {
         "different": 22,
@@ -1228,9 +1442,24 @@
         "routed_recall": 0.5,
         "same": 16
       },
+      "direction": {
+        "different": 8,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 8,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.125,
+        "routed_recall": 0.0,
+        "same": 0
+      },
       "format": {
         "different": 0,
-        "f1": 0.9932,
+        "f1": 0.9863,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
@@ -1238,9 +1467,9 @@
         "hard_negatives": 0,
         "pairs": 74,
         "precision": 1.0,
-        "recall": 0.9865,
+        "recall": 0.973,
         "routed_different_rate": 0.0,
-        "routed_recall": 1.0,
+        "routed_recall": 0.9865,
         "same": 74
       },
       "general": {
@@ -1288,6 +1517,51 @@
         "routed_recall": 1.0,
         "same": 9
       },
+      "legal_code": {
+        "different": 15,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 15,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.9333,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "lower_code": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "month_name": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
       "names": {
         "different": 61,
         "f1": 1.0,
@@ -1299,39 +1573,39 @@
         "pairs": 61,
         "precision": 1.0,
         "recall": 1.0,
-        "routed_different_rate": 0.1639,
+        "routed_different_rate": 0.1803,
         "routed_recall": 0.0,
         "same": 0
       },
       "normalisation": {
         "different": 0,
-        "f1": 0.641,
+        "f1": 0.5714,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
         "hard_negatives": 0,
-        "pairs": 53,
+        "pairs": 55,
         "precision": 1.0,
-        "recall": 0.4717,
+        "recall": 0.4,
         "routed_different_rate": 0.0,
         "routed_recall": 1.0,
-        "same": 53
+        "same": 55
       },
       "number": {
         "different": 19,
-        "f1": 1.0,
+        "f1": 0.9231,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
         "hard_negatives": 19,
-        "pairs": 24,
+        "pairs": 26,
         "precision": 1.0,
-        "recall": 1.0,
+        "recall": 0.8571,
         "routed_different_rate": 0.0,
-        "routed_recall": 1.0,
-        "same": 5
+        "routed_recall": 0.8571,
+        "same": 7
       },
       "order": {
         "different": 13,
@@ -1393,6 +1667,36 @@
         "routed_recall": 1.0,
         "same": 10
       },
+      "symbol": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "tenant_vs_pack": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 2
+      },
       "title": {
         "different": 11,
         "f1": 1.0,
@@ -1426,122 +1730,138 @@
     },
     "by_lang": {
       "ar": {
-        "different": 28,
+        "different": 32,
         "f1": 0.7895,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 28,
-        "pairs": 51,
+        "hard_negatives": 32,
+        "pairs": 55,
         "precision": 1.0,
         "recall": 0.6522,
-        "routed_different_rate": 0.0714,
+        "routed_different_rate": 0.125,
         "routed_recall": 0.913,
         "same": 23
       },
       "de": {
-        "different": 38,
-        "f1": 0.8214,
+        "different": 49,
+        "f1": 0.8276,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 38,
-        "pairs": 71,
+        "hard_negatives": 49,
+        "pairs": 83,
         "precision": 1.0,
-        "recall": 0.697,
-        "routed_different_rate": 0.0789,
-        "routed_recall": 0.9091,
-        "same": 33
+        "recall": 0.7059,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.9118,
+        "same": 34
       },
       "en": {
-        "different": 137,
-        "f1": 0.8826,
+        "different": 159,
+        "f1": 0.874,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 137,
-        "pairs": 275,
+        "hard_negatives": 159,
+        "pairs": 302,
         "precision": 1.0,
-        "recall": 0.7899,
-        "routed_different_rate": 0.146,
-        "routed_recall": 1.0,
-        "same": 138
+        "recall": 0.7762,
+        "routed_different_rate": 0.1824,
+        "routed_recall": 0.986,
+        "same": 143
       },
       "es": {
-        "different": 38,
-        "f1": 0.8148,
+        "different": 49,
+        "f1": 0.7925,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 38,
-        "pairs": 70,
+        "hard_negatives": 49,
+        "pairs": 81,
         "precision": 1.0,
-        "recall": 0.6875,
-        "routed_different_rate": 0.0526,
+        "recall": 0.6562,
+        "routed_different_rate": 0.1837,
         "routed_recall": 0.9688,
         "same": 32
       },
       "hi": {
-        "different": 29,
-        "f1": 0.8421,
+        "different": 33,
+        "f1": 0.7059,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 29,
-        "pairs": 51,
+        "hard_negatives": 33,
+        "pairs": 55,
         "precision": 1.0,
-        "recall": 0.7273,
-        "routed_different_rate": 0.0,
+        "recall": 0.5455,
+        "routed_different_rate": 0.0606,
         "routed_recall": 0.9091,
         "same": 22
       }
     },
     "by_split": {
       "dev": {
-        "different": 134,
-        "f1": 0.8626,
+        "different": 163,
+        "f1": 0.8491,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 134,
-        "pairs": 254,
+        "hard_negatives": 163,
+        "pairs": 285,
         "precision": 1.0,
-        "recall": 0.7583,
-        "routed_different_rate": 0.0896,
-        "routed_recall": 0.975,
-        "same": 120
+        "recall": 0.7377,
+        "routed_different_rate": 0.1656,
+        "routed_recall": 0.9754,
+        "same": 122
       },
       "test": {
-        "different": 136,
-        "f1": 0.8468,
+        "different": 159,
+        "f1": 0.8267,
         "false_merge_rate": 0.0,
         "false_merges": 0,
         "hard_negative_false_merge_rate": 0.0,
         "hard_negative_false_merges": 0,
-        "hard_negatives": 136,
-        "pairs": 264,
+        "hard_negatives": 159,
+        "pairs": 291,
         "precision": 1.0,
-        "recall": 0.7344,
-        "routed_different_rate": 0.1103,
-        "routed_recall": 0.9609,
-        "same": 128
+        "recall": 0.7045,
+        "routed_different_rate": 0.1635,
+        "routed_recall": 0.947,
+        "same": 132
       }
     },
-    "dev": 0.975,
-    "different": 270,
+    "dev": 0.9754,
+    "different": 322,
     "errors": [
+      {
+        "a": "PO#4471",
+        "b": "po 4471",
+        "id": "format-en-009",
+        "label": "same",
+        "reason": "identifiers differ: po# 4471 vs 4471",
+        "verdict": "different"
+      },
       {
         "a": "Dock 7",
         "b": "dock door #7",
         "id": "format-en-010",
         "label": "same",
         "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0915\u093e \u0938\u094d\u091f\u0949\u0915",
+        "b": "SKU-1001 \u0938\u094d\u091f\u0949\u0915",
+        "id": "alias-hi-242",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
       },
       {
@@ -1558,6 +1878,14 @@
         "id": "normalisation-en-246",
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "The Atlas project",
+        "b": "Atlas project",
+        "id": "normalisation-en-249",
+        "label": "same",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -1661,7 +1989,7 @@
         "b": "Batterie von Gabelstapler 4",
         "id": "normalisation-de-270",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -1693,7 +2021,15 @@
         "b": "montacargas 4 bater\u00eda",
         "id": "normalisation-es-278",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda S.A.",
+        "b": "Transportes Garc\u00eda",
+        "id": "normalisation-es-280",
+        "label": "same",
+        "reason": "one side names no identifier",
         "verdict": "possible"
       },
       {
@@ -1717,7 +2053,7 @@
         "b": "tienda 12 ventas",
         "id": "normalisation-es-285",
         "label": "same",
-        "reason": "the same only once folded, reordered or without a title",
+        "reason": "one names more than the other",
         "verdict": "possible"
       },
       {
@@ -1769,9 +2105,33 @@
         "verdict": "possible"
       },
       {
+        "a": "\u0938\u094d\u091f\u094b\u0930 12 \u0915\u0940 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "id": "normalisation-hi-295",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u0915\u0940 \u092c\u0948\u091f\u0930\u0940",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u092c\u0948\u091f\u0930\u0940",
+        "id": "normalisation-hi-296",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
         "a": "\u0936\u0930\u094d\u092e\u093e \u091c\u0940",
         "b": "\u0936\u0930\u094d\u092e\u093e",
         "id": "normalisation-hi-297",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0917\u094b\u0926\u093e\u092e 3 \u0915\u0947 \u092a\u0948\u0932\u0947\u091f",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3 \u092a\u0948\u0932\u0947\u091f",
+        "id": "normalisation-hi-298",
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
@@ -1845,7 +2205,7 @@
         "b": "GFS",
         "id": "spelling-en-375",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -1853,7 +2213,7 @@
         "b": "FPD",
         "id": "spelling-en-376",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -1861,7 +2221,7 @@
         "b": "PCS",
         "id": "spelling-en-377",
         "label": "same",
-        "reason": "one names more than the other and no identifier",
+        "reason": "initialism",
         "verdict": "possible"
       },
       {
@@ -2039,20 +2399,28 @@
         "label": "same",
         "reason": "the same only once folded, reordered or without a title",
         "verdict": "possible"
+      },
+      {
+        "a": "1,000 units order",
+        "b": "1000 units order",
+        "id": "number-en-497",
+        "label": "same",
+        "reason": "identifiers differ: 1,000pcs vs 1000pcs",
+        "verdict": "different"
       }
     ],
-    "f1": 0.8545,
+    "f1": 0.8375,
     "false_merge_rate": 0.0,
     "false_merges": 0,
     "hard_negative_false_merge_rate": 0.0,
     "hard_negative_false_merges": 0,
-    "hard_negatives": 270,
-    "pairs": 518,
+    "hard_negatives": 322,
+    "pairs": 576,
     "precision": 1.0,
-    "recall": 0.746,
-    "routed_different_rate": 0.1,
-    "routed_recall": 0.9677,
-    "same": 248,
-    "test": 0.9609
+    "recall": 0.7205,
+    "routed_different_rate": 0.1646,
+    "routed_recall": 0.9606,
+    "same": 254,
+    "test": 0.947
   }
 }

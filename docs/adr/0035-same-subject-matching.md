@@ -121,9 +121,10 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
      named memory to the model. Measured on the ten LoCoMo conversations (5,882 turns, a
      counting stand-in for the model): 0.022 calls per turn against 0.004 before (128
      against 23), so no further floor was added.
-   * *caches* - only subjects of at most 64 characters are cached (4,096 of them): 20,000
-     sentence-length texts leave a worker's memory where it was (+0 MB RSS, against +278 MB
-     when sentences were cached too).
+   * *cost* - an identity's slots and topics are compared only when the adjudicator is on
+     (only its gate reads them). Subjects and topics up to 300 characters are parsed once
+     and cached, at most 2,048 of them; the scanner is not cached: 20,000 distinct
+     sentence-length texts add 19 MB RSS, bounded, against 278 MB when every scan was kept.
    Replacement semantics are unchanged: which predicates are single-valued, and when a value
    supersedes another, is ADR 0009's (and its successor's).
 5. **No new dependency.** The typo rule is a one-edit check written here. rapidfuzz was
@@ -144,17 +145,20 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
 
 ## Evidence
 
-- `tests/eval/golden/subject_pairs.json`: 518 labelled pairs (en 275, de 71, es 70, ar 51,
-  hi 51; retail, logistics, people, suppliers, software, finance, healthcare), 270 of them
+- `tests/eval/golden/subject_pairs.json`: 576 labelled pairs (en 302, de 83, es 81, ar 55,
+  hi 55; retail, logistics, people, suppliers, software, finance, healthcare), 322 of them
   hard negatives - identifiers, units, dates, names and suppliers sharing words, and the
-  classes a review found: short codes that look like connectives ("Store LA" / "Store AL"),
-  identifier order ("Dock 3 door 4" / "Dock 4 door 3"), titles ("Mrs Patel" / "Mr Patel"),
-  names a plural fold joins ("John Roberts" / "John Robert"), numbers as written ("1,5 kg" /
-  "15 kg", "5 €" / "5 $", "Level -1" / "Level 1") and short forms defined twice - in every
-  language they apply to; halved into dev and test by a hash of the pair.
-  → `benchmark/results/subject_gate.json` (words only, the eval gate) and
-  `benchmark/results/subject_matching.json` (`benchmark/subjects.py`: the encoder, rapidfuzz,
-  timings), both from commit a932d43.
+  classes two reviews found: short codes that look like connectives ("Store LA" / "Store AL")
+  or legal forms ("Sales SE" / "Sales"), identifier order ("Dock 3 door 4" / "Dock 4 door
+  3"), titles ("Mrs Patel" / "Mr Patel"), names a plural fold joins ("John Roberts" / "John
+  Robert"), numbers as written ("1,5 kg" / "15 kg", "5 €" / "5 $", "Level -1" / "Level 1",
+  "1,250" / "1250"), directions ("to" / "from"), months and articles inside names ("April
+  Jones", "El Salvador"), signs on codes ("C#" / "C++", "A+" / "A-"), lower-case codes
+  ("block a" / "block y"), a short form defined twice and a tenant's definition against a
+  pack's - in every language they apply to; halved into dev and test by a hash of the pair.
+  → `benchmark/results/subject_gate.json` (words only, the eval gate, from 86a1ced) and
+  `benchmark/results/subject_matching.json` (`benchmark/subjects.py`: the encoder,
+  rapidfuzz, timings, from b1aa2aa; the matcher's verdicts are the same at both).
 - `tests/unit/test_subjects.py`, `tests/integration/test_subject_matching.py` (including a
   person fact under a mixed-case id past the recency window).
 - Every suite (unit and SDK, contract, integration, security, e2e, agent, failure, eval) passes
@@ -164,26 +168,32 @@ different things; "DC 3" and "Distribution Centre 3" share almost nothing and ar
 
 ## Results
 
-| matcher (SAME = merge) | precision | recall | F1 | false merges (all / 270 hard negatives) | same / different pairs sent to the adjudicator |
+| matcher (SAME = merge) | precision | recall | F1 | false merges (all / 322 hard negatives) | same / different pairs sent to the adjudicator |
 |---|---|---|---|---|---|
-| exact subject strings (before) | 1.00 | 0.07 | 0.13 | 0 / 0 | n/a |
-| words only (every write) | 1.00 | 0.746 | 0.855 (dev 0.863, test 0.847) | 0 / 0 | 0.936 / 0.078 |
-| words + encoder (adjudicator on) | 1.00 | 0.746 | 0.855 | 0 / 0 | 0.968 (dev 0.975, test 0.961) / 0.100 |
+| exact subject strings (main) | 0.944 | 0.067 | 0.125 | 1 / 1 | n/a |
+| words only (every write) | 1.00 | 0.721 | 0.838 (dev 0.849, test 0.827) | 0 / 0 | 0.929 / 0.146 |
+| words + encoder (adjudicator on) | 1.00 | 0.721 | 0.838 | 0 / 0 | 0.961 (dev 0.975, test 0.947) / 0.165 |
 
-No false merge in any class: identifiers 0 of 92, names 0 of 61, short codes 0 of 22, numbers
-0 of 19, units 0 of 14, order 0 of 13, titles 0 of 11, plural names 0 of 9, general 0 of 9,
-cross-lingual 0 of 8, learned 0 of 6, partial 0 of 6. F1 by language (words only): en 0.88,
-hi 0.84, de 0.82, es 0.81, ar 0.79. Recall is lower than a looser matcher's on purpose: a
-match that needs a plural folded, a title dropped or the words reordered is POSSIBLE, so the
-service never merges it on its own; with the adjudicator on it is asked about. The rules were
-refined while reading errors on the whole set; only the encoder threshold was chosen on the
-dev half alone.
+Main's own comparison - equal lower-cased subject strings - merges one hard negative of this
+set; the matcher merges none. No false merge in any class: identifiers 0 of 92, names 0 of
+61, short codes 0 of 22, numbers 0 of 19, legal forms as codes 0 of 15, units 0 of 14, order
+0 of 13, titles 0 of 11, plural names 0 of 9, signs 0 of 9, general 0 of 9, cross-lingual 0
+of 8, directions 0 of 8, learned 0 of 6, partial 0 of 6, articles in names 0 of 6, months as
+names 0 of 4, ambiguous commas 0 of 4, lower-case codes 0 of 3, tenant against pack 0 of 3.
+F1 by language (words only): en 0.87, de 0.83, es 0.79, ar 0.79, hi 0.71. Recall is lower
+than a looser matcher's on purpose: a match that needs a plural folded, a title or connective
+dropped or the words reordered is POSSIBLE, so the service never merges it on its own; with
+the adjudicator on it is asked about. The rules were refined while reading errors on the
+whole set; only the encoder threshold was chosen on the dev half alone.
 
-rapidfuzz against the one-edit rule, on the 90 pairs whose words each side alone has: the
-one-edit rule routes 7 of 25 same-subject pairs and 1 of 65 different ones; ratio >= 85 routes
-7 and 2, >= 90 routes 4 and 1. It never does better, so it is not a dependency.
+rapidfuzz against the one-edit rule, on the 103 pairs whose words each side alone has: the
+one-edit rule routes 7 of 24 same-subject pairs and 5 of 79 different ones; ratio >= 85 routes
+7 and 4, >= 80 routes 8 and 6, >= 90 routes 4 and 3. It is no clear gain for a new
+dependency, so it is not one.
 
 Cost: one comparison p50 0.05 ms / p95 0.11 ms cold, 0.005 ms warm; consolidating a statement
-against 20 stored memories p50 0.24 ms / p95 0.32-0.35 ms against main's 0.08 / 0.14-0.15 ms,
-with identical decisions. The encoder runs only on the 80 of 5,180 pairs the words leave
-undecided, p50 5.2 ms / p95 6.5 ms each, and only with the model on.
+against 20 stored memories p50 0.18 ms / p95 0.28-0.29 ms against main's 0.08 / 0.12 ms,
+with identical decisions. Subjects and topics up to 300 characters are cached, at most 2,048
+(20,000 distinct sentence-length parses: +19 MB RSS, bounded). The encoder runs only on the
+83 of 5,760 pairs the words leave undecided, p50 5.0 ms / p95 8.7 ms each, and only with the
+model on. With the adjudicator on, LoCoMo writes ask it 0.022 times per turn (main: 0.004).
