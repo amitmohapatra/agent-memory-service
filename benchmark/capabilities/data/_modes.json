@@ -81,6 +81,30 @@
         "direct"
       ],
       "note": "One scenario per capability, one phrasing: a minute, to see the pipeline work."
+    },
+    "core": {
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ],
+      "enrich_seconds": 0,
+      "note": "The PR gate (make eval-capabilities-gate SET=core): every capability but scale, every language and the code-switched phrasings, every phrasing kind, every surface. Questions start once indexing is done (no wait for graph enrichment, which on a shared worker trails by hours); its own baseline (nollm/core)."
+    },
+    "scale": {
+      "capabilities": [
+        "scale"
+      ],
+      "enrich_seconds": 0,
+      "subset_of": "nollm",
+      "note": "Capability 7 alone, every language: run in the PR of a change that targets it, and in the nightly full run. Held to the full nollm baseline's scale cells; its latency is not compared."
     }
   }
 }

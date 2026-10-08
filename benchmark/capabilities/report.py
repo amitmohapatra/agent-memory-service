@@ -256,7 +256,8 @@ def build(
         "gate": "capability",
         "mode": meta.get("mode"),
         "dataset": {"sha256": dataset.sha256, **dataset.counts()},
-        "meta": dict(meta),
+        # the users and threads written stay in the raw records (cleanup reads them there)
+        "meta": {k: v for k, v in meta.items() if k != "written"},
         "summary": summary,
         "by_capability": by_capability,
         "cells": cells(records),

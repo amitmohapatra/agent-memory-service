@@ -217,7 +217,13 @@ def test_period_arithmetic() -> None:
 
 
 def _run(
-    acc: float, p95: float, *, trustworthy: bool = True, sha: str | None = None, load: float = 0.2
+    acc: float,
+    p95: float,
+    *,
+    trustworthy: bool = True,
+    sha: str | None = None,
+    load: float = 0.2,
+    sample: str | None = None,
 ) -> dict:
     records = [
         {
@@ -250,6 +256,7 @@ def _run(
         "mode": "nollm",
         "selection": {"languages": ["en"]},
         "host_load_during_asks": {"latency_trustworthy": trustworthy, "max_load_per_core": load},
+        "sample": sample,
     }
     out = build(DATASET, records, meta)
     if sha:
@@ -291,6 +298,26 @@ def test_the_gate_fails_on_any_drop_and_on_slower_context(tmp_path: Path) -> Non
     failed.write_text(json.dumps(broken))
     with pytest.raises(SystemExit, match="not a baseline"):
         gate.record([base, failed], tmp_path / "gate3.json")
+
+
+def test_gate_sets_core_has_its_own_baseline_and_scale_is_held_to_the_full_one(
+    tmp_path: Path,
+) -> None:
+    full, core = tmp_path / "nollm.json", tmp_path / "nollm_core.json"
+    full.write_text(json.dumps(_run(0.7, 100.0)))
+    core.write_text(json.dumps(_run(0.5, 40.0, sample="core")))
+    recorded = gate.record([full, core], tmp_path / "gate.json")
+    assert set(recorded["baselines"]) == {"nollm", "nollm/core"}
+    assert recorded["baselines"]["nollm/core"]["latency"]["context_p95_ms"] == 40.0
+    assert gate.check(_run(0.5, 42.0, sample="core"), recorded) == []
+    assert gate.check(_run(0.4, 40.0, sample="core"), recorded), "a core cell dropped"
+    # the scale set: the full baseline's matching cells, its own latency not compared
+    assert gate.check(_run(0.7, 900.0, sample="scale"), recorded) == []
+    assert gate.check(_run(0.6, 100.0, sample="scale"), recorded), "a scale cell dropped"
+    scale = tmp_path / "nollm_scale.json"
+    scale.write_text(json.dumps(_run(0.7, 100.0, sample="scale")))
+    with pytest.raises(SystemExit, match="gated against"):
+        gate.record([full, scale], tmp_path / "gate2.json")
 
 
 # --------------------------------------------------------------------------- harness mode
@@ -435,3 +462,30 @@ async def test_the_runner_drives_the_service_through_the_sdk(app, running) -> No
     ]
     assert recall and all(r["passed"] for r in recall), recall
     assert set(payload["by_capability"]) == caps
+    # the run leaves the tenant as it found it: every memory it wrote is forgotten and every
+    # thread deleted, through the service's API
+    cleanup = payload["meta"]["cleanup"]
+    assert cleanup["purged"] and cleanup["error_count"] == 0, cleanup
+    assert cleanup["memories_forgotten"] > 0 and cleanup["threads_deleted"] > 0
+    from sqlalchemy import text
+
+    async with app.state.container.database.engine.connect() as conn:
+        live = (
+            await conn.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM memories WHERE tenant_id = :t AND deleted_at IS NULL),"
+                    " (SELECT count(*) FROM threads WHERE tenant_id = :t AND deleted_at IS NULL)"
+                ),
+                {"t": "capeval-test"},
+            )
+        ).one()
+    assert tuple(live) == (0, 0), f"left behind: {live[0]} memories, {live[1]} threads"
+
+
+def test_a_run_purges_unless_kept_or_reused() -> None:
+    from benchmark.capabilities.cleanup import should_purge
+    from benchmark.capabilities.runner import parse
+
+    assert should_purge(parse(["--mode", "nollm"])[0])
+    assert not should_purge(parse(["--mode", "nollm", "--keep"])[0])
+    assert not should_purge(parse(["--mode", "nollm", "--reuse", "x.raw.json.gz"])[0])

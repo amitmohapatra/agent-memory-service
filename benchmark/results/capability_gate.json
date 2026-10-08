@@ -1010,14 +1010,14 @@
       },
       "git_commit": "a06c2c9b576ab8c93e964359d0169ca8067e50cd",
       "latency": {
-        "context_p50_ms": 37.07,
-        "context_p95_ms": 52.28,
-        "max_load_per_core": 0.9,
+        "context_p50_ms": 39.93,
+        "context_p95_ms": 53.51,
+        "max_load_per_core": 0.7,
         "max_rise": 0.1,
         "trustworthy": true
       },
       "macro_accuracy": 0.1085,
-      "repeat_runs": 2,
+      "repeat_runs": 3,
       "retail_track": 0.099,
       "run_date": "2026-10-08",
       "sample": null,
@@ -1042,7 +1042,8 @@
       "source": "benchmark/results/capabilities/nollm.json",
       "sources": [
         "benchmark/results/capabilities/nollm.json",
-        "benchmark/results/capabilities/nollm_repeat.json"
+        "benchmark/results/capabilities/nollm_repeat.json",
+        "benchmark/results/capabilities/nollm_latency.json"
       ]
     }
   },
@@ -1050,12 +1051,12 @@
   "gate": "capability",
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "a06c2c9b576ab8c93e964359d0169ca8067e50cd",
+    "git_commit": "da5a637b4916c872fa1315c2cfdaeed548bc8dae",
     "host_load": {
-      "load_per_core": 1.22,
-      "loadavg_15m": 2.81,
-      "loadavg_1m": 4.87,
-      "loadavg_5m": 4.02
+      "load_per_core": 0.52,
+      "loadavg_15m": 1.81,
+      "loadavg_1m": 2.08,
+      "loadavg_5m": 1.98
     },
     "llm": {
       "enabled": false,
@@ -1095,7 +1096,7 @@
     },
     "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
     "python": "3.13.14",
-    "timestamp": "2026-10-08T11:09:46.244929+00:00"
+    "timestamp": "2026-10-08T16:17:33.207847+00:00"
   },
   "rule": "every cell >= its recorded accuracy; context p95 <= recorded x (1 + max_rise)"
 }

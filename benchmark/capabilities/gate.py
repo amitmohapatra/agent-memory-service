@@ -52,6 +52,25 @@ def _cells(run: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def key_of(run: Mapping[str, Any]) -> str:
+    """The baseline a run is held to: its mode, or ``mode/set`` for a named gate set
+    (``nollm/core``). A mode's own sample (``llm`` in llm mode) is the mode's baseline."""
+    mode, sample = run.get("mode"), (run.get("meta") or {}).get("sample")
+    return str(mode) if sample in (None, mode) else f"{mode}/{sample}"
+
+
+def _subset_of(run: Mapping[str, Any]) -> str | None:
+    """A set gated against another baseline's matching cells (``"gate": "subset_of"`` in
+    ``_modes.json``): the scale set is held to the full run's scale cells."""
+    sample = (run.get("meta") or {}).get("sample")
+    if not sample:
+        return None
+    from benchmark.capabilities.dataset import load_json
+
+    spec = load_json("_modes.json")["samples"].get(sample) or {}
+    return spec.get("subset_of")
+
+
 def baseline_of(run: Mapping[str, Any], source: str) -> dict[str, Any]:
     lat = run["summary"]["latency_ms"]
     return {
@@ -123,8 +142,11 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
     baselines = dict(existing.get("baselines", {})) if existing.get("dataset_sha256") == sha else {}
     fresh: dict[str, dict[str, Any]] = {}
     for path, run in runs:
+        if _subset_of(run):
+            raise SystemExit(f"{path}: this set is gated against {_subset_of(run)!r}'s cells")
         b = baseline_of(run, str(path))
-        fresh[run["mode"]] = _merge(fresh[run["mode"]], b) if run["mode"] in fresh else b
+        key = key_of(run)
+        fresh[key] = _merge(fresh[key], b) if key in fresh else b
     baselines.update(fresh)
     from benchmark.capabilities.report import _provenance
 
@@ -145,11 +167,14 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
 def check(
     run: Mapping[str, Any], gate: Mapping[str, Any], *, allow_untrusted_latency: bool = False
 ) -> list[str]:
-    """Failures of ``run`` against the recorded baseline of its mode; empty is a pass."""
-    mode = run.get("mode")
-    base = (gate.get("baselines") or {}).get(mode)
+    """Failures of ``run`` against the recorded baseline of its mode (or gate set); empty is
+    a pass. A ``subset_of`` set is held to that baseline's cells it measured, and its latency
+    (a different mix of questions) is not compared."""
+    subset = _subset_of(run)
+    key = subset or key_of(run)
+    base = (gate.get("baselines") or {}).get(key)
     if base is None:
-        return [f"no recorded baseline for mode {mode!r}"]
+        return [f"no recorded baseline {key!r}"]
     failures: list[str] = []
     if run["dataset"]["sha256"] != gate.get("dataset_sha256"):
         return [
@@ -157,13 +182,19 @@ def check(
             f"({run['dataset']['sha256'][:12]} != {str(gate.get('dataset_sha256'))[:12]}): "
             "re-record the baseline in the same change"
         ]
-    if run["meta"].get("selection") != base.get("selection"):
+    if not subset and run["meta"].get("selection") != base.get("selection"):
         return [
             f"selection differs from the baseline's: {run['meta'].get('selection')} != {base.get('selection')}"
         ]
     cells = _cells(run)
+    if subset:
+        unknown = sorted(set(cells) - set(base["cells"]))
+        if unknown:
+            return [f"cells the {subset!r} baseline does not hold: {unknown[:5]}"]
     for key, want in sorted(base["cells"].items()):
         got = cells.get(key)
+        if got is None and subset:
+            continue
         if got is None:
             failures.append(f"{key}: not measured (baseline {want['accuracy']} over {want['n']})")
         elif got["accuracy"] is None or want["accuracy"] is None:
@@ -174,7 +205,7 @@ def check(
             )
     lat = run["summary"]["latency_ms"]
     p95, base_p95 = lat.get("context_p95"), base["latency"].get("context_p95_ms")
-    if p95 is None:
+    if p95 is None or subset:
         # no context was asked (harness mode scores answers): there is no latency to gate -
         # the answer's includes the model, which on a laptop is the CPU's main load itself
         pass

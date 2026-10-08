@@ -37,6 +37,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from benchmark.capabilities.cleanup import purge, should_purge
 from benchmark.capabilities.dataset import (
     ALL_LANGUAGES,
     Case,
@@ -134,6 +135,9 @@ class Settings:
     sample: str | None = None
     #: ask again what an earlier run (its ``.raw.json.gz``) wrote, without writing it again
     reuse: Path | None = None
+    #: leave the run's writes in the tenant (for a later ``--reuse``); by default the run
+    #: forgets them when it ends (``cleanup.purge``)
+    keep: bool = False
     #: how long to wait for graph enrichment and summaries once everything is indexed
     enrich_seconds: float = ENRICH_SECONDS
     out: Path | None = None
@@ -700,6 +704,8 @@ async def run(
     token, policy = await _tenant(settings, factory)
     client = factory(token)
     service = Service(client, settings.worker_metrics_url)
+    written: list[Written] = []
+    cleanup: dict[str, Any] = {"purged": False}
     try:
         version = await client.version()
         work = [
@@ -721,7 +727,7 @@ async def run(
 
         queues_at_start = await service.queue_depths()
         t_write = _now()
-        written = await asyncio.gather(*(_write(*x) for x in work))
+        written = list(await asyncio.gather(*(_write(*x) for x in work)))
         last_write = time.time()
         write_seconds = _now() - t_write
         print(
@@ -750,6 +756,11 @@ async def run(
             )
         ask_seconds = _now() - t_ask
     finally:
+        # a run leaves the service as it found it, a failed one too
+        if should_purge(settings) and written:
+            done = await purge(client, owned_by(written).items())
+            cleanup = {"purged": True, **done.as_dict()}
+            print(f"cleanup: {cleanup}", file=sys.stderr)
         await client.aclose()
         await _revoke(settings, factory, policy)
 
@@ -786,12 +797,24 @@ async def run(
         },
         "ask_seconds": round(ask_seconds, 1),
         "reused_writes_of": str(settings.reuse) if settings.reuse else None,
+        "cleanup": cleanup,
+        #: the users and threads written, so a kept run can be purged later
+        #: (``python -m benchmark.capabilities.cleanup <raw.json.gz>``)
+        "written": owned_by(written),
         "host_load_during_asks": load.summary(),
     }
     # the measurement itself, before anything that could fail summarising it
     if settings.out is not None:
         save_raw(records, meta, settings.out)
     return build(dataset, records, meta)
+
+
+def owned_by(written: Sequence[Written]) -> dict[str, list[str]]:
+    """User -> the threads the run wrote for it."""
+    out: dict[str, dict[str, None]] = {}
+    for w in written:
+        out.setdefault(w.user_id, {}).update(dict.fromkeys(w.threads))
+    return {user: list(threads) for user, threads in out.items()}
 
 
 def _pcts(values: Sequence[float]) -> dict[str, float | None]:
@@ -840,6 +863,9 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
     p.add_argument("--surfaces", default="context,search")
     p.add_argument("--timeout", type=float, default=120.0)
     p.add_argument("--reuse", default=None, help="ask again what this run's .raw.json.gz wrote")
+    p.add_argument(
+        "--keep", action="store_true", help="leave the writes in the tenant (for a later --reuse)"
+    )
     p.add_argument("--enrich-seconds", type=float, default=ENRICH_SECONDS)
     p.add_argument("--out", default=None, help="default benchmark/results/capabilities/<mode>.json")
     a = p.parse_args(argv)
@@ -875,21 +901,26 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         timeout=a.timeout,
         sample=a.sample,
         reuse=Path(a.reuse) if a.reuse else None,
-        enrich_seconds=a.enrich_seconds,
+        keep=a.keep,
+        enrich_seconds=float(sample.get("enrich_seconds", a.enrich_seconds)),
         out=Path(a.out) if a.out else None,
     )
     return settings, a
+
+
+def default_out(mode: str, sample: str | None) -> Path:
+    """``<mode>.json``, or ``<mode>_<set>.json`` for a named gate set (``nollm_core.json``)."""
+    name = mode if sample in (None, mode) else f"{mode}_{sample}"
+    return Path(f"benchmark/results/capabilities/{name}.json")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     from benchmark.capabilities.report import write
 
     settings, _ = parse(argv)
-    settings.out = settings.out or Path(f"benchmark/results/capabilities/{settings.mode}.json")
+    settings.out = settings.out or default_out(settings.mode, settings.sample)
     payload = asyncio.run(run(settings))
-    json_path, md_path = write(
-        payload, settings.out or Path(f"benchmark/results/capabilities/{settings.mode}.json")
-    )
+    json_path, md_path = write(payload, settings.out)
     print(f"wrote {json_path} and {md_path}")
     s = payload["summary"]
     print(

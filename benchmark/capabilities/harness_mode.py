@@ -26,6 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from benchmark.capabilities.cleanup import purge, should_purge
 from benchmark.capabilities.dataset import (
     Case,
     cases,
@@ -41,6 +42,7 @@ from benchmark.capabilities.runner import (
     _revoke,
     _tenant,
     default_factory,
+    owned_by,
     parse,
     settle,
     write_scenario,
@@ -164,6 +166,11 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
                         f"({r['latency_ms'] / 1000:.1f}s)",
                         file=sys.stderr,
                     )
+    cleanup: dict[str, Any] = {"purged": False}
+    if should_purge(settings):
+        done = await purge(client, owned_by(written).items())
+        cleanup = {"purged": True, **done.as_dict()}
+        print(f"cleanup: {cleanup}", file=sys.stderr)
     await client.aclose()
     await _revoke(settings, factory, policy)
 
@@ -184,6 +191,8 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
         "surfaces": ["answer"],
         "model_ready_seconds": round(model_wait, 1),
         "host_load_during_asks": load.summary(),
+        "cleanup": cleanup,
+        "written": owned_by(written),
         "answer_errors": sum(1 for r in records if r["reason"] == "error"),
         "ingestion": {
             "queues_at_start": queues_at_start,

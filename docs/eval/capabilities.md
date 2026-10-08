@@ -162,12 +162,91 @@ the scale specs and `_languages.json`) or another selection is refused - a datas
 re-records the baseline in the same change, where both numbers are reviewed. A threshold is
 never lowered to let a change through; an improvement is recorded by re-recording.
 
+### The gate runs on a store of its own
+
+`make eval-capabilities-isolated MODE=nollm SET=core` runs the eval against a memory service
+of its own (`benchmark/capabilities/isolated_stack.sh`). The stack is:
+
+- a PostgreSQL database (`capeval`);
+- a Qdrant instance on its own storage path, since the service has no collection-prefix
+  setting;
+- an in-memory OpenFGA;
+- a Redis database number;
+- a blob directory;
+- `memory-api` and `memory-worker` from this checkout, on their own ports, with no model
+  gateway.
+
+When the command ends, the stack is dropped, whether the run passed, failed or was
+interrupted. The script deletes the Qdrant collections through the API, stops the instance,
+removes its path, drops the database, flushes the Redis database and removes the blob
+directory. It records the disk before the stack starts and after it is gone; a gate run
+leaves nothing. Machine paths and ports are environment variables (`QDRANT_BIN`,
+`OPENFGA_BIN`, `CAPEVAL_DB`, `CAPEVAL_API_PORT`, ...). It waits for 5 GB of free memory
+before starting the two processes that load the encoders.
+
+The `llm` and `harness` modes need the model gateway, so they still run against a shared
+stack. There a run's own purge, below, is what cleans up.
+
+### A run leaves the service as it found it
+
+Every mode forgets what it wrote when it ends, a failed run too
+(`benchmark/capabilities/cleanup.py`). It goes through the service's own API, as a tenant
+administrator would:
+
+- every memory of each thread written is forgotten (`DELETE /v1/memories/{id}`);
+- every thread written is deleted (`DELETE /v1/threads/{id}`).
+
+The users and threads a run wrote are kept in its raw records (`meta.written`). The purge's
+counts are in `meta.cleanup`. `--keep` leaves the writes in place for a later `--reuse`, and
+a `--reuse` run never purges. A kept run is purged later with
+`python -m benchmark.capabilities.cleanup <run>.raw.json.gz`.
+
+The service has no tenant purge. Both deletes are soft: the vector index points go (an index
+job removes them, and Qdrant reclaims the space as it vacuums segments), but the PostgreSQL
+rows, and the graph entities and relations built from the writes, stay.
+
+What one full `nollm` run leaves behind on the live stack, without the purge (measured
+2026-10-08 from the eval tenants' share of each store):
+
+- Qdrant: about 70,000 memory points, about 1.3 GB.
+- PostgreSQL: about 350 MB. That is memories about 115 MB, graph relations about 165 MB,
+  graph entities about 35 MB, messages and observations about 25 MB, and read records about
+  12 MB.
+- The run's result files: about 0.6 MB.
+
+The purge returns the Qdrant share. The PostgreSQL share stays.
+
+The purge is slow. Forgets commit at about 45 a second, but each one queues its own
+`memory.index` job, and the worker clears those at about 9 a second. Freeing a full run's
+points therefore takes about 2 hours of worker time. The next run's readiness wait (the
+`embedding` queue) waits for it.
+
+### Two gate sets: the PR gate and the full run
+
+A full `nollm` run takes about two hours of a quiet machine. Most of that is capability 7:
+8,938 turns to write and extract, and an enrichment backlog to wait on. So a change is gated
+on a fast set, and the full set runs nightly:
+
+| Set | What it runs | Baseline | When |
+|---|---|---|---|
+| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once indexing is done, without waiting for graph enrichment | its own, `nollm/core` (cells and context p95), two runs merged | every PR that touches capability work |
+| `SET=scale` | capability 7 alone, every language | held to the full baseline's scale cells; its latency is not compared | the PR of a change that targets scale, and nightly |
+| `SET=full` (default) | everything | `nollm` | nightly, and before a baseline is re-recorded |
+
+`make eval-capabilities-isolated MODE=nollm SET=core` writes `nollm_core.json`, and
+`make eval-capabilities-gate MODE=nollm SET=core` checks it. A set's baseline is keyed
+`mode/set` in `capability_gate.json`. A mode's own sample, `llm` in llm mode or `harness` in
+harness mode, stays keyed by the mode. Sets are defined in `data/_modes.json`. They narrow
+only by capability, which keeps the dataset hash and every cell's definition unchanged.
+
 ```bash
 make eval-capabilities MODE=nollm                 # the full set, every language
 make eval-capabilities MODE=llm                   # sample llm, through the model policy
 make eval-capabilities MODE=harness               # sample harness, agent-harness + its model
 make eval-capabilities-scale                      # opt-in: the ~1M-token tenant (capability 7)
-make eval-capabilities-gate MODE=nollm            # fail on any drop against the baseline
+make eval-capabilities-isolated MODE=nollm SET=core  # the PR gate set (no scale), on a store of its own
+make eval-capabilities MODE=nollm SET=scale       # capability 7 alone, held to the full baseline
+make eval-capabilities-gate MODE=nollm SET=core   # fail on any drop against the baseline
 make eval-capabilities-baseline                   # record the measured runs as the thresholds
 make eval-capabilities-validate                   # every assertion satisfiable in every language
 ```
@@ -226,14 +305,24 @@ The table shows four things:
 
 | | nollm | llm sample | harness sample |
 |---|---|---|---|
-| context p50 / p95 | 37.07 / 52.28 ms | 33.77 / 280.62 ms | - |
+| context p50 / p95 | 37.07 / 52.28 ms; quiet re-measure 39.93 / 53.51 ms (gated) | 33.77 / 280.62 ms | - |
 | search p50 / p95 | 31.95 / 42.84 ms | 29.44 / 280.06 ms | - |
 | answer p50 / p95 | - | - | 5,566 / 10,702 ms (the CPU model; load 1.31 per core, set by the model itself: not baseline-grade, not gated) |
 | abstention: precision / recall / false refusal | 0.07 / 0.58 / 0.71 | 0.09 / 0.60 / 0.70 | 0.09 / 1.00 / 0.88 |
 | stale-value leak: context new / same / search | 0.00 / 0.001 / 0.59 | 0.00 / 0.00 / 0.63 | answer 0.00 |
 | ingestion | 8,938 turns, 10,948 jobs, 0 failed; written in 703 s; indexed 2,589 s after the last write; graph 11,541 queued at the questions | 284 turns, 383 jobs; indexed 1,832 s after; graph 3,958 queued | 1,427 turns, 1,711 jobs; indexed 1,899 s after; graph 2,499 at the start, 1,788 at the questions |
 
-The `nollm` latency was taken at a peak load of 0.9 per core, with a mean of 0.57 per core: trustworthy, but near the bar. A re-measure that re-asked the same writes was taken while the shared worker was working off LLM-assisted graph enrichment for other tenants. The CPU model used three of the four cores, and the re-measure gave context p50/p95 of 49.46/70.13 ms at 1.63 per core. That is +34 % on p95, from the service's own background enrichment. It was flagged and not recorded. A quiet re-measure replaces the latency in the gate when it is trustworthy. It re-asks the same writes with `--reuse`, started once the worker's queues are empty and the load is under 0.5 per core. The gate keeps the quietest trustworthy measurement.
+The quiet re-measure re-asked the same writes with `--reuse`, starting only once the
+worker's queues were empty and the load was under 0.5 per core. It gave context p50/p95 of
+39.93/53.51 ms and search p50/p95 of 33.93/42.59 ms, at a peak of 0.7 per core. That agrees
+with the first run's 37.07/52.28 ms, taken at 0.9 per core. The gate holds the quietest
+trustworthy measurement, **53.51 ms**, so a PR's full run may reach 58.86 ms. Its verdicts
+matched the first run's on 16,274 of 16,278 records, the same 4 same-session phrasings that
+differ between repeats.
+
+An earlier re-measure, taken while the shared worker enriched other tenants' graphs through
+the CPU model, gave 49.46/70.13 ms at 1.63 per core. It was flagged and not recorded (see
+the known gaps).
 
 Most failures have the same few causes:
 
@@ -244,6 +333,59 @@ Most failures have the same few causes:
 - **Corrections stay where they were made (`test_time_learning`, 0 in context).** The corrected value (`55 Nm`, `0.67`) lives in the thread where the user corrected it, and no later context carries it.
 - **Forgetting.** In a same session, the context keeps the removal and drops the replacement. For example, it carries "GEN-T1 has been removed" but not `UPS-4`.
 - **Scale is 0 on every surface.** The monthly records are multi-line, and extraction stores single-line memories rather than the records, so no period label (evidence) comes back. Writing the scale tenant made about 70,000 memories out of 8,938 turns. Graph enrichment then drains at about 30 jobs per minute per tenant and was still hours behind when the questions started. That backlog sits on the shared worker's `graph` queue. The eval records it and does not wait it out.
+
+## Known gaps
+
+These are what the baseline measured, recorded for the blocks that will close them. Each
+number is from the `nollm` full run unless the line names another.
+
+- **A new session sees nothing.** In every capability but abstention, nearly every
+  phrasing's context in a new thread is `false_abstain`: 448 to 504 phrasings per capability.
+  A memory taken from a conversation is THREAD-visible, so another thread of the same user
+  never sees it. Primary macro is 0.11; the same session reaches 0.34 and search 0.41.
+  **B1** (user visibility).
+- **Stale values and corrections.** Search returns the superseded turn unmarked beside the
+  new one: a stale-value leak rate of 0.59, which is 1,190 of 2,016 phrasings (0.63 in the
+  llm sample). `update_contradiction` search is 0.00 (477 `stale_leak`) and
+  `temporal_recency` search is 0.02. A correction stays in the thread where it was made:
+  `test_time_learning` is 0.00 in context, in both a new and the same session.
+  **B4 / P4**.
+- **The second hop is missing.** `multi_hop` same session is 0.02 (415 `missing_evidence`).
+  The context holds the first fact but not the one it leads to (the seal kit `SK-19` for
+  pump `R-1182`). **P4**.
+- **Abstention precision is 0.07.** The service says INSUFFICIENT mostly when the answer
+  was there: false refusal is 0.71. In the same session it says too little: abstention there
+  is 0.16 (425 `no_abstain`, with a near neighbour returned confidently). **P4** coverage
+  gate.
+- **Scale is 0 everywhere.**
+  - Monthly multi-line records are flattened into single-line memories, so no period label
+    (the evidence an aggregate answer needs) comes back: search is 504 of 504
+    `not_retrieved`.
+  - 8,938 turns became about 70,000 memories. Graph enrichment drains at about 30 jobs per
+    minute per tenant, and 11,541 jobs were still queued when the questions started.
+- **LLM mode: `query_expansion` times out on the read path. This is a latency regression.**
+  With the CPU Granite policy, context p95 is 280.62 ms in llm mode against 52.28 ms in
+  nollm, and search p95 is 280.06 ms. The read-time `query_expansion` call waits for its
+  budget and gives up. It adds about 250 ms to p95 and changes no verdict: on the llm
+  sample's 444 records, llm and nollm give identical verdicts. It is to be fixed before llm
+  mode is the default.
+- **LLM graph enrichment inflates read latency on a shared worker.** A `nollm` re-measure
+  that re-asked the same writes ran while the worker enriched other tenants' graphs through
+  the CPU model, which used three of the four cores. It measured context p50/p95 of
+  49.46/70.13 ms at 1.63 load per core: +34 % on p95. Background model work and the read
+  path share the host.
+
+- **No hard delete and no tenant purge: an erasure gap, and the disk grows.** The only
+  supported deletes are `DELETE /v1/memories/{id}` and `DELETE /v1/threads/{id}`, and both
+  are soft. A forgotten memory stays as a PostgreSQL row. The graph entities and relations
+  built from it are never removed: `graph_relations` (378 MB) and `graph_entities` (87 MB)
+  were the largest tables of the live database, and almost all of it was eval data. Nothing
+  can erase a tenant or a user. To be scheduled as its own block.
+  About 99 % of the live database's rows were eval data, roughly 820 MB, and no supported
+  call removes them.
+- **Forget frees the vector only when the worker runs.** The index point is removed by a
+  `memory.index` job. While the worker was down (it died when the disk filled), forgets
+  committed at once but every point stayed in Qdrant, still marked `current`.
 
 ## What it does not measure
 
