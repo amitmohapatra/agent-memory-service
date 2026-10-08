@@ -218,6 +218,27 @@ def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: dat
     target.updated_at = now
 
 
+async def _replace(
+    uow: UnitOfWork,
+    ctx: MemoryExecutionContext,
+    target: CanonicalMemory,
+    memory: CanonicalMemory,
+    *,
+    now: datetime,
+) -> set[str]:
+    """Store ``memory`` as the new version of ``target`` and close ``target``, with the turn
+    kept in the target's words: it is the same statement (ADR 0035), and left CURRENT it
+    keeps answering the value just replaced. The ids written."""
+    twins = await uow.memories.twins(ctx.tenant_id, target)
+    supersede(target, memory, now=now)
+    for twin in twins:
+        supersede(twin, memory.model_copy(), now=now)
+    await uow.memories.add(memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx))
+    for closed in (target, *twins):
+        await uow.memories.update(closed)
+    return {memory.memory_id, target.memory_id, *(t.memory_id for t in twins)}
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -551,12 +572,7 @@ class ObservationPipeline:
             case DedupDecision.SUPERSEDE | DedupDecision.UPDATE if target is not None:
                 memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 memory.reinforcement_count = 1
-                supersede(target, memory, now=now)
-                await uow.memories.add(
-                    memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
-                )
-                await uow.memories.update(target)
-                return {memory.memory_id, target.memory_id}
+                return await _replace(uow, ctx, target, memory, now=now)
             case DedupDecision.CONTRADICT if target is not None:
                 memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 memory.temporal = memory.temporal.model_copy(

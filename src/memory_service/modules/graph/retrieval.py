@@ -26,7 +26,12 @@ from memory_service.domain.ids import content_hash
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.service import GraphAnswer, GraphService
 from memory_service.modules.memory.native import parse_date
-from memory_service.modules.retrieval.engine import Candidate, in_hand, memory_candidate
+from memory_service.modules.retrieval.engine import (
+    Candidate,
+    in_hand,
+    memory_candidate,
+    not_in_hand,
+)
 from memory_service.modules.retrieval.router import RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import REGISTRY, stage_seconds
@@ -278,7 +283,10 @@ class GraphStage:
                 if len(memory_ids) >= self.max_expansion_memories:
                     break
             if memory_ids:
-                added = await self._expand_memories(ctx, memory_ids, visibility, as_of=as_of)
+                added = not_in_hand(
+                    await self._expand_memories(ctx, memory_ids, visibility, as_of=as_of),
+                    candidates,
+                )
                 first_fact = next(
                     (i for i, c in enumerate(candidates) if c.kind == "fact"), len(candidates)
                 )

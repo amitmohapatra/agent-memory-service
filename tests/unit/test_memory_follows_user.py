@@ -24,13 +24,20 @@ from memory_service.domain.enums import (
 from memory_service.domain.ids import content_hash
 from memory_service.domain.observation import Observation
 from memory_service.modules.memory.native import (
+    VERBATIM_MAX_PIECES,
     NativeMemoryIntelligence,
     default_visibility,
     said_by_user,
     verbatim_windows,
 )
 from memory_service.modules.memory.pipeline import build_memory
-from memory_service.modules.retrieval.engine import Candidate, _dedup, in_hand
+from memory_service.modules.retrieval.engine import (
+    Candidate,
+    _dedup,
+    in_hand,
+    memory_candidate,
+    not_in_hand,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -131,6 +138,9 @@ async def test_a_long_named_subject_is_a_fact_and_the_turn_is_kept(native) -> No
     [
         "The kids and I went to the beach yesterday and it was great.",
         "The new guy that we hired from Berlin last week is great.",
+        "Deployed the payment service to prod and the dashboard is green.",
+        "Yesterday John Smith sent the report and the deadline is Friday.",
+        "The report John Smith sent with his notes on Q3 is due Friday.",
     ],
 )
 async def test_a_clause_is_not_read_as_a_long_subject(native, text) -> None:
@@ -178,6 +188,23 @@ def test_a_long_turn_is_kept_whole_in_sentence_pieces() -> None:
     assert "".join("".join(verbatim_windows(long_one, 200)).split()) == "".join(long_one.split())
 
 
+async def test_a_long_noun_phrase_opened_by_a_possessive_is_still_a_fact(native) -> None:
+    text = "Our primary supplier for heavy-duty pallets is Uline."
+    fact, _turn = await _classified(native, _obs(text))
+    assert fact.category == "fact" and fact.object == "uline"
+
+
+async def test_a_pasted_corpus_keeps_a_bounded_number_of_pieces(native) -> None:
+    """A 2.1-million-character turn is not a statement to keep for good a thousand times
+    over: at most ``VERBATIM_MAX_PIECES`` pieces, the first ones, every one a slice of it."""
+    text = "Pallet 4471 was counted against the manifest in aisle seven today. " * 31_000
+    assert len(text) > 2_000_000
+    turns = [c for c in await _classified(native, _obs(text)) if c.category == "verbatim_turn"]
+    assert 1 < len(turns) == VERBATIM_MAX_PIECES
+    assert all(len(t.content) <= 2000 and t.content in text for t in turns)
+    assert text.startswith(turns[0].content)
+
+
 async def test_a_code_said_after_two_thousand_characters_is_kept(native) -> None:
     filler = "Pallet counts for aisle four were checked against the manifest. " * 40
     text = f"{filler}The new dock door code is 7731."
@@ -221,3 +248,55 @@ def test_a_collapsed_twin_counts_as_in_hand() -> None:
     fact = _hit("fact", "master lock code for the hazardous materials cage in warehouse 3", 0.9)
     kept = _dedup([fact, _hit("turn", "user:u1", 0.7)])
     assert in_hand(kept) == {"fact", "turn"}
+
+
+def test_a_turn_relayed_by_a_harness_and_its_fact_take_one_slot() -> None:
+    """Through a harness the turn names the user and the fact's writer is the harness agent
+    bound to that user: both are the user's words, one statement."""
+    fact = _hit("fact", "master lock code for the hazardous materials cage in warehouse 3", 0.9)
+    turn = _hit("turn", "user:u1", 0.7)
+    for hit in (fact, turn):
+        hit.payload["owner_principal"] = "agent:u1/harness"
+    [kept] = _dedup([fact, turn])
+    assert kept.record_id == "fact" and kept.payload["duplicates"] == ["turn"]
+    # another person's agent saying the same words from the same source is not this user
+    other = _hit("other", "user:u2", 0.6)
+    other.payload["owner_principal"] = "agent:u2/harness"
+    assert len(_dedup([fact, other])) == 2
+
+
+def test_an_expansion_does_not_add_the_copy_of_a_statement_in_hand() -> None:
+    """Graph evidence or a derived memory's sources can reach the fact when ranking kept
+    only the turn; the fact is the same statement and does not take a second slot."""
+    from memory_service.domain.enums import ScopeLevel
+    from memory_service.domain.evidence import EvidenceRef, EvidenceSource
+    from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
+
+    when = datetime(2026, 10, 6, 7, 40, tzinfo=UTC)
+    source = EvidenceRef(
+        source_type=EvidenceSource.MESSAGE, source_id="msg_1", message_id="msg_1", observed_at=when
+    )
+
+    def memory(category: str, subject: str, content: str = CODE) -> CanonicalMemory:
+        return CanonicalMemory(
+            tenant_id="acme",
+            scope=Scope(level=ScopeLevel.THREAD, tenant_id="acme", thread_id="t1"),
+            visibility=Visibility.USER,
+            owner_principal="agent:u1/harness",
+            lifetime=Lifetime.LONG_TERM,
+            memory_type=MemoryType.SEMANTIC if category == "fact" else MemoryType.OBSERVATION,
+            content=content,
+            normalized_hash=content_hash(content),
+            subject=subject,
+            temporal=TemporalState(observed_at=when),
+            evidence=[source],
+            system_metadata={"category": category},
+        )
+
+    turn = memory_candidate(memory("verbatim_turn", "user:u1"), retriever="fusion", score=0.9)
+    fact = memory_candidate(memory("fact", "cage code"), retriever="graph", score=0.4)
+    other = memory_candidate(
+        memory("fact", "dock door", "The dock door code is 7731."), retriever="graph", score=0.4
+    )
+    assert turn.payload["owner_principal"] == "agent:u1/harness"
+    assert not_in_hand([fact, other], [turn]) == [other]

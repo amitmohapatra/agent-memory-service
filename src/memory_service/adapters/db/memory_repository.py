@@ -362,19 +362,19 @@ class SqlMemoryRepository:
         ).first()
         return _to_domain(row) if row is not None else None
 
-    async def twins(self, tenant_id: str, memory: CanonicalMemory) -> list[CanonicalMemory]:
-        rows = (
-            await self.s.scalars(
-                select(MemoryRow).where(
-                    MemoryRow.tenant_id == tenant_id,
-                    MemoryRow.normalized_hash == memory.normalized_hash,
-                    MemoryRow.owner_principal == memory.owner_principal,
-                    MemoryRow.memory_id != memory.memory_id,
-                    MemoryRow.deleted_at.is_(None),
-                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
-                )
-            )
-        ).all()
+    async def twins(
+        self, tenant_id: str, memory: CanonicalMemory, *, current_only: bool = True
+    ) -> list[CanonicalMemory]:
+        conds = [
+            MemoryRow.tenant_id == tenant_id,
+            MemoryRow.normalized_hash == memory.normalized_hash,
+            MemoryRow.owner_principal == memory.owner_principal,
+            MemoryRow.memory_id != memory.memory_id,
+            MemoryRow.deleted_at.is_(None),
+        ]
+        if current_only:
+            conds.append(MemoryRow.temporal_status == TemporalStatus.CURRENT.value)
+        rows = (await self.s.scalars(select(MemoryRow).where(*conds))).all()
         sources = {(ev.source_type, ev.source_id) for ev in memory.evidence}
         return [
             twin

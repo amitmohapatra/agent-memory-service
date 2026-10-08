@@ -143,6 +143,8 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             "subject": memory.subject,
             "predicate": memory.predicate,
             "object": memory.object,
+            # who wrote it: what tells two copies of one statement from equal words of others
+            "owner_principal": memory.owner_principal,
             "observed_at": memory.temporal.observed_at.isoformat(),
             "valid_from": memory.temporal.valid_from.isoformat()
             if memory.temporal.valid_from
@@ -555,6 +557,7 @@ class RetrievalEngine:
                     expansion_edge="DERIVED_SOURCE",
                 )
             )
+        additions = not_in_hand(additions, candidates)
         diagnostics["derived_sources"] = len(additions)
         return [*candidates, *additions]
 
@@ -1182,24 +1185,41 @@ def _dedup_context(candidate: Candidate) -> tuple:
 _SPEAKER_SUBJECTS = ("user:", "agent:")
 
 
+def _speaker(principal: object) -> object:
+    """The person a principal speaks for: an agent bound to a user (``agent:<user>/<agent>``)
+    relays that user's words, so it is ``user:<user>``; anything else is itself."""
+    if isinstance(principal, str) and principal.startswith("agent:") and "/" in principal:
+        return "user:" + principal.removeprefix("agent:").split("/", 1)[0]
+    return principal
+
+
 def _twin_context(context: tuple) -> tuple:
-    """The provenance under which equal words are one statement: a topic subject counts as
-    the writer, as a scope placeholder already does in ``_dedup_context``.
+    """The provenance under which equal words are one statement: who said them (a topic
+    subject counts as the writer, as a scope placeholder does in ``_dedup_context``; an agent
+    bound to a user counts as that user), when, and from which source turns.
 
     A turn is kept verbatim beside what a rule read from it (``native.extract``), and a rule
     that parses the whole turn yields the same words twice: "The cage code is 8492" as a fact
-    about the cage and as the turn its speaker said. A subject like "cage code" names what was
-    said about, not a different speaker, so equal words from the same writer, instant and
-    source turns are one statement and take one slot. A speaker subject (``user:``,
-    ``agent:``) still keeps equal words apart, and containment (``COLLAPSE_SUBSUMED``) still
-    compares within the subject.
+    about the cage and as the turn its speaker said. Through an agent harness the turn names
+    the user (``user:<u>``) and the fact's writer is the harness (``agent:<u>/<h>``); both are
+    the user's words. Equal words from the same person, instant and source turns are one
+    statement and take one slot. A different person still keeps equal words apart, and
+    containment (``COLLAPSE_SUBSUMED``) still compares within the subject.
     """
     if len(context) != 5:  # not a memory with full provenance: its own context already
         return context
     kind, subject, owner, observed_at, sources = context
     if not (isinstance(subject, str) and subject.startswith(_SPEAKER_SUBJECTS)):
         subject = owner
-    return (kind, subject, owner, observed_at, sources)
+    return (kind, _speaker(subject), _speaker(owner), observed_at, sources)
+
+
+def _twin_key(candidate: Candidate) -> tuple | None:
+    """The key ``_dedup`` collapses exact twins on, or None for what has no text."""
+    digest = candidate.payload.get("text_hash") or (
+        content_hash(candidate.text) if candidate.text else None
+    )
+    return (_twin_context(_dedup_context(candidate)), digest) if digest else None
 
 
 def in_hand(candidates: Sequence[Candidate]) -> set[str]:
@@ -1209,6 +1229,23 @@ def in_hand(candidates: Sequence[Candidate]) -> set[str]:
     return {c.record_id for c in candidates} | {
         twin for c in candidates for twin in c.payload.get("duplicates") or ()
     }
+
+
+def not_in_hand(added: Sequence[Candidate], present: Sequence[Candidate]) -> list[Candidate]:
+    """``added`` without what ``present`` already says: an expansion (graph evidence, a
+    derived memory's sources) can reach a statement's other copy - the fact when ranking
+    kept the turn - and it would take a second slot. One pass over keys already computed,
+    instead of re-ranking the whole list."""
+    held = {key for c in present if (key := _twin_key(c)) is not None}
+    out: list[Candidate] = []
+    for candidate in added:
+        key = _twin_key(candidate)
+        if key is not None and key in held:
+            continue
+        if key is not None:
+            held.add(key)
+        out.append(candidate)
+    return out
 
 
 def _dedup(candidates: Sequence[Candidate]) -> list[Candidate]:

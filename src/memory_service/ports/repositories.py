@@ -362,10 +362,14 @@ class MemoryRepository(Protocol):
         """Indexed lookup of the unique live derived slot; caller serializes slot writes."""
         ...
 
-    async def twins(self, tenant_id: str, memory: CanonicalMemory) -> list[CanonicalMemory]:
-        """The live CURRENT memories that are the same statement as ``memory``: its words
-        (normalized hash), its owner and a source it was read from, in any scope - a turn kept
-        verbatim and a rule's reading of it in the same words. An indexed lookup (tenant,
+    async def twins(
+        self, tenant_id: str, memory: CanonicalMemory, *, current_only: bool = True
+    ) -> list[CanonicalMemory]:
+        """The live (not forgotten) memories that are the same statement as ``memory``: its
+        words (normalized hash), its owner and a source it was read from, in any scope - a turn
+        kept verbatim and a rule's reading of it in the same words. ``current_only`` keeps the
+        CURRENT ones (what a replacement closes); without it every status counts (what a
+        forget removes, so an archived copy cannot be restored). An indexed lookup (tenant,
         normalized hash)."""
         ...
 

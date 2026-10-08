@@ -205,6 +205,14 @@ def _sentence_spans(text: str, max_chars: int) -> list[tuple[int, int]]:
     return spans
 
 
+#: The most verbatim pieces one turn keeps (``verbatim_windows``): twelve thousand characters
+#: at the default piece size, which covers anything said in a conversation. A pasted corpus
+#: is not a statement - a 2.1-million-character turn would have made a thousand permanent
+#: memories in one job - and the message itself keeps the rest (the thread, its archive, and
+#: the document path for files). A constant, not a setting.
+VERBATIM_MAX_PIECES = 6
+
+
 def verbatim_windows(text: str, max_chars: int) -> list[str]:
     """``text`` in consecutive verbatim pieces of at most ``max_chars``, cut at sentence ends.
 
@@ -310,25 +318,38 @@ _FACT = re.compile(
     r"\s+(?P<pred>is|are|was|were|has|have|costs?|uses?|runs? on|belongs? to|owns?|reports? to|"
     r"is owned by|is located in|is due|starts?|ends?|expires?)\s+(?P<object>.+)$"
 )
-#: Words that make a long "subject" a clause rather than a noun phrase: a pronoun or a
-#: subordinating word means the text before the verb already says something ("The kids and I
-#: went to the beach and it was great", "The guy we hired last week is great").
+#: Words that make a long "subject" a clause rather than a noun phrase: a pronoun, a
+#: subordinating word or a conjunction means the text before the verb already says something
+#: ("The kids and I went to the beach and it was great", "The guy we hired last week is
+#: great", "Deployed the payment service to prod and the dashboard is green").
 _LONG_SUBJECT_STOP = frozenset(
     {
         *("i", "me", "we", "us", "you", "he", "him", "she", "her", "it", "they", "them"),
         *("who", "whom", "whose", "which", "that", "when", "where", "while", "because"),
-        *("if", "although", "though", "unless", "whether"),
+        *("if", "although", "though", "unless", "whether", "and", "but"),
     }
 )
+#: Possessives name an owner inside a clause ("...sent his report"), but the one that opens a
+#: phrase is its determiner: "Our primary supplier for heavy-duty pallets is Uline".
+_POSSESSIVES = frozenset({"my", "our", "your", "his", "her", "their"})
 _SHORT_SUBJECT_WORDS = 5
 
 
 def _noun_phrase(subject: str) -> bool:
     """Whether the fact rule's subject reads as a thing rather than a clause: any subject of up
-    to five words (the rule's reach before long subjects), a longer one with no pronoun or
-    subordinating word in it. A sentence it refuses falls through to the rules after it."""
+    to five words (the rule's reach before long subjects); a longer one only with no pronoun,
+    conjunction or subordinating word, no possessive after its first word, and nothing that
+    reads as an event (``_EVENT_HINT``: "Yesterday John Smith sent the report and..."). A
+    sentence it refuses falls through to the rules after it. English only, like the rule:
+    no other language has a fact pattern to guard."""
     words = subject.lower().split()
-    return len(words) <= _SHORT_SUBJECT_WORDS or not _LONG_SUBJECT_STOP.intersection(words)
+    if len(words) <= _SHORT_SUBJECT_WORDS:
+        return True
+    return not (
+        _LONG_SUBJECT_STOP.intersection(words)
+        or _POSSESSIVES.intersection(words[1:])
+        or _EVENT_HINT.search(subject)
+    )
 
 
 _EVENT_HINT = re.compile(
@@ -743,10 +764,10 @@ class NativeMemoryIntelligence:
         for an asserted fact or merged with one. Any other memory type here would quietly
         feed raw chatter into the consolidation machinery.
 
-        A turn longer than ``verbatim_max_chars`` is kept whole, in consecutive pieces cut at
-        sentence ends (``verbatim_windows``), each one a verbatim turn of the same message. It
-        used to be cut off there, and a code or an amount said after the cut survived only if
-        a rule happened to parse its sentence.
+        A turn longer than ``verbatim_max_chars`` is kept in consecutive pieces cut at
+        sentence ends (``verbatim_windows``), each one a verbatim turn of the same message, up
+        to ``VERBATIM_MAX_PIECES``. It used to be cut off at the first piece, and a code or an
+        amount said after the cut survived only if a rule happened to parse its sentence.
         """
         if not self.cfg.keep_verbatim_turns or observation.kind is not ObservationKind.MESSAGE:
             return []
@@ -782,7 +803,9 @@ class NativeMemoryIntelligence:
                 confidence=0.99,  # nobody is guessing what was said
                 category="verbatim_turn",
             )
-            for piece in verbatim_windows(text.strip(), self.cfg.verbatim_max_chars)
+            for piece in verbatim_windows(text.strip(), self.cfg.verbatim_max_chars)[
+                :VERBATIM_MAX_PIECES
+            ]
             if any(
                 not _QUESTION.search(s) and not ACKNOWLEDGEMENT.match(s)
                 for s in split_sentences(piece)

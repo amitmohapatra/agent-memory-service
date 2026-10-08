@@ -13,6 +13,7 @@ the audiences they had.
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import text
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
@@ -20,8 +21,10 @@ from memory_service.domain.enums import (
     MemoryType,
     MessageRole,
     ObservationKind,
+    TemporalStatus,
     Visibility,
 )
+from memory_service.domain.errors import NotFound
 from memory_service.domain.ids import new_id
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
@@ -261,3 +264,54 @@ async def test_forgetting_or_correcting_the_code_takes_every_copy(container, uow
     await container.tasks.drain()
     recalled = await _recalled(container, later, ASK)
     assert "5170" not in recalled and "8492" not in recalled
+
+
+async def test_a_value_replaced_in_conversation_closes_its_turn_too(container, uow_factory) -> None:
+    """ "The cage code is 9999 now instead of 8492" supersedes the fact read from "The cage
+    code is 8492." - and the turn kept in those words, which would otherwise keep answering
+    the old code beside the new one."""
+    chat = _chat()
+    await _say(container, uow_factory, chat, "The cage code is 8492.")
+    await _say(container, uow_factory, chat, "The cage code is 9999 now instead of 8492.")
+    old = [
+        m
+        for m in await _memories(uow_factory, chat, container, include_superseded=True)
+        if m.content == "The cage code is 8492."
+    ]
+    assert {m.system_metadata["category"] for m in old} == {"fact", "verbatim_turn"}
+    assert all(m.temporal.status is TemporalStatus.SUPERSEDED for m in old)
+    assert all(m.temporal.superseded_by for m in old)
+    current = {m.content for m in await _memories(uow_factory, chat, container)}
+    assert "The cage code is 8492." not in current
+    assert "The cage code is 9999 now instead of 8492." in current
+    found = await container.services["retrieval"].retrieve(
+        _chat(), "what is the cage code?", kinds=("memory",)
+    )
+    assert all(c.text != "The cage code is 8492." for c in found.candidates)
+
+
+async def test_forgetting_reaches_an_archived_copy(container, uow_factory) -> None:
+    """A copy that automatic forgetting archived is still the forgotten statement: it is
+    deleted with the other, so ``restore`` cannot bring the words back."""
+    chat = _chat()
+    await _say(container, uow_factory, chat, CODE)
+    said = {
+        m.system_metadata["category"]: m
+        for m in await _memories(uow_factory, chat, container)
+        if m.content == CODE
+    }
+    fact, turn = said["fact"], said["verbatim_turn"]
+    async with container.database.engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE memories SET temporal_status = 'ARCHIVED' WHERE memory_id = :id"),
+            {"id": fact.memory_id},
+        )
+    service = container.services["memory"]
+    async with uow_factory() as uow:
+        await service.forget(uow, chat, turn.memory_id)
+        await uow.commit()
+    await container.tasks.drain()
+    async with uow_factory() as uow:
+        assert await uow.memories.is_forgotten("acme", fact.memory_id)
+        with pytest.raises(NotFound):
+            await service.restore(uow, chat, fact.memory_id, container.services["forgetting"])
