@@ -133,7 +133,7 @@ flowchart LR
 | critical evidence-group recall | 1.00 | 1.00; evidence-complete rate 1.00 | `retrieval_gate.json` (eval run) |
 | KG fact recall / false facts / noise | 1.00 / 0 / 0 | 1.00 / 0 / 0 over 49 facts | `kg_gate.json` (eval run) |
 | false-merge rate | ≤ 0.01 | 0.00 over 35 pairs; dedup recall 1.00 | `memory_gate.json` (eval run) |
-| statement kinds: English macro-F1 (held-out half) / questions or requests stored as rules | ≥ 0.85 / 0 | 1.000 / 0 with the frozen head (0.983 lexicon alone); reported beside it, blind set 2 (sentences a language model wrote, never tuned on): macro-F1 0.829 against 0.095 for the extractor before it | `statement_kinds_gate.json` (eval run; ADR 0037) |
+| statement kinds: English macro-F1 (held-out half) / non-rules kept as lasting rules (every set) / blind set 2 macro-F1 and cells below the extractor before it (frozen head) | ≥ 0.85 / 0 / ≥ 0.75 and none | 0.983 / 0 / 0.829 (main 0.105) and none | `statement_kinds_gate.json` (eval run; ADR 0037) |
 | p95 latency (ms): chat accept / cached context / recall / context / file accept | 100 / 75 / 300 / 400 / 200 | 29.1 / 5.9 / 84.3 / 93.8 / 23.6, in-process ASGI | `performance.json` (2026-09-15) |
 | failure recovery | every scenario passes | worker kill, cache flush, blob outage, search rebuild, authz denial: pass | `failure_injection.json` (2026-09-15) |
 | all tests | 0 failed | 281 passed, 0 failed | `tests.json` (2026-09-15) |

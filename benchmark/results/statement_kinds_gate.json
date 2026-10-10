@@ -5,108 +5,113 @@
   "nli_provider": "nli-onnx-b867968c260265cf8b1f55da",
   "threshold": {
     "english_test_macro_f1": 0.85,
-    "rules_on_none": 0
+    "false_rules": 0,
+    "blind2_macro_f1": 0.75,
+    "blind2_below_baseline": 0
   },
   "dev": {
-    "n": 333,
-    "macro_f1": 0.9863,
-    "macro_f1_with_none": 0.9882,
-    "accuracy": 0.988,
+    "n": 361,
+    "macro_f1": 0.9513,
+    "macro_f1_with_none": 0.946,
+    "accuracy": 0.9446,
     "per_kind_f1": {
-      "FACT": 0.963,
+      "FACT": 0.9508,
       "RULE": 0.9792,
-      "CONDITIONAL_RULE": 0.9756,
+      "CONDITIONAL_RULE": 0.8696,
       "STATUS": 1.0,
-      "CORRECTION": 1.0,
-      "LIFECYCLE": 1.0,
-      "NONE": 1.0
+      "CORRECTION": 0.95,
+      "LIFECYCLE": 0.9583,
+      "NONE": 0.9143
     },
     "per_language": {
       "ar": {
-        "n": 47,
-        "macro_f1": 0.9512,
-        "macro_f1_with_none": 0.9582,
-        "accuracy": 0.9574,
+        "n": 52,
+        "macro_f1": 0.8948,
+        "macro_f1_with_none": 0.8873,
+        "accuracy": 0.8846,
         "per_kind_f1": {
-          "FACT": 0.875,
+          "FACT": 0.8889,
           "RULE": 0.9231,
-          "CONDITIONAL_RULE": 0.9091,
+          "CONDITIONAL_RULE": 0.7143,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
-          "LIFECYCLE": 1.0,
-          "NONE": 1.0
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.8421
         }
       },
       "de": {
-        "n": 47,
-        "macro_f1": 0.9737,
-        "macro_f1_with_none": 0.9775,
-        "accuracy": 0.9787,
+        "n": 52,
+        "macro_f1": 0.9255,
+        "macro_f1_with_none": 0.9218,
+        "accuracy": 0.9231,
         "per_kind_f1": {
-          "FACT": 0.9333,
+          "FACT": 0.9412,
           "RULE": 1.0,
-          "CONDITIONAL_RULE": 0.9091,
+          "CONDITIONAL_RULE": 0.7692,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
-          "LIFECYCLE": 1.0,
-          "NONE": 1.0
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.9
         }
       },
       "en": {
-        "n": 145,
-        "macro_f1": 0.9925,
-        "macro_f1_with_none": 0.9936,
-        "accuracy": 0.9931,
+        "n": 152,
+        "macro_f1": 0.9798,
+        "macro_f1_with_none": 0.9757,
+        "accuracy": 0.9737,
         "per_kind_f1": {
-          "FACT": 0.9796,
+          "FACT": 0.9804,
           "RULE": 0.9756,
-          "CONDITIONAL_RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9231,
           "STATUS": 1.0,
           "CORRECTION": 1.0,
           "LIFECYCLE": 1.0,
-          "NONE": 1.0
+          "NONE": 0.9508
         }
       },
       "es": {
-        "n": 47,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "n": 53,
+        "macro_f1": 0.9443,
+        "macro_f1_with_none": 0.9297,
+        "accuracy": 0.9245,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.9,
           "RULE": 1.0,
-          "CONDITIONAL_RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9231,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
-          "LIFECYCLE": 1.0,
-          "NONE": 1.0
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.8421
         }
       },
       "hi": {
-        "n": 47,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "n": 52,
+        "macro_f1": 0.9609,
+        "macro_f1_with_none": 0.9597,
+        "accuracy": 0.9615,
         "per_kind_f1": {
           "FACT": 1.0,
           "RULE": 1.0,
-          "CONDITIONAL_RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9231,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
-          "LIFECYCLE": 1.0,
-          "NONE": 1.0
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.9524
         }
       }
     },
-    "rules_on_none": 0,
+    "rules_on_none": 10,
+    "false_rules": 0,
+    "false_rule_items": [],
+    "false_rule_kinds": 10,
     "sources": {
-      "lexicon": 319,
-      "nli": 14
+      "lexicon": 331,
+      "nli": 30
     },
     "latency_ms_per_sentence": {
-      "p50": 0.122,
-      "p95": 0.505,
-      "mean": 2.267
+      "p50": 0.179,
+      "p95": 47.96,
+      "mean": 4.487
     },
     "errors": [
       {
@@ -126,6 +131,22 @@
         "text": "Runde Preise immer auf ,99, außer bei Abverkaufsware."
       },
       {
+        "id": "dev-de-029",
+        "lang": "de",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "Eigentlich haben wir den Vertrag mit Uline gestern gekündigt."
+      },
+      {
+        "id": "dev-es-029",
+        "lang": "es",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "En realidad, ayer rescindimos el contrato con Uline."
+      },
+      {
         "id": "dev-ar-013",
         "lang": "ar",
         "gold": "RULE",
@@ -140,183 +161,339 @@
         "predicted": "FACT",
         "source": "nli",
         "text": "قرّب الأسعار دائمًا إلى .99 باستثناء أصناف التصفية."
+      },
+      {
+        "id": "dev-ar-029",
+        "lang": "ar",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "في الواقع، أنهينا عقدنا مع Uline أمس."
+      },
+      {
+        "id": "dev-hi-029",
+        "lang": "hi",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "दरअसल, हमने कल Uline के साथ अपना कॉन्ट्रैक्ट खत्म कर दिया।"
+      },
+      {
+        "id": "dev-oneoff-en-01",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Please send the report when it's ready."
+      },
+      {
+        "id": "dev-oneoff-en-02",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Let me know when the shipment arrives."
+      },
+      {
+        "id": "dev-oneoff-en-03",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Tell me if the price drops."
+      },
+      {
+        "id": "dev-oneoff-de-03",
+        "lang": "de",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Gib mir Bescheid, wenn die Lieferung ankommt."
+      },
+      {
+        "id": "dev-oneoff-de-04",
+        "lang": "de",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Erinnere mich daran, wenn es Zeit zum Gehen ist."
+      },
+      {
+        "id": "dev-oneoff-es-02",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Llámame cuando leas esto."
+      },
+      {
+        "id": "dev-oneoff-es-03",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Avísame cuando llegue el pedido."
+      },
+      {
+        "id": "dev-oneoff-es-04",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Mándame el informe cuando esté listo."
+      },
+      {
+        "id": "dev-oneoff-ar-01",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أخبرني عندما تصل."
+      },
+      {
+        "id": "dev-oneoff-ar-03",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أرسل لي التقرير عندما يكون جاهزًا."
+      },
+      {
+        "id": "dev-oneoff-ar-04",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أخبرني إذا انخفض السعر."
+      },
+      {
+        "id": "dev-oneoff-hi-04",
+        "lang": "hi",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "lexicon",
+        "text": "अगर कीमत गिरे तो मुझे बताना।"
       }
     ]
   },
   "test": {
     "n": 154,
-    "macro_f1": 1.0,
-    "macro_f1_with_none": 1.0,
-    "accuracy": 1.0,
+    "macro_f1": 0.9616,
+    "macro_f1_with_none": 0.9671,
+    "accuracy": 0.9675,
     "per_kind_f1": {
-      "FACT": 1.0,
+      "FACT": 0.898,
       "RULE": 1.0,
       "CONDITIONAL_RULE": 1.0,
       "STATUS": 1.0,
-      "CORRECTION": 1.0,
+      "CORRECTION": 0.8718,
       "LIFECYCLE": 1.0,
       "NONE": 1.0
     },
     "per_language": {
       "ar": {
         "n": 21,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.8571,
           "RULE": 1.0,
           "CONDITIONAL_RULE": 1.0,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
+          "CORRECTION": 0.8,
           "LIFECYCLE": 1.0,
           "NONE": 1.0
         }
       },
       "de": {
         "n": 21,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.8571,
           "RULE": 1.0,
           "CONDITIONAL_RULE": 1.0,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
+          "CORRECTION": 0.8,
           "LIFECYCLE": 1.0,
           "NONE": 1.0
         }
       },
       "en": {
         "n": 70,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "macro_f1": 0.9833,
+        "macro_f1_with_none": 0.9857,
+        "accuracy": 0.9857,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.9524,
           "RULE": 1.0,
           "CONDITIONAL_RULE": 1.0,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
+          "CORRECTION": 0.9474,
           "LIFECYCLE": 1.0,
           "NONE": 1.0
         }
       },
       "es": {
         "n": 21,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.8571,
           "RULE": 1.0,
           "CONDITIONAL_RULE": 1.0,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
+          "CORRECTION": 0.8,
           "LIFECYCLE": 1.0,
           "NONE": 1.0
         }
       },
       "hi": {
         "n": 21,
-        "macro_f1": 1.0,
-        "macro_f1_with_none": 1.0,
-        "accuracy": 1.0,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
         "per_kind_f1": {
-          "FACT": 1.0,
+          "FACT": 0.8571,
           "RULE": 1.0,
           "CONDITIONAL_RULE": 1.0,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
+          "CORRECTION": 0.8,
           "LIFECYCLE": 1.0,
           "NONE": 1.0
         }
       }
     },
     "rules_on_none": 0,
+    "false_rules": 0,
+    "false_rule_items": [],
+    "false_rule_kinds": 0,
     "sources": {
-      "lexicon": 153,
-      "nli": 1
+      "lexicon": 148,
+      "nli": 6
     },
     "latency_ms_per_sentence": {
-      "p50": 0.116,
-      "p95": 0.28,
-      "mean": 0.428
+      "p50": 0.191,
+      "p95": 0.674,
+      "mean": 2.151
     },
-    "errors": []
+    "errors": [
+      {
+        "id": "test-en-041",
+        "lang": "en",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Actually, the meeting was moved to Thursday."
+      },
+      {
+        "id": "test-de-013",
+        "lang": "de",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Eigentlich wurde das Meeting auf Donnerstag verschoben."
+      },
+      {
+        "id": "test-es-013",
+        "lang": "es",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "En realidad, la reunión se cambió al jueves."
+      },
+      {
+        "id": "test-ar-013",
+        "lang": "ar",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "في الواقع، تم نقل الاجتماع إلى يوم الخميس."
+      },
+      {
+        "id": "test-hi-013",
+        "lang": "hi",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "दरअसल, मीटिंग गुरुवार को शिफ्ट कर दी गई है।"
+      }
+    ]
   },
   "blind": {
     "blind1": {
       "role": "dev",
       "noise_rate": 0.228,
       "labeller": {
-        "n": 235,
-        "macro_f1": 0.9041,
-        "macro_f1_with_none": 0.9043,
-        "accuracy": 0.9021,
+        "n": 254,
+        "macro_f1": 0.8935,
+        "macro_f1_with_none": 0.8943,
+        "accuracy": 0.8898,
         "per_kind_f1": {
-          "FACT": 0.806,
+          "FACT": 0.7907,
           "RULE": 0.8679,
-          "CONDITIONAL_RULE": 0.8696,
+          "CONDITIONAL_RULE": 0.8571,
           "STATUS": 0.9351,
-          "CORRECTION": 0.9796,
+          "CORRECTION": 0.9434,
           "LIFECYCLE": 0.9667,
-          "NONE": 0.9053
+          "NONE": 0.8991
         },
         "per_language": {
           "ar": {
-            "n": 35,
-            "macro_f1": 0.7581,
-            "macro_f1_with_none": 0.7851,
+            "n": 42,
+            "macro_f1": 0.7601,
+            "macro_f1_with_none": 0.7825,
             "accuracy": 0.8571,
             "per_kind_f1": {
-              "FACT": 0.8571,
+              "FACT": 0.8696,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.75,
               "STATUS": 0.9412,
               "CORRECTION": 1.0,
               "LIFECYCLE": 1.0,
-              "NONE": 0.9474
+              "NONE": 0.9167
             }
           },
           "de": {
-            "n": 51,
-            "macro_f1": 0.8656,
-            "macro_f1_with_none": 0.8562,
-            "accuracy": 0.8627,
+            "n": 55,
+            "macro_f1": 0.8358,
+            "macro_f1_with_none": 0.8367,
+            "accuracy": 0.8364,
             "per_kind_f1": {
-              "FACT": 0.8,
+              "FACT": 0.75,
               "RULE": 0.75,
-              "CONDITIONAL_RULE": 0.9412,
+              "CONDITIONAL_RULE": 0.8889,
               "STATUS": 0.7692,
-              "CORRECTION": 1.0,
+              "CORRECTION": 0.9231,
               "LIFECYCLE": 0.9333,
-              "NONE": 0.8
+              "NONE": 0.8421
             }
           },
           "en": {
-            "n": 61,
-            "macro_f1": 0.9762,
-            "macro_f1_with_none": 0.9617,
-            "accuracy": 0.9672,
+            "n": 65,
+            "macro_f1": 0.9712,
+            "macro_f1_with_none": 0.9669,
+            "accuracy": 0.9692,
             "per_kind_f1": {
-              "FACT": 0.8571,
+              "FACT": 0.875,
               "RULE": 1.0,
               "CONDITIONAL_RULE": 1.0,
               "STATUS": 1.0,
-              "CORRECTION": 1.0,
+              "CORRECTION": 0.9524,
               "LIFECYCLE": 1.0,
-              "NONE": 0.875
+              "NONE": 0.9412
             }
           },
           "es": {
-            "n": 53,
-            "macro_f1": 0.8891,
-            "macro_f1_with_none": 0.9049,
-            "accuracy": 0.9057,
+            "n": 54,
+            "macro_f1": 0.8928,
+            "macro_f1_with_none": 0.9081,
+            "accuracy": 0.9074,
             "per_kind_f1": {
-              "FACT": 0.7778,
+              "FACT": 0.8,
               "RULE": 0.9333,
               "CONDITIONAL_RULE": 0.7143,
               "STATUS": 1.0,
@@ -326,10 +503,10 @@
             }
           },
           "hi": {
-            "n": 35,
+            "n": 38,
             "macro_f1": 0.9223,
-            "macro_f1_with_none": 0.6551,
-            "accuracy": 0.8857,
+            "macro_f1_with_none": 0.6483,
+            "accuracy": 0.8421,
             "per_kind_f1": {
               "FACT": 0.0,
               "RULE": 0.0,
@@ -337,29 +514,24 @@
               "STATUS": 0.9231,
               "CORRECTION": 1.0,
               "LIFECYCLE": 0.9091,
-              "NONE": 0.8966
+              "NONE": 0.8485
             }
           }
         },
         "rules_on_none": 0,
+        "false_rules": 0,
+        "false_rule_items": [],
+        "false_rule_kinds": 4,
         "sources": {
-          "lexicon": 222,
-          "nli": 13
+          "lexicon": 236,
+          "nli": 18
         },
         "latency_ms_per_sentence": {
-          "p50": 0.146,
-          "p95": 45.189,
-          "mean": 3.164
+          "p50": 0.201,
+          "p95": 56.618,
+          "mean": 4.626
         },
         "errors": [
-          {
-            "id": "blind1-001",
-            "lang": "en",
-            "gold": "NONE",
-            "predicted": "FACT",
-            "source": "lexicon",
-            "text": "Room service for Ms. Johnson, please."
-          },
           {
             "id": "blind1-055",
             "lang": "en",
@@ -385,6 +557,14 @@
             "text": "Erinnere mich bitte, jeden Bestellvorgang nachzuprüfen, bevor ich abschließe."
           },
           {
+            "id": "blind1-078",
+            "lang": "de",
+            "gold": "FACT",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
+          },
+          {
             "id": "blind1-085",
             "lang": "de",
             "gold": "STATUS",
@@ -399,6 +579,14 @@
             "predicted": "LIFECYCLE",
             "source": "lexicon",
             "text": "Die Reparatur meiner Smartwatch ist abgeschlossen, sie funktioniert nun wieder."
+          },
+          {
+            "id": "blind1-093",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich sollten wir den Blutdruckmessung durchführen, bevor wir zur nächsten Ebene gehen."
           },
           {
             "id": "blind1-101",
@@ -505,6 +693,14 @@
             "text": "احتاج إلى إصلاح."
           },
           {
+            "id": "blind1-201",
+            "lang": "ar",
+            "gold": "FACT",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+          },
+          {
             "id": "blind1-238",
             "lang": "hi",
             "gold": "CONDITIONAL_RULE",
@@ -529,67 +725,91 @@
             "text": "मेरा स्वास्थ्य ऐप परीक्षण उपकरणों के लिए अब आपूर्ति समाप्त हो गया है।"
           },
           {
-            "id": "blind1-274",
+            "id": "blind1-252",
+            "lang": "en",
+            "gold": "FACT",
+            "predicted": "CORRECTION",
+            "source": "lexicon",
+            "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+          },
+          {
+            "id": "blind1-257",
             "lang": "hi",
             "gold": "NONE",
             "predicted": "FACT",
             "source": "lexicon",
-            "text": "एआई, कृपया अपनी सूची में नए आपूर्तिकर्ताओं को जोड़ें, कृपया"
+            "text": "Haan, aapne kharidaar ki tarah product display ki hai."
+          },
+          {
+            "id": "blind1-258",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Haan, aapne product stock update ke liye AI ki help le li."
+          },
+          {
+            "id": "blind1-259",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Haan, aapne product price check ke liye camera system use kiya."
           }
         ]
       },
       "baseline": {
-        "n": 235,
-        "macro_f1": 0.1296,
-        "macro_f1_with_none": 0.2326,
-        "accuracy": 0.3277,
+        "n": 254,
+        "macro_f1": 0.1378,
+        "macro_f1_with_none": 0.2305,
+        "accuracy": 0.3425,
         "per_kind_f1": {
-          "FACT": 0.2778,
+          "FACT": 0.3265,
           "RULE": 0.5,
           "CONDITIONAL_RULE": 0.0,
           "STATUS": 0.0,
           "CORRECTION": 0.0,
           "LIFECYCLE": 0.0,
-          "NONE": 0.8506
+          "NONE": 0.7872
         },
         "per_language": {
           "ar": {
-            "n": 35,
-            "macro_f1": 0.0625,
-            "macro_f1_with_none": 0.1964,
-            "accuracy": 0.4286,
+            "n": 42,
+            "macro_f1": 0.0833,
+            "macro_f1_with_none": 0.2,
+            "accuracy": 0.4762,
             "per_kind_f1": {
-              "FACT": 0.375,
+              "FACT": 0.5,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 1.0
+              "NONE": 0.9
             }
           },
           "de": {
-            "n": 51,
-            "macro_f1": 0.0503,
-            "macro_f1_with_none": 0.1656,
-            "accuracy": 0.2745,
+            "n": 55,
+            "macro_f1": 0.0565,
+            "macro_f1_with_none": 0.1556,
+            "accuracy": 0.2909,
             "per_kind_f1": {
-              "FACT": 0.3019,
+              "FACT": 0.339,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 0.8571
+              "NONE": 0.75
             }
           },
           "en": {
-            "n": 61,
-            "macro_f1": 0.1866,
-            "macro_f1_with_none": 0.271,
-            "accuracy": 0.377,
+            "n": 65,
+            "macro_f1": 0.1943,
+            "macro_f1_with_none": 0.2777,
+            "accuracy": 0.3846,
             "per_kind_f1": {
-              "FACT": 0.25,
+              "FACT": 0.2963,
               "RULE": 0.8696,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
@@ -599,12 +819,12 @@
             }
           },
           "es": {
-            "n": 53,
-            "macro_f1": 0.0606,
-            "macro_f1_with_none": 0.1948,
-            "accuracy": 0.3396,
+            "n": 54,
+            "macro_f1": 0.0643,
+            "macro_f1_with_none": 0.198,
+            "accuracy": 0.3519,
             "per_kind_f1": {
-              "FACT": 0.3636,
+              "FACT": 0.386,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
@@ -614,10 +834,10 @@
             }
           },
           "hi": {
-            "n": 35,
+            "n": 38,
             "macro_f1": 0.0,
-            "macro_f1_with_none": 0.0952,
-            "accuracy": 0.2,
+            "macro_f1_with_none": 0.0833,
+            "accuracy": 0.1842,
             "per_kind_f1": {
               "FACT": 0.0,
               "RULE": 0.0,
@@ -625,58 +845,59 @@
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 0.6667
+              "NONE": 0.5833
             }
           }
         }
-      }
+      },
+      "below_baseline": []
     },
     "blind2": {
       "role": "held_out",
       "noise_rate": 0.245,
       "labeller": {
-        "n": 222,
-        "macro_f1": 0.8288,
-        "macro_f1_with_none": 0.8497,
-        "accuracy": 0.8333,
+        "n": 241,
+        "macro_f1": 0.8292,
+        "macro_f1_with_none": 0.8409,
+        "accuracy": 0.8133,
         "per_kind_f1": {
-          "FACT": 0.5747,
-          "RULE": 0.8889,
+          "FACT": 0.6154,
+          "RULE": 0.9545,
           "CONDITIONAL_RULE": 0.8308,
-          "STATUS": 0.8387,
-          "CORRECTION": 0.9545,
-          "LIFECYCLE": 0.8852,
-          "NONE": 0.975
+          "STATUS": 0.8254,
+          "CORRECTION": 0.878,
+          "LIFECYCLE": 0.871,
+          "NONE": 0.9111
         },
         "per_language": {
           "ar": {
-            "n": 26,
-            "macro_f1": 0.6309,
-            "macro_f1_with_none": 0.6836,
-            "accuracy": 0.7308,
+            "n": 36,
+            "macro_f1": 0.6099,
+            "macro_f1_with_none": 0.6581,
+            "accuracy": 0.7222,
             "per_kind_f1": {
-              "FACT": 0.4615,
+              "FACT": 0.6429,
               "RULE": 0.8,
               "CONDITIONAL_RULE": 0.0,
-              "STATUS": 0.8571,
-              "CORRECTION": 1.0,
+              "STATUS": 0.75,
+              "CORRECTION": 0.8,
               "LIFECYCLE": 0.6667,
-              "NONE": 1.0
+              "NONE": 0.9474
             }
           },
           "de": {
-            "n": 49,
-            "macro_f1": 0.8698,
-            "macro_f1_with_none": 0.8884,
-            "accuracy": 0.898,
+            "n": 53,
+            "macro_f1": 0.8084,
+            "macro_f1_with_none": 0.8199,
+            "accuracy": 0.8113,
             "per_kind_f1": {
-              "FACT": 0.6154,
+              "FACT": 0.5,
               "RULE": 0.8889,
               "CONDITIONAL_RULE": 1.0,
               "STATUS": 0.7143,
-              "CORRECTION": 1.0,
-              "LIFECYCLE": 1.0,
-              "NONE": 1.0
+              "CORRECTION": 0.8,
+              "LIFECYCLE": 0.9474,
+              "NONE": 0.8889
             }
           },
           "en": {
@@ -695,45 +916,48 @@
             }
           },
           "es": {
-            "n": 52,
-            "macro_f1": 0.7095,
-            "macro_f1_with_none": 0.751,
-            "accuracy": 0.7308,
+            "n": 56,
+            "macro_f1": 0.7865,
+            "macro_f1_with_none": 0.8011,
+            "accuracy": 0.7679,
             "per_kind_f1": {
-              "FACT": 0.5,
-              "RULE": 0.6667,
+              "FACT": 0.6286,
+              "RULE": 1.0,
               "CONDITIONAL_RULE": 0.5,
               "STATUS": 0.9333,
               "CORRECTION": 0.8,
               "LIFECYCLE": 0.8571,
-              "NONE": 1.0
+              "NONE": 0.8889
             }
           },
           "hi": {
-            "n": 41,
-            "macro_f1": 0.7895,
-            "macro_f1_with_none": 0.8037,
-            "accuracy": 0.7805,
+            "n": 42,
+            "macro_f1": 0.7852,
+            "macro_f1_with_none": 0.7933,
+            "accuracy": 0.7619,
             "per_kind_f1": {
-              "FACT": 0.4706,
+              "FACT": 0.4444,
               "RULE": 1.0,
               "CONDITIONAL_RULE": 1.0,
               "STATUS": 0.6667,
               "CORRECTION": 1.0,
               "LIFECYCLE": 0.6,
-              "NONE": 0.8889
+              "NONE": 0.8421
             }
           }
         },
         "rules_on_none": 0,
+        "false_rules": 0,
+        "false_rule_items": [],
+        "false_rule_kinds": 0,
         "sources": {
-          "lexicon": 202,
-          "nli": 20
+          "lexicon": 218,
+          "nli": 23
         },
         "latency_ms_per_sentence": {
-          "p50": 0.161,
-          "p95": 48.902,
-          "mean": 4.937
+          "p50": 0.215,
+          "p95": 52.766,
+          "mean": 5.544
         },
         "errors": [
           {
@@ -761,12 +985,28 @@
             "text": "Der Lagerbestand an Lebensmitteln im Magazin hat sich auf 15.000 kg reduziert."
           },
           {
+            "id": "blind2-060",
+            "lang": "de",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
+          },
+          {
             "id": "blind2-064",
             "lang": "de",
             "gold": "RULE",
             "predicted": "FACT",
             "source": "lexicon",
             "text": "Vergessen Sie nie, den Kunden über die Reparaturstatus zu informieren"
+          },
+          {
+            "id": "blind2-065",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
           },
           {
             "id": "blind2-082",
@@ -793,36 +1033,36 @@
             "text": "Die Führungsmaschine arbeitet jetzt einwandfrei."
           },
           {
+            "id": "blind2-087",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich meine ich..."
+          },
+          {
+            "id": "blind2-091",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich müssen Sie Ihre Rezeptur vor dem Zahnarzt abgeben."
+          },
+          {
+            "id": "blind2-092",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
+          },
+          {
             "id": "blind2-117",
             "lang": "es",
             "gold": "FACT",
             "predicted": "CORRECTION",
             "source": "nli",
             "text": "La máquina de soldadura ha generado un error de 2% en la tasa de soldadura."
-          },
-          {
-            "id": "blind2-118",
-            "lang": "es",
-            "gold": "RULE",
-            "predicted": "FACT",
-            "source": "lexicon",
-            "text": "Siempre que solicite información financiera, por favor mencione tu nombre completo."
-          },
-          {
-            "id": "blind2-120",
-            "lang": "es",
-            "gold": "FACT",
-            "predicted": "RULE",
-            "source": "lexicon",
-            "text": "Siempre consultaré con el banco antes de tomar decisiones financieras importantes."
-          },
-          {
-            "id": "blind2-121",
-            "lang": "es",
-            "gold": "FACT",
-            "predicted": "RULE",
-            "source": "nli",
-            "text": "A partir de ahora, siempre validaré tus datos personales antes de proceder."
           },
           {
             "id": "blind2-127",
@@ -881,11 +1121,27 @@
             "text": "El sistema de rastreo de envídos está funcionando nuevamente."
           },
           {
+            "id": "blind2-143",
+            "lang": "es",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
+          },
+          {
+            "id": "blind2-147",
+            "lang": "es",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Realmente, debo ver el estado actual de la entrega 12345."
+          },
+          {
             "id": "blind2-148",
             "lang": "es",
             "gold": "CORRECTION",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "De hecho, la ruta más rápida para llegar al puerto es a través del puente 901."
           },
           {
@@ -945,6 +1201,30 @@
             "text": "لا يزال معدات التدريس الإلكترونية مؤقتًا محدودة في الغرفة التعليمية."
           },
           {
+            "id": "blind2-196",
+            "lang": "ar",
+            "gold": "FACT",
+            "predicted": "STATUS",
+            "source": "lexicon",
+            "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
+          },
+          {
+            "id": "blind2-203",
+            "lang": "ar",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "في الواقع، تحتاج إلى تصليح الأشبات الأمامية."
+          },
+          {
+            "id": "blind2-206",
+            "lang": "ar",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
+          },
+          {
             "id": "blind2-210",
             "lang": "ar",
             "gold": "LIFECYCLE",
@@ -993,6 +1273,14 @@
             "text": "ATM मशीन अप्रत्याशित रूप से बंद है"
           },
           {
+            "id": "blind2-261",
+            "lang": "hi",
+            "gold": "FACT",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
+          },
+          {
             "id": "blind2-263",
             "lang": "hi",
             "gold": "LIFECYCLE",
@@ -1035,48 +1323,48 @@
         ]
       },
       "baseline": {
-        "n": 222,
-        "macro_f1": 0.0955,
-        "macro_f1_with_none": 0.2137,
-        "accuracy": 0.3153,
+        "n": 241,
+        "macro_f1": 0.1048,
+        "macro_f1_with_none": 0.2108,
+        "accuracy": 0.3361,
         "per_kind_f1": {
-          "FACT": 0.2871,
+          "FACT": 0.3431,
           "RULE": 0.2857,
           "CONDITIONAL_RULE": 0.0,
           "STATUS": 0.0,
           "CORRECTION": 0.0,
           "LIFECYCLE": 0.0,
-          "NONE": 0.9231
+          "NONE": 0.8471
         },
         "per_language": {
           "ar": {
-            "n": 26,
-            "macro_f1": 0.0455,
-            "macro_f1_with_none": 0.1818,
-            "accuracy": 0.3846,
+            "n": 36,
+            "macro_f1": 0.0855,
+            "macro_f1_with_none": 0.1909,
+            "accuracy": 0.4722,
             "per_kind_f1": {
-              "FACT": 0.2727,
+              "FACT": 0.5128,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 1.0
+              "NONE": 0.8235
             }
           },
           "de": {
-            "n": 49,
-            "macro_f1": 0.0362,
-            "macro_f1_with_none": 0.1739,
-            "accuracy": 0.2653,
+            "n": 53,
+            "macro_f1": 0.0392,
+            "macro_f1_with_none": 0.1606,
+            "accuracy": 0.2642,
             "per_kind_f1": {
-              "FACT": 0.2174,
+              "FACT": 0.2353,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 1.0
+              "NONE": 0.8889
             }
           },
           "en": {
@@ -1095,27 +1383,27 @@
             }
           },
           "es": {
-            "n": 52,
-            "macro_f1": 0.0617,
-            "macro_f1_with_none": 0.1958,
-            "accuracy": 0.3462,
+            "n": 56,
+            "macro_f1": 0.0667,
+            "macro_f1_with_none": 0.1841,
+            "accuracy": 0.3571,
             "per_kind_f1": {
-              "FACT": 0.3704,
+              "FACT": 0.4,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
               "CORRECTION": 0.0,
               "LIFECYCLE": 0.0,
-              "NONE": 1.0
+              "NONE": 0.8889
             }
           },
           "hi": {
-            "n": 41,
-            "macro_f1": 0.0407,
-            "macro_f1_with_none": 0.1369,
-            "accuracy": 0.2439,
+            "n": 42,
+            "macro_f1": 0.0465,
+            "macro_f1_with_none": 0.1419,
+            "accuracy": 0.2619,
             "per_kind_f1": {
-              "FACT": 0.2439,
+              "FACT": 0.2791,
               "RULE": 0.0,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.0,
@@ -1125,20 +1413,21 @@
             }
           }
         }
-      }
+      },
+      "below_baseline": []
     }
   },
   "provenance": {
-    "timestamp": "2026-10-08T16:59:45.980472+00:00",
-    "git_commit": "073efa05aceb5aee7b829a5d8240e6bd2ac7a59c",
+    "timestamp": "2026-10-10T23:02:16.566924+00:00",
+    "git_commit": "95e50728fdfedaad8549911e9ff23274ed2d825f",
     "host_load": {
-      "loadavg_1m": 1.88,
-      "loadavg_5m": 2.16,
-      "loadavg_15m": 2.44,
-      "load_per_core": 0.47
+      "loadavg_1m": 1.83,
+      "loadavg_5m": 1.93,
+      "loadavg_15m": 1.62,
+      "load_per_core": 0.46
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,

@@ -18,9 +18,13 @@ each entry says which one moved. Decisions behind each change are in the
   the packs are unsure of, none for one they settle), and to the tenant's model only when the
   head is unsure and only if the head confirms it. Retrieval is unchanged
   ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0037). No migration.
-  Measured on sentences a language model wrote to order and no one tuned against
-  (`tests/eval/golden/statement_kinds_blind.json`, blind set 2): macro-F1 0.829 over the six
-  kinds, against 0.095 for the extractor before it, better in every kind and every language.
+  Only a rule that says it is for every time (a standing word, a recurring trigger, a
+  universal obligation) is kept as a lasting rule; any other conditional instruction ("Tell me
+  if the price drops") keeps its kind as metadata and is stored as before. A failing NLI head
+  keeps the lexicon's labels (`memory_statement_labeller_fallback_total`). Measured on
+  sentences a local language model wrote to order (`tests/eval/golden/statement_kinds_blind.json`,
+  blind set 2): macro-F1 0.829 over the six kinds against 0.105 for the extractor before it,
+  below it in no kind, language or cell, and no non-rule kept as a lasting rule.
 - Learned skills: an agent learns from all of its users (its own tool records, whichever user it
   ran for, under one audience) and is offered what it learned in its context on its own -
   "Learned skills for this task", in full, matched to the task; nothing is published or
