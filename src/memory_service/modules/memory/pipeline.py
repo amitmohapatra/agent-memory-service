@@ -228,7 +228,7 @@ async def _replace(
     now: datetime,
 ) -> set[str]:
     """Store ``memory`` as the new version of ``target`` and close ``target``, with the turn
-    kept in the target's words: it is the same statement (ADR 0035), and left CURRENT it
+    kept in the target's words: it is the same statement (ADR 0036), and left CURRENT it
     keeps answering the value just replaced. The ids written."""
     twins = await uow.memories.twins(ctx.tenant_id, target)
     supersede(target, memory, now=now)

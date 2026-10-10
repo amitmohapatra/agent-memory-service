@@ -58,6 +58,9 @@ made such a user's `TASK` or `EPISODIC` statement the agent's `PRIVATE` note.
    words back), `update` (supersede), an automatic supersession in the pipeline, and a
    feedback retraction or correction (the CURRENT copies) act on both
    (`MemoryRepository.twins`: same words, owner and source, an indexed lookup).
+   Consolidation reads the most recent readings and the most recent turns as two windows
+   (`MemoryRepository.candidates`), so the twins do not halve the readings a new one is
+   compared with, and the turns stay at hand for the definitions they carry (ADR 0035).
 4. **Long turns are kept in pieces, up to a bound.** A turn over `verbatim_max_chars` is stored
    as consecutive verbatim pieces cut at sentence ends (`verbatim_windows`), not truncated
    after the first; the restatement (ADR 0027) is carried by the first piece. At most

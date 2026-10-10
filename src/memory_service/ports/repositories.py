@@ -393,7 +393,10 @@ class MemoryRepository(Protocol):
     ) -> list[CanonicalMemory]:
         """Existing CURRENT memories that could be duplicates of a new candidate: same scope
         and (same hash OR a subject stored as one of ``subjects`` - the spellings the
-        subject matcher allows - OR most recent)."""
+        subject matcher allows - OR among the ``limit`` most recent readings, OR among the
+        ``limit`` most recent verbatim turns). The two recent windows are apart because a
+        statement's turn is kept beside its reading (ADR 0036): one window over both held half
+        as many readings."""
         ...
 
     async def about_user(

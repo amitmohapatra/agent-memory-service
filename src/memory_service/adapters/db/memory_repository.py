@@ -414,20 +414,25 @@ class SqlMemoryRepository:
                     )
                 ).all()
             )
-        recent = list(
-            (
+        # The most recent of each kind: a statement's turn is kept beside its reading (ADR
+        # 0036), so one window over both held half as many readings as before, and a turn
+        # still belongs in it - the memories at hand are what a tenant's own definitions
+        # ("the cross-dock facility (CDF)") are learned from.
+        turn = MemoryRow.system_metadata["category"].astext == "verbatim_turn"
+        recent: list[MemoryRow] = []
+        for kind in (turn.is_(False) | turn.is_(None), turn.is_(True)):
+            recent += (
                 await self.s.scalars(
                     select(MemoryRow)
-                    .where(*conds)
+                    .where(*conds, kind)
                     .order_by(MemoryRow.updated_at.desc())
                     .limit(limit)
                 )
             ).all()
-        )
         seen: dict[str, MemoryRow] = {}
         for r in exact + recent:
             seen.setdefault(r.memory_id, r)
-        return [_to_domain(r) for r in list(seen.values())[: max(limit, len(exact))]]
+        return [_to_domain(r) for r in seen.values()]
 
     async def about_user(
         self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int
