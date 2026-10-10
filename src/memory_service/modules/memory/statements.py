@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
@@ -41,7 +42,11 @@ from memory_service.config.constants import STATEMENT_LABELLER, StatementLabelle
 from memory_service.domain.enums import StatementKind
 from memory_service.domain.language import ENGLISH, detect_language, english_evidence
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.observability.logging import get_logger
+from memory_service.observability.metrics import statement_labeller_fallback_total
 from memory_service.ports.models import NLIProvider
+
+log = get_logger(__name__)
 
 LEXICON_DIR: Final = Path(__file__).with_name("lexicon")
 RULE_KINDS: Final = frozenset({StatementKind.RULE, StatementKind.CONDITIONAL_RULE})
@@ -85,6 +90,8 @@ _FIELDS: Final = (
     "addressee",
     "generic",
     "consequent",
+    "recurring",
+    "deictic",
     "subject_start",
     "imperative",
     "imperative_inside",
@@ -110,6 +117,14 @@ _CLAUSE_BREAK: Final = re.compile(r"(?<!\d)[,:]|[,:](?!\d)|[;\u2014\u2013()\u060
 _QUESTION_MARK: Final = re.compile("[?\uff1f\u061f][\"'\u201d\u2019)\\]]*\\s*$")
 _WORD: Final = re.compile(rf"[{_LETTER}'\u2019#/.-]+")
 _LEAD_NOISE: Final = re.compile("^[\\s\"'\u201c\u2018\u00a1\u00bf(\\[*\u2022#-]+")
+#: apostrophes typed as quotes ("Don't" with a right single quote), read as the ASCII one
+_APOSTROPHES: Final = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'"})
+
+
+def normalise(sentence: str) -> str:
+    """What the packs are matched against: compatibility forms folded (a full-width "Never"
+    is "Never", a ligature its letters) and typographic apostrophes made ASCII."""
+    return unicodedata.normalize("NFKC", sentence).translate(_APOSTROPHES)
 
 
 def _compile_term(
@@ -209,6 +224,11 @@ class LexicalLabel:
     exception: str | None = None
     #: the instruction without its opening "please" / "from now on"
     instruction: str | None = None
+    #: a rule that says it outlives the task: a standing word ("always", "from now on"), a
+    #: recurring trigger ("whenever", "every time") or a universal obligation ("All X must").
+    #: Only such a rule is kept as a lasting one; "Tell me if the price drops" is a
+    #: conditional instruction too, but nothing in it says it is for every time.
+    standing: bool = False
 
 
 @dataclass(frozen=True)
@@ -221,6 +241,8 @@ class StatementLabel:
     trigger: str | None = None
     exception: str | None = None
     instruction: str | None = None
+    #: see ``LexicalLabel.standing``: what makes a rule lasting rather than a turn's
+    standing: bool = False
 
     @classmethod
     def of(cls, lexical: LexicalLabel) -> StatementLabel:
@@ -230,6 +252,7 @@ class StatementLabel:
             trigger=lexical.trigger,
             exception=lexical.exception,
             instruction=lexical.instruction,
+            standing=lexical.standing,
         )
 
 
@@ -282,10 +305,18 @@ class Lexicon:
         return self._readers.get(lang, self._any)
 
     def is_question(self, sentence: str) -> bool:
-        return self.reader(sentence).is_question(sentence)
+        s = normalise(sentence)
+        if len(s) > STATEMENT_LABELLER.lexicon_max_chars:
+            return bool(_QUESTION_MARK.search(s[-16:]))
+        return self.reader(s).is_question(s)
 
     def label(self, sentence: str) -> LexicalLabel:
-        return self.reader(sentence).label(sentence)
+        s = normalise(sentence)
+        if len(s) > STATEMENT_LABELLER.lexicon_max_chars:
+            # not one statement anyone said: kept as the fact it is, unread (the cost of
+            # reading grows with the text, and the write path's worker runs it inline)
+            return LexicalLabel(StatementKind.FACT)
+        return self.reader(s).label(s)
 
 
 class _Reader:
@@ -321,6 +352,19 @@ class _Reader:
         return self.cues["auxiliary"].at(s, _skip_space(s, lead.end())) is not None
 
     def label(self, sentence: str) -> LexicalLabel:
+        label = self._label(sentence)
+        if (
+            label.decided
+            and label.kind not in (None, StatementKind.CORRECTION, StatementKind.FACT)
+            and self.cues["correction_weak"].search(sentence)
+        ):
+            # "Actually, we terminated our contract with Uline": a word that only suggests a
+            # correction, on a sentence that is surely something else - the head decides
+            # whether it corrects (which outranks the rest), else it stays what it is
+            return replace(label, decided=False, maybe=StatementKind.CORRECTION)
+        return label
+
+    def _label(self, sentence: str) -> LexicalLabel:
         s = _LEAD_NOISE.sub("", sentence.strip())
         if not any(ch.isalpha() for ch in s) or self.is_question(s) or self._chitchat(s):
             return LexicalLabel(None)
@@ -377,6 +421,10 @@ class _Reader:
             return not (s[after : after + 1].isdigit() or s[after : after + 1] == "#") and (
                 self.cues["auxiliary"].at(s, after) is None
             )
+        # a later clause opened by a please ("Kreditnehmer zahlt nicht, bitte prüfe ...",
+        # "Room service for Ms. Johnson, please")
+        if any(self.cues["imperative_inside"].at(s, start) for start, _ in self._clauses(s)[1:]):
+            return True
         return self._imperative_end(s)
 
     def _imperative_end(self, clause: str) -> bool:
@@ -427,6 +475,12 @@ class _Reader:
         if decided is None:
             return None
         condition, exception = shape.condition, shape.exception
+        standing = self._standing(s, work, shape)
+        if not standing and condition is not None and self._one_off(work, condition):
+            # "Call me when you get this", "Remind me when it's time to leave": a request
+            # tied to one expected event of the listener's, or to the moment itself - not
+            # an instruction for the future
+            return None
         # "whenever I ask for a stock audit" scopes a rule to a request; "if a delivery is
         # late" makes it depend on the world, which is what a conditional rule is
         conditional = exception is not None or (
@@ -443,7 +497,25 @@ class _Reader:
             trigger=_clean_clause(s[condition[0] : condition[1]]) if condition else None,
             exception=_clean_clause(s[exception[0] : exception[1]]) if exception else None,
             instruction=self._instruction(s),
+            standing=standing,
         )
+
+    def _standing(self, s: str, work: str, shape: _Shape) -> bool:
+        """The rule says it is for every time: a standing word outside its condition and
+        exception ("always", "nunca", "from now on, ..."), a recurring trigger ("whenever",
+        "every time", "cada vez que", "jab bhi") or a universal obligation."""
+        if shape.marker is not None or shape.leads or self._obligation(s, work, shape):
+            return True
+        return shape.condition is not None and bool(
+            self.cues["recurring"].at(work, shape.condition[0])
+        )
+
+    def _one_off(self, work: str, condition: Span) -> bool:
+        """The condition's subject is the listener or the moment itself ("when you get
+        this", "cuando llegues", "wenn du da bist", "when it's time to leave")."""
+        lead = self.cues["condition"].at(work, condition[0])
+        pos = _skip_space(work, lead.end()) if lead is not None else condition[0]
+        return self.cues["deictic"].at(work, pos) is not None
 
     def _requested(self, work: str, condition: Span | None) -> bool:
         """The condition is about the user's own requests or the assistant's work ("when I
@@ -705,10 +777,23 @@ class StatementLabeller:
         if not open_:
             return labels
         # one pair per open sentence - the kind it may be - in one batch for the observation
-        seen = await self._entail(
-            open_, [(n, k) for n, o in enumerate(open_) for k in o.candidates]
-        )
-        proposals = await self._ask_model(open_, seen)
+        try:
+            seen = await self._entail(
+                open_, [(n, k) for n, o in enumerate(open_) for k in o.candidates]
+            )
+        except Exception as exc:  # a failing head never costs the message
+            # the head is shared and bounded (a full queue refuses with DependencyUnavailable),
+            # and a labeller error must not fail the extraction it is part of: the turn
+            # and its facts are still stored, with the lexicon's labels
+            statement_labeller_fallback_total.labels(tier="nli").inc()
+            log.warning("statement_labeller.nli_failed", error=type(exc).__name__)
+            return labels
+        try:
+            proposals = await self._ask_model(open_, seen)
+        except Exception as exc:  # as above, for the model tier
+            statement_labeller_fallback_total.labels(tier="llm").inc()
+            log.warning("statement_labeller.llm_failed", error=type(exc).__name__)
+            proposals = {}
         for n, o in enumerate(open_):
             labels[o.index] = self._resolve(o, proposals.get(n), seen.get(n, {}), labels[o.index])
         return labels

@@ -590,7 +590,7 @@ class StatementLabellerSettings(BaseModel):
             StatementKind.CONDITIONAL_RULE: 0.7,
             StatementKind.STATUS: 0.9,
             StatementKind.LIFECYCLE: 0.9,
-            StatementKind.CORRECTION: 0.9,
+            StatementKind.CORRECTION: 0.8,
         }
     )
     #: entailment at or above which a kind the tenant's model proposed is accepted
@@ -598,6 +598,10 @@ class StatementLabellerSettings(BaseModel):
     #: open sentences scored per observation (a pasted document is not labelled whole)
     nli_max_sentences: int = Field(default=12, ge=0)
     nli_max_chars: int = Field(default=400, ge=1)
+    #: a longer "sentence" (a pasted log, a run-on dump) is a fact without being read: the
+    #: lexicon's cost grows with the text (about 14 us a character), and nothing that long
+    #: is one instruction
+    lexicon_max_chars: int = Field(default=2000, ge=1)
 
 
 STATEMENT_LABELLER = StatementLabellerSettings()

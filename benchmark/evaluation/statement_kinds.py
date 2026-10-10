@@ -73,19 +73,26 @@ def evaluate_baseline(items: Sequence[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def not_below(labeller: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
-    """Where the labeller scores below the baseline: a kind's F1 (over every language) or a
-    language's macro-F1. Empty when it is nowhere worse."""
+def below_baseline(labeller: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
+    """Where the labeller scores below the baseline: a kind's F1 over every language, a
+    language's macro-F1, or one kind's F1 within one language (NONE included). Empty when it
+    is nowhere worse. The baseline never outputs CONDITIONAL_RULE, STATUS, CORRECTION or
+    LIFECYCLE, so for those four it holds trivially; FACT, RULE and NONE are real comparisons."""
     worse = [
         f"{k}: {labeller['per_kind_f1'][k]} < {v}"
         for k, v in baseline["per_kind_f1"].items()
         if labeller["per_kind_f1"][k] < v
     ]
-    return worse + [
-        f"{lang}: {labeller['per_language'][lang]['macro_f1']} < {v['macro_f1']}"
-        for lang, v in baseline["per_language"].items()
-        if labeller["per_language"][lang]["macro_f1"] < v["macro_f1"]
-    ]
+    for lang, base in baseline["per_language"].items():
+        mine = labeller["per_language"][lang]
+        if (mine["macro_f1"] or 0.0) < (base["macro_f1"] or 0.0):
+            worse.append(f"{lang}: {mine['macro_f1']} < {base['macro_f1']}")
+        worse += [
+            f"{lang} {k}: {mine['per_kind_f1'][k]} < {v}"
+            for k, v in base["per_kind_f1"].items()
+            if mine["per_kind_f1"][k] < v
+        ]
+    return worse
 
 
 def f1_table(rows: Sequence[tuple[str, str]]) -> dict[str, float]:
@@ -120,6 +127,8 @@ async def evaluate(labeller: StatementLabeller, items: Sequence[dict[str, Any]])
     latency_ms: list[float] = []
     errors: list[dict[str, str]] = []
     rule_on_none = 0
+    false_rules: list[dict[str, str]] = []
+    false_rule_kinds = 0
     for item in items:
         started = time.perf_counter()
         [label] = await labeller.label([item["text"]])
@@ -127,11 +136,18 @@ async def evaluate(labeller: StatementLabeller, items: Sequence[dict[str, Any]])
         predicted = label.kind.value if label.kind else NONE
         sources[label.source] += 1
         rows_by_lang[item["lang"]].append((item["kind"], predicted))
-        if item["kind"] == NONE and predicted in (
+        is_rule = predicted in (StatementKind.RULE.value, StatementKind.CONDITIONAL_RULE.value)
+        if item["kind"] == NONE and is_rule:
+            rule_on_none += 1
+        if is_rule and item["kind"] not in (
             StatementKind.RULE.value,
             StatementKind.CONDITIONAL_RULE.value,
         ):
-            rule_on_none += 1
+            false_rule_kinds += 1
+            if label.standing:
+                false_rules.append(
+                    {"id": item.get("id", ""), "gold": item["kind"], "text": item["text"]}
+                )
         if predicted != item["kind"]:
             errors.append(
                 {
@@ -148,8 +164,15 @@ async def evaluate(labeller: StatementLabeller, items: Sequence[dict[str, Any]])
     return {
         **_summary(every),
         "per_language": {lang: _summary(rows) for lang, rows in sorted(rows_by_lang.items())},
-        #: questions, greetings and one-off requests stored as a standing rule (must be 0)
+        #: questions, greetings and one-off requests labelled a rule of either kind
         "rules_on_none": rule_on_none,
+        #: anything that is not a rule kept as a lasting one (a rule kind the sentence says is
+        #: standing, which is what the extractor stores LONG_TERM): must be 0
+        "false_rules": len(false_rules),
+        "false_rule_items": false_rules,
+        #: anything that is not a rule labelled a rule of either kind - kept as metadata only
+        #: unless it is standing
+        "false_rule_kinds": false_rule_kinds,
         "sources": dict(sources),
         "latency_ms_per_sentence": {
             "p50": round(ordered[len(ordered) // 2], 3) if ordered else None,

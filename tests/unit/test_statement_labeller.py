@@ -5,6 +5,7 @@ The real head is exercised by ``tests/eval/test_statement_kinds_gate.py`` (``mod
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -12,7 +13,8 @@ import pytest
 
 from memory_service.config.constants import MemoryIntelligenceSettings, StatementLabellerSettings
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import MemoryType, ObservationKind, StatementKind
+from memory_service.domain.enums import Lifetime, MemoryType, ObservationKind, StatementKind
+from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import statement_kind_of
 from memory_service.domain.observation import Observation
@@ -72,7 +74,6 @@ def _kind(text: str) -> StatementKind | None:
             "We now use the /shrinkage command to write off damage so it hits the right ledger.",
             K.CORRECTION,
         ),
-        ("Actually, we terminated our contract with Uline yesterday due to pricing.", K.CORRECTION),
         ("Our new exclusive pallet supplier is PackagingCorp.", K.LIFECYCLE),
         (
             "The temporary refrigeration unit has been dismantled and the project is closed.",
@@ -104,7 +105,6 @@ def test_english_statements(text: str, kind: StatementKind | None) -> None:
             K.CONDITIONAL_RULE,
         ),
         ("Gabelstapler 4 ist wegen Wartung außer Betrieb.", K.STATUS),
-        ("Eigentlich haben wir den Vertrag mit Uline gestern gekündigt.", K.CORRECTION),
         ("Nunca me sugieras recetas con cilantro.", K.RULE),
         (
             "Nunca incluyas artículos sin existencias a menos que escriba 'incluir agotados'.",
@@ -114,7 +114,6 @@ def test_english_statements(text: str, kind: StatementKind | None) -> None:
         ("¡Buenos días!", None),
         ("لا تقترح عليّ أبدًا وصفات تحتوي على الكزبرة.", K.RULE),
         ("الرافعة الشوكية رقم 4 خارج الخدمة للصيانة.", K.STATUS),
-        ("في الواقع، أنهينا عقدنا مع Uline أمس.", K.CORRECTION),
         ("मुझे कभी भी धनिया वाली रेसिपी मत सुझाना।", K.RULE),
         # "hamesha ke liye" is "for good", not "always": closed for good is a lifecycle
         ("स्टोर 22 शनिवार को हमेशा के लिए बंद हो गया।", K.LIFECYCLE),
@@ -148,6 +147,36 @@ def test_what_the_words_cannot_settle_is_left_to_the_model(text: str, maybe: Sta
     assert (label.decided, label.maybe) == (False, maybe), text
     # a request stays one ("Send alerts if ..." stores nothing new); anything else is a fact
     assert label.kind in (K.FACT, None), text
+
+
+@pytest.mark.parametrize(
+    ("text", "otherwise"),
+    [
+        # a discourse word alone does not correct: the head decides, else the sentence stays
+        # what it surely is
+        ("Actually, we terminated our contract with Uline yesterday due to pricing.", K.LIFECYCLE),
+        ("Eigentlich haben wir den Vertrag mit Uline gestern gekündigt.", K.LIFECYCLE),
+        ("في الواقع، أنهينا عقدنا مع Uline أمس.", K.LIFECYCLE),
+        ("Actually I love hiking.", K.FACT),
+        ("Eigentlich wohne ich in Berlin.", K.FACT),
+        ("Realmente me gusta mucho el café.", K.FACT),
+    ],
+)
+def test_a_discourse_word_alone_is_left_to_the_head(text: str, otherwise: StatementKind) -> None:
+    label = Lexicon.default().label(text)
+    assert (label.kind, label.decided, label.maybe) == (otherwise, False, K.CORRECTION), text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Actually, I have two kids, not three.",
+        "Eigentlich ist es Dienstag, nicht Montag.",
+        "En realidad la tasa es del 5%, no del 10%.",
+    ],
+)
+def test_a_discourse_word_with_a_contrast_corrects(text: str) -> None:
+    assert _kind(text) is K.CORRECTION, text
 
 
 @pytest.mark.parametrize(
@@ -436,3 +465,138 @@ async def test_the_head_reaches_extraction_for_user_messages_only() -> None:
     cands = await _extract(PLAIN, StatementLabeller(nli=nli))  # type: ignore[arg-type]
     assert {c.statement_kind for c in cands} == {K.STATUS}
     assert nli.pairs
+
+
+class _YesHead(ScriptedNLI):
+    """A trained head that entails every suspected kind: the upper bound of what it confirms."""
+
+    def __init__(self) -> None:
+        super().__init__({})
+
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        return [
+            [NLIScore(entailment=0.99, neutral=0.01, contradiction=0.0) for _ in p]
+            for p, _ in groups
+        ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # one-off conditional requests, and conditional instructions that do not say they
+        # are for every time: never a lasting rule, whatever the head says
+        "Please send the report when it's ready.",
+        "Let me know when the shipment arrives.",
+        "Tell me if the price drops.",
+        "Call me when you get this.",
+        "Remind me when it's time to leave.",
+        "If a delivery is late, notify me.",
+        "Don't use bullet points unless I ask.",
+        "Don't reorder seasonal items unless the buyer approves it.",
+        "Avísame cuando llegues.",
+        "Si el pedido llega tarde, avísame.",
+        "Sag mir Bescheid, wenn du da bist.",
+        "Wenn die Lieferung zu spät ist, sag mir Bescheid.",
+        "إذا تأخرت الشحنة، أبلغني.",
+        "अगर कीमत गिरे तो मुझे बताना।",
+        # first-person habits and promises with a standing word
+        "Siempre consultaré con el banco antes de tomar decisiones importantes.",
+        "Nunca uso efectivo en la tienda.",
+        "A partir de ahora, siempre validaré tus datos personales antes de proceder.",
+        "Nunca responderá sobre tus transacciones personales sin tu autorización.",
+        "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen.",
+    ],
+)
+async def test_nothing_that_does_not_say_it_is_standing_is_kept_as_a_lasting_rule(
+    text: str,
+) -> None:
+    for labeller in (StatementLabeller(), StatementLabeller(nli=_YesHead())):  # type: ignore[arg-type]
+        for cand in await _extract(text, labeller):
+            # stored as before the labeller (main's own patterns decide): never a rule
+            assert cand.category != "rule" and cand.predicate != "rule", (text, cand)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Don't use bullet points unless I ask.", "Don't reorder seasonal items unless it rains."],
+)
+async def test_an_unmarked_conditional_imperative_stays_a_short_term_instruction(text: str) -> None:
+    [cand] = await _extract(text, StatementLabeller(nli=_YesHead()))  # type: ignore[arg-type]
+    assert (cand.category, cand.lifetime) == ("instruction", Lifetime.SHORT_TERM)
+    assert cand.statement_kind is K.CONDITIONAL_RULE, "the kind is kept, as metadata only"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Always reply in German.",
+        "Whenever I mention a new account, remind me of the security measures.",
+        "Every time a delivery is late, notify the supplier.",
+        "Siempre que puedas, usa tablas.",
+        "Wenn die Kasse ausfällt, erinnere mich bitte immer an die Bezahlmöglichkeiten.",
+        "Nunca me sugieras recetas con cilantro.",
+        "हर बार जब मैं दवाओं की जानकारी मांगूं तो सटीक जानकारी दें।",
+    ],
+)
+async def test_a_rule_that_says_it_is_standing_is_lasting(text: str) -> None:
+    labeller = StatementLabeller(nli=_YesHead())  # type: ignore[arg-type]
+    rules = [c for c in await _extract(text, labeller) if c.category == "rule"]
+    assert rules and rules[0].lifetime is Lifetime.LONG_TERM, text
+    assert rules[0].statement_kind in (K.RULE, K.CONDITIONAL_RULE)
+
+
+class _BrokenHead(ScriptedNLI):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__({})
+        self.exc = exc
+
+    async def entail_groups(
+        self, groups: Sequence[tuple[Sequence[str], str]]
+    ) -> list[list[NLIScore]]:
+        raise self.exc
+
+
+@pytest.mark.parametrize(
+    "exc", [RuntimeError("onnx session failed"), DependencyUnavailable("model queue is full")]
+)
+async def test_a_failing_head_keeps_the_lexicon_s_labels_and_the_message(exc: Exception) -> None:
+    from memory_service.observability.metrics import statement_labeller_fallback_total
+
+    before = statement_labeller_fallback_total.labels(tier="nli")._value.get()
+    labeller = StatementLabeller(nli=_BrokenHead(exc))  # type: ignore[arg-type]
+    labels = await labeller.label([AMBIGUOUS_RULE, "Our supplier is Uline."])
+    assert [label.kind for label in labels] == [K.FACT, K.FACT]
+    assert statement_labeller_fallback_total.labels(tier="nli")._value.get() == before + 1
+    # and extraction stores the turn as if no head had been there
+    cands = await _extract(AMBIGUOUS_RULE, labeller)
+    assert any(c.category == "verbatim_turn" for c in cands)
+
+
+def test_a_run_on_sentence_is_a_fact_unread() -> None:
+    text = "no, " * 50_000
+    started = time.perf_counter()
+    label = Lexicon.default().label(text)
+    assert label.kind is K.FACT and label.decided
+    assert not Lexicon.default().is_question(text)
+    assert time.perf_counter() - started < 0.5
+
+
+@pytest.mark.parametrize(
+    ("text", "kind"),
+    [
+        ("Don" + chr(0x2019) + "t ever use tables.", K.RULE),  # a typographic apostrophe
+        ("".join(chr(0xFF00 + ord(c) - 0x20) for c in "Never") + " suggest recipes.", K.RULE),
+        ("Siempre consultaré con el banco antes de tomar decisiones.", K.FACT),
+        ("Which is why I moved to Berlin last year.", K.FACT),
+        ("Did an analysis on this series and I think it went ok!", K.FACT),
+        ("No, gracias.", None),
+        ("Call me when you get this.", None),
+        ("Avísame cuando llegues.", None),
+    ],
+)
+def test_normalised_forms_questions_and_one_off_requests(
+    text: str, kind: StatementKind | None
+) -> None:
+    assert _kind(text) is kind, text

@@ -1,6 +1,6 @@
 {
   "pack": "generic",
-  "description": "Domain-free cue words of the statement labeller (modules/memory/statements.py, ADR 0037), per language. Every entry is a case-insensitive regular expression matched as whole words; a space matches any run of whitespace. Field meanings: standing - says an instruction outlives the task (always, never, from now on); not_standing - a phrase that contains a standing word but is not one (for good, forever), masked first; obligation and universal - 'All X must ...'; policy_subject - a clause subject that makes 'we never ...' a policy; condition - opens a clause the rule depends on (if, when, whenever); exception - opens the clause a rule does not apply under (unless, except); requester - a word in a condition clause that makes it about the user's own requests or the assistant's work ('when I ask'), so the rule stays a RULE; correction - says something earlier was wrong, at the start of a sentence (correction_start) or anywhere (correction); replacement - the new way replaces an old one (we now use, instead of); lifecycle and status - generic change-of-existence and state words (a domain pack adds its own); status_weak, lifecycle_weak, correction_weak - words that only suggest the kind (closed, new, instead of): the NLI head confirms it with one pair; filler - words that may open an instruction before its verb (please, also, then); only - restricts an instruction to its condition ('only escalate if ...'); addressee - who an instruction acts for (me, us, the manager); generic - an indefinite word that makes a condition any occurrence ('if a delivery is late', 'any change'); consequent - opens the clause after a condition (then, dann, to); subject_start - a word that starts a declarative clause (a pronoun, an article), so a standing word after it describes a habit rather than gives an instruction; imperative - a word that marks an instruction when it opens a clause (please, don't); imperative_inside - one that marks it anywhere in the clause (Hindi mat, Arabic la ta-); imperative_ending - (hi) the ending of an imperative or infinitive-as-imperative verb at the end of a clause, unless it is a declarative_ending; clitic - (ar) what may be written onto the front of a word (wa-, al-, bi-); enclitic - (ar) what may be written onto its end (-ni 'me', the -i of a feminine imperative, the -u of a plural one); request - a verb that opens a one-off request at the start of a sentence; question_start - (en) opens a question even without a question mark, other languages are read by their question marks; auxiliary - (en) a verb that, right after a question word that also opens a condition, makes it a question ('when is', not 'when I ask'); chitchat - greetings, thanks and fillers.",
+  "description": "Domain-free cue words of the statement labeller (modules/memory/statements.py, ADR 0037), per language. Every entry is a case-insensitive regular expression matched as whole words; a space matches any run of whitespace. Field meanings: standing - says an instruction outlives the task (always, never, from now on); not_standing - a phrase that contains a standing word but is not one (for good, forever), masked first; obligation and universal - 'All X must ...'; policy_subject - a clause subject that makes 'we never ...' a policy; condition - opens a clause the rule depends on (if, when, whenever); exception - opens the clause a rule does not apply under (unless, except); requester - a word in a condition clause that makes it about the user's own requests or the assistant's work ('when I ask'), so the rule stays a RULE; correction - says something earlier was wrong, at the start of a sentence (correction_start) or anywhere (correction); replacement - the new way replaces an old one (we now use, instead of); lifecycle and status - generic change-of-existence and state words (a domain pack adds its own); status_weak, lifecycle_weak, correction_weak - words that only suggest the kind (closed, new, instead of): the NLI head confirms it with one pair; filler - words that may open an instruction before its verb (please, also, then); only - restricts an instruction to its condition ('only escalate if ...'); addressee - who an instruction acts for (me, us, the manager); generic - an indefinite word that makes a condition any occurrence ('if a delivery is late', 'any change'); consequent - opens the clause after a condition (then, dann, to); recurring - a condition that recurs (whenever, every time, cada vez que), which makes a rule standing; deictic - a condition subject that ties a request to one expected event: the listener or the moment itself ('when you get this', 'cuando llegues', 'when it's time to leave'); subject_start - a word that starts a declarative clause (a pronoun, an article), so a standing word after it describes a habit rather than gives an instruction; imperative - a word that marks an instruction when it opens a clause (please, don't); imperative_inside - one that marks it anywhere in the clause (Hindi mat, Arabic la ta-); imperative_ending - (hi) the ending of an imperative or infinitive-as-imperative verb at the end of a clause, unless it is a declarative_ending; clitic - (ar) what may be written onto the front of a word (wa-, al-, bi-); enclitic - (ar) what may be written onto its end (-ni 'me', the -i of a feminine imperative, the -u of a plural one); request - a verb that opens a one-off request at the start of a sentence; question_start - (en) opens a question even without a question mark (never 'which' or a bare 'did'/'does': 'Which is why ...', 'Did an analysis ...' are statements), other languages are read by their question marks; auxiliary - (en) a verb that, right after a question word that also opens a condition, makes it a question ('when is', not 'when I ask'); chitchat - greetings, thanks and fillers.",
   "languages": {
     "en": {
       "standing": [
@@ -100,7 +100,6 @@
         "my"
       ],
       "correction_start": [
-        "actually",
         "correction[,.!:;—–،]",
         "wait[,.!:;—–،]",
         "scratch that",
@@ -130,7 +129,8 @@
         "it'?s not (?!just|only|about|that|really|easy|always)[^,]{1,40}, it'?s",
         "(that|this|it) (is|was|'s) (wrong|incorrect|not (right|correct|true))",
         "you (got|have) (it|that) wrong",
-        "(is|was) (wrong|incorrect), it"
+        "(is|was) (wrong|incorrect), it",
+        "(actually|in fact)\\b[^.!?]{0,120}(, not|\\bnot [^,.]{1,40} but|\\brather than|\\binstead of)"
       ],
       "replacement": [
         "(now|nowadays) (use|uses|using|go with|work with|works with|order from|buy from)",
@@ -474,7 +474,6 @@
         "where's",
         "who",
         "who's",
-        "which",
         "whose",
         "whom",
         "when",
@@ -483,8 +482,6 @@
         "would you",
         "will you",
         "do you",
-        "does",
-        "did",
         "is (it|there|the|this|that|my|our)",
         "are (there|the|you|we|our)",
         "have you",
@@ -496,7 +493,9 @@
         "could i",
         "do i",
         "do we",
-        "am i"
+        "am i",
+        "did you",
+        "does (it|this|that|the)"
       ],
       "auxiliary": [
         "is",
@@ -560,7 +559,8 @@
         "welcome",
         "nope",
         "nah",
-        "yup"
+        "yup",
+        "no,? thanks?( you)?"
       ],
       "filler": [
         "please",
@@ -577,7 +577,9 @@
         "note",
         "ai",
         "hey ai",
-        "assistant"
+        "assistant",
+        "finally",
+        "lastly"
       ],
       "only": [
         "only"
@@ -645,7 +647,6 @@
         "retired",
         "quit",
         "cancell?ed",
-        "replaced",
         "moved (in|out|to)",
         "founded",
         "acquired",
@@ -666,7 +667,23 @@
         "not .{1,30} but",
         "i mean"
       ],
-      "enclitic": []
+      "enclitic": [],
+      "recurring": [
+        "whenever",
+        "every time",
+        "each time",
+        "any( )?time"
+      ],
+      "deictic": [
+        "you",
+        "you're",
+        "you've",
+        "you'll",
+        "you'd",
+        "u",
+        "it's time",
+        "it is time"
+      ]
     },
     "de": {
       "standing": [
@@ -694,7 +711,8 @@
         "nicht immer",
         "immer (noch|wieder|mehr)",
         "schon immer",
-        "noch nie"
+        "noch nie",
+        "(ich|wir|man) (immer|nie|niemals|stets)"
       ],
       "obligation": [
         "muss( nicht| nie| immer)?",
@@ -750,7 +768,6 @@
       ],
       "correction_start": [
         "nein[,.!:;—–،]",
-        "eigentlich",
         "korrektur[,.!:;—–،]",
         "moment[,.!:;—–،]",
         "warte[,.!:;—–،]",
@@ -761,8 +778,6 @@
         "kleine korrektur",
         "berichtigung[,.!:;—–،]",
         "update[,.!:;—–،]",
-        "tatsächlich",
-        "in wirklichkeit",
         "es ist falsch",
         "das ist (falsch|irreführend|nicht (korrekt|richtig|wahr))",
         "nicht ganz"
@@ -777,7 +792,8 @@
         "es ist falsch",
         "ist (falsch|nicht korrekt|nicht richtig), (es|das|die|der) ",
         "das ist irreführend",
-        "du hast dich geirrt"
+        "du hast dich geirrt",
+        "(eigentlich|tatsächlich|in wirklichkeit)\\b[^.!?]{0,120}(, nicht|, sondern|\\bstatt|\\banstatt)"
       ],
       "replacement": [
         "(jetzt|nun|mittlerweile|inzwischen) (verwenden|nutzen|benutzen|bestellen|arbeiten)",
@@ -994,7 +1010,8 @@
         "ja",
         "nein danke",
         "bis später",
-        "schönes wochenende"
+        "schönes wochenende",
+        "nein,? danke"
       ],
       "filler": [
         "bitte",
@@ -1004,7 +1021,9 @@
         "aber",
         "also",
         "wichtig",
-        "ki"
+        "ki",
+        "schließlich",
+        "zuletzt"
       ],
       "only": [
         "nur"
@@ -1067,9 +1086,20 @@
         "falsch",
         "fehler",
         "sondern",
-        "doch"
+        "doch",
+        "tatsächlich",
+        "in wirklichkeit"
       ],
-      "enclitic": []
+      "enclitic": [],
+      "recurring": [
+        "immer wenn",
+        "jedes mal,? wenn",
+        "jedes mal"
+      ],
+      "deictic": [
+        "du",
+        "es (so )?weit ist"
+      ]
     },
     "es": {
       "standing": [
@@ -1092,8 +1122,8 @@
         "como siempre",
         "casi siempre",
         "no siempre",
-        "siempre que",
-        "nunca antes"
+        "nunca antes",
+        "(siempre|nunca|jamás) (?!(lo|la|los|las|le|les|me|te|se|nos|no|ni|que|con|por|para|en|de|a|sé|todo|todos|todas|esto|eso)\\b)\\w{2,}(o|é|oy|á|án)"
       ],
       "obligation": [
         "deben?( siempre| nunca)?",
@@ -1157,8 +1187,6 @@
         "solicite"
       ],
       "correction_start": [
-        "en realidad",
-        "realmente",
         "corrección[,.!:;—–،]",
         "espera[,.!:;—–،]",
         "quise decir",
@@ -1184,7 +1212,8 @@
         "en realidad es",
         "(es|era|está) (incorrect[oa]|equivocad[oa])",
         "lo que (mencionaste|dijiste) .{0,60}(es )?incorrect[oa]",
-        "no es (correcto|cierto|así)"
+        "no es (correcto|cierto|así)",
+        "(en realidad|realmente)\\b[^.!?]{0,120}(, no|, sino|\\ben lugar de|\\ben vez de)"
       ],
       "replacement": [
         "ahora (usamos|utilizamos|trabajamos con|compramos a|pedimos a|usa|utiliza)",
@@ -1302,7 +1331,8 @@
         "nuestra",
         "nuestros",
         "nuestras",
-        "tus"
+        "\\w{2,}(aré|eré|iré)",
+        "(siempre|nunca|jamás) (?!(lo|la|los|las|le|les|me|te|se|nos|no|ni|que|con|por|para|en|de|a|sé|todo|todos|todas|esto|eso)\\b)\\w{2,}(o|é|oy|á|án)"
       ],
       "imperative": [
         "por favor",
@@ -1392,7 +1422,8 @@
         "sí",
         "no gracias",
         "jaja+",
-        "buen fin de semana"
+        "buen fin de semana",
+        "no,? gracias"
       ],
       "filler": [
         "por favor",
@@ -1401,7 +1432,9 @@
         "y",
         "pero",
         "importante",
-        "ia"
+        "ia",
+        "finalmente",
+        "por último"
       ],
       "only": [
         "solo",
@@ -1437,9 +1470,7 @@
         "disponibles?",
         "parad[oa]s?",
         "lleno",
-        "vacío",
         "pendiente",
-        "retrasad[oa]s?",
         "funciona(ndo)?",
         "fallando"
       ],
@@ -1461,9 +1492,23 @@
         "error",
         "equivoc\\w+",
         "sino",
-        "de hecho"
+        "en realidad",
+        "realmente"
       ],
-      "enclitic": []
+      "enclitic": [],
+      "recurring": [
+        "cada vez que",
+        "siempre que",
+        "toda vez que"
+      ],
+      "deictic": [
+        "tú",
+        "tu",
+        "usted",
+        "ustedes",
+        "vos",
+        "(?!(las|unas|nuestras|vuestras|sus|mis|estas|esas|aquellas|todas|algunas|muchas|pocas|ambas|otras|tres|seis|veces|mes|es|más|menos|los|les|antes|después|veces|clientes|ventas|entregas|personas)\\b)\\w+(es|as)"
+      ]
     },
     "ar": {
       "standing": [
@@ -1558,8 +1603,6 @@
       ],
       "correction_start": [
         "لا[,.!:;—–،]",
-        "في الواقع",
-        "في الحقيقة",
         "بالأحرى",
         "تصحيح[,.!:;—–،]",
         "انتظر[,.!:;—–،]",
@@ -1576,7 +1619,8 @@
         "أقصد",
         "هذا غير صحيح",
         "(هذا|ذلك) (غير صحيح|خطأ|خاطئ)",
-        "يجب استخدام .{1,40} بدلا من"
+        "يجب استخدام .{1,40} بدلا من",
+        "(في الواقع|في الحقيقة)[^.!؟]{0,120}(وليس| لا| بل|بدلا من|بدلاً من)"
       ],
       "replacement": [
         "(نستخدم|نعتمد|نتعامل مع|نطلب من|نشتري من) الآن",
@@ -1765,7 +1809,9 @@
         "مع السلامة",
         "نعم",
         "لا شكرا",
-        "عطلة سعيدة"
+        "عطلة سعيدة",
+        "لا،? شكرا",
+        "لا،? شكرًا"
       ],
       "filler": [
         "و",
@@ -1774,7 +1820,9 @@
         "من فضلك",
         "رجاء",
         "مهم",
-        "يا مساعد"
+        "يا مساعد",
+        "أخيرا",
+        "وأخيرا"
       ],
       "only": [
         "فقط"
@@ -1793,7 +1841,9 @@
         "ك"
       ],
       "imperative_inside": [
-        "لا ت\\w+"
+        "لا ت\\w+",
+        "من فضلك",
+        "رجاء"
       ],
       "addressee": [
         "ني",
@@ -1837,17 +1887,17 @@
         "انتهت",
         "بدأ",
         "بدأنا",
-        "وقع",
         "تعاقد"
       ],
       "correction_weak": [
         "بدلا من",
         "بدلًا من",
         "بدلاً من",
-        "خطأ",
         "خاطئ",
         "غير صحيح",
-        "بل"
+        "بل",
+        "في الواقع",
+        "في الحقيقة"
       ],
       "enclitic": [
         "يني",
@@ -1861,6 +1911,17 @@
         "هم",
         "ك",
         "كم"
+      ],
+      "recurring": [
+        "كلما",
+        "في كل مرة",
+        "متى ما"
+      ],
+      "deictic": [
+        "أنت",
+        "أنتِ",
+        "أنتم",
+        "أنتما"
       ]
     },
     "hi": {
@@ -1934,9 +1995,6 @@
       ],
       "correction_start": [
         "नहीं[,.!:;—–،]",
-        "दरअसल",
-        "असल में",
-        "वास्तव में",
         "सुधार[,.!:;—–،]",
         "रुको[,.!:;—–،]",
         "मेरा मतलब",
@@ -1953,7 +2011,8 @@
         "मैं गलत थी",
         "मेरा मतलब",
         "यह गलत है",
-        "गलत बताया"
+        "गलत बताया",
+        "(दरअसल|असल में|वास्तव में)[^।!?]{0,120}(, नहीं|न कि|बल्कि|की जगह|के बजाय)"
       ],
       "replacement": [
         "अब (हम|हमलोग) .{0,40}(इस्तेमाल|उपयोग|प्रयोग)",
@@ -2129,7 +2188,8 @@
         "हाँ",
         "जी",
         "अलविदा",
-        "फिर मिलेंगे"
+        "फिर मिलेंगे",
+        "नहीं,? धन्यवाद"
       ],
       "filler": [
         "कृपया",
@@ -2140,7 +2200,9 @@
         "बस",
         "ज़रूरी",
         "एआई",
-        "ai"
+        "ai",
+        "अंत में",
+        "आखिर में"
       ],
       "only": [
         "केवल",
@@ -2162,7 +2224,8 @@
       "imperative_inside": [
         "मत",
         "न करें",
-        "न करना"
+        "न करना",
+        "कृपया"
       ],
       "addressee": [
         "मुझे",
@@ -2188,14 +2251,12 @@
         "उपलब्ध",
         "रुका",
         "अटका",
-        "देरी",
         "धीमा"
       ],
       "lifecycle_weak": [
         "खोल",
         "खोला",
         "खोली",
-        "शुरू",
         "समाप्त",
         "खत्म",
         "लॉन्च",
@@ -2207,9 +2268,23 @@
         "के बजाय",
         "गलत",
         "असल में",
-        "बल्कि"
+        "बल्कि",
+        "दरअसल",
+        "वास्तव में"
       ],
-      "enclitic": []
+      "enclitic": [],
+      "recurring": [
+        "जब भी",
+        "हर बार जब",
+        "हर बार"
+      ],
+      "deictic": [
+        "आप",
+        "तुम",
+        "तू",
+        "यह",
+        "वह"
+      ]
     }
   }
 }

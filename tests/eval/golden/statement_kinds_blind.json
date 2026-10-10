@@ -1,5 +1,5 @@
 {
- "description": "Blind sets for the statement labeller (ADR 0037): sentences a local language model wrote to order - one request per (language, kind, two sampled domains), four sentences each, in en/de/es/ar/hi - not the packs' author. Each item's 'kind' is the kind that was asked for, then reviewed against 'guidelines' only, never against the labeller's output: garbled, truncated or ambiguous items dropped, mislabelled ones relabelled, each change listed with its reason under 'changes' ('noise_rate' = dropped + relabelled over generated). 'blind1' (seed 7; retail, warehouse, supermarket, software, clinic, hotel, finance, personal life) is the generalisation dev set the packs and the NLI thresholds were tuned against after it was read. 'blind2' (seed 20261008; logistics, pharmacy, e-commerce, manufacturing, school, restaurant, car repair, bank) was generated afterwards, cleaned before any prediction on it existed, and scored once: the held-out numbers.",
+ "description": "Blind sets for the statement labeller (ADR 0037): sentences that IBM Granite 3.3 2B Instruct (Q4_K_M, served locally by llama.cpp at temperature 0.9) wrote to order - one request per (language, kind, two sampled domains), four sentences each, in en/de/es/ar/hi - not the packs' author. Each item's 'kind' is the kind that was asked for, then reviewed against 'guidelines' only, never against the labeller's output: garbled, truncated or genuinely ambiguous items dropped, mislabelled ones relabelled, each change listed with its reason under 'changes' ('noise_rate' = dropped + relabelled over generated). A third review pass relabelled, by the guidelines, valid sentences the first pass had dropped. 'blind1' (seed 7; retail, warehouse, supermarket, software, clinic, hotel, finance, personal life) is the generalisation dev set the packs and the NLI thresholds were tuned against after it was read. 'blind2' (seed 20261008; logistics, pharmacy, e-commerce, manufacturing, school, restaurant, car repair, bank) was generated afterwards and cleaned before any prediction on it existed; its third pass was made after aggregate scores, but before any per-item prediction on it was read.",
  "guidelines": {
   "RULE": "a standing instruction or policy meant for future occasions (always / never / from now on / every time / 'whenever I ask for X'; universal must: 'All X must ...'). A trigger that only scopes it to a kind of request ('when I ask for a stock audit') keeps it a RULE.",
   "CONDITIONAL_RULE": "a standing instruction with an exception (unless / except / other than / without) or one that applies only while a condition about the world holds (if / when + a state or event).",
@@ -7,18 +7,20 @@
   "LIFECYCLE": "a thing or a relationship began or ended: terminated, dismantled, discontinued, retired, launched, opened, hired, a new supplier.",
   "CORRECTION": "the speaker revises something said or known before: 'No, ...', 'Actually, ...', 'I meant ...', 'we now use X' (instead of the old way).",
   "FACT": "any other declarative statement of information, including preferences and past events.",
-  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now.",
-  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT"
+  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now - including one tied to a single expected event ('call me when you get this', 'let me know when the shipment arrives', 'remind me when it's time to leave').",
+  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT",
+  "storage": "a RULE or CONDITIONAL_RULE is kept as a lasting rule only when it says it is for every time: a standing word (always, never, from now on), a recurring trigger (whenever, every time) or a universal obligation ('All X must'). Any other conditional instruction keeps its kind as metadata and is stored as it would be without the labeller.",
+  "habits": "a standing word in the speaker's own habit or promise ('I always double-check the invoices', 'Siempre consulto con el banco') is a FACT."
  },
  "blind1": {
   "role": "dev",
   "seed": 7,
   "cleaning": {
    "items_in": 276,
-   "items_out": 235,
-   "dropped": 41,
-   "relabelled": 17,
-   "relanguaged": 5,
+   "items_out": 254,
+   "dropped": 22,
+   "relabelled": 36,
+   "relanguaged": 9,
    "noise_rate": 0.228
   },
   "changes": [
@@ -54,24 +56,21 @@
    },
    {
     "index": 74,
-    "action": "drop",
-    "reason": "fragment without a condition marker",
-    "text": "Aufkommendes Übernahmeangebot, bitte mir eine detaillierte Analyse zustellen.",
-    "was": "CONDITIONAL_RULE"
+    "action": "relabel CONDITIONAL_RULE -> NONE",
+    "reason": "a one-off request ('please send me a detailed analysis')",
+    "text": "Aufkommendes Übernahmeangebot, bitte mir eine detaillierte Analyse zustellen."
    },
    {
     "index": 75,
-    "action": "drop",
-    "reason": "fragment without a condition marker",
-    "text": "Kreditnehmer zahlt nicht, bitte prüfe die Zahlungsmöglichkeiten und melde unverzüglich.",
-    "was": "CONDITIONAL_RULE"
+    "action": "relabel CONDITIONAL_RULE -> NONE",
+    "reason": "a one-off request ('please check the payment options')",
+    "text": "Kreditnehmer zahlt nicht, bitte prüfe die Zahlungsmöglichkeiten und melde unverzüglich."
    },
    {
     "index": 78,
-    "action": "drop",
-    "reason": "not an instruction ('bin ich fuer dich bereit')",
-    "text": "Sobald die Bestände knapp werden, bin ich für dich bereit.",
-    "was": "CONDITIONAL_RULE"
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "the speaker's own readiness, a statement",
+    "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
    },
    {
     "index": 87,
@@ -82,10 +81,9 @@
    },
    {
     "index": 95,
-    "action": "drop",
-    "reason": "advice with a contrast, not a revision",
-    "text": "Wir sollten die Injektionsstelle für die Insulin-Infusion anpassen, nicht dort, wo der Patient heute geimpft wurde.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact ('we should adjust ...')",
+    "text": "Wir sollten die Injektionsstelle für die Insulin-Infusion anpassen, nicht dort, wo der Patient heute geimpft wurde."
    },
    {
     "index": 101,
@@ -120,17 +118,20 @@
    },
    {
     "index": 144,
-    "action": "drop",
-    "reason": "an intention, not a correction",
-    "text": "Actually, debo enfocar en los inventarios de lámina de plata",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "an intention ('actually, I should focus on ...'), a statement",
+    "text": "Actually, debo enfocar en los inventarios de lámina de plata"
    },
    {
     "index": 171,
-    "action": "drop",
-    "reason": "statement of intent, ambiguous between request and fact",
-    "text": "أريد تصحيح صيغة طريقة المريض الحالي. (I need to correct the medication schedule for the current patient.)",
-    "was": "FACT"
+    "action": "strip English gloss",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي. (I need to correct the medication schedule for the current patient.)"
+   },
+   {
+    "index": 171,
+    "action": "relabel FACT -> FACT",
+    "reason": "a statement of intent ('I want to correct the schedule')",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي. (I need to correct the medication schedule for the current patient.)"
    },
    {
     "index": 172,
@@ -245,24 +246,21 @@
    },
    {
     "index": 200,
-    "action": "drop",
-    "reason": "advice, not a correction",
-    "text": "أيضاً، لا تقتصر على التواصل مع الضيفين فحسب، بل يجب أن تعمل على تحسين تجربة المضيف ككل",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "one-off advice in the imperative ('don't limit yourself to ...')",
+    "text": "أيضاً، لا تقتصر على التواصل مع الضيفين فحسب، بل يجب أن تعمل على تحسين تجربة المضيف ككل"
    },
    {
     "index": 201,
-    "action": "drop",
-    "reason": "advice, not a correction",
-    "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement ('continuous inquiries help ...')",
+    "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
    },
    {
     "index": 202,
-    "action": "drop",
-    "reason": "advice, not a correction",
-    "text": "أخيراً، تجنب استخدام التعليمات المزعجة أو غير الواضحة في تعاملاتك مع المضيفين",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "one-off advice in the imperative ('finally, avoid ...')",
+    "text": "أخيراً، تجنب استخدام التعليمات المزعجة أو غير الواضحة في تعاملاتك مع المضيفين"
    },
    {
     "index": 206,
@@ -273,10 +271,9 @@
    },
    {
     "index": 207,
-    "action": "drop",
-    "reason": "an extension, neither start nor end",
-    "text": "العقود التعاقدية متمددة",
-    "was": "LIFECYCLE"
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "contracts extended: a statement",
+    "text": "العقود التعاقدية متمددة"
    },
    {
     "index": 208,
@@ -301,17 +298,15 @@
    },
    {
     "index": 211,
-    "action": "drop",
-    "reason": "a revision, not a lifecycle change",
-    "text": "أُنقِح عقد كلاء.",
-    "was": "LIFECYCLE"
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "a contract was revised: a statement",
+    "text": "أُنقِح عقد كلاء."
    },
    {
     "index": 212,
-    "action": "drop",
-    "reason": "a stock reduction, not a lifecycle change",
-    "text": "تم تخفيض منتج من المخزون.",
-    "was": "LIFECYCLE"
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "a product reduced in stock: a statement",
+    "text": "تم تخفيض منتج من المخزون."
    },
    {
     "index": 214,
@@ -408,31 +403,51 @@
    },
    {
     "index": 252,
-    "action": "drop",
-    "reason": "English advice in the Hindi slot, not a correction",
-    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice ('No, realistically, you shouldn't rely on AI'), English",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+   },
+   {
+    "index": 252,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
    },
    {
     "index": 253,
-    "action": "drop",
-    "reason": "English advice, not a correction",
-    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "an assertion ('Actually, an AI can't ...'), English",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
+   },
+   {
+    "index": 253,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
    },
    {
     "index": 254,
-    "action": "drop",
-    "reason": "English advice, not a correction",
-    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> CORRECTION",
+    "reason": "'I meant, ...' revises what was said, English",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
+   },
+   {
+    "index": 254,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
    },
    {
     "index": 255,
-    "action": "drop",
-    "reason": "English advice, not a correction",
-    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> CORRECTION",
+    "reason": "'That is incorrect, ...' revises what was said, English",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
+   },
+   {
+    "index": 255,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
    },
    {
     "index": 256,
@@ -441,24 +456,36 @@
    },
    {
     "index": 257,
-    "action": "drop",
-    "reason": "an acknowledgement, not a correction",
-    "text": "Haan, aapne kharidaar ki tarah product display ki hai. (Yes, you have arranged the products like a shelf.)",
-    "was": "CORRECTION"
+    "action": "strip English gloss",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai. (Yes, you have arranged the products like a shelf.)"
+   },
+   {
+    "index": 257,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...': yes, you did ...)",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai. (Yes, you have arranged the products like a shelf.)"
    },
    {
     "index": 258,
-    "action": "drop",
-    "reason": "an acknowledgement, not a correction",
-    "text": "Haan, aapne product stock update ke liye AI ki help le li. (Yes, you used AI's help for stock update.)",
-    "was": "CORRECTION"
+    "action": "strip English gloss",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li. (Yes, you used AI's help for stock update.)"
+   },
+   {
+    "index": 258,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...')",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li. (Yes, you used AI's help for stock update.)"
    },
    {
     "index": 259,
-    "action": "drop",
-    "reason": "an acknowledgement, not a correction",
-    "text": "Haan, aapne product price check ke liye camera system use kiya. (Yes, you used a camera system for price check.",
-    "was": "CORRECTION"
+    "action": "strip English gloss",
+    "text": "Haan, aapne product price check ke liye camera system use kiya. (Yes, you used a camera system for price check."
+   },
+   {
+    "index": 259,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...')",
+    "text": "Haan, aapne product price check ke liye camera system use kiya. (Yes, you used a camera system for price check."
    },
    {
     "index": 261,
@@ -1002,6 +1029,20 @@
     "text": "Wenn eine Lieferung verspätet ist, melde mir sofort den Sachverhalt."
    },
    {
+    "id": "blind1-074",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "Aufkommendes Übernahmeangebot, bitte mir eine detaillierte Analyse zustellen."
+   },
+   {
+    "id": "blind1-075",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "Kreditnehmer zahlt nicht, bitte prüfe die Zahlungsmöglichkeiten und melde unverzüglich."
+   },
+   {
     "id": "blind1-076",
     "lang": "de",
     "kind": "CONDITIONAL_RULE",
@@ -1014,6 +1055,13 @@
     "kind": "CONDITIONAL_RULE",
     "domain": "a retail store",
     "text": "Lass mich wissen, wenn ein Liefertermin verschoben ist."
+   },
+   {
+    "id": "blind1-078",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
    },
    {
     "id": "blind1-079",
@@ -1119,6 +1167,13 @@
     "kind": "CORRECTION",
     "domain": "a medical clinic",
     "text": "Es ist falsch, diese Medikamente gegeneinander einzusetzen. Es ist besser, sie nebeneinander zu verwenden."
+   },
+   {
+    "id": "blind1-095",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "Wir sollten die Injektionsstelle für die Insulin-Infusion anpassen, nicht dort, wo der Patient heute geimpft wurde."
    },
    {
     "id": "blind1-096",
@@ -1450,6 +1505,13 @@
     "text": "El filtro del aire del automóvil está agotado."
    },
    {
+    "id": "blind1-144",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "Actually, debo enfocar en los inventarios de lámina de plata"
+   },
+   {
     "id": "blind1-145",
     "lang": "es",
     "kind": "CORRECTION",
@@ -1632,6 +1694,13 @@
     "text": "نحن نحاول زيادة استخدام الأنظمة الذكية لتحسين كفاءة التخزين."
    },
    {
+    "id": "blind1-171",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي."
+   },
+   {
     "id": "blind1-172",
     "lang": "ar",
     "kind": "NONE",
@@ -1758,6 +1827,27 @@
     "text": "لا يمكن الحصول على المنتج المستحسن حاليًا"
    },
    {
+    "id": "blind1-200",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "أيضاً، لا تقتصر على التواصل مع الضيفين فحسب، بل يجب أن تعمل على تحسين تجربة المضيف ككل"
+   },
+   {
+    "id": "blind1-201",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a hotel",
+    "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+   },
+   {
+    "id": "blind1-202",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "أخيراً، تجنب استخدام التعليمات المزعجة أو غير الواضحة في تعاملاتك مع المضيفين"
+   },
+   {
     "id": "blind1-203",
     "lang": "ar",
     "kind": "CORRECTION",
@@ -1777,6 +1867,27 @@
     "kind": "CORRECTION",
     "domain": "a software team",
     "text": "في هذا السياق، يجب استخدام 'نصب' بدلاً من 'نصيف', و'الإدارة' بدلاً من 'الإدارة"
+   },
+   {
+    "id": "blind1-207",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "العقود التعاقدية متمددة"
+   },
+   {
+    "id": "blind1-211",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "أُنقِح عقد كلاء."
+   },
+   {
+    "id": "blind1-212",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "تم تخفيض منتج من المخزون."
    },
    {
     "id": "blind1-213",
@@ -2031,11 +2142,60 @@
     "text": "वेबसाइट अपडेट नहीं हो रही है।"
    },
    {
+    "id": "blind1-252",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+   },
+   {
+    "id": "blind1-253",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
+   },
+   {
+    "id": "blind1-254",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "someone's personal life",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
+   },
+   {
+    "id": "blind1-255",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "someone's personal life",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
+   },
+   {
     "id": "blind1-256",
     "lang": "hi",
     "kind": "CORRECTION",
     "domain": "a supermarket chain",
     "text": "Nahi, main supermarket ke manager nahi hoon."
+   },
+   {
+    "id": "blind1-257",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai."
+   },
+   {
+    "id": "blind1-258",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li."
+   },
+   {
+    "id": "blind1-259",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne product price check ke liye camera system use kiya."
    },
    {
     "id": "blind1-260",
@@ -2135,9 +2295,9 @@
   "seed": 20261008,
   "cleaning": {
    "items_in": 278,
-   "items_out": 222,
-   "dropped": 56,
-   "relabelled": 12,
+   "items_out": 241,
+   "dropped": 37,
+   "relabelled": 31,
    "stripped": 2,
    "noise_rate": 0.245
   },
@@ -2168,10 +2328,9 @@
    },
    {
     "index": 60,
-    "action": "drop",
-    "reason": "a future start, neither begun nor ended",
-    "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten.",
-    "was": "FACT"
+    "action": "relabel FACT -> LIFECYCLE",
+    "reason": "a new route starts next week: a thing begins",
+    "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
    },
    {
     "index": 61,
@@ -2188,10 +2347,9 @@
    },
    {
     "index": 65,
-    "action": "drop",
-    "reason": "a question in disguise, garbled",
-    "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen.",
-    "was": "RULE"
+    "action": "relabel RULE -> NONE",
+    "reason": "a question without its question mark ('Should I always ...')",
+    "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
    },
    {
     "index": 66,
@@ -2201,10 +2359,9 @@
    },
    {
     "index": 72,
-    "action": "drop",
-    "reason": "not an instruction",
-    "text": "Bei einem Lieferengpass, solange keine Alternative gefunden wird, stehe ich Ihnen zur Verfügung.",
-    "was": "CONDITIONAL_RULE"
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "the speaker's own availability, a statement",
+    "text": "Bei einem Lieferengpass, solange keine Alternative gefunden wird, stehe ich Ihnen zur Verfügung."
    },
    {
     "index": 78,
@@ -2222,17 +2379,15 @@
    },
    {
     "index": 92,
-    "action": "drop",
-    "reason": "an acknowledgement, not a correction",
-    "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement with thanks",
+    "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
    },
    {
     "index": 119,
-    "action": "drop",
-    "reason": "ambiguous: third-person future, not an imperative",
-    "text": "Nunca responderá sobre tus transacciones personales sin tu autorización.",
-    "was": "RULE"
+    "action": "relabel RULE -> FACT",
+    "reason": "a third-person statement of what will (not) happen",
+    "text": "Nunca responderá sobre tus transacciones personales sin tu autorización."
    },
    {
     "index": 120,
@@ -2260,17 +2415,15 @@
    },
    {
     "index": 143,
-    "action": "drop",
-    "reason": "an instruction, not a revision",
-    "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('you must enter 1000 euros')",
+    "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
    },
    {
     "index": 147,
-    "action": "drop",
-    "reason": "not a revision",
-    "text": "Realmente, debo ver el estado actual de la entrega 12345.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off request ('I need to see the status of delivery 12345')",
+    "text": "Realmente, debo ver el estado actual de la entrega 12345."
    },
    {
     "index": 148,
@@ -2280,10 +2433,9 @@
    },
    {
     "index": 149,
-    "action": "drop",
-    "reason": "not a revision",
-    "text": "Exactamente, he necesitado la actualización de las tarifas de transporte.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement ('I have needed the rate update')",
+    "text": "Exactamente, he necesitado la actualización de las tarifas de transporte."
    },
    {
     "index": 169,
@@ -2392,10 +2544,9 @@
    },
    {
     "index": 194,
-    "action": "drop",
-    "reason": "a decision, not a state",
-    "text": "الطاقم قد قرر بإصلاح الإذار الإلكترونية.",
-    "was": "STATUS"
+    "action": "relabel STATUS -> FACT",
+    "reason": "a past decision, a statement",
+    "text": "الطاقم قد قرر بإصلاح الإذار الإلكترونية."
    },
    {
     "index": 195,
@@ -2406,66 +2557,57 @@
    },
    {
     "index": 196,
-    "action": "drop",
-    "reason": "speculation, not a state",
-    "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة.",
-    "was": "STATUS"
+    "action": "relabel STATUS -> FACT",
+    "reason": "a speculation about the future, a statement",
+    "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
    },
    {
     "index": 197,
-    "action": "drop",
-    "reason": "an event, not a state",
-    "text": "الطاقم قد وقع خطأ في ترتيب المدة المتوقعة للدواء.",
-    "was": "STATUS"
+    "action": "relabel STATUS -> FACT",
+    "reason": "a past event (a mistake was made), a statement",
+    "text": "الطاقم قد وقع خطأ في ترتيب المدة المتوقعة للدواء."
    },
    {
     "index": 199,
-    "action": "drop",
-    "reason": "not a revision",
-    "text": "أنت لا تفعل شيئًا غريبًا بالبيانات المنزلية.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement about the listener",
+    "text": "أنت لا تفعل شيئًا غريبًا بالبيانات المنزلية."
    },
    {
     "index": 200,
-    "action": "drop",
-    "reason": "an instruction, not a correction",
-    "text": "لا أريد أن تقوم بتحليل المشاكل العلمية دون فهمها الأساسي.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a preference ('I don't want you to ...') with no standing word",
+    "text": "لا أريد أن تقوم بتحليل المشاكل العلمية دون فهمها الأساسي."
    },
    {
     "index": 201,
-    "action": "drop",
-    "reason": "advice, not a correction",
-    "text": "أنت تحتاج إلى تعليم المدرسة بطريقة أكثر تفاعلية مع الطلاب.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact ('you need to ...')",
+    "text": "أنت تحتاج إلى تعليم المدرسة بطريقة أكثر تفاعلية مع الطلاب."
    },
    {
     "index": 204,
-    "action": "drop",
-    "reason": "an instruction, not a correction",
-    "text": "أيضًا، لا تفوت تصليح العينين الخلفية.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('also, don't miss repairing ...')",
+    "text": "أيضًا، لا تفوت تصليح العينين الخلفية."
    },
    {
     "index": 205,
-    "action": "drop",
-    "reason": "an instruction, not a correction",
-    "text": "وأخيرًا، تأكد من تصليح أفق العين.",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('finally, make sure to repair ...')",
+    "text": "وأخيرًا، تأكد من تصليح أفق العين."
    },
    {
     "index": 206,
-    "action": "drop",
-    "reason": "thanks, not a lifecycle change",
-    "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة",
-    "was": "LIFECYCLE"
+    "action": "relabel LIFECYCLE -> NONE",
+    "reason": "thanks",
+    "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
    },
    {
     "index": 207,
-    "action": "drop",
-    "reason": "waiting to sign: nothing began or ended",
-    "text": "ننتظر بتوقيع التعديل على اتفاقية التسويق الجديدة",
-    "was": "LIFECYCLE"
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "waiting to sign: a statement",
+    "text": "ننتظر بتوقيع التعديل على اتفاقية التسويق الجديدة"
    },
    {
     "index": 209,
@@ -2616,10 +2758,9 @@
    },
    {
     "index": 261,
-    "action": "drop",
-    "reason": "not a revision",
-    "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।",
-    "was": "CORRECTION"
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact, code-mixed but readable",
+    "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
    },
    {
     "index": 262,
@@ -3051,6 +3192,13 @@
     "text": "Die Lieferung für den Kunden in Leipzig muss heute Abend um 19 Uhr erfolgen."
    },
    {
+    "id": "blind2-060",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
+   },
+   {
     "id": "blind2-061",
     "lang": "de",
     "kind": "STATUS",
@@ -3070,6 +3218,13 @@
     "kind": "RULE",
     "domain": "a car repair garage",
     "text": "Vergessen Sie nie, den Kunden über die Reparaturstatus zu informieren"
+   },
+   {
+    "id": "blind2-065",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
    },
    {
     "id": "blind2-066",
@@ -3112,6 +3267,13 @@
     "kind": "CONDITIONAL_RULE",
     "domain": "a manufacturing plant",
     "text": "Sobald der Warelpaneele unter einen bestimmten Schwellenwert sinkt, warn Sie mich."
+   },
+   {
+    "id": "blind2-072",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "Bei einem Lieferengpass, solange keine Alternative gefunden wird, stehe ich Ihnen zur Verfügung."
    },
    {
     "id": "blind2-073",
@@ -3231,6 +3393,13 @@
     "kind": "CORRECTION",
     "domain": "a pharmacy",
     "text": "Tatsächlich müssen Sie Ihre Rezeptur vor dem Zahnarzt abgeben."
+   },
+   {
+    "id": "blind2-092",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
    },
    {
     "id": "blind2-093",
@@ -3415,6 +3584,13 @@
     "text": "Siempre que solicite información financiera, por favor mencione tu nombre completo."
    },
    {
+    "id": "blind2-119",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Nunca responderá sobre tus transacciones personales sin tu autorización."
+   },
+   {
     "id": "blind2-120",
     "lang": "es",
     "kind": "FACT",
@@ -3576,6 +3752,13 @@
     "text": "No, realmente necesito que agregues un depósito de 500 euros a mi cuenta corriente."
    },
    {
+    "id": "blind2-143",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a bank branch",
+    "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
+   },
+   {
     "id": "blind2-144",
     "lang": "es",
     "kind": "CORRECTION",
@@ -3597,11 +3780,25 @@
     "text": "No, lo que necesito es la información de los envíos de mañana."
    },
    {
+    "id": "blind2-147",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a logistics company",
+    "text": "Realmente, debo ver el estado actual de la entrega 12345."
+   },
+   {
     "id": "blind2-148",
     "lang": "es",
     "kind": "CORRECTION",
     "domain": "a logistics company",
     "text": "De hecho, la ruta más rápida para llegar al puerto es a través del puente 901."
+   },
+   {
+    "id": "blind2-149",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "Exactamente, he necesitado la actualización de las tarifas de transporte."
    },
    {
     "id": "blind2-150",
@@ -3807,11 +4004,53 @@
     "text": "لا يزال معدات التدريس الإلكترونية مؤقتًا محدودة في الغرفة التعليمية."
    },
    {
+    "id": "blind2-194",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "الطاقم قد قرر بإصلاح الإذار الإلكترونية."
+   },
+   {
+    "id": "blind2-196",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
+   },
+   {
+    "id": "blind2-197",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "الطاقم قد وقع خطأ في ترتيب المدة المتوقعة للدواء."
+   },
+   {
     "id": "blind2-198",
     "lang": "ar",
     "kind": "CORRECTION",
     "domain": "a school",
     "text": "لا، لم تقم بإعطاء المعلمة تعلم الرياضيات بشكل صحيح."
+   },
+   {
+    "id": "blind2-199",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "أنت لا تفعل شيئًا غريبًا بالبيانات المنزلية."
+   },
+   {
+    "id": "blind2-200",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "لا أريد أن تقوم بتحليل المشاكل العلمية دون فهمها الأساسي."
+   },
+   {
+    "id": "blind2-201",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "أنت تحتاج إلى تعليم المدرسة بطريقة أكثر تفاعلية مع الطلاب."
    },
    {
     "id": "blind2-202",
@@ -3826,6 +4065,34 @@
     "kind": "CORRECTION",
     "domain": "a car repair garage",
     "text": "في الواقع، تحتاج إلى تصليح الأشبات الأمامية."
+   },
+   {
+    "id": "blind2-204",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "أيضًا، لا تفوت تصليح العينين الخلفية."
+   },
+   {
+    "id": "blind2-205",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "وأخيرًا، تأكد من تصليح أفق العين."
+   },
+   {
+    "id": "blind2-206",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
+   },
+   {
+    "id": "blind2-207",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "an e-commerce shop",
+    "text": "ننتظر بتوقيع التعديل على اتفاقية التسويق الجديدة"
    },
    {
     "id": "blind2-208",
@@ -4078,6 +4345,13 @@
     "kind": "CORRECTION",
     "domain": "a manufacturing plant",
     "text": "That's incorrect, मशीन का रखरखाव हर दिन विशेष रूप से किया जाता है। साप्ताहिक नहीं।"
+   },
+   {
+    "id": "blind2-261",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
    },
    {
     "id": "blind2-263",

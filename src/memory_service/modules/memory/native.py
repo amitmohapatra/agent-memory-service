@@ -869,13 +869,17 @@ class NativeMemoryIntelligence:
                 category="preference",
                 **common,
             )
-        if label.kind in RULE_KINDS:
+        if label.kind in RULE_KINDS and label.standing:
             # A standing rule ("Never suggest recipes with cilantro", "Whenever I ask for a
             # stock audit, always use a table", "Nunca me sugieras recetas con cilantro")
             # says so in its own words, so it is durable on sight: a lasting PREFERENCE the
             # user profile is kept from, not a seven-day instruction that lapses unless
             # restated. The labeller finds it wherever the standing word sits ("For weekly
-            # overviews, never ...") and keeps its trigger and its exception.
+            # overviews, never ...") and keeps its trigger and its exception. A conditional
+            # instruction that does not say it is for every time ("Tell me if the price
+            # drops", "Don't use bullet points unless I ask") keeps its kind as metadata
+            # only and takes the path below, as it did before the labeller: a SHORT_TERM
+            # instruction that lapses unless restated.
             return MemoryCandidate(
                 content=s,
                 memory_type=MemoryType.PREFERENCE,

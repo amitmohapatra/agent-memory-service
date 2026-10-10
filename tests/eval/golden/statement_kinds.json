@@ -7,8 +7,10 @@
   "LIFECYCLE": "a thing or a relationship began or ended: terminated, dismantled, discontinued, retired, launched, opened, hired, a new supplier.",
   "CORRECTION": "the speaker revises something said or known before: 'No, ...', 'Actually, ...', 'I meant ...', 'we now use X' (instead of the old way).",
   "FACT": "any other declarative statement of information, including preferences and past events.",
-  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now.",
-  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT"
+  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now - including one tied to a single expected event ('call me when you get this', 'let me know when the shipment arrives', 'remind me when it's time to leave').",
+  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT",
+  "storage": "a RULE or CONDITIONAL_RULE is kept as a lasting rule only when it says it is for every time: a standing word (always, never, from now on), a recurring trigger (whenever, every time) or a universal obligation ('All X must'). Any other conditional instruction keeps its kind as metadata and is stored as it would be without the labeller.",
+  "habits": "a standing word in the speaker's own habit or promise ('I always double-check the invoices', 'Siempre consulto con el banco') is a FACT."
  },
  "dev": [
   {
@@ -2341,6 +2343,202 @@
    "domain": "retail",
    "kind": "NONE",
    "text": "कोल्ड रूम हमेशा इतना शोर क्यों करता है?"
+  },
+  {
+   "id": "dev-oneoff-en-01",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Please send the report when it's ready."
+  },
+  {
+   "id": "dev-oneoff-en-02",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Let me know when the shipment arrives."
+  },
+  {
+   "id": "dev-oneoff-en-03",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Tell me if the price drops."
+  },
+  {
+   "id": "dev-oneoff-en-04",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Call me when you get this."
+  },
+  {
+   "id": "dev-oneoff-en-05",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Remind me when it's time to leave."
+  },
+  {
+   "id": "dev-oneoff-en-06",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Text me once you've landed."
+  },
+  {
+   "id": "dev-oneoff-en-07",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "I always double-check the invoices before I pay them."
+  },
+  {
+   "id": "dev-oneoff-de-01",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Sag mir Bescheid, wenn du da bist."
+  },
+  {
+   "id": "dev-oneoff-de-02",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Ruf mich an, wenn du das hier liest."
+  },
+  {
+   "id": "dev-oneoff-de-03",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Gib mir Bescheid, wenn die Lieferung ankommt."
+  },
+  {
+   "id": "dev-oneoff-de-04",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Erinnere mich daran, wenn es Zeit zum Gehen ist."
+  },
+  {
+   "id": "dev-oneoff-de-05",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Ich prüfe die Rechnungen immer vor der Zahlung."
+  },
+  {
+   "id": "dev-oneoff-es-01",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Avísame cuando llegues."
+  },
+  {
+   "id": "dev-oneoff-es-02",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Llámame cuando leas esto."
+  },
+  {
+   "id": "dev-oneoff-es-03",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Avísame cuando llegue el pedido."
+  },
+  {
+   "id": "dev-oneoff-es-04",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Mándame el informe cuando esté listo."
+  },
+  {
+   "id": "dev-oneoff-es-05",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Siempre consulto con el banco antes de firmar."
+  },
+  {
+   "id": "dev-oneoff-es-06",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Nunca uso efectivo en la tienda."
+  },
+  {
+   "id": "dev-oneoff-ar-01",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أخبرني عندما تصل."
+  },
+  {
+   "id": "dev-oneoff-ar-02",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "اتصل بي عندما تقرأ هذا."
+  },
+  {
+   "id": "dev-oneoff-ar-03",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أرسل لي التقرير عندما يكون جاهزًا."
+  },
+  {
+   "id": "dev-oneoff-ar-04",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أخبرني إذا انخفض السعر."
+  },
+  {
+   "id": "dev-oneoff-ar-05",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "أنا دائمًا أراجع الفواتير قبل الدفع."
+  },
+  {
+   "id": "dev-oneoff-hi-01",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "जब तुम पहुँचो तो मुझे बताना।"
+  },
+  {
+   "id": "dev-oneoff-hi-02",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "जब आप यह पढ़ें तो मुझे फ़ोन करना।"
+  },
+  {
+   "id": "dev-oneoff-hi-03",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "रिपोर्ट तैयार हो जाए तो मुझे भेज देना।"
+  },
+  {
+   "id": "dev-oneoff-hi-04",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "अगर कीमत गिरे तो मुझे बताना।"
+  },
+  {
+   "id": "dev-oneoff-hi-05",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "मैं हमेशा भुगतान से पहले बिल जाँचता हूँ।"
   }
  ],
  "test": [

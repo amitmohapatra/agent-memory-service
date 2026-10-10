@@ -120,6 +120,12 @@ llm_tokens_total = Counter(
     ["tenant", "use", "direction"],
     registry=REGISTRY,
 )
+statement_labeller_fallback_total = Counter(
+    "memory_statement_labeller_fallback_total",
+    "Statement-labeller model tiers that failed, so the lexicon's labels were kept (nli|llm)",
+    ["tier"],
+    registry=REGISTRY,
+)
 grounding_claims_total = Counter(
     "memory_grounding_claims_total",
     "Grounding cascade claim verdicts (supported|unsupported|contradicted|borderline)",
