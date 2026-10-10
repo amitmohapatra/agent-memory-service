@@ -1,4 +1,4 @@
-# ADR 0035: What a user says follows that user, in the words they said it
+# ADR 0036: What a user says follows that user, in the words they said it
 
 Date: 2026-10-08. Status: accepted. Amends ADR 0005 (default audiences) and ADR 0013 (an agent's
 working notes).

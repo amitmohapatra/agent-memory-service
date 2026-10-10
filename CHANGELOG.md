@@ -51,7 +51,7 @@ each entry says which one moved. Decisions behind each change are in the
   conversation and `"WORKSPACE"` shares it with a team, as before. A user's turn relayed by an
   agent harness is the user's, no longer the agent's private note. Existing rows keep their
   audience ([concepts](docs/guide/02-concepts.md#scope-and-visibility-are-separate-on-purpose),
-  ADR 0035).
+  ADR 0036).
 - A user's sentence is no longer lost when a rule reads all of it: the turn is kept verbatim
   beside any reading that can lapse, merge or fade (a fact, a task, a procedure, an event, a
   decision) - "All seasonal merchandise must go to Facility B" survived only as a seven-day
@@ -60,10 +60,10 @@ each entry says which one moved. Decisions behind each change are in the
   turn longer than 2000 characters is kept in sentence-cut pieces, up to six (about 12,000
   characters), instead of truncated after the first. The fact rule reads noun-phrase subjects
   of up to twelve words ("the master lock code for the hazardous materials cage in
-  Warehouse 3"), not five; a longer clause or event is left to the event rule (ADR 0035).
+  Warehouse 3"), not five; a longer clause or event is left to the event rule (ADR 0036).
 - A key restricted with `may_act_as` to a user now reads that user's statements from all of
   their threads, and the other participants of a shared thread no longer read a user's
-  default memories from it (ADR 0035).
+  default memories from it (ADR 0036).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does

@@ -198,7 +198,7 @@ When the writer does not say, the visibility follows the type and the request
 | anything else, from a user's own words | `USER` |
 | anything else | `THREAD` with a thread, else `USER` with a user, else `TENANT` |
 
-**What a user says follows that user** (ADR 0035). A user's own words are their message, a
+**What a user says follows that user** (ADR 0036). A user's own words are their message, a
 decision or feedback they record, or a `remember` they make themselves, including a turn an
 agent harness relays for them (`said_by_user`). Everything made from those words is `USER`:
 read in every conversation of theirs and by every agent acting for them, never by another

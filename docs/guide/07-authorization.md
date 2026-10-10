@@ -94,7 +94,7 @@ What the verifier guarantees (`modules/auth/keys.py`, ADR 0021):
    `… as that agent`); a request naming neither acts as the key itself, the anonymous service
    principal, which holds no grant on any user's or agent's memories. `*` lifts it
    (`tests/security/test_may_act_as.py`, ADR 0032). Acting for a user reads that user's
-   `USER` memories, and what a user says is `USER` by default (ADR 0035): a key limited to
+   `USER` memories, and what a user says is `USER` by default (ADR 0036): a key limited to
    `user:alice` and `agent:x` sees what alice said in all of her threads, not only the one
    the request names.
 5. **Body against headers**: a `tenant_id`, `workspace_id` or `user_id` in the body that
