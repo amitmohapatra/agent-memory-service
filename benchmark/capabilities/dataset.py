@@ -273,9 +273,12 @@ def _digest(paths: Sequence[Path]) -> tuple[str, dict[str, str]]:
     h = hashlib.sha256()
     files: dict[str, str] = {}
     for path in sorted(paths):
-        canonical = json.dumps(
-            json.loads(path.read_text(encoding="utf-8")), sort_keys=True, ensure_ascii=False
-        ).encode("utf-8")
+        if path.suffix == ".json":
+            canonical = json.dumps(
+                json.loads(path.read_text(encoding="utf-8")), sort_keys=True, ensure_ascii=False
+            ).encode("utf-8")
+        else:  # the scorer and the generator: what a verdict means is part of the dataset
+            canonical = path.read_bytes()
         files[path.name] = hashlib.sha256(canonical).hexdigest()
         h.update(path.name.encode())
         h.update(canonical)
@@ -301,9 +304,13 @@ def load_dataset(root: Path = DATA) -> Dataset:
                 scenarios=tuple(_scenario(s, name) for s in raw["scenarios"]),
             )
         )
-    # the questions, their assertions and the scorer's language data; not _modes.json, which
+    # the questions, their assertions, the scorer's language data, the scorer and the
+    # generator; not _modes.json, which
     # says who runs what (a run records its own selection), not what is asked
     extra = [*sorted(root.glob("scale_*.json")), root / "_languages.json"]
+    if root == DATA:
+        here = Path(__file__).parent
+        extra += [here / "scoring.py", here / "generate.py"]
     sha, files = _digest([*paths, *extra])
     dataset = Dataset(capabilities=tuple(capabilities), sha256=sha, files=files)
     assign_splits(dataset)

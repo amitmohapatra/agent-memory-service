@@ -111,68 +111,75 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
 
     async def _write(s: Any, lang: str, user: str) -> Any:
         async with sem:
-            return await write_scenario(service, s, lang, user, today, settings)
+            w = await write_scenario(service, s, lang, user, today, settings)
+            written.append(w)
+            return w
 
-    queues_at_start = await service.queue_depths()
-    print(f"worker queues at start: {queues_at_start}", file=sys.stderr)
-    t0 = time.perf_counter()
-    written = await asyncio.gather(*(_write(*x) for x in work))
-    last_write = time.time()
-    write_seconds = time.perf_counter() - t0
-    signals = await settle(service, written, last_write, settings.probe_seconds)
-    print(f"wrote {sum(w.turns for w in written)} turns; settled {signals}", file=sys.stderr)
-
-    hs = HarnessSettings.from_env().model_copy(
-        update={"memory_url": settings.url, "api_key": token, "grounding_sample": 0.0}
-    )
-    harness_memory = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
+    written: list[Any] = []
     records: list[dict[str, Any]] = []
-    async with Harness(config=hs, memory=harness_memory) as h:
-        assert h.gateway is not None, "the harness mode needs BIFROST_URL (the gateway)"
-        gateway = h.gateway
-        model_wait = await wait_for_model(gateway, model)
-        print(f"model {model} answered after {model_wait:.1f} s", file=sys.stderr)
-
-        async def answer(question: str, agent: Runtime) -> str:
-            messages = [
-                {"role": "system", "content": SYSTEM + (agent.context or "(nothing on file)")},
-                {"role": "user", "content": question},
-            ]
-            reply = await gateway.complete(
-                messages, model=model, max_tokens=MAX_TOKENS, temperature=0
-            )
-            return str(
-                ((reply.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
-            )
-
-        agents: dict[str | None, Any] = {}
-
-        def agent_for(agent_id: str | None) -> Any:
-            if agent_id not in agents:
-                agents[agent_id] = h.wrap(
-                    answer, id=agent_id or "capeval-agent", timeout=RUN_TIMEOUT
-                )
-            return agents[agent_id]
-
-        # the answer latency includes the model, which on a laptop shares the CPU: the load
-        # is recorded so a run beside another heavy job can be told apart
-        async with LoadSampler() as load:
-            for w in written:
-                for case in cases(w.scenario, w.language):
-                    records.append(await _ask(agent_for(w.scenario.agent), w, case, settings))
-                    r = records[-1]
-                    print(
-                        f"{r['key']}: {'PASS' if r['passed'] else 'FAIL ' + str(r['reason'])} "
-                        f"({r['latency_ms'] / 1000:.1f}s)",
-                        file=sys.stderr,
-                    )
     cleanup: dict[str, Any] = {"purged": False}
-    if should_purge(settings):
-        done = await purge(client, owned_by(written).items())
-        cleanup = {"purged": True, **done.as_dict()}
-        print(f"cleanup: {cleanup}", file=sys.stderr)
-    await client.aclose()
-    await _revoke(settings, factory, policy)
+    try:
+        queues_at_start = await service.queue_depths()
+        print(f"worker queues at start: {queues_at_start}", file=sys.stderr)
+        t0 = time.perf_counter()
+        # in scenario order (the asking order), not completion order
+        written[:] = await asyncio.gather(*(_write(*x) for x in work))
+        last_write = time.time()
+        write_seconds = time.perf_counter() - t0
+        signals = await settle(service, written, last_write, settings.probe_seconds)
+        print(f"wrote {sum(w.turns for w in written)} turns; settled {signals}", file=sys.stderr)
+
+        hs = HarnessSettings.from_env().model_copy(
+            update={"memory_url": settings.url, "api_key": token, "grounding_sample": 0.0}
+        )
+        harness_memory = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
+        async with Harness(config=hs, memory=harness_memory) as h:
+            assert h.gateway is not None, "the harness mode needs BIFROST_URL (the gateway)"
+            gateway = h.gateway
+            model_wait = await wait_for_model(gateway, model)
+            print(f"model {model} answered after {model_wait:.1f} s", file=sys.stderr)
+
+            async def answer(question: str, agent: Runtime) -> str:
+                messages = [
+                    {"role": "system", "content": SYSTEM + (agent.context or "(nothing on file)")},
+                    {"role": "user", "content": question},
+                ]
+                reply = await gateway.complete(
+                    messages, model=model, max_tokens=MAX_TOKENS, temperature=0
+                )
+                return str(
+                    ((reply.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+                )
+
+            agents: dict[str | None, Any] = {}
+
+            def agent_for(agent_id: str | None) -> Any:
+                if agent_id not in agents:
+                    agents[agent_id] = h.wrap(
+                        answer, id=agent_id or "capeval-agent", timeout=RUN_TIMEOUT
+                    )
+                return agents[agent_id]
+
+            # the answer latency includes the model, which on a laptop shares the CPU: the load
+            # is recorded so a run beside another heavy job can be told apart
+            async with LoadSampler() as load:
+                for w in written:
+                    for case in cases(w.scenario, w.language):
+                        records.append(await _ask(agent_for(w.scenario.agent), w, case, settings))
+                        r = records[-1]
+                        print(
+                            f"{r['key']}: {'PASS' if r['passed'] else 'FAIL ' + str(r['reason'])} "
+                            f"({r['latency_ms'] / 1000:.1f}s)",
+                            file=sys.stderr,
+                        )
+    finally:
+        # a failed run purges what it wrote and gives its key back, as a finished one does
+        if should_purge(settings) and written:
+            done = await purge(client, owned_by(written).items())
+            cleanup = {"purged": True, **done.as_dict()}
+            print(f"cleanup: {cleanup}", file=sys.stderr)
+        await client.aclose()
+        await _revoke(settings, factory, policy)
 
     from benchmark.capabilities.report import build, save_raw
 
@@ -233,7 +240,7 @@ async def _ask(agent: Any, w: Any, case: Case, settings: Settings) -> dict[str, 
     ).as_dict()
     if error is not None:
         # the model call failed: an error, not the agent declining to answer
-        v.update(passed=False, reason="error")
+        v.update(passed=False, reason="error", abstained=None)
     s = case.scenario
     return {
         "key": case.key,
@@ -262,11 +269,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from benchmark.capabilities.report import write
 
     argv = list(sys.argv[1:] if argv is None else argv)
-    model = (
-        os.environ.get("CAPEVAL_ANSWER_MODEL")
-        or os.environ.get("TRELLIS_LIVE_MODEL")
-        or "granite/granite-3.3-2b"
-    )
+    model = os.environ.get("CAPEVAL_ANSWER_MODEL") or os.environ.get("TRELLIS_LIVE_MODEL") or ""
+    if not model:
+        raise SystemExit("harness mode needs the answer model in CAPEVAL_ANSWER_MODEL")
     settings, args = parse(["--mode", "nollm", *argv])
     settings.mode = "harness"
     settings.tenant = args.tenant or "capeval-harness"

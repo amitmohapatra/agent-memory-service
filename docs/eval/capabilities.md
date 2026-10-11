@@ -122,7 +122,7 @@ Run every baseline on a quiet machine, alone - `HEAVY=` wraps it in a machine-wi
 | Mode | Tenant policy | What answers | Run |
 |---|---|---|---|
 | `nollm` | no model use at all, reads deterministic | the context itself is scored | the full dataset, every language |
-| `llm` | the live policy: every use but `memory_restatement`, `read_assist` on, one gateway model (`CAPEVAL_LLM_MODEL`, default Granite 3.3 2B) | the context is scored | sample `llm` |
+| `llm` | the live policy: every use but `memory_restatement`, `read_assist` on, one gateway model (`CAPEVAL_LLM_MODEL`, required) | the context is scored | sample `llm` |
 | `harness` | as `nollm` | an agent wrapped by agent-harness: a function agent whose prompt is the pushed context and whose model (`CAPEVAL_ANSWER_MODEL`) answers; the answer is scored | sample `harness` |
 
 The samples are deterministic (`_modes.json`): per capability the InventorySmart scenario first,
@@ -155,12 +155,31 @@ kinds (`direct`, `paraphrase`, `implicit`), every capability but scale (extracti
 | `benchmark/results/capabilities/<mode>.raw.json.gz` | every record as measured, saved before anything summarises it; `python -m benchmark.capabilities.report <mode>.raw.json.gz` rebuilds the summary |
 | `benchmark/results/capability_gate.json` | the thresholds: every cell's recorded accuracy and the context p95, per mode, for one dataset hash |
 
-The gate: **every cell must reach its recorded accuracy** (no tolerance), a cell the baseline
-has and the run lacks fails, **context p95 may rise at most 10 %**, a latency measured on a
+The gate is a **ratchet: accuracy may only go up**. Every cell's threshold is its best
+recorded accuracy. `gate record` raises a threshold whenever it measures a cell higher, and
+keeps it for any cell whose questions did not change, even across a dataset change. A cell
+measured lower is refused. The ratchet starts at main `420bbf3`. `targets` sit beside the
+thresholds: goals that are reported and never failed. A cell the baseline has and
+the run lacks fails, **context p95 may rise at most 10 %**, a latency measured on a
 loaded machine fails, and a run on another dataset (`dataset.sha256`: the capability files,
-the scale specs and `_languages.json`) or another selection is refused - a dataset change
+the scale specs, `_languages.json`, the scorer and the generator) or another selection is refused - a dataset change
 re-records the baseline in the same change, where both numbers are reviewed. A threshold is
 never lowered to let a change through; an improvement is recorded by re-recording.
+
+More rules:
+
+- **Noisy cells.** Repeat runs recorded together give each cell its lowest value; a cell
+  they disagree on is recorded as noisy, with the range they spanned. A drop beyond that
+  range that is confined to noisy cells exits with code 3 (`RERUN`) instead of failing. One rerun decides it: `make eval-capabilities-gate RERUN=<second run>.json`
+  (`gate check --rerun`). A noisy cell fails only if both runs are below its threshold less its range.
+- **Empty runs.** A run that measured nothing is refused as a baseline and fails as a check.
+- **New cells.** A cell the run measured but the baseline does not hold yet is listed as a new
+  cell; it is gated once the baseline is re-recorded.
+- **Noise allowance.** A cell may sit below its threshold by as much as its repeats spread,
+  and no further; cells whose repeats agreed get no allowance at all.
+- **What the hash covers.** The dataset hash includes the scorer (`scoring.py`) and the
+  generator (`generate.py`), so a change to what a verdict means re-records the baseline in
+  the same change.
 
 ### The gate runs on a store of its own
 
@@ -176,7 +195,20 @@ of its own (`benchmark/capabilities/isolated_stack.sh`). The stack is:
 - `memory-api` and `memory-worker` from this checkout, on their own ports, with no model
   gateway.
 
-When the command ends, the stack is dropped, whether the run passed, failed or was
+Before it creates anything, the script refuses to start if any of these holds:
+
+- the database name does not match `^capeval`;
+- a Qdrant port is the live one (6333/6334);
+- a port already answers;
+- WORK does not resolve under `/var/tmp/capeval*`;
+- the Redis database is 0, a reserved one (`CAPEVAL_REDIS_RESERVED`) or not empty.
+
+One stack runs at a time: an exclusive lock sits beside WORK. The service starts with a clean
+environment (`env -i`) and from WORK, so no `.env` is read. Both database URLs, including the
+`DIRECT_URL` that migrations, the job queue and graph sessions use, point at the eval
+database. Everything the script creates is written to a manifest. Teardown removes only what
+the manifest names, and signals a process only if its command line is still the one started
+here. When the command ends, the stack is dropped, whether the run passed, failed or was
 interrupted. The script deletes the Qdrant collections through the API, stops the instance,
 removes its path, drops the database, flushes the Redis database and removes the blob
 directory. It records the disk before the stack starts and after it is gone; a gate run
@@ -229,7 +261,8 @@ on a fast set, and the full set runs nightly:
 
 | Set | What it runs | Baseline | When |
 |---|---|---|---|
-| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. On the isolated store the worker's queues hold only the run's own work, so the questions start once all of it, summaries and graph enrichment included, has drained (bounded at 15 minutes). (about 4 minutes in practice). A core run takes about 17 minutes end to end, the isolated stack's start and teardown included. Even with every queue drained, two runs differ in 14 of 174 cells, all same-session, by at most 0.05 (personalization, procedures, recency, updates). That variance is the service's own, a finding for the blocks that touch the same-session context. The baseline keeps the lower value of each cell, so a PR that fails on one of those cells alone is rerun once before it counts as a regression | its own, `nollm/core` (cells and context p95), two runs merged | every PR that touches capability work |
+| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once the run's own queued work, summaries and graph enrichment included, has drained (bounded at 15 minutes; about 4 in practice). A run takes about 17 minutes, the isolated stack included | its own, `nollm/core` (cells and context p95), two runs merged: the lower value of each cell, and the cells they disagreed on recorded as noisy | every PR that touches capability work |
+| `SET=llm_core` (`MODE=llm`) | a fixed stratified subset of core: per capability (scale aside), the InventorySmart origin scenario and the other-domain scenario with the fewest turns. All five domains, every language and the code-switched phrasings, three phrasing kinds: 20 scenarios, 697 turns, 326 phrasings per surface (`_modes.json` lists them). It runs on the isolated store through the live gateway and the CPU model (`CAPEVAL_GATEWAY=1`, `CAPEVAL_LLM_MODEL`) | its own, `llm/llm_core`, ratcheted like `nollm/core` | every PR that touches capability work |
 | `SET=scale` | capability 7 alone, every language | held to the full baseline's scale cells; its latency is not compared | the PR of a change that targets scale, and nightly |
 | `SET=full` (default) | everything | `nollm` | nightly, and before a baseline is re-recorded |
 
@@ -272,7 +305,7 @@ The recorded numbers, with what produced them, are in the result files and their
 [`harness.md`](../../benchmark/results/capabilities/harness.md). Read them with their dates and
 `provenance`; the summary table below is copied from them.
 
-Recorded on 2026-10-08 on a 4-core laptop. The service ran the `claude/cool-maxwell-w5avo8` tree at `a06c2c9`, plus uncommitted ingestion work, with the dataset `600b1e5d758f`. Accuracy is the share of phrasings whose assertions held. Reading the columns:
+Recorded on 2026-10-08 on a 4-core laptop. The service ran `a06c2c9` plus uncommitted ingestion work, with the dataset `600b1e5d758f`. Accuracy is the share of phrasings whose assertions held. Reading the columns:
 
 - **new session**: the pushed context in a fresh thread. This is the primary number.
 - **same session**: the pushed context in the thread of the scenario's last session.
@@ -298,7 +331,7 @@ Recorded on 2026-10-08 on a 4-core laptop. The service ran the `claude/cool-maxw
 
 The table shows four things:
 
-- **The model policy changes nothing measured.** On the `llm` sample's 153 phrasings, `nollm` gives the same verdicts as `llm` on every record of every surface. With a CPU Granite, `query_expansion` times out on the read path (≈250 ms added). The LLM enrichment jobs were still queued behind the graph backlog when the questions started (`queued_at_ask`).
+- **The model policy changes nothing measured.** On the `llm` sample's 153 phrasings, `nollm` gives the same verdicts as `llm` on every record of every surface. With a small model on the CPU, `query_expansion` times out on the read path (≈250 ms added). The LLM enrichment jobs were still queued behind the graph backlog when the questions started (`queued_at_ask`).
 - **The harness answer follows the context.** On the harness sample's 61 phrasings, the pushed context in a new session reached 0.14 and the answers 0.11. The agent can only answer what the context brings. Where the context brought a rule but not the facts it applies to, the model either refused or made the facts up.
 - **Languages.** Primary macro by language: en 0.14; de, es, ar and hi 0.10 each; code-switched 0.09. Same session: en 0.40, de 0.35, es 0.35, ar 0.30, hi 0.29, code-switched 0.36. Search is flat at 0.40-0.42. The English lead on the primary surface is one capability: an explicit rule reaches a new session only through the profile block, which keeps English statements (en 0.27; every other language 0).
 - **Determinism.** Two full `nollm` runs gave identical verdicts in 191 of 192 gate cells. The one difference was same-session abstention in Hindi, 0.16 against 0.19. The gate keeps the lower of the two (`repeat_runs: 2`).
@@ -364,7 +397,7 @@ number is from the `nollm` full run unless the line names another.
   - 8,938 turns became about 70,000 memories. Graph enrichment drains at about 30 jobs per
     minute per tenant, and 11,541 jobs were still queued when the questions started.
 - **LLM mode: `query_expansion` times out on the read path. This is a latency regression.**
-  With the CPU Granite policy, context p95 is 280.62 ms in llm mode against 52.28 ms in
+  With a small model on the CPU as the policy's model, context p95 is 280.62 ms in llm mode against 52.28 ms in
   nollm, and search p95 is 280.06 ms. The read-time `query_expansion` call waits for its
   budget and gives up. It adds about 250 ms to p95 and changes no verdict: on the llm
   sample's 444 records, llm and nollm give identical verdicts. It is to be fixed before llm
@@ -402,15 +435,65 @@ Three cells moved the other way. The superseded value now reaches the context un
 - `abstention` in a new session fell from 1.00 to 0.31 (347 `no_abstain`): a nearest
   neighbour now always comes back.
 
-`capability_gate.json` keeps those 18 cells at their pre-B1 values as `targets`. The gate
-prints a run that is below a target ("below target (not failed)") but only the baseline fails
-it, because the old values came from thread isolation hiding the superseded statement, not
-from replacement logic: they are what B4/P4 must reach with statements visible across
-threads.
+`capability_gate.json` keeps those 18 cells at their pre-B1 values as `targets`. A run below a
+target is reported ("below target (not failed)"), never failed: the old values came from
+thread isolation hiding the superseded statement, not from replacement logic. They are what
+B4 / P4 must reach with statements visible across threads. The thresholds are the ratchet's,
+from 420bbf3 on.
 
 These are the gaps listed above, now visible: stale leaks for **B4 / P4**, abstention for
-**P4**. The core baseline was re-recorded on `420bbf3` from one run. The full `nollm`, `llm`
-and `harness` baselines are still the pre-B1 ones until the nightly full run re-records them.
+**P4**. Search on `update_contradiction` cannot pass until the message, summary and profile
+items it returns carry history marking, as memories and facts already do. That work is
+tracked for **P4**.
+
+The core baseline is recorded on `420bbf3` from two runs on the isolated store
+(`nollm_core.json` and `nollm_core_repeat.json`, both regenerable):
+
+- macro 0.4787 and 0.4789;
+- wall time 1,066 s and 1,117 s;
+- context p95 60.5 and 65.6 ms, at 0.89 and 0.95 load per core.
+
+The two runs differed in 41 of 174 cells, by at most 0.04. That is more than the 14 seen
+before B1, and it is the service's own variance. With the earlier one-run 420bbf3 record as
+a third observation, 52 cells are recorded as noisy.
+
+For the eight capabilities whose questions did not change, the threshold is the higher of
+that earlier record and the new lower value (27 cells were raised). `procedural_skill` and
+`explicit_personalization` start afresh. Five of their queries (`explicit-field-no-north-
+fridays`, `explicit-retail-no-clearance`, `explicit-retail-competitor-supplier`,
+`procedure-retail-hazmat-report`, `procedure-retail-promo-brief`) had a "rule" anchor that the
+event turn alone satisfied (for example "north of the river" appears in the job list). They
+now require words that only the stated rule carries ("kids", "competitor", "end date"...).
+That makes them stricter: 0.48 → 0.475 and 0.739 → 0.737 mean cell accuracy on the core set.
+
+**The full baselines are not reproducible.** The full `nollm`, `llm` and `harness` runs of
+2026-10-08 were measured on `a06c2c9` plus uncommitted work, and on an earlier dataset hash.
+They are not in `capability_gate.json`; their summaries are kept as history. The plan is to
+re-record them on main with the nightly full run: `make eval-capabilities MODE=...`, then
+`make eval-capabilities-baseline`.
+
+### Where the run-to-run noise may come from
+
+Not fixed yet; these are hypotheses to test. The two core runs differ in 41 of 174 cells,
+nearly all in same-session context. The flips are a context that came back with nothing
+(INSUFFICIENT, 0 items) in one run and with the one item in the other.
+
+- **Worker job order.** Extraction, supersession and consolidation jobs run concurrently.
+  Which statement is processed first decides which memory supersedes which, and whether a
+  near-duplicate is merged.
+- **Consolidation and summary timing.** A thread summary or a reflection that lands before
+  or after a related memory is indexed changes what the same-session context assembles.
+- **Ties in ranking.** Equal fused scores are broken by row or point order. HNSW insertion
+  in Qdrant is concurrent, so approximate neighbours can differ between two builds of the
+  same data.
+- **The evidence gate at its boundary.** A candidate scoring right at the sufficiency
+  threshold is kept in one run and dropped in the other: INSUFFICIENT with 0 items against
+  COMPLETE or INSUFFICIENT with 1.
+- **Time.** Recency weighting is computed from the moment of asking, which differs between
+  runs by minutes.
+
+The per-cell ranges are in the gate (`noisy`). Each cell's tolerance is its own observed
+range, from 0.01 to 0.04, never a global allowance; cells whose runs agreed get none.
 
 ## What it does not measure
 

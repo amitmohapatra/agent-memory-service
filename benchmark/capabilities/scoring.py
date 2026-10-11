@@ -187,9 +187,10 @@ def items_from_answer(answer: str) -> list[Item]:
 # --------------------------------------------------------------------------- verdicts
 
 #: Failure reasons, most specific first; a verdict carries the first that applies.
+#: every failure reason, in precedence order: a verdict's reason is the first that applies
 REASONS: tuple[str, ...] = (
+    "hallucinated",  # the answer was unknowable and something it must not invent appeared
     "no_abstain",  # the answer was unknowable and the service did not say so
-    "hallucinated",  # ... and something it must not invent appeared
     "false_abstain",  # answerable, and the service said INSUFFICIENT
     "not_retrieved",  # answerable, and nothing came back at all
     "missing_evidence",  # things came back, the evidence the answer needs did not
@@ -308,24 +309,19 @@ def score(
         abstained=abstained,
         items=len(items),
     )
-    if e.get("abstain"):
-        if leaks:
-            v.reason = "hallucinated"
-        elif abstained is False:
-            v.reason = "no_abstain"
-        v.passed = v.reason is None
-        return v
-    if missing:
-        if abstained:
-            v.reason = "false_abstain"
-        elif not items:
-            v.reason = "not_retrieved"
-        else:
-            v.reason = "missing_evidence"
-    elif leaks:
-        v.reason = "stale_leak"
-    elif e.get("table_columns") and not _table_ok(e["table_columns"], items, lang):
-        v.reason = "format"
+    unknowable = bool(e.get("abstain"))
+    applies = {
+        "hallucinated": unknowable and bool(leaks),
+        "no_abstain": unknowable and abstained is False,
+        "false_abstain": not unknowable and bool(missing) and bool(abstained),
+        "not_retrieved": not unknowable and bool(missing) and not items,
+        "missing_evidence": not unknowable and bool(missing),
+        "stale_leak": not unknowable and bool(leaks),
+        "format": not unknowable
+        and bool(e.get("table_columns"))
+        and not _table_ok(e["table_columns"], items, lang),
+    }
+    v.reason = next((r for r in REASONS if applies.get(r)), None)
     v.passed = v.reason is None
     return v
 

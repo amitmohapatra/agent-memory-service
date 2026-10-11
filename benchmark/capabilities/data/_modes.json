@@ -24,8 +24,7 @@
           "summaries"
         ],
         "read_assist": true,
-        "model_env": "CAPEVAL_LLM_MODEL",
-        "model_default": "granite/granite-3.3-2b"
+        "model_env": "CAPEVAL_LLM_MODEL"
       },
       "note": "The tenant's model policy as the live stack runs it: every use but the opt-in memory_restatement, reads assisted, one gateway model."
     },
@@ -105,6 +104,49 @@
       "enrich_seconds": 0,
       "subset_of": "nollm",
       "note": "Capability 7 alone, every language: run in the PR of a change that targets it, and in the nightly full run. Held to the full nollm baseline's scale cells; its latency is not compared."
+    },
+    "llm_core": {
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ],
+      "scenarios": [
+        "recall-retail-hazmat-code",
+        "recall-finance-cost-centre",
+        "multihop-retail-holiday-trees",
+        "multihop-finance-holiday-calendar",
+        "temporal-retail-forklift",
+        "temporal-it-vpn-incident",
+        "update-retail-pallet-supplier",
+        "update-finance-approval-limit",
+        "abstain-retail-inspector-phone",
+        "abstain-personal-sister",
+        "forget-retail-temp-fridge",
+        "forget-finance-old-vendor",
+        "procedure-retail-audit-table",
+        "procedure-it-mfa-skill",
+        "correction-retail-shrinkage-command",
+        "correction-it-account-unlock",
+        "implicit-retail-perishables",
+        "implicit-field-medical",
+        "explicit-retail-zero-stock",
+        "explicit-personal-no-cilantro"
+      ],
+      "kinds": [
+        "direct",
+        "paraphrase",
+        "implicit"
+      ],
+      "enrich_seconds": 900,
+      "note": "The llm-mode PR gate (make eval-capabilities-isolated MODE=llm SET=llm_core): a fixed stratified subset of core small enough to index through a CPU model in about an hour (697 turns, 326 phrasings per surface). Per capability (scale aside): the InventorySmart origin scenario and, of the scenarios in another domain, the one with the fewest turns (ties: id-hash order) - all five domains appear; every language and the code-switched phrasings; three phrasing kinds (direct, paraphrase, implicit). The list is fixed here, so the set does not move when scenarios are added."
     }
   }
 }

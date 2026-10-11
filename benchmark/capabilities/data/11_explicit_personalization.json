@@ -449,7 +449,13 @@
      ],
      "expect": {
       "contains": [
-       "MegaGroup",
+       {
+        "en": "competitor",
+        "de": "Konkurrenten",
+        "es": "competidor",
+        "ar": "لمنافسنا",
+        "hi": "प्रतियोगी"
+       },
        "GreenSack"
       ],
       "answer": {
@@ -778,11 +784,11 @@
      "expect": {
       "contains": [
        {
-        "en": "clearance",
-        "de": "Abverkauf",
-        "es": "liquidación",
-        "ar": "التصفية",
-        "hi": "क्लीयरेंस"
+        "en": "reorder suggestions",
+        "de": "Nachbestellvorschlägen",
+        "es": "sugerencia de pedido",
+        "ar": "اقتراحات إعادة طلب",
+        "hi": "रीऑर्डर सुझाव"
        },
        "RG-20"
       ],
@@ -1755,11 +1761,11 @@
      "expect": {
       "contains": [
        {
-        "en": "north of the river",
-        "de": "nördlich des Flusses",
-        "es": "al norte del río",
-        "ar": "شمال النهر",
-        "hi": "नदी के उत्तर"
+        "en": "kids",
+        "de": "Kinder",
+        "es": "hijos",
+        "ar": "أطفالي",
+        "hi": "बच्चों"
        },
        "J-12"
       ],

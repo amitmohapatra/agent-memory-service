@@ -661,7 +661,11 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
             admin_key = created.admin_key.token or admin_key
     async with factory(admin_key) as admin:
         tenant = admin.administer(settings.tenant)
-        model = os.environ.get(policy.get("model_env", ""), "") or policy.get("model_default")
+        model = os.environ.get(policy.get("model_env", ""), "")
+        if policy.get("model_env") and not model:
+            raise SystemExit(
+                f"{settings.mode} mode needs the gateway model in {policy['model_env']}"
+            )
         models = dict.fromkeys(policy["uses"], model) if model else {}
         stored = await tenant.set_model_policy(
             policy["uses"], read_assist=policy["read_assist"], models=models
@@ -883,7 +887,7 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         kinds=tuple(sample["kinds"]) if sample.get("kinds") else _csv(a.kinds),
         scenarios_per_capability=sample.get("scenarios_per_capability", a.scenarios_per_capability),
         scenarios_per_domain=sample.get("scenarios_per_domain", a.scenarios_per_domain),
-        scenario_ids=_csv(a.scenarios),
+        scenario_ids=tuple(sample["scenarios"]) if sample.get("scenarios") else _csv(a.scenarios),
     )
     settings = Settings(
         url=a.url,

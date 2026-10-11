@@ -126,7 +126,9 @@ SET ?= full
 CAPEVAL_SET = $(if $(filter full,$(SET)),,--sample $(SET))
 CAPEVAL_RESULT = benchmark/results/capabilities/$(MODE)$(if $(filter full,$(SET)),,_$(SET)).json
 CAPEVAL_ARGS ?=
-HEAVY ?=
+#: every eval run takes the machine-wide heavy-job lock by default (HEAVY_LOCK; HEAVY= runs bare)
+HEAVY_LOCK ?= /var/tmp/heavy.lock
+HEAVY ?= flock -o $(HEAVY_LOCK)
 HARNESS_PY ?= ../agent-harness/.venv/bin/python
 
 eval-capabilities: ## Capability eval against MEMORY_URL (MODE=nollm|llm|harness, SET=full|core|scale) -> benchmark/results/capabilities/
@@ -137,8 +139,8 @@ eval-capabilities: ## Capability eval against MEMORY_URL (MODE=nollm|llm|harness
 	  *) echo "MODE must be nollm, llm or harness" >&2; exit 2 ;; \
 	esac
 
-eval-capabilities-isolated: ## The capability eval on a store of its own, dropped when it ends (SET=core for a PR gate)
-	$(HEAVY) benchmark/capabilities/isolated_stack.sh $(PY) python -m benchmark.capabilities.runner \
+eval-capabilities-isolated: ## The capability eval on a store of its own, dropped when it ends (SET=core, or MODE=llm SET=llm_core, for a PR gate)
+	$(if $(filter llm,$(MODE)),CAPEVAL_GATEWAY=1) $(HEAVY) benchmark/capabilities/isolated_stack.sh $(PY) python -m benchmark.capabilities.runner \
 	  --mode $(MODE) $(CAPEVAL_SET) --keep $(CAPEVAL_ARGS)
 
 eval-capabilities-scale: ## Opt-in ~1M-token tenant for capability 7 (--scale large, English)
@@ -146,7 +148,7 @@ eval-capabilities-scale: ## Opt-in ~1M-token tenant for capability 7 (--scale la
 	  --languages en --scale large --out benchmark/results/capabilities/scale_large.json $(CAPEVAL_ARGS)
 
 eval-capabilities-gate: ## Fail on any capability drop or a context p95 rise > 10% (MODE=, SET=core for a PR)
-	$(PY) python -m benchmark.capabilities.gate check $(CAPEVAL_RESULT)
+	$(PY) python -m benchmark.capabilities.gate check $(CAPEVAL_RESULT) $(if $(RERUN),--rerun $(RERUN))
 
 eval-capabilities-baseline: ## Record the measured runs as the capability gate's thresholds
 	@# every run of a mode is merged: a cell's threshold is the lowest any repeat reached

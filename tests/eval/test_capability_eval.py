@@ -10,6 +10,7 @@ model, the harness - are ``make eval-capabilities`` targets, not tests.
 from __future__ import annotations
 
 import json
+import subprocess
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -278,13 +279,14 @@ def test_the_gate_fails_on_any_drop_and_on_slower_context(tmp_path: Path) -> Non
     assert loaded and "load" in loaded[0]
     assert "dataset changed" in gate.check(_run(0.7, 100.0, sha="0" * 64), recorded)[0]
     assert markdown(_run(0.7, 100.0)).startswith("# Capability eval")
-    # a repeat run that reached less in a cell lowers that cell's threshold, nothing else
+    # repeats recorded together: each cell's lowest, and the range they spanned is its noise
     repeat = tmp_path / "repeat.json"
     repeat.write_text(json.dumps(_run(0.6, 90.0)))
     merged = gate.record([base, repeat], tmp_path / "gate2.json")
     assert merged["baselines"]["nollm"]["repeat_runs"] == 2
     assert gate.check(_run(0.6, 100.0), merged) == []
-    assert gate.check(_run(0.5, 100.0), merged)
+    assert gate.check(_run(0.5, 100.0), merged) == [], "within the noise the repeats showed"
+    assert gate.check(_run(0.4, 100.0), merged)
     # a latency-only re-measure on a quieter machine replaces the latency, not the cells
     quiet = tmp_path / "quiet.json"
     quiet.write_text(json.dumps(_run(0.7, 80.0, load=0.05)))
@@ -314,19 +316,170 @@ def test_gate_sets_core_has_its_own_baseline_and_scale_is_held_to_the_full_one(
     # the scale set: the full baseline's matching cells, its own latency not compared
     assert gate.check(_run(0.7, 900.0, sample="scale"), recorded) == []
     assert gate.check(_run(0.6, 100.0, sample="scale"), recorded), "a scale cell dropped"
-    # a target is reported when a run is below it, and never fails the gate
-    cell = next(iter(recorded["baselines"]["nollm/core"]["cells"]))
-    gate_file = tmp_path / "gate.json"
-    with_target = {**recorded, "targets": {"nollm/core": {"cells": {cell: 0.9}}}}
-    gate_file.write_text(json.dumps(with_target))
-    assert gate.record([full, core], gate_file)["targets"] == with_target["targets"]
-    below = _run(0.5, 40.0, sample="core")
-    assert gate.check(below, with_target) == []
-    assert gate.below_targets(below, with_target) == [f"{cell}: 0.5 below target 0.9"]
     scale = tmp_path / "nollm_scale.json"
     scale.write_text(json.dumps(_run(0.7, 100.0, sample="scale")))
     with pytest.raises(SystemExit, match="gated against"):
         gate.record([full, scale], tmp_path / "gate2.json")
+
+
+def test_gate_rerun_rule_empty_runs_and_new_cells(tmp_path: Path) -> None:
+    import copy
+
+    first, second = tmp_path / "a.json", tmp_path / "b.json"
+    first.write_text(json.dumps(_run(0.7, 100.0)))
+    second.write_text(json.dumps(_run(0.6, 100.0)))
+    recorded = gate.record([first, second], tmp_path / "gate.json")
+    cell = "context/new_session/single_fact_recall/en"
+    assert recorded["baselines"]["nollm"]["noisy"][cell] == [0.6, 0.7]
+    # within the noise passes; below it, a noisy cell asks for one rerun ...
+    assert gate.check(_run(0.5, 100.0), recorded) == []
+    dropped = gate.check(_run(0.4, 100.0), recorded)
+    assert dropped and all(f.startswith(gate.RERUN) for f in dropped)
+    # ... which clears it when the rerun is back within the noise, and fails it when not
+    assert gate.check(_run(0.4, 100.0), recorded, rerun=_run(0.5, 100.0)) == []
+    assert not gate.check(_run(0.4, 100.0), recorded, rerun=_run(0.4, 100.0))[0].startswith(
+        gate.RERUN
+    )
+    # a run that measured nothing is neither a baseline nor a pass
+    empty = _run(0.7, 100.0)
+    empty["cells"], empty["records"] = [], []
+    (tmp_path / "empty.json").write_text(json.dumps(empty))
+    with pytest.raises(SystemExit, match="measured nothing"):
+        gate.record([tmp_path / "empty.json"], tmp_path / "gate2.json")
+    assert gate.check(empty, recorded) == ["the run measured no cells"]
+    # a cell the baseline does not hold yet is reported, not gated
+    wider = _run(0.7, 100.0)
+    extra = copy.deepcopy(wider["cells"][0])
+    extra["language"] = "de"
+    wider["cells"].append(extra)
+    assert gate.new_cells(wider, recorded) == ["context/new_session/single_fact_recall/de"]
+
+
+def test_the_gate_is_a_ratchet_with_report_only_targets(tmp_path: Path) -> None:
+    cell = "context/new_session/single_fact_recall/en"
+    g = tmp_path / "gate.json"
+
+    def record(acc: float) -> dict:
+        run = tmp_path / f"run_{acc}.json"
+        run.write_text(json.dumps(_run(acc, 100.0)))
+        return gate.record([run], g)
+
+    assert record(0.6)["baselines"]["nollm"]["cells"][cell]["accuracy"] == 0.6
+    # a better run raises the threshold; a worse one is refused: accuracy may only go up
+    raised = record(0.8)
+    assert raised["baselines"]["nollm"]["cells"][cell]["accuracy"] == 0.8
+    with pytest.raises(SystemExit, match="would record a regression"):
+        record(0.7)
+    assert gate.check(_run(0.7, 100.0), raised), "below the best recorded value"
+    # a target beside the threshold is reported, never failed, and kept by a re-record
+    with_target = {**raised, "targets": {"nollm": {"cells": {cell: 0.9}}}}
+    g.write_text(json.dumps(with_target))
+    assert gate.check(_run(0.8, 100.0), with_target) == []
+    assert gate.below_targets(_run(0.8, 100.0), with_target) == [f"{cell}: 0.8 below target 0.9"]
+    assert record(0.9)["targets"] == with_target["targets"]
+    assert gate.below_targets(_run(0.9, 100.0), with_target) == []
+
+
+def test_reasons_are_given_in_precedence_order() -> None:
+    # unknowable, answered, and with an invented value: the first applicable reason wins
+    v = scoring.score(
+        {"abstain": True, "absent": [{"text": "555-0101"}]},
+        _items("Call him at 555-0101."),
+        "en",
+        surface="answer",
+    )
+    assert v.reason == scoring.REASONS[0] == "hallucinated"
+
+
+# --------------------------------------------------------------------------- isolated stack
+
+STACK = Path(__file__).resolve().parents[2] / "benchmark/capabilities/isolated_stack.sh"
+
+
+def _stack(tmp_path: Path, **env: str) -> subprocess.CompletedProcess[str]:
+    """Run the isolated stack with a command that must never run: every case here is refused
+    before anything is created."""
+    import os
+    import uuid
+
+    base = {
+        "CAPEVAL_WORK": f"/var/tmp/capeval_test_{uuid.uuid4().hex[:8]}",
+        "CAPEVAL_DB": "capeval_test",
+        "CAPEVAL_REDIS_DB": "15",
+        # ports nothing listens on
+        "CAPEVAL_API_PORT": "18191",
+        "CAPEVAL_METRICS_PORT": "19481",
+        "CAPEVAL_QDRANT_HTTP": "16533",
+        "CAPEVAL_QDRANT_GRPC": "16534",
+        "CAPEVAL_FGA_HTTP": "18281",
+    }
+    marker = tmp_path / "ran"
+    return subprocess.run(
+        ["bash", str(STACK), "touch", str(marker)],
+        env={**os.environ, **base, **env},
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+@pytest.mark.parametrize(
+    ("env", "why"),
+    [
+        ({"CAPEVAL_DB": "live_prod"}, "does not match ^capeval"),
+        ({"CAPEVAL_QDRANT_HTTP": "6333"}, "live instance"),
+        ({"CAPEVAL_QDRANT_GRPC": "6334"}, "live instance"),
+        ({"CAPEVAL_WORK": "/tmp/elsewhere"}, "not under /var/tmp/capeval"),
+        ({"CAPEVAL_WORK": "/var/tmp/capeval_x/../live"}, "not under /var/tmp/capeval"),
+        ({"CAPEVAL_REDIS_DB": "0"}, "reserved"),
+        ({"CAPEVAL_REDIS_DB": "13"}, "reserved"),
+        ({"CAPEVAL_GATEWAY": "1", "BIFROST_URL": "", "BIFROST_VIRTUAL_KEY": ""}, "needs BIFROST"),
+    ],
+)
+def test_the_isolated_stack_refuses_a_live_resource(tmp_path: Path, env: dict, why: str) -> None:
+    done = _stack(tmp_path, **env)
+    assert done.returncode == 2 and why in done.stderr, done.stderr
+    assert not (tmp_path / "ran").exists()
+
+
+def test_the_isolated_stack_refuses_a_port_that_already_answers(tmp_path: Path) -> None:
+    import http.server
+    import threading
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        done = _stack(tmp_path, CAPEVAL_QDRANT_HTTP=str(server.server_address[1]))
+    finally:
+        server.shutdown()
+    assert done.returncode == 2 and "already answers" in done.stderr, done.stderr
+
+
+def test_the_isolated_stack_removes_only_what_its_manifest_names(tmp_path: Path) -> None:
+    """A manifest left by an earlier run naming a pid that is now someone else's: the process
+    is left alone, and a WORK the manifest does not name is not removed."""
+    import shutil
+    import uuid
+
+    work = Path(f"/var/tmp/capeval_test_{uuid.uuid4().hex[:8]}")
+    stranger = subprocess.Popen(["sleep", "60"])
+    try:
+        work.mkdir()
+        Path(f"{work}.manifest").write_text(
+            f"qdrant_pid={stranger.pid}\nqdrant_marker=QDRANT__STORAGE__STORAGE_PATH={work}/qdrant\n"
+            "qdrant_http=16533\n"
+        )
+        done = _stack(tmp_path, CAPEVAL_WORK=str(work))
+        assert done.returncode == 2 and "no manifest names it" in done.stderr, done.stderr
+        assert stranger.poll() is None, "a process that is not ours was signalled"
+        assert work.is_dir()
+    finally:
+        stranger.kill()
+        shutil.rmtree(work, ignore_errors=True)
+        for leftover in (f"{work}.manifest", f"{work}.lock"):
+            Path(leftover).unlink(missing_ok=True)
+        shutil.rmtree(f"{work}.logs", ignore_errors=True)
 
 
 # --------------------------------------------------------------------------- harness mode
@@ -376,6 +529,7 @@ async def test_harness_mode_waits_for_the_model_and_scores_a_failed_call_as_an_e
 
     record = await harness_mode._ask(Failing(), Written(scenario, "en", "u"), case, settings)
     assert (record["passed"], record["reason"]) == (False, "error")
+    assert record["abstained"] is None, "an empty answer from a failed run is not a refusal"
     assert "502" in record["error"]
 
 

@@ -584,7 +584,13 @@
      ],
      "expect": {
       "contains": [
-       "SDS",
+       {
+        "en": "action taken",
+        "de": "Maßnahme",
+        "es": "medida tomada",
+        "ar": "الإجراء المتخذ",
+        "hi": "की गई कार्रवाई"
+       },
        "UN1791"
       ],
       "answer": {
@@ -1155,11 +1161,11 @@
      "expect": {
       "contains": [
        {
-        "en": "margin impact",
-        "de": "Margenwirkung",
-        "es": "impacto en margen",
-        "ar": "أثره على الهامش",
-        "hi": "मार्जिन पर असर"
+        "en": "end date",
+        "de": "Enddatum",
+        "es": "fecha de fin",
+        "ar": "تاريخ انتهائه",
+        "hi": "अंतिम तारीख़"
        },
        "2026-09-30"
       ],
