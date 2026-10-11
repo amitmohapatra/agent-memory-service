@@ -532,6 +532,36 @@ def test_the_isolated_stack_removes_only_what_its_manifest_names(tmp_path: Path)
         shutil.rmtree(f"{work}.logs", ignore_errors=True)
 
 
+def test_the_isolated_stack_kills_a_worker_that_ignores_sigterm(tmp_path: Path) -> None:
+    """A worker left draining a job ignores SIGTERM and would keep the stack's port: teardown
+    escalates to SIGKILL for a process that is still the one it started."""
+    import shutil
+    import sys
+    import uuid
+
+    work = Path(f"/var/tmp/capeval_test_{uuid.uuid4().hex[:8]}")
+    marker = "capeval-worker-19481"
+    stubborn = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            f"import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)  # {marker}",
+        ]
+    )
+    try:
+        work.mkdir()
+        Path(f"{work}.manifest").write_text(f"worker_pid={stubborn.pid}\nworker_marker={marker}\n")
+        done = _stack(tmp_path, CAPEVAL_WORK=str(work), CAPEVAL_KILL_WAIT="1")
+        assert done.returncode == 2 and "no manifest names it" in done.stderr, done.stderr
+        assert stubborn.wait(timeout=10) == -9
+    finally:
+        stubborn.kill()
+        shutil.rmtree(work, ignore_errors=True)
+        for leftover in (f"{work}.manifest", f"{work}.lock"):
+            Path(leftover).unlink(missing_ok=True)
+        shutil.rmtree(f"{work}.logs", ignore_errors=True)
+
+
 # --------------------------------------------------------------------------- harness mode
 
 

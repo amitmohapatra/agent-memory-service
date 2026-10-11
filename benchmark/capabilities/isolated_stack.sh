@@ -97,6 +97,14 @@ disk() {
 " db_exists=$(psql_ -c "select count(*) from pg_database where datname='$DB'" 2>/dev/null || echo ?)"\
 " redis_keys=$(redis-cli -n "$REDIS_DB" dbsize 2>/dev/null || echo ?)"
 }
+stop() {  # pid marker: SIGTERM, then SIGKILL if it has not exited (a worker draining a job
+  # may never exit on its own, and would keep the stack's port for the next run)
+  ours "$1" "$2" || return 0
+  kill "$1" 2>/dev/null
+  for _ in $(seq 1 "${CAPEVAL_KILL_WAIT:-20}"); do ours "$1" "$2" || return 0; sleep 1; done
+  ours "$1" "$2" && kill -9 "$1" 2>/dev/null
+  return 0
+}
 ours() {  # pid, a marker its command line or its environment must still carry
   [ -n "${1:-}" ] && [ -r "/proc/$1/cmdline" ] || return 1
   { tr '\0' ' ' < "/proc/$1/cmdline"; tr '\0' ' ' < "/proc/$1/environ" 2>/dev/null; } | grep -qF -- "$2"
@@ -112,7 +120,7 @@ teardown() {
   for name in worker api fga; do
     local pid
     pid="$(get "${name}_pid")"
-    ours "$pid" "$(get "${name}_marker")" && kill "$pid" 2>/dev/null
+    stop "$pid" "$(get "${name}_marker")"
   done
   local qpid qhttp
   qpid="$(get qdrant_pid)" qhttp="$(get qdrant_http)"
@@ -121,7 +129,7 @@ teardown() {
         | "$PY" -c "import json,sys; print(' '.join(c['name'] for c in json.load(sys.stdin)['result']['collections']))" 2>/dev/null); do
       curl -s -X DELETE "http://127.0.0.1:$qhttp/collections/$c" >/dev/null
     done
-    kill "$qpid" 2>/dev/null
+    stop "$qpid" "$(get qdrant_marker)"
   fi
   sleep 2
   local db rdb work
