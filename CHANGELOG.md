@@ -70,8 +70,8 @@ each entry says which one moved. Decisions behind each change are in the
   the job timeout on a large file) the document is `FAILED` with `last_error` "index failed:
   ...", and `memory-reindex` indexes such documents, and `STAGED` ones with a parsed version,
   and makes them `READY`.
-- The job worker's queue pool is sized for its three Procrastinate workers (two connections
-  each), and their three LISTEN connections count against `connection_budget`; with four
+- The job worker's queue pool is sized for its four Procrastinate workers (two connections
+  each), and their four LISTEN connections count against `connection_budget`; with four
   connections for all of them, pool checkouts timed out under load. A worker starting no
   longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 140 s
   (`TASKS.stalled_after_seconds`, derived from the heartbeat, the 90 s a worker rides a
@@ -85,7 +85,8 @@ each entry says which one moved. Decisions behind each change are in the
 - The worker runs the `embedding` queue - the jobs that make a memory, a document's chunks or a
   tool findable - and the `graph` queue on slots of their own: `tasks.worker_concurrency` (one
   per CPU) is split between the `embedding` queue (up to 2) and every other queue, since both
-  run models, and the `graph` queue's 2 slots, which wait on the LLM, come on top. With a slow model, observation extraction
+  run models; the `chat-fast` queue's own slot, which a long parse cannot take, and the
+  `graph` queue's 2 slots, which wait on the LLM, come on top. With a slow model, observation extraction
   and graph enrichment held every slot, and a tool catalog published just before a question
   waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
   jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until

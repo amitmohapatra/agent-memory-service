@@ -160,14 +160,14 @@ async def test_a_pools_long_jobs_never_hold_another_pools_slots(
             await asyncio.sleep(0.1)
 
     queue.register("test.enrich", Queue.GRAPH, slow)
-    queue.register("test.extract", Queue.CHAT_FAST, slow)
+    queue.register("test.extract", Queue.DOCUMENT_PARSE, slow)
     queue.register("test.learn", Queue.RECONCILE, done)
     queue.register("test.index", Queue.EMBEDDING, done)
     for n in ("g1", "g2", "g3"):
         await queue.enqueue(JobSpec(task_name="test.enrich", queue=Queue.GRAPH, payload={"n": n}))
     pools = worker_pools(concurrency=1, indexing=1, graph=1)
     assert pools[0] == ([Queue.EMBEDDING], 1) and pools[1] == ([Queue.GRAPH], 1)
-    assert Queue.GRAPH not in pools[2][0] and Queue.RECONCILE in pools[2][0]
+    assert Queue.GRAPH not in pools[-1][0] and Queue.RECONCILE in pools[-1][0]
     worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
     try:
         await until(1)
@@ -179,7 +179,7 @@ async def test_a_pools_long_jobs_never_hold_another_pools_slots(
         await asyncio.wait_for(ran["learn"].wait(), timeout=10)
 
         await queue.enqueue(
-            JobSpec(task_name="test.extract", queue=Queue.CHAT_FAST, payload={"n": "x"})
+            JobSpec(task_name="test.extract", queue=Queue.DOCUMENT_PARSE, payload={"n": "x"})
         )
         await until(2)
         assert started == ["g1", "x"], "the shared pool's one slot is taken"
@@ -299,6 +299,47 @@ async def test_a_worker_that_stops_unasked_ends_the_pools_with_an_error(
     monkeypatch.setattr(queue, "run_worker", stopped_on_its_own)
     with pytest.raises(WorkerStoppedError, match="worker:reconcile"):
         await asyncio.wait_for(queue.run_pools([([Queue.RECONCILE], 1)]), timeout=10)
+
+
+@ON_THE_POOLS_LOOP
+@pytest.mark.parametrize("concurrency", [1, 2, 4])
+async def test_a_long_parse_never_delays_a_chat_job(
+    queue: ProcrastinateTaskQueue, concurrency: int
+) -> None:
+    """Queues are bulkheads: a 500-page PDF must never starve chat memory. On a worker capped
+    at 1, 2 or 4 CPUs (``tasks.worker_concurrency``), parses that take every slot of the shared
+    pool leave chat its own slot: a remember's job runs at once."""
+    release = asyncio.Event()
+    parsing: list[int] = []
+    chatted = asyncio.Event()
+
+    async def parse(payload):
+        parsing.append(payload["n"])
+        await release.wait()
+
+    async def chat(payload):
+        chatted.set()
+
+    queue.register("test.parse", Queue.DOCUMENT_PARSE, parse)
+    queue.register("test.chat", Queue.CHAT_FAST, chat)
+    pools = worker_pools(concurrency, 2, 2)
+    shared = pools[-1][1]
+    for n in range(shared + 1):  # one more than the shared pool can run
+        await queue.enqueue(
+            JobSpec(task_name="test.parse", queue=Queue.DOCUMENT_PARSE, payload={"n": n})
+        )
+    worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
+    try:
+        await _until(lambda: len(parsing) == shared)
+        await asyncio.sleep(1)
+        assert len(parsing) == shared, "every shared slot is parsing"
+        await queue.enqueue(JobSpec(task_name="test.chat", queue=Queue.CHAT_FAST))
+        await asyncio.wait_for(chatted.wait(), timeout=10)
+    finally:
+        release.set()
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker
 
 
 async def _stop_mid_job(queue_database: str, tmp_path, *, seconds: float, grace: float):

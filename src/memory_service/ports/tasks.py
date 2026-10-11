@@ -42,21 +42,37 @@ INDEXING_QUEUES: tuple[Queue, ...] = (Queue.EMBEDDING,)
 GRAPH_QUEUES: tuple[Queue, ...] = (Queue.GRAPH,)
 
 
+#: The interactive queue: besides its place in the shared pool (at the top of
+#: ``QUEUE_PRIORITY``), it has a slot of its own that nothing else can take. On a worker
+#: capped at 2 CPUs the shared pool has one slot, and a 500-page parse held it for minutes
+#: while every remember waited.
+CHAT_QUEUES: tuple[Queue, ...] = (Queue.CHAT_FAST,)
 #: How many pools (Procrastinate workers, each with a LISTEN connection) the worker runs
-WORKER_POOL_COUNT: int = 3
+WORKER_POOL_COUNT: int = 4
 
 
 def worker_pools(concurrency: int, indexing: int, graph: int) -> list[tuple[list[Queue], int]]:
     """The worker's pools. ``concurrency`` (one per CPU the worker may use) is shared between
     the two pools whose jobs compute - the indexing queues, up to ``indexing`` slots and at
-    most half, and every other queue, the rest (at least one) - so the slots that run models
-    never outnumber the CPUs. The graph queues get ``graph`` slots on top: enrichment waits on
-    the database and the LLM, one job per tenant at a time when a model is reachable."""
+    most half, and every other queue, the rest - so those slots never outnumber the CPUs.
+    Two pools come on top: the chat queue's own slot, which a long parse cannot take (chat
+    is in the shared pool too, at the top of its priority), and the graph queues' ``graph``
+    slots, which wait on the database and the LLM.
+
+    Every pool has at least one slot, or its queues would never run: at 1 CPU that is three
+    computing slots, not one. The bulkhead wins there over the CPU count; each model computes
+    on threads of its own and serves one call at a time, so the extra slots wait their turn on
+    a model rather than multiply its threads."""
     embedding = min(indexing, max(1, concurrency // 2))
     shared = max(1, concurrency - embedding)
     own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
     rest = [q for q in Queue if q not in own]
-    return [(list(INDEXING_QUEUES), embedding), (list(GRAPH_QUEUES), graph), (rest, shared)]
+    return [
+        (list(INDEXING_QUEUES), embedding),
+        (list(GRAPH_QUEUES), graph),
+        (list(CHAT_QUEUES), 1),
+        (rest, shared),
+    ]
 
 
 #: Called with a job's payload and the error it last failed with, once it will not be retried.

@@ -121,6 +121,47 @@ class ServiceSettings(BaseModel):
 _CONNECTIONS_PER_PROCESS = 28
 
 
+def _split(per_process: int, queue_workers: int) -> PoolPlan:
+    """``per_process`` connections between the pools (``DatabaseSettings.pool_plan``)."""
+    pooled = per_process - queue_workers
+    queue = max(2, pooled // 7, 2 * queue_workers)
+    graph = max(2, 2 * pooled // 7)
+    main = max(2, per_process - graph - queue - queue_workers)
+    return PoolPlan(
+        main_size=-(-main // 2),
+        main_overflow=main // 2,
+        graph_size=-(-graph // 2),
+        graph_overflow=graph // 2,
+        queue_max=queue,
+        listeners=queue_workers,
+    )
+
+
+def worker_connection_floor(queue_workers: int) -> int:
+    """The fewest connections a process running ``queue_workers`` Procrastinate workers can
+    split without going over: two pooled and one LISTEN per worker, two each for the request
+    pool and the graph traversal, at least (6 for the API)."""
+    share = 4 + 3 * queue_workers
+    while _split(share, queue_workers).total > share:
+        share += 1
+    return max(6, share)
+
+
+@lru_cache(maxsize=8)
+def _warn_budget_below_floor(budget: int | None, per_process: int, floor: int) -> None:
+    """Once per process and numbers: the plan is computed for each pool the process opens."""
+    from memory_service.observability.logging import get_logger
+
+    get_logger(__name__).warning(
+        "database.connection_budget_below_worker_floor",
+        connection_budget=budget,
+        per_process=per_process,
+        worker_floor=floor,
+        message=f"connection_budget gives this worker {per_process} connections; it needs "
+        f"{floor} (4 + 3 per queue worker) and takes {floor}",
+    )
+
+
 @dataclass(frozen=True)
 class PoolPlan:
     """One process's share of the pod's connection budget, per pool (``pool_plan``)."""
@@ -192,39 +233,20 @@ class DatabaseSettings(BaseModel):
         the budget counts both, because a burst is when the budget matters. The job worker
         runs ``queue_workers`` Procrastinate workers on one queue pool, each with its fetch,
         finishes, heartbeat, abort poll and periodic deferrer: two pooled connections each,
-        or their checkouts time out under load. Its share is at least ``4 + 3 *
-        queue_workers`` (13 for three): a smaller budget is raised to it, with a warning.
+        or their checkouts time out under load. Its share is at least
+        :func:`worker_connection_floor` (17 for four): a smaller budget is raised to it, with
+        a warning.
         """
         processes = max(1, processes)
         if self.connection_budget is None:
             per_process = _CONNECTIONS_PER_PROCESS
         else:
             per_process = max(6, self.connection_budget // processes)
-        floor = 4 + 3 * queue_workers
+        floor = worker_connection_floor(queue_workers)
         if per_process < floor:
-            from memory_service.observability.logging import get_logger
-
-            get_logger(__name__).warning(
-                "database.connection_budget_below_worker_floor",
-                connection_budget=self.connection_budget,
-                per_process=per_process,
-                worker_floor=floor,
-                message=f"connection_budget gives this worker {per_process} connections; it "
-                f"needs {floor} (4 + 3 per queue worker) and takes {floor}",
-            )
+            _warn_budget_below_floor(self.connection_budget, per_process, floor)
             per_process = floor
-        pooled = per_process - queue_workers
-        queue = max(2, pooled // 7, 2 * queue_workers)
-        graph = max(2, 2 * pooled // 7)
-        main = max(2, per_process - graph - queue - queue_workers)
-        return PoolPlan(
-            main_size=-(-main // 2),
-            main_overflow=main // 2,
-            graph_size=-(-graph // 2),
-            graph_overflow=graph // 2,
-            queue_max=queue,
-            listeners=queue_workers,
-        )
+        return _split(per_process, queue_workers)
 
     @property
     def sync_url(self) -> str:

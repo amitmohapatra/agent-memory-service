@@ -178,6 +178,7 @@ def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int 
     connections each (fetch and finishes; heartbeat, abort poll, deferrer) and a LISTEN each
     outside the pool, all counted against the budget. Four for all three made its pool
     checkouts time out under load."""
+    from memory_service.config.settings import worker_connection_floor
     from memory_service.ports.tasks import WORKER_POOL_COUNT, worker_pools
 
     assert len(worker_pools(4, 2, 2)) == WORKER_POOL_COUNT
@@ -186,7 +187,7 @@ def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int 
     assert plan.queue_max >= 2 * WORKER_POOL_COUNT
     assert plan.listeners == WORKER_POOL_COUNT
     share = 28 if budget is None else max(6, budget)
-    assert plan.total <= max(share, 4 + 3 * WORKER_POOL_COUNT)
+    assert plan.total <= max(share, worker_connection_floor(WORKER_POOL_COUNT))
     assert database.pool_plan(1).listeners == 0, "the API listens for nothing"
 
 
@@ -195,12 +196,17 @@ def test_a_budget_below_the_workers_floor_is_raised_with_a_warning() -> None:
     takes them, and says so naming both numbers rather than exceeding the budget silently."""
     from structlog.testing import capture_logs
 
-    database = Settings(_env_file=None, database={"connection_budget": 6}).database
+    from memory_service.config.settings import worker_connection_floor
+    from memory_service.ports.tasks import WORKER_POOL_COUNT
+
+    floor = worker_connection_floor(WORKER_POOL_COUNT)
+    database = Settings(_env_file=None, database={"connection_budget": 7}).database
     with capture_logs() as logs:
-        plan = database.pool_plan(1, queue_workers=3)
-    assert plan.total == 13
+        for _ in range(3):  # one plan per pool the worker opens
+            plan = database.pool_plan(1, queue_workers=WORKER_POOL_COUNT)
+    assert plan.total == floor == 17
     [warned] = [e for e in logs if e["event"] == "database.connection_budget_below_worker_floor"]
-    assert (warned["per_process"], warned["worker_floor"]) == (6, 13)
+    assert (warned["per_process"], warned["worker_floor"]) == (7, floor), "once, both numbers"
     with capture_logs() as quiet:
         database.pool_plan(1)  # the API's floor is the budget's own
     assert not quiet

@@ -159,11 +159,14 @@ re-measure on a real corpus).
 Every job is registered in one place, `modules/jobs/registry.py`, and every enqueued task name
 must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on named queues;
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
-`ports/tasks.py`). The worker runs three pools (`worker_pools`). The `embedding` queue, whose
+`ports/tasks.py`). The worker runs four pools (`worker_pools`). The `embedding` queue, whose
 jobs make a write findable, and every other queue share `tasks.worker_concurrency` (one per
 CPU) on slots of their own - the `embedding` queue up to `TASKS.indexing_concurrency` (2) and at
 most half, the rest the shared pool's - because both run models, each on 2 threads of its own.
-The `graph` queue has `TASKS.graph_concurrency` (2) slots on top: enrichment waits on the LLM. In one pool, jobs waiting on a slow model held every slot and
+Two pools come on top: the `chat-fast` queue's own slot, which a long parse cannot take (on a
+worker capped at 2 CPUs the shared pool has one slot), and the `graph` queue's
+`TASKS.graph_concurrency` (2), which wait on the LLM. Every pool has at least one slot, so at
+1 CPU three slots compute: the bulkhead wins, and each model serves one call at a time. In one pool, jobs waiting on a slow model held every slot and
 indexing waited minutes behind them, and a graph backlog (an import queues thousands of
 enrichment jobs, which outrank parsing, archiving, reconciliation and summaries) held every slot
 until it drained. Each pool keeps one listening connection outside the queue pool.

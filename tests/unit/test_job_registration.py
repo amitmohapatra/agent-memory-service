@@ -130,17 +130,21 @@ def test_the_outbox_sweep_is_scheduled_not_merely_registered() -> None:
 
 
 def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
-    """Indexing and graph enrichment on slots of their own (``worker_pools``), every other
-    queue in the shared pool: a queue in no pool is never worked, one in two is worked by
-    both."""
+    """Indexing and graph enrichment on slots of their own (``worker_pools``), chat on one of
+    its own as well as in the shared pool, every other queue in the shared pool: a queue in
+    no pool is never worked."""
     from memory_service.ports.tasks import Queue, worker_pools
 
     pools = worker_pools(4, 2, 2)
-    assert pools[:2] == [([Queue.EMBEDDING], 2), ([Queue.GRAPH], 2)]
-    assert pools[2][1] == 2, "the slots that run models share the 4 CPUs: 2 + 2"
+    assert pools[:3] == [([Queue.EMBEDDING], 2), ([Queue.GRAPH], 2), ([Queue.CHAT_FAST], 1)]
+    assert pools[3][1] == 2, "the slots that run models share the 4 CPUs: 2 + 2"
+    assert Queue.CHAT_FAST in pools[3][0], "chat also takes a shared slot, first in line"
     listed = [q for queues, _ in pools for q in queues]
-    assert sorted(listed) == sorted(Queue), "each queue in exactly one pool"
+    assert set(listed) == set(Queue), "every queue is worked"
+    assert sorted(q for q in listed if q is not Queue.CHAT_FAST) == sorted(
+        q for q in Queue if q is not Queue.CHAT_FAST
+    ), "and, chat apart, in exactly one pool"
     for cpus in range(1, 9):
-        embedding, _, shared = (slots for _, slots in worker_pools(cpus, 2, 2))
-        assert embedding >= 1 and shared >= 1
+        embedding, _, chat, shared = (slots for _, slots in worker_pools(cpus, 2, 2))
+        assert embedding >= 1 and shared >= 1 and chat == 1
         assert embedding + shared == max(2, cpus), "models never get more slots than CPUs"
