@@ -46,6 +46,7 @@ is not finished).
 | [0033](0033-learned-skills.md) | A learned procedure becomes an Agent Skill only when the tenant's administrator publishes it, to `SKILLS_DIR` or the gateway's skills repository | superseded by 0034 |
 | [0034](0034-learned-skills-in-context.md) | An agent learns skills from all its users and is offered them in its context: no publishing, a skill reaches other users once two produced it, `GET /v1/skills` and dismiss | accepted; supersedes 0033, builds on 0018 |
 | [0035](0035-same-subject-matching.md) | Same-subject matching: identifiers, units and dates block a merge, vocabulary packs (data) and a tenant's own defined abbreviations allow one, the encoder only makes a pair possible; the conflict adjudicator is gated by it instead of word overlap | accepted; amends 0009 |
+| [0036](0036-a-users-words-follow-the-user.md) | What a user says follows that user (`USER` by default, `THREAD`/`WORKSPACE` by choice) and is kept in the words they said it: the turn beside any reading that is not lasting, long turns in up to six pieces, long noun-phrase subjects | accepted; amends 0005, 0013 |
 
 ## Where the numbers behind these decisions are
 
